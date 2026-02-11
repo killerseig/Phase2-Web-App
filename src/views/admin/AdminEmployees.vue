@@ -167,9 +167,9 @@ onMounted(() => loadRoster())
             <div v-if="availableEmployees.length === 0" class="alert alert-info">
               All employees are already in the roster.
             </div>
-            <div v-else class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
-              <table class="table table-sm table-striped table-hover mb-0">
-                <thead class="table-light" style="background-color: #f0f0f0; border-bottom: 2px solid #dee2e6;">
+            <div v-else class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0">
+                  <thead>
                   <tr>
                     <th class="small fw-semibold">Name</th>
                     <th class="small fw-semibold">Employee #</th>
@@ -178,7 +178,7 @@ onMounted(() => loadRoster())
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="emp in availableEmployees" :key="emp.id" style="border-bottom: 1px solid #dee2e6;">
+                    <tr v-for="emp in availableEmployees" :key="emp.id">
                     <td style="padding: 8px;" class="fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
                     <td style="padding: 8px;" class="text-muted small">#{{ emp.employeeNumber }}</td>
                     <td style="padding: 8px;" class="text-muted small">{{ emp.occupation || '—' }}</td>
@@ -227,9 +227,9 @@ onMounted(() => loadRoster())
         </div>
 
         <!-- Table -->
-        <div v-else class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+        <div v-else class="table-responsive">
           <table class="table table-sm table-striped table-hover mb-0">
-            <thead class="table-light" style="background-color: #f0f0f0; border-bottom: 2px solid #dee2e6;">
+              <thead>
               <tr>
                 <th class="small fw-semibold">Name</th>
                 <th class="small fw-semibold">Employee #</th>
@@ -239,7 +239,7 @@ onMounted(() => loadRoster())
               </tr>
             </thead>
             <tbody>
-              <tr v-for="emp in filteredRosterEmployees" :key="emp.id" style="border-bottom: 1px solid #dee2e6;">
+              <tr v-for="emp in filteredRosterEmployees" :key="emp.id">
                 <td style="padding: 8px;" class="fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
                 <td style="padding: 8px;" class="text-muted small">#{{ emp.employeeNumber }}</td>
                 <td style="padding: 8px;" class="text-muted small">{{ emp.occupation || '—' }}</td>

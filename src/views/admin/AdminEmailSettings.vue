@@ -90,7 +90,7 @@ onMounted(loadJobs)
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-fluid py-4 wide-container-1200">
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">Email Settings</h2>
@@ -120,8 +120,13 @@ onMounted(loadJobs)
       :error="err"
       class="mt-4"
     >
-      <div class="alert alert-info small mb-3" role="alert">
-        <strong><i class="bi bi-info-circle me-2"></i>Tip:</strong> Department supervisors can be added as job-specific recipients. When a daily log is submitted for a job, the supervisor's email will automatically receive the report.
+      <div class="alert job-tip small mb-3" role="alert">
+        <div class="d-flex align-items-start gap-2">
+          <i class="bi bi-info-circle flex-shrink-0"></i>
+          <div>
+            <strong>Tip:</strong> Department supervisors can be added as job-specific recipients. When a daily log is submitted for a job, the supervisor's email will automatically receive the report.
+          </div>
+        </div>
       </div>
 
       <div v-if="jobs.length === 0" class="alert alert-info text-center mb-0">
@@ -169,8 +174,27 @@ onMounted(loadJobs)
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
 .accordion-item {
-  border: 1px solid #dee2e6;
+  border: 1px solid $border-color;
+}
+
+.wide-container-1200 {
+  max-width: 1200px;
+}
+
+.job-tip {
+  background: $surface-2;
+  border: 1px solid $border-color;
+  color: $body-color;
+  box-shadow: $box-shadow-sm;
+}
+
+.job-tip .bi-info-circle {
+  color: $primary;
+  font-size: 1.1rem;
+  margin-top: 1px;
 }
 </style>

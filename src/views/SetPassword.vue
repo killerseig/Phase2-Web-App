@@ -260,12 +260,14 @@ const toggleConfirmPasswordVisibility = () => {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
 .input-group > .btn-outline-secondary {
-  border: 1px solid #dee2e6;
+  border: 1px solid $border-color;
 }
 
 .input-group > .btn-outline-secondary:hover {
-  background-color: #f8f9fa;
+  background-color: $surface-2;
 }
 </style>

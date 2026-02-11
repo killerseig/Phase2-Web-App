@@ -7,12 +7,14 @@ import {
   createDailyLog,
   getMyDailyLogByDate,
   getDailyLogById,
-  listAllDailyLogs,
+  listDailyLogsForDate,
   submitDailyLog,
   updateDailyLog,
   deleteDailyLog,
   cleanupDeletedLogs,
   subscribeToDailyLog,
+  formatTimestamp,
+  toMillis,
   type DailyLog,
   type DailyLogDraftInput,
 } from '../services/DailyLogs'
@@ -41,19 +43,37 @@ const loading = ref(true)
 const saving = ref(false)
 const uploading = ref(false)
 const err = ref('')
-const recent = ref<DailyLog[]>([])
+const logDate = ref(new Date().toISOString().slice(0, 10))
+const selectedLogs = ref<DailyLog[]>([])
+const logsForSelectedDate = computed(() => {
+  return selectedLogs.value
+    .slice()
+    .sort((a, b) => {
+      const rank = (s: DailyLog['status']) => (s === 'submitted' ? 0 : 1)
+      const aTs = toMillis(a.submittedAt || a.updatedAt || a.createdAt)
+      const bTs = toMillis(b.submittedAt || b.updatedAt || b.createdAt)
+      if (rank(a.status) !== rank(b.status)) return rank(a.status) - rank(b.status)
+      return bTs - aTs
+    })
+})
 const currentId = ref<string | null>(null)
 const currentStatus = ref<'draft' | 'submitted'>('draft')
 const currentOwnerId = ref<string | null>(null)
 const currentSubmittedAt = ref<any>(null)
-const logDate = ref(new Date().toISOString().slice(0, 10))
 const jobEmailRecipients = ref<string[]>([])
 const newEmailRecipient = ref('')
 const savingRecipients = ref(false)
 
-const HARDCODED_EMAILS: string[] = []
+const canEditDraft = computed(() => {
+  return (
+    currentStatus.value === 'draft' &&
+    logDate.value === today.value &&
+    currentOwnerId.value === auth.user?.uid
+  )
+})
 
-const canEditDraft = computed(() => currentOwnerId.value === auth.user?.uid)
+const photoFileName = ref('No file selected')
+const ptpFileName = ref('No file selected')
 
 const form = ref<DailyLogDraftInput>({
   jobSiteNumbers: '',
@@ -79,11 +99,14 @@ const form = ref<DailyLogDraftInput>({
 
 let unsubscribeLiveLog: (() => void) | null = null
 let autoSaveTimeout: NodeJS.Timeout
+const creatingDraft = ref(false)
 
 const resetForm = () => {
   form.value = { jobSiteNumbers: '', foremanOnSite: '', siteForemanAssistant: '', projectName: jobName.value, manpower: '', weeklySchedule: '', manpowerAssessment: '', manpowerLines: [{ trade: '', count: 0, areas: '' }], safetyConcerns: '', ahaReviewed: '', scheduleConcerns: '', budgetConcerns: '', deliveriesReceived: '', deliveriesNeeded: '', newWorkAuthorizations: '', qcInspection: '', notesCorrespondence: '', actionItems: '', attachments: [] }
   currentOwnerId.value = auth.user?.uid ?? null
   currentSubmittedAt.value = null
+  photoFileName.value = 'No file selected'
+  ptpFileName.value = 'No file selected'
 }
 
 const stopLiveLog = () => {
@@ -109,13 +132,12 @@ const startLiveLog = (dailyLogId: string) => {
   }, () => {})
 }
 
-const loadRecent = async () => {
+const loadLogsForSelectedDate = async (dateStr: string) => {
   try {
-    recent.value = await listAllDailyLogs(jobId.value, 25)
-    console.log('Recent logs loaded:', recent.value)
+    selectedLogs.value = await listDailyLogsForDate(jobId.value, dateStr)
   } catch (e: any) {
-    console.error('Failed to load recent logs:', e)
-    recent.value = []
+    console.error('Failed to load logs for date:', e)
+    selectedLogs.value = []
   }
 }
 
@@ -148,27 +170,89 @@ const loadForDate = async (dateStr: string) => {
   resetForm()
 
   try {
-    // First, try to load existing daily log for this date
+    const isToday = dateStr === today.value
+
+    await loadLogsForSelectedDate(dateStr)
+
+    // Always try to load an existing log for the selected date
     const existingLog = await getMyDailyLogByDate(jobId.value, dateStr)
-    
+
     if (existingLog) {
-      // Load existing draft
       currentId.value = existingLog.id
       currentStatus.value = existingLog.status
+      logDate.value = existingLog.logDate
       applyDailyLogToForm(existingLog)
       startLiveLog(existingLog.id)
-    } else {
-      // Create new draft if none exists
-      const id = await createDailyLog(jobId.value, dateStr, { ...form.value })
-      currentId.value = id
-      currentStatus.value = 'draft'
-      currentOwnerId.value = auth.user?.uid ?? null
-      startLiveLog(id)
+      return
     }
+
+    // No existing log found. Only create a new draft for today.
+    if (!isToday) {
+      toastRef.value?.show('No daily log exists for this date.', 'warning')
+      stopLiveLog()
+      return
+    }
+
+    // Prevent duplicate drafts if multiple create requests overlap
+    if (creatingDraft.value) return
+    creatingDraft.value = true
+
+    // Create new draft for today
+    const id = await createDailyLog(jobId.value, dateStr, { ...form.value })
+    currentId.value = id
+    currentStatus.value = 'draft'
+    currentOwnerId.value = auth.user?.uid ?? null
+    startLiveLog(id)
+    await loadLogsForSelectedDate(dateStr)
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to create daily log'
     toastRef.value?.show('Failed to create daily log', 'error')
+  } finally {
+    creatingDraft.value = false
   }
+}
+
+const startNewDraftForToday = async () => {
+  if (creatingDraft.value) return
+  if (logDate.value !== today.value) {
+    toastRef.value?.show('New drafts can only be created for today.', 'warning')
+    return
+  }
+  creatingDraft.value = true
+  err.value = ''
+  try {
+    resetForm()
+    const id = await createDailyLog(jobId.value, today.value, { ...form.value })
+    currentId.value = id
+    currentStatus.value = 'draft'
+    currentOwnerId.value = auth.user?.uid ?? null
+    startLiveLog(id)
+    await loadLogsForSelectedDate(today.value)
+    toastRef.value?.show('New draft created for today.', 'success')
+  } catch (e: any) {
+    err.value = e?.message ?? 'Failed to create new draft'
+    toastRef.value?.show('Failed to create new draft', 'error')
+  } finally {
+    creatingDraft.value = false
+  }
+}
+
+const handleFileChange = async (e: Event, type: 'photo' | 'ptp') => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    if (type === 'photo') {
+      photoFileName.value = file.name
+    } else {
+      ptpFileName.value = file.name
+    }
+  } else {
+    if (type === 'photo') photoFileName.value = 'No file selected'
+    else ptpFileName.value = 'No file selected'
+  }
+
+  await uploadAttachment(e, type)
+  input.value = ''
 }
 
 const init = async () => {
@@ -182,7 +266,7 @@ const init = async () => {
     await cleanupDeletedLogs(jobId.value)
     
     jobEmailRecipients.value = await getDailyLogRecipients(jobId.value)
-    await loadRecent()
+    await loadLogsForSelectedDate(logDate.value)
     await loadForDate(logDate.value)
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to load daily logs'
@@ -213,7 +297,7 @@ const saveDraft = async () => {
   err.value = ''
   try {
     await updateDailyLog(jobId.value, currentId.value, { ...form.value })
-    await loadRecent()
+    await loadLogsForSelectedDate(logDate.value)
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to save daily log'
     toastRef.value?.show('Failed to save daily log', 'error')
@@ -234,12 +318,11 @@ const submit = async () => {
     await updateDailyLog(jobId.value, currentId.value, { ...form.value })
     await submitDailyLog(jobId.value, currentId.value)
     currentStatus.value = 'submitted'
-    await loadRecent()
+    await loadLogsForSelectedDate(logDate.value)
     
-    const allRecipients = [...HARDCODED_EMAILS, ...jobEmailRecipients.value]
-    if (allRecipients.length > 0) {
+    if (jobEmailRecipients.value.length > 0) {
       try {
-        await jobService.sendDailyLogEmail({ jobId: jobId.value, dailyLogId: currentId.value, recipients: allRecipients })
+        await jobService.sendDailyLogEmail({ jobId: jobId.value, dailyLogId: currentId.value, recipients: jobEmailRecipients.value })
         toastRef.value?.show('Daily log submitted and emailed successfully!', 'success')
       } catch (emailError: any) {
         toastRef.value?.show('Daily log submitted, but email failed to send', 'warning')
@@ -307,7 +390,7 @@ const deleteDraft = async () => {
     await deleteDailyLog(jobId.value, currentId.value)
     currentId.value = null
     resetForm()
-    await loadRecent()
+    await loadLogsForSelectedDate(logDate.value)
     await loadForDate(today.value)
     toastRef.value?.show('Daily log deleted', 'success')
   } catch (e: any) {
@@ -329,7 +412,7 @@ const deleteLogById = async (logId: string) => {
       resetForm()
       await loadForDate(today.value)
     }
-    await loadRecent()
+    await loadLogsForSelectedDate(logDate.value)
     toastRef.value?.show('Daily log deleted', 'success')
   } catch (e: any) {
     toastRef.value?.show('Failed to delete daily log', 'error')
@@ -437,43 +520,50 @@ onUnmounted(stopLiveLog)
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-fluid py-4 wide-container-1200">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-hero">
       <div>
+        <div class="text-muted small mb-1">Job Daily Log</div>
         <h2 class="h3 mb-1">{{ jobName }}</h2>
         <div class="text-muted small d-flex align-items-center gap-2">
           <span v-if="jobCode">Job Number: {{ jobCode }}</span>
         </div>
       </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge rounded-pill text-bg-secondary">{{ logsForSelectedDate.length }} for {{ logDate }}</span>
+        <span v-if="currentStatus === 'draft'" class="badge rounded-pill text-bg-warning">Draft</span>
+        <span v-else class="badge rounded-pill text-bg-success">Submitted</span>
+      </div>
     </div>
 
     <!-- Date & Status Controls -->
-    <div class="card mb-4">
+    <div class="card mb-4 status-card">
       <div class="card-body">
-        <div class="row align-items-end g-3">
-          <div class="col-auto">
-            <label class="form-label mb-0">Date</label>
-            <input type="date" class="form-control" v-model="logDate" @change="loadForDate(logDate)" />
+        <div class="row align-items-center g-3">
+          <div class="col-md-4">
+            <label class="form-label small text-muted mb-1">Date</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text bg-light"><i class="bi bi-calendar-date"></i></span>
+              <input type="date" class="form-control" v-model="logDate" @change="loadForDate(logDate)" />
+            </div>
           </div>
-          <div class="col-auto">
-            <span class="text-muted">Status:</span>
-            <span class="ms-2">
-              <span v-if="currentStatus === 'draft'" class="badge text-bg-warning">Draft (Auto-saved)</span>
-              <span v-else class="badge text-bg-success">Submitted</span>
-            </span>
+          <div class="col-md-4 d-flex flex-column gap-1">
+            <div class="text-muted small">Status</div>
+            <div class="d-flex flex-wrap gap-2">
+              <span v-if="currentStatus === 'draft'" class="badge rounded-pill text-bg-warning">Draft (auto-saved)</span>
+              <span v-else class="badge rounded-pill text-bg-success">Submitted</span>
+              <span v-if="logDate !== today && currentStatus === 'draft'" class="badge rounded-pill text-bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ logDate > today ? 'Future' : 'Past' }} draft</span>
+              <span v-if="logDate !== today && currentStatus === 'submitted'" class="badge rounded-pill text-bg-info"><i class="bi bi-eye me-1"></i>View only</span>
+            </div>
+            <div v-if="currentStatus === 'submitted' && currentSubmittedAt" class="text-muted small">Submitted: {{ new Date(currentSubmittedAt.toDate?.() || currentSubmittedAt).toLocaleString() }}</div>
           </div>
-          <div v-if="currentStatus === 'submitted' && currentSubmittedAt" class="col-auto">
-            <span class="text-muted small">Submitted: {{ new Date(currentSubmittedAt.toDate?.() || currentSubmittedAt).toLocaleString() }}</span>
-          </div>
-          <div v-if="logDate !== today && currentStatus === 'draft'" class="col-auto">
-            <span class="badge text-bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Past Draft (View Only)</span>
-          </div>
-          <div v-if="logDate !== today && currentStatus === 'submitted'" class="col-auto">
-            <span class="badge text-bg-info"><i class="bi bi-eye me-1"></i>View Only</span>
-          </div>
-          <div v-if="saving" class="col-auto ms-auto">
-            <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Saving...</span>
+          <div class="col-md-4 d-flex justify-content-md-end align-items-center gap-2">
+            <button v-if="logDate === today && currentStatus === 'submitted'" type="button" class="btn btn-outline-primary btn-sm" @click="startNewDraftForToday" :disabled="creatingDraft">
+              <span v-if="creatingDraft" class="spinner-border spinner-border-sm me-2"></span>
+              New draft for today
+            </button>
+            <span v-if="saving" class="text-muted small d-flex align-items-center gap-1"><i class="bi bi-hourglass-split"></i>Saving…</span>
           </div>
         </div>
       </div>
@@ -520,19 +610,19 @@ onUnmounted(stopLiveLog)
             <div class="row g-3">
               <div class="col-12">
                 <label class="form-label">Manpower</label>
-                <div class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+                <div class="table-responsive">
                   <table class="table table-sm table-striped table-hover mb-0">
-                    <thead class="table-light" style="background-color: #f0f0f0;">
-                      <tr style="border-bottom: 2px solid #dee2e6;">
-                        <th style="width: 40%;" class="small fw-semibold">Trade</th>
-                        <th style="width: 20%;" class="small fw-semibold text-center">Count</th>
-                        <th style="width: 35%;" class="small fw-semibold">Areas</th>
-                        <th style="width: 5%;" class="text-center">Actions</th>
+                    <thead>
+                      <tr>
+                        <th class="small fw-semibold col-trade">Trade</th>
+                        <th class="small fw-semibold text-center col-count">Count</th>
+                        <th class="small fw-semibold col-areas">Areas</th>
+                        <th class="text-center col-actions">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(ln, idx) in form.manpowerLines" :key="idx" style="border-bottom: 1px solid #dee2e6;">
-                        <td style="padding: 8px;">
+                      <tr v-for="(ln, idx) in form.manpowerLines" :key="idx">
+                        <td class="p-2">
                           <input 
                             type="text"
                             class="form-control form-control-sm" 
@@ -541,7 +631,7 @@ onUnmounted(stopLiveLog)
                             :disabled="!canEditDraft" 
                           />
                         </td>
-                        <td style="padding: 8px;">
+                        <td class="p-2">
                           <input 
                             type="number" 
                             min="0" 
@@ -552,7 +642,7 @@ onUnmounted(stopLiveLog)
                             :disabled="!canEditDraft"
                           />
                         </td>
-                        <td style="padding: 8px;">
+                        <td class="p-2">
                           <div class="d-flex gap-2 align-items-center">
                             <input 
                               type="text"
@@ -562,10 +652,10 @@ onUnmounted(stopLiveLog)
 
                               :disabled="!canEditDraft"
                             />
-                            <span v-if="isAdminAddedLine(ln)" class="badge bg-info flex-shrink-0" style="white-space: nowrap; font-size: 0.75rem; padding: 4px 6px;">admin</span>
+                            <span v-if="isAdminAddedLine(ln)" class="badge bg-info flex-shrink-0 badge-admin">admin</span>
                           </div>
                         </td>
-                        <td style="padding: 8px;" class="text-center">
+                        <td class="p-2 text-center">
                           <button 
                             v-if="idx > 0 && canDeleteManpowerLine(ln)" 
                             type="button" 
@@ -617,12 +707,12 @@ onUnmounted(stopLiveLog)
               </div>
               <div class="col-12">
                 <label class="form-label">Photos</label>
-                <input type="file" class="form-control mb-2" accept="image/*" @change="(e) => { const filename = (e.target as HTMLInputElement).files?.[0]?.name; if (filename) { (e.target as HTMLInputElement).nextElementSibling?.setAttribute('data-filename', filename) }; uploadAttachment(e, 'photo'); (e.target as HTMLInputElement).value = '' }" :disabled="!canEditDraft || uploading" />
-                <small class="text-muted d-block mb-3" data-filename="">No file selected</small>
+                <input type="file" class="form-control mb-2" accept="image/*" @change="(e) => handleFileChange(e, 'photo')" :disabled="!canEditDraft || uploading" />
+                <small class="text-muted d-block mb-3">{{ photoFileName }}</small>
                 <div v-if="form.attachments?.filter(a => a.type !== 'ptp').length" class="row g-2">
                   <div v-for="att in form.attachments.filter(a => a.type !== 'ptp')" :key="att.path" class="col-6 col-md-4">
                     <div class="card">
-                      <img :src="att.url" class="card-img-top" style="height: 150px; object-fit: cover;" />
+                      <img :src="att.url" class="card-img-top thumb-image" />
                       <div class="card-body p-2">
                         <button type="button" class="btn btn-sm btn-outline-danger w-100" @click="deleteAttachment(att.path)" :disabled="uploading"><i class="bi bi-trash me-1"></i>Remove</button>
                       </div>
@@ -632,12 +722,12 @@ onUnmounted(stopLiveLog)
               </div>
               <div class="col-12">
                 <label class="form-label">PTP Photos</label>
-                <input type="file" class="form-control mb-2" accept="image/*" @change="(e) => { const filename = (e.target as HTMLInputElement).files?.[0]?.name; if (filename) { (e.target as HTMLInputElement).nextElementSibling?.setAttribute('data-filename', filename) }; uploadAttachment(e, 'ptp'); (e.target as HTMLInputElement).value = '' }" :disabled="!canEditDraft || uploading" />
-                <small class="text-muted d-block mb-3" data-filename="">No file selected</small>
+                <input type="file" class="form-control mb-2" accept="image/*" @change="(e) => handleFileChange(e, 'ptp')" :disabled="!canEditDraft || uploading" />
+                <small class="text-muted d-block mb-3">{{ ptpFileName }}</small>
                 <div v-if="form.attachments?.filter(a => a.type === 'ptp').length" class="row g-2">
                   <div v-for="att in form.attachments.filter(a => a.type === 'ptp')" :key="att.path" class="col-6 col-md-4">
                     <div class="card">
-                      <img :src="att.url" class="card-img-top" style="height: 150px; object-fit: cover;" />
+                      <img :src="att.url" class="card-img-top thumb-image" />
                       <div class="card-body p-2">
                         <button type="button" class="btn btn-sm btn-outline-danger w-100" @click="deleteAttachment(att.path)" :disabled="uploading"><i class="bi bi-trash me-1"></i>Remove</button>
                       </div>
@@ -687,15 +777,44 @@ onUnmounted(stopLiveLog)
         <!-- Action Buttons -->
         <div class="d-grid gap-2">
           <button v-if="currentStatus === 'draft' && canEditDraft" @click="saveDraft" :disabled="saving" class="btn btn-primary"><i class="bi bi-check-circle me-2"></i>Save Draft</button>
-          <button v-if="currentStatus === 'draft'" @click="submit" :disabled="saving || recent.some(r => r.logDate === today && r.status === 'submitted')" class="btn btn-success"><i class="bi bi-send me-2"></i>Submit</button>
+          <button v-if="currentStatus === 'draft'" @click="submit" :disabled="saving" class="btn btn-success"><i class="bi bi-send me-2"></i>Submit</button>
           <button v-if="currentStatus === 'draft'" @click="deleteDraft" :disabled="saving" class="btn btn-outline-danger"><i class="bi bi-trash me-2"></i>Delete Draft</button>
-          <div v-if="recent.some(r => r.logDate === today && r.status === 'submitted')" class="alert alert-info mb-0"><small><i class="bi bi-info-circle me-1"></i>Daily log already submitted for today</small></div>
+          <div v-if="currentStatus !== 'draft' && logsForSelectedDate.some(r => r.logDate === today && r.status === 'submitted')" class="alert alert-info mb-0"><small><i class="bi bi-info-circle me-1"></i>Daily log already submitted for today</small></div>
           <button v-if="currentStatus === 'submitted' && jobEmailRecipients.length" @click="sendEmail" :disabled="saving" class="btn btn-info"><i class="bi bi-envelope me-2"></i>Send Email</button>
         </div>
       </div>
 
       <!-- Sidebar -->
       <div class="col-lg-4">
+        <!-- Logs for Selected Date -->
+        <div class="card mb-4 panel-muted">
+          <div class="card-header bg-light d-flex align-items-center justify-content-between">
+            <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Logs for {{ logDate }}</h5>
+            <span class="badge text-bg-secondary">{{ logsForSelectedDate.length }}</span>
+          </div>
+          <div class="card-body p-0">
+            <div v-if="logsForSelectedDate.length" class="list-group list-group-flush">
+              <button
+                v-for="log in logsForSelectedDate"
+                :key="log.id"
+                type="button"
+                class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
+                @click="loadLogById(log.id)"
+              >
+                <div class="me-2">
+                  <div class="fw-semibold">{{ log.status === 'submitted' ? 'Submitted' : 'Draft' }}</div>
+                  <div class="text-muted small">{{ formatTimestamp(log.submittedAt || log.updatedAt || log.createdAt) || 'Time not available' }}</div>
+                </div>
+                <div class="d-flex flex-column align-items-end">
+                  <span :class="['badge', log.status === 'submitted' ? 'text-bg-success' : 'text-bg-warning']">{{ log.status }}</span>
+                  <span v-if="log.uid === auth.user?.uid" class="text-muted small mt-1">You</span>
+                </div>
+              </button>
+            </div>
+            <div v-else class="text-muted small text-center py-3">No logs for this date yet</div>
+          </div>
+        </div>
+
         <!-- Email Recipients -->
         <div class="card mb-4">
           <div class="card-header bg-light"><h5 class="mb-0"><i class="bi bi-envelope me-2"></i>Email Recipients</h5></div>
@@ -718,7 +837,8 @@ onUnmounted(stopLiveLog)
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
 /* Make disabled form controls appear more clearly as read-only */
 .form-control:disabled,
 .form-control[readonly],
@@ -726,9 +846,9 @@ textarea:disabled,
 textarea[readonly],
 input:disabled,
 input[readonly] {
-  background-color: #f0f0f0;
-  color: #666;
-  border-color: #ddd;
+  background-color: $surface-3;
+  color: $text-muted-2;
+  border-color: $border-color;
   cursor: not-allowed;
   opacity: 1;
 }
@@ -737,10 +857,74 @@ input[readonly] {
   opacity: 0.5;
 }
 
+/* Dark theme for file pickers */
+input[type='file'].form-control {
+  background-color: $surface-2;
+  color: $body-color;
+  border-color: $border-color;
+}
+
+input[type='file'].form-control::file-selector-button {
+  background-color: $surface-3;
+  color: $body-color;
+  border-color: $border-color;
+}
+
+input[type='file'].form-control:hover::file-selector-button,
+input[type='file'].form-control:focus::file-selector-button {
+  background-color: lighten($surface-3, 4%);
+}
+
 /* File input feedback */
 [data-filename]::after {
   content: attr(data-filename);
-  color: #198754;
+  color: $success;
   font-weight: 500;
+}
+
+.header-hero {
+  background: linear-gradient(140deg, rgba($primary, 0.24) 0%, rgba($primary-200, 0.8) 55%, $surface-2 100%);
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.status-card {
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba($primary-50, 0.9) 0%, $surface-2 100%);
+}
+
+.panel-muted {
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  background: $surface;
+}
+
+.panel-muted .list-group-item {
+  border-color: rgba(230, 237, 247, 0.08);
+}
+
+.card-header.bg-light {
+  background: $surface-2 !important;
+}
+
+.wide-container-1200 {
+  max-width: 1200px;
+}
+
+.col-trade { width: 40%; }
+.col-count { width: 20%; }
+.col-areas { width: 35%; }
+.col-actions { width: 5%; }
+
+.badge-admin {
+  white-space: nowrap;
+  font-size: 0.75rem;
+  padding: 4px 6px;
+}
+
+.thumb-image {
+  height: 150px;
+  object-fit: cover;
 }
 </style>

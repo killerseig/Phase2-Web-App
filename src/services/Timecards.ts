@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore'
 import type { Timecard, TimecardInput, TimecardDay, TimecardTotals } from '@/types/models'
 import { calculateWeekStartDate } from '@/utils/modelValidation'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 /**
  * Helper to require authenticated user
@@ -31,6 +32,14 @@ function requireUser() {
   const u = auth.currentUser
   if (!u) throw new Error('Not signed in')
   return u
+}
+
+const jobAccess = useJobAccess()
+
+const assertJobAccess = (jobId: string) => {
+  if (!jobAccess.canAccessJob(jobId)) {
+    throw new Error('You do not have access to this job')
+  }
 }
 
 /**
@@ -113,6 +122,7 @@ export async function listTimecardsByJobAndWeek(
   jobId: string,
   weekEndingDate: string
 ): Promise<Timecard[]> {
+  assertJobAccess(jobId)
   const q = query(
     collection(db, `jobs/${jobId}/timecards`),
     where('weekEndingDate', '==', weekEndingDate),
@@ -128,6 +138,7 @@ export async function listTimecardsByJobAndWeek(
  * Get a single timecard by ID
  */
 export async function getTimecard(jobId: string, timecardId: string): Promise<Timecard | null> {
+  assertJobAccess(jobId)
   const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
   const snap = await getDoc(ref)
   if (!snap.exists()) return null
@@ -141,6 +152,7 @@ export async function listJobTimecards(
   jobId: string,
   options?: { max?: number; includeArchived?: boolean }
 ): Promise<Timecard[]> {
+  assertJobAccess(jobId)
   const includeArchived = options?.includeArchived ?? false
   const maxResults = options?.max ?? 50
 
@@ -168,6 +180,7 @@ export async function listJobTimecards(
  * List submitted timecards for a job (ready for export/approval)
  */
 export async function listSubmittedTimecards(jobId: string): Promise<Timecard[]> {
+  assertJobAccess(jobId)
   const q = query(
     collection(db, `jobs/${jobId}/timecards`),
     where('status', '==', 'submitted'),
@@ -187,6 +200,7 @@ export async function watchTimecardsByWeek(
   weekEndingDate: string,
   onUpdate: (timecards: Timecard[]) => void
 ): Promise<Unsubscribe> {
+  assertJobAccess(jobId)
   const q = query(
     collection(db, `jobs/${jobId}/timecards`),
     where('weekEndingDate', '==', weekEndingDate),
@@ -208,6 +222,7 @@ export async function watchTimecardsByWeek(
  * Create a new timecard
  */
 export async function createTimecard(jobId: string, input: TimecardInput): Promise<string> {
+  assertJobAccess(jobId)
   const u = requireUser()
 
   // Calculate totals from days
@@ -261,6 +276,7 @@ export async function updateTimecard(
   timecardId: string,
   updates: Partial<TimecardInput>
 ): Promise<void> {
+  assertJobAccess(jobId)
   const u = requireUser()
   const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
@@ -291,6 +307,7 @@ export async function updateTimecardDays(
   timecardId: string,
   days: TimecardDay[]
 ): Promise<void> {
+  assertJobAccess(jobId)
   const u = requireUser()
   const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
@@ -318,6 +335,7 @@ export async function getPreviousWeekTimecards(
   jobId: string,
   weekEndingDate: string
 ): Promise<Timecard[]> {
+  assertJobAccess(jobId)
   // Calculate previous week's Saturday
   const currentWeekEnd = new Date(weekEndingDate + 'T00:00:00Z')
   const previousWeekEnd = new Date(currentWeekEnd)
@@ -344,6 +362,7 @@ export async function createTimecardFromCopy(
   sourceTimecard: Timecard,
   newWeekEndingDate: string
 ): Promise<string> {
+  assertJobAccess(jobId)
   // Create new days array with zeroed hours
   const newDays = sourceTimecard.days.map((day, index) => {
     // Calculate new date for this day
@@ -390,6 +409,7 @@ export async function autoGenerateTimecards(
   jobId: string,
   newWeekEndingDate: string
 ): Promise<string[]> {
+  assertJobAccess(jobId)
   // Get previous week's timecards
   const previousWeekTimecards = await getPreviousWeekTimecards(jobId, newWeekEndingDate)
   
@@ -422,6 +442,7 @@ export async function submitAllWeekTimecards(
   jobId: string,
   weekEndingDate: string
 ): Promise<number> {
+  assertJobAccess(jobId)
   const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
   const draftTimecards = timecards.filter(tc => tc.status === 'draft')
   
@@ -438,6 +459,7 @@ export async function submitAllWeekTimecards(
  * Submit a timecard (change status to submitted)
  */
 export async function submitTimecard(jobId: string, timecardId: string): Promise<void> {
+  assertJobAccess(jobId)
   const u = requireUser()
   const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
@@ -453,6 +475,7 @@ export async function submitTimecard(jobId: string, timecardId: string): Promise
  * Archive a timecard
  */
 export async function archiveTimecard(jobId: string, timecardId: string): Promise<void> {
+  assertJobAccess(jobId)
   const u = requireUser()
   const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
@@ -468,6 +491,7 @@ export async function archiveTimecard(jobId: string, timecardId: string): Promis
  * Unarchive a timecard
  */
 export async function unarchiveTimecard(jobId: string, timecardId: string): Promise<void> {
+  assertJobAccess(jobId)
   requireUser()
   const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
@@ -482,6 +506,7 @@ export async function unarchiveTimecard(jobId: string, timecardId: string): Prom
  * Delete a timecard (only drafts)
  */
 export async function deleteTimecard(jobId: string, timecardId: string): Promise<void> {
+  assertJobAccess(jobId)
   const u = requireUser()
   const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
   const snap = await getDoc(ref)
@@ -509,6 +534,7 @@ export async function exportTimecardsToCsv(
   jobId: string,
   weekEndingDate: string
 ): Promise<string> {
+  assertJobAccess(jobId)
   const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
 
   // CSV header
@@ -556,6 +582,7 @@ export async function exportTimecardsToCsv(
  * Export all submitted timecards for a job to CSV
  */
 export async function exportAllSubmittedTimecardsToCsv(jobId: string): Promise<string> {
+  assertJobAccess(jobId)
   const timecards = await listSubmittedTimecards(jobId)
 
   if (timecards.length === 0) return ''
@@ -616,6 +643,7 @@ export async function getWeeklyStats(
   totalHours: number
   totalProduction: number
 }> {
+  assertJobAccess(jobId)
   const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
 
   const submitted = timecards.filter(tc => tc.status === 'submitted')
@@ -645,6 +673,7 @@ export async function listTimecardsByJobAndWeekLegacy(
   weekStart: string,
   onUpdate: (timecards: any[]) => void
 ): Promise<Unsubscribe> {
+  assertJobAccess(jobId)
   // Map old weekStart (Monday) to new weekEndingDate (Saturday)
   // Assume weekStart is the Monday, so Saturday is weekStart + 5 days
   const startDate = new Date(weekStart + 'T00:00:00Z')
@@ -679,6 +708,7 @@ export type TimecardLine = {
  * Legacy wrapper for old upsertTimecard function
  */
 export async function upsertTimecard(jobId: string, input: any): Promise<string> {
+  assertJobAccess(jobId)
   // Map old format to new
   const days: TimecardDay[] = [
     { date: '', dayOfWeek: 0, hours: input.sun ?? 0, production: 0, unitCost: 0, lineTotal: 0 },

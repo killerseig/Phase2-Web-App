@@ -1,36 +1,40 @@
 // Extended text colors
+.text-muted {
+  color: #9fb0c8 !important;
+}
+
 .text-muted-2 {
-  color: rgba(15, 23, 42, 0.68) !important;
+  color: #9fb0c8 !important;
 }
 
 .text-muted-3 {
-  color: rgba(15, 23, 42, 0.48) !important;
+  color: #6c7a93 !important;
 }
 
 // Background utilities
 .bg-surface {
-  background: #ffffff !important;
+  background: $surface !important;
 }
 
 .bg-soft {
-  background: #f7f8fb !important;
+  background: $surface-2 !important;
 }
 
 .bg-soft-2 {
-  background: #f0f3f7 !important;
+  background: $surface-3 !important;
 }
 
 // Border utilities
 .border-soft {
-  border-color: rgba(15, 23, 42, 0.10) !important;
+  border-color: rgba(230, 237, 247, 0.10) !important;
 }
 
 .border-top-soft {
-  border-top-color: rgba(15, 23, 42, 0.10) !important;
+  border-top-color: rgba(230, 237, 247, 0.10) !important;
 }
 
 .border-bottom-soft {
-  border-bottom-color: rgba(15, 23, 42, 0.10) !important;
+  border-bottom-color: rgba(230, 237, 247, 0.10) !important;
 }
 
 // Icon pill (great for service cards)
@@ -40,19 +44,19 @@
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: rgba($warning, 0.14);
+  color: $warning;
   font-size: 1.25rem;
 }
 
 .icon-pill-primary {
-  background: rgba(0, 71, 171, 0.12);
-  color: #0047ab;
+  background: rgba($primary, 0.16);
+  color: $primary;
 }
 
 .icon-pill-success {
-  background: rgba(31, 122, 77, 0.12);
-  color: #1f7a4d;
+  background: rgba($success, 0.16);
+  color: $success;
 }
 
 // Divider
@@ -63,7 +67,7 @@
 }
 
 .divider-soft {
-  background: rgba(15, 23, 42, 0.08);
+  background: rgba(230, 237, 247, 0.08);
 }
 
 // Spacing helpers (clamp for responsive padding)
@@ -90,7 +94,7 @@
   transition: color .2s ease;
 
   &:hover {
-    color: darken($primary, 10%);
+    color: lighten($primary, 6%);
     text-decoration: underline;
   }
 }

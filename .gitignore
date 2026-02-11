@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Sensitive local data
+users.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

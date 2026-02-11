@@ -55,9 +55,13 @@ export async function getJob(jobId: string): Promise<Job | null> {
   return normalize(snap.id, snap.data())
 }
 
-export async function listAllJobs(includeArchived = true): Promise<Job[]> {
-  // Fetch all jobs sorted by name
-  const jobsQ = query(collection(db, 'jobs'), orderBy('name', 'asc'))
+export async function listAllJobs(includeArchived = true, options?: { assignedOnlyForUid?: string }): Promise<Job[]> {
+  const assignedUid = options?.assignedOnlyForUid
+
+  const jobsQ = assignedUid
+    ? query(collection(db, 'jobs'), where('assignedForemanIds', 'array-contains', assignedUid))
+    : query(collection(db, 'jobs'), orderBy('name', 'asc'))
+
   const snap = await getDocs(jobsQ)
   
   let jobs = snap.docs.map((d) => normalize(d.id, d.data()))
@@ -65,6 +69,11 @@ export async function listAllJobs(includeArchived = true): Promise<Job[]> {
   // Filter to active jobs only if not including archived
   if (!includeArchived) {
     jobs = jobs.filter(j => j.active)
+  }
+
+  // For foreman-restricted queries we sort client-side to avoid composite indexes
+  if (assignedUid) {
+    jobs = jobs.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   }
   
   return jobs

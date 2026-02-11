@@ -30,6 +30,23 @@ export interface UserTrackedDocument extends AuditMetadata {
   uid: string // Creator/Owner UID
 }
 
+// Attachments (used by daily logs and other modules)
+export interface Attachment {
+  name: string
+  url: string
+  path: string
+  type?: 'photo' | 'ptp' | 'other'
+  createdAt?: Timestamp | any
+}
+
+// Manpower line item for daily logs
+export interface ManpowerLine {
+  trade: string
+  count: number
+  areas: string
+  addedByUserId?: string
+}
+
 /**
  * Submittable Document - Draft/Submitted workflow
  */

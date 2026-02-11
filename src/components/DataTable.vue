@@ -3,39 +3,40 @@
  * Standardized Data Table Component
  * Provides consistent behavior for all editable/display tables in the app
  */
+</template>
 
-import { computed } from 'vue'
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
 
-interface Column {
-  key: string
-  label: string
-  type?: 'text' | 'number' | 'select' | 'textarea' | 'email' | 'date'
-  placeholder?: string
-  width?: string
-  sortable?: boolean
-  hidden?: boolean
-  step?: number
-  min?: number
-  max?: number
-  options?: Array<{ label: string; value: any }>
-  format?: (value: any) => string
-  editable?: boolean
+.data-table-wrapper {
+  width: 100%;
 }
 
-interface Props {
-  rows: any[]
-  columns: Column[]
-  editable?: boolean
-  onAddRow?: () => void
-  onDeleteRow?: (rowIndex: number) => void
-  onUpdateRow?: (rowIndex: number, row: any) => void
-  showAddButton?: boolean
-  addButtonLabel?: string
-  deleteConfirmMessage?: string
-  emptyMessage?: string
-  loading?: boolean
-  striped?: boolean
-  hover?: boolean
+.table-responsive {
+  border: 1px solid $border-color;
+  border-radius: 8px;
+  overflow-x: auto;
+  background: $surface;
+  box-shadow: $box-shadow-sm;
+}
+
+.table {
+  border-collapse: collapse;
+}
+
+.form-control,
+.form-control-sm,
+select {
+  border-radius: 4px;
+}
+
+.form-control:focus,
+.form-control-sm:focus,
+select:focus {
+  border-color: lighten($primary, 6%);
+  box-shadow: 0 0 0 0.2rem rgba($primary, 0.25);
+}
+</style>
   compact?: boolean
 }
 
@@ -102,8 +103,8 @@ const getInputClasses = (): string => [
     <!-- Table -->
     <div v-else class="table-responsive">
       <table :class="tableClasses">
-        <thead class="table-light">
-          <tr style="background-color: #f0f0f0; border-bottom: 2px solid #dee2e6;">
+        <thead>
+          <tr>
             <th v-for="col in visibleColumns" :key="String(col.key)" :style="{ width: col.width }" class="small fw-semibold">
               {{ col.label }}
             </th>
@@ -111,7 +112,7 @@ const getInputClasses = (): string => [
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, rowIdx) in rows" :key="rowIdx" style="border-bottom: 1px solid #dee2e6;">
+          <tr v-for="(row, rowIdx) in rows" :key="rowIdx">
             <td v-for="col in visibleColumns" :key="String(col.key)" :style="{ width: col.width }">
               <!-- Editable Cell -->
               <template v-if="editable && col.editable !== false">
@@ -198,17 +199,12 @@ const getInputClasses = (): string => [
       </button>
     </div>
   </div>
-</template>
-
-<style scoped>
-.data-table-wrapper {
-  width: 100%;
-}
-
 .table-responsive {
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: 8px;
   overflow-x: auto;
+  background: $surface;
+  box-shadow: $box-shadow-sm;
 }
 
 .table {
@@ -224,7 +220,14 @@ select {
 .form-control:focus,
 .form-control-sm:focus,
 select:focus {
-  border-color: #80bdff;
-  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  border-color: lighten($primary, 6%);
+  box-shadow: 0 0 0 0.2rem rgba($primary, 0.25);
+}
+</style>
+
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+.data-table-wrapper {
+  width: 100%;
 }
 </style>

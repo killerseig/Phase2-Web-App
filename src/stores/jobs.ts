@@ -17,11 +17,11 @@ export const useJobsStore = defineStore('jobs', () => {
   const hasError = computed(() => error.value !== null)
 
   // Actions
-  async function fetchAllJobs(includeArchived = true) {
+  async function fetchAllJobs(includeArchived = true, options?: { assignedOnlyForUid?: string }) {
     loading.value = true
     error.value = null
     try {
-      jobs.value = await JobsService.listAllJobs(includeArchived)
+      jobs.value = await JobsService.listAllJobs(includeArchived, options)
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to load jobs'
       console.error('[Jobs Store] Error loading jobs:', e)

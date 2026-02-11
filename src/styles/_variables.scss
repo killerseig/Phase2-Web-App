@@ -1,21 +1,31 @@
-// ===== Brand palette (professional construction vibe) =====
-$primary:   #0047ab;  // company brand blue
-$secondary: #2f3b45;  // steel
-$success:   #1f7a4d;
-$warning:   #f59e0b;  // safety amber
-$danger:    #b42318;
-$info:      #2563eb;
-$light:     #f6f7f9;
-$dark:      #0f172a;
+// ===== Brand palette (dark theme, brand blue anchored) =====
+$primary:    #3d8bff;  // luminous brand blue
+$primary-50:  #0f1b30; // deepest tint for panels
+$primary-100: #14233d;
+$primary-200: #1b2d4f;
+$primary-700: #0f3263;
+$secondary:  #9fb0c8;  // muted slate for text accents
+$success:    #2bd4c5;
+$warning:    #f6b73c;
+$danger:     #f16a6a;
+$info:       #9f7aea;
+$light:      #1c2940;
+$dark:       #0b1020;
 
 // ===== Body + surfaces =====
-$body-bg: #ffffff;
-$body-color: #0f172a;
+$body-bg: #0f1b30;
+$body-color: #e6edf7;
+$surface: #111a2c;
+$surface-2: #162038;
+$surface-3: #1c2940;
+$text-muted: #9fb0c8;
+$text-muted-2: #9fb0c8;
+$text-muted-3: #6c7a93;
 
-$border-color: rgba(15, 23, 42, 0.12);
-$box-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
-$box-shadow:    0 8px 20px rgba(15, 23, 42, 0.10);
-$box-shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.14);
+$border-color: rgba(230, 237, 247, 0.08);
+$box-shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.30);
+$box-shadow:    0 16px 40px rgba(0, 0, 0, 0.35);
+$box-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45);
 
 // ===== Typography =====
 $font-family-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;

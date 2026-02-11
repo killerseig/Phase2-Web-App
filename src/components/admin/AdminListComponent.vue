@@ -110,10 +110,10 @@ function getCellValue(item: any, key: string) {
     </div>
 
     <!-- Table -->
-    <div v-else class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+    <div v-else class="table-responsive">
       <table class="table table-sm table-striped table-hover mb-0">
-        <thead class="table-light" style="background-color: #f0f0f0;">
-          <tr style="border-bottom: 2px solid #dee2e6;">
+        <thead>
+          <tr>
             <th
               v-for="column in columns"
               :key="column.key"
@@ -132,7 +132,7 @@ function getCellValue(item: any, key: string) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in filteredItems" :key="item.id" style="border-bottom: 1px solid #dee2e6;">
+          <tr v-for="item in filteredItems" :key="item.id">
             <td v-for="column in columns" :key="column.key" :class="column.class" style="padding: 8px;">
               {{ getCellValue(item, column.key) }}
             </td>
@@ -161,9 +161,18 @@ function getCellValue(item: any, key: string) {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
 .cursor-pointer {
   cursor: pointer;
   user-select: none;
+}
+
+.table-responsive {
+  border: 1px solid $border-color;
+  border-radius: 8px;
+  background: $surface;
+  box-shadow: $box-shadow-sm;
 }
 </style>

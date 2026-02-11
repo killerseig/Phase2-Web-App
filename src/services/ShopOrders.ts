@@ -12,6 +12,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 export type ShopOrderStatus = 'draft' | 'order' | 'receive'
 
@@ -40,6 +41,14 @@ function requireUser() {
   return u
 }
 
+const jobAccess = useJobAccess()
+
+const assertJobAccess = (jobId: string) => {
+  if (!jobAccess.canAccessJob(jobId)) {
+    throw new Error('You do not have access to this job')
+  }
+}
+
 function normalize(id: string, data: any): ShopOrder {
   return {
     id,
@@ -66,6 +75,7 @@ export async function listShopOrders(
   scopes: string[] = ['scope:employee'],
   max = 25
 ): Promise<ShopOrder[]> {
+  assertJobAccess(jobId)
   requireUser()
 
   const docMap = new Map<string, ShopOrder>()
@@ -96,6 +106,7 @@ export async function listShopOrders(
  * Create a new draft shop order with a scope key (uid)
  */
 export async function createShopOrder(jobId: string, scopeKey: string) {
+  assertJobAccess(jobId)
   const u = requireUser()
 
   // Firebase's addDoc automatically generates a unique document ID
@@ -122,6 +133,7 @@ export async function updateShopOrderItems(
   orderId: string,
   items: ShopOrderItem[]
 ) {
+  assertJobAccess(jobId)
   requireUser()
   const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
 
@@ -139,6 +151,7 @@ export async function updateShopOrderStatus(
   orderId: string,
   status: ShopOrderStatus
 ) {
+  assertJobAccess(jobId)
   requireUser()
   const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
 
@@ -156,6 +169,7 @@ export async function updateShopOrderScope(
   orderId: string,
   scopeKey: string
 ) {
+  assertJobAccess(jobId)
   requireUser()
   const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
 

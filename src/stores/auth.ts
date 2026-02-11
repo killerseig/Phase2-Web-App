@@ -10,8 +10,9 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore'
 
 // Use relative imports to avoid alias/tsconfig fights
 import { auth, db } from '../firebase'
+import type { Role as AppRole } from '@/constants/app'
 
-export type Role = 'admin' | 'employee' | 'shop' | 'foreman' | 'none'
+export type Role = AppRole
 
 type AuthState = {
   user: User | null

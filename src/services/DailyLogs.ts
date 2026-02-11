@@ -14,22 +14,32 @@ import {
   deleteDoc,
   where,
 } from 'firebase/firestore'
+import type { Attachment, ManpowerLine } from '@/types/documents'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 export type DailyLogStatus = 'draft' | 'submitted'
 
-export type ManpowerLine = {
-  trade: string
-  count: number
-  areas: string
-  addedByUserId?: string
+
+export function toMillis(ts: any): number {
+  if (!ts) return 0
+  if (typeof ts === 'number') return ts
+  if (typeof ts === 'string') return new Date(ts).getTime()
+  if (typeof ts?.toMillis === 'function') return ts.toMillis()
+  try {
+    const d = ts.toDate?.() ?? ts
+    const asDate = typeof d === 'string' || typeof d === 'number' ? new Date(d) : d
+    return asDate instanceof Date ? asDate.getTime() : 0
+  } catch {
+    return 0
+  }
 }
 
-export type Attachment = {
-  name: string
-  url: string
-  path: string
-  type?: 'photo' | 'ptp' | 'other'
-  createdAt?: any
+export function formatTimestamp(ts: any): string {
+  if (!ts) return ''
+  const date = ts?.toDate?.() ?? ts
+  const parsed = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
+  if (!(parsed instanceof Date) || Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleString()
 }
 
 export type DailyLog = {
@@ -82,6 +92,14 @@ function requireUser() {
   return u
 }
 
+const jobAccess = useJobAccess()
+
+const assertJobAccess = (jobId: string) => {
+  if (!jobAccess.canAccessJob(jobId)) {
+    throw new Error('You do not have access to this job')
+  }
+}
+
 function normalize(id: string, data: any): DailyLog {
   return {
     id,
@@ -124,6 +142,7 @@ function normalize(id: string, data: any): DailyLog {
 }
 
 export async function listMyDailyLogs(jobId: string, max = 25): Promise<DailyLog[]> {
+  assertJobAccess(jobId)
   const u = requireUser()
 
   const q = query(
@@ -138,6 +157,7 @@ export async function listMyDailyLogs(jobId: string, max = 25): Promise<DailyLog
 }
 
 export async function listAllDailyLogs(jobId: string, max = 25): Promise<DailyLog[]> {
+  assertJobAccess(jobId)
   const u = requireUser()
 
   // Get all submitted logs (visible to everyone)
@@ -168,24 +188,94 @@ export async function listAllDailyLogs(jobId: string, max = 25): Promise<DailyLo
     .slice(0, max)
 }
 
-export async function getMyDailyLogByDate(jobId: string, logDate: string): Promise<DailyLog | null> {
+export async function listDailyLogsForDate(jobId: string, logDate: string): Promise<DailyLog[]> {
+  assertJobAccess(jobId)
   const u = requireUser()
 
-  const q = query(
+  const submittedQuery = query(
+    collection(db, `jobs/${jobId}/dailyLogs`),
+    where('logDate', '==', logDate),
+    where('status', '==', 'submitted')
+  )
+
+  const myDraftsQuery = query(
+    collection(db, `jobs/${jobId}/dailyLogs`),
+    where('logDate', '==', logDate),
+    where('status', '==', 'draft'),
+    where('uid', '==', u.uid)
+  )
+
+  const [submittedSnap, draftsSnap] = await Promise.all([
+    getDocs(submittedQuery),
+    getDocs(myDraftsQuery)
+  ])
+
+  const logsMap = new Map<string, DailyLog>()
+  submittedSnap.docs.forEach((d) => logsMap.set(d.id, normalize(d.id, d.data())))
+  draftsSnap.docs.forEach((d) => logsMap.set(d.id, normalize(d.id, d.data())))
+
+  const rank = (s: DailyLog['status']) => (s === 'submitted' ? 0 : 1)
+
+  return Array.from(logsMap.values()).sort((a, b) => {
+    if (rank(a.status) !== rank(b.status)) return rank(a.status) - rank(b.status)
+    const aTs = toMillis(a.submittedAt || a.updatedAt || a.createdAt)
+    const bTs = toMillis(b.submittedAt || b.updatedAt || b.createdAt)
+    return bTs - aTs
+  })
+}
+
+export async function getMyDailyLogByDate(jobId: string, logDate: string): Promise<DailyLog | null> {
+  assertJobAccess(jobId)
+  const u = requireUser()
+
+  // Prefer draft for that date (most recent)
+  const draftQuery = query(
     collection(db, `jobs/${jobId}/dailyLogs`),
     where('uid', '==', u.uid),
     where('logDate', '==', logDate),
-    limit(1)
+    where('status', '==', 'draft')
   )
 
-  const snap = await getDocs(q)
-  if (snap.empty) return null
+  const draftSnap = await getDocs(draftQuery)
+  if (!draftSnap.empty) {
+    // Pick latest by createdAt to avoid needing a composite index
+    const latestDraft = draftSnap.docs.reduce<
+      { doc: (typeof draftSnap.docs)[number]; ts: number } | null
+    >((latest, doc) => {
+      const ts = doc.data()?.createdAt?.toMillis?.() ?? 0
+      if (!latest || ts > latest.ts) return { doc, ts }
+      return latest
+    }, null)
 
-  const d = snap.docs[0]
+    const d = latestDraft?.doc ?? draftSnap.docs[0]
+    return normalize(d.id, d.data())
+  }
+
+  // Otherwise fall back to latest submitted for that date
+  const submittedQuery = query(
+    collection(db, `jobs/${jobId}/dailyLogs`),
+    where('uid', '==', u.uid),
+    where('logDate', '==', logDate),
+    where('status', '==', 'submitted')
+  )
+
+  const submittedSnap = await getDocs(submittedQuery)
+  if (submittedSnap.empty) return null
+
+  const latestSubmitted = submittedSnap.docs.reduce<
+    { doc: (typeof submittedSnap.docs)[number]; ts: number } | null
+  >((latest, doc) => {
+    const ts = doc.data()?.submittedAt?.toMillis?.() ?? 0
+    if (!latest || ts > latest.ts) return { doc, ts }
+    return latest
+  }, null)
+
+  const d = latestSubmitted?.doc ?? submittedSnap.docs[0]
   return normalize(d.id, d.data())
 }
 
 export async function createDailyLog(jobId: string, logDate: string, input: DailyLogDraftInput) {
+  assertJobAccess(jobId)
   const u = requireUser()
 
   const ref = await addDoc(collection(db, `jobs/${jobId}/dailyLogs`), {
@@ -204,6 +294,7 @@ export async function createDailyLog(jobId: string, logDate: string, input: Dail
 }
 
 export async function updateDailyLog(jobId: string, dailyLogId: string, updates: Partial<DailyLogDraftInput>) {
+  assertJobAccess(jobId)
   requireUser()
   const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
   await updateDoc(ref, {
@@ -213,6 +304,7 @@ export async function updateDailyLog(jobId: string, dailyLogId: string, updates:
 }
 
 export async function submitDailyLog(jobId: string, dailyLogId: string) {
+  assertJobAccess(jobId)
   requireUser()
   const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
 
@@ -227,12 +319,14 @@ export async function submitDailyLog(jobId: string, dailyLogId: string) {
 }
 
 export async function deleteDailyLog(jobId: string, dailyLogId: string) {
+  assertJobAccess(jobId)
   requireUser()
   const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
   await deleteDoc(ref)
 }
 
 export async function cleanupDeletedLogs(jobId: string) {
+  assertJobAccess(jobId)
   requireUser()
   
   const q = query(
@@ -249,6 +343,7 @@ export async function cleanupDeletedLogs(jobId: string) {
 }
 
 export async function getDailyLogById(jobId: string, dailyLogId: string): Promise<DailyLog | null> {
+  assertJobAccess(jobId)
   const u = requireUser()
   const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
   const snap = await getDoc(ref)
@@ -270,6 +365,7 @@ export function subscribeToDailyLog(
   onData: (log: DailyLog) => void,
   onError?: (error: any) => void
 ) {
+  assertJobAccess(jobId)
   const u = requireUser()
   const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
   return onSnapshot(

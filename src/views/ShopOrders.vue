@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import ShopCatalogTreeNode from '../components/admin/ShopCatalogTreeNode.vue'
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, type Unsubscribe } from 'firebase/firestore'
@@ -11,15 +11,18 @@ import { useShopCatalogStore } from '../stores/shopCatalog'
 import { useShopCategoriesStore } from '../stores/shopCategories'
 import { useShopService } from '../services/useShopService'
 import { createShopOrder } from '../services/ShopOrders'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 defineProps<{ jobId?: string }>()
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const jobs = useJobsStore()
 const shopCatalogStore = useShopCatalogStore()
 const shopCategoriesStore = useShopCategoriesStore()
 const shopService = useShopService()
+const jobAccess = useJobAccess()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 type ShopOrderStatus = 'draft' | 'order' | 'receive'
@@ -45,6 +48,9 @@ const newItemNote = ref('')
 const selectedCatalogItem = ref<any | null>(null)
 const catalogItemQtys = ref<Record<string, number>>({})
 const expandedNodes = ref<Set<string>>(new Set())
+const showEmailModal = ref(false)
+const recipientsInput = ref('')
+const sendingEmail = ref(false)
 
 const isAdmin = computed(() => auth.role === 'admin')
 const isJobManager = computed(() => isAdmin.value)
@@ -351,6 +357,13 @@ const init = async () => {
   loading.value = true
   err.value = ''
   try {
+    if (!auth.ready) await auth.init()
+    if (!jobAccess.canAccessJob(jobId.value)) {
+      await router.push({ name: 'unauthorized' })
+      loading.value = false
+      return
+    }
+
     // Load job details
     await jobs.fetchJob(jobId.value)
     
@@ -484,6 +497,45 @@ const receiveOrder = async () => {
   }
 }
 
+const openEmailModal = () => {
+  if (!selected.value) return
+  showEmailModal.value = true
+  recipientsInput.value = ''
+}
+
+const closeEmailModal = () => {
+  showEmailModal.value = false
+  recipientsInput.value = ''
+}
+
+const sendOrderEmail = async () => {
+  if (!selected.value) return
+  const recipients = recipientsInput.value
+    .split(',')
+    .map(r => r.trim())
+    .filter(Boolean)
+
+  if (recipients.length === 0) {
+    toastRef.value?.show('Enter at least one recipient email', 'error')
+    return
+  }
+
+  sendingEmail.value = true
+  try {
+    await shopService.sendShopOrderEmail({
+      jobId: jobId.value,
+      shopOrderId: selected.value.id,
+      recipients,
+    })
+    toastRef.value?.show('Order emailed successfully', 'success')
+    closeEmailModal()
+  } catch (e: any) {
+    toastRef.value?.show(e?.message ?? 'Failed to email order', 'error')
+  } finally {
+    sendingEmail.value = false
+  }
+}
+
 onMounted(init)
 onUnmounted(clearSubscriptions)
 </script>
@@ -527,20 +579,27 @@ onUnmounted(clearSubscriptions)
     <div class="row g-4">
       <!-- Orders List -->
       <div class="col-lg-4">
-        <div class="card">
-          <div class="card-header bg-light"><h5 class="mb-0">Orders ({{ filtered.length }})</h5></div>
+        <div class="card order-panel">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Orders</h5>
+            <span class="badge rounded-pill text-bg-secondary">{{ filtered.length }}</span>
+          </div>
           <div v-if="loading" class="card-body text-center py-5"><div class="spinner-border spinner-border-sm"></div></div>
-          <div v-else-if="!filtered.length" class="card-body text-center text-muted py-5">No orders found</div>
+          <div v-else-if="!filtered.length" class="card-body text-center text-muted py-5">
+            <i class="bi bi-inbox mb-2 d-block" style="font-size: 1.6rem;"></i>
+            <div>No orders yet</div>
+            <div class="small text-muted">Create one to get started</div>
+          </div>
           <div v-else class="list-group list-group-flush">
-            <button v-for="order in filtered" :key="order.id" type="button" class="list-group-item list-group-item-action text-start" :class="{ active: selectedId === order.id }" @click="selectedId = order.id">
+            <button v-for="order in filtered" :key="order.id" type="button" class="list-group-item list-group-item-action text-start order-list-item" :class="{ active: selectedId === order.id }" @click="selectedId = order.id">
               <div class="d-flex justify-content-between align-items-start">
                 <div>
-                  <small class="text-muted">{{ order.id.slice(0, 8) }}</small>
                   <div class="small fw-semibold">{{ fmtDate(order.orderDate) }}</div>
+                  <small class="text-muted">{{ order.id.slice(0, 8) }}</small>
                 </div>
-                <span :class="`badge ${statusBadgeClass(order.status)}`">{{ order.status }}</span>
+                <span :class="`badge rounded-pill ${statusBadgeClass(order.status)}`">{{ order.status }}</span>
               </div>
-              <div class="small mt-1">{{ order.items.length }} item(s)</div>
+              <div class="small mt-1 text-muted">{{ order.items.length }} item(s)</div>
             </button>
           </div>
         </div>
@@ -548,20 +607,28 @@ onUnmounted(clearSubscriptions)
 
       <!-- Order Details -->
       <div class="col-lg-8">
-        <div v-if="!selected" class="card text-center text-muted py-5"><p>Select an order to view details</p></div>
+          <div v-if="!selected" class="card text-center text-muted py-5 order-empty">
+            <i class="bi bi-hand-index-thumb" style="font-size: 1.8rem;"></i>
+            <p class="mb-0 mt-2">Select an order to view details</p>
+          </div>
         <div v-else>
           <!-- Order Header -->
-          <div class="card mb-3">
+          <div class="card mb-3 order-card">
             <div class="card-header bg-light">
               <div class="d-flex justify-content-between align-items-center">
                 <div>
                   <h5 class="mb-1">Order {{ selected.id.slice(0, 8) }}</h5>
                   <small class="text-muted">{{ fmtDate(selected.orderDate) }}</small>
                 </div>
-                <span :class="`badge ${statusBadgeClass(selected.status)}`">{{ selected.status }}</span>
+                <div class="d-flex align-items-center gap-2">
+                  <button class="btn btn-outline-secondary btn-sm" type="button" @click="openEmailModal" title="Email this order">
+                    <i class="bi bi-envelope me-1"></i>Email
+                  </button>
+                  <span :class="`badge rounded-pill ${statusBadgeClass(selected.status)}`">{{ selected.status }}</span>
+                </div>
               </div>
             </div>
-            <div class="card-body">
+            <div class="card-body order-body">
               <!-- Scope Selector -->
               <div v-if="canChangeScope(selected)" class="mb-3">
                 <label class="form-label">Scope</label>
@@ -575,10 +642,10 @@ onUnmounted(clearSubscriptions)
               </div>
 
               <!-- Items Table -->
-              <div v-if="selected.items.length > 0" class="table-responsive mb-3" style="border: 1px solid #dee2e6; border-radius: 4px;">
+              <div v-if="selected.items.length > 0" class="table-responsive mb-3 order-table">
                 <h6 class="mb-2">Order Items</h6>
-                <table class="table table-sm table-striped table-hover mb-0">
-                  <thead class="table-light" style="background-color: #f0f0f0; border-bottom: 2px solid #dee2e6;">
+                <table class="table table-sm table-striped table-hover mb-0 align-middle">
+                  <thead>
                     <tr>
                       <th style="width: auto;" class="small fw-semibold">Description</th>
                       <th style="width: 100px;" class="small fw-semibold text-center">Qty</th>
@@ -587,7 +654,7 @@ onUnmounted(clearSubscriptions)
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, idx) in selected.items" :key="idx" style="border-bottom: 1px solid #dee2e6;">
+                    <tr v-for="(item, idx) in selected.items" :key="idx">
                       <td style="padding: 8px;">
                         <template v-if="canEditOrder(selected)">
                           <input 
@@ -725,14 +792,45 @@ onUnmounted(clearSubscriptions)
       </div>
     </div>
   </div>
+
+  <!-- Email Order Modal -->
+  <div v-if="showEmailModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Email Order</h5>
+          <button type="button" class="btn-close" @click="closeEmailModal" :disabled="sendingEmail"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Enter one or more recipient emails, separated by commas.</p>
+          <textarea
+            v-model="recipientsInput"
+            class="form-control"
+            rows="3"
+            placeholder="email1@example.com, email2@example.com"
+            :disabled="sendingEmail"
+          ></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="closeEmailModal" :disabled="sendingEmail">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="sendOrderEmail" :disabled="sendingEmail">
+            <span v-if="sendingEmail" class="spinner-border spinner-border-sm me-2" />
+            Send Email
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
 .catalog-tree {
-  border: 1px solid #dee2e6;
+  border: 1px solid $border-color;
   border-radius: 4px;
   max-height: 600px;
   overflow-y: auto;
+  background: $surface;
 }
 
 .catalog-tree::-webkit-scrollbar {
@@ -744,11 +842,47 @@ onUnmounted(clearSubscriptions)
 }
 
 .catalog-tree::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: rgba($primary, 0.35);
   border-radius: 4px;
 }
 
 .catalog-tree::-webkit-scrollbar-thumb:hover {
-  background: #999;
+  background: rgba($primary, 0.5);
+}
+
+.order-panel .list-group-item {
+  border-left: 3px solid transparent;
+}
+
+.order-list-item.active {
+  border-left-color: #0d6efd;
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.05);
+}
+
+
+.order-card .card-header {
+  border-bottom: 1px solid rgba(230, 237, 247, 0.12);
+  background: linear-gradient(180deg, rgba($primary, 0.20) 0%, rgba($primary-200, 0.85) 60%, $surface-2 100%);
+}
+
+.order-card .order-body {
+  background: linear-gradient(180deg, rgba($primary-50, 0.9) 0%, $surface 100%);
+}
+
+.order-table {
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba($primary, 0.08),
+    rgba($primary, 0.08) 24px,
+    $surface,
+    $surface 48px
+  );
+}
+
+.order-empty {
+  border: 1px dashed rgba(230, 237, 247, 0.20);
+  background: $surface-2;
 }
 </style>

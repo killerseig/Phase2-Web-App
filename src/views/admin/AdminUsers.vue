@@ -385,10 +385,10 @@ onMounted(() => {
           No users yet. Create your first user above.
         </div>
 
-        <div v-else class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+        <div v-else class="table-responsive">
           <table class="table table-sm table-striped table-hover mb-0">
-            <thead class="table-light" style="background-color: #f0f0f0;">
-              <tr style="border-bottom: 2px solid #dee2e6;">
+            <thead>
+              <tr>
                 <th style="width: 20%;" class="small fw-semibold">Email</th>
                 <th style="width: 15%;" class="small fw-semibold">First Name</th>
                 <th style="width: 15%;" class="small fw-semibold">Last Name</th>
@@ -398,7 +398,7 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="user in users" :key="user.id" style="border-bottom: 1px solid #dee2e6;">
+              <tr v-for="user in users" :key="user.id">
                 <td style="padding: 8px;">
                   <template v-if="editingUserId === user.id">
                     <input
@@ -554,10 +554,10 @@ onMounted(() => {
           No employees yet. Create your first employee above.
         </div>
 
-        <div v-else class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+        <div v-else class="table-responsive">
           <table class="table table-sm table-striped table-hover mb-0">
-            <thead class="table-light" style="background-color: #f0f0f0;">
-              <tr style="border-bottom: 2px solid #dee2e6;">
+            <thead>
+              <tr>
                 <th style="width: 30%;" class="small fw-semibold">Name</th>
                 <th style="width: 20%;" class="small fw-semibold">Employee #</th>
                 <th style="width: 24%;" class="small fw-semibold">Occupation</th>
@@ -565,7 +565,7 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="emp in employees" :key="emp.id" style="border-bottom: 1px solid #dee2e6;">
+              <tr v-for="emp in employees" :key="emp.id">
                 <td style="padding: 8px;" class="fw-semibold">
                   <template v-if="editingEmployeeId === emp.id">
                     <div class="row g-2">

@@ -39,6 +39,8 @@
 
 // Cards: subtle but premium
 .card {
+  background: $surface-2;
+  color: $body-color;
   border: 1px solid $border-color;
   box-shadow: $box-shadow-sm;
   transition: all .2s ease;
@@ -51,18 +53,19 @@
 
 // Navbar: crisp
 .navbar {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: $surface;
+  border-bottom: 1px solid $border-color;
   box-shadow: $box-shadow-sm;
 }
 
 .nav-link {
   font-weight: 600;
-  color: #0f172a !important;
+  color: $body-color !important;
   transition: color .2s ease;
 }
 
 .nav-link:hover {
-  color: $primary !important;
+  color: lighten($primary, 10%) !important;
 }
 
 // Hero overlay (for background images)
@@ -103,20 +106,85 @@
   box-shadow: 0 0 0 .2rem rgba($primary, .15);
 }
 
+// Form controls - dark theme friendly
+.form-control,
+.form-select {
+  background: $surface-2;
+  color: $body-color;
+  border: 1px solid $border-color;
+}
+
+.form-control::placeholder,
+.form-select::placeholder {
+  color: $text-muted-3;
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  background: $surface-3;
+  color: $text-muted;
+  border-color: $border-color;
+}
+
+.input-group-text {
+  background: $surface-3;
+  color: $body-color;
+  border: 1px solid $border-color;
+}
+
+// Native pickers inherit dark theme where supported
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
 // Table styling
 .table {
+  --bs-table-bg: transparent;
+  --bs-table-color: $body-color;
+  --bs-table-striped-bg: rgba($primary, 0.08);
+  --bs-table-striped-color: $body-color;
+  --bs-table-hover-bg: rgba($primary, 0.12);
+  --bs-table-hover-color: $body-color;
+  --bs-border-color: $border-color;
   border-color: $border-color;
+  color: $body-color;
+  background: $surface;
+}
+
+.table tbody tr {
+  color: $body-color;
 }
 
 .table th {
   border-color: $border-color;
   font-weight: 700;
-  background-color: rgba(15, 23, 42, 0.03);
+  background-color: rgba($primary, 0.08);
   letter-spacing: .3px;
+  color: $body-color;
 }
 
 .table-hover tbody tr:hover {
-  background-color: rgba($primary, 0.05);
+  background-color: rgba($primary, 0.10);
+  color: $body-color;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+  background-color: rgba($primary, 0.08);
+  color: $body-color;
+}
+
+.table-striped > tbody > tr:nth-of-type(even) {
+  background-color: $surface;
+  color: $body-color;
+}
+
+.table-responsive {
+  background: $surface;
+  border: 1px solid $border-color !important;
+  border-radius: 8px;
+  box-shadow: $box-shadow-sm;
 }
 
 // Alert refinement

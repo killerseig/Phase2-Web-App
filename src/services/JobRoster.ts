@@ -18,6 +18,7 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 /**
  * Normalize Firestore document to JobRosterEmployee type
@@ -64,10 +65,19 @@ function requireUser() {
   return u
 }
 
+const jobAccess = useJobAccess()
+
+const assertJobAccess = (jobId: string) => {
+  if (!jobAccess.canAccessJob(jobId)) {
+    throw new Error('You do not have access to this job')
+  }
+}
+
 /**
  * List all employees in a job roster, sorted by lastName, firstName
  */
 export async function listRosterEmployees(jobId: string): Promise<JobRosterEmployee[]> {
+  assertJobAccess(jobId)
   try {
     // Try with composite index first
     const q = query(
@@ -97,6 +107,7 @@ export async function listRosterEmployees(jobId: string): Promise<JobRosterEmplo
  * List active employees only (for timecard assignment)
  */
 export async function listActiveRosterEmployees(jobId: string): Promise<JobRosterEmployee[]> {
+  assertJobAccess(jobId)
   const all = await listRosterEmployees(jobId)
   return all.filter(e => e.active)
 }
@@ -109,6 +120,7 @@ export async function addRosterEmployee(
   jobId: string,
   employee: JobRosterEmployeeInput
 ): Promise<string> {
+  assertJobAccess(jobId)
   const u = requireUser()
   
   // Validate employee number is unique within this job
@@ -155,6 +167,7 @@ export async function updateRosterEmployee(
   employeeId: string,
   updates: Partial<JobRosterEmployeeInput>
 ): Promise<void> {
+  assertJobAccess(jobId)
   // Validate if employee number is being changed to unique value
   if (updates.employeeNumber) {
     const existing = await listRosterEmployees(jobId)
@@ -187,6 +200,7 @@ export async function updateRosterEmployee(
  * Remove an employee from the job roster
  */
 export async function removeRosterEmployee(jobId: string, employeeId: string): Promise<void> {
+  assertJobAccess(jobId)
   const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
   await deleteDoc(ref)
 }
@@ -195,6 +209,7 @@ export async function removeRosterEmployee(jobId: string, employeeId: string): P
  * Get a single roster employee by ID
  */
 export async function getRosterEmployee(jobId: string, employeeId: string): Promise<JobRosterEmployee | null> {
+  assertJobAccess(jobId)
   const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
   // Note: Using getDoc when available from firestore
   const { getDoc } = await import('firebase/firestore')
@@ -207,6 +222,7 @@ export async function getRosterEmployee(jobId: string, employeeId: string): Prom
  * Search roster employees by name
  */
 export async function searchRosterEmployees(jobId: string, searchTerm: string): Promise<JobRosterEmployee[]> {
+  assertJobAccess(jobId)
   const all = await listRosterEmployees(jobId)
   const term = searchTerm.toLowerCase()
   
@@ -228,6 +244,7 @@ export async function getRosterStats(jobId: string): Promise<{
   inactive: number
   withContractors: number
 }> {
+  assertJobAccess(jobId)
   const all = await listRosterEmployees(jobId)
   
   return {
@@ -243,6 +260,7 @@ export async function getRosterStats(jobId: string): Promise<{
  * Used for reports or external systems
  */
 export async function exportRosterToCsv(jobId: string): Promise<string> {
+  assertJobAccess(jobId)
   const employees = await listRosterEmployees(jobId)
   
   // CSV header

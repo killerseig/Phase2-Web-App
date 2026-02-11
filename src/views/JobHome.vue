@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 import { useJobRosterStore } from '../stores/jobRoster'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 defineProps<{
   jobId?: string
 }>()
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const jobs = useJobsStore()
 const roster = useJobRosterStore()
+const jobAccess = useJobAccess()
 
 const jobId = computed(() => String(route.params.jobId))
 
@@ -44,6 +47,11 @@ const canManageRoster = computed(() => isAdmin.value || isForeman.value)
 async function boot() {
   if (!auth.ready) await auth.init()
 
+  if (!jobAccess.canAccessJob(jobId.value)) {
+    await router.push({ name: 'unauthorized' })
+    return
+  }
+
   try {
     // Load job
     await jobs.fetchJob(jobId.value)
@@ -68,7 +76,7 @@ watch(
 </script>
 
 <template>
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-fluid py-4 wide-container-1200">
     <div class="mb-4">
       <h2 class="h3 mb-1">{{ jobName }}</h2>
       <div class="text-muted small d-flex align-items-center gap-2 flex-wrap">
@@ -131,48 +139,6 @@ watch(
         </div>
       </div>
 
-      <!-- Foreman Tools (Foremen and Admins only) -->
-      <div v-if="canManageRoster" class="col-12 col-md-6">
-        <div class="card h-100 shadow-sm border-info">
-          <div class="card-header bg-light border-info">
-            <h5 class="card-title mb-0 text-info">
-              <i class="bi bi-tools me-2"></i>Management Tools
-            </h5>
-          </div>
-          <div class="card-body">
-            <p class="text-muted small mb-3">Job roster and team management.</p>
-            <div class="btn-group btn-group-sm w-100" role="group">
-              <button class="btn btn-outline-info" disabled title="Manage roster in Admin > Jobs">
-                <i class="bi bi-people me-1"></i>Roster
-              </button>
-              <button class="btn btn-outline-info" disabled title="Coming soon">
-                <i class="bi bi-graph-up me-1"></i>Reports
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Admin Panel -->
-      <div v-if="isAdmin" class="col-12 col-md-6">
-        <div class="card h-100 shadow-sm border-danger">
-          <div class="card-header bg-light border-danger">
-            <h5 class="card-title mb-0 text-danger">
-              <i class="bi bi-shield-lock me-2"></i>Admin Tools
-            </h5>
-          </div>
-          <div class="card-body">
-            <p class="text-muted small mb-3">System administration and configuration.</p>
-            <router-link 
-              class="btn btn-outline-danger btn-sm w-100" 
-              :to="{ name: 'admin-jobs' }"
-            >
-              <i class="bi bi-gear me-1"></i>Job Settings
-            </router-link>
-          </div>
-        </div>
-      </div>
-
       <!-- No Modules Alert -->
       <div v-if="!canEmployeeModules && !canShopOrders && !canManageRoster && !isAdmin" class="col-12">
         <div class="alert alert-secondary mb-0">
@@ -183,3 +149,11 @@ watch(
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
+.wide-container-1200 {
+  max-width: 1200px;
+}
+</style>

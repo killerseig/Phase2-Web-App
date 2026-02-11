@@ -38,4 +38,11 @@ export default defineConfig({
     // Set chunk size warning to 600kb (optional, but keeps warnings relevant)
     chunkSizeWarningLimit: 600,
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
 })

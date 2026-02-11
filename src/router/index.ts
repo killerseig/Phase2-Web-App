@@ -1,17 +1,17 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { ROUTES, ROLES } from '@/constants/app'
-
-type Role = typeof ROLES[keyof typeof ROLES]
+import { useJobAccess } from '@/composables/useJobAccess'
+import { ROUTES, ROLES, type Role } from '@/constants/app'
 
 // Route configurations
 interface RouteConfig {
   path: string
-  name: string
-  component: () => Promise<any>
+  name?: string
+  component?: () => Promise<any>
   roles?: Role[]
   isPublic?: boolean
-  title: string
+  title?: string
+  redirect?: string
 }
 
 const routeConfigs: RouteConfig[] = [
@@ -132,26 +132,42 @@ const routeConfigs: RouteConfig[] = [
 ]
 
 // Build routes array for Vue Router
-const routes: RouteRecordRaw[] = routeConfigs.map((config) => ({
-  path: config.path,
-  ...(config.name && { name: config.name }),
-  ...(config.component && { component: config.component }),
-  meta: {
-    public: config.isPublic || false,
-    roles: config.roles || [],
-    title: config.title || 'App',
-  },
-  ...(config.path === '/' && { redirect: ROUTES.DASHBOARD }),
-  props: config.path.includes(':') ? true : undefined,
-}))
+const routes: RouteRecordRaw[] = routeConfigs.map((config) => {
+  // If the route is a redirect, do not include component or props
+  if (config.redirect) {
+    return {
+      path: config.path,
+      redirect: config.redirect,
+      meta: {
+        public: config.isPublic || false,
+        roles: config.roles || [],
+        title: config.title || 'App',
+      },
+      ...(config.name && { name: config.name }),
+    }
+  }
+  // Otherwise, normal route
+  return {
+    path: config.path,
+    ...(config.name && { name: config.name }),
+    ...(config.component && { component: config.component }),
+    meta: {
+      public: config.isPublic || false,
+      roles: config.roles || [],
+      title: config.title || 'App',
+    },
+    props: config.path.includes(':') ? true : undefined,
+  }
+})
 
 export const router = createRouter({
   history: createWebHistory(),
   routes,
 })
 
-router.beforeEach(async (to) => {
+export const runNavigationGuard = async (to: any) => {
   const auth = useAuthStore()
+  const jobAccess = useJobAccess()
 
   // Ensure auth state is resolved (no polling loop)
   if (!auth.ready) await auth.init()
@@ -180,5 +196,23 @@ router.beforeEach(async (to) => {
     }
   }
 
+  // Foremen can only access jobs assigned to them
+  if (auth.role === ROLES.FOREMAN && to.params?.jobId) {
+    const jobIdParam = Array.isArray(to.params.jobId) ? to.params.jobId[0] : to.params.jobId
+    const jobId = String(jobIdParam)
+    if (!jobAccess.canAccessJob(jobId)) {
+      return { name: 'unauthorized' }
+    }
+  }
+
   return true
+}
+
+router.beforeEach(runNavigationGuard)
+
+// Update document title after navigation completes
+router.afterEach((to) => {
+  const pageTitle = to.meta.title as string | undefined
+  const baseTitle = 'Phase 2'
+  document.title = pageTitle ? `${pageTitle} · ${baseTitle}` : baseTitle
 })

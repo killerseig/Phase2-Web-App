@@ -30,7 +30,7 @@
 - **Email Service**: Cloud Function using Microsoft Graph API
 - **Authentication**: OAuth 2.0 Client Credentials flow
 - **Credentials**: AppID, TenantID, Secret (stored as Firebase secrets)
-- **Sender Address**: Shared mailbox `no-reply@phase2co.com`
+- **Sender Address**: Shared mailbox (configured in secret manager)
 - **Permissions**: Send.Mail permission granted
 - **Endpoint**: `https://graph.microsoft.com/v1.0/me/sendMail`
 
@@ -40,7 +40,7 @@
 3. Function gets OAuth token from Azure AD
 4. Function builds email message in Graph API format
 5. Function sends email via Graph API endpoint
-6. Email is sent from `no-reply@phase2co.com`
+6. Email is sent from configured sender address
 
 ---
 
@@ -64,11 +64,11 @@ OR simpler approach:
 - `EMAIL_USER`
 - `EMAIL_PASSWORD`
 
-**Add:**
-- `GRAPH_CLIENT_ID` → f31ac0ab-6b28-44a7-ad73-afb71c64898f
-- `GRAPH_TENANT_ID` → cdbaf457-1b20-4f99-bbc6-5a8f7b57fd68
-- `GRAPH_CLIENT_SECRET` → O7K8Q~mFsZChzInCaTzE12QiTP1pn_ceeXFEGdxK
-- `OUTLOOK_SENDER_EMAIL` → no-reply@phase2co.com
+**Add (store in secret manager, do not commit):**
+- Application Client ID
+- Tenant ID
+- Application Client Secret
+- Sender email address (shared mailbox)
 
 ### 3. **Email Service** (functions/src/emailService.ts)
 **Create new functions:**
@@ -78,7 +78,7 @@ OR simpler approach:
 
 **Changes to existing functions:**
 - Keep email template builders (HTML generation) - they stay the same
-- Update `getSenderEmail()` to return `no-reply@phase2co.com`
+- Update `getSenderEmail()` to return configured sender email (from secrets)
 - Remove/deprecate `getEmailTransporter()` for nodemailer
 
 **Architecture:**
@@ -113,25 +113,7 @@ async function sendEmail(options: {
 ### Graph API Token Acquisition
 **Endpoint:** `https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token`
 
-**Request:**
-```
-POST /oauth2/v2.0/token
-Content-Type: application/x-www-form-urlencoded
-
-client_id={GRAPH_CLIENT_ID}
-&client_secret={GRAPH_CLIENT_SECRET}
-&scope=https://graph.microsoft.com/.default
-&grant_type=client_credentials
-```
-
-**Response:**
-```json
-{
-  "access_token": "...",
-  "expires_in": 3600,
-  "token_type": "Bearer"
-}
-```
+Use client-credentials flow parameters (app ID, app secret, scope, grant_type) sent as form data. All values must come from secret storage; do not commit them.
 
 ### Graph API Send Mail
 **Endpoint:** `https://graph.microsoft.com/v1.0/me/sendMail`
@@ -168,7 +150,7 @@ Content-Type: application/json
 
 1. **Unit Test**: Token acquisition (caching works)
 2. **Integration Test**: Send email to test address
-3. **Email Verification**: Check email received at no-reply@phase2co.com origin
+3. **Email Verification**: Check email received from the configured sender origin
 4. **Batch Test**: Send multiple emails in parallel
 5. **Error Handling**: Test invalid recipients, network failures
 6. **Fallback**: Consider fallback to Gmail if Graph API fails (optional)
@@ -219,9 +201,7 @@ Subject: ⚠️ Graph API Secret Expiring Soon - Action Required
 
 Dear Admin,
 
-The Microsoft Graph API secret for no-reply@phase2co.com is expiring on:
-
-📅 February 9, 2027
+The Microsoft Graph API secret for the shared mailbox is expiring soon.
 
 Please contact the Microsoft 365 administrator to renew this secret 
 and update the application before this date.
@@ -258,7 +238,7 @@ export const SECRET_EXPIRATION = {
 
 ### Manual Renewal Process (for when Jan 10, 2027 arrives)
 1. Microsoft 365 admin generates new secret
-2. Admin updates Firebase secrets with new `GRAPH_CLIENT_SECRET`
+2. Admin updates Firebase secrets with the new secret value
 3. Deploy updated functions
 4. Old secret stops working after Feb 9, 2027
 5. No downtime if renewed on time

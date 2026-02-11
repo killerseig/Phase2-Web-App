@@ -1,54 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
-import { useAuthStore } from '../stores/auth'
-import { useJobsStore } from '../stores/jobs'
-import { useUsersStore } from '../stores/users'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 const router = useRouter()
-const auth = useAuthStore()
-const jobsStore = useJobsStore()
-const usersStore = useUsersStore()
+const { isAdmin, isForeman, visibleActiveJobs, visibleArchivedJobs, loadJobsForCurrentUser } = useJobAccess()
 
 const err = ref('')
 
-const uid = computed(() => auth.user?.uid ?? null)
-const isAdmin = computed(() => auth.role === 'admin')
-const isForeman = computed(() => auth.role === 'foreman')
-
-// Get current user profile for assigned job IDs
-const currentUserProfile = computed(() => usersStore.currentUserProfile)
-const profileLoaded = computed(() => usersStore.currentUserProfile !== null)
-const assignedJobIds = computed(() => auth.assignedJobIds ?? [])
-
-// Split jobs into active and archived for admin view
-const activeJobs = computed(() => {
-  const jobs = jobsStore.activeJobs
-  
-  // For foreman, only show assigned jobs
-  if (isForeman.value) {
-    return jobs.filter(j => assignedJobIds.value.includes(j.id))
-  }
-  
-  // Admin sees all jobs
-  return jobs
-})
-
-const archivedJobs = computed(() => {
-  // Only admins can see archived jobs
-  if (isAdmin.value) {
-    return jobsStore.archivedJobs
-  }
-  return []
-})
+const activeJobs = visibleActiveJobs
+const archivedJobs = visibleArchivedJobs
 
 async function init() {
   err.value = ''
   try {
-    await jobsStore.fetchAllJobs(isAdmin.value)
+    await loadJobsForCurrentUser()
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to load jobs'
     toastRef.value?.show('Failed to load jobs', 'error')
@@ -61,7 +30,6 @@ async function openJob(jobId: string) {
 }
 
 onMounted(async () => {
-  if (!auth.ready) await auth.init()
   await init()
 })
 </script>
@@ -69,7 +37,7 @@ onMounted(async () => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-fluid py-4 wide-container-1200">
     <div class="mb-4">
       <h2 class="h3 mb-1">Dashboard</h2>
       <div class="text-muted small">Pick a job to continue</div>
@@ -83,16 +51,16 @@ onMounted(async () => {
       <!-- Active Jobs Section -->
       <div v-if="activeJobs.length > 0">
         <h5 class="mb-3">{{ isAdmin ? 'Active Jobs' : 'Your Jobs' }}</h5>
-        <div class="list-group mb-4">
+        <div class="list-group mb-4 job-list">
           <button
             v-for="j in activeJobs"
             :key="j.id"
             type="button"
-            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center job-item"
             @click="openJob(j.id)"
           >
             <div>
-              <div class="fw-semibold">{{ j.name }}</div>
+              <div class="fw-semibold job-name">{{ j.name }}</div>
               <div class="text-muted small">
                 <span v-if="j.code">Job Number: {{ j.code }}</span>
               </div>
@@ -106,16 +74,16 @@ onMounted(async () => {
       <!-- Archived Jobs Section (Admins Only) -->
       <div v-if="isAdmin && archivedJobs.length > 0">
         <h5 class="mb-3 text-muted">Archived Jobs</h5>
-        <div class="list-group">
+        <div class="list-group job-list">
           <button
             v-for="j in archivedJobs"
             :key="j.id"
             type="button"
-            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center job-item"
             @click="openJob(j.id)"
           >
             <div>
-              <div class="fw-semibold text-muted">{{ j.name }}</div>
+              <div class="fw-semibold text-muted job-name">{{ j.name }}</div>
               <div class="text-muted small">
                 <span v-if="j.code">Job Number: {{ j.code }}</span>
                 <span class="ms-2 badge text-bg-warning">Archived</span>
@@ -127,9 +95,48 @@ onMounted(async () => {
         </div>
       </div>
     </div>
-
-    <div class="text-muted small mt-3">
-      Tip: If job filtering feels slow, add <code>memberUids</code> (array) to jobs for fast queries.
-    </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
+.wide-container-1200 {
+  max-width: 1200px;
+}
+
+.job-list .job-item {
+  background: $surface-2;
+  color: $body-color;
+  border: 1px solid $border-color;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.job-list .job-item + .job-item {
+  margin-top: 0.5rem;
+}
+
+.job-list .job-item:hover,
+.job-list .job-item:focus {
+  background: rgba($primary, 0.10);
+  border-color: rgba($primary, 0.4);
+  color: $body-color;
+  transform: translateY(-1px);
+}
+
+.job-list .job-item:active {
+  transform: translateY(0);
+}
+
+.job-name {
+  color: $body-color;
+}
+
+.job-list .list-group-item {
+  border-radius: $border-radius-sm;
+}
+
+.job-list .list-group-item-action:focus {
+  box-shadow: 0 0 0 0.15rem rgba($primary, 0.25);
+}
+</style>

@@ -702,7 +702,10 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+$select-arrow-color: $body-color;
+$select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);
 .modal.d-block {
   display: flex !important;
   align-items: center;
@@ -710,10 +713,11 @@ onMounted(() => {
 }
 
 .catalog-tree {
-  border: 1px solid #dee2e6;
+  border: 1px solid $border-color;
   border-radius: 4px;
   overflow-y: auto;
   max-height: 600px;
+  background: $surface;
 }
 
 .catalog-tree::-webkit-scrollbar {
@@ -725,15 +729,52 @@ onMounted(() => {
 }
 
 .catalog-tree::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: rgba($primary, 0.35);
   border-radius: 4px;
 }
 
 .catalog-tree::-webkit-scrollbar-thumb:hover {
-  background: #999;
+  background: rgba($primary, 0.5);
 }
 
 .table-responsive {
   overflow: visible;
+}
+
+/* Dark theme for modals and inputs/dropdowns */
+.modal-content {
+  background: $surface-2;
+  color: $body-color;
+  border-color: $border-color;
+  box-shadow: $box-shadow;
+}
+
+.modal-header,
+.modal-footer {
+  border-color: $border-color;
+}
+
+.btn-close {
+  filter: invert(1) contrast(1.1);
+}
+
+.form-control,
+.form-select {
+  background-color: $surface-3;
+  color: $body-color;
+  border-color: $border-color;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: $surface-3;
+  color: $body-color;
+  border-color: $primary;
+  box-shadow: 0 0 0 0.15rem rgba($primary, 0.25);
+}
+
+.form-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23#{$select-arrow-hex}' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+  background-color: $surface-3;
 }
 </style>

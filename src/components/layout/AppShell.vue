@@ -4,10 +4,10 @@
     <SideNav />
 
     <!-- Main content area: account for fixed sidebar with dynamic margin -->
-    <div class="flex-grow-1 d-flex flex-column" :style="{ marginLeft: app.sidebarCollapsed ? '56px' : '260px', transition: 'margin-left 0.3s ease', overflow: 'hidden' }">
+    <div class="flex-grow-1 d-flex flex-column main-pane" :style="{ marginLeft: app.sidebarCollapsed ? '56px' : '260px' }">
       <TopNav />
       <main class="container-fluid py-4 overflow-auto">
-        <router-view />
+        <slot />
       </main>
     </div>
   </div>
@@ -20,3 +20,10 @@ import { useAppStore } from '@/stores/app'
 
 const app = useAppStore()
 </script>
+
+<style scoped lang="scss">
+.main-pane {
+  transition: margin-left 0.3s ease;
+  overflow: hidden;
+}
+</style>

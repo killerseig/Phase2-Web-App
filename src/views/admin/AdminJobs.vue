@@ -241,17 +241,17 @@ onMounted(async () => {
               <div v-if="rosterEmployees.length > 0" class="mb-5">
                 <h6 class="mb-3">Roster Employees</h6>
                 <p class="text-muted small mb-3">Designate employees as foremen for this job. Primary foreman can manage timecards and approve submissions.</p>
-                <div class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+                <div class="table-responsive">
                   <table class="table table-sm table-striped table-hover mb-0">
-                    <thead class="table-light" style="background-color: #f0f0f0;">
-                      <tr style="border-bottom: 2px solid #dee2e6;">
+                    <thead>
+                      <tr>
                         <th style="width: 40%;" class="small fw-semibold">Name</th>
                         <th style="width: 40%;" class="small fw-semibold">Occupation</th>
                         <th style="width: 20%;" class="small fw-semibold text-center">Role</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="emp in rosterEmployees" :key="emp.id" style="border-bottom: 1px solid #dee2e6;">
+                      <tr v-for="emp in rosterEmployees" :key="emp.id">
                         <td style="padding: 8px;" class="fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
                         <td style="padding: 8px;" class="text-muted small">{{ emp.occupation }}</td>
                         <td style="padding: 8px; text-center;">
@@ -359,10 +359,10 @@ onMounted(async () => {
           No jobs found. Create your first job above.
         </div>
 
-        <div v-else class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+        <div v-else class="table-responsive">
           <table class="table table-sm table-striped table-hover mb-0">
-            <thead class="table-light" style="background-color: #f0f0f0;">
-              <tr style="border-bottom: 2px solid #dee2e6;">
+            <thead>
+              <tr>
                 <th style="width: 25%;" class="small fw-semibold">Job Name</th>
                 <th style="width: 15%;" class="small fw-semibold">Code</th>
                 <th style="width: 15%;" class="small fw-semibold">Status</th>
@@ -370,7 +370,7 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="job in jobs" :key="job.id" style="border-bottom: 1px solid #dee2e6;">
+              <tr v-for="job in jobs" :key="job.id">
                 <td style="padding: 8px;" class="fw-semibold">{{ job.name }}</td>
                 <td style="padding: 8px;" class="text-muted small">{{ job.code || '—' }}</td>
                 <td style="padding: 8px;">

@@ -6,8 +6,10 @@
 import { ref, Ref } from 'vue'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/firebase'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 export interface SendShopOrderEmailRequest {
+  jobId: string
   shopOrderId: string
   recipients: string[]
 }
@@ -26,11 +28,18 @@ export interface ShopServiceState {
  * Shop service composable
  * Usage:
  * const { sendShopOrderEmail, isLoading, error } = useShopService()
- * await sendShopOrderEmail({ shopOrderId: 'abc123', recipients: ['user@example.com'] })
+ * await sendShopOrderEmail({ jobId: 'job123', shopOrderId: 'abc123', recipients: ['user@example.com'] })
  */
 export function useShopService() {
   const isLoading: Ref<boolean> = ref(false)
   const error: Ref<string | null> = ref(null)
+  const jobAccess = useJobAccess()
+
+  const assertJobAccess = (jobId: string) => {
+    if (!jobAccess.canAccessJob(jobId)) {
+      throw new Error('You do not have access to this job')
+    }
+  }
 
   /**
    * Send shop order via email
@@ -40,6 +49,8 @@ export function useShopService() {
     error.value = null
 
     try {
+      assertJobAccess(request.jobId)
+
       const sendEmailFunction = httpsCallable<SendShopOrderEmailRequest, SendShopOrderEmailResponse>(
         functions,
         'sendShopOrderEmail'

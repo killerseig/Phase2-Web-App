@@ -6,6 +6,7 @@
 import { ref, Ref } from 'vue'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/firebase'
+import { useJobAccess } from '@/composables/useJobAccess'
 
 export interface SendDailyLogEmailRequest {
   jobId: string
@@ -39,11 +40,18 @@ export interface JobServiceState {
  * Job service composable
  * Usage:
  * const { sendDailyLogEmail, sendTimecardEmail, isLoading, error } = useJobService()
- * await sendDailyLogEmail({ dailyLogId: 'abc123', recipients: ['user@example.com'] })
+ * await sendDailyLogEmail({ jobId: 'job123', dailyLogId: 'abc123', recipients: ['user@example.com'] })
  */
 export function useJobService() {
   const isLoading: Ref<boolean> = ref(false)
   const error: Ref<string | null> = ref(null)
+  const jobAccess = useJobAccess()
+
+  const assertJobAccess = (jobId: string) => {
+    if (!jobAccess.canAccessJob(jobId)) {
+      throw new Error('You do not have access to this job')
+    }
+  }
 
   /**
    * Send daily log via email
@@ -53,6 +61,8 @@ export function useJobService() {
     error.value = null
 
     try {
+      assertJobAccess(request.jobId)
+
       const sendEmailFunction = httpsCallable<SendDailyLogEmailRequest, SendDailyLogEmailResponse>(
         functions,
         'sendDailyLogEmail'
@@ -78,6 +88,8 @@ export function useJobService() {
     error.value = null
 
     try {
+      assertJobAccess(request.jobId)
+
       const sendEmailFunction = httpsCallable<SendTimecardEmailRequest, SendTimecardEmailResponse>(
         functions,
         'sendTimecardEmail'
