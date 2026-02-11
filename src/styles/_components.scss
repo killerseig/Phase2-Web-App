@@ -1,0 +1,130 @@
+// Section spacing helper
+.section {
+  padding: clamp(3rem, 5vw, 5rem) 0;
+}
+
+// Headline accent bar (professional feel)
+.h-accent {
+  position: relative;
+  padding-left: 1rem;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: .25em;
+    width: .35rem;
+    height: 1.1em;
+    border-radius: 999px;
+    background: $warning;
+  }
+}
+
+// Buttons: strong + professional
+.btn {
+  letter-spacing: .2px;
+  box-shadow: $box-shadow-sm;
+  transition: all .2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: $box-shadow;
+}
+
+.btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+// Cards: subtle but premium
+.card {
+  border: 1px solid $border-color;
+  box-shadow: $box-shadow-sm;
+  transition: all .2s ease;
+}
+
+.card-hover:hover {
+  box-shadow: $box-shadow;
+  transform: translateY(-2px);
+}
+
+// Navbar: crisp
+.navbar {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: $box-shadow-sm;
+}
+
+.nav-link {
+  font-weight: 600;
+  color: #0f172a !important;
+  transition: color .2s ease;
+}
+
+.nav-link:hover {
+  color: $primary !important;
+}
+
+// Hero overlay (for background images)
+.hero {
+  position: relative;
+  background: $dark;
+  color: white;
+  overflow: hidden;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      rgba(11, 31, 51, 0.90),
+      rgba(11, 31, 51, 0.55)
+    );
+  }
+
+  > .container {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+// Badge styling
+.badge {
+  font-weight: 600;
+  letter-spacing: .3px;
+  padding: .5rem .75rem;
+}
+
+// Input focus states
+.form-control:focus,
+.form-select:focus {
+  border-color: $primary;
+  box-shadow: 0 0 0 .2rem rgba($primary, .15);
+}
+
+// Table styling
+.table {
+  border-color: $border-color;
+}
+
+.table th {
+  border-color: $border-color;
+  font-weight: 700;
+  background-color: rgba(15, 23, 42, 0.03);
+  letter-spacing: .3px;
+}
+
+.table-hover tbody tr:hover {
+  background-color: rgba($primary, 0.05);
+}
+
+// Alert refinement
+.alert {
+  border: 1px solid;
+  border-radius: $border-radius;
+}
+
+.alert-dismissible .btn-close {
+  filter: brightness(0) saturate(100%) invert(36%) sepia(75%) saturate(1000%) hue-rotate(245deg);
+}

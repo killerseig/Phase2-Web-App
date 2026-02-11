@@ -1,0 +1,52 @@
+// ===== Brand palette (professional construction vibe) =====
+$primary:   #0047ab;  // company brand blue
+$secondary: #2f3b45;  // steel
+$success:   #1f7a4d;
+$warning:   #f59e0b;  // safety amber
+$danger:    #b42318;
+$info:      #2563eb;
+$light:     #f6f7f9;
+$dark:      #0f172a;
+
+// ===== Body + surfaces =====
+$body-bg: #ffffff;
+$body-color: #0f172a;
+
+$border-color: rgba(15, 23, 42, 0.12);
+$box-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+$box-shadow:    0 8px 20px rgba(15, 23, 42, 0.10);
+$box-shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.14);
+
+// ===== Typography =====
+$font-family-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+$headings-font-weight: 700;
+$headings-line-height: 1.15;
+
+$font-size-base: 1rem;
+$line-height-base: 1.6;
+
+// ===== Radius + buttons =====
+$border-radius: .75rem;
+$border-radius-sm: .5rem;
+$border-radius-lg: 1rem;
+
+$btn-font-weight: 600;
+$btn-padding-y: .7rem;
+$btn-padding-x: 1.1rem;
+
+// ===== Navbar =====
+$navbar-padding-y: 1rem;
+
+// ===== Forms =====
+$input-padding-y: .7rem;
+$input-padding-x: .95rem;
+$input-border-radius: .75rem;
+
+// ===== Container sizes =====
+$container-max-widths: (
+  sm: 540px,
+  md: 720px,
+  lg: 960px,
+  xl: 1140px,
+  xxl: 1240px
+);
