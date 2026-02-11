@@ -49,7 +49,7 @@ const sendReset = async () => {
   resetLoading.value = true
   try {
     // Use Firebase REST API directly - no reCAPTCHA issues
-    const apiKey = import.meta.env.VITE_FIREBASE_API_KEY
+    const apiKey = 'AIzaSyA2m7B5EalpzgclsTRseyMfxWnCtqIYKWI'
     const response = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
       {

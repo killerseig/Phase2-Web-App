@@ -342,7 +342,7 @@ export function buildSecretExpirationEmail(): string {
         <p><strong>What to do:</strong></p>
         <ol>
           <li>Contact your Microsoft 365 administrator</li>
-          <li>Request a new client secret in Azure Portal</li>
+          <li>Request a new client secret for AppID: f31ac0ab-6b28-44a7-ad73-afb71c64898f</li>
           <li>Provide the new secret to your Phase 2 technical team for deployment</li>
         </ol>
         <p style="color: #666; font-size: 12px; margin-top: 30px;">

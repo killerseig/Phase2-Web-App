@@ -12,15 +12,6 @@ dist
 dist-ssr
 *.local
 
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Sensitive files
-users.json
-functions/src/secrets.ts
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
