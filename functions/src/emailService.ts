@@ -389,6 +389,11 @@ export async function sendEmail(options: {
   to: string | string[]
   subject: string
   html: string
+  attachments?: Array<{
+    name: string
+    contentType?: string
+    contentBytes: string
+  }>
 }): Promise<void> {
   if (!isEmailEnabled()) {
     console.log('[sendEmail] Email sending disabled. Skipping send.')
@@ -430,6 +435,16 @@ export async function sendEmail(options: {
             address: email.trim(),
           },
         })),
+        ...(options.attachments && options.attachments.length
+          ? {
+              attachments: options.attachments.map(att => ({
+                '@odata.type': '#microsoft.graph.fileAttachment',
+                name: att.name,
+                contentType: att.contentType || 'application/octet-stream',
+                contentBytes: att.contentBytes,
+              })),
+            }
+          : {}),
       },
       saveToSentItems: true,
     }

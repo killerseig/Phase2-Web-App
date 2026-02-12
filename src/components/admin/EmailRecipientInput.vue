@@ -8,6 +8,8 @@ interface Props {
   placeholder?: string
   disabled?: boolean
   maxEmails?: number
+  inputName?: string
+  autocompleteSection?: string
 }
 
 const emit = defineEmits<{
@@ -20,6 +22,8 @@ const props = withDefaults(defineProps<Props>(), {
   placeholder: 'email@example.com',
   disabled: false,
   maxEmails: undefined,
+  inputName: '',
+  autocompleteSection: '',
 })
 
 const newEmail = ref('')
@@ -81,6 +85,8 @@ function removeEmail(email: string) {
           class="form-control form-control-sm"
           v-model="newEmail"
           :placeholder="placeholder"
+          :name="inputName || undefined"
+          :autocomplete="autocompleteSection ? `section-${autocompleteSection} email` : 'off'"
           @keyup.enter="addEmail"
           :disabled="disabled"
         />

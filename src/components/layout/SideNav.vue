@@ -2,7 +2,11 @@
   <!-- Sidebar: Always 56px when collapsed, expands to 260px overlay -->
   <aside
     class="sidebar border-end d-flex flex-column h-100 position-fixed"
-    :style="{ width: app.sidebarCollapsed ? '56px' : '260px' }"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Main navigation"
+    tabindex="-1"
+    ref="sidebarRef"
   >
     <!-- Header with Toggle Button -->
     <div class="p-2 border-bottom sidebar-header">
@@ -10,14 +14,26 @@
         <div class="fw-bold fs-5 sidebar-title">Phase 2</div>
         <span v-if="role" class="badge text-bg-primary text-uppercase small sidebar-role">{{ role }}</span>
       </div>
-      <button
-        type="button"
-        @click="app.toggleSidebar"
-        :title="app.sidebarCollapsed ? 'Expand menu' : 'Collapse menu'"
-        class="sidebar-toggle"
-      >
-        <i :class="app.sidebarCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left'" class="sidebar-toggle-icon"></i>
-      </button>
+      <div class="d-flex align-items-center gap-1">
+        <button
+          type="button"
+          class="sidebar-toggle d-lg-none"
+          :title="'Close menu'"
+          @click="app.setSidebarOpenMobile(false)"
+          aria-label="Close menu"
+        >
+          <i class="bi bi-x-lg sidebar-toggle-icon"></i>
+        </button>
+        <button
+          type="button"
+          @click="app.toggleSidebar"
+          :title="app.sidebarCollapsed ? 'Expand menu' : 'Collapse menu'"
+          class="sidebar-toggle"
+          aria-label="Toggle sidebar"
+        >
+          <i :class="app.sidebarCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left'" class="sidebar-toggle-icon"></i>
+        </button>
+      </div>
     </div>
 
     <!-- Navigation Menu -->
@@ -40,42 +56,14 @@
         </div>
 
         <router-link
-          :to="{ name: 'job-home', params: { jobId } }"
+          v-for="item in jobNav"
+          :key="item.label"
+          :to="item.jobScoped ? { ...(item.to as any), params: { ...(item.to as any).params, jobId } } : item.to"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Job Home' : ''"
+          :title="app.sidebarCollapsed ? item.label : ''"
         >
-          <i class="bi bi-briefcase flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Job Home</span>
-        </router-link>
-
-        <router-link
-          v-if="canEmployee"
-          :to="{ name: 'job-daily-logs', params: { jobId } }"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Daily Logs' : ''"
-        >
-          <i class="bi bi-journal-text flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Daily Logs</span>
-        </router-link>
-
-        <router-link
-          v-if="canEmployee"
-          :to="{ name: 'job-timecards', params: { jobId } }"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Timecards' : ''"
-        >
-          <i class="bi bi-clock-history flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Timecards</span>
-        </router-link>
-
-        <router-link
-          v-if="canShop"
-          :to="{ name: 'job-shop-orders', params: { jobId } }"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Shop Orders' : ''"
-        >
-          <i class="bi bi-receipt flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Shop Orders</span>
+          <i :class="['bi', item.icon, 'flex-shrink-0']"></i>
+          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">{{ item.label }}</span>
         </router-link>
       </template>
 
@@ -86,43 +74,14 @@
         </div>
 
         <router-link
-          v-if="isAdmin"
-          to="/admin/users"
+          v-for="item in adminNav"
+          :key="item.label"
+          :to="item.to"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Users' : ''"
+          :title="app.sidebarCollapsed ? item.label : ''"
         >
-          <i class="bi bi-people flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Users</span>
-        </router-link>
-
-        <router-link
-          v-if="isAdmin"
-          to="/admin/jobs"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Jobs' : ''"
-        >
-          <i class="bi bi-building flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Jobs</span>
-        </router-link>
-
-        <router-link
-          v-if="isAdmin || isShopRole"
-          to="/admin/shop-catalog"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Shop Catalog' : ''"
-        >
-          <i class="bi bi-box-seam flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Shop Catalog</span>
-        </router-link>
-
-        <router-link
-          v-if="isAdmin"
-          to="/admin/email-settings"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? 'Email Settings' : ''"
-        >
-          <i class="bi bi-envelope flex-shrink-0"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Email Settings</span>
+          <i :class="['bi', item.icon, 'flex-shrink-0']"></i>
+          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">{{ item.label }}</span>
         </router-link>
       </template>
     </nav>
@@ -145,29 +104,35 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useJobsStore } from '@/stores/jobs'
-
-type Role = 'admin' | 'employee' | 'shop'
+import { navItems } from '@/config/nav'
+import { ROLES } from '@/constants/app'
 
 const auth = useAuthStore()
 const app = useAppStore()
 const jobs = useJobsStore()
 const route = useRoute()
+const sidebarRef = ref<HTMLElement | null>(null)
 
-const role = computed(() => auth.role as Role | null)
+const role = computed(() => auth.role)
 
 const jobId = computed(() => app.currentJobId || (route.params.jobId as string | undefined) || jobs.currentJob?.id || null)
 const jobName = computed(() => app.currentJobName || jobs.currentJob?.name || null)
 
-const isAdmin = computed(() => role.value === 'admin')
-const isShopRole = computed(() => role.value === 'shop')
+const isAdmin = computed(() => role.value === ROLES.ADMIN)
+const isShopRole = computed(() => role.value === ROLES.SHOP)
 
-const canEmployee = computed(() => role.value === 'admin' || role.value === 'employee')
-const canShop = computed(() => role.value === 'admin' || role.value === 'employee' || role.value === 'shop')
+const canSee = (itemRoles?: string[]) => {
+  if (!itemRoles || itemRoles.length === 0) return true
+  return itemRoles.includes(role.value ?? ROLES.NONE)
+}
+
+const jobNav = computed(() => navItems.filter((n) => n.section === 'job' && canSee(n.roles)))
+const adminNav = computed(() => navItems.filter((n) => n.section === 'admin' && canSee(n.roles)))
 
 // Smooth opacity transition for text without reflow
 const textOpacity = computed(() => (app.sidebarCollapsed ? 0 : 1))
@@ -175,6 +140,31 @@ const textOpacity = computed(() => (app.sidebarCollapsed ? 0 : 1))
 const headerTextStyle = computed(() => ({
   transition: 'opacity 0.3s ease',
 }))
+
+const onKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && app.sidebarOpenMobile) {
+    app.setSidebarOpenMobile(false)
+  }
+}
+
+watch(
+  () => app.sidebarOpenMobile,
+  (open) => {
+    if (open) {
+      requestAnimationFrame(() => {
+        sidebarRef.value?.focus()
+      })
+    }
+  }
+)
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <style scoped lang="scss">
@@ -187,11 +177,22 @@ const headerTextStyle = computed(() => ({
   box-shadow: 6px 0 24px rgba(0, 0, 0, 0.25);
   overflow-y: auto;
   overflow-x: hidden;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, transform 0.3s ease;
   top: 0;
   left: 0;
   bottom: 0;
   z-index: 99;
+  width: var(--sidebar-width, 260px);
+}
+
+@media (max-width: 991px) {
+  .sidebar {
+    transform: translateX(calc(-1 * var(--sidebar-width, 260px)));
+    width: 260px;
+  }
+  .app-shell.is-mobile-open .sidebar {
+    transform: translateX(0);
+  }
 }
 
 .sidebar .border-bottom,

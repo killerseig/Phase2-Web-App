@@ -49,6 +49,7 @@ export interface Job {
   timecardStatus?: TimecardStatus   // Current submission status
   timecardSubmittedAt?: Timestamp   // When last submitted
   timecardPeriodEndDate?: string    // YYYY-MM-DD (Saturday) - current period
+  timecardLastSentWeekEnding?: string // YYYY-MM-DD (Saturday) last week sent to office
   
   // Communications
   dailyLogRecipients?: string[]

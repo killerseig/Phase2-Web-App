@@ -14,6 +14,15 @@
 
       <!-- Actions -->
       <div class="d-flex align-items-center gap-2 ms-auto">
+        <button
+          class="btn btn-outline-secondary btn-sm d-lg-none topnav-btn"
+          type="button"
+          title="Toggle menu"
+          @click="app.setSidebarOpenMobile(!app.sidebarOpenMobile)"
+        >
+          <i class="bi bi-list"></i>
+        </button>
+
         <router-link
           v-if="jobId"
           :to="{ name: 'job-home', params: { jobId } }"
@@ -41,11 +50,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useJobsStore } from '@/stores/jobs'
+import { crumbByRouteName } from '@/config/nav'
 
 const route = useRoute()
 const router = useRouter()
@@ -59,30 +69,21 @@ const jobName = computed(() => app.currentJobName || jobs.currentJob?.name || ''
 const title = computed(() => {
   const metaTitle = route.meta.title as string | undefined
   if (metaTitle) return metaTitle
-
-  const p = route.path
-  if (p.startsWith('/dashboard')) return 'Dashboard'
-  if (p.startsWith('/job/') && p.endsWith('/daily-logs')) return 'Daily Logs'
-  if (p.startsWith('/job/') && p.endsWith('/timecards')) return 'Timecards'
-  if (p.startsWith('/job/') && p.endsWith('/shop-orders')) return 'Shop Orders'
-  if (p.startsWith('/job/')) return jobName.value || 'Job'
-  if (p.startsWith('/admin/users')) return 'Admin · Users'
-  if (p.startsWith('/admin/jobs')) return 'Admin · Jobs'
-  if (p.startsWith('/admin/email-settings')) return 'Admin · Email Settings'
-  if (p.startsWith('/admin/shop-catalog')) return 'Admin · Shop Catalog'
-  if (p.startsWith('/unauthorized')) return 'Unauthorized'
-  if (p.startsWith('/login')) return 'Login'
+  const byName = crumbByRouteName[route.name as string]
+  if (byName) return byName
+  if (route.path.startsWith('/job/')) return jobName.value || 'Job'
   return 'Phase 2'
 })
 
 const crumb = computed(() => {
-  const p = route.path
-  if (p.startsWith('/admin')) return 'Admin'
-  if (p.startsWith('/job/')) {
-    return jobName.value ? `Job · ${jobName.value}` : 'Job'
+  if (route.path.startsWith('/job/')) {
+    return jobName.value || 'Job'
   }
-  if (p.startsWith('/dashboard')) return 'Dashboard'
-  if (p.startsWith('/login')) return 'Auth'
+  const byName = crumbByRouteName[route.name as string]
+  if (byName) return byName
+  if (route.path.startsWith('/admin')) return 'Admin'
+  if (route.path.startsWith('/dashboard')) return 'Dashboard'
+  if (route.path.startsWith('/login')) return 'Auth'
   return 'App'
 })
 

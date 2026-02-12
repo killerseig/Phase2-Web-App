@@ -1,234 +1,276 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
+import flatPickr from 'vue-flatpickr-component'
+import 'flatpickr/dist/flatpickr.css'
 import { useRoute, useRouter } from 'vue-router'
-import Toast from '../components/Toast.vue'
+import Toast from '@/components/Toast.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useJobsStore } from '@/stores/jobs'
+import { usePermissions } from '@/composables/usePermissions'
+import { markTimecardsSent } from '@/services/Jobs'
 import {
   autoGenerateTimecards,
   createTimecard,
-  deleteTimecard as deleteTimecardService,
+  deleteTimecard,
   listTimecardsByJobAndWeek,
   submitAllWeekTimecards,
-  submitTimecard as submitTimecardService,
+  submitTimecard,
   updateTimecard,
-} from '@/services'
-import { useJobsStore } from '../stores/jobs'
-import { useAuthStore } from '../stores/auth'
-import type { TimecardDay, Timecard as TimecardModel } from '@/types/models'
-import { DAY_NAMES_SHORT } from '@/config/constants'
-import { formatWeekRange, snapToSunday, getSaturdayFromSunday } from '@/utils/modelValidation'
-import { useJobAccess } from '@/composables/useJobAccess'
-import FlatPickr from 'vue-flatpickr-component'
-import 'flatpickr/dist/flatpickr.css'
+} from '@/services/Timecards'
+import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
+import type { Timecard, TimecardDay, TimecardJobEntry, TimecardTotals } from '@/types/models'
 
-defineProps<{ jobId?: string }>()
+type ToastInstance = ComponentPublicInstance<{ show: (message: string, type?: 'success' | 'error' | 'info' | 'warning', duration?: number) => string; remove: (id: string) => void }>
+
+type TimecardJobUi = TimecardJobEntry & { difH?: string; difP?: string; difC?: string }
+
+interface TimecardModel extends Timecard {
+  jobs?: TimecardJobUi[]
+  totals: TimecardTotals
+}
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const jobs = useJobsStore()
-const jobAccess = useJobAccess()
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
+const jobsStore = useJobsStore()
+const permissions = usePermissions()
+const isAdmin = computed(() => auth.role === 'admin')
+
+const toastRef = ref<ToastInstance | null>(null)
+const datePickerRef = ref<any>(null)
 
 const jobId = computed(() => String(route.params.jobId))
-const jobName = computed(() => jobs.currentJob?.name ?? 'Timecards')
-const jobCode = computed(() => jobs.currentJob?.code ?? '')
-
-const loading = ref(true)
-const saving = ref(false)
-const submitting = ref(false)
-const autoGenerating = ref(false)
-const err = ref('')
-const timecards = ref<TimecardModel[]>([])
-const autoSaveTimers = ref<Map<string, NodeJS.Timeout>>(new Map())
-const expandedTimecardId = ref<string | null>(null)
-const editingTimecardId = ref<string | null>(null)
-const editForm = ref({
-  employeeNumber: '',
-  firstName: '',
-  lastName: '',
-  occupation: '',
-})
-const selectedDate = ref('')
-const dateInputRef = ref<HTMLInputElement | null>(null)
-const datePickerRef = ref<InstanceType<typeof FlatPickr> | null>(null)
-const flatpickrConfig = {
-  dateFormat: 'Y-m-d',
-  disableMobile: true,
-}
-const showCreateForm = ref(false)
-const draftTimecards = ref<Map<string, TimecardModel>>(new Map())
-
-// Form for creating new timecard
-const newTimecardForm = ref({
-  employeeNumber: '',
-  firstName: '',
-  lastName: '',
-  occupation: '',
-})
-
-// Computed
+const jobName = computed(() => jobsStore.currentJob?.name ?? 'Timecards')
+const selectedDate = ref<string>('')
 const weekStartDate = computed(() => snapToSunday(selectedDate.value || new Date()))
 const weekEndingDate = computed(() => getSaturdayFromSunday(weekStartDate.value))
 const weekRange = computed(() => formatWeekRange(weekStartDate.value, weekEndingDate.value))
 
-const allTimecards = computed(() => {
-  const existing = timecards.value
-  const drafts = Array.from(draftTimecards.value.values())
-  return [...existing, ...drafts].sort((a, b) => 
-    a.employeeName.localeCompare(b.employeeName)
-  )
+const timecards = ref<TimecardModel[]>([])
+const draftTimecards = ref<Map<string, TimecardModel>>(new Map())
+const autoSaveTimers = ref<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+const showSummaryModal = ref(false)
+const printing = ref(false)
+
+const loading = ref(true)
+const saving = ref(false)
+const submittingAll = ref(false)
+const autoGenerating = ref(false)
+const err = ref('')
+
+const editingTimecardId = ref<string | null>(null)
+const expandedId = ref<string | null>(null)
+const editForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '' })
+
+const showCreateForm = ref(false)
+const newTimecardForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '' })
+
+const flatpickrConfig = ref<any>({
+  dateFormat: 'Y-m-d',
+  disableMobile: true,
+  // Use Bootstrap icons instead of default inline SVG path strings
+  prevArrow: '<i class="bi bi-chevron-left"></i>',
+  nextArrow: '<i class="bi bi-chevron-right"></i>',
 })
 
-const draftCount = computed(() => 
-  allTimecards.value.filter(t => t.status === 'draft').length
-)
+const allTimecards = computed(() => {
+  const drafts = Array.from(draftTimecards.value.values())
+  return [...timecards.value, ...drafts].sort((a, b) => a.employeeName.localeCompare(b.employeeName))
+})
 
-const submittedCount = computed(() => 
-  allTimecards.value.filter(t => t.status === 'submitted').length
-)
+const summaryRows = computed(() => allTimecards.value.map(tc => ({
+  id: tc.id,
+  employeeName: tc.employeeName,
+  employeeNumber: tc.employeeNumber,
+  status: tc.status,
+  hours: tc.totals?.hoursTotal ?? 0,
+  production: tc.totals?.productionTotal ?? 0,
+  lineTotal: tc.totals?.lineTotal ?? 0,
+})))
 
-// Helpers
-function getDaysArray(startDate: string): TimecardDay[] {
-  const days: TimecardDay[] = []
-  const d = new Date(startDate + 'T00:00:00')
-  
+const draftCount = computed(() => allTimecards.value.filter(tc => tc.status === 'draft').length)
+const submittedCount = computed(() => allTimecards.value.filter(tc => tc.status === 'submitted').length)
+
+function buildWeekDates(start: string): string[] {
+  const dates: string[] = []
+  const base = new Date(start + 'T00:00:00Z')
   for (let i = 0; i < 7; i++) {
-    const dateStr = d.toISOString().split('T')[0]
-    days.push({
-      date: dateStr,
-      dayOfWeek: i,
-      hours: 0,
-      production: 0,
-      unitCost: 0,
-      lineTotal: 0,
-      notes: ''
-    })
-    d.setDate(d.getDate() + 1)
+    const d = new Date(base)
+    d.setUTCDate(base.getUTCDate() + i)
+    const yyyy = d.getUTCFullYear()
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const dd = String(d.getUTCDate()).padStart(2, '0')
+    dates.push(`${yyyy}-${mm}-${dd}`)
   }
-  return days
+  return dates
 }
 
-function createNewBlankTimecard(): TimecardModel {
-  const tempId = 'temp-' + Date.now()
+function makeDaysArray(start: string): TimecardDay[] {
+  return buildWeekDates(start).map((date, idx) => ({
+    date,
+    dayOfWeek: idx,
+    hours: 0,
+    production: 0,
+    unitCost: 0,
+    lineTotal: 0,
+    notes: '',
+  }))
+}
+
+function createDraft(): TimecardModel {
+  const days = makeDaysArray(weekStartDate.value)
   return {
-    id: tempId,
+    id: `temp-${Date.now()}`,
     jobId: jobId.value,
     weekStartDate: weekStartDate.value,
     weekEndingDate: weekEndingDate.value,
     status: 'draft',
-    archived: false,
     createdByUid: auth.user?.uid ?? '',
+    submittedAt: null as any,
     employeeRosterId: '',
     employeeNumber: newTimecardForm.value.employeeNumber,
-    employeeName: `${newTimecardForm.value.firstName} ${newTimecardForm.value.lastName}`,
+    employeeName: `${newTimecardForm.value.firstName} ${newTimecardForm.value.lastName}`.trim(),
     occupation: newTimecardForm.value.occupation,
-    jobs: [{ jobNumber: '', acct: '', div: '', days: getDaysArray(weekStartDate.value) }],
-    days: getDaysArray(weekStartDate.value),
+    jobs: [
+      {
+        jobNumber: '',
+        acct: '',
+        difH: '',
+        difP: '',
+        difC: '',
+        days: makeDaysArray(weekStartDate.value),
+      },
+    ],
+    days,
     totals: {
-      hours: [0, 0, 0, 0, 0, 0, 0],
-      production: [0, 0, 0, 0, 0, 0, 0],
+      hours: Array(7).fill(0),
+      production: Array(7).fill(0),
       hoursTotal: 0,
       productionTotal: 0,
-      lineTotal: 0
+      lineTotal: 0,
     },
-    notes: ''
+    notes: '',
+    archived: false,
+    archivedAt: null as any,
   }
 }
 
-// Load functions
-async function loadCurrentJob() {
+function recalcTotals(timecard: TimecardModel) {
+  const hours: number[] = Array(7).fill(0)
+  const production: number[] = Array(7).fill(0)
+  const lineTotals: number[] = Array(7).fill(0)
+
+  timecard.jobs?.forEach(job => {
+    job.days?.forEach((day, idx) => {
+      hours[idx] += day.hours || 0
+      production[idx] += day.production || 0
+      lineTotals[idx] += (day.production || 0) * (day.unitCost || 0)
+    })
+  })
+
+  const dates = buildWeekDates(weekStartDate.value)
+  timecard.days = dates.map((date, idx) => ({
+    date,
+    dayOfWeek: idx,
+    hours: hours[idx],
+    production: production[idx],
+    unitCost: 0,
+    lineTotal: lineTotals[idx],
+    notes: timecard.days?.[idx]?.notes ?? '',
+  }))
+
+  timecard.totals = {
+    hours,
+    production,
+    hoursTotal: hours.reduce((sum, h) => sum + h, 0),
+    productionTotal: production.reduce((sum, p) => sum + p, 0),
+    lineTotal: lineTotals.reduce((sum, v) => sum + v, 0),
+  }
+}
+
+async function ensureAccess(): Promise<boolean> {
   try {
     if (!auth.ready) await auth.init()
-    if (!jobAccess.canAccessJob(jobId.value)) {
+    if (!permissions.canAccessJob.value) {
       await router.push({ name: 'unauthorized' })
       return false
     }
-
-    await jobs.fetchJob(jobId.value)
+    await jobsStore.fetchJob(jobId.value)
     return true
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to load job'
-    toastRef.value?.show('Failed to load job', 'error')
+    toastRef.value?.show(err.value, 'error')
     return false
   }
 }
 
 async function loadTimecards() {
+  loading.value = true
+  err.value = ''
   try {
-    timecards.value = await listTimecardsByJobAndWeek(
-      jobId.value,
-      weekEndingDate.value
-    )
+    timecards.value = await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to load timecards'
-    toastRef.value?.show('Failed to load timecards', 'error')
+    toastRef.value?.show(err.value, 'error')
+  } finally {
+    loading.value = false
   }
 }
 
 async function init() {
   loading.value = true
   err.value = ''
-  
   try {
-    const today = new Date()
-    selectedDate.value = today.toISOString().split('T')[0]
-    const jobLoaded = await loadCurrentJob()
-    if (!jobLoaded) {
-      loading.value = false
-      return
-    }
-
+    const today = new Date().toISOString().split('T')[0]
+    selectedDate.value = today
+    if (!await ensureAccess()) return
     await loadTimecards()
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to initialize'
+    toastRef.value?.show(err.value, 'error')
   } finally {
     loading.value = false
   }
 }
 
-async function onChangeWeek() {
-  // Save any unsaved drafts before switching weeks
+async function refreshWeek(dateStr: string) {
+  selectedDate.value = dateStr
   const drafts = Array.from(draftTimecards.value.values())
   for (const draft of drafts) {
     if (draft.id.startsWith('temp-')) {
       try {
-        await saveTimecard(draft)
+        await saveTimecard(draft, false)
       } catch (e) {
-        console.error('Failed to save draft before switching weeks:', e)
+        console.error('Failed to save draft before switching weeks', e)
       }
     }
   }
-  
-  // Clear UI state
   draftTimecards.value.clear()
-  expandedTimecardId.value = null
+  editingTimecardId.value = null
   showCreateForm.value = false
   err.value = ''
-  
-  // Load timecards for new week
   await loadTimecards()
 }
 
-async function onDateSelected(date: string) {
-  selectedDate.value = date
-  await onChangeWeek()
+function openDatePicker() {
+  const picker = datePickerRef.value?.fp || datePickerRef.value?.flatpickr
+  if (picker?.open) picker.open()
 }
 
-function openDatePicker() {
-  const picker = datePickerRef.value as any
-  const fp = picker?.fp || picker?.flatpickr
-  if (fp?.open) fp.open()
+function toggleAccordion(id: string) {
+  expandedId.value = expandedId.value === id ? null : id
+}
+
+function onDateChange(_dates: Date[], dateStr: string) {
+  if (dateStr) refreshWeek(dateStr)
 }
 
 function onDateInputFocus() {
   openDatePicker()
 }
 
-function onDateChange(_selectedDates: Date[], dateStr: string) {
-  if (dateStr) onDateSelected(dateStr)
-}
-
-// Create timecard
 function startCreateTimecard() {
   newTimecardForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '' }
   showCreateForm.value = true
@@ -236,7 +278,6 @@ function startCreateTimecard() {
 
 function cancelCreateTimecard() {
   showCreateForm.value = false
-  newTimecardForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '' }
 }
 
 function confirmCreateTimecard() {
@@ -252,65 +293,30 @@ function confirmCreateTimecard() {
     toastRef.value?.show('Employee number is required', 'error')
     return
   }
-
-  const timecard = createNewBlankTimecard()
-  draftTimecards.value.set(timecard.id, timecard)
-  expandedTimecardId.value = timecard.id
+  const draft = createDraft()
+  draftTimecards.value.set(draft.id, draft)
+  editingTimecardId.value = draft.id
+  expandedId.value = draft.id
   showCreateForm.value = false
 }
 
-// Update timecard
-function updateDayValue(timecard: TimecardModel, dayIndex: number, field: keyof TimecardDay, value: any) {
-  timecard.days[dayIndex] = { ...timecard.days[dayIndex], [field]: value }
-  
-  const day = timecard.days[dayIndex]
-  day.lineTotal = (day.production || 0) * (day.unitCost || 0)
-  
-  const hours = timecard.days.map(d => d.hours || 0)
-  const production = timecard.days.map(d => d.production || 0)
-  const hoursTotal = hours.reduce((a, b) => a + b, 0)
-  const productionTotal = production.reduce((a, b) => a + b, 0)
-  const lineTotal = timecard.days.reduce((sum, d) => sum + (d.lineTotal || 0), 0)
-  
-  timecard.totals = { hours, production, hoursTotal, productionTotal, lineTotal }
-}
-
-function recalculateTotals(timecard: TimecardModel) {
-  // Sum totals across all jobs
-  const hours = [0, 0, 0, 0, 0, 0, 0]
-  const production = [0, 0, 0, 0, 0, 0, 0]
-  let hoursTotal = 0
-  let productionTotal = 0
-  let lineTotal = 0
-  
-  if (timecard.jobs && timecard.jobs.length > 0) {
-    for (const job of timecard.jobs) {
-      if (job.days && job.days.length === 7) {
-        for (let i = 0; i < 7; i++) {
-          const jobDay = job.days[i]
-          hours[i] = (hours[i] || 0) + (jobDay.hours || 0)
-          production[i] = (production[i] || 0) + (jobDay.production || 0)
-          const lineTotalForDay = (jobDay.production || 0) * (jobDay.unitCost || 0)
-          lineTotal += lineTotalForDay
-        }
-      }
-    }
-  }
-  
-  hoursTotal = hours.reduce((a, b) => a + b, 0)
-  productionTotal = production.reduce((a, b) => a + b, 0)
-  
-  timecard.totals = { hours, production, hoursTotal, productionTotal, lineTotal }
-  autoSave(timecard)
+function autoSave(timecard: TimecardModel) {
+  const existing = autoSaveTimers.value.get(timecard.id)
+  if (existing) clearTimeout(existing)
+  const timer = setTimeout(() => {
+    saveTimecard(timecard, false)
+    autoSaveTimers.value.delete(timecard.id)
+  }, 500)
+  autoSaveTimers.value.set(timecard.id, timer)
 }
 
 async function saveTimecard(timecard: TimecardModel, showToast = true) {
   saving.value = true
   err.value = ''
-  
   try {
+    recalcTotals(timecard)
+    const previousId = timecard.id
     if (timecard.id.startsWith('temp-')) {
-      // New timecard - create it
       const id = await createTimecard(jobId.value, {
         weekEndingDate: timecard.weekEndingDate,
         employeeRosterId: '',
@@ -319,38 +325,42 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
         occupation: timecard.occupation,
         jobs: timecard.jobs || [],
         days: timecard.days,
-        notes: timecard.notes
+        notes: timecard.notes,
       })
-      
-      // Update draft map with real ID
       draftTimecards.value.delete(timecard.id)
       timecard.id = id
-      draftTimecards.value.set(id, timecard)
-      
+      expandedId.value = expandedId.value === previousId ? id : expandedId.value
+      editingTimecardId.value = editingTimecardId.value === previousId ? id : editingTimecardId.value
+      draftTimecards.value.delete(id)
+      if (!timecards.value.find(t => t.id === id)) timecards.value.push(timecard)
       if (showToast) toastRef.value?.show(`Created timecard for ${timecard.employeeName}`, 'success')
-    } else if (!timecards.value.find(t => t.id === timecard.id)) {
-      // Draft that hasn't been saved yet
-      const id = await createTimecard(jobId.value, {
-        weekEndingDate: timecard.weekEndingDate,
-        employeeRosterId: '',
-        employeeNumber: timecard.employeeNumber,
-        employeeName: timecard.employeeName,
-        occupation: timecard.occupation,
-        jobs: timecard.jobs || [],
-        days: timecard.days,
-        notes: timecard.notes
-      })
-      
-      timecard.id = id
-      if (showToast) toastRef.value?.show(`Created timecard for ${timecard.employeeName}`, 'success')
-    } else {
-      // Update existing
+    } else if (timecards.value.find(t => t.id === timecard.id)) {
       await updateTimecard(jobId.value, timecard.id, {
         days: timecard.days,
         jobs: timecard.jobs,
-        notes: timecard.notes
+        notes: timecard.notes,
+        employeeName: timecard.employeeName,
+        employeeNumber: timecard.employeeNumber,
+        occupation: timecard.occupation,
       })
       if (showToast) toastRef.value?.show(`Updated timecard for ${timecard.employeeName}`, 'success')
+    } else {
+      const id = await createTimecard(jobId.value, {
+        weekEndingDate: timecard.weekEndingDate,
+        employeeRosterId: '',
+        employeeNumber: timecard.employeeNumber,
+        employeeName: timecard.employeeName,
+        occupation: timecard.occupation,
+        jobs: timecard.jobs || [],
+        days: timecard.days,
+        notes: timecard.notes,
+      })
+      timecard.id = id
+      expandedId.value = expandedId.value === previousId ? id : expandedId.value
+      editingTimecardId.value = editingTimecardId.value === previousId ? id : editingTimecardId.value
+      draftTimecards.value.delete(id)
+      if (!timecards.value.find(t => t.id === id)) timecards.value.push(timecard)
+      if (showToast) toastRef.value?.show(`Created timecard for ${timecard.employeeName}`, 'success')
     }
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to save timecard'
@@ -362,12 +372,10 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
 
 async function handleDeleteTimecard(timecardId: string, employeeName: string) {
   if (!confirm(`Delete timecard for ${employeeName}?`)) return
-  
   saving.value = true
   err.value = ''
-  
   try {
-    await deleteTimecardService(jobId.value, timecardId)
+    await deleteTimecard(jobId.value, timecardId)
     draftTimecards.value.delete(timecardId)
     toastRef.value?.show(`Deleted timecard for ${employeeName}`, 'success')
     await loadTimecards()
@@ -381,12 +389,10 @@ async function handleDeleteTimecard(timecardId: string, employeeName: string) {
 
 async function handleSubmitTimecard(timecard: TimecardModel) {
   if (!confirm(`Submit timecard for ${timecard.employeeName}?`)) return
-  
   saving.value = true
   err.value = ''
-  
   try {
-    await submitTimecardService(jobId.value, timecard.id)
+    await submitTimecard(jobId.value, timecard.id)
     timecard.status = 'submitted'
     toastRef.value?.show(`Submitted timecard for ${timecard.employeeName}`, 'success')
     await loadTimecards()
@@ -400,46 +406,52 @@ async function handleSubmitTimecard(timecard: TimecardModel) {
 
 async function submitAllTimecards() {
   if (!confirm(`Submit all timecards for the week of ${weekRange.value}?`)) return
-  
-  submitting.value = true
+  submittingAll.value = true
   err.value = ''
-  
   try {
-    // Save all drafts first
-    const drafts = allTimecards.value.filter(t => t.status === 'draft')
+    const drafts = allTimecards.value.filter(tc => tc.status === 'draft')
     for (const draft of drafts) {
-      if (draft.id.startsWith('temp-')) {
-        await saveTimecard(draft)
-      }
+      if (draft.id.startsWith('temp-')) await saveTimecard(draft, false)
     }
-    
-    // Now submit all
-    const count = await submitAllWeekTimecards(
-      jobId.value,
-      weekEndingDate.value
-    )
-    
+    const count = await submitAllWeekTimecards(jobId.value, weekEndingDate.value)
     toastRef.value?.show(`Submitted ${count} timecard(s)`, 'success')
+    if (isAdmin.value) {
+      await markTimecardsSent(jobId.value, weekEndingDate.value)
+    }
     await loadTimecards()
     draftTimecards.value.clear()
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to submit timecards'
     toastRef.value?.show(err.value, 'error')
   } finally {
-    submitting.value = false
+    submittingAll.value = false
   }
+}
+
+function openSummary() {
+  showSummaryModal.value = true
+}
+
+function closeSummary() {
+  if (printing.value) return
+  showSummaryModal.value = false
+}
+
+function printSummary() {
+  if (printing.value) return
+  printing.value = true
+  // Use a timeout to allow modal render before print
+  requestAnimationFrame(() => {
+    window.print()
+    printing.value = false
+  })
 }
 
 async function generateFromPreviousWeek() {
   autoGenerating.value = true
   err.value = ''
-  
   try {
-    const newIds = await autoGenerateTimecards(
-      jobId.value,
-      weekEndingDate.value
-    )
-    
+    const newIds = await autoGenerateTimecards(jobId.value, weekEndingDate.value)
     if (newIds.length > 0) {
       toastRef.value?.show(`Generated ${newIds.length} timecard(s) from previous week`, 'success')
       await loadTimecards()
@@ -454,24 +466,13 @@ async function generateFromPreviousWeek() {
   }
 }
 
-function autoSave(timecard: TimecardModel) {
-  const existingTimer = autoSaveTimers.value.get(timecard.id)
-  if (existingTimer) clearTimeout(existingTimer)
-  
-  const timer = setTimeout(() => {
-    saveTimecard(timecard, false)  // Don't show toast for auto-save
-    autoSaveTimers.value.delete(timecard.id)
-  }, 500)
-  
-  autoSaveTimers.value.set(timecard.id, timer)
-}
-
 function startEditingEmployee(timecard: TimecardModel) {
   editingTimecardId.value = timecard.id
+  const [firstName, ...rest] = timecard.employeeName.split(' ')
   editForm.value = {
     employeeNumber: timecard.employeeNumber,
-    firstName: timecard.employeeName.split(' ')[0],
-    lastName: timecard.employeeName.split(' ').slice(1).join(' '),
+    firstName,
+    lastName: rest.join(' '),
     occupation: timecard.occupation,
   }
 }
@@ -494,18 +495,11 @@ function confirmEditingEmployee(timecard: TimecardModel) {
     toastRef.value?.show('Employee number is required', 'error')
     return
   }
-
   timecard.employeeNumber = editForm.value.employeeNumber
   timecard.employeeName = `${editForm.value.firstName} ${editForm.value.lastName}`
   timecard.occupation = editForm.value.occupation
-
   autoSave(timecard)
   editingTimecardId.value = null
-}
-
-function handleDayInput(timecard: TimecardModel, dayIndex: number, field: keyof TimecardDay, value: any) {
-  updateDayValue(timecard, dayIndex, field, value)
-  autoSave(timecard)
 }
 
 function handleNotesInput(timecard: TimecardModel, value: string) {
@@ -514,22 +508,55 @@ function handleNotesInput(timecard: TimecardModel, value: string) {
 }
 
 function addJobRow(timecard: TimecardModel) {
-  if (!timecard.jobs) {
-    timecard.jobs = []
-  }
-  timecard.jobs.push({ jobNumber: '', acct: '', div: '', days: getDaysArray(weekStartDate.value) })
+  if (!timecard.jobs) timecard.jobs = []
+  timecard.jobs.push({ jobNumber: '', acct: '', difH: '', difP: '', difC: '', days: makeDaysArray(weekStartDate.value) })
+  recalcTotals(timecard)
   autoSave(timecard)
 }
 
-function removeJobRow(timecard: TimecardModel, jobIndex: number) {
+function removeJobRow(timecard: TimecardModel, index: number) {
   if (timecard.jobs && timecard.jobs.length > 1) {
-    timecard.jobs.splice(jobIndex, 1)
+    timecard.jobs.splice(index, 1)
+    recalcTotals(timecard)
     autoSave(timecard)
   }
 }
 
-onMounted(() => init())
+function updateJobNumber(timecard: TimecardModel, index: number, value: string) {
+  if (!timecard.jobs) return
+  timecard.jobs[index].jobNumber = value
+  autoSave(timecard)
+}
 
+function updateAccount(timecard: TimecardModel, index: number, value: string) {
+  if (!timecard.jobs) return
+  timecard.jobs[index].acct = value
+  autoSave(timecard)
+}
+
+type TimecardDayNumberField = 'hours' | 'production' | 'unitCost' | 'lineTotal'
+
+function updateDayValue(timecard: TimecardModel, jobIndex: number, dayIndex: number, field: TimecardDayNumberField, raw: number) {
+  if (!timecard.jobs || !timecard.jobs[jobIndex] || !timecard.jobs[jobIndex].days) return
+  timecard.jobs[jobIndex].days![dayIndex][field] = raw
+  recalcTotals(timecard)
+  autoSave(timecard)
+}
+
+function clampHours(value: number) {
+  if (Number.isNaN(value)) return 0
+  return Math.min(24, Math.max(0, value))
+}
+
+function handleHoursInput(timecard: TimecardModel, jobIndex: number, dayIndex: number, rawValue: number) {
+  if (!timecard.jobs || !timecard.jobs[jobIndex] || !timecard.jobs[jobIndex].days) return
+  const clamped = clampHours(rawValue)
+  timecard.jobs[jobIndex].days![dayIndex].hours = clamped
+  recalcTotals(timecard)
+  autoSave(timecard)
+}
+
+onMounted(() => init())
 onUnmounted(() => {
   autoSaveTimers.value.forEach(timer => clearTimeout(timer))
   autoSaveTimers.value.clear()
@@ -539,410 +566,380 @@ onUnmounted(() => {
 <template>
   <div class="timecards-page">
     <Toast ref="toastRef" />
-    
+
     <div class="container-fluid py-4 wide-container">
-    <!-- Header Navigation -->
-    <div class="mb-4 d-flex justify-content-between align-items-center">
-      <div>
-        <h2 class="h4 mb-1">{{ jobName }}</h2>
-        <small class="text-muted">{{ weekRange }}</small>
-      </div>
-      <div class="d-flex gap-2">
-        <button 
-          @click="generateFromPreviousWeek"
-          :disabled="autoGenerating || loading"
-          class="btn btn-outline-secondary btn-sm"
-          title="Copy timecards from previous week"
-        >
-          <i class="bi bi-arrow-repeat me-1"></i>
-          {{ autoGenerating ? 'Generating...' : 'Previous Week' }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Error Alert -->
-    <div v-if="err" class="alert alert-danger alert-dismissible fade show mb-4">
-      <strong>Error:</strong> {{ err }}
-      <button type="button" class="btn-close" @click="err = ''"></button>
-    </div>
-
-    <!-- Loading State -->
-    <div v-if="loading" class="text-center py-5">
-      <div class="spinner-border text-primary mb-3"></div>
-      <p class="text-muted">Loading timecards…</p>
-    </div>
-
-    <!-- Content (Toolbar always visible) -->
-    <div v-else>
-      <div class="timecards-toolbar sticky-top mb-3">
-        <div class="container-fluid wide-container">
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div class="d-flex gap-2 flex-wrap">
-              <button 
-                @click="startCreateTimecard"
-                :disabled="loading || showCreateForm"
-                class="btn btn-primary btn-sm"
-              >
-                <i class="bi bi-plus-circle me-1"></i>Create New
-              </button>
-
-              <div class="input-group input-group-sm date-input-group">
-                <flat-pickr
-                  ref="datePickerRef"
-                  v-model="selectedDate"
-                  :config="flatpickrConfig"
-                  @on-change="onDateChange"
-                  @focus="onDateInputFocus"
-                  class="form-control date-input"
-                />
-                <button 
-                  type="button"
-                  class="btn btn-outline-secondary"
-                  @click="openDatePicker"
-                  title="Open date picker"
-                >
-                  <i class="bi bi-calendar3"></i>
-                </button>
-              </div>
-            </div>
-
-            <div class="d-flex gap-2 align-items-center">
-              <span class="small text-muted">
-                <span class="badge bg-warning text-dark">{{ draftCount }} Draft</span>
-                <span class="badge bg-success ms-2">{{ submittedCount }} Submitted</span>
-              </span>
-
-              <button 
-                @click="submitAllTimecards"
-                :disabled="submitting || loading || draftCount === 0"
-                class="btn btn-success btn-sm"
-              >
-                <i class="bi bi-send me-1"></i>
-                {{ submitting ? 'Submitting...' : `Submit All (${draftCount})` }}
-              </button>
-            </div>
-          </div>
+      <div class="mb-4 d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="h4 mb-1">{{ jobName }}</h2>
+          <small class="text-muted">{{ weekRange }}</small>
         </div>
-      </div>
-
-      <div v-if="allTimecards.length === 0" class="alert alert-info text-center">
-        <i class="bi bi-inbox me-2"></i>No timecards yet.
-        <button @click="startCreateTimecard" class="btn btn-link btn-sm">Create one</button>
-      </div>
-
-      <div v-else class="accordion accordion-flush" id="timecardsAccordion">
-        <div v-for="timecard in allTimecards" :key="timecard.id" class="accordion-item">
-          <h2 class="accordion-header" :id="`heading-${timecard.id}`">
-            <button 
-              class="accordion-button collapsed"
-              type="button" 
-              data-bs-toggle="collapse"
-              :data-bs-target="`#collapse-${timecard.id}`"
-              aria-expanded="false"
-              :aria-controls="`collapse-${timecard.id}`"
-            >
-              <div class="row g-3 align-items-center w-100">
-                <div class="col-md-3">
-                  <div v-if="editingTimecardId === timecard.id" class="input-group input-group-sm">
-                    <input 
-                      v-model="editForm.firstName"
-                      type="text" 
-                      class="form-control" 
-                      placeholder="First"
-                      @click.stop
-                    />
-                    <input 
-                      v-model="editForm.lastName"
-                      type="text" 
-                      class="form-control" 
-                      placeholder="Last"
-                      @click.stop
-                    />
-                  </div>
-                  <div v-else class="fw-semibold">{{ timecard.employeeName }}</div>
-                </div>
-                
-                <div class="col-md-2">
-                  <div v-if="editingTimecardId === timecard.id">
-                    <input 
-                      v-model="editForm.employeeNumber"
-                      type="text" 
-                      class="form-control form-control-sm" 
-                      @click.stop
-                    />
-                  </div>
-                  <div v-else class="fw-semibold">#{{ timecard.employeeNumber }}</div>
-                </div>
-
-                <div class="col-md-3">
-                  <div v-if="editingTimecardId === timecard.id">
-                    <input 
-                      v-model="editForm.occupation"
-                      type="text" 
-                      class="form-control form-control-sm" 
-                      @click.stop
-                    />
-                  </div>
-                  <div v-else class="text-muted">{{ timecard.occupation }}</div>
-                </div>
-
-                <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2" @click.stop>
-                  <span v-if="editingTimecardId === timecard.id" class="d-flex gap-1">
-                    <button 
-                      @click="confirmEditingEmployee(timecard)"
-                      class="btn btn-primary btn-sm"
-                    >
-                      <i class="bi bi-check"></i>
-                    </button>
-                    <button 
-                      @click="cancelEditingEmployee"
-                      class="btn btn-secondary btn-sm"
-                    >
-                      <i class="bi bi-x"></i>
-                    </button>
-                  </span>
-                  <span v-else class="d-flex gap-2 align-items-center">
-                    <button 
-                      @click="startEditingEmployee(timecard)"
-                      class="btn btn-outline-secondary btn-sm"
-                      :disabled="timecard.status === 'submitted'"
-                    >
-                      <i class="bi bi-pencil"></i>
-                    </button>
-                    <span :class="timecard.status === 'submitted' ? 'badge bg-success' : 'badge bg-warning text-dark'">
-                      {{ timecard.status }}
-                    </span>
-                  </span>
-                </div>
-              </div>
-            </button>
-          </h2>
-
-          <div 
-            :id="`collapse-${timecard.id}`"
-            class="accordion-collapse collapse"
-            :aria-labelledby="`heading-${timecard.id}`"
-            data-bs-parent="#timecardsAccordion"
+        <div class="d-flex gap-2">
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            title="Copy timecards from previous week"
+            :disabled="autoGenerating || loading"
+            @click="generateFromPreviousWeek"
           >
-            <div class="accordion-body p-0">
-              <div class="table-responsive">
-                <table class="table table-sm mb-0 border-bottom">
-                  <thead>
-                    <tr>
-                      <th class="text-center small fw-semibold col-job">Job #</th>
-                      <th class="text-center small fw-semibold col-acct">Acct</th>
-                      <th class="text-center small fw-semibold col-blank"></th>
-                      <th class="text-center small fw-semibold col-div">Div</th>
-                      <th v-for="dayIdx in 7" :key=dayIdx class="text-center col-day">
-                        <div class="fw-semibold small">{{ DAY_NAMES_SHORT[dayIdx - 1] }}</div>
-                      </th>
-                      <th class="text-center small fw-semibold col-total">Total</th>
-                      <th class="col-actions"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template v-for="(job, jobIdx) in (timecard.jobs || [])" :key="`job-${jobIdx}`">
-                      <tr class="align-middle">
-                        <td v-if="true" :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
-                          <input 
-                            type="text" 
-                            :value="job.jobNumber || ''"
-                            @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].jobNumber = (e.target as HTMLInputElement).value; handleDayInput(timecard, 0, 'hours', timecard.days[0]?.hours ?? 0) }"
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center"
-                            placeholder="Job #"
-                          />
-                        </td>
-                        <td v-if="true" :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
-                          <input 
-                            type="text" 
-                            :value="job.acct || ''"
-                            @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].acct = (e.target as HTMLInputElement).value; handleDayInput(timecard, 0, 'hours', timecard.days[0]?.hours ?? 0) }"
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center"
-                            placeholder="Acct"
-                          />
-                        </td>
-                        <td class="bg-soft small fw-semibold text-center">H</td>
-                        <td class="bg-soft text-center px-2 py-0">
-                          <input 
-                            type="text" 
-                            :value="job.div || ''"
-                            @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].div = (e.target as HTMLInputElement).value }"
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center"
-                            placeholder="Div"
-                          />
-                        </td>
-                        <td v-for="dayIdx in 7" :key="`h-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
-                          <input 
-                            v-if="job.days && job.days[dayIdx - 1]"
-                            type="number" 
-                            min="0" 
-                            step="0.25"
-                            v-model.number="job.days[dayIdx - 1].hours"
-                            @input="recalculateTotals(timecard)"
-                            @focus="($event.target as HTMLInputElement).select()"
-                            @click.stop
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center w-100"
-                          />
-                        </td>
-                        <td class="text-center fw-semibold small">{{ timecard.totals.hoursTotal ?? 0 }}</td>
-                        <td :rowspan="3" class="text-center align-middle">
-                          <button 
-                            v-if="(timecard.jobs?.length || 0) > 1"
-                            @click="removeJobRow(timecard, jobIdx)"
-                            :disabled="timecard.status === 'submitted'"
-                            class="btn btn-sm btn-danger btn-icon"
-                            title="Remove job"
-                          >
-                            <i class="bi bi-x"></i>
-                          </button>
-                        </td>
-                      </tr>
+            <i class="bi bi-arrow-repeat me-1"></i>
+            {{ autoGenerating ? 'Generating...' : 'Previous Week' }}
+          </button>
+        </div>
+      </div>
 
-                      <tr class="align-middle bg-soft">
-                        <td class="bg-soft small fw-semibold text-center">P</td>
-                        <td class="bg-soft text-center px-2 py-0">
-                          <input 
-                            type="text" 
-                            :value="job.div || ''"
-                            @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].div = (e.target as HTMLInputElement).value }"
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center"
-                            placeholder="Div"
-                          />
-                        </td>
-                        <td v-for="dayIdx in 7" :key="`p-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
-                          <input 
-                            v-if="job.days && job.days[dayIdx - 1]"
-                            type="number" 
-                            min="0" 
-                            step="0.1"
-                            v-model.number="job.days[dayIdx - 1].production"
-                            @input="recalculateTotals(timecard)"
-                            @focus="($event.target as HTMLInputElement).select()"
-                            @click.stop
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center w-100"
-                            title="Production units"
-                          />
-                        </td>
-                        <td class="text-center fw-semibold small">{{ timecard.totals.productionTotal ?? 0 }}</td>
-                      </tr>
+      <div v-if="err" class="alert alert-danger alert-dismissible fade show mb-4">
+        <strong>Error:</strong> {{ err }}
+        <button type="button" class="btn-close" @click="err = ''"></button>
+      </div>
 
-                      <tr class="align-middle">
-                        <td class="bg-soft small fw-semibold text-center">C</td>
-                        <td class="bg-soft text-center px-2 py-0">
-                          <input 
-                            type="text" 
-                            :value="job.div || ''"
-                            @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].div = (e.target as HTMLInputElement).value }"
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center"
-                            placeholder="Div"
-                          />
-                        </td>
-                        <td v-for="dayIdx in 7" :key="`c-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
-                          <input 
-                            v-if="job.days && job.days[dayIdx - 1]"
-                            type="number" 
-                            min="0" 
-                            step="0.01"
-                            v-model.number="job.days[dayIdx - 1].unitCost"
-                            @input="recalculateTotals(timecard)"
-                            @focus="($event.target as HTMLInputElement).select()"
-                            @click.stop
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center text-xs"
-                            title="Cost per unit"
-                          />
-                        </td>
-                        <td class="text-center fw-semibold small">
-                          ${{ (timecard.totals.lineTotal ?? 0).toFixed(2) }}
-                        </td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
+      <div v-if="loading" class="text-center py-5">
+        <div class="spinner-border text-primary mb-3"></div>
+        <p class="text-muted">Loading timecards…</p>
+      </div>
+
+      <div v-else>
+        <div class="timecards-toolbar mb-3">
+          <div class="container-fluid wide-container">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-primary btn-sm" :disabled="loading || showCreateForm" @click="startCreateTimecard">
+                  <i class="bi bi-plus-circle me-1"></i>
+                  Create New
+                </button>
+                <div class="input-group input-group-sm date-input-group">
+                  <flat-pickr
+                    ref="datePickerRef"
+                    v-model="selectedDate"
+                    :config="flatpickrConfig"
+                    @on-change="onDateChange"
+                    @focus="onDateInputFocus"
+                    class="form-control date-input"
+                  />
+                  <button type="button" class="btn btn-outline-secondary" @click="openDatePicker" title="Open date picker">
+                    <i class="bi bi-calendar3"></i>
+                  </button>
+                </div>
+                <div class="text-muted small ms-1 align-self-center">
+                  Week ending Saturday: {{ weekEndingDate }}
+                </div>
               </div>
 
-              <div class="p-2 border-top d-flex justify-content-between align-items-center">
-                <small class="text-muted">
-                  Showing {{ timecard.jobs?.length || 1 }} job{{ (timecard.jobs?.length || 1) !== 1 ? 's' : '' }}
-                </small>
-                <button 
-                  @click="addJobRow(timecard)"
-                  :disabled="timecard.status === 'submitted'"
-                  class="btn btn-sm btn-outline-primary"
-                  title="Add another job row"
+              <div class="d-flex gap-2 align-items-center">
+                <button
+                  class="btn btn-outline-secondary btn-sm"
+                  :disabled="loading || allTimecards.length === 0"
+                  @click="openSummary"
                 >
-                  <i class="bi bi-plus-circle me-1"></i>Add Job Row
+                  <i class="bi bi-clipboard-data me-1"></i>
+                  Summary / Print
+                </button>
+                <span class="small text-muted">
+                  <span class="badge bg-warning text-dark">{{ draftCount }} Draft</span>
+                  <span class="badge bg-success ms-2">{{ submittedCount }} Submitted</span>
+                </span>
+                <button
+                  class="btn btn-success btn-sm"
+                  :disabled="submittingAll || loading || draftCount === 0"
+                  @click="submitAllTimecards"
+                >
+                  <i class="bi bi-send me-1"></i>
+                  {{ submittingAll ? 'Submitting...' : `Submit All (${draftCount})` }}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
 
-              <div class="pt-3 border-top">
-                <div class="row g-3 mb-3">
-                  <div class="col-md-2">
-                    <label class="form-label small text-muted">OT (Overtime)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      step="0.25"
-                      :value="Math.max((timecard.totals.hoursTotal ?? 0) - 40, 0).toFixed(2)"
-                      class="form-control form-control-sm"
-                      :disabled="true"
-                    />
+        <div v-if="allTimecards.length === 0" class="alert alert-info text-center">
+          <i class="bi bi-inbox me-2"></i>No timecards yet.
+        </div>
+
+        <div v-else class="accordion accordion-flush" id="timecardsAccordion">
+          <div v-for="timecard in allTimecards" :key="timecard.id" class="accordion-item">
+            <h2 class="accordion-header" :id="`heading-${timecard.id}`">
+              <button
+                :class="['accordion-button', { collapsed: expandedId !== timecard.id }]"
+                type="button"
+                :aria-expanded="expandedId === timecard.id"
+                :aria-controls="`collapse-${timecard.id}`"
+                @click="toggleAccordion(timecard.id)"
+              >
+                <div class="row g-3 align-items-center w-100">
+                  <div class="col-md-3">
+                    <div v-if="editingTimecardId === timecard.id" class="input-group input-group-sm">
+                      <input v-model="editForm.firstName" type="text" class="form-control" placeholder="First" @click.stop />
+                      <input v-model="editForm.lastName" type="text" class="form-control" placeholder="Last" @click.stop />
+                    </div>
+                    <div v-else class="fw-semibold">{{ timecard.employeeName }}</div>
                   </div>
+
                   <div class="col-md-2">
-                    <label class="form-label small text-muted">REG (Regular)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      step="0.25"
-                      :value="Math.min((timecard.totals.hoursTotal ?? 0), 40).toFixed(2)"
-                      class="form-control form-control-sm"
-                      :disabled="true"
-                    />
+                    <div v-if="editingTimecardId === timecard.id">
+                      <input v-model="editForm.employeeNumber" type="text" class="form-control form-control-sm" @click.stop />
+                    </div>
+                    <div v-else class="fw-semibold">#{{ timecard.employeeNumber }}</div>
                   </div>
-                  <div class="col-md-8">
-                    <label class="form-label small text-muted">Notes</label>
-                    <textarea 
-                      :value="timecard.notes"
-                      @input="(e) => handleNotesInput(timecard, (e.target as HTMLTextAreaElement).value)"
-                      rows="2" 
-                      class="form-control form-control-sm"
-                      placeholder="Additional notes"
-                      :disabled="timecard.status === 'submitted'"
-                    ></textarea>
+
+                  <div class="col-md-3">
+                    <div v-if="editingTimecardId === timecard.id">
+                      <input v-model="editForm.occupation" type="text" class="form-control form-control-sm" @click.stop />
+                    </div>
+                    <div v-else class="text-muted">{{ timecard.occupation }}</div>
+                  </div>
+
+                  <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2" @click.stop>
+                    <span v-if="editingTimecardId === timecard.id" class="d-flex gap-1">
+                      <button class="btn btn-primary btn-sm" @click="confirmEditingEmployee(timecard)">
+                        <i class="bi bi-check"></i>
+                      </button>
+                      <button class="btn btn-secondary btn-sm" @click="cancelEditingEmployee">
+                        <i class="bi bi-x"></i>
+                      </button>
+                    </span>
+                    <span v-else class="d-flex gap-2 align-items-center">
+                      <button
+                        class="btn btn-outline-secondary btn-sm"
+                        :disabled="timecard.status === 'submitted'"
+                        @click="startEditingEmployee(timecard)"
+                      >
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                      <span :class="timecard.status === 'submitted' ? 'badge bg-success' : 'badge bg-warning text-dark'">
+                        {{ timecard.status }}
+                      </span>
+                    </span>
                   </div>
                 </div>
+              </button>
+            </h2>
 
-                <div class="d-flex gap-2 flex-wrap">
-                  <button 
-                    @click="saveTimecard(timecard)"
-                    :disabled="saving || timecard.status === 'submitted'"
-                    class="btn btn-primary btn-sm"
-                  >
-                    <i class="bi bi-save me-1"></i>Save
-                  </button>
-                  
-                  <button 
-                    @click="handleDeleteTimecard(timecard.id, timecard.employeeName)"
-                    :disabled="saving || timecard.status === 'submitted'"
-                    class="btn btn-danger btn-sm"
-                  >
-                    <i class="bi bi-trash me-1"></i>Delete
-                  </button>
+            <div
+              :id="`collapse-${timecard.id}`"
+              :class="['tc-collapse', { show: expandedId === timecard.id }]"
+              :aria-labelledby="`heading-${timecard.id}`"
+            >
+              <div class="accordion-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm mb-0 timecard-table">
+                    <thead>
+                      <tr>
+                        <th class="text-center small fw-semibold col-job">Job #</th>
+                        <th class="text-center small fw-semibold col-acct">Acct</th>
+                        <th class="text-center small fw-semibold col-blank"></th>
+                        <th class="text-center small fw-semibold col-div">Dif</th>
+                        <th v-for="dayIdx in 7" :key="dayIdx" class="text-center col-day">
+                          <div class="fw-semibold small">{{ ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayIdx - 1] }}</div>
+                        </th>
+                        <th class="text-center small fw-semibold col-total">Total</th>
+                        <th class="col-actions"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template v-for="(job, jobIdx) in (timecard.jobs || [])" :key="`job-${jobIdx}`">
+                        <tr class="align-middle">
+                          <td v-if="true" :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                            <input
+                              type="text"
+                              :value="job.jobNumber || ''"
+                              :disabled="timecard.status === 'submitted'"
+                              class="form-control form-control-sm text-center"
+                              placeholder="Job #"
+                              @input="(e) => updateJobNumber(timecard, jobIdx, (e.target as HTMLInputElement).value)"
+                            />
+                          </td>
+                          <td v-if="true" :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                            <input
+                              type="text"
+                              :value="job.acct || ''"
+                              :disabled="timecard.status === 'submitted'"
+                              class="form-control form-control-sm text-center"
+                              placeholder="Acct"
+                              @input="(e) => updateAccount(timecard, jobIdx, (e.target as HTMLInputElement).value)"
+                            />
+                          </td>
+                          <td class="bg-soft small fw-semibold text-center">H</td>
+                          <td class="bg-soft text-center px-2 py-0">
+                            <input
+                              type="text"
+                              :value="job.difH || ''"
+                              :disabled="timecard.status === 'submitted'"
+                              class="form-control form-control-sm text-center"
+                              placeholder="Dif"
+                              @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difH = (e.target as HTMLInputElement).value }"
+                            />
+                          </td>
+                          <td v-for="dayIdx in 7" :key="`h-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
+                            <template v-if="job.days && job.days[dayIdx - 1]">
+                              <input
+                                v-model.number="job.days[dayIdx - 1].hours"
+                                type="number"
+                                inputmode="decimal"
+                                min="0"
+                                max="24"
+                                step="0.25"
+                                :disabled="timecard.status === 'submitted'"
+                                class="form-control form-control-sm text-center w-100 day-input"
+                                placeholder="0"
+                                @input="(e) => handleHoursInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
+                                @focus="($event.target as HTMLInputElement).select()"
+                                @click.stop
+                              />
+                            </template>
+                          </td>
+                          <td class="text-center fw-semibold small">{{ (timecard.totals.hoursTotal ?? 0).toFixed(2) }}</td>
+                          <td :rowspan="3" class="text-center align-middle">
+                            <button
+                              v-if="(timecard.jobs?.length || 0) > 1"
+                              class="btn btn-sm btn-danger btn-icon"
+                              title="Remove job"
+                              :disabled="timecard.status === 'submitted'"
+                              @click="removeJobRow(timecard, jobIdx)"
+                            >
+                              <i class="bi bi-x"></i>
+                            </button>
+                          </td>
+                        </tr>
 
-                  <button 
-                    @click="handleSubmitTimecard(timecard)"
-                    :disabled="saving || timecard.status === 'submitted'"
-                    class="btn btn-success btn-sm ms-auto"
+                        <tr class="align-middle bg-soft">
+                          <td class="bg-soft small fw-semibold text-center">P</td>
+                          <td class="bg-soft text-center px-2 py-0">
+                            <input
+                              type="text"
+                              :value="job.difP || ''"
+                              :disabled="timecard.status === 'submitted'"
+                              class="form-control form-control-sm text-center"
+                              placeholder="Dif"
+                              @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difP = (e.target as HTMLInputElement).value }"
+                            />
+                          </td>
+                          <td v-for="dayIdx in 7" :key="`p-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
+                            <template v-if="job.days && job.days[dayIdx - 1]">
+                              <input
+                                v-model.number="job.days[dayIdx - 1].production"
+                                type="number"
+                                inputmode="decimal"
+                                min="0"
+                                step="0.1"
+                                :disabled="timecard.status === 'submitted'"
+                                class="form-control form-control-sm text-center w-100 day-input"
+                                title="Production units"
+                                placeholder="0"
+                                @input="recalcTotals(timecard); autoSave(timecard)"
+                                @focus="($event.target as HTMLInputElement).select()"
+                                @click.stop
+                              />
+                            </template>
+                          </td>
+                          <td class="text-center fw-semibold small">{{ (timecard.totals.productionTotal ?? 0).toFixed(2) }}</td>
+                        </tr>
+
+                        <tr class="align-middle">
+                          <td class="bg-soft small fw-semibold text-center">C</td>
+                          <td class="bg-soft text-center px-2 py-0">
+                            <input
+                              type="text"
+                              :value="job.difC || ''"
+                              :disabled="timecard.status === 'submitted'"
+                              class="form-control form-control-sm text-center"
+                              placeholder="Dif"
+                              @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difC = (e.target as HTMLInputElement).value }"
+                            />
+                          </td>
+                          <td v-for="dayIdx in 7" :key="`c-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
+                            <template v-if="job.days && job.days[dayIdx - 1]">
+                              <input
+                                v-model.number="job.days[dayIdx - 1].unitCost"
+                                type="number"
+                                inputmode="decimal"
+                                min="0"
+                                step="0.01"
+                                :disabled="timecard.status === 'submitted'"
+                                class="form-control form-control-sm text-center text-xs day-input"
+                                title="Cost per unit"
+                                placeholder="0"
+                                @input="recalcTotals(timecard); autoSave(timecard)"
+                                @focus="($event.target as HTMLInputElement).select()"
+                                @click.stop
+                              />
+                            </template>
+                          </td>
+                          <td class="text-center fw-semibold small">${{ (timecard.totals.lineTotal ?? 0).toFixed(2) }}</td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="p-2 border-top d-flex justify-content-between align-items-center">
+                  <small class="text-muted">
+                    Showing {{ timecard.jobs?.length || 1 }} job{{ (timecard.jobs?.length || 1) !== 1 ? 's' : '' }}
+                  </small>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    title="Add another job row"
+                    :disabled="timecard.status === 'submitted'"
+                    @click="addJobRow(timecard)"
                   >
-                    <i class="bi bi-check-circle me-1"></i>Submit
+                    <i class="bi bi-plus-circle me-1"></i>
+                    Add Job Row
                   </button>
+                </div>
+
+                <div class="pt-3 border-top">
+                  <div class="row g-3 mb-3">
+                    <div class="col-md-2">
+                      <label class="form-label small text-muted">Overtime</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.25"
+                        :value="Math.max((timecard.totals.hoursTotal ?? 0) - 40, 0).toFixed(2)"
+                        class="form-control form-control-sm"
+                        :disabled="true"
+                      />
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label small text-muted">Regular</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.25"
+                        :value="Math.min((timecard.totals.hoursTotal ?? 0), 40).toFixed(2)"
+                        class="form-control form-control-sm"
+                        :disabled="true"
+                      />
+                    </div>
+                    <div class="col-md-8">
+                      <label class="form-label small text-muted">Notes</label>
+                      <textarea
+                        :value="timecard.notes"
+                        rows="2"
+                        class="form-control form-control-sm"
+                        placeholder="Additional notes"
+                        :disabled="timecard.status === 'submitted'"
+                        @input="(e) => handleNotesInput(timecard, (e.target as HTMLTextAreaElement).value)"
+                      ></textarea>
+                    </div>
+                  </div>
+
+                  <div class="d-flex gap-2 flex-wrap timecard-actions">
+                    <button
+                      class="btn btn-primary btn-sm"
+                      :disabled="saving || timecard.status === 'submitted'"
+                      @click="saveTimecard(timecard)"
+                    >
+                      <i class="bi bi-save me-1"></i>
+                      Save
+                    </button>
+                    <button
+                      class="btn btn-danger btn-sm"
+                      :disabled="saving || timecard.status === 'submitted'"
+                      @click="handleDeleteTimecard(timecard.id, timecard.employeeName)"
+                    >
+                      <i class="bi bi-trash me-1"></i>
+                      Delete
+                    </button>
+                    <!-- Individual submit disabled; use global Submit All -->
+                  </div>
                 </div>
               </div>
             </div>
@@ -951,8 +948,10 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Create Timecard Modal -->
-    <div v-if="showCreateForm" class="position-fixed top-0 start-0 end-0 bottom-0 d-flex align-items-center justify-content-center modal-overlay">
+    <div
+      v-if="showCreateForm"
+      class="position-fixed top-0 start-0 end-0 bottom-0 d-flex align-items-center justify-content-center modal-overlay"
+    >
       <div class="card border-0 shadow-lg modal-card">
         <div class="card-header bg-primary text-white">
           <h5 class="mb-0">Create New Timecard</h5>
@@ -960,10 +959,10 @@ onUnmounted(() => {
         <div class="card-body">
           <div class="mb-3">
             <label class="form-label">Employee Number *</label>
-            <input 
+            <input
               v-model="newTimecardForm.employeeNumber"
-              type="text" 
-              class="form-control" 
+              type="text"
+              class="form-control"
               placeholder="e.g., 1234"
               autofocus
             />
@@ -971,66 +970,103 @@ onUnmounted(() => {
           <div class="row g-2 mb-3">
             <div class="col-6">
               <label class="form-label">First Name *</label>
-              <input 
-                v-model="newTimecardForm.firstName"
-                type="text" 
-                class="form-control" 
-                placeholder="First"
-              />
+              <input v-model="newTimecardForm.firstName" type="text" class="form-control" placeholder="First" />
             </div>
             <div class="col-6">
               <label class="form-label">Last Name *</label>
-              <input 
-                v-model="newTimecardForm.lastName"
-                type="text" 
-                class="form-control" 
-                placeholder="Last"
-              />
+              <input v-model="newTimecardForm.lastName" type="text" class="form-control" placeholder="Last" />
             </div>
           </div>
           <div class="mb-4">
             <label class="form-label">Occupation</label>
-            <input 
-              v-model="newTimecardForm.occupation"
-              type="text" 
-              class="form-control" 
-              placeholder="e.g., Carpenter"
-            />
+            <input v-model="newTimecardForm.occupation" type="text" class="form-control" placeholder="e.g., Carpenter" />
           </div>
           <div class="d-flex gap-2">
-            <button 
-              @click="confirmCreateTimecard"
-              class="btn btn-primary"
-            >
-              Create
-            </button>
-            <button 
-              @click="cancelCreateTimecard"
-              class="btn btn-secondary"
-            >
-              Cancel
-            </button>
+            <button class="btn btn-primary" @click="confirmCreateTimecard">Create</button>
+            <button class="btn btn-secondary" @click="cancelCreateTimecard">Cancel</button>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
+
+  <!-- Timecard Summary Modal (Printable) -->
+  <div v-if="showSummaryModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" id="timecard-summary">
+        <div class="modal-header">
+          <h5 class="modal-title">Timecard Summary – Week ending {{ weekEndingDate }}</h5>
+          <button type="button" class="btn-close" @click="closeSummary" :disabled="printing"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="text-muted small">{{ weekRange }}</div>
+            <button class="btn btn-outline-primary btn-sm" @click="printSummary" :disabled="printing">
+              <i class="bi bi-printer me-1"></i>Print
+            </button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle summary-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>#</th>
+                  <th class="text-center">Status</th>
+                  <th class="text-end">Hours</th>
+                  <th class="text-end">Production</th>
+                  <th class="text-end">Line Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in summaryRows" :key="row.id">
+                  <td>{{ row.employeeName }}</td>
+                  <td class="text-muted">{{ row.employeeNumber }}</td>
+                  <td class="text-center">
+                    <span :class="['badge', row.status === 'submitted' ? 'text-bg-success' : 'text-bg-warning text-dark']">
+                      {{ row.status }}
+                    </span>
+                  </td>
+                  <td class="text-end">{{ row.hours.toFixed(2) }}</td>
+                  <td class="text-end">{{ row.production.toFixed(2) }}</td>
+                  <td class="text-end">{{ row.lineTotal.toFixed(2) }}</td>
+                </tr>
+              </tbody>
+              <tfoot v-if="summaryRows.length">
+                <tr class="fw-semibold">
+                  <td colspan="3" class="text-end">Totals</td>
+                  <td class="text-end">{{ summaryRows.reduce((s, r) => s + r.hours, 0).toFixed(2) }}</td>
+                  <td class="text-end">{{ summaryRows.reduce((s, r) => s + r.production, 0).toFixed(2) }}</td>
+                  <td class="text-end">{{ summaryRows.reduce((s, r) => s + r.lineTotal, 0).toFixed(2) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="closeSummary" :disabled="printing">Close</button>
+          <button type="button" class="btn btn-primary" @click="printSummary" :disabled="printing">
+            <i class="bi bi-printer me-1"></i>Print
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as *;
-input[type="number"] {
+
+input[type='number'] {
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-/* Hide native calendar icon to avoid double icons */
 .date-input::-webkit-calendar-picker-indicator {
   opacity: 0;
   width: 0;
@@ -1043,12 +1079,6 @@ input[type="number"]::-webkit-inner-spin-button {
   appearance: none;
 }
 
-.display-6 {
-  font-size: 2rem;
-  font-weight: 600;
-}
-
-/* Compact form controls - remove border radius and reduce padding */
 .form-control {
   border-radius: 0;
   padding: 0.25rem 0.5rem !important;
@@ -1062,11 +1092,10 @@ textarea.form-control {
   border-radius: 0;
 }
 
-/* Make accordion header visually distinct and clickable */
 .accordion-button {
-  background-color: $surface;
-  border: 1px solid $border-color;
-  border-bottom: 2px solid $border-color;
+  background-color: $surface-2;
+  border: 1px solid rgba($border-color, 0.4);
+  border-bottom: 2px solid rgba($border-color, 0.4);
   padding: 0.75rem 1.25rem;
   transition: all 0.2s ease-in-out;
   color: $body-color;
@@ -1077,9 +1106,9 @@ textarea.form-control {
 }
 
 .accordion-button:not(.collapsed) {
-  background-color: linear-gradient(180deg, rgba($primary, 0.16) 0%, rgba($primary-200, 0.55) 60%, $surface-2 100%);
+  background: linear-gradient(180deg, rgba($primary, 0.16) 0%, rgba($primary-200, 0.55) 60%, $surface-2 100%);
   border-color: rgba($primary, 0.4);
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 -1px rgba(0, 0, 0, 0.25);
   color: $body-color;
 }
 
@@ -1089,16 +1118,33 @@ textarea.form-control {
 }
 
 .timecards-toolbar {
-  background: $surface-2;
-  border-bottom: 1px solid $border-color;
+  background: $surface;
+  border: 1px solid $border-color;
   padding: 0.75rem 0.5rem;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-  z-index: 1000;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
 }
 
 .timecards-page {
   background: $body-bg;
   min-height: 100vh;
+}
+
+.accordion-body {
+  padding-bottom: 1.25rem;
+}
+
+.tc-collapse {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.25s ease;
+}
+
+.tc-collapse.show {
+  max-height: 4000px; /* large enough for content */
+}
+
+.timecard-actions {
+  padding-bottom: 0.75rem;
 }
 
 .wide-container {
@@ -1109,16 +1155,59 @@ textarea.form-control {
   max-width: 210px;
 }
 
-.col-job { width: 80px; }
-.col-acct { width: 70px; }
-.col-blank { width: 50px; }
-.col-div { width: 70px; }
-.col-day { width: 90px; }
-.col-total { width: 80px; }
-.col-actions { width: 40px; }
+.col-job {
+  width: 80px;
+}
+
+.col-acct {
+  width: 70px;
+}
+
+.col-blank {
+  width: 50px;
+}
+
+.col-div {
+  width: 70px;
+}
+
+.col-day {
+  width: 90px;
+}
+
+.col-total {
+  width: 80px;
+}
+
+.col-actions {
+  width: 40px;
+}
 
 .text-xs {
   font-size: 0.875rem;
+}
+
+.timecard-table {
+  --bs-table-border-color: transparent;
+  border-color: transparent;
+}
+
+.timecard-table > :not(caption) > * > * {
+  border-color: transparent;
+}
+
+.day-input {
+  background: $surface;
+  color: $body-color;
+  min-width: 78px;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 768px) {
+  .day-input {
+    min-width: 68px;
+    font-size: 0.9rem;
+  }
 }
 
 .modal-overlay {
@@ -1132,86 +1221,26 @@ textarea.form-control {
   margin: 0 20px;
 }
 
-:global(.flatpickr-calendar) {
-  background: $surface-2;
-  color: $body-color;
-  border: 1px solid $border-color;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+.bg-soft {
+  background-color: rgba($secondary, 0.08);
 }
+</style>
 
-:global(.flatpickr-calendar .flatpickr-months),
-:global(.flatpickr-calendar .flatpickr-weekdays) {
-  background: $surface-2;
-  border-bottom: 1px solid $border-color;
-}
-
-:global(.flatpickr-weekday),
-:global(.flatpickr-weekdays .flatpickr-weekday) {
-  color: $body-color;
-}
-
-:global(.flatpickr-months .flatpickr-prev-month svg),
-:global(.flatpickr-months .flatpickr-next-month svg) {
-  fill: $body-color;
-}
-
-:global(.flatpickr-months .flatpickr-prev-month svg:hover),
-:global(.flatpickr-months .flatpickr-next-month svg:hover) {
-  fill: lighten($body-color, 8%);
-}
-
-:global(.flatpickr-months .flatpickr-prev-month),
-:global(.flatpickr-months .flatpickr-next-month) {
-  color: $body-color;
-}
-
-:global(.flatpickr-monthDropdown-months),
-:global(.flatpickr-months .numInput.cur-year) {
-  color: $body-color;
-}
-
-:global(.flatpickr-current-month .numInputWrapper span.arrowUp::after) {
-  border-bottom-color: $body-color;
-}
-
-:global(.flatpickr-current-month .numInputWrapper span.arrowDown::after) {
-  border-top-color: $body-color;
-}
-
-:global(.flatpickr-calendar .flatpickr-current-month input),
-:global(.flatpickr-calendar .flatpickr-monthDropdown-months),
-:global(.flatpickr-calendar .numInput.cur-year) {
-  color: $body-color;
-}
-
-:global(.flatpickr-calendar .flatpickr-day) {
-  color: $body-color;
-  border-radius: $border-radius-sm;
-}
-
-:global(.flatpickr-calendar .flatpickr-day:hover) {
-  background: rgba($primary, 0.15);
-}
-
-:global(.flatpickr-calendar .flatpickr-day.today) {
-  border-color: $primary;
-}
-
-:global(.flatpickr-calendar .flatpickr-day.selected),
-:global(.flatpickr-calendar .flatpickr-day.startRange),
-:global(.flatpickr-calendar .flatpickr-day.endRange),
-:global(.flatpickr-calendar .flatpickr-day.selected.inRange),
-:global(.flatpickr-calendar .flatpickr-day.startRange.inRange),
-:global(.flatpickr-calendar .flatpickr-day.endRange.inRange),
-:global(.flatpickr-calendar .flatpickr-day.selected:focus) {
-  background: $primary;
-  border-color: $primary;
-  color: #fff;
-}
-
-:global(.flatpickr-calendar .flatpickr-day.disabled),
-:global(.flatpickr-calendar .flatpickr-day.prevMonthDay),
-:global(.flatpickr-calendar .flatpickr-day.nextMonthDay) {
-  color: $text-muted-3;
+<style lang="scss">
+/* Summary modal print isolation (global) */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #timecard-summary, #timecard-summary * {
+    visibility: visible;
+  }
+  #timecard-summary {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+  }
 }
 </style>

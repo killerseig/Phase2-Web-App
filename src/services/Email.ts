@@ -2,6 +2,8 @@ import { functions } from '../firebase'
 import { httpsCallable } from 'firebase/functions'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from './serviceUtils'
+import { db } from '@/firebase'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 
 const assertActiveUser = () => {
   const auth = useAuthStore()
@@ -38,4 +40,35 @@ export async function sendShopOrderEmail(jobId: string, shopOrderId: string, rec
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to send shop order email'))
   }
+}
+
+// Global email settings (app-wide)
+type EmailSettings = {
+  timecardSubmitRecipients?: string[]
+  shopOrderSubmitRecipients?: string[]
+}
+
+const EMAIL_SETTINGS_DOC = doc(db, 'settings', 'email')
+
+export async function getEmailSettings(): Promise<EmailSettings> {
+  try {
+    const snap = await getDoc(EMAIL_SETTINGS_DOC)
+    if (!snap.exists()) return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] }
+    const data = snap.data() || {}
+    return {
+      timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
+      shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
+    }
+  } catch (e) {
+    console.warn('[getEmailSettings] Falling back to defaults due to error:', e)
+    return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] }
+  }
+}
+
+export async function updateTimecardSubmitRecipientsGlobal(recipients: string[]): Promise<void> {
+  await setDoc(EMAIL_SETTINGS_DOC, { timecardSubmitRecipients: recipients }, { merge: true })
+}
+
+export async function updateShopOrderSubmitRecipientsGlobal(recipients: string[]): Promise<void> {
+  await setDoc(EMAIL_SETTINGS_DOC, { shopOrderSubmitRecipients: recipients }, { merge: true })
 }

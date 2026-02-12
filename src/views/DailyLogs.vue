@@ -241,19 +241,19 @@ const startNewDraftForToday = async () => {
 
 const handleFileChange = async (e: Event, type: 'photo' | 'ptp') => {
   const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (file) {
-    if (type === 'photo') {
-      photoFileName.value = file.name
-    } else {
-      ptpFileName.value = file.name
-    }
-  } else {
+  const files = Array.from(input.files || [])
+
+  if (!files.length) {
     if (type === 'photo') photoFileName.value = 'No file selected'
     else ptpFileName.value = 'No file selected'
+    return
   }
 
-  await uploadAttachment(e, type)
+  const label = files.length === 1 ? files[0].name : `${files.length} files selected`
+  if (type === 'photo') photoFileName.value = label
+  else ptpFileName.value = label
+
+  await uploadAttachment(files, type)
   input.value = ''
 }
 
@@ -434,35 +434,33 @@ const deleteLogById = async (logId: string) => {
   }
 }
 
-const uploadAttachment = async (event: Event, type: 'photo' | 'ptp' | 'other') => {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file || !currentId.value) {
-    if (!file) toastRef.value?.show('Please select a file', 'error')
+const uploadAttachment = async (files: File[], type: 'photo' | 'ptp' | 'other') => {
+  if (!files.length || !currentId.value) {
+    if (!files.length) toastRef.value?.show('Please select a file', 'error')
     if (!currentId.value) toastRef.value?.show('Please save the daily log first', 'error')
     return
   }
-  
-  // Validate file size (max 10MB)
+
   const maxSize = 10 * 1024 * 1024
-  if (file.size > maxSize) {
-    toastRef.value?.show('File size must be less than 10MB', 'error')
-    return
-  }
-  
-  // Validate file type (images only)
-  if (!file.type.startsWith('image/')) {
-    toastRef.value?.show('Please select an image file', 'error')
-    return
-  }
-  
+
   uploading.value = true
   try {
-    const att = await uploadPhotoToStorage(file, currentId.value, type)
-    if (!form.value.attachments) form.value.attachments = []
-    form.value.attachments.push(att)
-    await updateDailyLog(jobId.value, currentId.value, { ...form.value })
-    toastRef.value?.show(`${type === 'ptp' ? 'PTP Photo' : 'Photo'} uploaded: ${file.name}`, 'success');
-    (event.target as HTMLInputElement).value = ''
+    for (const file of files) {
+      if (file.size > maxSize) {
+        toastRef.value?.show('File size must be less than 10MB', 'error')
+        continue
+      }
+      if (!file.type.startsWith('image/')) {
+        toastRef.value?.show('Please select an image file', 'error')
+        continue
+      }
+
+      const att = await uploadPhotoToStorage(file, currentId.value, type)
+      if (!form.value.attachments) form.value.attachments = []
+      form.value.attachments.push(att)
+      await updateDailyLog(jobId.value, currentId.value, { ...form.value })
+      toastRef.value?.show(`${type === 'ptp' ? 'PTP Photo' : 'Photo'} uploaded: ${file.name}`, 'success')
+    }
   } catch (e: any) {
     console.error('[uploadAttachment] Error:', e)
     const errorMsg = e?.message || 'Failed to upload file'
@@ -514,6 +512,23 @@ const sendEmail = async () => {
 const addManpowerLine = () => {
   form.value.manpowerLines.push({ trade: '', count: 0, areas: '', addedByUserId: auth.user?.uid })
   autoSave()
+}
+
+const clampCount = (value: number) => {
+  if (Number.isNaN(value)) return 1
+  return Math.max(1, Math.round(value))
+}
+
+const handleCountInput = (line: any, raw: number) => {
+  line.count = clampCount(raw)
+  autoSave()
+}
+
+const handleCountFocus = (e: FocusEvent, line: any) => {
+  const input = e.target as HTMLInputElement
+  if (!line.count || line.count === 0) {
+    input.select()
+  }
 }
 
 const canDeleteManpowerLine = (line: any): boolean => {
@@ -624,7 +639,7 @@ onUnmounted(stopLiveLog)
               <div class="col-12">
                 <label class="form-label">Manpower</label>
                 <div class="table-responsive">
-                  <table class="table table-sm table-striped table-hover mb-0">
+                  <table class="table table-sm table-striped table-hover mb-0 manpower-table">
                     <thead>
                       <tr>
                         <th class="small fw-semibold col-trade">Trade</th>
@@ -646,12 +661,15 @@ onUnmounted(stopLiveLog)
                         </td>
                         <td class="p-2">
                           <input 
-                            type="number" 
-                            min="0" 
-                            class="form-control form-control-sm text-center" 
-                            placeholder="0" 
+                            type="number"
+                            inputmode="numeric"
+                            min="1"
+                            step="1"
+                            class="form-control form-control-sm text-center count-input" 
+                            placeholder="1" 
                             v-model.number="(ln as any).count" 
-
+                            @input="(e) => handleCountInput(ln, Number((e.target as HTMLInputElement).value))"
+                            @focus="(e) => handleCountFocus(e, ln)"
                             :disabled="!canEditDraft"
                           />
                         </td>
@@ -720,7 +738,15 @@ onUnmounted(stopLiveLog)
               </div>
               <div class="col-12">
                 <label class="form-label">Photos</label>
-                <input type="file" class="form-control mb-2" accept="image/*" @change="(e) => handleFileChange(e, 'photo')" :disabled="!canEditDraft || uploading" />
+                <input
+                  type="file"
+                  class="form-control mb-2"
+                  accept="image/*"
+                  multiple
+                  :data-filename="photoFileName"
+                  @change="(e) => handleFileChange(e, 'photo')"
+                  :disabled="!canEditDraft || uploading"
+                />
                 <small class="text-muted d-block mb-3">{{ photoFileName }}</small>
                 <div v-if="form.attachments?.filter(a => a.type !== 'ptp').length" class="row g-2">
                   <div v-for="att in form.attachments.filter(a => a.type !== 'ptp')" :key="att.path" class="col-6 col-md-4">
@@ -735,7 +761,15 @@ onUnmounted(stopLiveLog)
               </div>
               <div class="col-12">
                 <label class="form-label">PTP Photos</label>
-                <input type="file" class="form-control mb-2" accept="image/*" @change="(e) => handleFileChange(e, 'ptp')" :disabled="!canEditDraft || uploading" />
+                <input
+                  type="file"
+                  class="form-control mb-2"
+                  accept="image/*"
+                  multiple
+                  :data-filename="ptpFileName"
+                  @change="(e) => handleFileChange(e, 'ptp')"
+                  :disabled="!canEditDraft || uploading"
+                />
                 <small class="text-muted d-block mb-3">{{ ptpFileName }}</small>
                 <div v-if="form.attachments?.filter(a => a.type === 'ptp').length" class="row g-2">
                   <div v-for="att in form.attachments.filter(a => a.type === 'ptp')" :key="att.path" class="col-6 col-md-4">
@@ -893,6 +927,24 @@ input[type='file'].form-control:focus::file-selector-button {
   content: attr(data-filename);
   color: $success;
   font-weight: 500;
+}
+
+.manpower-table td {
+  vertical-align: middle;
+}
+
+.count-input {
+  min-width: 90px;
+}
+
+@media (max-width: 768px) {
+  .count-input {
+    min-width: 80px;
+    font-size: 0.95rem;
+  }
+  .manpower-table td {
+    padding: 0.35rem;
+  }
 }
 
 .header-hero {

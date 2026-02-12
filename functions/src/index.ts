@@ -11,6 +11,7 @@ import {
   getDailyLog,
   getTimecard,
   getShopOrder,
+  getEmailSettings,
 } from './firestoreService'
 import {
   sendEmail,
@@ -153,7 +154,7 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
 
-  const { jobId, timecardIds, weekStart, recipients } = request.data
+  const { jobId, timecardIds, weekStart, recipients: requestRecipients } = request.data
 
   if (!jobId) {
     throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
@@ -164,7 +165,14 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
   if (!weekStart) {
     throw new Error(ERROR_MESSAGES.WEEK_START_REQUIRED)
   }
-  if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+  const settings = await getEmailSettings()
+  const recipients = Array.isArray(settings.timecardSubmitRecipients) && settings.timecardSubmitRecipients.length
+    ? settings.timecardSubmitRecipients
+    : Array.isArray(requestRecipients)
+      ? requestRecipients
+      : []
+
+  if (!recipients || recipients.length === 0) {
     throw new Error(ERROR_MESSAGES.RECIPIENTS_REQUIRED)
   }
 
@@ -249,11 +257,23 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
       </table>
     `
 
-    await sendEmail({
-      to: recipients,
-      subject: `${EMAIL.SUBJECTS.TIMECARD} - ${timecards.length} timecard(s) - Week of ${weekStart}`,
-      html: emailHtml,
-    })
+      // Build CSV attachment for accounting upload
+      const csvAttachment = buildTimecardCsv(timecards, weekStart)
+
+      await sendEmail({
+        to: recipients,
+        subject: `${EMAIL.SUBJECTS.TIMECARD} - ${timecards.length} timecard(s) - Week of ${weekStart}`,
+        html: emailHtml,
+        attachments: csvAttachment
+          ? [
+              {
+                name: `timecards-${weekStart}.csv`,
+                contentType: 'text/csv',
+                contentBytes: Buffer.from(csvAttachment, 'utf-8').toString('base64'),
+              },
+            ]
+          : undefined,
+      })
 
     console.log(`Timecards ${timecardIds.join(', ')} emailed to ${recipients.join(', ')}`)
     return { success: true, message: 'Email sent successfully' }
@@ -263,6 +283,67 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
   }
 })
 
+function buildTimecardCsv(timecards: any[], weekStart: string): string {
+  const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', '']
+  const rows: string[][] = [headers]
+
+  if (!timecards || timecards.length === 0) {
+    return rows.map(r => r.join(',')).join('\n')
+  }
+
+  const start = new Date(weekStart)
+  if (isNaN(start.getTime())) {
+    console.warn('[buildTimecardCsv] Invalid weekStart; using raw value for dates')
+  }
+
+  const dayOffsets: Array<{ key: keyof any; label: string; index: number }> = [
+    { key: 'sun', label: 'Sun', index: 0 },
+    { key: 'mon', label: 'Mon', index: 1 },
+    { key: 'tue', label: 'Tue', index: 2 },
+    { key: 'wed', label: 'Wed', index: 3 },
+    { key: 'thu', label: 'Thu', index: 4 },
+    { key: 'fri', label: 'Fri', index: 5 },
+    { key: 'sat', label: 'Sat', index: 6 },
+  ]
+
+  const formatDate = (offset: number) => {
+    if (isNaN(start.getTime())) return weekStart
+    const d = new Date(start)
+    d.setDate(d.getDate() + offset)
+    const month = d.getMonth() + 1
+    const day = d.getDate()
+    const year = d.getFullYear()
+    return \`\${month}/\${day}/\${year}\`
+  }
+
+  for (const tc of timecards) {
+    const lines = Array.isArray(tc?.lines) ? tc.lines : []
+    for (const line of lines) {
+      for (const offset of dayOffsets) {
+        const hoursVal = Number(line?.[offset.key]) || 0
+        const productionVal = Number(line?.production?.[offset.key]) || 0
+        if (hoursVal === 0 && productionVal === 0) continue
+
+        rows.push([
+          tc?.employeeName || '',
+          tc?.employeeId || tc?.employeeNumber || '',
+          line?.jobNumber || '',
+          formatDate(offset.index),
+          line?.area || '',
+          line?.account || '',
+          line?.costCode || '',
+          hoursVal ? String(hoursVal) : '',
+          productionVal ? String(productionVal) : '',
+          '',
+          '',
+        ])
+      }
+    }
+  }
+
+  return rows.map(r => r.join(',')).join('\n')
+}
+
 /**
  * Send Shop Order via email
  */
@@ -271,12 +352,19 @@ export const sendShopOrderEmail = onCall({ secrets: [graphClientId, graphTenantI
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
 
-  const { shopOrderId, recipients } = request.data
+  const { shopOrderId, recipients: requestRecipients } = request.data
 
   if (!shopOrderId) {
     throw new Error(ERROR_MESSAGES.SHOP_ORDER_ID_REQUIRED)
   }
-  if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+  const settings = await getEmailSettings()
+  const recipients = Array.isArray(settings.shopOrderSubmitRecipients) && settings.shopOrderSubmitRecipients.length
+    ? settings.shopOrderSubmitRecipients
+    : Array.isArray(requestRecipients)
+      ? requestRecipients
+      : []
+
+  if (!recipients || recipients.length === 0) {
     throw new Error(ERROR_MESSAGES.RECIPIENTS_REQUIRED)
   }
 

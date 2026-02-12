@@ -9,7 +9,7 @@ import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 import { useShopCatalogStore } from '../stores/shopCatalog'
 import { useShopCategoriesStore } from '../stores/shopCategories'
-import { createShopOrder, useShopService } from '@/services'
+import { createShopOrder, useShopService, getEmailSettings } from '@/services'
 import { useJobAccess } from '@/composables/useJobAccess'
 
 defineProps<{ jobId?: string }>()
@@ -49,10 +49,10 @@ const catalogItemQtys = ref<Record<string, number>>({})
 const expandedNodes = ref<Set<string>>(new Set())
 const showEmailModal = ref(false)
 const recipientsInput = ref('')
+const shopOrderRecipients = ref<string[]>([])
 const sendingEmail = ref(false)
 
 const isAdmin = computed(() => auth.role === 'admin')
-const isJobManager = computed(() => isAdmin.value)
 const catalog = computed(() => shopCatalogStore.allItems)
 
 // Helper to get all categories that should be in the tree (matching categories + their parents)
@@ -99,34 +99,17 @@ const uncategorizedItems = computed(() => {
   return catalog.value.filter(item => !item.categoryId && item.active && itemMatchesSearch(item)).map(item => `item-${item.id}`)
 })
 
-const SCOPE_OPTIONS = [
-  { key: 'scope:employee', label: 'Employee' },
-  { key: 'scope:shop', label: 'Shop' },
-  { key: 'scope:admin', label: 'Admin' },
-]
-
-const scopeLabel = (scope: string) => SCOPE_OPTIONS.find(s => s.key === scope)?.label ?? scope
-const scopeBadgeClass = (scope: string) => {
-  const map: Record<string, string> = { 'scope:employee': 'text-bg-info', 'scope:shop': 'text-bg-dark', 'scope:admin': 'text-bg-secondary' }
-  return map[scope] || 'text-bg-light'
-}
 const statusBadgeClass = (st: ShopOrderStatus) => {
   const map: Record<ShopOrderStatus, string> = { draft: 'text-bg-secondary', order: 'text-bg-primary', receive: 'text-bg-success' }
   return map[st]
 }
+const statusLabel = (st: ShopOrderStatus) => {
+  const map: Record<ShopOrderStatus, string> = { draft: 'Draft', order: 'Submitted', receive: 'Received' }
+  return map[st] ?? st
+}
 const fmtDate = (ts: any) => {
   try { return ts?.toDate ? ts.toDate().toLocaleString() : '' } catch { return '' }
 }
-
-const allowedScopes = computed(() => {
-  if (isJobManager.value) return ['scope:employee', 'scope:shop', 'scope:admin']
-  return auth.role === 'shop' ? ['scope:shop'] : ['scope:employee']
-})
-
-const defaultScope = computed(() => {
-  if (isJobManager.value) return 'scope:admin'
-  return auth.role === 'shop' ? 'scope:shop' : 'scope:employee'
-})
 
 const selected = computed(() => orders.value.find(o => o.id === selectedId.value) ?? null)
 
@@ -144,7 +127,7 @@ const canEditOrder = (o: ShopOrder) => o.status === 'draft'
 const canSubmit = (o: ShopOrder) => o.status === 'draft' && o.items.length > 0
 const canOrder = (o: ShopOrder) => o.status === 'order'
 const canReceive = (o: ShopOrder) => o.status === 'order'
-const canChangeScope = (o: ShopOrder) => canEditOrder(o) && isJobManager.value
+const canChangeScope = (_o: ShopOrder) => false
 
 const itemMatchesSearch = (item: any) => {
   if (!catalogSearch.value.trim()) return true
@@ -326,7 +309,8 @@ const loadOrders = () => {
     console.log('Orders snapshot received, doc count:', snap.docs.length)
     snap.docChanges().forEach(change => {
       const d = change.doc.data() as any
-      const order: ShopOrder = { id: change.doc.id, jobId: d.jobId, uid: d.uid, ownerUid: d.ownerUid, status: d.status, orderDate: d.orderDate, createdAt: d.createdAt, updatedAt: d.updatedAt, items: d.items || [] }
+      const items = Array.isArray(d.items) ? d.items.map((it: any) => ({ ...it })) : []
+      const order: ShopOrder = { id: change.doc.id, jobId: d.jobId, uid: d.uid, ownerUid: d.ownerUid, status: d.status, orderDate: d.orderDate, createdAt: d.createdAt, updatedAt: d.updatedAt, items }
       if (change.type === 'removed') {
         mergedMap.delete(change.doc.id)
       } else {
@@ -365,6 +349,15 @@ const init = async () => {
 
     // Load job details
     await jobs.fetchJob(jobId.value)
+    try {
+      const settings = await getEmailSettings()
+      shopOrderRecipients.value = settings.shopOrderSubmitRecipients ?? []
+      recipientsInput.value = shopOrderRecipients.value.join(', ')
+    } catch (settingsError) {
+      console.warn('[ShopOrders] Failed to load email settings, using defaults', settingsError)
+      shopOrderRecipients.value = []
+      recipientsInput.value = ''
+    }
     
     await shopCatalogStore.fetchCatalog()
     await shopCategoriesStore.fetchAllCategories()
@@ -388,7 +381,11 @@ const addItem = async () => {
   }
   
   try {
-    const updatedItems = [...(selected.value.items || []), { description: newItemDescription.value.trim(), quantity: newItemQty.value, note: newItemNote.value.trim() || undefined, catalogItemId: newItemCatalogId.value }]
+    const description = newItemDescription.value.trim()
+    const quantity = Math.max(1, Math.floor(Number(newItemQty.value) || 1))
+    const note = newItemNote.value.trim() || undefined
+    const catalogItemId = newItemCatalogId.value ?? null
+    const updatedItems = [...(selected.value.items || []), { description, quantity, ...(note ? { note } : {}), catalogItemId }]
     await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { items: updatedItems, updatedAt: serverTimestamp() })
     newItemDescription.value = ''
     newItemQty.value = 1
@@ -402,20 +399,30 @@ const addItem = async () => {
   }
 }
 
+const normalizeCatalogSelection = (item: any) => {
+  const description = (item?.description || item?.name || '').trim()
+  const quantity = Math.max(1, Math.floor(Number(item?.quantity ?? catalogItemQtys.value[item?.id] ?? 1) || 1))
+  const catalogItemId = item?.id ?? null
+  const noteParts: string[] = []
+  if (item?.sku) noteParts.push(`SKU: ${item.sku}`)
+  if (item?.price) noteParts.push(`$${item.price}`)
+  const note = noteParts.length ? noteParts.join(' - ') : ''
+  return { description, quantity, catalogItemId, note }
+}
+
 const selectCatalogItem = (item: any) => {
-  const qty = catalogItemQtys.value[item.id] || 0
-  newItemCatalogId.value = item.id
-  newItemDescription.value = item.description
-  newItemQty.value = qty
-  newItemNote.value = item.sku ? `SKU: ${item.sku}` : ''
-  if (item.price) {
-    newItemNote.value += (newItemNote.value ? ' - ' : '') + `$${item.price}`
+  const normalized = normalizeCatalogSelection(item)
+  if (!normalized.description) {
+    toastRef.value?.show('Catalog item is missing a description', 'error')
+    return
   }
+  newItemCatalogId.value = normalized.catalogItemId
+  newItemDescription.value = normalized.description
+  newItemQty.value = normalized.quantity
+  newItemNote.value = normalized.note
   selectedCatalogItem.value = item
-  // Auto-add the item
   addItem()
-  // Reset quantity for next selection
-  catalogItemQtys.value[item.id] = 0
+  catalogItemQtys.value[item.id] = 1
 }
 
 const deleteItem = async (idx: number) => {
@@ -428,10 +435,25 @@ const deleteItem = async (idx: number) => {
   }
 }
 
+const persistItems = async () => {
+  if (!selected.value) return
+  try {
+    const sanitized = (selected.value.items || []).map(it => ({
+      description: (it.description || '').trim(),
+      quantity: Math.max(0, Math.floor(Number(it.quantity) || 0)),
+      ...(it.note ? { note: it.note } : {}),
+      catalogItemId: it.catalogItemId ?? null,
+    }))
+    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { items: sanitized, updatedAt: serverTimestamp() })
+  } catch (e) {
+    console.error('Failed to persist items', e)
+  }
+}
+
 const createDraft = async () => {
   try {
-    console.log('Creating order with jobId:', jobId.value, 'scope:', defaultScope.value)
-    const orderId = await createShopOrder(jobId.value, defaultScope.value)
+    console.log('Creating order with jobId:', jobId.value)
+    const orderId = await createShopOrder(jobId.value, 'scope:employee')
     console.log('Order created with ID:', orderId)
     selectedId.value = orderId
     toastRef.value?.show('New order created', 'success')
@@ -451,14 +473,7 @@ const deleteOrder = async () => {
   }
 }
 
-const changeScope = async (newScope: string) => {
-  if (!selected.value) return
-  try {
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { scope: newScope })
-  } catch (e: any) {
-    toastRef.value?.show('Failed to update scope', 'error')
-  }
-}
+const changeScope = async (_newScope: string) => {}
 
 const submitOrder = async () => {
   if (!selected.value) return
@@ -499,7 +514,7 @@ const receiveOrder = async () => {
 const openEmailModal = () => {
   if (!selected.value) return
   showEmailModal.value = true
-  recipientsInput.value = ''
+  recipientsInput.value = shopOrderRecipients.value.join(', ')
 }
 
 const closeEmailModal = () => {
@@ -513,9 +528,10 @@ const sendOrderEmail = async () => {
     .split(',')
     .map(r => r.trim())
     .filter(Boolean)
+  const finalRecipients = recipients.length ? recipients : shopOrderRecipients.value
 
-  if (recipients.length === 0) {
-    toastRef.value?.show('Enter at least one recipient email', 'error')
+  if (!finalRecipients.length) {
+    toastRef.value?.show('No recipients configured for shop orders', 'error')
     return
   }
 
@@ -524,7 +540,12 @@ const sendOrderEmail = async () => {
     await shopService.sendShopOrderEmail({
       jobId: jobId.value,
       shopOrderId: selected.value.id,
-      recipients,
+      recipients: finalRecipients,
+    })
+    // Treat email as submit: move status to 'order'
+    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), {
+      status: 'order' as ShopOrderStatus,
+      updatedAt: serverTimestamp(),
     })
     toastRef.value?.show('Order emailed successfully', 'success')
     closeEmailModal()
@@ -596,7 +617,7 @@ onUnmounted(clearSubscriptions)
                   <div class="small fw-semibold">{{ fmtDate(order.orderDate) }}</div>
                   <small class="text-muted">{{ order.id.slice(0, 8) }}</small>
                 </div>
-                <span :class="`badge rounded-pill ${statusBadgeClass(order.status)}`">{{ order.status }}</span>
+                <span :class="`badge rounded-pill ${statusBadgeClass(order.status)}`">{{ statusLabel(order.status) }}</span>
               </div>
               <div class="small mt-1 text-muted">{{ order.items.length }} item(s)</div>
             </button>
@@ -620,26 +641,14 @@ onUnmounted(clearSubscriptions)
                   <small class="text-muted">{{ fmtDate(selected.orderDate) }}</small>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                  <button class="btn btn-outline-secondary btn-sm" type="button" @click="openEmailModal" title="Email this order">
-                    <i class="bi bi-envelope me-1"></i>Email
+                  <button class="btn btn-success btn-sm" type="button" @click="openEmailModal" title="Submit and email this order">
+                    <i class="bi bi-envelope me-1"></i>Submit & Email
                   </button>
-                  <span :class="`badge rounded-pill ${statusBadgeClass(selected.status)}`">{{ selected.status }}</span>
+                  <span :class="`badge rounded-pill ${statusBadgeClass(selected.status)}`">{{ statusLabel(selected.status) }}</span>
                 </div>
               </div>
             </div>
             <div class="card-body order-body">
-              <!-- Scope Selector -->
-              <div v-if="canChangeScope(selected)" class="mb-3">
-                <label class="form-label">Scope</label>
-                <select class="form-select" :value="selected.uid" @change="changeScope(($event.target as HTMLSelectElement).value)">
-                  <option v-for="opt in SCOPE_OPTIONS.filter(o => allowedScopes.includes(o.key))" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
-                </select>
-              </div>
-              <div v-else class="mb-3">
-                <small class="text-muted">Scope: </small>
-                <span :class="`badge ${scopeBadgeClass(selected.uid)}`">{{ scopeLabel(selected.uid) }}</span>
-              </div>
-
               <!-- Items Table -->
               <div v-if="selected.items.length > 0" class="table-responsive mb-3 order-table">
                 <h6 class="mb-2">Order Items</h6>
@@ -660,7 +669,7 @@ onUnmounted(clearSubscriptions)
                             type="text"
                             class="form-control form-control-sm"
                             :value="item.description"
-                            @input="(e) => { item.description = (e.target as HTMLInputElement).value }"
+                            @input="(e) => { item.description = (e.target as HTMLInputElement).value; persistItems() }"
                             placeholder="Item description"
                           />
                         </template>
@@ -676,7 +685,7 @@ onUnmounted(clearSubscriptions)
                             step="1"
                             class="form-control form-control-sm text-center"
                             :value="item.quantity"
-                            @input="(e) => { item.quantity = Math.max(0, Math.floor(Number((e.target as HTMLInputElement).value) || 0)) }"
+                            @input="(e) => { item.quantity = Math.max(0, Math.floor(Number((e.target as HTMLInputElement).value) || 0)); persistItems() }"
                           />
                         </template>
                         <template v-else>
@@ -689,7 +698,7 @@ onUnmounted(clearSubscriptions)
                             type="text"
                             class="form-control form-control-sm"
                             :value="item.note || ''"
-                            @input="(e) => { item.note = (e.target as HTMLInputElement).value }"
+                            @input="(e) => { item.note = (e.target as HTMLInputElement).value; persistItems() }"
                             placeholder="Optional note"
                           />
                         </template>
@@ -713,7 +722,7 @@ onUnmounted(clearSubscriptions)
 
               <!-- Action Buttons -->
               <div class="d-grid gap-2 mt-3" v-if="!canEditOrder(selected)">
-                <button v-if="canSubmit(selected)" @click="submitOrder" class="btn btn-warning"><i class="bi bi-check-circle me-1"></i>Submit Order</button>
+                <button v-if="canSubmit(selected)" @click="submitOrder" class="btn btn-success"><i class="bi bi-check-circle me-1"></i>Submit Order</button>
                 <button v-if="canOrder(selected)" @click="orderOrder" class="btn btn-info"><i class="bi bi-box-seam me-1"></i>Place Order</button>
                 <button v-if="canReceive(selected)" @click="receiveOrder" class="btn btn-success"><i class="bi bi-check me-1"></i>Receive</button>
               </div>
@@ -812,7 +821,7 @@ onUnmounted(clearSubscriptions)
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" @click="closeEmailModal" :disabled="sendingEmail">Cancel</button>
-          <button type="button" class="btn btn-primary" @click="sendOrderEmail" :disabled="sendingEmail">
+          <button type="button" class="btn btn-success" @click="sendOrderEmail" :disabled="sendingEmail">
             <span v-if="sendingEmail" class="spinner-border spinner-border-sm me-2" />
             Send Email
           </button>
@@ -854,34 +863,27 @@ onUnmounted(clearSubscriptions)
 }
 
 .order-list-item.active {
-  border-left-color: #0d6efd;
-  box-shadow: inset 0 1px 0 rgba(0,0,0,0.05);
+  border-left-color: $primary;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.05);
 }
 
-
 .order-card .card-header {
-  border-bottom: 1px solid rgba(230, 237, 247, 0.12);
-  background: linear-gradient(180deg, rgba($primary, 0.20) 0%, rgba($primary-200, 0.85) 60%, $surface-2 100%);
+  border-bottom: 1px solid $border-color;
+  background: $surface-2;
 }
 
 .order-card .order-body {
-  background: linear-gradient(180deg, rgba($primary-50, 0.9) 0%, $surface 100%);
+  background: $surface;
 }
 
 .order-table {
-  border: 1px solid rgba(230, 237, 247, 0.12);
+  border: 1px solid $border-color;
   border-radius: 6px;
-  background: repeating-linear-gradient(
-    90deg,
-    rgba($primary, 0.08),
-    rgba($primary, 0.08) 24px,
-    $surface,
-    $surface 48px
-  );
+  background: $surface;
 }
 
 .order-empty {
-  border: 1px dashed rgba(230, 237, 247, 0.20);
+  border: 1px dashed $border-color;
   background: $surface-2;
 }
 </style>

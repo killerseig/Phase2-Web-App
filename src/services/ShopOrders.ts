@@ -97,7 +97,7 @@ export async function listShopOrders(
 /**
  * Create a new draft shop order with a scope key (uid)
  */
-export async function createShopOrder(jobId: string, scopeKey: string) {
+export async function createShopOrder(jobId: string, scopeKey = 'scope:employee') {
   try {
     assertJobAccess(jobId)
     const u = requireUser()

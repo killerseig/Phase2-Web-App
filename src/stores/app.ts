@@ -18,6 +18,7 @@ export const useAppStore = defineStore('app', {
       currentJobRole: null as JobRole,
       loadingJob: false,
       sidebarCollapsed: initialCollapsed,
+      sidebarOpenMobile: false,
     }
   },
 
@@ -41,6 +42,10 @@ export const useAppStore = defineStore('app', {
         localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed.toString())
       }
       console.log('Sidebar toggled, now collapsed:', this.sidebarCollapsed)
+    },
+
+    setSidebarOpenMobile(open: boolean) {
+      this.sidebarOpenMobile = open
     },
 
     async loadJob(jobId: string) {

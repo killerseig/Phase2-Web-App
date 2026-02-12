@@ -161,6 +161,11 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    /* ---------------- settings (app-wide) ---------------- */
+    match /settings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+
     /* ---------------- shop orders (DEV - simplified) ---------------- */
     match /shopOrders/{orderId} {
       // For now, allow all signed-in users to read/write shop orders

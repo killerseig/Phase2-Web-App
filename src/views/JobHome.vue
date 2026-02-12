@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 import { useJobRosterStore } from '../stores/jobRoster'
 import { useJobAccess } from '@/composables/useJobAccess'
+import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 
 defineProps<{
   jobId?: string
@@ -22,6 +23,12 @@ const jobId = computed(() => String(route.params.jobId))
 const job = computed(() => jobs.currentJob)
 const jobName = computed(() => job.value?.name ?? 'Job')
 const jobCode = computed(() => job.value?.code ?? '')
+const timecardPeriodEnd = computed(() => job.value?.timecardPeriodEndDate ?? null)
+const timecardStatus = computed(() => job.value?.timecardStatus ?? 'pending')
+
+const currentWeekStart = computed(() => snapToSunday(new Date()))
+const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.value))
+const currentWeekLabel = computed(() => formatWeekRange(currentWeekStart.value, currentWeekEnd.value))
 
 const currentUser = computed(() => auth.user)
 const isAdmin = computed(() => auth.role === 'admin')
@@ -84,6 +91,13 @@ watch(
         <span v-if="isForeman" class="badge bg-success"><i class="bi bi-person-badge me-1"></i>You are Foreman</span>
         <span v-else-if="isAdmin" class="badge bg-primary"><i class="bi bi-shield-check me-1"></i>Admin</span>
         <span v-else-if="currentUserRosterEntry?.active" class="badge bg-info"><i class="bi bi-person me-1"></i>On Roster</span>
+        <span
+          class="badge"
+          :class="timecardStatus === 'submitted' && timecardPeriodEnd === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger'"
+          :title="`Timecards for week ${currentWeekLabel}: ${timecardStatus === 'submitted' && timecardPeriodEnd === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
+        >
+          {{ timecardStatus === 'submitted' && timecardPeriodEnd === currentWeekEnd ? 'Timecards submitted this week' : 'Timecards not submitted this week' }}
+        </span>
       </div>
     </div>
 

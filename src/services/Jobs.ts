@@ -37,6 +37,7 @@ function normalize(id: string, data: DocumentData): Job {
     timecardStatus: data.timecardStatus ?? 'pending',
     timecardSubmittedAt: data.timecardSubmittedAt,
     timecardPeriodEndDate: data.timecardPeriodEndDate,
+    timecardLastSentWeekEnding: data.timecardLastSentWeekEnding,
     
     createdAt: data.createdAt,
     archivedAt: data.archivedAt,
@@ -106,6 +107,7 @@ export async function createJob(
       timecardStatus: 'pending',
       timecardSubmittedAt: null,
       timecardPeriodEndDate: null,
+      timecardLastSentWeekEnding: null,
       
       createdAt: serverTimestamp(),
       archivedAt: null,
@@ -175,6 +177,7 @@ export async function updateDailyLogRecipients(jobId: string, recipients: string
     throw new Error(normalizeError(err, 'Failed to update daily log recipients'))
   }
 }
+
 
 // ============================================================================
 // FOREMAN ASSIGNMENT & MANAGEMENT
@@ -280,6 +283,23 @@ export async function updateTimecardStatus(jobId: string, status: TimecardStatus
     await updateDoc(ref, payload)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to update timecard status'))
+  }
+}
+
+/**
+ * Mark timecards as sent for a specific week (used for red/green job status)
+ */
+export async function markTimecardsSent(jobId: string, weekEndingDate: string): Promise<void> {
+  try {
+    const ref = doc(db, 'jobs', jobId)
+    await updateDoc(ref, {
+      timecardStatus: 'submitted',
+      timecardSubmittedAt: serverTimestamp(),
+      timecardPeriodEndDate: weekEndingDate,
+      timecardLastSentWeekEnding: weekEndingDate,
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to mark timecards as sent'))
   }
 }
 

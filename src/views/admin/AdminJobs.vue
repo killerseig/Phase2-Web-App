@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import flatPickr from 'vue-flatpickr-component'
+import 'flatpickr/dist/flatpickr.css'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import StatusBadge from '../../components/admin/StatusBadge.vue'
@@ -7,6 +9,9 @@ import { useJobsStore } from '../../stores/jobs'
 import { useJobRosterStore } from '../../stores/jobRoster'
 import { useUsersStore } from '../../stores/users'
 import type { Job } from '@/services'
+import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
+import { listSubmittedTimecards, listTimecardsByJobAndWeek } from '@/services/Timecards'
+import { downloadCsv } from '@/utils/plexisIntegration'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
@@ -49,6 +54,100 @@ const assignedForemen = computed(() => {
     u.assignedJobIds?.includes(selectedJobForForeman.value!.id)
   )
 })
+
+const currentWeekStart = computed(() => snapToSunday(new Date()))
+const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.value))
+const currentWeekLabel = computed(() => formatWeekRange(currentWeekStart.value, currentWeekEnd.value))
+const exportWeekEnding = ref<string>(currentWeekEnd.value)
+
+const exportDateConfig = computed(() => ({
+  dateFormat: 'Y-m-d',
+  disableMobile: true,
+  prevArrow: '<i class="bi bi-chevron-left"></i>',
+  nextArrow: '<i class="bi bi-chevron-right"></i>',
+  maxDate: currentWeekEnd.value,
+}))
+
+function normalizeWeekEnding(input?: string | Date | null): string | undefined {
+  if (!input) return undefined
+  if (typeof input === 'string') return input
+  const year = input.getFullYear()
+  const month = String(input.getMonth() + 1).padStart(2, '0')
+  const day = String(input.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function toCsv(headers: string[], rows: (string | number)[][]): string {
+  const escape = (v: string | number) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  return [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n')
+}
+
+async function exportAllSubmittedAllJobs(weekEndingInput?: string | Date | null) {
+  try {
+    const weekEnding = normalizeWeekEnding(weekEndingInput ?? exportWeekEnding.value)
+    const jobList = jobs.value
+    const rows: (string | number)[][] = []
+    for (const job of jobList) {
+      const tcs = weekEnding
+        ? (await listTimecardsByJobAndWeek(job.id, weekEnding)).filter(t => t.status === 'submitted')
+        : await listSubmittedTimecards(job.id)
+      for (const tc of tcs) {
+        rows.push([
+          job.name,
+          job.code || '',
+          tc.weekEndingDate,
+          tc.employeeNumber,
+          tc.employeeName,
+          tc.occupation,
+          tc.days[0]?.hours ?? '',
+          tc.days[1]?.hours ?? '',
+          tc.days[2]?.hours ?? '',
+          tc.days[3]?.hours ?? '',
+          tc.days[4]?.hours ?? '',
+          tc.days[5]?.hours ?? '',
+          tc.days[6]?.hours ?? '',
+          tc.totals.hoursTotal ?? '',
+          tc.totals.productionTotal ?? '',
+        ])
+      }
+    }
+
+    if (rows.length === 0) {
+      toastRef.value?.show('No submitted timecards to export', 'info')
+      return
+    }
+
+    const headers = [
+      'Job Name',
+      'Job Code',
+      'Week Ending',
+      'Employee #',
+      'Name',
+      'Occupation',
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Total Hours',
+      'Total Production',
+    ]
+
+    const filename = weekEnding
+      ? `timecards-submitted-all-jobs-${weekEnding}.csv`
+      : 'timecards-submitted-all-jobs.csv'
+
+    downloadCsv(toCsv(headers, rows), filename)
+    toastRef.value?.show('Exported submitted timecards', 'success')
+  } catch (e: any) {
+    toastRef.value?.show(e?.message ?? 'Failed to export timecards', 'error')
+  }
+}
 
 const removingForemanId = ref<string>('')
 
@@ -185,7 +284,7 @@ onMounted(async () => {
     </div>
 
     <!-- Create Job Button -->
-    <div class="mb-4">
+    <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
       <button
         v-if="!showJobModal"
         @click="showJobModal = true"
@@ -193,6 +292,31 @@ onMounted(async () => {
       >
         <i class="bi bi-plus-circle me-2"></i>Create Job
       </button>
+    </div>
+
+    <!-- Office Exports -->
+    <div class="card mb-4">
+      <div class="card-body d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
+        <div>
+          <h5 class="mb-1">Office Export</h5>
+          <div class="text-muted small">Choose a week (Saturday) to export all submitted timecards across all jobs.</div>
+        </div>
+        <div class="ms-md-auto d-flex flex-wrap gap-2 align-items-center">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <label class="small text-muted mb-0">Week ending (Saturday)</label>
+            <flat-pickr
+              v-model="exportWeekEnding"
+              :config="exportDateConfig"
+              class="form-control form-control-sm"
+              placeholder="Select Saturday"
+              aria-label="Week ending date"
+            />
+          </div>
+          <button class="btn btn-outline-success btn-sm" @click="exportAllSubmittedAllJobs(exportWeekEnding)">
+            <i class="bi bi-download me-1"></i>Export Submitted (all jobs)
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Create Job Modal -->
@@ -366,7 +490,8 @@ onMounted(async () => {
                 <th style="width: 25%;" class="small fw-semibold">Job Name</th>
                 <th style="width: 15%;" class="small fw-semibold">Code</th>
                 <th style="width: 15%;" class="small fw-semibold">Status</th>
-                <th style="width: 45%;" class="small fw-semibold text-center">Actions</th>
+                <th style="width: 15%;" class="small fw-semibold">Timecards This Week</th>
+                <th style="width: 30%;" class="small fw-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -375,6 +500,14 @@ onMounted(async () => {
                 <td style="padding: 8px;" class="text-muted small">{{ job.code || '—' }}</td>
                 <td style="padding: 8px;">
                   <StatusBadge :status="job.active ? 'active' : 'archived'" />
+                </td>
+                <td style="padding: 8px;">
+                  <span
+                    :class="['badge', job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger']"
+                    :title="`Timecards for week ${currentWeekLabel}: ${job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
+                  >
+                    {{ job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'Submitted this week' : 'Not submitted this week' }}
+                  </span>
                 </td>
                 <td style="padding: 8px;" class="text-center">
                   <button

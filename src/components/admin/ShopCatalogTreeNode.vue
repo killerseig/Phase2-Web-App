@@ -209,20 +209,24 @@ function handleEditCategory() {
 
       <div v-if="orderMode && catalogItemQtys" class="btn-group btn-group-sm" role="group" style="margin-left: auto;">
         <input
-          :value="catalogItemQtys?.[category.id] || 0"
-          @input="(e) => { if (catalogItemQtys) { catalogItemQtys[category.id] = parseInt((e.target as HTMLInputElement).value) || 0 } }"
+          type="number"
+          inputmode="numeric"
+          min="1"
+          step="1"
+          :value="catalogItemQtys?.[category.id] || 1"
+          @input="(e) => { if (catalogItemQtys) { const v = Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value) || 1)); catalogItemQtys[category.id] = v } }"
           class="form-control form-control-sm"
-          style="width: 60px;"
+          style="width: 70px;"
         />
         <button
           class="btn btn-sm btn-success"
-          @click.stop="() => { const qty = catalogItemQtys?.[category.id] || 0; emit('select-for-order', { id: category.id, description: category.name, quantity: qty } as any) }"
+          @click.stop="() => { const qty = catalogItemQtys?.[category.id] || 1; emit('select-for-order', { id: category.id, description: category.name, quantity: qty } as any) }"
           title="Add to order"
         >
           <i class="bi bi-plus-circle"></i>
         </button>
       </div>
-      <div v-else class="btn-group btn-group-sm" role="group" style="margin-left: auto;">
+      <div v-else-if="!orderMode" class="btn-group btn-group-sm" role="group" style="margin-left: auto;">
         <button v-if="!isArchived" class="btn btn-outline-secondary" @click.stop="handleAddChild" title="Add subcategory">
           <i class="bi bi-folder-plus"></i>
         </button>
@@ -302,7 +306,6 @@ function handleEditCategory() {
   <div v-else-if="item" class="tree-node accordion-item">
     <div class="node-header" @click="handleNodeHeaderClick">
       <button
-        v-if="!isEditing"
         :id="`btn-${props.nodeId}`"
         class="accordion-button"
         type="button"
@@ -320,16 +323,7 @@ function handleEditCategory() {
         </span>
       </button>
 
-      <div v-else style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; width: 100%;">
-        <i class="bi bi-file-text me-2" style="flex-shrink: 0;"></i>
-        <input v-model="editDesc" type="text" class="form-control form-control-sm" placeholder="Description" @keydown.enter="handleSaveItem" @keydown.esc="handleCancelEdit" style="flex: 1;" />
-        <input v-model="editSku" type="text" class="form-control form-control-sm" placeholder="SKU" @keydown.enter="handleSaveItem" @keydown.esc="handleCancelEdit" style="width: 90px;" />
-        <input v-model="editPrice" type="number" class="form-control form-control-sm" placeholder="Price" @keydown.enter="handleSaveItem" @keydown.esc="handleCancelEdit" step="0.01" style="width: 90px;" />
-        <button class="btn btn-sm btn-success" @click.stop="handleSaveItem" :disabled="isSaving || !editDesc.trim()" title="Save (Enter)"><i class="bi bi-check"></i></button>
-        <button class="btn btn-sm btn-outline-secondary" @click.stop="handleCancelEdit" :disabled="isSaving" title="Cancel (Esc)"><i class="bi bi-x"></i></button>
-      </div>
-
-      <div v-if="!isEditing" class="btn-group btn-group-sm" role="group" style="margin-left: auto;" @click.stop>
+      <div v-if="!orderMode" class="btn-group btn-group-sm" role="group" style="margin-left: auto;" @click.stop>
         <button class="btn btn-outline-primary" @click.stop="handleAddChild" title="Add subcategory"><i class="bi bi-folder-plus"></i></button>
         <button class="btn btn-outline-secondary" @click.stop="handleEditItem" title="Edit"><i class="bi bi-pencil"></i></button>
         <button v-if="item.active" class="btn btn-outline-warning" @click.stop="handleArchiveItem" title="Archive"><i class="bi bi-archive"></i></button>

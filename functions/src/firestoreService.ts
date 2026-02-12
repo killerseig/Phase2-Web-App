@@ -22,6 +22,11 @@ export interface JobDetails {
   number: string
 }
 
+export interface EmailSettings {
+  timecardSubmitRecipients?: string[]
+  shopOrderSubmitRecipients?: string[]
+}
+
 export interface UserProfile {
   uid: string
   email: string
@@ -139,5 +144,18 @@ export async function getShopOrder(shopOrderId: string): Promise<any> {
   return {
     id: orderSnap.id,
     ...orderSnap.data(),
+  }
+}
+
+/**
+ * Get global email settings
+ */
+export async function getEmailSettings(): Promise<EmailSettings> {
+  const settingsSnap = await getDb().collection('settings').doc('email').get()
+  if (!settingsSnap.exists) return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] }
+  const data = settingsSnap.data() || {}
+  return {
+    timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
+    shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
   }
 }

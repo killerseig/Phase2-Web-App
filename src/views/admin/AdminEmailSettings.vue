@@ -3,7 +3,14 @@ import { onMounted, ref } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import EmailRecipientInput from '../../components/admin/EmailRecipientInput.vue'
-import { listAllJobs, updateDailyLogRecipients, type Job } from '@/services'
+import {
+  listAllJobs,
+  updateDailyLogRecipients,
+  getEmailSettings,
+  updateTimecardSubmitRecipientsGlobal,
+  updateShopOrderSubmitRecipientsGlobal,
+  type Job,
+} from '@/services'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
@@ -14,6 +21,8 @@ const saving = ref(false)
 
 // Global default recipients
 const globalDefaultRecipients = ref<string[]>([])
+const timecardSubmitRecipients = ref<string[]>([])
+const shopOrderSubmitRecipients = ref<string[]>([])
 
 // Job-specific recipients
 const jobRecipients = ref<Map<string, string[]>>(new Map())
@@ -22,6 +31,17 @@ async function loadJobs() {
   loading.value = true
   err.value = ''
   try {
+    // Load global email settings (timecards & shop orders)
+    try {
+      const settings = await getEmailSettings()
+      timecardSubmitRecipients.value = settings.timecardSubmitRecipients ?? []
+      shopOrderSubmitRecipients.value = settings.shopOrderSubmitRecipients ?? []
+    } catch (settingsError) {
+      console.warn('[AdminEmailSettings] Failed to load global email settings, using defaults', settingsError)
+      timecardSubmitRecipients.value = []
+      shopOrderSubmitRecipients.value = []
+    }
+
     jobs.value = await listAllJobs(true)
     
     // Initialize job recipient maps
@@ -70,6 +90,34 @@ function removeJobRecipient(jobId: string, email: string) {
   saveJobRecipients(jobId)
 }
 
+function addTimecardRecipient(email: string) {
+  if (timecardSubmitRecipients.value.includes(email)) {
+    toastRef.value?.show('Email already in the list', 'warning')
+    return
+  }
+  timecardSubmitRecipients.value = [...timecardSubmitRecipients.value, email]
+  saveTimecardRecipients()
+}
+
+function removeTimecardRecipient(email: string) {
+  timecardSubmitRecipients.value = timecardSubmitRecipients.value.filter(e => e !== email)
+  saveTimecardRecipients()
+}
+
+function addShopOrderRecipient(email: string) {
+  if (shopOrderSubmitRecipients.value.includes(email)) {
+    toastRef.value?.show('Email already in the list', 'warning')
+    return
+  }
+  shopOrderSubmitRecipients.value = [...shopOrderSubmitRecipients.value, email]
+  saveShopOrderRecipients()
+}
+
+function removeShopOrderRecipient(email: string) {
+  shopOrderSubmitRecipients.value = shopOrderSubmitRecipients.value.filter(e => e !== email)
+  saveShopOrderRecipients()
+}
+
 async function saveJobRecipients(jobId: string) {
   saving.value = true
   try {
@@ -79,6 +127,32 @@ async function saveJobRecipients(jobId: string) {
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to save recipients'
     toastRef.value?.show('Failed to save recipients', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveTimecardRecipients() {
+  saving.value = true
+  try {
+    await updateTimecardSubmitRecipientsGlobal(timecardSubmitRecipients.value)
+    toastRef.value?.show('Timecard submit recipients updated', 'success')
+  } catch (e: any) {
+    err.value = e?.message ?? 'Failed to save timecard recipients'
+    toastRef.value?.show('Failed to save timecard recipients', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveShopOrderRecipients() {
+  saving.value = true
+  try {
+    await updateShopOrderSubmitRecipientsGlobal(shopOrderSubmitRecipients.value)
+    toastRef.value?.show('Shop order submit recipients updated', 'success')
+  } catch (e: any) {
+    err.value = e?.message ?? 'Failed to save shop order recipients'
+    toastRef.value?.show('Failed to save shop order recipients', 'error')
   } finally {
     saving.value = false
   }
@@ -94,28 +168,69 @@ onMounted(loadJobs)
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">Email Settings</h2>
-      <p class="text-muted small mb-0">Configure email recipients for daily logs</p>
+      <p class="text-muted small mb-0">Configure recipients for daily logs (per job) and global recipients for timecards and shop orders.</p>
     </div>
+
+    <!-- Global Timecard Recipients -->
+    <AdminCardWrapper
+      title="Timecard Submission Recipients"
+      icon="clock"
+      subtitle="These recipients will receive all submitted timecards."
+    >
+      <EmailRecipientInput
+        :key="'timecard-recips'"
+        :emails="timecardSubmitRecipients"
+        label="Timecard recipients"
+        input-name="timecard-recipient"
+        autocomplete-section="timecard"
+        :disabled="saving"
+        @add="addTimecardRecipient"
+        @remove="removeTimecardRecipient"
+      />
+    </AdminCardWrapper>
+
+    <!-- Global Shop Order Recipients -->
+    <AdminCardWrapper
+      title="Shop Order Submission Recipients"
+      icon="box-seam"
+      subtitle="These recipients will receive all submitted shop orders."
+      class="mt-4"
+    >
+      <EmailRecipientInput
+        :key="'shop-order-recips'"
+        :emails="shopOrderSubmitRecipients"
+        label="Shop order recipients"
+        input-name="shop-order-recipient"
+        autocomplete-section="shop-order"
+        :disabled="saving"
+        @add="addShopOrderRecipient"
+        @remove="removeShopOrderRecipient"
+      />
+    </AdminCardWrapper>
 
     <!-- Global Default Recipients -->
     <AdminCardWrapper
-      title="Global Default Recipients"
+      title="Daily Log Global Defaults"
       icon="envelope"
       subtitle="These email addresses will receive daily logs from all jobs (unless overridden at the job level)."
+      class="mt-4"
     >
       <EmailRecipientInput
+        :key="'global-default-recips'"
         :emails="globalDefaultRecipients"
         label="Global Recipients"
+        input-name="daily-log-global-recipient"
+        autocomplete-section="daily-log-global"
         @add="addGlobalRecipient"
         @remove="removeGlobalRecipient"
       />
     </AdminCardWrapper>
 
-    <!-- Job-Specific Recipients -->
+    <!-- Job-Specific Recipients (Daily Logs only) -->
     <AdminCardWrapper
       title="Job-Specific Recipients"
       icon="briefcase"
-      subtitle="Configure email recipients for individual jobs. These override the global defaults."
+      subtitle="Configure daily log recipients for individual jobs. These override the global defaults."
       :loading="loading"
       :error="err"
       class="mt-4"
@@ -159,13 +274,16 @@ onMounted(loadJobs)
             :data-bs-parent="`#jobsAccordion`"
           >
             <div class="accordion-body">
-              <EmailRecipientInput
-                :emails="jobRecipients.get(job.id) ?? []"
-                :label="`Recipients for ${job.name}`"
-                :disabled="saving"
-                @add="(email) => addJobRecipient(job.id, email)"
-                @remove="(email) => removeJobRecipient(job.id, email)"
-              />
+              <div>
+                <h6 class="section-label">Daily Logs</h6>
+                <EmailRecipientInput
+                  :emails="jobRecipients.get(job.id) ?? []"
+                  :label="`Recipients for ${job.name}`"
+                  :disabled="saving"
+                  @add="(email) => addJobRecipient(job.id, email)"
+                  @remove="(email) => removeJobRecipient(job.id, email)"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -196,5 +314,17 @@ onMounted(loadJobs)
   color: $primary;
   font-size: 1.1rem;
   margin-top: 1px;
+}
+
+.section-label {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: $text-muted;
+  margin-bottom: 0.35rem;
+}
+
+.mt-4 {
+  margin-top: 1.5rem;
 }
 </style>
