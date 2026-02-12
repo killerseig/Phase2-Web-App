@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import * as ShopService from '../services/ShopCatalog'
-import type { ShopCatalogItem } from '../services/ShopCatalog'
+import {
+  createCatalogItem as createCatalogItemService,
+  deleteCatalogItem as deleteCatalogItemService,
+  listCatalog as listCatalogService,
+  setCatalogItemActive as setCatalogItemActiveService,
+  updateCatalogItem as updateCatalogItemService,
+  type ShopCatalogItem,
+} from '@/services'
 
 export const useShopCatalogStore = defineStore('shopCatalog', () => {
   const items = ref<ShopCatalogItem[]>([])
@@ -19,7 +25,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     loading.value = true
     error.value = null
     try {
-      items.value = await ShopService.listCatalog(activeOnly)
+      items.value = await listCatalogService(activeOnly)
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to load catalog'
       console.error('[Shop Catalog Store] Error loading catalog:', e)
@@ -32,9 +38,9 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     loading.value = true
     error.value = null
     try {
-      const itemId = await ShopService.createCatalogItem(description, categoryId, sku, price)
+      const itemId = await createCatalogItemService(description, categoryId, sku, price)
       // Re-fetch catalog to get the new item
-      const catalog = await ShopService.listCatalog(false)
+      const catalog = await listCatalogService(false)
       const newItem = catalog.find(i => i.id === itemId)
       if (newItem) {
         items.value.push(newItem)
@@ -53,7 +59,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
   async function updateItem(itemId: string, updates: { description?: string; sku?: string; price?: number }) {
     error.value = null
     try {
-      await ShopService.updateCatalogItem(itemId, updates)
+      await updateCatalogItemService(itemId, updates)
       const idx = items.value.findIndex(i => i.id === itemId)
       if (idx !== -1) {
         items.value[idx] = { ...items.value[idx], ...updates }
@@ -68,7 +74,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
   async function setItemActive(itemId: string, active: boolean) {
     error.value = null
     try {
-      await ShopService.setCatalogItemActive(itemId, active)
+      await setCatalogItemActiveService(itemId, active)
       const idx = items.value.findIndex(i => i.id === itemId)
       if (idx !== -1) {
         items.value[idx] = { ...items.value[idx], active }
@@ -83,7 +89,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
   async function deleteItem(itemId: string) {
     error.value = null
     try {
-      await ShopService.deleteCatalogItem(itemId)
+      await deleteCatalogItemService(itemId)
       items.value = items.value.filter(i => i.id !== itemId)
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to delete item'

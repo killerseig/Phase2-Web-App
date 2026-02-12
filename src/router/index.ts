@@ -1,18 +1,44 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import {
+  createRouter,
+  createWebHistory,
+  type NavigationGuardWithThis,
+  type RouteComponent,
+  type RouteLocationNormalized,
+  type RouteMeta,
+  type RouteRecordRaw,
+} from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { ROUTES, ROLES, type Role } from '@/constants/app'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    public: boolean
+    roles: Role[]
+    title: string
+  }
+}
+
+type LazyView = () => Promise<RouteComponent>
 
 // Route configurations
 interface RouteConfig {
   path: string
   name?: string
-  component?: () => Promise<any>
+  component?: LazyView
   roles?: Role[]
   isPublic?: boolean
   title?: string
   redirect?: string
 }
+
+const BASE_TITLE = 'Phase 2'
+
+const toMeta = (config: RouteConfig): RouteMeta => ({
+  public: config.isPublic ?? false,
+  roles: config.roles ?? [],
+  title: config.title ?? 'App',
+})
 
 const routeConfigs: RouteConfig[] = [
   // Root
@@ -138,11 +164,7 @@ const routes: RouteRecordRaw[] = routeConfigs.map((config) => {
     return {
       path: config.path,
       redirect: config.redirect,
-      meta: {
-        public: config.isPublic || false,
-        roles: config.roles || [],
-        title: config.title || 'App',
-      },
+      meta: toMeta(config),
       ...(config.name && { name: config.name }),
     }
   }
@@ -151,11 +173,7 @@ const routes: RouteRecordRaw[] = routeConfigs.map((config) => {
     path: config.path,
     ...(config.name && { name: config.name }),
     ...(config.component && { component: config.component }),
-    meta: {
-      public: config.isPublic || false,
-      roles: config.roles || [],
-      title: config.title || 'App',
-    },
+    meta: toMeta(config),
     props: config.path.includes(':') ? true : undefined,
   }
 })
@@ -165,15 +183,19 @@ export const router = createRouter({
   routes,
 })
 
-export const runNavigationGuard = async (to: any) => {
+export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to: RouteLocationNormalized) => {
   const auth = useAuthStore()
   const jobAccess = useJobAccess()
+
+  const meta = (to.meta ?? {}) as Partial<RouteMeta>
+  const isPublicRoute = meta.public ?? false
+  const allowedRoles = Array.isArray(meta.roles) ? meta.roles : []
 
   // Ensure auth state is resolved (no polling loop)
   if (!auth.ready) await auth.init()
 
   // Public routes
-  if (to.meta.public) {
+  if (isPublicRoute) {
     if (auth.user && to.name === 'login') return { name: 'dashboard' }
     return true
   }
@@ -188,8 +210,7 @@ export const runNavigationGuard = async (to: any) => {
   }
 
   // Role-based access control
-  const allowedRoles = to.meta.roles as Role[] | undefined
-  if (allowedRoles && allowedRoles.length > 0) {
+  if (allowedRoles.length > 0) {
     const userRole = auth.role || ROLES.NONE
     if (!allowedRoles.includes(userRole)) {
       return { name: 'unauthorized' }
@@ -213,6 +234,5 @@ router.beforeEach(runNavigationGuard)
 // Update document title after navigation completes
 router.afterEach((to) => {
   const pageTitle = to.meta.title as string | undefined
-  const baseTitle = 'Phase 2'
-  document.title = pageTitle ? `${pageTitle} · ${baseTitle}` : baseTitle
+  document.title = pageTitle ? `${pageTitle} · ${BASE_TITLE}` : BASE_TITLE
 })

@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import * as EmployeesService from '../services/Employees'
-import type { Employee } from '../services/Employees'
+import {
+  createEmployee as createEmployeeService,
+  deleteEmployee as deleteEmployeeService,
+  listAllEmployees as listAllEmployeesService,
+  listEmployeesByJob as listEmployeesByJobService,
+  updateEmployee as updateEmployeeService,
+  type Employee,
+} from '@/services'
 
 export const useEmployeesStore = defineStore('employees', () => {
   const employees = ref<Employee[]>([])
@@ -20,7 +26,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     loading.value = true
     error.value = null
     try {
-      employees.value = await EmployeesService.listAllEmployees()
+      employees.value = await listAllEmployeesService()
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to load employees'
       console.error('[Employees Store] Error loading employees:', e)
@@ -33,7 +39,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     loading.value = true
     error.value = null
     try {
-      const jobEmployees = await EmployeesService.listEmployeesByJob(jobId)
+      const jobEmployees = await listEmployeesByJobService(jobId)
       employeesByJob.value.set(jobId, jobEmployees)
       return jobEmployees
     } catch (e: any) {
@@ -53,7 +59,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     loading.value = true
     error.value = null
     try {
-      const employeeId = await EmployeesService.createEmployee(jobId, input)
+      const employeeId = await createEmployeeService(jobId, input)
       // Re-fetch to get the full employee object
       if (jobId) {
         await fetchEmployeesByJob(jobId)
@@ -75,7 +81,7 @@ export const useEmployeesStore = defineStore('employees', () => {
   async function updateEmployee(employeeId: string, updates: any) {
     error.value = null
     try {
-      await EmployeesService.updateEmployee(employeeId, updates)
+      await updateEmployeeService(employeeId, updates)
       
       // Update in main list
       const idx = employees.value.findIndex(e => e.id === employeeId)
@@ -107,7 +113,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       // Get employee before deletion to know which job to update
       const emp = employees.value.find(e => e.id === employeeId)
       
-      await EmployeesService.deleteEmployee(employeeId)
+      await deleteEmployeeService(employeeId)
       
       // Remove from main list
       employees.value = employees.value.filter(e => e.id !== employeeId)

@@ -15,6 +15,13 @@ export interface ServiceError {
  * Parse Firebase error and return standardized service error
  */
 export function handleServiceError(error: any, context: string = 'Service'): ServiceError {
+  if (!error) {
+    return {
+      code: ErrorCodes.INTERNAL_ERROR,
+      message: `${context} error: An unexpected error occurred`,
+    }
+  }
+
   // Firebase Firestore errors
   if (error.code === 'permission-denied') {
     return {

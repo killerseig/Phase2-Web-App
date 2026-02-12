@@ -6,9 +6,10 @@
 import { ref, Ref } from 'vue'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/firebase'
-import { VALID_ROLES } from '@/constants/app'
+import { Role, VALID_ROLES } from '@/constants/app'
+import { normalizeError } from './serviceUtils'
 
-export type UserRole = typeof VALID_ROLES[number]
+export type UserRole = Role
 
 export interface CreateUserRequest {
   email: string
@@ -63,8 +64,8 @@ export function useUserService() {
 
       const result = await createUserFunction(request)
       return result.data
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to create user'
+    } catch (err) {
+      const errorMessage = normalizeError(err, 'Failed to create user')
       error.value = errorMessage
       console.error('[useUserService] createUserByAdmin error:', err)
       throw new Error(errorMessage)
@@ -89,8 +90,8 @@ export function useUserService() {
 
       const result = await deleteUserFunction({ uid })
       return result.data
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to delete user'
+    } catch (err) {
+      const errorMessage = normalizeError(err, 'Failed to delete user')
       error.value = errorMessage
       console.error('[useUserService] deleteUser error:', err)
       throw new Error(errorMessage)

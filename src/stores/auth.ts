@@ -10,9 +10,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore'
 
 // Use relative imports to avoid alias/tsconfig fights
 import { auth, db } from '../firebase'
-import type { Role as AppRole } from '@/constants/app'
-
-export type Role = AppRole
+import { ROLES, type Role } from '@/constants/app'
 
 type AuthState = {
   user: User | null
@@ -62,7 +60,7 @@ export const useAuthStore = defineStore('auth', {
             }
 
             const data = snap.data()
-            const newRole = data.role as Role
+            const newRole = (data.role as Role) ?? ROLES.NONE
             const newActive = data.active === true
             const newAssignedJobIds = (data.assignedJobIds ?? []) as string[]
 
@@ -125,9 +123,9 @@ export const useAuthStore = defineStore('auth', {
             const snap = await getDoc(doc(db, 'users', u.uid))
             if (snap.exists()) {
               const data = snap.data()
-              this.role = (data.role as Role)
+              this.role = (data.role as Role) ?? ROLES.NONE
               this.active = data.active === true
-              this.assignedJobIds = data.assignedJobIds ?? []
+              this.assignedJobIds = (data.assignedJobIds ?? []) as string[]
             } else {
               // Create user document if it doesn't exist (for imported/external users)
               await setDoc(doc(db, 'users', u.uid), {
@@ -135,12 +133,12 @@ export const useAuthStore = defineStore('auth', {
                 displayName: u.displayName || null,
                 firstName: null,
                 lastName: null,
-                role: 'none',
+                role: ROLES.NONE,
                 active: true,
                 assignedJobIds: [],
                 createdAt: new Date(),
               })
-              this.role = 'none'
+              this.role = ROLES.NONE
               this.active = true
               this.assignedJobIds = []
             }
@@ -180,7 +178,7 @@ export const useAuthStore = defineStore('auth', {
         await setDoc(doc(db, 'users', cred.user.uid), {
           email: cred.user.email,
           active: true,
-          role: 'none',
+          role: ROLES.NONE,
           createdAt: new Date(),
         })
       }

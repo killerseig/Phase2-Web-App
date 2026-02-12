@@ -1,6 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import * as UsersService from '../services/Users'
+import {
+  assignJobToForeman as assignJobToForemanService,
+  createUserByAdmin as createUserByAdminService,
+  deleteUser as deleteUserService,
+  getMyUserProfile as getMyUserProfileService,
+  listUsers as listUsersService,
+  removeJobFromForeman as removeJobFromForemanService,
+  setForemanJobs as setForemanJobsService,
+  updateUser as updateUserService,
+} from '@/services'
 import type { UserProfile } from '@/types/models'
 
 export const useUsersStore = defineStore('users', () => {
@@ -22,7 +31,7 @@ export const useUsersStore = defineStore('users', () => {
     loading.value = true
     error.value = null
     try {
-      users.value = await UsersService.listUsers()
+      users.value = await listUsersService()
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to load users'
       console.error('[Users Store] Error loading users:', e)
@@ -35,7 +44,7 @@ export const useUsersStore = defineStore('users', () => {
     loading.value = true
     error.value = null
     try {
-      currentUserProfile.value = await UsersService.getMyUserProfile()
+      currentUserProfile.value = await getMyUserProfileService()
       return currentUserProfile.value
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to load user profile'
@@ -48,7 +57,7 @@ export const useUsersStore = defineStore('users', () => {
   async function updateUserProfile(userId: string, updates: any) {
     error.value = null
     try {
-      await UsersService.updateUser(userId, updates)
+      await updateUserService(userId, updates)
       
       // Update in list
       const idx = users.value.findIndex(u => u.id === userId)
@@ -70,7 +79,7 @@ export const useUsersStore = defineStore('users', () => {
   async function deleteUser(userId: string) {
     error.value = null
     try {
-      await UsersService.deleteUser(userId)
+      await deleteUserService(userId)
       users.value = users.value.filter(u => u.id !== userId)
       if (currentUserProfile.value?.id === userId) {
         currentUserProfile.value = null
@@ -97,7 +106,7 @@ export const useUsersStore = defineStore('users', () => {
   async function createUser(email: string, firstName: string, lastName: string, role: 'admin' | 'employee' | 'shop' | 'foreman' | 'none' = 'none') {
     error.value = null
     try {
-      const result = await UsersService.createUserByAdmin(email, firstName, lastName, role)
+      const result = await createUserByAdminService(email, firstName, lastName, role)
       // Refresh users list after creation
       await fetchAllUsers()
       return result
@@ -112,7 +121,7 @@ export const useUsersStore = defineStore('users', () => {
   async function assignJobToForeman(foremanId: string, jobId: string) {
     error.value = null
     try {
-      await UsersService.assignJobToForeman(foremanId, jobId)
+      await assignJobToForemanService(foremanId, jobId)
       
       // Update in list
       const idx = users.value.findIndex(u => u.id === foremanId)
@@ -142,7 +151,7 @@ export const useUsersStore = defineStore('users', () => {
   async function removeJobFromForeman(foremanId: string, jobId: string) {
     error.value = null
     try {
-      await UsersService.removeJobFromForeman(foremanId, jobId)
+      await removeJobFromForemanService(foremanId, jobId)
       
       // Update in list
       const idx = users.value.findIndex(u => u.id === foremanId)
@@ -170,7 +179,7 @@ export const useUsersStore = defineStore('users', () => {
   async function setForemanJobs(foremanId: string, jobIds: string[]) {
     error.value = null
     try {
-      await UsersService.setForemanJobs(foremanId, jobIds)
+      await setForemanJobsService(foremanId, jobIds)
       
       // Update in list
       const idx = users.value.findIndex(u => u.id === foremanId)

@@ -1,6 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import * as JobsService from '../services/Jobs'
+import {
+  assignForemanToJob as assignForemanToJobService,
+  createJob as createJobService,
+  deleteJob as deleteJobService,
+  getJob as getJobService,
+  listAllJobs as listAllJobsService,
+  removeForemanFromJob as removeForemanFromJobService,
+  setJobActive as setJobActiveService,
+  setTimecardPeriodEndDate as setTimecardPeriodEndDateService,
+  updateJob as updateJobService,
+  updateTimecardStatus as updateTimecardStatusService,
+} from '@/services'
 import type { Job } from '@/types/models'
 
 export const useJobsStore = defineStore('jobs', () => {
@@ -21,7 +32,7 @@ export const useJobsStore = defineStore('jobs', () => {
     loading.value = true
     error.value = null
     try {
-      jobs.value = await JobsService.listAllJobs(includeArchived, options)
+      jobs.value = await listAllJobsService(includeArchived, options)
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to load jobs'
       console.error('[Jobs Store] Error loading jobs:', e)
@@ -34,7 +45,7 @@ export const useJobsStore = defineStore('jobs', () => {
     loading.value = true
     error.value = null
     try {
-      currentJob.value = await JobsService.getJob(jobId)
+      currentJob.value = await getJobService(jobId)
       // Also update in the jobs list if present
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1 && currentJob.value) {
@@ -53,8 +64,8 @@ export const useJobsStore = defineStore('jobs', () => {
   async function createJob(name: string, options?: { code?: string; accountNumber?: string; type?: 'general' | 'subcontractor' }) {
     error.value = null
     try {
-      const jobId = await JobsService.createJob(name, options)
-      const newJob = await JobsService.getJob(jobId)
+      const jobId = await createJobService(name, options)
+      const newJob = await getJobService(jobId)
       if (newJob) {
         jobs.value.push(newJob)
         return newJob
@@ -70,7 +81,7 @@ export const useJobsStore = defineStore('jobs', () => {
   async function updateJob(jobId: string, updates: { name?: string; code?: string }) {
     error.value = null
     try {
-      await JobsService.updateJob(jobId, updates)
+      await updateJobService(jobId, updates)
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1) {
         jobs.value[idx] = { ...jobs.value[idx], ...updates }
@@ -88,7 +99,7 @@ export const useJobsStore = defineStore('jobs', () => {
   async function setJobActive(jobId: string, active: boolean) {
     error.value = null
     try {
-      await JobsService.setJobActive(jobId, active)
+      await setJobActiveService(jobId, active)
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1) {
         jobs.value[idx] = { ...jobs.value[idx], active }
@@ -106,7 +117,7 @@ export const useJobsStore = defineStore('jobs', () => {
   async function deleteJob(jobId: string) {
     error.value = null
     try {
-      await JobsService.deleteJob(jobId)
+      await deleteJobService(jobId)
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1) {
         jobs.value.splice(idx, 1)
@@ -125,7 +136,7 @@ export const useJobsStore = defineStore('jobs', () => {
   async function assignForemanToJob(jobId: string, foremanId: string) {
     error.value = null
     try {
-      await JobsService.assignForemanToJob(jobId, foremanId)
+      await assignForemanToJobService(jobId, foremanId)
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1) {
         const updated = jobs.value[idx]
@@ -151,7 +162,7 @@ export const useJobsStore = defineStore('jobs', () => {
   async function removeForemanFromJob(jobId: string, foremanId: string) {
     error.value = null
     try {
-      await JobsService.removeForemanFromJob(jobId, foremanId)
+      await removeForemanFromJobService(jobId, foremanId)
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1) {
         const updated = jobs.value[idx]
@@ -176,7 +187,7 @@ export const useJobsStore = defineStore('jobs', () => {
   async function setTimecardStatus(jobId: string, status: 'pending' | 'submitted' | 'archived') {
     error.value = null
     try {
-      await JobsService.updateTimecardStatus(jobId, status)
+      await updateTimecardStatusService(jobId, status)
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1) {
         jobs.value[idx] = { ...jobs.value[idx], timecardStatus: status }
@@ -194,7 +205,7 @@ export const useJobsStore = defineStore('jobs', () => {
   async function setTimecardPeriodEndDate(jobId: string, date: string) {
     error.value = null
     try {
-      await JobsService.setTimecardPeriodEndDate(jobId, date)
+      await setTimecardPeriodEndDateService(jobId, date)
       const idx = jobs.value.findIndex(j => j.id === jobId)
       if (idx !== -1) {
         jobs.value[idx] = { ...jobs.value[idx], timecardPeriodEndDate: date }

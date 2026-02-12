@@ -1,13 +1,14 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
+import { ROLES } from '@/constants/app'
 
 export function useJobAccess() {
   const auth = useAuthStore()
   const jobsStore = useJobsStore()
 
-  const isAdmin = computed(() => auth.role === 'admin')
-  const isForeman = computed(() => auth.role === 'foreman')
+  const isAdmin = computed(() => auth.role === ROLES.ADMIN)
+  const isForeman = computed(() => auth.role === ROLES.FOREMAN)
 
   const visibleActiveJobs = computed(() => {
     const base = jobsStore.activeJobs
@@ -31,7 +32,8 @@ export function useJobAccess() {
   const canAccessJob = (jobId: string): boolean => {
     if (!jobId) return false
     if (isForeman.value) {
-      return auth.assignedJobIds?.includes(jobId) ?? false
+      const assignedJobIds = auth.assignedJobIds ?? []
+      return assignedJobIds.includes(jobId)
     }
     return true
   }

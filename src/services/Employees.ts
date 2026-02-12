@@ -10,7 +10,9 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  type DocumentData,
 } from 'firebase/firestore'
+import { normalizeError } from './serviceUtils'
 
 export type Employee = {
   id: string
@@ -26,7 +28,7 @@ export type Employee = {
 
 export type EmployeeInput = Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>
 
-function normalize(id: string, data: any): Employee {
+function normalize(id: string, data: DocumentData): Employee {
   return {
     id,
     jobId: data.jobId,
@@ -41,14 +43,18 @@ function normalize(id: string, data: any): Employee {
 }
 
 export async function listAllEmployees(): Promise<Employee[]> {
-  const q = query(collection(db, 'employees'))
-  const snap = await getDocs(q)
-  const employees = snap.docs.map(d => normalize(d.id, d.data()))
-  employees.sort((a, b) => {
-    const lastNameCmp = a.lastName.localeCompare(b.lastName)
-    return lastNameCmp !== 0 ? lastNameCmp : a.firstName.localeCompare(b.firstName)
-  })
-  return employees
+  try {
+    const q = query(collection(db, 'employees'))
+    const snap = await getDocs(q)
+    const employees = snap.docs.map((d) => normalize(d.id, d.data()))
+    employees.sort((a, b) => {
+      const lastNameCmp = a.lastName.localeCompare(b.lastName)
+      return lastNameCmp !== 0 ? lastNameCmp : a.firstName.localeCompare(b.firstName)
+    })
+    return employees
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load employees'))
+  }
 }
 
 export async function listEmployeesByJob(jobId: string): Promise<Employee[]> {
@@ -76,29 +82,41 @@ export async function listEmployeesByJob(jobId: string): Promise<Employee[]> {
       })
       return employees
     }
-    throw e
+    throw new Error(normalizeError(e, 'Failed to load employees'))
   }
 }
 
 export async function createEmployee(jobId: string | null, input: Omit<EmployeeInput, 'jobId'>): Promise<string> {
-  const ref = await addDoc(collection(db, 'employees'), {
-    jobId: jobId ?? null,
-    ...input,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
-  return ref.id
+  try {
+    const ref = await addDoc(collection(db, 'employees'), {
+      jobId: jobId ?? null,
+      ...input,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return ref.id
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to create employee'))
+  }
 }
 
 export async function updateEmployee(employeeId: string, updates: Partial<Omit<EmployeeInput, 'jobId'>>) {
-  const ref = doc(db, 'employees', employeeId)
-  await updateDoc(ref, {
-    ...updates,
-    updatedAt: serverTimestamp(),
-  })
+  try {
+    const ref = doc(db, 'employees', employeeId)
+    await updateDoc(ref, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to update employee'))
+  }
 }
 
 export async function deleteEmployee(employeeId: string) {
-  const ref = doc(db, 'employees', employeeId)
-  await deleteDoc(ref)
+  try {
+    const ref = doc(db, 'employees', employeeId)
+    await deleteDoc(ref)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to delete employee'))
+  }
 }

@@ -4,7 +4,7 @@
  * Location: jobs/{jobId}/roster/{employeeId}
  */
 
-import { auth, db } from '../firebase'
+import { db } from '../firebase'
 import {
   addDoc,
   collection,
@@ -16,14 +16,16 @@ import {
   serverTimestamp,
   updateDoc,
   Timestamp,
+  type DocumentData,
 } from 'firebase/firestore'
 import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
-import { useJobAccess } from '@/composables/useJobAccess'
+import { assertJobAccess, requireUser } from './serviceGuards'
+import { normalizeError } from './serviceUtils'
 
 /**
  * Normalize Firestore document to JobRosterEmployee type
  */
-function normalize(id: string, data: any): JobRosterEmployee {
+function normalize(id: string, data: DocumentData): JobRosterEmployee {
   return {
     id,
     jobId: data.jobId,
@@ -57,23 +59,6 @@ function normalize(id: string, data: any): JobRosterEmployee {
 }
 
 /**
- * Helper to require authenticated user
- */
-function requireUser() {
-  const u = auth.currentUser
-  if (!u) throw new Error('Not signed in')
-  return u
-}
-
-const jobAccess = useJobAccess()
-
-const assertJobAccess = (jobId: string) => {
-  if (!jobAccess.canAccessJob(jobId)) {
-    throw new Error('You do not have access to this job')
-  }
-}
-
-/**
  * List all employees in a job roster, sorted by lastName, firstName
  */
 export async function listRosterEmployees(jobId: string): Promise<JobRosterEmployee[]> {
@@ -99,7 +84,7 @@ export async function listRosterEmployees(jobId: string): Promise<JobRosterEmplo
       })
       return employees
     }
-    throw e
+    throw new Error(normalizeError(e, 'Failed to load roster'))
   }
 }
 
@@ -108,8 +93,12 @@ export async function listRosterEmployees(jobId: string): Promise<JobRosterEmplo
  */
 export async function listActiveRosterEmployees(jobId: string): Promise<JobRosterEmployee[]> {
   assertJobAccess(jobId)
-  const all = await listRosterEmployees(jobId)
-  return all.filter(e => e.active)
+  try {
+    const all = await listRosterEmployees(jobId)
+    return all.filter(e => e.active)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load active roster'))
+  }
 }
 
 /**
@@ -121,42 +110,49 @@ export async function addRosterEmployee(
   employee: JobRosterEmployeeInput
 ): Promise<string> {
   assertJobAccess(jobId)
-  const u = requireUser()
-  
-  // Validate employee number is unique within this job
-  const existing = await listRosterEmployees(jobId)
-  const isDuplicate = existing.some(e => e.employeeNumber === employee.employeeNumber)
-  if (isDuplicate) {
-    throw new Error(`Employee number ${employee.employeeNumber} already exists in this job`)
+  try {
+    const u = requireUser()
+    
+    // Validate employee number is unique within this job
+    const existing = await listRosterEmployees(jobId)
+    const isDuplicate = existing.some(e => e.employeeNumber === employee.employeeNumber)
+    if (isDuplicate) {
+      throw new Error(`Employee number ${employee.employeeNumber} already exists in this job`)
+    }
+    
+    // Create the document
+    const ref = await addDoc(collection(db, `jobs/${jobId}/roster`), {
+      jobId,
+      
+      // Identity
+      employeeNumber: employee.employeeNumber.trim(),
+      firstName: employee.firstName.trim(),
+      lastName: employee.lastName.trim(),
+      
+      // Job info
+      occupation: employee.occupation.trim(),
+      contractor: employee.contractor,
+      
+      // Compensation
+      wageRate: employee.wageRate ?? null,
+      unitCost: employee.unitCost ?? null,
+      
+      // Status
+      active: employee.active ?? true,
+      
+      // Metadata
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      addedByUid: u.uid,
+    })
+    
+    return ref.id
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('already exists in this job')) {
+      throw err
+    }
+    throw new Error(normalizeError(err, 'Failed to add roster employee'))
   }
-  
-  // Create the document
-  const ref = await addDoc(collection(db, `jobs/${jobId}/roster`), {
-    jobId,
-    
-    // Identity
-    employeeNumber: employee.employeeNumber.trim(),
-    firstName: employee.firstName.trim(),
-    lastName: employee.lastName.trim(),
-    
-    // Job info
-    occupation: employee.occupation.trim(),
-    contractor: employee.contractor,
-    
-    // Compensation
-    wageRate: employee.wageRate ?? null,
-    unitCost: employee.unitCost ?? null,
-    
-    // Status
-    active: employee.active ?? true,
-    
-    // Metadata
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    addedByUid: u.uid,
-  })
-  
-  return ref.id
 }
 
 /**
@@ -168,32 +164,39 @@ export async function updateRosterEmployee(
   updates: Partial<JobRosterEmployeeInput>
 ): Promise<void> {
   assertJobAccess(jobId)
-  // Validate if employee number is being changed to unique value
-  if (updates.employeeNumber) {
-    const existing = await listRosterEmployees(jobId)
-    const isDuplicate = existing.some(
-      e => e.employeeNumber === updates.employeeNumber && e.id !== employeeId
-    )
-    if (isDuplicate) {
-      throw new Error(`Employee number ${updates.employeeNumber} already exists in this job`)
+  try {
+    // Validate if employee number is being changed to unique value
+    if (updates.employeeNumber) {
+      const existing = await listRosterEmployees(jobId)
+      const isDuplicate = existing.some(
+        e => e.employeeNumber === updates.employeeNumber && e.id !== employeeId
+      )
+      if (isDuplicate) {
+        throw new Error(`Employee number ${updates.employeeNumber} already exists in this job`)
+      }
     }
+    
+    const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
+    const payload: any = {}
+    
+    if ('employeeNumber' in updates) payload.employeeNumber = updates.employeeNumber?.trim()
+    if ('firstName' in updates) payload.firstName = updates.firstName?.trim()
+    if ('lastName' in updates) payload.lastName = updates.lastName?.trim()
+    if ('occupation' in updates) payload.occupation = updates.occupation?.trim()
+    if ('contractor' in updates) payload.contractor = updates.contractor
+    if ('wageRate' in updates) payload.wageRate = updates.wageRate ?? null
+    if ('unitCost' in updates) payload.unitCost = updates.unitCost ?? null
+    if ('active' in updates) payload.active = updates.active
+    
+    payload.updatedAt = serverTimestamp()
+    
+    await updateDoc(ref, payload)
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('already exists in this job')) {
+      throw err
+    }
+    throw new Error(normalizeError(err, 'Failed to update roster employee'))
   }
-  
-  const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
-  const payload: any = {}
-  
-  if ('employeeNumber' in updates) payload.employeeNumber = updates.employeeNumber?.trim()
-  if ('firstName' in updates) payload.firstName = updates.firstName?.trim()
-  if ('lastName' in updates) payload.lastName = updates.lastName?.trim()
-  if ('occupation' in updates) payload.occupation = updates.occupation?.trim()
-  if ('contractor' in updates) payload.contractor = updates.contractor
-  if ('wageRate' in updates) payload.wageRate = updates.wageRate ?? null
-  if ('unitCost' in updates) payload.unitCost = updates.unitCost ?? null
-  if ('active' in updates) payload.active = updates.active
-  
-  payload.updatedAt = serverTimestamp()
-  
-  await updateDoc(ref, payload)
 }
 
 /**
@@ -201,8 +204,12 @@ export async function updateRosterEmployee(
  */
 export async function removeRosterEmployee(jobId: string, employeeId: string): Promise<void> {
   assertJobAccess(jobId)
-  const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
-  await deleteDoc(ref)
+  try {
+    const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
+    await deleteDoc(ref)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to remove roster employee'))
+  }
 }
 
 /**
@@ -210,12 +217,16 @@ export async function removeRosterEmployee(jobId: string, employeeId: string): P
  */
 export async function getRosterEmployee(jobId: string, employeeId: string): Promise<JobRosterEmployee | null> {
   assertJobAccess(jobId)
-  const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
-  // Note: Using getDoc when available from firestore
-  const { getDoc } = await import('firebase/firestore')
-  const snap = await getDoc(ref)
-  if (!snap.exists()) return null
-  return normalize(snap.id, snap.data())
+  try {
+    const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
+    // Note: Using getDoc when available from firestore
+    const { getDoc } = await import('firebase/firestore')
+    const snap = await getDoc(ref)
+    if (!snap.exists()) return null
+    return normalize(snap.id, snap.data())
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load roster employee'))
+  }
 }
 
 /**
@@ -223,16 +234,20 @@ export async function getRosterEmployee(jobId: string, employeeId: string): Prom
  */
 export async function searchRosterEmployees(jobId: string, searchTerm: string): Promise<JobRosterEmployee[]> {
   assertJobAccess(jobId)
-  const all = await listRosterEmployees(jobId)
-  const term = searchTerm.toLowerCase()
-  
-  return all.filter(
-    e =>
-      e.firstName.toLowerCase().includes(term) ||
-      e.lastName.toLowerCase().includes(term) ||
-      e.employeeNumber.includes(term) ||
-      e.occupation.toLowerCase().includes(term)
-  )
+  try {
+    const all = await listRosterEmployees(jobId)
+    const term = searchTerm.toLowerCase()
+    
+    return all.filter(
+      e =>
+        e.firstName.toLowerCase().includes(term) ||
+        e.lastName.toLowerCase().includes(term) ||
+        e.employeeNumber.includes(term) ||
+        e.occupation.toLowerCase().includes(term)
+    )
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to search roster'))
+  }
 }
 
 /**
@@ -245,13 +260,17 @@ export async function getRosterStats(jobId: string): Promise<{
   withContractors: number
 }> {
   assertJobAccess(jobId)
-  const all = await listRosterEmployees(jobId)
-  
-  return {
-    total: all.length,
-    active: all.filter(e => e.active).length,
-    inactive: all.filter(e => !e.active).length,
-    withContractors: all.filter(e => e.contractor).length,
+  try {
+    const all = await listRosterEmployees(jobId)
+    
+    return {
+      total: all.length,
+      active: all.filter(e => e.active).length,
+      inactive: all.filter(e => !e.active).length,
+      withContractors: all.filter(e => e.contractor).length,
+    }
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load roster stats'))
   }
 }
 
@@ -261,39 +280,43 @@ export async function getRosterStats(jobId: string): Promise<{
  */
 export async function exportRosterToCsv(jobId: string): Promise<string> {
   assertJobAccess(jobId)
-  const employees = await listRosterEmployees(jobId)
-  
-  // CSV header
-  const headers = [
-    'Employee #',
-    'First Name',
-    'Last Name',
-    'Occupation',
-    'Contractor',
-    'Contractor Category',
-    'Wage Rate',
-    'Unit Cost',
-    'Status',
-  ]
-  
-  // CSV rows
-  const rows = employees.map(e => [
-    e.employeeNumber,
-    e.firstName,
-    e.lastName,
-    e.occupation,
-    e.contractor?.name || '',
-    e.contractor?.category || '',
-    e.wageRate?.toString() || '',
-    e.unitCost?.toString() || '',
-    e.active ? 'Active' : 'Inactive',
-  ])
-  
-  // Combine with proper escaping
-  const csv = [
-    headers.map(h => `"${h}"`).join(','),
-    ...rows.map(r => r.map(v => `"${v}"`).join(',')),
-  ].join('\n')
-  
-  return csv
+  try {
+    const employees = await listRosterEmployees(jobId)
+    
+    // CSV header
+    const headers = [
+      'Employee #',
+      'First Name',
+      'Last Name',
+      'Occupation',
+      'Contractor',
+      'Contractor Category',
+      'Wage Rate',
+      'Unit Cost',
+      'Status',
+    ]
+    
+    // CSV rows
+    const rows = employees.map(e => [
+      e.employeeNumber,
+      e.firstName,
+      e.lastName,
+      e.occupation,
+      e.contractor?.name || '',
+      e.contractor?.category || '',
+      e.wageRate?.toString() || '',
+      e.unitCost?.toString() || '',
+      e.active ? 'Active' : 'Inactive',
+    ])
+    
+    // Combine with proper escaping
+    const csv = [
+      headers.map(h => `"${h}"`).join(','),
+      ...rows.map(r => r.map(v => `"${v}"`).join(',')),
+    ].join('\n')
+    
+    return csv
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to export roster'))
+  }
 }

@@ -1,4 +1,4 @@
-import { auth, db } from '../firebase'
+import { db } from '../firebase'
 import {
   collection,
   deleteDoc,
@@ -13,6 +13,9 @@ import {
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../firebase'
 import type { UserProfile as UserProfileModel, Role } from '@/types/models'
+import { ROLES } from '@/constants/app'
+import { requireUser } from './serviceGuards'
+import { normalizeError } from './serviceUtils'
 
 // Export as both old name (backward compatibility) and new name
 export type UserProfile = UserProfileModel
@@ -23,7 +26,7 @@ function normalizeUser(id: string, data: DocumentData): UserProfile {
     email: data.email ?? null,
     firstName: data.firstName ?? null,
     lastName: data.lastName ?? null,
-    role: (data.role ?? 'none') as Role,
+    role: (data.role as Role) ?? ROLES.NONE,
     active: typeof data.active === 'boolean' ? data.active : true,
     assignedJobIds: Array.isArray(data.assignedJobIds) ? data.assignedJobIds : [],
     createdAt: data.createdAt,
@@ -35,26 +38,31 @@ function normalizeUser(id: string, data: DocumentData): UserProfile {
  * Fetch the current signed-in user's Firestore profile (users/{uid}).
  */
 export async function getMyUserProfile(): Promise<UserProfile | null> {
-  const u = auth.currentUser
-  if (!u) return null
+  try {
+    const u = requireUser()
 
-  const snap = await getDoc(doc(db, 'users', u.uid))
-  if (!snap.exists()) return null
+    const snap = await getDoc(doc(db, 'users', u.uid))
+    if (!snap.exists()) return null
 
-  return normalizeUser(snap.id, snap.data())
+    return normalizeUser(snap.id, snap.data())
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load user profile'))
+  }
 }
 
 /**
  * Admin: list all user profiles in Firestore (users collection).
  */
 export async function listUsers(): Promise<UserProfile[]> {
-  // Ensure user is signed in
-  const u = auth.currentUser
-  if (!u) throw new Error('Not signed in')
+  try {
+    requireUser()
 
-  const q = query(collection(db, 'users'), orderBy('email', 'asc'))
-  const snap = await getDocs(q)
-  return snap.docs.map((d) => normalizeUser(d.id, d.data()))
+    const q = query(collection(db, 'users'), orderBy('email', 'asc'))
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => normalizeUser(d.id, d.data()))
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load users'))
+  }
 }
 
 /**
@@ -65,17 +73,21 @@ export async function updateUser(
   uid: string,
   updates: Partial<Pick<UserProfile, 'firstName' | 'lastName' | 'role' | 'active' | 'assignedJobIds'>>
 ): Promise<void> {
-  const ref = doc(db, 'users', uid)
+  try {
+    const ref = doc(db, 'users', uid)
 
-  const payload: Record<string, any> = {}
+    const payload: Record<string, any> = {}
 
-  if ('firstName' in updates) payload.firstName = updates.firstName ?? null
-  if ('lastName' in updates) payload.lastName = updates.lastName ?? null
-  if ('role' in updates && updates.role) payload.role = updates.role
-  if ('active' in updates && typeof updates.active === 'boolean') payload.active = updates.active
-  if ('assignedJobIds' in updates) payload.assignedJobIds = updates.assignedJobIds ?? []
+    if ('firstName' in updates) payload.firstName = updates.firstName ?? null
+    if ('lastName' in updates) payload.lastName = updates.lastName ?? null
+    if ('role' in updates && updates.role) payload.role = updates.role
+    if ('active' in updates && typeof updates.active === 'boolean') payload.active = updates.active
+    if ('assignedJobIds' in updates) payload.assignedJobIds = updates.assignedJobIds ?? []
 
-  await updateDoc(ref, payload)
+    await updateDoc(ref, payload)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to update user'))
+  }
 }
 
 /**
@@ -84,7 +96,11 @@ export async function updateUser(
  */
 export async function deleteUser(uid: string): Promise<void> {
   const callable = httpsCallable(functions, 'deleteUser')
-  await callable({ uid })
+  try {
+    await callable({ uid })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to delete user'))
+  }
 }
 
 /**
@@ -98,8 +114,12 @@ export async function createUserByAdmin(
   role?: Role
 ): Promise<{ success: boolean; message: string; uid: string }> {
   const callable = httpsCallable(functions, 'createUserByAdmin')
-  const result = await callable({ email, firstName, lastName, role })
-  return result.data as any
+  try {
+    const result = await callable({ email, firstName, lastName, role })
+    return result.data as any
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to create user'))
+  }
 }
 
 // ============================================================================
@@ -110,24 +130,35 @@ export async function createUserByAdmin(
  * Get a foreman's assigned jobs
  */
 export async function getForemanAssignedJobs(foremanId: string): Promise<string[]> {
-  const snap = await getDoc(doc(db, 'users', foremanId))
-  if (!snap.exists()) return []
-  const data = snap.data()
-  return Array.isArray(data.assignedJobIds) ? data.assignedJobIds : []
+  try {
+    const snap = await getDoc(doc(db, 'users', foremanId))
+    if (!snap.exists()) return []
+    const data = snap.data()
+    return Array.isArray(data.assignedJobIds) ? data.assignedJobIds : []
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load foreman jobs'))
+  }
 }
 
 /**
  * Assign a job to a foreman
  */
 export async function assignJobToForeman(foremanId: string, jobId: string): Promise<void> {
-  const ref = doc(db, 'users', foremanId)
-  const snap = await getDoc(ref)
-  if (!snap.exists()) throw new Error('User not found')
-  
-  const current = snap.data().assignedJobIds ?? []
-  if (!current.includes(jobId)) {
-    current.push(jobId)
-    await updateDoc(ref, { assignedJobIds: current })
+  try {
+    const ref = doc(db, 'users', foremanId)
+    const snap = await getDoc(ref)
+    if (!snap.exists()) throw new Error('User not found')
+    
+    const current = snap.data().assignedJobIds ?? []
+    if (!current.includes(jobId)) {
+      current.push(jobId)
+      await updateDoc(ref, { assignedJobIds: current })
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'User not found') {
+      throw err
+    }
+    throw new Error(normalizeError(err, 'Failed to assign job to foreman'))
   }
 }
 
@@ -135,38 +166,52 @@ export async function assignJobToForeman(foremanId: string, jobId: string): Prom
  * Remove a job from a foreman
  */
 export async function removeJobFromForeman(foremanId: string, jobId: string): Promise<void> {
-  const ref = doc(db, 'users', foremanId)
-  const snap = await getDoc(ref)
-  if (!snap.exists()) throw new Error('User not found')
-  
-  const current = snap.data().assignedJobIds ?? []
-  const updated = current.filter((id: string) => id !== jobId)
-  await updateDoc(ref, { assignedJobIds: updated })
+  try {
+    const ref = doc(db, 'users', foremanId)
+    const snap = await getDoc(ref)
+    if (!snap.exists()) throw new Error('User not found')
+    
+    const current = snap.data().assignedJobIds ?? []
+    const updated = current.filter((id: string) => id !== jobId)
+    await updateDoc(ref, { assignedJobIds: updated })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'User not found') {
+      throw err
+    }
+    throw new Error(normalizeError(err, 'Failed to remove job from foreman'))
+  }
 }
 
 /**
  * Set all jobs for a foreman (replaces existing)
  */
 export async function setForemanJobs(foremanId: string, jobIds: string[]): Promise<void> {
-  const ref = doc(db, 'users', foremanId)
-  await updateDoc(ref, { assignedJobIds: jobIds })
+  try {
+    const ref = doc(db, 'users', foremanId)
+    await updateDoc(ref, { assignedJobIds: jobIds })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to set foreman jobs'))
+  }
 }
 
 /**
  * List all foremen (users with role 'foreman')
  */
 export async function listForemen(): Promise<UserProfile[]> {
-  const u = auth.currentUser
-  if (!u) throw new Error('Not signed in')
+  try {
+    requireUser()
 
-  const q = query(
-    collection(db, 'users'),
-    orderBy('email', 'asc')
-  )
-  const snap = await getDocs(q)
-  return snap.docs
-    .map((d) => normalizeUser(d.id, d.data()))
-    .filter(user => user.role === 'foreman')
+    const q = query(
+      collection(db, 'users'),
+      orderBy('email', 'asc')
+    )
+    const snap = await getDocs(q)
+    return snap.docs
+      .map((d) => normalizeUser(d.id, d.data()))
+      .filter((user) => user.role === ROLES.FOREMAN)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load foremen'))
+  }
 }
 
 /**
@@ -174,11 +219,14 @@ export async function listForemen(): Promise<UserProfile[]> {
  * Used by admin to see who manages a job
  */
 export async function getForemenForJob(jobId: string): Promise<UserProfile[]> {
-  const u = auth.currentUser
-  if (!u) throw new Error('Not signed in')
+  try {
+    requireUser()
 
-  const allForemen = await listForemen()
-  return allForemen.filter(foreman =>
-    foreman.assignedJobIds?.includes(jobId)
-  )
+    const allForemen = await listForemen()
+    return allForemen.filter(foreman =>
+      foreman.assignedJobIds?.includes(jobId)
+    )
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load foremen for job'))
+  }
 }

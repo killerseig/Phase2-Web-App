@@ -6,3 +6,4 @@
 export * from './shared'
 export * from './validation'
 export * from './errorHandler'
+export * from './emailValidation'

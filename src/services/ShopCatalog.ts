@@ -10,7 +10,9 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  type DocumentData,
 } from 'firebase/firestore'
+import { normalizeError } from './serviceUtils'
 
 export type ShopCatalogItem = {
   id: string
@@ -32,7 +34,7 @@ export type ShopCategory = {
   updatedAt?: any
 }
 
-function normalize(id: string, data: any): ShopCatalogItem {
+function normalize(id: string, data: DocumentData): ShopCatalogItem {
   return {
     id,
     description: data.description ?? '',
@@ -45,7 +47,7 @@ function normalize(id: string, data: any): ShopCatalogItem {
   }
 }
 
-function normalizeCategory(id: string, data: any): ShopCategory {
+function normalizeCategory(id: string, data: DocumentData): ShopCategory {
   return {
     id,
     name: data.name ?? '',
@@ -57,106 +59,150 @@ function normalizeCategory(id: string, data: any): ShopCategory {
 }
 
 export async function listCatalog(activeOnly = true): Promise<ShopCatalogItem[]> {
-  // This query may require an index if you keep the where+orderBy combo.
-  // If Firestore asks, create index for: active ASC, description ASC
-  const q = activeOnly
-    ? query(collection(db, 'shopCatalog'), where('active', '==', true), orderBy('description', 'asc'))
-    : query(collection(db, 'shopCatalog'), orderBy('description', 'asc'))
+  try {
+    // This query may require an index if you keep the where+orderBy combo.
+    // If Firestore asks, create index for: active ASC, description ASC
+    const q = activeOnly
+      ? query(collection(db, 'shopCatalog'), where('active', '==', true), orderBy('description', 'asc'))
+      : query(collection(db, 'shopCatalog'), orderBy('description', 'asc'))
 
-  const snap = await getDocs(q)
-  return snap.docs.map(d => normalize(d.id, d.data()))
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => normalize(d.id, d.data()))
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load catalog'))
+  }
 }
 
 export async function createCatalogItem(description: string, categoryId?: string, sku?: string, price?: number) {
-  const ref = await addDoc(collection(db, 'shopCatalog'), {
-    description: description.trim(),
-    categoryId: categoryId || null,
-    sku: sku?.trim() || null,
-    price: price ?? null,
-    active: true,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
-  return ref.id
+  try {
+    const ref = await addDoc(collection(db, 'shopCatalog'), {
+      description: description.trim(),
+      categoryId: categoryId || null,
+      sku: sku?.trim() || null,
+      price: price ?? null,
+      active: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return ref.id
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to create catalog item'))
+  }
 }
 
 export async function updateCatalogItem(itemId: string, updates: { description?: string; sku?: string; price?: number }) {
-  const ref = doc(db, 'shopCatalog', itemId)
-  
-  // Filter out undefined values - Firestore doesn't accept undefined
-  const filteredUpdates = Object.fromEntries(
-    Object.entries(updates).filter(([_, v]) => v !== undefined)
-  )
-  
-  await updateDoc(ref, {
-    ...filteredUpdates,
-    updatedAt: serverTimestamp(),
-  })
+  try {
+    const ref = doc(db, 'shopCatalog', itemId)
+    
+    // Filter out undefined values - Firestore doesn't accept undefined
+    const filteredUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([_, v]) => v !== undefined)
+    )
+    
+    await updateDoc(ref, {
+      ...filteredUpdates,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to update catalog item'))
+  }
 }
 
 export async function setCatalogItemActive(itemId: string, active: boolean) {
-  const ref = doc(db, 'shopCatalog', itemId)
-  await updateDoc(ref, {
-    active,
-    updatedAt: serverTimestamp(),
-  })
+  try {
+    const ref = doc(db, 'shopCatalog', itemId)
+    await updateDoc(ref, {
+      active,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to update catalog item'))
+  }
 }
 
 export async function deleteCatalogItem(itemId: string) {
-  const ref = doc(db, 'shopCatalog', itemId)
-  await deleteDoc(ref)
+  try {
+    const ref = doc(db, 'shopCatalog', itemId)
+    await deleteDoc(ref)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to delete catalog item'))
+  }
 }
 
 /* ============= SHOP CATEGORIES ============= */
 
 export async function getAllCategories(): Promise<ShopCategory[]> {
-  const q = query(collection(db, 'shopCategories'), orderBy('name', 'asc'))
-  const snap = await getDocs(q)
-  return snap.docs.map(d => normalizeCategory(d.id, d.data()))
+  try {
+    const q = query(collection(db, 'shopCategories'), orderBy('name', 'asc'))
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => normalizeCategory(d.id, d.data()))
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load categories'))
+  }
 }
 
 export async function createCategory(name: string, parentId: string | null = null): Promise<ShopCategory> {
-  const ref = await addDoc(collection(db, 'shopCategories'), {
-    name: name.trim(),
-    parentId: parentId || null,
-    active: true,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
-  
-  // Fetch the created document to get serverTimestamp values
-  const snap = await getDocs(query(collection(db, 'shopCategories'), where('__name__', '==', ref.id)))
-  const doc = snap.docs[0]
-  return normalizeCategory(doc.id, doc.data())
+  try {
+    const ref = await addDoc(collection(db, 'shopCategories'), {
+      name: name.trim(),
+      parentId: parentId || null,
+      active: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    
+    // Fetch the created document to get serverTimestamp values
+    const snap = await getDocs(query(collection(db, 'shopCategories'), where('__name__', '==', ref.id)))
+    const doc = snap.docs[0]
+    return normalizeCategory(doc.id, doc.data())
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to create category'))
+  }
 }
 
 export async function updateCategory(categoryId: string, updates: { name?: string; active?: boolean }): Promise<void> {
-  const ref = doc(db, 'shopCategories', categoryId)
-  await updateDoc(ref, {
-    ...updates,
-    updatedAt: serverTimestamp(),
-  })
+  try {
+    const ref = doc(db, 'shopCategories', categoryId)
+    await updateDoc(ref, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to update category'))
+  }
 }
 
 export async function archiveCategory(categoryId: string): Promise<void> {
-  const ref = doc(db, 'shopCategories', categoryId)
-  await updateDoc(ref, {
-    active: false,
-    updatedAt: serverTimestamp(),
-  })
+  try {
+    const ref = doc(db, 'shopCategories', categoryId)
+    await updateDoc(ref, {
+      active: false,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to archive category'))
+  }
 }
 
 export async function reactivateCategory(categoryId: string): Promise<void> {
-  const ref = doc(db, 'shopCategories', categoryId)
-  await updateDoc(ref, {
-    active: true,
-    updatedAt: serverTimestamp(),
-  })
+  try {
+    const ref = doc(db, 'shopCategories', categoryId)
+    await updateDoc(ref, {
+      active: true,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to reactivate category'))
+  }
 }
 
 export async function deleteCategory(categoryId: string): Promise<void> {
-  const ref = doc(db, 'shopCategories', categoryId)
-  await deleteDoc(ref)
+  try {
+    const ref = doc(db, 'shopCategories', categoryId)
+    await deleteDoc(ref)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to delete category'))
+  }
 }
 
 export const ShopCatalogService = {

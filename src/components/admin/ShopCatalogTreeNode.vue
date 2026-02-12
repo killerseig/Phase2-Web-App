@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { ShopCatalogItem } from '../../services/ShopCatalog'
 import { useShopCategoriesStore } from '../../stores/shopCategories'
+import type { ShopCatalogItem } from '@/services'
 
 defineOptions({ name: 'ShopCatalogTreeNode' })
 

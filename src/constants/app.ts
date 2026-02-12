@@ -14,8 +14,8 @@ export const ROLES = {
 
 export type Role = typeof ROLES[keyof typeof ROLES]
 
-// Valid roles array for validation
-export const VALID_ROLES = ['admin', 'employee', 'shop', 'foreman', 'none'] as const
+// Valid roles array for validation (derived from ROLES to avoid drift)
+export const VALID_ROLES = Object.values(ROLES) as Role[]
 
 // Route Paths
 export const ROUTES = {

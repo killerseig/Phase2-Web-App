@@ -24,6 +24,10 @@ export function normalizeFSDoc<T extends Record<string, any>>(
  * Handle Firebase errors and convert to ApiResponse
  */
 export function handleFirebaseError(error: any): ApiResponse {
+  if (!error) {
+    return errorResponse(ErrorCodes.INTERNAL_ERROR, 'An unexpected error occurred')
+  }
+
   if (error.code === 'permission-denied') {
     return errorResponse(ErrorCodes.PERMISSION_DENIED, 'You do not have permission to perform this action')
   }
@@ -42,7 +46,7 @@ export function handleFirebaseError(error: any): ApiResponse {
 /**
  * Validate required fields in an object
  */
-export function validateRequired(
+export function validateRequiredFields(
   obj: Record<string, any>,
   fields: string[]
 ): { valid: boolean; missing?: string[] } {

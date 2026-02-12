@@ -9,8 +9,7 @@ import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 import { useShopCatalogStore } from '../stores/shopCatalog'
 import { useShopCategoriesStore } from '../stores/shopCategories'
-import { useShopService } from '../services/useShopService'
-import { createShopOrder } from '../services/ShopOrders'
+import { createShopOrder, useShopService } from '@/services'
 import { useJobAccess } from '@/composables/useJobAccess'
 
 defineProps<{ jobId?: string }>()

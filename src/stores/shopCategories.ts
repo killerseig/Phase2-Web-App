@@ -14,7 +14,14 @@ export interface CategoryNode extends ShopCategory {
   children: CategoryNode[]
 }
 
-import { ShopCatalogService } from '@/services/ShopCatalog'
+import {
+  archiveCategory,
+  createCategory,
+  deleteCategory,
+  getAllCategories,
+  reactivateCategory,
+  updateCategory,
+} from '@/services'
 
 export const useShopCategoriesStore = defineStore('shopCategories', () => {
   const categories = ref<ShopCategory[]>([])
@@ -96,7 +103,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     isLoading.value = true
     error.value = null
     try {
-      categories.value = await ShopCatalogService.getAllCategories()
+      categories.value = await getAllCategories()
       console.log('[ShopCategories Store] Fetched categories:', categories.value)
     } catch (e: any) {
       error.value = e?.message || 'Failed to fetch categories'
@@ -112,7 +119,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
   async function createCategory(name: string, parentId: string | null = null): Promise<ShopCategory> {
     try {
       console.log('[ShopCategories Store] Creating category:', { name, parentId })
-      const newCat = await ShopCatalogService.createCategory(name, parentId)
+      const newCat = await createCategory(name, parentId)
       console.log('[ShopCategories Store] Category created from service:', { id: newCat.id, name: newCat.name, parentId: newCat.parentId })
       categories.value.push(newCat)
       console.log('[ShopCategories Store] Categories after push:', categories.value.map(c => ({ id: c.id, name: c.name, parentId: c.parentId })))
@@ -129,7 +136,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
    */
   async function updateCategory(id: string, updates: { name?: string; active?: boolean }): Promise<void> {
     try {
-      await ShopCatalogService.updateCategory(id, updates)
+      await updateCategory(id, updates)
       const cat = categories.value.find(c => c.id === id)
       if (cat) {
         if (updates.name) cat.name = updates.name
@@ -153,7 +160,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
       const allToArchive = [id, ...descendants.map(d => d.id)]
 
       // Archive all in batch
-      await Promise.all(allToArchive.map(catId => ShopCatalogService.archiveCategory(catId)))
+      await Promise.all(allToArchive.map(catId => archiveCategory(catId)))
 
       // Update local state
       for (const catId of allToArchive) {
@@ -175,7 +182,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
    */
   async function reactivateCategory(id: string): Promise<void> {
     try {
-      await ShopCatalogService.reactivateCategory(id)
+      await reactivateCategory(id)
       const cat = categories.value.find(c => c.id === id)
       if (cat) {
         cat.active = true
@@ -198,7 +205,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
         throw new Error('Cannot delete category with subcategories')
       }
 
-      await ShopCatalogService.deleteCategory(id)
+      await deleteCategory(id)
       categories.value = categories.value.filter(c => c.id !== id)
     } catch (e: any) {
       error.value = e?.message || 'Failed to delete category'

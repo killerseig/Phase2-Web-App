@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import EmailRecipientInput from '../../components/admin/EmailRecipientInput.vue'
-import { listAllJobs, type Job, updateDailyLogRecipients } from '../../services/Jobs'
+import { listAllJobs, updateDailyLogRecipients, type Job } from '@/services'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 

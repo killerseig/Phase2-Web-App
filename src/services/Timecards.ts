@@ -4,7 +4,7 @@
  * Location: jobs/{jobId}/timecards/{timecardId}
  */
 
-import { auth, db } from '../firebase'
+import { db } from '../firebase'
 import {
   addDoc,
   collection,
@@ -20,32 +20,17 @@ import {
   where,
   onSnapshot,
   type Unsubscribe,
+  type DocumentData,
 } from 'firebase/firestore'
 import type { Timecard, TimecardInput, TimecardDay, TimecardTotals } from '@/types/models'
 import { calculateWeekStartDate } from '@/utils/modelValidation'
-import { useJobAccess } from '@/composables/useJobAccess'
-
-/**
- * Helper to require authenticated user
- */
-function requireUser() {
-  const u = auth.currentUser
-  if (!u) throw new Error('Not signed in')
-  return u
-}
-
-const jobAccess = useJobAccess()
-
-const assertJobAccess = (jobId: string) => {
-  if (!jobAccess.canAccessJob(jobId)) {
-    throw new Error('You do not have access to this job')
-  }
-}
+import { assertJobAccess, requireUser } from './serviceGuards'
+import { normalizeError } from './serviceUtils'
 
 /**
  * Normalize Firestore document to Timecard type
  */
-function normalize(id: string, data: any): Timecard {
+function normalize(id: string, data: DocumentData): Timecard {
   return {
     id,
     jobId: data.jobId,
@@ -122,27 +107,35 @@ export async function listTimecardsByJobAndWeek(
   jobId: string,
   weekEndingDate: string
 ): Promise<Timecard[]> {
-  assertJobAccess(jobId)
-  const q = query(
-    collection(db, `jobs/${jobId}/timecards`),
-    where('weekEndingDate', '==', weekEndingDate),
-    where('archived', '==', false),
-    orderBy('employeeNumber', 'asc')
-  )
+  try {
+    assertJobAccess(jobId)
+    const q = query(
+      collection(db, `jobs/${jobId}/timecards`),
+      where('weekEndingDate', '==', weekEndingDate),
+      where('archived', '==', false),
+      orderBy('employeeNumber', 'asc')
+    )
 
-  const snap = await getDocs(q)
-  return snap.docs.map(d => normalize(d.id, d.data()))
+    const snap = await getDocs(q)
+    return snap.docs.map(d => normalize(d.id, d.data()))
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load timecards for week'))
+  }
 }
 
 /**
  * Get a single timecard by ID
  */
 export async function getTimecard(jobId: string, timecardId: string): Promise<Timecard | null> {
-  assertJobAccess(jobId)
-  const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
-  const snap = await getDoc(ref)
-  if (!snap.exists()) return null
-  return normalize(snap.id, snap.data())
+  try {
+    assertJobAccess(jobId)
+    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const snap = await getDoc(ref)
+    if (!snap.exists()) return null
+    return normalize(snap.id, snap.data())
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load timecard'))
+  }
 }
 
 /**
@@ -152,44 +145,52 @@ export async function listJobTimecards(
   jobId: string,
   options?: { max?: number; includeArchived?: boolean }
 ): Promise<Timecard[]> {
-  assertJobAccess(jobId)
-  const includeArchived = options?.includeArchived ?? false
-  const maxResults = options?.max ?? 50
+  try {
+    assertJobAccess(jobId)
+    const includeArchived = options?.includeArchived ?? false
+    const maxResults = options?.max ?? 50
 
-  let q = query(
-    collection(db, `jobs/${jobId}/timecards`),
-    orderBy('weekEndingDate', 'desc'),
-    limit(maxResults)
-  )
-
-  // If not including archived, add where clause
-  if (!includeArchived) {
-    q = query(
+    let q = query(
       collection(db, `jobs/${jobId}/timecards`),
-      where('archived', '==', false),
       orderBy('weekEndingDate', 'desc'),
       limit(maxResults)
     )
-  }
 
-  const snap = await getDocs(q)
-  return snap.docs.map(d => normalize(d.id, d.data()))
+    // If not including archived, add where clause
+    if (!includeArchived) {
+      q = query(
+        collection(db, `jobs/${jobId}/timecards`),
+        where('archived', '==', false),
+        orderBy('weekEndingDate', 'desc'),
+        limit(maxResults)
+      )
+    }
+
+    const snap = await getDocs(q)
+    return snap.docs.map(d => normalize(d.id, d.data()))
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load timecards'))
+  }
 }
 
 /**
  * List submitted timecards for a job (ready for export/approval)
  */
 export async function listSubmittedTimecards(jobId: string): Promise<Timecard[]> {
-  assertJobAccess(jobId)
-  const q = query(
-    collection(db, `jobs/${jobId}/timecards`),
-    where('status', '==', 'submitted'),
-    where('archived', '==', false),
-    orderBy('weekEndingDate', 'desc')
-  )
+  try {
+    assertJobAccess(jobId)
+    const q = query(
+      collection(db, `jobs/${jobId}/timecards`),
+      where('status', '==', 'submitted'),
+      where('archived', '==', false),
+      orderBy('weekEndingDate', 'desc')
+    )
 
-  const snap = await getDocs(q)
-  return snap.docs.map(d => normalize(d.id, d.data()))
+    const snap = await getDocs(q)
+    return snap.docs.map(d => normalize(d.id, d.data()))
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load submitted timecards'))
+  }
 }
 
 /**
@@ -200,18 +201,22 @@ export async function watchTimecardsByWeek(
   weekEndingDate: string,
   onUpdate: (timecards: Timecard[]) => void
 ): Promise<Unsubscribe> {
-  assertJobAccess(jobId)
-  const q = query(
-    collection(db, `jobs/${jobId}/timecards`),
-    where('weekEndingDate', '==', weekEndingDate),
-    where('archived', '==', false),
-    orderBy('employeeNumber', 'asc')
-  )
+  try {
+    assertJobAccess(jobId)
+    const q = query(
+      collection(db, `jobs/${jobId}/timecards`),
+      where('weekEndingDate', '==', weekEndingDate),
+      where('archived', '==', false),
+      orderBy('employeeNumber', 'asc')
+    )
 
-  return onSnapshot(q, snap => {
-    const timecards = snap.docs.map(d => normalize(d.id, d.data()))
-    onUpdate(timecards)
-  })
+    return onSnapshot(q, snap => {
+      const timecards = snap.docs.map(d => normalize(d.id, d.data()))
+      onUpdate(timecards)
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to watch timecards'))
+  }
 }
 
 // ============================================================================
@@ -222,50 +227,54 @@ export async function watchTimecardsByWeek(
  * Create a new timecard
  */
 export async function createTimecard(jobId: string, input: TimecardInput): Promise<string> {
-  assertJobAccess(jobId)
-  const u = requireUser()
+  try {
+    assertJobAccess(jobId)
+    const u = requireUser()
 
-  // Calculate totals from days
-  const totals = calculateTotals(input.days)
+    // Calculate totals from days
+    const totals = calculateTotals(input.days)
 
-  // Calculate week start from week end
-  const weekStartDate = calculateWeekStartDate(input.weekEndingDate)
+    // Calculate week start from week end
+    const weekStartDate = calculateWeekStartDate(input.weekEndingDate)
 
-  const ref = await addDoc(collection(db, `jobs/${jobId}/timecards`), {
-    jobId,
+    const ref = await addDoc(collection(db, `jobs/${jobId}/timecards`), {
+      jobId,
 
-    // Weekly tracking
-    weekStartDate,
-    weekEndingDate: input.weekEndingDate,
+      // Weekly tracking
+      weekStartDate,
+      weekEndingDate: input.weekEndingDate,
 
-    // Submission
-    status: 'draft',
-    uid: u.uid,
-    createdByUid: u.uid,
-    submittedAt: null,
+      // Submission
+      status: 'draft',
+      uid: u.uid,
+      createdByUid: u.uid,
+      submittedAt: null,
 
-    // Employee reference
-    employeeRosterId: input.employeeRosterId,
-    employeeNumber: input.employeeNumber,
-    employeeName: input.employeeName,
-    occupation: input.occupation,
+      // Employee reference
+      employeeRosterId: input.employeeRosterId,
+      employeeNumber: input.employeeNumber,
+      employeeName: input.employeeName,
+      occupation: input.occupation,
 
-    // Daily entries & totals
-    days: input.days,
-    totals,
+      // Daily entries & totals
+      days: input.days,
+      totals,
 
-    // Notes
-    notes: input.notes ?? '',
+      // Notes
+      notes: input.notes ?? '',
 
-    // Archival
-    archived: false,
-    archivedAt: null,
+      // Archival
+      archived: false,
+      archivedAt: null,
 
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
 
-  return ref.id
+    return ref.id
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to create timecard'))
+  }
 }
 
 /**
@@ -276,27 +285,31 @@ export async function updateTimecard(
   timecardId: string,
   updates: Partial<TimecardInput>
 ): Promise<void> {
-  assertJobAccess(jobId)
-  const u = requireUser()
-  const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+  try {
+    assertJobAccess(jobId)
+    const u = requireUser()
+    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
-  const payload: any = {}
+    const payload: any = {}
 
-  if ('days' in updates && updates.days) {
-    payload.days = updates.days
-    // Recalculate totals when days change
-    payload.totals = calculateTotals(updates.days)
+    if ('days' in updates && updates.days) {
+      payload.days = updates.days
+      // Recalculate totals when days change
+      payload.totals = calculateTotals(updates.days)
+    }
+
+    if ('jobs' in updates) payload.jobs = updates.jobs ?? []
+    if ('notes' in updates) payload.notes = updates.notes ?? ''
+    if ('employeeNumber' in updates) payload.employeeNumber = updates.employeeNumber
+    if ('employeeName' in updates) payload.employeeName = updates.employeeName
+    if ('occupation' in updates) payload.occupation = updates.occupation
+
+    payload.updatedAt = serverTimestamp()
+
+    await updateDoc(ref, payload)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to update timecard'))
   }
-
-  if ('jobs' in updates) payload.jobs = updates.jobs ?? []
-  if ('notes' in updates) payload.notes = updates.notes ?? ''
-  if ('employeeNumber' in updates) payload.employeeNumber = updates.employeeNumber
-  if ('employeeName' in updates) payload.employeeName = updates.employeeName
-  if ('occupation' in updates) payload.occupation = updates.occupation
-
-  payload.updatedAt = serverTimestamp()
-
-  await updateDoc(ref, payload)
 }
 
 /**
@@ -307,18 +320,22 @@ export async function updateTimecardDays(
   timecardId: string,
   days: TimecardDay[]
 ): Promise<void> {
-  assertJobAccess(jobId)
-  const u = requireUser()
-  const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+  try {
+    assertJobAccess(jobId)
+    const u = requireUser()
+    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
-  const totals = calculateTotals(days)
+    const totals = calculateTotals(days)
 
-  await updateDoc(ref, {
-    uid: u.uid,
-    days,
-    totals,
-    updatedAt: serverTimestamp(),
-  })
+    await updateDoc(ref, {
+      uid: u.uid,
+      days,
+      totals,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to update timecard days'))
+  }
 }
 
 // ============================================================================
@@ -335,18 +352,22 @@ export async function getPreviousWeekTimecards(
   jobId: string,
   weekEndingDate: string
 ): Promise<Timecard[]> {
-  assertJobAccess(jobId)
-  // Calculate previous week's Saturday
-  const currentWeekEnd = new Date(weekEndingDate + 'T00:00:00Z')
-  const previousWeekEnd = new Date(currentWeekEnd)
-  previousWeekEnd.setUTCDate(previousWeekEnd.getUTCDate() - 7)
-  
-  const year = previousWeekEnd.getUTCFullYear()
-  const month = String(previousWeekEnd.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(previousWeekEnd.getUTCDate()).padStart(2, '0')
-  const previousWeekEndDate = `${year}-${month}-${day}`
-  
-  return listTimecardsByJobAndWeek(jobId, previousWeekEndDate)
+  try {
+    assertJobAccess(jobId)
+    // Calculate previous week's Saturday
+    const currentWeekEnd = new Date(weekEndingDate + 'T00:00:00Z')
+    const previousWeekEnd = new Date(currentWeekEnd)
+    previousWeekEnd.setUTCDate(previousWeekEnd.getUTCDate() - 7)
+    
+    const year = previousWeekEnd.getUTCFullYear()
+    const month = String(previousWeekEnd.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(previousWeekEnd.getUTCDate()).padStart(2, '0')
+    const previousWeekEndDate = `${year}-${month}-${day}`
+    
+    return listTimecardsByJobAndWeek(jobId, previousWeekEndDate)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load previous week timecards'))
+  }
 }
 
 /**
@@ -362,40 +383,44 @@ export async function createTimecardFromCopy(
   sourceTimecard: Timecard,
   newWeekEndingDate: string
 ): Promise<string> {
-  assertJobAccess(jobId)
-  // Create new days array with zeroed hours
-  const newDays = sourceTimecard.days.map((day, index) => {
-    // Calculate new date for this day
-    const weekStart = new Date(newWeekEndingDate + 'T00:00:00Z')
-    weekStart.setUTCDate(weekStart.getUTCDate() - 6) // Go back to Sunday
-    weekStart.setUTCDate(weekStart.getUTCDate() + index)
+  try {
+    assertJobAccess(jobId)
+    // Create new days array with zeroed hours
+    const newDays = sourceTimecard.days.map((day, index) => {
+      // Calculate new date for this day
+      const weekStart = new Date(newWeekEndingDate + 'T00:00:00Z')
+      weekStart.setUTCDate(weekStart.getUTCDate() - 6) // Go back to Sunday
+      weekStart.setUTCDate(weekStart.getUTCDate() + index)
+      
+      const year = weekStart.getUTCFullYear()
+      const month = String(weekStart.getUTCMonth() + 1).padStart(2, '0')
+      const dateDay = String(weekStart.getUTCDate()).padStart(2, '0')
+      const dateStr = `${year}-${month}-${dateDay}`
+      
+      return {
+        ...day,
+        date: dateStr,
+        hours: 0, // ZERO OUT hours
+        lineTotal: 0,
+        notes: '',
+      }
+    })
     
-    const year = weekStart.getUTCFullYear()
-    const month = String(weekStart.getUTCMonth() + 1).padStart(2, '0')
-    const dateDay = String(weekStart.getUTCDate()).padStart(2, '0')
-    const dateStr = `${year}-${month}-${dateDay}`
-    
-    return {
-      ...day,
-      date: dateStr,
-      hours: 0, // ZERO OUT hours
-      lineTotal: 0,
-      notes: '',
+    // Create the timecard input
+    const timecardInput: TimecardInput = {
+      weekEndingDate: newWeekEndingDate,
+      employeeRosterId: sourceTimecard.employeeRosterId,
+      employeeNumber: sourceTimecard.employeeNumber,
+      employeeName: sourceTimecard.employeeName,
+      occupation: sourceTimecard.occupation,
+      days: newDays,
+      notes: '', // Don't copy notes, start fresh
     }
-  })
-  
-  // Create the timecard input
-  const timecardInput: TimecardInput = {
-    weekEndingDate: newWeekEndingDate,
-    employeeRosterId: sourceTimecard.employeeRosterId,
-    employeeNumber: sourceTimecard.employeeNumber,
-    employeeName: sourceTimecard.employeeName,
-    occupation: sourceTimecard.occupation,
-    days: newDays,
-    notes: '', // Don't copy notes, start fresh
+    
+    return createTimecard(jobId, timecardInput)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to copy timecard'))
   }
-  
-  return createTimecard(jobId, timecardInput)
 }
 
 /**
@@ -409,27 +434,31 @@ export async function autoGenerateTimecards(
   jobId: string,
   newWeekEndingDate: string
 ): Promise<string[]> {
-  assertJobAccess(jobId)
-  // Get previous week's timecards
-  const previousWeekTimecards = await getPreviousWeekTimecards(jobId, newWeekEndingDate)
-  
-  if (previousWeekTimecards.length === 0) {
-    return [] // No timecards to copy
+  try {
+    assertJobAccess(jobId)
+    // Get previous week's timecards
+    const previousWeekTimecards = await getPreviousWeekTimecards(jobId, newWeekEndingDate)
+    
+    if (previousWeekTimecards.length === 0) {
+      return [] // No timecards to copy
+    }
+    
+    // Create new timecards for each employee from previous week
+    const newTimecardIds: string[] = []
+    
+    for (const prevTimecard of previousWeekTimecards) {
+      const newId = await createTimecardFromCopy(
+        jobId,
+        prevTimecard,
+        newWeekEndingDate
+      )
+      newTimecardIds.push(newId)
+    }
+    
+    return newTimecardIds
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to auto-generate timecards'))
   }
-  
-  // Create new timecards for each employee from previous week
-  const newTimecardIds: string[] = []
-  
-  for (const prevTimecard of previousWeekTimecards) {
-    const newId = await createTimecardFromCopy(
-      jobId,
-      prevTimecard,
-      newWeekEndingDate
-    )
-    newTimecardIds.push(newId)
-  }
-  
-  return newTimecardIds
 }
 
 /**
@@ -442,84 +471,107 @@ export async function submitAllWeekTimecards(
   jobId: string,
   weekEndingDate: string
 ): Promise<number> {
-  assertJobAccess(jobId)
-  const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
-  const draftTimecards = timecards.filter(tc => tc.status === 'draft')
-  
-  let submitCount = 0
-  for (const timecard of draftTimecards) {
-    await submitTimecard(jobId, timecard.id)
-    submitCount++
+  try {
+    assertJobAccess(jobId)
+    const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
+    const draftTimecards = timecards.filter(tc => tc.status === 'draft')
+    
+    let submitCount = 0
+    for (const timecard of draftTimecards) {
+      await submitTimecard(jobId, timecard.id)
+      submitCount++
+    }
+    
+    return submitCount
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to submit week timecards'))
   }
-  
-  return submitCount
 }
 
 /**
  * Submit a timecard (change status to submitted)
  */
 export async function submitTimecard(jobId: string, timecardId: string): Promise<void> {
-  assertJobAccess(jobId)
-  const u = requireUser()
-  const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+  try {
+    assertJobAccess(jobId)
+    const u = requireUser()
+    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
-  await updateDoc(ref, {
-    uid: u.uid,
-    status: 'submitted',
-    submittedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
+    await updateDoc(ref, {
+      uid: u.uid,
+      status: 'submitted',
+      submittedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to submit timecard'))
+  }
 }
 
 /**
  * Archive a timecard
  */
 export async function archiveTimecard(jobId: string, timecardId: string): Promise<void> {
-  assertJobAccess(jobId)
-  const u = requireUser()
-  const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+  try {
+    assertJobAccess(jobId)
+    const u = requireUser()
+    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
-  await updateDoc(ref, {
-    uid: u.uid,
-    archived: true,
-    archivedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
+    await updateDoc(ref, {
+      uid: u.uid,
+      archived: true,
+      archivedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to archive timecard'))
+  }
 }
 
 /**
  * Unarchive a timecard
  */
 export async function unarchiveTimecard(jobId: string, timecardId: string): Promise<void> {
-  assertJobAccess(jobId)
-  requireUser()
-  const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+  try {
+    assertJobAccess(jobId)
+    requireUser()
+    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
-  await updateDoc(ref, {
-    archived: false,
-    archivedAt: null,
-    updatedAt: serverTimestamp(),
-  })
+    await updateDoc(ref, {
+      archived: false,
+      archivedAt: null,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to unarchive timecard'))
+  }
 }
 
 /**
  * Delete a timecard (only drafts)
  */
 export async function deleteTimecard(jobId: string, timecardId: string): Promise<void> {
-  assertJobAccess(jobId)
-  const u = requireUser()
-  const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
-  const snap = await getDoc(ref)
+  try {
+    assertJobAccess(jobId)
+    const u = requireUser()
+    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const snap = await getDoc(ref)
 
-  if (!snap.exists()) throw new Error('Timecard not found')
-  const data = snap.data()
+    if (!snap.exists()) throw new Error('Timecard not found')
+    const data = snap.data()
 
-  // Only allow deletion of draft timecards by creator
-  if (data.status !== 'draft' || data.createdByUid !== u.uid) {
-    throw new Error('Cannot delete submitted or archived timecards')
+    // Only allow deletion of draft timecards by creator
+    if (data.status !== 'draft' || data.createdByUid !== u.uid) {
+      throw new Error('Cannot delete submitted or archived timecards')
+    }
+
+    await deleteDoc(ref)
+  } catch (err) {
+    if (err instanceof Error && (err.message === 'Timecard not found' || err.message.includes('Cannot delete'))) {
+      throw err
+    }
+    throw new Error(normalizeError(err, 'Failed to delete timecard'))
   }
-
-  await deleteDoc(ref)
 }
 
 // ============================================================================
@@ -534,100 +586,108 @@ export async function exportTimecardsToCsv(
   jobId: string,
   weekEndingDate: string
 ): Promise<string> {
-  assertJobAccess(jobId)
-  const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
+  try {
+    assertJobAccess(jobId)
+    const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
 
-  // CSV header
-  const headers = [
-    'Employee #',
-    'Name',
-    'Occupation',
-    'Sunday',
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Total Hours',
-    'Total Production',
-  ]
+    // CSV header
+    const headers = [
+      'Employee #',
+      'Name',
+      'Occupation',
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Total Hours',
+      'Total Production',
+    ]
 
-  // CSV rows
-  const rows = timecards.map(tc => [
-    tc.employeeNumber,
-    tc.employeeName,
-    tc.occupation,
-    tc.days[0]?.hours ?? '',
-    tc.days[1]?.hours ?? '',
-    tc.days[2]?.hours ?? '',
-    tc.days[3]?.hours ?? '',
-    tc.days[4]?.hours ?? '',
-    tc.days[5]?.hours ?? '',
-    tc.days[6]?.hours ?? '',
-    tc.totals.hoursTotal.toString(),
-    tc.totals.productionTotal.toString(),
-  ])
+    // CSV rows
+    const rows = timecards.map(tc => [
+      tc.employeeNumber,
+      tc.employeeName,
+      tc.occupation,
+      tc.days[0]?.hours ?? '',
+      tc.days[1]?.hours ?? '',
+      tc.days[2]?.hours ?? '',
+      tc.days[3]?.hours ?? '',
+      tc.days[4]?.hours ?? '',
+      tc.days[5]?.hours ?? '',
+      tc.days[6]?.hours ?? '',
+      tc.totals.hoursTotal.toString(),
+      tc.totals.productionTotal.toString(),
+    ])
 
-  // Combine with proper CSV escaping
-  const csv = [
-    headers.map(h => `"${h}"`).join(','),
-    ...rows.map(r => r.map(v => `"${v}"`).join(',')),
-  ].join('\n')
+    // Combine with proper CSV escaping
+    const csv = [
+      headers.map(h => `"${h}"`).join(','),
+      ...rows.map(r => r.map(v => `"${v}"`).join(',')),
+    ].join('\n')
 
-  return csv
+    return csv
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to export timecards'))
+  }
 }
 
 /**
  * Export all submitted timecards for a job to CSV
  */
 export async function exportAllSubmittedTimecardsToCsv(jobId: string): Promise<string> {
-  assertJobAccess(jobId)
-  const timecards = await listSubmittedTimecards(jobId)
+  try {
+    assertJobAccess(jobId)
+    const timecards = await listSubmittedTimecards(jobId)
 
-  if (timecards.length === 0) return ''
+    if (timecards.length === 0) return ''
 
-  // CSV header
-  const headers = [
-    'Week Ending',
-    'Employee #',
-    'Name',
-    'Occupation',
-    'Sunday',
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Total Hours',
-    'Total Production',
-  ]
+    // CSV header
+    const headers = [
+      'Week Ending',
+      'Employee #',
+      'Name',
+      'Occupation',
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Total Hours',
+      'Total Production',
+    ]
 
-  // CSV rows (grouped by week for clarity)
-  const rows = timecards.map(tc => [
-    tc.weekEndingDate,
-    tc.employeeNumber,
-    tc.employeeName,
-    tc.occupation,
-    tc.days[0]?.hours ?? '',
-    tc.days[1]?.hours ?? '',
-    tc.days[2]?.hours ?? '',
-    tc.days[3]?.hours ?? '',
-    tc.days[4]?.hours ?? '',
-    tc.days[5]?.hours ?? '',
-    tc.days[6]?.hours ?? '',
-    tc.totals.hoursTotal.toString(),
-    tc.totals.productionTotal.toString(),
-  ])
+    // CSV rows (grouped by week for clarity)
+    const rows = timecards.map(tc => [
+      tc.weekEndingDate,
+      tc.employeeNumber,
+      tc.employeeName,
+      tc.occupation,
+      tc.days[0]?.hours ?? '',
+      tc.days[1]?.hours ?? '',
+      tc.days[2]?.hours ?? '',
+      tc.days[3]?.hours ?? '',
+      tc.days[4]?.hours ?? '',
+      tc.days[5]?.hours ?? '',
+      tc.days[6]?.hours ?? '',
+      tc.totals.hoursTotal.toString(),
+      tc.totals.productionTotal.toString(),
+    ])
 
-  // Combine with proper CSV escaping
-  const csv = [
-    headers.map(h => `"${h}"`).join(','),
-    ...rows.map(r => r.map(v => `"${v}"`).join(',')),
-  ].join('\n')
+    // Combine with proper CSV escaping
+    const csv = [
+      headers.map(h => `"${h}"`).join(','),
+      ...rows.map(r => r.map(v => `"${v}"`).join(',')),
+    ].join('\n')
 
-  return csv
+    return csv
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to export submitted timecards'))
+  }
 }
 
 /**
@@ -643,18 +703,22 @@ export async function getWeeklyStats(
   totalHours: number
   totalProduction: number
 }> {
-  assertJobAccess(jobId)
-  const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
+  try {
+    assertJobAccess(jobId)
+    const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
 
-  const submitted = timecards.filter(tc => tc.status === 'submitted')
-  const drafts = timecards.filter(tc => tc.status === 'draft')
+    const submitted = timecards.filter(tc => tc.status === 'submitted')
+    const drafts = timecards.filter(tc => tc.status === 'draft')
 
-  return {
-    totalTimecards: timecards.length,
-    submittedCount: submitted.length,
-    draftCount: drafts.length,
-    totalHours: submitted.reduce((sum, tc) => sum + tc.totals.hoursTotal, 0),
-    totalProduction: submitted.reduce((sum, tc) => sum + tc.totals.productionTotal, 0),
+    return {
+      totalTimecards: timecards.length,
+      submittedCount: submitted.length,
+      draftCount: drafts.length,
+      totalHours: submitted.reduce((sum, tc) => sum + tc.totals.hoursTotal, 0),
+      totalProduction: submitted.reduce((sum, tc) => sum + tc.totals.productionTotal, 0),
+    }
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load weekly timecard stats'))
   }
 }
 
@@ -673,18 +737,22 @@ export async function listTimecardsByJobAndWeekLegacy(
   weekStart: string,
   onUpdate: (timecards: any[]) => void
 ): Promise<Unsubscribe> {
-  assertJobAccess(jobId)
-  // Map old weekStart (Monday) to new weekEndingDate (Saturday)
-  // Assume weekStart is the Monday, so Saturday is weekStart + 5 days
-  const startDate = new Date(weekStart + 'T00:00:00Z')
-  startDate.setUTCDate(startDate.getUTCDate() + 5) // Add 5 days to get Saturday
-  
-  const year = startDate.getUTCFullYear()
-  const month = String(startDate.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(startDate.getUTCDate()).padStart(2, '0')
-  const weekEndingDate = `${year}-${month}-${day}`
-  
-  return watchTimecardsByWeek(jobId, weekEndingDate, onUpdate)
+  try {
+    assertJobAccess(jobId)
+    // Map old weekStart (Monday) to new weekEndingDate (Saturday)
+    // Assume weekStart is the Monday, so Saturday is weekStart + 5 days
+    const startDate = new Date(weekStart + 'T00:00:00Z')
+    startDate.setUTCDate(startDate.getUTCDate() + 5) // Add 5 days to get Saturday
+    
+    const year = startDate.getUTCFullYear()
+    const month = String(startDate.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(startDate.getUTCDate()).padStart(2, '0')
+    const weekEndingDate = `${year}-${month}-${day}`
+    
+    return watchTimecardsByWeek(jobId, weekEndingDate, onUpdate)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to watch legacy timecards'))
+  }
 }
 
 // Export old types for compatibility
@@ -708,27 +776,31 @@ export type TimecardLine = {
  * Legacy wrapper for old upsertTimecard function
  */
 export async function upsertTimecard(jobId: string, input: any): Promise<string> {
-  assertJobAccess(jobId)
-  // Map old format to new
-  const days: TimecardDay[] = [
-    { date: '', dayOfWeek: 0, hours: input.sun ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
-    { date: '', dayOfWeek: 1, hours: input.mon ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
-    { date: '', dayOfWeek: 2, hours: input.tue ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
-    { date: '', dayOfWeek: 3, hours: input.wed ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
-    { date: '', dayOfWeek: 4, hours: input.thu ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
-    { date: '', dayOfWeek: 5, hours: input.fri ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
-    { date: '', dayOfWeek: 6, hours: input.sat ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
-  ]
-  
-  const timecardInput: TimecardInput = {
-    weekEndingDate: input.weekEnding,
-    employeeRosterId: input.employeeId,
-    employeeNumber: '',
-    employeeName: input.employeeName,
-    occupation: input.occupation,
-    days,
-    notes: input.notes ?? '',
+  try {
+    assertJobAccess(jobId)
+    // Map old format to new
+    const days: TimecardDay[] = [
+      { date: '', dayOfWeek: 0, hours: input.sun ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
+      { date: '', dayOfWeek: 1, hours: input.mon ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
+      { date: '', dayOfWeek: 2, hours: input.tue ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
+      { date: '', dayOfWeek: 3, hours: input.wed ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
+      { date: '', dayOfWeek: 4, hours: input.thu ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
+      { date: '', dayOfWeek: 5, hours: input.fri ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
+      { date: '', dayOfWeek: 6, hours: input.sat ?? 0, production: 0, unitCost: 0, lineTotal: 0 },
+    ]
+    
+    const timecardInput: TimecardInput = {
+      weekEndingDate: input.weekEnding,
+      employeeRosterId: input.employeeId,
+      employeeNumber: '',
+      employeeName: input.employeeName,
+      occupation: input.occupation,
+      days,
+      notes: input.notes ?? '',
+    }
+    
+    return await createTimecard(jobId, timecardInput)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to upsert legacy timecard'))
   }
-  
-  return await createTimecard(jobId, timecardInput)
 }

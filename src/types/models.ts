@@ -4,12 +4,13 @@
  */
 
 import type { Timestamp } from 'firebase/firestore'
+import { ROLES } from '@/constants/app'
 
 // ============================================================================
 // USER PROFILE
 // ============================================================================
 
-export type Role = 'admin' | 'employee' | 'shop' | 'foreman' | 'none'
+export type Role = typeof ROLES[keyof typeof ROLES]
 
 export interface UserProfile {
   id: string              // Firebase Auth UID
@@ -166,7 +167,17 @@ export interface Timecard {
 // Input type
 export type TimecardInput = Omit<
   Timecard,
-  'id' | 'jobId' | 'status' | 'createdByUid' | 'submittedAt' | 'createdAt' | 'updatedAt'
+  | 'id'
+  | 'jobId'
+  | 'status'
+  | 'createdByUid'
+  | 'submittedAt'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'weekStartDate'
+  | 'totals'
+  | 'archived'
+  | 'archivedAt'
 >
 
 // ============================================================================
@@ -224,6 +235,7 @@ export interface DailyLog {
   // Notes
   notesCorrespondence: string
   actionItems: string
+  commentsAboutShip?: string
   
   // Attachments
   attachments?: Attachment[]

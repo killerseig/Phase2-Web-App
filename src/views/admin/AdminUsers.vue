@@ -5,11 +5,11 @@ import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import AdminFormModal from '../../components/admin/AdminFormModal.vue'
 import StatusBadge from '../../components/admin/StatusBadge.vue'
-import type { Role, UserProfile } from '../../services/Users'
-import type { Employee } from '../../services/Employees'
 import { useUsersStore } from '../../stores/users'
 import { useEmployeesStore } from '../../stores/employees'
 import { useAuthStore } from '../../stores/auth'
+import { type Employee, type UserProfile } from '@/services'
+import { type Role } from '@/constants/app'
 
 const route = useRoute()
 const auth = useAuthStore()

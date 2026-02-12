@@ -6,7 +6,7 @@ import StatusBadge from '../../components/admin/StatusBadge.vue'
 import { useJobsStore } from '../../stores/jobs'
 import { useJobRosterStore } from '../../stores/jobRoster'
 import { useUsersStore } from '../../stores/users'
-import type { Job } from '../../services/Jobs'
+import type { Job } from '@/services'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()

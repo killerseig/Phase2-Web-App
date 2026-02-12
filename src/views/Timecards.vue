@@ -2,7 +2,15 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
-import * as TimecardService from '../services/Timecards'
+import {
+  autoGenerateTimecards,
+  createTimecard,
+  deleteTimecard as deleteTimecardService,
+  listTimecardsByJobAndWeek,
+  submitAllWeekTimecards,
+  submitTimecard as submitTimecardService,
+  updateTimecard,
+} from '@/services'
 import { useJobsStore } from '../stores/jobs'
 import { useAuthStore } from '../stores/auth'
 import type { TimecardDay, Timecard as TimecardModel } from '@/types/models'
@@ -108,6 +116,7 @@ function createNewBlankTimecard(): TimecardModel {
     weekStartDate: weekStartDate.value,
     weekEndingDate: weekEndingDate.value,
     status: 'draft',
+    archived: false,
     createdByUid: auth.user?.uid ?? '',
     employeeRosterId: '',
     employeeNumber: newTimecardForm.value.employeeNumber,
@@ -146,7 +155,7 @@ async function loadCurrentJob() {
 
 async function loadTimecards() {
   try {
-    timecards.value = await TimecardService.listTimecardsByJobAndWeek(
+    timecards.value = await listTimecardsByJobAndWeek(
       jobId.value,
       weekEndingDate.value
     )
@@ -302,7 +311,7 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
   try {
     if (timecard.id.startsWith('temp-')) {
       // New timecard - create it
-      const id = await TimecardService.createTimecard(jobId.value, {
+      const id = await createTimecard(jobId.value, {
         weekEndingDate: timecard.weekEndingDate,
         employeeRosterId: '',
         employeeNumber: timecard.employeeNumber,
@@ -321,7 +330,7 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
       if (showToast) toastRef.value?.show(`Created timecard for ${timecard.employeeName}`, 'success')
     } else if (!timecards.value.find(t => t.id === timecard.id)) {
       // Draft that hasn't been saved yet
-      const id = await TimecardService.createTimecard(jobId.value, {
+      const id = await createTimecard(jobId.value, {
         weekEndingDate: timecard.weekEndingDate,
         employeeRosterId: '',
         employeeNumber: timecard.employeeNumber,
@@ -336,7 +345,7 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
       if (showToast) toastRef.value?.show(`Created timecard for ${timecard.employeeName}`, 'success')
     } else {
       // Update existing
-      await TimecardService.updateTimecard(jobId.value, timecard.id, {
+      await updateTimecard(jobId.value, timecard.id, {
         days: timecard.days,
         jobs: timecard.jobs,
         notes: timecard.notes
@@ -351,14 +360,14 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
   }
 }
 
-async function deleteTimecard(timecardId: string, employeeName: string) {
+async function handleDeleteTimecard(timecardId: string, employeeName: string) {
   if (!confirm(`Delete timecard for ${employeeName}?`)) return
   
   saving.value = true
   err.value = ''
   
   try {
-    await TimecardService.deleteTimecard(jobId.value, timecardId)
+    await deleteTimecardService(jobId.value, timecardId)
     draftTimecards.value.delete(timecardId)
     toastRef.value?.show(`Deleted timecard for ${employeeName}`, 'success')
     await loadTimecards()
@@ -370,14 +379,14 @@ async function deleteTimecard(timecardId: string, employeeName: string) {
   }
 }
 
-async function submitTimecard(timecard: TimecardModel) {
+async function handleSubmitTimecard(timecard: TimecardModel) {
   if (!confirm(`Submit timecard for ${timecard.employeeName}?`)) return
   
   saving.value = true
   err.value = ''
   
   try {
-    await TimecardService.submitTimecard(jobId.value, timecard.id)
+    await submitTimecardService(jobId.value, timecard.id)
     timecard.status = 'submitted'
     toastRef.value?.show(`Submitted timecard for ${timecard.employeeName}`, 'success')
     await loadTimecards()
@@ -405,7 +414,7 @@ async function submitAllTimecards() {
     }
     
     // Now submit all
-    const count = await TimecardService.submitAllWeekTimecards(
+    const count = await submitAllWeekTimecards(
       jobId.value,
       weekEndingDate.value
     )
@@ -426,7 +435,7 @@ async function generateFromPreviousWeek() {
   err.value = ''
   
   try {
-    const newIds = await TimecardService.autoGenerateTimecards(
+    const newIds = await autoGenerateTimecards(
       jobId.value,
       weekEndingDate.value
     )
@@ -920,7 +929,7 @@ onUnmounted(() => {
                   </button>
                   
                   <button 
-                    @click="deleteTimecard(timecard.id, timecard.employeeName)"
+                    @click="handleDeleteTimecard(timecard.id, timecard.employeeName)"
                     :disabled="saving || timecard.status === 'submitted'"
                     class="btn btn-danger btn-sm"
                   >
@@ -928,7 +937,7 @@ onUnmounted(() => {
                   </button>
 
                   <button 
-                    @click="submitTimecard(timecard)"
+                    @click="handleSubmitTimecard(timecard)"
                     :disabled="saving || timecard.status === 'submitted'"
                     class="btn btn-success btn-sm ms-auto"
                   >

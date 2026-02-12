@@ -3,9 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import ShopCatalogTreeNode from '../../components/admin/ShopCatalogTreeNode.vue'
-import type { ShopCatalogItem } from '../../services/ShopCatalog'
 import { useShopCategoriesStore } from '../../stores/shopCategories'
 import { useShopCatalogStore } from '../../stores/shopCatalog'
+import type { ShopCatalogItem } from '@/services'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const categoriesStore = useShopCategoriesStore()

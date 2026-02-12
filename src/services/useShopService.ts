@@ -7,6 +7,7 @@ import { ref, Ref } from 'vue'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/firebase'
 import { useJobAccess } from '@/composables/useJobAccess'
+import { normalizeError } from './serviceUtils'
 
 export interface SendShopOrderEmailRequest {
   jobId: string
@@ -58,8 +59,8 @@ export function useShopService() {
 
       const result = await sendEmailFunction(request)
       return result.data
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to send shop order email'
+    } catch (err) {
+      const errorMessage = normalizeError(err, 'Failed to send shop order email')
       error.value = errorMessage
       console.error('[useShopService] sendShopOrderEmail error:', err)
       throw new Error(errorMessage)

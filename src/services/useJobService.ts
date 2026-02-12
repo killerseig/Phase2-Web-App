@@ -7,6 +7,7 @@ import { ref, Ref } from 'vue'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/firebase'
 import { useJobAccess } from '@/composables/useJobAccess'
+import { normalizeError } from './serviceUtils'
 
 export interface SendDailyLogEmailRequest {
   jobId: string
@@ -70,8 +71,8 @@ export function useJobService() {
 
       const result = await sendEmailFunction(request)
       return result.data
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to send daily log email'
+    } catch (err) {
+      const errorMessage = normalizeError(err, 'Failed to send daily log email')
       error.value = errorMessage
       console.error('[useJobService] sendDailyLogEmail error:', err)
       throw new Error(errorMessage)
@@ -97,8 +98,8 @@ export function useJobService() {
 
       const result = await sendEmailFunction(request)
       return result.data
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to send timecard email'
+    } catch (err) {
+      const errorMessage = normalizeError(err, 'Failed to send timecard email')
       error.value = errorMessage
       console.error('[useJobService] sendTimecardEmail error:', err)
       throw new Error(errorMessage)

@@ -4,24 +4,26 @@ import { useRoute } from 'vue-router'
 import { isValidEmail } from '../utils/emailValidation'
 import Toast from '../components/Toast.vue'
 import {
-  createDailyLog,
-  getMyDailyLogByDate,
-  getDailyLogById,
-  listDailyLogsForDate,
-  submitDailyLog,
-  updateDailyLog,
-  deleteDailyLog,
   cleanupDeletedLogs,
-  subscribeToDailyLog,
+  createDailyLog,
+  deleteAttachmentFile,
+  deleteDailyLog,
   formatTimestamp,
+  getDailyLogById,
+  getDailyLogRecipients,
+  getMyDailyLogByDate,
+  listDailyLogsForDate,
+  subscribeToDailyLog,
+  submitDailyLog,
   toMillis,
+  updateDailyLog,
+  updateDailyLogRecipients,
+  uploadAttachment as uploadPhotoToStorage,
+  useJobService,
   type DailyLog,
   type DailyLogDraftInput,
-} from '../services/DailyLogs'
-import { uploadAttachment as uploadPhotoToStorage, deleteAttachmentFile } from '../services/Storage'
-import { useJobService } from '../services/useJobService'
+} from '@/services'
 import { EMAIL_UI_ENABLED } from '../config'
-import { getDailyLogRecipients, updateDailyLogRecipients } from '../services/Jobs'
 import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 
@@ -262,10 +264,21 @@ const init = async () => {
     // Load job details
     await jobs.fetchJob(jobId.value)
     
-    // Clean up any old deleted logs
-    await cleanupDeletedLogs(jobId.value)
+    // Clean up any old deleted logs (best-effort)
+    try {
+      await cleanupDeletedLogs(jobId.value)
+    } catch (cleanupError) {
+      console.warn('Cleanup deleted logs failed', cleanupError)
+    }
     
-    jobEmailRecipients.value = await getDailyLogRecipients(jobId.value)
+    // Load email recipients (best-effort)
+    try {
+      jobEmailRecipients.value = await getDailyLogRecipients(jobId.value)
+    } catch (recipientError) {
+      console.warn('Failed to load daily log recipients', recipientError)
+      jobEmailRecipients.value = []
+    }
+
     await loadLogsForSelectedDate(logDate.value)
     await loadForDate(logDate.value)
   } catch (e: any) {

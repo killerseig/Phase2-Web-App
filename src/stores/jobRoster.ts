@@ -6,7 +6,12 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import * as JobRosterService from '../services/JobRoster'
+import {
+  addRosterEmployee,
+  listRosterEmployees,
+  removeRosterEmployee,
+  updateRosterEmployee,
+} from '@/services'
 import type { JobRosterEmployee } from '@/types/models'
 
 export const useJobRosterStore = defineStore('jobRoster', () => {
@@ -45,7 +50,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     loading.value = true
     error.value = null
     try {
-      const employees = await JobRosterService.listRosterEmployees(jobId)
+      const employees = await listRosterEmployees(jobId)
       rosterByJob.value.set(jobId, employees)
 
       // If this becomes current job, update currentJobId
@@ -84,7 +89,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
   async function addEmployee(jobId: string, employee: any) {
     error.value = null
     try {
-      const employeeId = await JobRosterService.addRosterEmployee(jobId, employee)
+      const employeeId = await addRosterEmployee(jobId, employee)
 
       // Update local cache
       const roster = rosterByJob.value.get(jobId) ?? []
@@ -112,7 +117,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
   async function updateEmployee(jobId: string, employeeId: string, updates: Partial<JobRosterEmployee>) {
     error.value = null
     try {
-      await JobRosterService.updateRosterEmployee(jobId, employeeId, updates)
+      await updateRosterEmployee(jobId, employeeId, updates)
 
       // Update local cache
       const roster = rosterByJob.value.get(jobId) ?? []
@@ -134,7 +139,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
   async function removeEmployee(jobId: string, employeeId: string) {
     error.value = null
     try {
-      await JobRosterService.removeRosterEmployee(jobId, employeeId)
+      await removeRosterEmployee(jobId, employeeId)
 
       // Update local cache
       const roster = rosterByJob.value.get(jobId) ?? []
