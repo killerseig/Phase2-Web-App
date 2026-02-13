@@ -49,6 +49,90 @@ const constants_1 = require("./constants");
 admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+function normalizeTimecardForEmail(tc) {
+    if (Array.isArray(tc?.lines) && tc.lines.length)
+        return tc;
+    const jobs = Array.isArray(tc?.jobs) ? tc.jobs : [];
+    const lines = jobs.map((job) => {
+        const hoursByDay = {
+            sun: 0,
+            mon: 0,
+            tue: 0,
+            wed: 0,
+            thu: 0,
+            fri: 0,
+            sat: 0,
+        };
+        const productionByDay = {
+            sun: 0,
+            mon: 0,
+            tue: 0,
+            wed: 0,
+            thu: 0,
+            fri: 0,
+            sat: 0,
+        };
+        const unitCostByDay = {
+            sun: 0,
+            mon: 0,
+            tue: 0,
+            wed: 0,
+            thu: 0,
+            fri: 0,
+            sat: 0,
+        };
+        const days = Array.isArray(job?.days) ? job.days : [];
+        for (const day of days) {
+            const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
+                ? day.dayOfWeek
+                : days.indexOf(day);
+            const key = DAY_KEYS[idx];
+            if (key === undefined)
+                continue;
+            hoursByDay[key] = Number(day?.hours) || 0;
+            productionByDay[key] = Number(day?.production) || 0;
+            unitCostByDay[key] = Number(day?.unitCost) || 0;
+        }
+        const line = {
+            jobNumber: job?.jobNumber || '',
+            area: job?.area || '',
+            account: job?.acct || job?.account || '',
+            costCode: job?.costCode || job?.difC || '',
+            difH: job?.difH || '',
+            difP: job?.difP || '',
+            difC: job?.difC || '',
+            production: productionByDay,
+            unitCost: unitCostByDay,
+        };
+        DAY_KEYS.forEach(k => {
+            line[k] = hoursByDay[k];
+        });
+        const totalHours = Object.values(hoursByDay).reduce((s, v) => s + v, 0);
+        const totalProduction = Object.values(productionByDay).reduce((s, v) => s + v, 0);
+        let totalLine = 0;
+        DAY_KEYS.forEach(k => {
+            totalLine += (productionByDay[k] || 0) * (unitCostByDay[k] || 0);
+        });
+        line.totals = {
+            hours: totalHours,
+            production: totalProduction,
+            lineTotal: totalLine,
+        };
+        return line;
+    });
+    const totals = lines.reduce((agg, line) => {
+        agg.hoursTotal += Number(line?.totals?.hours) || 0;
+        agg.productionTotal += Number(line?.totals?.production) || 0;
+        agg.lineTotal += Number(line?.totals?.lineTotal) || 0;
+        return agg;
+    }, { hoursTotal: 0, productionTotal: 0, lineTotal: 0 });
+    return {
+        ...tc,
+        lines,
+        totals: tc?.totals || totals,
+    };
+}
 /**
  * Send password reset email using Firebase Admin SDK
  * Works without authentication via HTTP callable
@@ -137,7 +221,7 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
-    const { jobId, timecardIds, weekStart, recipients } = request.data;
+    const { jobId, timecardIds, weekStart, recipients: requestRecipients } = request.data;
     if (!jobId) {
         throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
     }
@@ -147,7 +231,13 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     if (!weekStart) {
         throw new Error(constants_1.ERROR_MESSAGES.WEEK_START_REQUIRED);
     }
-    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+    const settings = await (0, firestoreService_1.getEmailSettings)();
+    const recipients = Array.isArray(settings.timecardSubmitRecipients) && settings.timecardSubmitRecipients.length
+        ? settings.timecardSubmitRecipients
+        : Array.isArray(requestRecipients)
+            ? requestRecipients
+            : [];
+    if (!recipients || recipients.length === 0) {
         throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
     }
     try {
@@ -157,77 +247,172 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
         }
         // Fetch all timecards
         const timecards = [];
+        const missingIds = [];
         for (const tcId of timecardIds) {
+            console.log('[sendTimecardEmail] Fetching timecard', { jobId, weekStart, tcId });
             const tc = await (0, firestoreService_1.getTimecard)(jobId, weekStart, tcId);
-            if (tc)
+            if (tc) {
                 timecards.push(tc);
+            }
+            else {
+                missingIds.push(tcId);
+                console.warn('[sendTimecardEmail] Timecard not found', { jobId, weekStart, tcId });
+            }
         }
         if (timecards.length === 0) {
-            throw new Error(constants_1.ERROR_MESSAGES.TIMECARD_NOT_FOUND);
+            const availableSnap = await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('timecards').get();
+            const availableIds = availableSnap.docs.map(d => d.id);
+            console.error('[sendTimecardEmail] No timecards found for requested IDs', {
+                jobId,
+                weekStart,
+                requested: timecardIds,
+                missing: missingIds,
+                availableCount: availableIds.length,
+                availableSample: availableIds.slice(0, 25),
+            });
+            throw new Error(`${constants_1.ERROR_MESSAGES.TIMECARD_NOT_FOUND}: ${missingIds.join(', ') || 'none found'}`);
         }
+        const normalizedTimecards = timecards.map(normalizeTimecardForEmail);
         const job = await (0, firestoreService_1.getJobDetails)(jobId);
         const userName = await (0, firestoreService_1.getUserDisplayName)(request.auth.uid, request.auth.token.email);
-        // Build single combined email for all timecards
+        const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const fmtNum = (val, digits = 2) => (Number(val) || 0).toFixed(digits);
+        const fmtMoney = (val) => `$${(Number(val) || 0).toFixed(2)}`;
+        const fmtCell = (val) => {
+            const n = Number(val) || 0;
+            return Number.isInteger(n) ? String(n) : n.toFixed(2);
+        };
+        const emailStyles = `
+      <style>
+        .tc-wrapper { font-family: 'Segoe UI', Arial, sans-serif; color: #e7ecff; background: #0d111f; padding: 12px; }
+        .tc-card { border: 1px solid #1f2638; border-radius: 8px; margin-bottom: 16px; background: #0f1424; box-shadow: 0 8px 18px rgba(0,0,0,0.35); }
+        .tc-card-header { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; background: linear-gradient(90deg, #0f1424, #182442); border-bottom: 1px solid #1f2638; }
+        .tc-emp-name { font-weight: 700; font-size: 16px; color: #f1f4ff; }
+        .tc-emp-meta { color: #9aa6c6; font-size: 13px; }
+        .tc-status { padding: 4px 10px; border-radius: 14px; font-size: 12px; font-weight: 700; text-transform: lowercase; background: #d1f4e8; color: #0f5132; }
+        .tc-status.draft { background: #fff3cd; color: #664d03; }
+        .tc-meta { font-size: 13px; color: #c7cee5; }
+        .tc-table { width: 100%; border-collapse: collapse; background: #0f1424; }
+        .tc-table th { font-size: 12px; font-weight: 700; text-align: center; padding: 8px 6px; background: #10182d; border-bottom: 1px solid #1f2638; color: #e7ecff; }
+        .tc-table td { padding: 8px 6px; text-align: center; font-size: 13px; color: #e7ecff; border-bottom: 1px solid #1f2638; }
+        .tc-row-soft td { background: #131b30; }
+        .tc-left { font-weight: 600; color: #f1f4ff; border-right: 1px solid #1f2638; }
+        .tc-label { font-weight: 700; width: 50px; border-right: 1px solid #1f2638; }
+        .tc-dif { border-right: 1px solid #1f2638; }
+        .tc-total { font-weight: 700; color: #f1f4ff; }
+        .col-job { width: 80px; }
+        .col-acct { width: 70px; }
+        .col-blank { width: 50px; }
+        .col-div { width: 70px; }
+        .col-day { width: 90px; }
+        .col-total { width: 80px; }
+        .tc-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #1f2638; background: #0f1424; }
+        .tc-notes { padding: 12px 14px; border-top: 1px solid #1f2638; background: #0f1424; font-size: 13px; color: #c7cee5; }
+        .pill { display: inline-block; padding: 6px 10px; background: #111933; border: 1px solid #1f2638; border-radius: 8px; font-weight: 700; color: #e7ecff; }
+      </style>
+    `;
+        const renderJobRows = (line, totals) => {
+            const hoursRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtCell(line[DAY_KEYS[idx]])}</td>`).join('');
+            const prodRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtCell(line.production?.[DAY_KEYS[idx]])}</td>`).join('');
+            const costRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtMoney(line.unitCost?.[DAY_KEYS[idx]])}</td>`).join('');
+            return `
+        <tr>
+          <td rowspan="3" class="tc-left">${line.jobNumber || ''}</td>
+          <td rowspan="3" class="tc-left">${line.account || ''}</td>
+          <td class="tc-label">H</td>
+          <td class="tc-dif">${line.difH || ''}</td>
+          ${hoursRow}
+          <td class="tc-total">${fmtNum(line?.totals?.hours)}</td>
+        </tr>
+        <tr class="tc-row-soft">
+          <td class="tc-label">P</td>
+          <td class="tc-dif">${line.difP || ''}</td>
+          ${prodRow}
+          <td class="tc-total">${fmtNum(line?.totals?.production)}</td>
+        </tr>
+        <tr>
+          <td class="tc-label">C</td>
+          <td class="tc-dif">${line.difC || ''}</td>
+          ${costRow}
+          <td class="tc-total">${fmtMoney(line?.totals?.lineTotal)}</td>
+        </tr>
+      `;
+        };
+        const weekStartDate = new Date(weekStart);
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 6);
+        const fmtDate = (d) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
         let emailHtml = `
-      <h2>Timecards Submitted</h2>
-      <p><strong>Job:</strong> ${job?.name || 'N/A'} ${job?.number ? `(#${job.number})` : ''}</p>
-      <p><strong>Week:</strong> ${weekStart}</p>
-      <p><strong>Submitted by:</strong> ${userName}</p>
-      <hr>
-      <table style="border-collapse: collapse; width: 100%; border: 1px solid #ccc;">
-        <thead>
-          <tr style="background-color: #f0f0f0; border-bottom: 2px solid #333;">
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Employee</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Job #</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Area</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Account</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Mon</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Tue</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Wed</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Thu</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Fri</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Sat</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Sun</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Total</th>
-          </tr>
-        </thead>
-        <tbody>
+      ${emailStyles}
+      <div class="tc-wrapper">
+        <div style="margin-bottom:14px;">
+          <h2 style="margin:0 0 6px 0; color:#f1f4ff;">Timecards Submitted</h2>
+          <div class="tc-meta">Job: ${job?.name || 'N/A'} ${job?.number ? `(#${job.number})` : ''}</div>
+          <div class="tc-meta">Week: ${fmtDate(weekStartDate)} – ${fmtDate(weekEndDate)}</div>
+          <div class="tc-meta">Submitted by: ${userName}</div>
+        </div>
     `;
-        for (const tc of timecards) {
-            const lines = tc?.lines || [];
-            if (lines.length === 0) {
-                emailHtml += `<tr><td colspan="12" style="border: 1px solid #ccc; padding: 8px;"><em>No entries</em></td></tr>`;
-                continue;
-            }
-            for (const line of lines) {
-                const total = (line.mon || 0) + (line.tue || 0) + (line.wed || 0) +
-                    (line.thu || 0) + (line.fri || 0) + (line.sat || 0) + (line.sun || 0);
-                emailHtml += `
-          <tr style="border-bottom: 1px solid #ccc;">
-            <td style="border: 1px solid #ccc; padding: 8px;">${tc?.employeeName || 'N/A'}</td>
-            <td style="border: 1px solid #ccc; padding: 8px;">${line.jobNumber || ''}</td>
-            <td style="border: 1px solid #ccc; padding: 8px;">${line.area || ''}</td>
-            <td style="border: 1px solid #ccc; padding: 8px;">${line.account || ''}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.mon || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.tue || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.wed || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.thu || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.fri || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.sat || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.sun || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;"><strong>${total}</strong></td>
-          </tr>
-        `;
-            }
-        }
-        emailHtml += `
-        </tbody>
-      </table>
-    `;
+        normalizedTimecards.forEach(tc => {
+            const lines = Array.isArray(tc?.lines) ? tc.lines : [];
+            const hasLines = lines.length > 0;
+            const statusClass = tc.status === 'submitted' ? 'submitted' : 'draft';
+            const hoursTotal = Number(tc?.totals?.hoursTotal) || 0;
+            const regularHours = Math.min(hoursTotal, 40);
+            const overtimeHours = Math.max(hoursTotal - 40, 0);
+            emailHtml += `
+        <div class="tc-card">
+          <div class="tc-card-header">
+            <div>
+              <div class="tc-emp-name">${tc.employeeName || 'Employee'}</div>
+              <div class="tc-emp-meta">#${tc.employeeNumber || ''}${tc.occupation ? ` · ${tc.occupation}` : ''}</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="tc-meta">Totals: ${fmtNum(tc?.totals?.hoursTotal)} hrs · ${fmtNum(tc?.totals?.productionTotal)} prod · ${fmtMoney(tc?.totals?.lineTotal)}</div>
+              <div class="tc-status ${statusClass}">${tc.status || 'submitted'}</div>
+            </div>
+          </div>
+
+          <div style="padding:12px 14px;">
+            <table class="tc-table">
+              <thead>
+                <tr>
+                  <th class="col-job">Job #</th>
+                  <th class="col-acct">Acct</th>
+                  <th class="col-blank"></th>
+                  <th class="col-div">Dif</th>
+                  ${dayLabels.map(d => `<th class="col-day">${d}</th>`).join('')}
+                  <th class="col-total">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${hasLines ? lines.map((line) => renderJobRows(line, tc.totals)).join('') : '<tr><td colspan="12" style="padding:10px; text-align:center;">No entries</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="tc-footer">
+            <div class="pill">Overtime: ${fmtNum(overtimeHours)}</div>
+            <div class="pill">Regular: ${fmtNum(regularHours)}</div>
+          </div>
+          ${tc.notes ? `<div class="tc-notes"><strong>Notes:</strong> ${tc.notes}</div>` : ''}
+        </div>
+      `;
+        });
+        emailHtml += '</div>';
+        // Build CSV attachment for accounting upload
+        const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart);
         await (0, emailService_1.sendEmail)({
             to: recipients,
             subject: `${constants_1.EMAIL.SUBJECTS.TIMECARD} - ${timecards.length} timecard(s) - Week of ${weekStart}`,
             html: emailHtml,
+            attachments: csvAttachment
+                ? [
+                    {
+                        name: `timecards-${weekStart}.csv`,
+                        contentType: 'text/csv',
+                        contentBytes: Buffer.from(csvAttachment, 'utf-8').toString('base64'),
+                    },
+                ]
+                : undefined,
         });
         console.log(`Timecards ${timecardIds.join(', ')} emailed to ${recipients.join(', ')}`);
         return { success: true, message: 'Email sent successfully' };
@@ -237,6 +422,61 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
         throw new Error(error.message);
     }
 });
+function buildTimecardCsv(timecards, weekStart) {
+    const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', ''];
+    const rows = [headers];
+    if (!timecards || timecards.length === 0) {
+        return rows.map(r => r.join(',')).join('\n');
+    }
+    const start = new Date(weekStart);
+    if (isNaN(start.getTime())) {
+        console.warn('[buildTimecardCsv] Invalid weekStart; using raw value for dates');
+    }
+    const dayOffsets = [
+        { key: 'sun', label: 'Sun', index: 0 },
+        { key: 'mon', label: 'Mon', index: 1 },
+        { key: 'tue', label: 'Tue', index: 2 },
+        { key: 'wed', label: 'Wed', index: 3 },
+        { key: 'thu', label: 'Thu', index: 4 },
+        { key: 'fri', label: 'Fri', index: 5 },
+        { key: 'sat', label: 'Sat', index: 6 },
+    ];
+    const formatDate = (offset) => {
+        if (isNaN(start.getTime()))
+            return weekStart;
+        const d = new Date(start);
+        d.setDate(d.getDate() + offset);
+        const month = d.getMonth() + 1;
+        const day = d.getDate();
+        const year = d.getFullYear();
+        return `${month}/${day}/${year}`;
+    };
+    for (const tc of timecards) {
+        const lines = Array.isArray(tc?.lines) ? tc.lines : [];
+        for (const line of lines) {
+            for (const offset of dayOffsets) {
+                const hoursVal = Number(line?.[offset.key]) || 0;
+                const productionVal = Number(line?.production?.[offset.key]) || 0;
+                if (hoursVal === 0 && productionVal === 0)
+                    continue;
+                rows.push([
+                    tc?.employeeName || '',
+                    tc?.employeeId || tc?.employeeNumber || '',
+                    line?.jobNumber || '',
+                    formatDate(offset.index),
+                    line?.area || '',
+                    line?.account || '',
+                    line?.costCode || '',
+                    hoursVal ? String(hoursVal) : '',
+                    productionVal ? String(productionVal) : '',
+                    '',
+                    '',
+                ]);
+            }
+        }
+    }
+    return rows.map(r => r.join(',')).join('\n');
+}
 /**
  * Send Shop Order via email
  */
@@ -244,11 +484,20 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
-    const { shopOrderId, recipients } = request.data;
+    const { jobId, shopOrderId, recipients: requestRecipients } = request.data;
+    if (!jobId) {
+        throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
+    }
     if (!shopOrderId) {
         throw new Error(constants_1.ERROR_MESSAGES.SHOP_ORDER_ID_REQUIRED);
     }
-    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+    const settings = await (0, firestoreService_1.getEmailSettings)();
+    const recipients = Array.isArray(settings.shopOrderSubmitRecipients) && settings.shopOrderSubmitRecipients.length
+        ? settings.shopOrderSubmitRecipients
+        : Array.isArray(requestRecipients)
+            ? requestRecipients
+            : [];
+    if (!recipients || recipients.length === 0) {
         throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
     }
     try {
@@ -256,11 +505,20 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
             console.log('[sendShopOrderEmail] Email sending disabled. Skipping send.');
             return { success: true, message: 'Email sending disabled. Skipped.' };
         }
-        const order = await (0, firestoreService_1.getShopOrder)(shopOrderId);
+        let order = null;
+        // Primary: job-scoped collection (jobs/{jobId}/shop_orders/{shopOrderId})
+        const jobOrderSnap = await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get();
+        if (jobOrderSnap.exists) {
+            order = { id: jobOrderSnap.id, ...jobOrderSnap.data(), jobId };
+        }
+        else {
+            // Fallback to legacy root collection (shopOrders)
+            order = await (0, firestoreService_1.getShopOrder)(shopOrderId);
+        }
         if (!order) {
             throw new Error(constants_1.ERROR_MESSAGES.SHOP_ORDER_NOT_FOUND);
         }
-        const job = await (0, firestoreService_1.getJobDetails)(order?.jobId || '');
+        const job = await (0, firestoreService_1.getJobDetails)(order?.jobId || jobId);
         const emailHtml = (0, emailService_1.buildShopOrderEmail)(order);
         await (0, emailService_1.sendEmail)({
             to: recipients,

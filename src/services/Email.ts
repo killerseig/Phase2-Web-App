@@ -46,6 +46,7 @@ export async function sendShopOrderEmail(jobId: string, shopOrderId: string, rec
 type EmailSettings = {
   timecardSubmitRecipients?: string[]
   shopOrderSubmitRecipients?: string[]
+  dailyLogSubmitRecipients?: string[]
 }
 
 const EMAIL_SETTINGS_DOC = doc(db, 'settings', 'email')
@@ -53,15 +54,16 @@ const EMAIL_SETTINGS_DOC = doc(db, 'settings', 'email')
 export async function getEmailSettings(): Promise<EmailSettings> {
   try {
     const snap = await getDoc(EMAIL_SETTINGS_DOC)
-    if (!snap.exists()) return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] }
+    if (!snap.exists()) return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [], dailyLogSubmitRecipients: [] }
     const data = snap.data() || {}
     return {
       timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
       shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
+      dailyLogSubmitRecipients: Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients : [],
     }
   } catch (e) {
     console.warn('[getEmailSettings] Falling back to defaults due to error:', e)
-    return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] }
+    return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [], dailyLogSubmitRecipients: [] }
   }
 }
 
@@ -71,4 +73,8 @@ export async function updateTimecardSubmitRecipientsGlobal(recipients: string[])
 
 export async function updateShopOrderSubmitRecipientsGlobal(recipients: string[]): Promise<void> {
   await setDoc(EMAIL_SETTINGS_DOC, { shopOrderSubmitRecipients: recipients }, { merge: true })
+}
+
+export async function updateDailyLogSubmitRecipientsGlobal(recipients: string[]): Promise<void> {
+  await setDoc(EMAIL_SETTINGS_DOC, { dailyLogSubmitRecipients: recipients }, { merge: true })
 }

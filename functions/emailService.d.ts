@@ -42,6 +42,11 @@ export declare function sendEmail(options: {
     to: string | string[];
     subject: string;
     html: string;
+    attachments?: Array<{
+        name: string;
+        contentType?: string;
+        contentBytes: string;
+    }>;
 }): Promise<void>;
 /**
  * Send daily log email notification

@@ -20,6 +20,12 @@ const usersStore = useUsersStore()
 
 // Jobs state from store
 const jobs = computed(() => jobsStore.allJobs)
+const orderedJobs = computed(() =>
+  [...jobsStore.allJobs].sort((a, b) => {
+    if (a.active !== b.active) return Number(b.active) - Number(a.active)
+    return (a.name || '').localeCompare(b.name || '')
+  })
+)
 const loadingJobs = computed(() => jobsStore.isLoading)
 const err = computed(() => jobsStore.error || '')
 
@@ -30,6 +36,7 @@ const jobForm = ref({
   code: '',
 })
 const creatingJob = ref(false)
+const togglingJobId = ref('')
 
 // Foreman modal (for job roster employees and foreman user assignment)
 const showForemanModal = ref(false)
@@ -196,6 +203,19 @@ async function handleDeleteJob(job: Job) {
     await loadJobs()
   } catch (e: any) {
     toastRef.value?.show('Failed to delete job', 'error')
+  }
+}
+
+async function toggleArchive(job: Job, active: boolean) {
+  togglingJobId.value = job.id
+  try {
+    await jobsStore.setJobActive(job.id, active)
+    toastRef.value?.show(active ? 'Job restored' : 'Job archived', 'success')
+    await loadJobs()
+  } catch (e: any) {
+    toastRef.value?.show(e?.message ?? 'Failed to update job status', 'error')
+  } finally {
+    togglingJobId.value = ''
   }
 }
 
@@ -479,7 +499,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-else-if="jobs.length === 0" class="alert alert-info text-center mb-0">
+        <div v-else-if="orderedJobs.length === 0" class="alert alert-info text-center mb-0">
           No jobs found. Create your first job above.
         </div>
 
@@ -495,7 +515,7 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="job in jobs" :key="job.id">
+              <tr v-for="job in orderedJobs" :key="job.id">
                 <td style="padding: 8px;" class="fw-semibold">{{ job.name }}</td>
                 <td style="padding: 8px;" class="text-muted small">{{ job.code || '—' }}</td>
                 <td style="padding: 8px;">
@@ -523,6 +543,24 @@ onMounted(async () => {
                     title="Edit job"
                   >
                     <i class="bi bi-pencil"></i>
+                  </button>
+                  <button
+                    v-if="job.active"
+                    @click="toggleArchive(job, false)"
+                    class="btn btn-sm btn-outline-secondary me-1"
+                    :disabled="togglingJobId === job.id"
+                    title="Archive job"
+                  >
+                    <i class="bi bi-archive"></i>
+                  </button>
+                  <button
+                    v-else
+                    @click="toggleArchive(job, true)"
+                    class="btn btn-sm btn-outline-success me-1"
+                    :disabled="togglingJobId === job.id"
+                    title="Restore job"
+                  >
+                    <i class="bi bi-arrow-counterclockwise"></i>
                   </button>
                   <button
                     @click="handleDeleteJob(job)"

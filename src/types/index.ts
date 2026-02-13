@@ -78,7 +78,9 @@ export interface ManpowerLine {
 export interface DailyLogAttachment {
   name: string
   url: string
+  path?: string
   type?: string
+  createdAt?: any
 }
 
 export interface DailyLog {

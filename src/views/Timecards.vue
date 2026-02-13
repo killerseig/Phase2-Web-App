@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { usePermissions } from '@/composables/usePermissions'
 import { markTimecardsSent } from '@/services/Jobs'
+import { getEmailSettings, sendTimecardEmail } from '@/services/Email'
 import {
   autoGenerateTimecards,
   createTimecard,
@@ -92,6 +93,7 @@ const summaryRows = computed(() => allTimecards.value.map(tc => ({
 
 const draftCount = computed(() => allTimecards.value.filter(tc => tc.status === 'draft').length)
 const submittedCount = computed(() => allTimecards.value.filter(tc => tc.status === 'submitted').length)
+const timecardRecipients = ref<string[]>([])
 
 function buildWeekDates(start: string): string[] {
   const dates: string[] = []
@@ -226,6 +228,13 @@ async function init() {
     const today = new Date().toISOString().split('T')[0]
     selectedDate.value = today
     if (!await ensureAccess()) return
+    try {
+      const settings = await getEmailSettings()
+      timecardRecipients.value = settings.timecardSubmitRecipients ?? []
+    } catch (recipientErr) {
+      console.warn('Failed to load timecard email recipients', recipientErr)
+      timecardRecipients.value = []
+    }
     await loadTimecards()
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to initialize'
@@ -295,7 +304,8 @@ function confirmCreateTimecard() {
   }
   const draft = createDraft()
   draftTimecards.value.set(draft.id, draft)
-  editingTimecardId.value = draft.id
+  editingTimecardId.value = null
+  editForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '' }
   expandedId.value = draft.id
   showCreateForm.value = false
 }
@@ -415,6 +425,21 @@ async function submitAllTimecards() {
     }
     const count = await submitAllWeekTimecards(jobId.value, weekEndingDate.value)
     toastRef.value?.show(`Submitted ${count} timecard(s)`, 'success')
+    if (timecardRecipients.value.length) {
+      try {
+        const submitted = await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)
+        const submittedIds = submitted.filter(tc => tc.status === 'submitted').map(tc => tc.id)
+        if (submittedIds.length) {
+          await sendTimecardEmail(jobId.value, submittedIds, weekStartDate.value as any, timecardRecipients.value)
+          toastRef.value?.show(`Timecards emailed to ${timecardRecipients.value.length} recipient(s)`, 'success')
+        } else {
+          toastRef.value?.show('No submitted timecards to email', 'info')
+        }
+      } catch (emailErr: any) {
+        console.error('Failed to send timecard email', emailErr)
+        toastRef.value?.show('Timecards submitted, but email failed to send', 'warning')
+      }
+    }
     if (isAdmin.value) {
       await markTimecardsSent(jobId.value, weekEndingDate.value)
     }
@@ -663,30 +688,56 @@ onUnmounted(() => {
                 :aria-controls="`collapse-${timecard.id}`"
                 @click="toggleAccordion(timecard.id)"
               >
-                <div class="row g-3 align-items-center w-100">
-                  <div class="col-md-3">
-                    <div v-if="editingTimecardId === timecard.id" class="input-group input-group-sm">
-                      <input v-model="editForm.firstName" type="text" class="form-control" placeholder="First" @click.stop />
-                      <input v-model="editForm.lastName" type="text" class="form-control" placeholder="Last" @click.stop />
+                <div class="row g-2 align-items-center w-100 timecard-header-row">
+                  <div class="col-6 col-md-3">
+                    <div
+                      v-if="editingTimecardId === timecard.id"
+                      class="d-flex align-items-center gap-2 flex-nowrap w-100"
+                      @click.stop
+                    >
+                      <input
+                        v-model="editForm.firstName"
+                        type="text"
+                        class="form-control form-control-sm flex-fill"
+                        placeholder="First name"
+                        style="min-width: 0"
+                      />
+                      <input
+                        v-model="editForm.lastName"
+                        type="text"
+                        class="form-control form-control-sm flex-fill"
+                        placeholder="Last name"
+                        style="min-width: 0"
+                      />
                     </div>
                     <div v-else class="fw-semibold">{{ timecard.employeeName }}</div>
                   </div>
 
-                  <div class="col-md-2">
-                    <div v-if="editingTimecardId === timecard.id">
-                      <input v-model="editForm.employeeNumber" type="text" class="form-control form-control-sm" @click.stop />
+                  <div class="col-3 col-md-2">
+                    <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
+                      <input
+                        v-model="editForm.employeeNumber"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="Employee #"
+                      />
                     </div>
                     <div v-else class="fw-semibold">#{{ timecard.employeeNumber }}</div>
                   </div>
 
-                  <div class="col-md-3">
-                    <div v-if="editingTimecardId === timecard.id">
-                      <input v-model="editForm.occupation" type="text" class="form-control form-control-sm" @click.stop />
+                  <div class="col-6 col-md-3">
+                    <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
+                      <input
+                        v-model="editForm.occupation"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="Occupation"
+                      />
                     </div>
                     <div v-else class="text-muted">{{ timecard.occupation }}</div>
                   </div>
 
-                  <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2" @click.stop>
+                  <div class="col-12 col-md-4 order-first order-md-last text-start text-md-end d-flex align-items-center justify-content-between justify-content-md-end gap-2 tc-header-actions" @click.stop>
                     <span v-if="editingTimecardId === timecard.id" class="d-flex gap-1">
                       <button class="btn btn-primary btn-sm" @click="confirmEditingEmployee(timecard)">
                         <i class="bi bi-check"></i>
@@ -1136,7 +1187,7 @@ textarea.form-control {
 .tc-collapse {
   overflow: hidden;
   max-height: 0;
-  transition: max-height 0.25s ease;
+  transition: max-height 0.45s ease;
 }
 
 .tc-collapse.show {
@@ -1156,19 +1207,22 @@ textarea.form-control {
 }
 
 .col-job {
-  width: 80px;
+  width: 110px;
+  min-width: 110px;
 }
 
 .col-acct {
-  width: 70px;
+  width: 110px;
+  min-width: 110px;
 }
 
 .col-blank {
-  width: 50px;
+  width: 60px;
 }
 
 .col-div {
-  width: 70px;
+  width: 100px;
+  min-width: 100px;
 }
 
 .col-day {
@@ -1203,10 +1257,42 @@ textarea.form-control {
   font-size: 0.95rem;
 }
 
+
+.tc-header-actions {
+  padding-top: 0.25rem;
+}
+
 @media (max-width: 768px) {
   .day-input {
     min-width: 68px;
     font-size: 0.9rem;
+  }
+
+  .timecard-header-row {
+    row-gap: 0.35rem;
+  }
+
+  .tc-header-actions {
+    padding-top: 0.15rem;
+  }
+
+  .timecard-table th,
+  .timecard-table td {
+    padding: 0.35rem 0.35rem;
+  }
+
+  .accordion-body {
+    padding: 0.75rem;
+  }
+
+  .accordion-button {
+    padding: 0.65rem 0.95rem;
+  }
+
+  .col-job,
+  .col-acct,
+  .col-div {
+    min-width: 130px;
   }
 }
 

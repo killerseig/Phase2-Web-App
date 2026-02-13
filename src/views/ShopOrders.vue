@@ -42,13 +42,11 @@ const statusFilter = ref<'all' | ShopOrderStatus>('all')
 const catalogSearch = ref('')
 const newItemDescription = ref('')
 const newItemCatalogId = ref<string | null>(null)
-const newItemQty = ref(1)
+const newItemQty = ref<string>('')
 const newItemNote = ref('')
 const selectedCatalogItem = ref<any | null>(null)
 const catalogItemQtys = ref<Record<string, number>>({})
 const expandedNodes = ref<Set<string>>(new Set())
-const showEmailModal = ref(false)
-const recipientsInput = ref('')
 const shopOrderRecipients = ref<string[]>([])
 const sendingEmail = ref(false)
 
@@ -352,11 +350,9 @@ const init = async () => {
     try {
       const settings = await getEmailSettings()
       shopOrderRecipients.value = settings.shopOrderSubmitRecipients ?? []
-      recipientsInput.value = shopOrderRecipients.value.join(', ')
     } catch (settingsError) {
       console.warn('[ShopOrders] Failed to load email settings, using defaults', settingsError)
       shopOrderRecipients.value = []
-      recipientsInput.value = ''
     }
     
     await shopCatalogStore.fetchCatalog()
@@ -388,7 +384,7 @@ const addItem = async () => {
     const updatedItems = [...(selected.value.items || []), { description, quantity, ...(note ? { note } : {}), catalogItemId }]
     await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { items: updatedItems, updatedAt: serverTimestamp() })
     newItemDescription.value = ''
-    newItemQty.value = 1
+    newItemQty.value = ''
     newItemNote.value = ''
     newItemCatalogId.value = null
     selectedCatalogItem.value = null
@@ -418,7 +414,7 @@ const selectCatalogItem = (item: any) => {
   }
   newItemCatalogId.value = normalized.catalogItemId
   newItemDescription.value = normalized.description
-  newItemQty.value = normalized.quantity
+  newItemQty.value = String(normalized.quantity)
   newItemNote.value = normalized.note
   selectedCatalogItem.value = item
   addItem()
@@ -511,24 +507,9 @@ const receiveOrder = async () => {
   }
 }
 
-const openEmailModal = () => {
-  if (!selected.value) return
-  showEmailModal.value = true
-  recipientsInput.value = shopOrderRecipients.value.join(', ')
-}
-
-const closeEmailModal = () => {
-  showEmailModal.value = false
-  recipientsInput.value = ''
-}
-
 const sendOrderEmail = async () => {
   if (!selected.value) return
-  const recipients = recipientsInput.value
-    .split(',')
-    .map(r => r.trim())
-    .filter(Boolean)
-  const finalRecipients = recipients.length ? recipients : shopOrderRecipients.value
+  const finalRecipients = shopOrderRecipients.value
 
   if (!finalRecipients.length) {
     toastRef.value?.show('No recipients configured for shop orders', 'error')
@@ -548,7 +529,6 @@ const sendOrderEmail = async () => {
       updatedAt: serverTimestamp(),
     })
     toastRef.value?.show('Order emailed successfully', 'success')
-    closeEmailModal()
   } catch (e: any) {
     toastRef.value?.show(e?.message ?? 'Failed to email order', 'error')
   } finally {
@@ -641,8 +621,9 @@ onUnmounted(clearSubscriptions)
                   <small class="text-muted">{{ fmtDate(selected.orderDate) }}</small>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                  <button class="btn btn-success btn-sm" type="button" @click="openEmailModal" title="Submit and email this order">
-                    <i class="bi bi-envelope me-1"></i>Submit & Email
+                  <button class="btn btn-success btn-sm" type="button" @click="sendOrderEmail" :disabled="sendingEmail" title="Submit and email this order">
+                    <span v-if="sendingEmail" class="spinner-border spinner-border-sm me-1" />
+                    <i v-else class="bi bi-envelope me-1"></i>Submit & Email
                   </button>
                   <span :class="`badge rounded-pill ${statusBadgeClass(selected.status)}`">{{ statusLabel(selected.status) }}</span>
                 </div>
@@ -783,7 +764,18 @@ onUnmounted(clearSubscriptions)
               <h6 class="mb-2">Or add a custom item</h6>
               <div class="row g-2 mb-2">
                 <div class="col-7"><input v-model="newItemDescription" type="text" class="form-control form-control-sm" placeholder="Description" /></div>
-                <div class="col-2"><input v-model.number="newItemQty" type="number" min="1" step="1" class="form-control form-control-sm" @input="(e) => { newItemQty = Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value) || 1)) }" /></div>
+                <div class="col-2">
+                  <input
+                    v-model="newItemQty"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    class="form-control form-control-sm"
+                    placeholder="Qty"
+                    @input="(e) => { newItemQty = (e.target as HTMLInputElement).value.replace(/[^0-9]/g, '') }"
+                    @focus="(e) => (e.target as HTMLInputElement).select()"
+                  />
+                </div>
                 <div class="col-3"><input v-model="newItemNote" type="text" class="form-control form-control-sm" placeholder="Note" /></div>
               </div>
               <button @click="addItem" class="btn btn-primary btn-sm"><i class="bi bi-plus me-1"></i>Add Custom Item</button>
@@ -801,34 +793,6 @@ onUnmounted(clearSubscriptions)
     </div>
   </div>
 
-  <!-- Email Order Modal -->
-  <div v-if="showEmailModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Email Order</h5>
-          <button type="button" class="btn-close" @click="closeEmailModal" :disabled="sendingEmail"></button>
-        </div>
-        <div class="modal-body">
-          <p class="text-muted small">Enter one or more recipient emails, separated by commas.</p>
-          <textarea
-            v-model="recipientsInput"
-            class="form-control"
-            rows="3"
-            placeholder="email1@example.com, email2@example.com"
-            :disabled="sendingEmail"
-          ></textarea>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="closeEmailModal" :disabled="sendingEmail">Cancel</button>
-          <button type="button" class="btn btn-success" @click="sendOrderEmail" :disabled="sendingEmail">
-            <span v-if="sendingEmail" class="spinner-border spinner-border-sm me-2" />
-            Send Email
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped lang="scss">

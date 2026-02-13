@@ -7,6 +7,10 @@ export interface JobDetails {
     name: string;
     number: string;
 }
+export interface EmailSettings {
+    timecardSubmitRecipients?: string[];
+    shopOrderSubmitRecipients?: string[];
+}
 export interface UserProfile {
     uid: string;
     email: string;
@@ -45,4 +49,8 @@ export declare function getTimecard(jobId: string, weekStart: string, timecardId
  * Get shop order by ID
  */
 export declare function getShopOrder(shopOrderId: string): Promise<any>;
+/**
+ * Get global email settings
+ */
+export declare function getEmailSettings(): Promise<EmailSettings>;
 //# sourceMappingURL=firestoreService.d.ts.map

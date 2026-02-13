@@ -44,6 +44,7 @@ exports.verifyAdminRole = verifyAdminRole;
 exports.getDailyLog = getDailyLog;
 exports.getTimecard = getTimecard;
 exports.getShopOrder = getShopOrder;
+exports.getEmailSettings = getEmailSettings;
 const admin = __importStar(require("firebase-admin"));
 const constants_1 = require("./constants");
 // Lazy initialize db on first use
@@ -132,19 +133,34 @@ async function getDailyLog(jobId, dailyLogId) {
  * Get timecard by path
  */
 async function getTimecard(jobId, weekStart, timecardId) {
-    const tcSnap = await getDb()
+    const db = getDb();
+    // Phase 3 timecards live directly under jobs/{jobId}/timecards
+    const directRef = db
+        .collection(constants_1.COLLECTIONS.JOBS)
+        .doc(jobId)
+        .collection('timecards')
+        .doc(timecardId);
+    const directSnap = await directRef.get();
+    if (directSnap.exists) {
+        return {
+            id: directSnap.id,
+            ...directSnap.data(),
+        };
+    }
+    // Fallback for legacy Phase 2 structure jobs/{jobId}/weeks/{weekStart}/timecards
+    const legacyRef = db
         .collection(constants_1.COLLECTIONS.JOBS)
         .doc(jobId)
         .collection(constants_1.COLLECTIONS.WEEKS)
         .doc(weekStart)
         .collection(constants_1.COLLECTIONS.TIMECARDS)
-        .doc(timecardId)
-        .get();
-    if (!tcSnap.exists)
+        .doc(timecardId);
+    const legacySnap = await legacyRef.get();
+    if (!legacySnap.exists)
         return null;
     return {
-        id: tcSnap.id,
-        ...tcSnap.data(),
+        id: legacySnap.id,
+        ...legacySnap.data(),
     };
 }
 /**
@@ -157,6 +173,19 @@ async function getShopOrder(shopOrderId) {
     return {
         id: orderSnap.id,
         ...orderSnap.data(),
+    };
+}
+/**
+ * Get global email settings
+ */
+async function getEmailSettings() {
+    const settingsSnap = await getDb().collection('settings').doc('email').get();
+    if (!settingsSnap.exists)
+        return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] };
+    const data = settingsSnap.data() || {};
+    return {
+        timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
+        shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
     };
 }
 //# sourceMappingURL=firestoreService.js.map

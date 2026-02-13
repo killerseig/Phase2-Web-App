@@ -169,6 +169,14 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
       <td style="padding: 8px; border: 1px solid #ddd;">${line.areas || ''}</td>
     </tr>
   `).join('') || '';
+    const attachments = (dailyLog?.attachments || [])
+        .map((att) => {
+        const label = att?.type === 'ptp' ? 'PTP Photo' : att?.type === 'photo' ? 'Photo' : 'Attachment';
+        const name = att?.name || att?.path || 'Attachment';
+        const url = att?.url || '#';
+        return `<li style="margin-bottom: 6px;"><strong>${label}:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${name}</a></li>`;
+    })
+        .join('');
     return `
     ${constants_1.EMAIL_STYLES}
     <div class="email-container">
@@ -176,22 +184,23 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
         <h1>Daily Log Submitted</h1>
       </div>
       <div class="content">
-        <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">${jobDetails.name || 'Unnamed Job'}</h2>
+        <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">${jobDetails.name || 'Unnamed Job'} ${jobDetails.number ? `(#${jobDetails.number})` : ''}</h2>
         <p><strong>Date:</strong> ${formattedDate}</p>
-        
-        ${dailyLog?.jobSiteNumbers ? `<p><strong>Job Site Numbers:</strong> ${dailyLog.jobSiteNumbers}</p>` : ''}
+
+        <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Site Information</h3>
+        ${dailyLog?.projectName ? `<p><strong>Project Name:</strong> ${dailyLog.projectName}</p>` : ''}
+        ${dailyLog?.jobSiteNumbers ? `<p><strong>Job Site Numbers / Notes:</strong> ${dailyLog.jobSiteNumbers}</p>` : ''}
         ${dailyLog?.foremanOnSite ? `<p><strong>Foreman on Site:</strong> ${dailyLog.foremanOnSite}</p>` : ''}
         ${dailyLog?.siteForemanAssistant ? `<p><strong>Site Foreman Assistant:</strong> ${dailyLog.siteForemanAssistant}</p>` : ''}
-        ${dailyLog?.projectName ? `<p><strong>Project Name:</strong> ${dailyLog.projectName}</p>` : ''}
-        
+
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
-        
-        ${dailyLog?.manpower ? `<p><strong>Manpower:</strong> ${dailyLog.manpower}</p>` : ''}
+
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Manpower</h3>
+        ${dailyLog?.manpower ? `<p><strong>Manpower Summary:</strong> ${dailyLog.manpower}</p>` : ''}
         ${dailyLog?.weeklySchedule ? `<p><strong>Weekly Schedule:</strong> ${dailyLog.weeklySchedule}</p>` : ''}
         ${dailyLog?.manpowerAssessment ? `<p><strong>Manpower Assessment:</strong> ${dailyLog.manpowerAssessment}</p>` : ''}
-        
+
         ${manpowerLines ? `
-        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Manpower Lines</h3>
         <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
           <thead>
             <tr style="background-color: #f5f5f5;">
@@ -205,25 +214,37 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
           </tbody>
         </table>
         ` : ''}
-        
+
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
-        
+
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Safety & Concerns</h3>
         ${dailyLog?.safetyConcerns ? `<p><strong>Safety Concerns:</strong> ${dailyLog.safetyConcerns}</p>` : ''}
         ${dailyLog?.ahaReviewed ? `<p><strong>AHA Reviewed:</strong> ${dailyLog.ahaReviewed}</p>` : ''}
         ${dailyLog?.scheduleConcerns ? `<p><strong>Schedule Concerns:</strong> ${dailyLog.scheduleConcerns}</p>` : ''}
         ${dailyLog?.budgetConcerns ? `<p><strong>Budget Concerns:</strong> ${dailyLog.budgetConcerns}</p>` : ''}
-        
+        ${dailyLog?.commentsAboutShip ? `<p><strong>Comments About Ship:</strong> ${dailyLog.commentsAboutShip}</p>` : ''}
+
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
-        
+
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Deliveries & Materials</h3>
         ${dailyLog?.deliveriesReceived ? `<p><strong>Deliveries Received:</strong> ${dailyLog.deliveriesReceived}</p>` : ''}
         ${dailyLog?.deliveriesNeeded ? `<p><strong>Deliveries Needed:</strong> ${dailyLog.deliveriesNeeded}</p>` : ''}
         ${dailyLog?.newWorkAuthorizations ? `<p><strong>New Work Authorizations:</strong> ${dailyLog.newWorkAuthorizations}</p>` : ''}
         ${dailyLog?.qcInspection ? `<p><strong>QC Inspection:</strong> ${dailyLog.qcInspection}</p>` : ''}
-        
+
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
-        
+
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Notes & Action Items</h3>
         ${dailyLog?.notesCorrespondence ? `<p><strong>Notes & Correspondence:</strong> ${dailyLog.notesCorrespondence}</p>` : ''}
         ${dailyLog?.actionItems ? `<p><strong>Action Items:</strong> ${dailyLog.actionItems}</p>` : ''}
+
+        ${attachments ? `
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Attachments</h3>
+        <ul style="padding-left: 18px; margin: 0; list-style: disc;">
+          ${attachments}
+        </ul>
+        ` : ''}
       </div>
       <div class="footer">
         <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
@@ -385,6 +406,16 @@ async function sendEmail(options) {
                         address: email.trim(),
                     },
                 })),
+                ...(options.attachments && options.attachments.length
+                    ? {
+                        attachments: options.attachments.map(att => ({
+                            '@odata.type': '#microsoft.graph.fileAttachment',
+                            name: att.name,
+                            contentType: att.contentType || 'application/octet-stream',
+                            contentBytes: att.contentBytes,
+                        })),
+                    }
+                    : {}),
             },
             saveToSentItems: true,
         };

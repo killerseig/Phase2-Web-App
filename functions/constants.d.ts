@@ -2,7 +2,7 @@
  * Application Constants
  * Centralized configuration for roles, collections, messages, etc.
  */
-export declare const VALID_ROLES: readonly ["admin", "employee", "shop", "none"];
+export declare const VALID_ROLES: readonly ["admin", "employee", "shop", "foreman", "none"];
 export type UserRole = typeof VALID_ROLES[number];
 export declare const COLLECTIONS: {
     readonly USERS: "users";

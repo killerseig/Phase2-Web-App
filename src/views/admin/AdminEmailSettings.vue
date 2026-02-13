@@ -9,6 +9,7 @@ import {
   getEmailSettings,
   updateTimecardSubmitRecipientsGlobal,
   updateShopOrderSubmitRecipientsGlobal,
+  updateDailyLogSubmitRecipientsGlobal,
   type Job,
 } from '@/services'
 
@@ -36,10 +37,12 @@ async function loadJobs() {
       const settings = await getEmailSettings()
       timecardSubmitRecipients.value = settings.timecardSubmitRecipients ?? []
       shopOrderSubmitRecipients.value = settings.shopOrderSubmitRecipients ?? []
+      globalDefaultRecipients.value = settings.dailyLogSubmitRecipients ?? []
     } catch (settingsError) {
       console.warn('[AdminEmailSettings] Failed to load global email settings, using defaults', settingsError)
       timecardSubmitRecipients.value = []
       shopOrderSubmitRecipients.value = []
+      globalDefaultRecipients.value = []
     }
 
     jobs.value = await listAllJobs(true)
@@ -64,12 +67,12 @@ function addGlobalRecipient(email: string) {
     return
   }
   globalDefaultRecipients.value.push(email)
-  toastRef.value?.show('Email recipient added', 'success')
+  saveGlobalDailyLogRecipients()
 }
 
 function removeGlobalRecipient(email: string) {
   globalDefaultRecipients.value = globalDefaultRecipients.value.filter(e => e !== email)
-  toastRef.value?.show('Email recipient removed', 'success')
+  saveGlobalDailyLogRecipients()
 }
 
 function addJobRecipient(jobId: string, email: string) {
@@ -153,6 +156,19 @@ async function saveShopOrderRecipients() {
   } catch (e: any) {
     err.value = e?.message ?? 'Failed to save shop order recipients'
     toastRef.value?.show('Failed to save shop order recipients', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveGlobalDailyLogRecipients() {
+  saving.value = true
+  try {
+    await updateDailyLogSubmitRecipientsGlobal(globalDefaultRecipients.value)
+    toastRef.value?.show('Daily log global recipients updated', 'success')
+  } catch (e: any) {
+    err.value = e?.message ?? 'Failed to save daily log global recipients'
+    toastRef.value?.show('Failed to save daily log global recipients', 'error')
   } finally {
     saving.value = false
   }

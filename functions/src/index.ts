@@ -45,6 +45,154 @@ admin.initializeApp()
 
 const db = admin.firestore()
 const auth = admin.auth()
+const storageBucket = admin.storage().bucket()
+
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+
+const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024
+const MAX_ATTACHMENT_COUNT = 10
+
+async function loadDailyLogAttachments(log: any) {
+  const attachments: Array<{ name: string; contentType?: string; contentBytes: string }> = []
+  const files = Array.isArray(log?.attachments) ? log.attachments : []
+  let totalBytes = 0
+
+  for (const att of files) {
+    if (!att?.path) continue
+    if (attachments.length >= MAX_ATTACHMENT_COUNT) {
+      console.warn('[sendDailyLogEmail] Skipping extra attachments beyond limit', { limit: MAX_ATTACHMENT_COUNT })
+      break
+    }
+
+    try {
+      const file = storageBucket.file(att.path)
+      const [exists] = await file.exists()
+      if (!exists) {
+        console.warn('[sendDailyLogEmail] Attachment missing in storage', { path: att.path })
+        continue
+      }
+
+      const [metadata] = await file.getMetadata()
+      const size = Number(metadata?.size) || 0
+      if (totalBytes + size > MAX_ATTACHMENT_TOTAL_BYTES) {
+        console.warn('[sendDailyLogEmail] Skipping attachment to respect size budget', {
+          path: att.path,
+          size,
+          totalBytes,
+          max: MAX_ATTACHMENT_TOTAL_BYTES,
+        })
+        continue
+      }
+
+      const [buffer] = await file.download()
+      totalBytes += buffer.length
+
+      attachments.push({
+        name: att?.name || file.name.split('/').pop() || 'attachment',
+        contentType: metadata?.contentType || 'application/octet-stream',
+        contentBytes: buffer.toString('base64'),
+      })
+    } catch (err) {
+      console.warn('[sendDailyLogEmail] Failed to load attachment', { path: att?.path, err })
+    }
+  }
+
+  return attachments
+}
+
+function normalizeTimecardForEmail(tc: any) {
+  if (Array.isArray(tc?.lines) && tc.lines.length) return tc
+  const jobs = Array.isArray(tc?.jobs) ? tc.jobs : []
+
+  const lines = jobs.map((job: any) => {
+    const hoursByDay: Record<typeof DAY_KEYS[number], number> = {
+      sun: 0,
+      mon: 0,
+      tue: 0,
+      wed: 0,
+      thu: 0,
+      fri: 0,
+      sat: 0,
+    }
+    const productionByDay: Record<typeof DAY_KEYS[number], number> = {
+      sun: 0,
+      mon: 0,
+      tue: 0,
+      wed: 0,
+      thu: 0,
+      fri: 0,
+      sat: 0,
+    }
+    const unitCostByDay: Record<typeof DAY_KEYS[number], number> = {
+      sun: 0,
+      mon: 0,
+      tue: 0,
+      wed: 0,
+      thu: 0,
+      fri: 0,
+      sat: 0,
+    }
+
+    const days = Array.isArray(job?.days) ? job.days : []
+    for (const day of days) {
+      const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
+        ? day.dayOfWeek
+        : days.indexOf(day)
+      const key = DAY_KEYS[idx]
+      if (key === undefined) continue
+      hoursByDay[key] = Number(day?.hours) || 0
+      productionByDay[key] = Number(day?.production) || 0
+      unitCostByDay[key] = Number(day?.unitCost) || 0
+    }
+
+    const line: any = {
+      jobNumber: job?.jobNumber || '',
+      area: job?.area || '',
+      account: job?.acct || job?.account || '',
+      costCode: job?.costCode || job?.difC || '',
+      difH: job?.difH || '',
+      difP: job?.difP || '',
+      difC: job?.difC || '',
+      production: productionByDay,
+      unitCost: unitCostByDay,
+    }
+
+    DAY_KEYS.forEach(k => {
+      line[k] = hoursByDay[k]
+    })
+
+    const totalHours = Object.values(hoursByDay).reduce((s, v) => s + v, 0)
+    const totalProduction = Object.values(productionByDay).reduce((s, v) => s + v, 0)
+    let totalLine = 0
+    DAY_KEYS.forEach(k => {
+      totalLine += (productionByDay[k] || 0) * (unitCostByDay[k] || 0)
+    })
+
+    line.totals = {
+      hours: totalHours,
+      production: totalProduction,
+      lineTotal: totalLine,
+    }
+
+    return line
+  })
+
+  const totals = lines.reduce(
+    (agg: any, line: any) => {
+      agg.hoursTotal += Number(line?.totals?.hours) || 0
+      agg.productionTotal += Number(line?.totals?.production) || 0
+      agg.lineTotal += Number(line?.totals?.lineTotal) || 0
+      return agg
+    },
+    { hoursTotal: 0, productionTotal: 0, lineTotal: 0 }
+  )
+
+  return {
+    ...tc,
+    lines,
+    totals: tc?.totals || totals,
+  }
+}
 
 /**
  * Send password reset email using Firebase Admin SDK
@@ -103,7 +251,7 @@ export const sendDailyLogEmail = onCall({ secrets: [graphClientId, graphTenantId
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
 
-  const { jobId, dailyLogId, recipients } = request.data
+  const { jobId, dailyLogId, recipients: requestRecipients } = request.data
 
   if (!jobId) {
     throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
@@ -113,7 +261,14 @@ export const sendDailyLogEmail = onCall({ secrets: [graphClientId, graphTenantId
     throw new Error(ERROR_MESSAGES.DAILY_LOG_ID_REQUIRED)
   }
 
-  if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+  const settings = await getEmailSettings()
+  const recipients = Array.isArray(settings.dailyLogSubmitRecipients) && settings.dailyLogSubmitRecipients.length
+    ? settings.dailyLogSubmitRecipients
+    : Array.isArray(requestRecipients)
+      ? requestRecipients
+      : []
+
+  if (!recipients || recipients.length === 0) {
     throw new Error(ERROR_MESSAGES.RECIPIENTS_REQUIRED)
   }
 
@@ -129,13 +284,14 @@ export const sendDailyLogEmail = onCall({ secrets: [graphClientId, graphTenantId
     }
 
     const job = await getJobDetails(log?.jobId || '')
-
     const emailHtml = buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log)
+    const attachments = await loadDailyLogAttachments(log)
 
     await sendEmail({
       to: recipients,
       subject: `${EMAIL.SUBJECTS.DAILY_LOG} - ${job?.name || 'Job'} - ${log?.logDate || 'N/A'}`,
       html: emailHtml,
+      ...(attachments.length ? { attachments } : {}),
     })
 
     console.log(`Daily log ${dailyLogId} emailed to ${recipients.join(', ')}`)
@@ -184,81 +340,170 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
 
     // Fetch all timecards
     const timecards = []
+    const missingIds: string[] = []
     for (const tcId of timecardIds) {
+      console.log('[sendTimecardEmail] Fetching timecard', { jobId, weekStart, tcId })
       const tc = await getTimecard(jobId, weekStart, tcId)
-      if (tc) timecards.push(tc)
+      if (tc) {
+        timecards.push(tc)
+      } else {
+        missingIds.push(tcId)
+        console.warn('[sendTimecardEmail] Timecard not found', { jobId, weekStart, tcId })
+      }
     }
 
     if (timecards.length === 0) {
-      throw new Error(ERROR_MESSAGES.TIMECARD_NOT_FOUND)
+      const availableSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).collection('timecards').get()
+      const availableIds = availableSnap.docs.map(d => d.id)
+      console.error('[sendTimecardEmail] No timecards found for requested IDs', {
+        jobId,
+        weekStart,
+        requested: timecardIds,
+        missing: missingIds,
+        availableCount: availableIds.length,
+        availableSample: availableIds.slice(0, 25),
+      })
+      throw new Error(`${ERROR_MESSAGES.TIMECARD_NOT_FOUND}: ${missingIds.join(', ') || 'none found'}`)
     }
+
+    const normalizedTimecards = timecards.map(normalizeTimecardForEmail)
 
     const job = await getJobDetails(jobId)
     const userName = await getUserDisplayName(request.auth.uid, request.auth.token.email)
 
-    // Build single combined email for all timecards
-    let emailHtml = `
-      <h2>Timecards Submitted</h2>
-      <p><strong>Job:</strong> ${job?.name || 'N/A'} ${job?.number ? `(#${job.number})` : ''}</p>
-      <p><strong>Week:</strong> ${weekStart}</p>
-      <p><strong>Submitted by:</strong> ${userName}</p>
-      <hr>
-      <table style="border-collapse: collapse; width: 100%; border: 1px solid #ccc;">
-        <thead>
-          <tr style="background-color: #f0f0f0; border-bottom: 2px solid #333;">
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Employee</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Job #</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Area</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Account</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Mon</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Tue</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Wed</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Thu</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Fri</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Sat</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Sun</th>
-            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-    `
-
-    for (const tc of timecards) {
-      const lines = tc?.lines || []
-      if (lines.length === 0) {
-        emailHtml += `<tr><td colspan="12" style="border: 1px solid #ccc; padding: 8px;"><em>No entries</em></td></tr>`
-        continue
-      }
-      
-      for (const line of lines) {
-        const total = (line.mon || 0) + (line.tue || 0) + (line.wed || 0) + 
-                     (line.thu || 0) + (line.fri || 0) + (line.sat || 0) + (line.sun || 0)
-        emailHtml += `
-          <tr style="border-bottom: 1px solid #ccc;">
-            <td style="border: 1px solid #ccc; padding: 8px;">${tc?.employeeName || 'N/A'}</td>
-            <td style="border: 1px solid #ccc; padding: 8px;">${line.jobNumber || ''}</td>
-            <td style="border: 1px solid #ccc; padding: 8px;">${line.area || ''}</td>
-            <td style="border: 1px solid #ccc; padding: 8px;">${line.account || ''}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.mon || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.tue || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.wed || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.thu || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.fri || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.sat || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${line.sun || 0}</td>
-            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;"><strong>${total}</strong></td>
-          </tr>
-        `
-      }
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const fmtNum = (val: any, digits = 2) => (Number(val) || 0).toFixed(digits)
+    const fmtMoney = (val: any) => `$${(Number(val) || 0).toFixed(2)}`
+    const fmtCell = (val: any) => {
+      const n = Number(val) || 0
+      return Number.isInteger(n) ? String(n) : n.toFixed(2)
     }
 
-    emailHtml += `
-        </tbody>
-      </table>
+    const emailStyles = `
+      <style>
+        .tc-wrapper { font-family: 'Segoe UI', Arial, sans-serif; color: #e7ecff; background: #0d111f; padding: 12px; }
+        .tc-card { border: 1px solid #1f2638; border-radius: 8px; margin-bottom: 16px; background: #0f1424; box-shadow: 0 8px 18px rgba(0,0,0,0.35); }
+        .tc-card-header { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; background: linear-gradient(90deg, #0f1424, #182442); border-bottom: 1px solid #1f2638; }
+        .tc-emp-name { font-weight: 700; font-size: 16px; color: #f1f4ff; }
+        .tc-emp-meta { color: #9aa6c6; font-size: 13px; }
+        .tc-status { padding: 4px 10px; border-radius: 14px; font-size: 12px; font-weight: 700; text-transform: lowercase; background: #d1f4e8; color: #0f5132; }
+        .tc-status.draft { background: #fff3cd; color: #664d03; }
+        .tc-meta { font-size: 13px; color: #c7cee5; }
+        .tc-table { width: 100%; border-collapse: collapse; background: #0f1424; }
+        .tc-table th { font-size: 12px; font-weight: 700; text-align: center; padding: 8px 6px; background: #10182d; border-bottom: 1px solid #1f2638; color: #e7ecff; }
+        .tc-table td { padding: 8px 6px; text-align: center; font-size: 13px; color: #e7ecff; border-bottom: 1px solid #1f2638; }
+        .tc-row-soft td { background: #131b30; }
+        .tc-left { font-weight: 600; color: #f1f4ff; border-right: 1px solid #1f2638; }
+        .tc-label { font-weight: 700; width: 50px; border-right: 1px solid #1f2638; }
+        .tc-dif { border-right: 1px solid #1f2638; }
+        .tc-total { font-weight: 700; color: #f1f4ff; }
+        .col-job { width: 80px; }
+        .col-acct { width: 70px; }
+        .col-blank { width: 50px; }
+        .col-div { width: 70px; }
+        .col-day { width: 90px; }
+        .col-total { width: 80px; }
+        .tc-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #1f2638; background: #0f1424; }
+        .tc-notes { padding: 12px 14px; border-top: 1px solid #1f2638; background: #0f1424; font-size: 13px; color: #c7cee5; }
+        .pill { display: inline-block; padding: 6px 10px; background: #111933; border: 1px solid #1f2638; border-radius: 8px; font-weight: 700; color: #e7ecff; }
+      </style>
     `
 
+    const renderJobRows = (line: any, totals: any) => {
+      const hoursRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtCell(line[DAY_KEYS[idx]])}</td>`).join('')
+      const prodRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtCell(line.production?.[DAY_KEYS[idx]])}</td>`).join('')
+      const costRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtMoney(line.unitCost?.[DAY_KEYS[idx]])}</td>`).join('')
+
+      return `
+        <tr>
+          <td rowspan="3" class="tc-left">${line.jobNumber || ''}</td>
+          <td rowspan="3" class="tc-left">${line.account || ''}</td>
+          <td class="tc-label">H</td>
+          <td class="tc-dif">${line.difH || ''}</td>
+          ${hoursRow}
+          <td class="tc-total">${fmtNum(line?.totals?.hours)}</td>
+        </tr>
+        <tr class="tc-row-soft">
+          <td class="tc-label">P</td>
+          <td class="tc-dif">${line.difP || ''}</td>
+          ${prodRow}
+          <td class="tc-total">${fmtNum(line?.totals?.production)}</td>
+        </tr>
+        <tr>
+          <td class="tc-label">C</td>
+          <td class="tc-dif">${line.difC || ''}</td>
+          ${costRow}
+          <td class="tc-total">${fmtMoney(line?.totals?.lineTotal)}</td>
+        </tr>
+      `
+    }
+
+    const weekStartDate = new Date(weekStart)
+    const weekEndDate = new Date(weekStartDate)
+    weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 6)
+    const fmtDate = (d: Date) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`
+
+      let emailHtml = `
+      ${emailStyles}
+      <div class="tc-wrapper">
+        <div style="margin-bottom:14px;">
+          <h2 style="margin:0 0 6px 0; color:#f1f4ff;">Timecards Submitted</h2>
+          <div class="tc-meta">Job: ${job?.name || 'N/A'} ${job?.number ? `(#${job.number})` : ''}</div>
+          <div class="tc-meta">Week: ${fmtDate(weekStartDate)} – ${fmtDate(weekEndDate)}</div>
+          <div class="tc-meta">Submitted by: ${userName}</div>
+        </div>
+    `
+
+    normalizedTimecards.forEach(tc => {
+      const lines = Array.isArray(tc?.lines) ? tc.lines : []
+      const hasLines = lines.length > 0
+      const statusClass = tc.status === 'submitted' ? 'submitted' : 'draft'
+      const hoursTotal = Number(tc?.totals?.hoursTotal) || 0
+      const regularHours = Math.min(hoursTotal, 40)
+      const overtimeHours = Math.max(hoursTotal - 40, 0)
+      emailHtml += `
+        <div class="tc-card">
+          <div class="tc-card-header">
+            <div>
+              <div class="tc-emp-name">${tc.employeeName || 'Employee'}</div>
+              <div class="tc-emp-meta">#${tc.employeeNumber || ''}${tc.occupation ? ` · ${tc.occupation}` : ''}</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="tc-meta">Totals: ${fmtNum(tc?.totals?.hoursTotal)} hrs · ${fmtNum(tc?.totals?.productionTotal)} prod · ${fmtMoney(tc?.totals?.lineTotal)}</div>
+              <div class="tc-status ${statusClass}">${tc.status || 'submitted'}</div>
+            </div>
+          </div>
+
+          <div style="padding:12px 14px;">
+            <table class="tc-table">
+              <thead>
+                <tr>
+                  <th class="col-job">Job #</th>
+                  <th class="col-acct">Acct</th>
+                  <th class="col-blank"></th>
+                  <th class="col-div">Dif</th>
+                  ${dayLabels.map(d => `<th class="col-day">${d}</th>`).join('')}
+                  <th class="col-total">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${hasLines ? lines.map((line: any) => renderJobRows(line, tc.totals)).join('') : '<tr><td colspan="12" style="padding:10px; text-align:center;">No entries</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="tc-footer">
+            <div class="pill">Overtime: ${fmtNum(overtimeHours)}</div>
+            <div class="pill">Regular: ${fmtNum(regularHours)}</div>
+          </div>
+          ${tc.notes ? `<div class="tc-notes"><strong>Notes:</strong> ${tc.notes}</div>` : ''}
+        </div>
+      `
+    })
+
+    emailHtml += '</div>'
+
       // Build CSV attachment for accounting upload
-      const csvAttachment = buildTimecardCsv(timecards, weekStart)
+      const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart)
 
       await sendEmail({
         to: recipients,
@@ -313,7 +558,7 @@ function buildTimecardCsv(timecards: any[], weekStart: string): string {
     const month = d.getMonth() + 1
     const day = d.getDate()
     const year = d.getFullYear()
-    return \`\${month}/\${day}/\${year}\`
+    return `${month}/${day}/${year}`
   }
 
   for (const tc of timecards) {
@@ -352,8 +597,11 @@ export const sendShopOrderEmail = onCall({ secrets: [graphClientId, graphTenantI
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
 
-  const { shopOrderId, recipients: requestRecipients } = request.data
+  const { jobId, shopOrderId, recipients: requestRecipients } = request.data
 
+  if (!jobId) {
+    throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
+  }
   if (!shopOrderId) {
     throw new Error(ERROR_MESSAGES.SHOP_ORDER_ID_REQUIRED)
   }
@@ -374,12 +622,22 @@ export const sendShopOrderEmail = onCall({ secrets: [graphClientId, graphTenantI
       return { success: true, message: 'Email sending disabled. Skipped.' }
     }
 
-    const order = await getShopOrder(shopOrderId)
+    let order: any = null
+
+    // Primary: job-scoped collection (jobs/{jobId}/shop_orders/{shopOrderId})
+    const jobOrderSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get()
+    if (jobOrderSnap.exists) {
+      order = { id: jobOrderSnap.id, ...jobOrderSnap.data(), jobId }
+    } else {
+      // Fallback to legacy root collection (shopOrders)
+      order = await getShopOrder(shopOrderId)
+    }
+
     if (!order) {
       throw new Error(ERROR_MESSAGES.SHOP_ORDER_NOT_FOUND)
     }
 
-    const job = await getJobDetails(order?.jobId || '')
+    const job = await getJobDetails(order?.jobId || jobId)
 
     const emailHtml = buildShopOrderEmail(order)
 
@@ -415,11 +673,13 @@ async function sendDailyLogEmailInternal(jobId: string, dailyLogId: string, reci
 
   const job = await getJobDetails(log?.jobId || '')
   const emailHtml = buildDailyLogAutoSubmitEmail(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString())
+  const attachments = await loadDailyLogAttachments(log)
 
   await sendEmail({
     to: recipients,
     subject: `${EMAIL.SUBJECTS.DAILY_LOG_AUTO} - ${job?.name || 'Job'} - ${log?.logDate || 'N/A'}`,
     html: emailHtml,
+    ...(attachments.length ? { attachments } : {}),
   })
 }
 

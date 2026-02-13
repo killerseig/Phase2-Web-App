@@ -25,6 +25,7 @@ export interface JobDetails {
 export interface EmailSettings {
   timecardSubmitRecipients?: string[]
   shopOrderSubmitRecipients?: string[]
+  dailyLogSubmitRecipients?: string[]
 }
 
 export interface UserProfile {
@@ -119,19 +120,36 @@ export async function getDailyLog(jobId: string, dailyLogId: string): Promise<an
  * Get timecard by path
  */
 export async function getTimecard(jobId: string, weekStart: string, timecardId: string): Promise<any> {
-  const tcSnap = await getDb()
+  const db = getDb()
+
+  // Phase 3 timecards live directly under jobs/{jobId}/timecards
+  const directRef = db
+    .collection(COLLECTIONS.JOBS)
+    .doc(jobId)
+    .collection('timecards')
+    .doc(timecardId)
+  const directSnap = await directRef.get()
+  if (directSnap.exists) {
+    return {
+      id: directSnap.id,
+      ...directSnap.data(),
+    }
+  }
+
+  // Fallback for legacy Phase 2 structure jobs/{jobId}/weeks/{weekStart}/timecards
+  const legacyRef = db
     .collection(COLLECTIONS.JOBS)
     .doc(jobId)
     .collection(COLLECTIONS.WEEKS)
     .doc(weekStart)
     .collection(COLLECTIONS.TIMECARDS)
     .doc(timecardId)
-    .get()
-  
-  if (!tcSnap.exists) return null
+  const legacySnap = await legacyRef.get()
+  if (!legacySnap.exists) return null
+
   return {
-    id: tcSnap.id,
-    ...tcSnap.data(),
+    id: legacySnap.id,
+    ...legacySnap.data(),
   }
 }
 
@@ -157,5 +175,6 @@ export async function getEmailSettings(): Promise<EmailSettings> {
   return {
     timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
     shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
+    dailyLogSubmitRecipients: Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients : [],
   }
 }
