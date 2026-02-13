@@ -17,16 +17,7 @@
       <div class="d-flex align-items-center gap-1">
         <button
           type="button"
-          class="sidebar-toggle d-lg-none"
-          :title="'Close menu'"
-          @click="app.setSidebarOpenMobile(false)"
-          aria-label="Close menu"
-        >
-          <i class="bi bi-x-lg sidebar-toggle-icon"></i>
-        </button>
-        <button
-          type="button"
-          @click="app.toggleSidebar"
+          @click="onToggleClick"
           :title="app.sidebarCollapsed ? 'Expand menu' : 'Collapse menu'"
           class="sidebar-toggle"
           aria-label="Toggle sidebar"
@@ -135,7 +126,11 @@ const jobNav = computed(() => navItems.filter((n) => n.section === 'job' && canS
 const adminNav = computed(() => navItems.filter((n) => n.section === 'admin' && canSee(n.roles)))
 
 // Smooth opacity transition for text without reflow
-const textOpacity = computed(() => (app.sidebarCollapsed ? 0 : 1))
+const textOpacity = computed(() => {
+  // On mobile, show text when drawer is open
+  if (app.sidebarOpenMobile) return 1
+  return app.sidebarCollapsed ? 0 : 1
+})
 
 const headerTextStyle = computed(() => ({
   transition: 'opacity 0.3s ease',
@@ -165,6 +160,15 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
 })
+
+function onToggleClick() {
+  const isMobile = window.innerWidth <= 991
+  if (isMobile) {
+    app.setSidebarOpenMobile(!app.sidebarOpenMobile)
+  } else {
+    app.toggleSidebar()
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -187,11 +191,11 @@ onBeforeUnmount(() => {
 
 @media (max-width: 991px) {
   .sidebar {
-    transform: translateX(calc(-1 * var(--sidebar-width, 260px)));
-    width: 260px;
+    width: 56px;
+    transform: translateX(0);
   }
   .app-shell.is-mobile-open .sidebar {
-    transform: translateX(0);
+    width: 260px;
   }
 }
 

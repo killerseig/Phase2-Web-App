@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import flatPickr from 'vue-flatpickr-component'
+import 'flatpickr/dist/flatpickr.css'
 import { useRoute } from 'vue-router'
 import { isValidEmail } from '../utils/emailValidation'
 import Toast from '../components/Toast.vue'
@@ -46,6 +48,12 @@ const saving = ref(false)
 const uploading = ref(false)
 const err = ref('')
 const logDate = ref(new Date().toISOString().slice(0, 10))
+const datePickerConfig = ref<any>({
+  dateFormat: 'Y-m-d',
+  disableMobile: true,
+  prevArrow: '<i class="bi bi-chevron-left"></i>',
+  nextArrow: '<i class="bi bi-chevron-right"></i>',
+})
 const selectedLogs = ref<DailyLog[]>([])
 const logsForSelectedDate = computed(() => {
   return selectedLogs.value
@@ -543,6 +551,12 @@ const isAdminAddedLine = (line: any): boolean => {
 
 onMounted(init)
 onUnmounted(stopLiveLog)
+
+function onDateChange(_dates: Date[], dateStr: string) {
+  if (!dateStr) return
+  logDate.value = dateStr
+  loadForDate(dateStr)
+}
 </script>
 
 <template>
@@ -573,7 +587,13 @@ onUnmounted(stopLiveLog)
             <label class="form-label small text-muted mb-1">Date</label>
             <div class="input-group input-group-sm">
               <span class="input-group-text bg-light"><i class="bi bi-calendar-date"></i></span>
-              <input type="date" class="form-control" v-model="logDate" @change="loadForDate(logDate)" />
+              <flat-pickr
+                v-model="logDate"
+                :config="datePickerConfig"
+                @on-change="onDateChange"
+                class="form-control"
+                aria-label="Daily log date"
+              />
             </div>
           </div>
           <div class="col-md-4 d-flex flex-column gap-1">

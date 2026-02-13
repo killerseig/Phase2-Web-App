@@ -14,15 +14,6 @@
 
       <!-- Actions -->
       <div class="d-flex align-items-center gap-2 ms-auto">
-        <button
-          class="btn btn-outline-secondary btn-sm d-lg-none topnav-btn"
-          type="button"
-          title="Toggle menu"
-          @click="app.setSidebarOpenMobile(!app.sidebarOpenMobile)"
-        >
-          <i class="bi bi-list"></i>
-        </button>
-
         <router-link
           v-if="jobId"
           :to="{ name: 'job-home', params: { jobId } }"

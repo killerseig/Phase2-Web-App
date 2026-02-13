@@ -6,10 +6,12 @@ import { updatePassword } from 'firebase/auth'
 import { auth } from '../firebase'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../firebase'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
+const authStore = useAuthStore()
 
 const setupToken = ref('')
 const uid = ref('')
@@ -87,22 +89,18 @@ const submit = async () => {
   loading.value = true
   try {
     // Get the current user and update password
-    // We need to sign in with a temporary session first
-    const { signInWithEmailAndPassword } = await import('firebase/auth')
-    
-    // Create a temporary password first to sign in, then update to real password
-    const tempPassword = setupToken.value.substring(0, 20)
-    
     try {
       // Try to update password directly using the auth user
       const currentUser = auth.currentUser
       if (currentUser && currentUser.uid === uid.value) {
         await updatePassword(currentUser, password.value)
-        toastRef.value?.show('Password set successfully! Redirecting to login...', 'success')
-        
-        setTimeout(() => {
-          router.push('/login')
-        }, 1500)
+        await authStore.login(email.value, password.value)
+        toastRef.value?.show('Password set successfully! Logging you in...', 'success')
+        if (authStore.role === 'none') {
+          await router.push('/unauthorized')
+        } else {
+          await router.push('/dashboard')
+        }
       } else {
         // User not currently signed in, use Firebase Admin SDK approach via function call
         const { httpsCallable } = await import('firebase/functions')
@@ -114,12 +112,13 @@ const submit = async () => {
           password: password.value,
           setupToken: setupToken.value 
         })
-        
-        toastRef.value?.show('Password set successfully! Redirecting to login...', 'success')
-        
-        setTimeout(() => {
-          router.push('/login')
-        }, 1500)
+        await authStore.login(email.value, password.value)
+        toastRef.value?.show('Password set successfully! Logging you in...', 'success')
+        if (authStore.role === 'none') {
+          await router.push('/unauthorized')
+        } else {
+          await router.push('/dashboard')
+        }
       }
     } catch (e: any) {
       throw e

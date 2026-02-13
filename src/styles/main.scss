@@ -12,6 +12,7 @@
 // 3) Your custom components/utilities last
 @import "components";
 @import "utilities";
+@import "flatpickr";
 
 // ---- Autofill theming (keep dark inputs consistent) ----
 input:-webkit-autofill,

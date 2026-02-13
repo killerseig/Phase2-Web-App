@@ -211,7 +211,7 @@ export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to:
 
   // Role-based access control
   if (allowedRoles.length > 0) {
-    const userRole = auth.role || ROLES.NONE
+    const userRole = (auth.role ?? ROLES.NONE) as Role
     if (!allowedRoles.includes(userRole)) {
       return { name: 'unauthorized' }
     }

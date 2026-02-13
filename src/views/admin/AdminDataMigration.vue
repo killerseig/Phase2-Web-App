@@ -104,11 +104,12 @@
           </div>
           <div class="col-md-6">
             <label class="form-label">Select Week</label>
-            <input
+            <flat-pickr
               v-model="selectedWeekDate"
-              type="date"
+              :config="datePickerConfig"
               class="form-control"
               placeholder="Select week ending date"
+              aria-label="Select week ending date"
             />
           </div>
         </div>
@@ -221,6 +222,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import flatPickr from 'vue-flatpickr-component'
+import 'flatpickr/dist/flatpickr.css'
 import Toast from '../../components/Toast.vue'
 import { useJobsStore } from '../../stores/jobs'
 import {
@@ -251,6 +254,12 @@ const migrationStartTime = ref<Date | null>(null)
 const selectedJobId = ref('')
 const selectedWeekDate = ref('')
 const plexisExportData = ref('')
+const datePickerConfig = ref<any>({
+  dateFormat: 'Y-m-d',
+  disableMobile: true,
+  prevArrow: '<i class="bi bi-chevron-left"></i>',
+  nextArrow: '<i class="bi bi-chevron-right"></i>',
+})
 
 // Import state
 const selectedJobIdForImport = ref('')

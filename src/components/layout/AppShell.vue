@@ -44,7 +44,14 @@ const app = useAppStore()
 
 @media (max-width: 991px) {
   .app-shell {
-    --sidebar-width: 0px;
+    --sidebar-width: 56px;
+  }
+  .app-shell.is-mobile-open {
+    --sidebar-width: 260px;
+  }
+
+  .main-pane {
+    margin-left: 0;
   }
 }
 
