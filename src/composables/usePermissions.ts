@@ -30,21 +30,22 @@ export function usePermissions() {
   const isAdmin = computed(() => authStore.role === 'admin')
   const isEmployee = computed(() => authStore.role === 'employee')
   const isShop = computed(() => authStore.role === 'shop')
+  const isForeman = computed(() => authStore.role === 'foreman')
   const isNone = computed(() => authStore.role === 'none')
 
   // Feature access checks
   const isManager = computed(() => isAdmin.value)
 
   const canAccessShopOrders = computed(() => {
-    return isManager.value || isEmployee.value || isShop.value
+    return isManager.value || isEmployee.value || isShop.value || isForeman.value
   })
 
   const canAccessTimecards = computed(() => {
-    return isManager.value || isEmployee.value
+    return isManager.value || isEmployee.value || isForeman.value
   })
 
   const canAccessDailyLogs = computed(() => {
-    return isManager.value || isEmployee.value
+    return isManager.value || isEmployee.value || isForeman.value
   })
 
   const canManageUsers = computed(() => isAdmin.value)
@@ -57,7 +58,7 @@ export function usePermissions() {
    * Employees and shop users have implicit access to all jobs
    */
   const canAccessJob = computed(() => {
-    return isAdmin.value || isEmployee.value || isShop.value
+    return isAdmin.value || isEmployee.value || isShop.value || isForeman.value
   })
 
   /**
@@ -92,6 +93,7 @@ export function usePermissions() {
     // Role checks
     isAdmin,
     isEmployee,
+    isForeman,
     isShop,
     isNone,
     isManager,

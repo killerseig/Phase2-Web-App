@@ -1,0 +1,10 @@
+@use '@/styles/_variables.scss' as vars;
+
+.alert {
+  border: 1px solid;
+  border-radius: var(--radius, vars.$border-radius);
+}
+
+.alert-dismissible .btn-close {
+  filter: brightness(0) saturate(100%) invert(36%) sepia(75%) saturate(1000%) hue-rotate(245deg);
+}

@@ -1,0 +1,39 @@
+@use '@/styles/_variables.scss' as vars;
+
+.form-control:focus,
+.form-select:focus {
+  border-color: vars.$primary;
+  box-shadow: 0 0 0 0.2rem rgba(vars.$primary, 0.15);
+}
+
+.form-control,
+.form-select {
+  background: var(--surface-2, vars.$surface-2);
+  color: var(--text-body, vars.$body-color);
+  border: 1px solid var(--border, vars.$border-color);
+}
+
+.form-control::placeholder,
+.form-select::placeholder {
+  color: var(--text-muted-3, vars.$text-muted-3);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  background: var(--surface-3, vars.$surface-3);
+  color: var(--text-muted, vars.$text-muted);
+  border-color: var(--border, vars.$border-color);
+}
+
+.input-group-text {
+  background: var(--surface-3, vars.$surface-3);
+  color: var(--text-body, vars.$body-color);
+  border: 1px solid var(--border, vars.$border-color);
+}
+
+// Native pickers inherit dark theme where supported
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  color-scheme: dark;
+}

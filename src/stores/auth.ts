@@ -12,6 +12,18 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { ROLES, type Role } from '@/constants/app'
 
+const CANONICAL_ROLES = Object.values(ROLES) as Role[]
+
+const normalizeRoleValue = (value: unknown): Role => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (CANONICAL_ROLES.includes(normalized as Role)) {
+      return normalized as Role
+    }
+  }
+  return ROLES.NONE
+}
+
 type AuthState = {
   user: User | null
   role: Role | null
@@ -60,7 +72,7 @@ export const useAuthStore = defineStore('auth', {
             }
 
             const data = snap.data()
-            const newRole = (data.role as Role) ?? ROLES.NONE
+            const newRole = normalizeRoleValue(data.role)
             const newActive = data.active === true
             const newAssignedJobIds = (data.assignedJobIds ?? []) as string[]
 
@@ -123,7 +135,7 @@ export const useAuthStore = defineStore('auth', {
             const snap = await getDoc(doc(db, 'users', u.uid))
             if (snap.exists()) {
               const data = snap.data()
-              this.role = (data.role as Role) ?? ROLES.NONE
+              this.role = normalizeRoleValue(data.role)
               this.active = data.active === true
               this.assignedJobIds = (data.assignedJobIds ?? []) as string[]
             } else {

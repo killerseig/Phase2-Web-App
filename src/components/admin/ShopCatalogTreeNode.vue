@@ -186,6 +186,38 @@ function handleDeleteCategory() {
 function handleEditCategory() {
   emit('edit-category', props.nodeId)
 }
+
+function setAccordionEnter(el: HTMLElement) {
+  el.style.maxHeight = '0px'
+  el.style.overflow = 'hidden'
+}
+
+function runAccordionEnter(el: HTMLElement) {
+  // Use measured height for smooth, adaptable animation
+  const target = `${el.scrollHeight}px`
+  el.style.transition = 'max-height 0.3s ease-in-out'
+  requestAnimationFrame(() => {
+    el.style.maxHeight = target
+  })
+}
+
+function cleanupAccordion(el: HTMLElement) {
+  el.style.maxHeight = ''
+  el.style.transition = ''
+  el.style.overflow = ''
+}
+
+function setAccordionLeave(el: HTMLElement) {
+  el.style.maxHeight = `${el.scrollHeight}px`
+  el.style.overflow = 'hidden'
+}
+
+function runAccordionLeave(el: HTMLElement) {
+  el.style.transition = 'max-height 0.3s ease-in-out'
+  requestAnimationFrame(() => {
+    el.style.maxHeight = '0px'
+  })
+}
 </script>
 
 <template>
@@ -262,7 +294,15 @@ function handleEditCategory() {
       </button>
     </div>
 
-    <Transition name="accordion">
+    <Transition
+      name="accordion"
+      @before-enter="setAccordionEnter"
+      @enter="runAccordionEnter"
+      @after-enter="cleanupAccordion"
+      @before-leave="setAccordionLeave"
+      @leave="runAccordionLeave"
+      @after-leave="cleanupAccordion"
+    >
       <div v-if="hasChildren" v-show="isExpanded" :id="`collapse-${props.nodeId}`" class="accordion-collapse" role="region" :aria-labelledby="`btn-${props.nodeId}`">
         <div class="accordion-body p-0">
           <div class="accordion">
@@ -332,7 +372,15 @@ function handleEditCategory() {
       </div>
     </div>
 
-    <Transition name="accordion">
+    <Transition
+      name="accordion"
+      @before-enter="setAccordionEnter"
+      @enter="runAccordionEnter"
+      @after-enter="cleanupAccordion"
+      @before-leave="setAccordionLeave"
+      @leave="runAccordionLeave"
+      @after-leave="cleanupAccordion"
+    >
       <div v-if="hasChildren" v-show="isExpanded" :id="`collapse-${props.nodeId}`" class="accordion-collapse" role="region" :aria-labelledby="`btn-${props.nodeId}`">
         <div class="accordion-body p-0">
           <div class="accordion">
@@ -466,22 +514,6 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
 .accordion-collapse {
   padding-left: 1.5rem;
   border-left: 1px solid $border-color;
-  overflow: hidden;
-}
-
-.accordion-enter-from,
-.accordion-leave-to {
-  max-height: 0;
-}
-
-.accordion-enter-to,
-.accordion-leave-from {
-  max-height: 1200px;
-}
-
-.accordion-enter-active,
-.accordion-leave-active {
-  transition: max-height 0.35s ease;
   overflow: hidden;
 }
 

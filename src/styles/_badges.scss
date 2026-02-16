@@ -1,0 +1,7 @@
+@use '@/styles/_variables.scss' as vars;
+
+.badge {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 0.5rem 0.75rem;
+}

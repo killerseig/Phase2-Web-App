@@ -1,0 +1,14 @@
+@use '@/styles/_variables.scss' as vars;
+
+.card {
+  background: var(--surface-2, vars.$surface-2);
+  color: var(--text-body, vars.$body-color);
+  border: 1px solid var(--border, vars.$border-color);
+  box-shadow: var(--shadow-sm, vars.$box-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  box-shadow: var(--shadow, vars.$box-shadow);
+  transform: translateY(-2px);
+}

@@ -128,7 +128,7 @@ onMounted(() => loadRoster())
 <template>
   <Toast ref="toastRef" />
 
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-xl py-4">
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">Job Roster</h2>
@@ -156,8 +156,8 @@ onMounted(() => loadRoster())
     </div>
 
     <!-- Select Employee Modal -->
-    <div v-if="showModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
-      <div class="modal-dialog modal-lg">
+    <div v-if="showModal" class="modal d-block bg-dark bg-opacity-50">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">Add Employee to Roster</h5>
@@ -174,15 +174,15 @@ onMounted(() => loadRoster())
                     <th class="small fw-semibold">Name</th>
                     <th class="small fw-semibold">Employee #</th>
                     <th class="small fw-semibold">Occupation</th>
-                    <th style="width: 100px;" class="small fw-semibold text-center">Action</th>
+                    <th class="small fw-semibold text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                     <tr v-for="emp in availableEmployees" :key="emp.id">
-                    <td style="padding: 8px;" class="fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
-                    <td style="padding: 8px;" class="text-muted small">#{{ emp.employeeNumber }}</td>
-                    <td style="padding: 8px;" class="text-muted small">{{ emp.occupation || '—' }}</td>
-                    <td style="padding: 8px;" class="text-center">
+                    <td class="p-2 fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
+                    <td class="p-2 text-muted small">#{{ emp.employeeNumber }}</td>
+                    <td class="p-2 text-muted small">{{ emp.occupation || '—' }}</td>
+                    <td class="p-2 text-center">
                       <button
                         @click="selectEmployeeToAdd(emp)"
                         :disabled="saving"
@@ -234,19 +234,19 @@ onMounted(() => loadRoster())
                 <th class="small fw-semibold">Name</th>
                 <th class="small fw-semibold">Employee #</th>
                 <th class="small fw-semibold">Occupation</th>
-                <th style="width: 100px;" class="small fw-semibold text-center">Status</th>
-                <th style="width: 120px;" class="small fw-semibold text-center">Actions</th>
+                <th class="small fw-semibold text-center">Status</th>
+                <th class="small fw-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="emp in filteredRosterEmployees" :key="emp.id">
-                <td style="padding: 8px;" class="fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
-                <td style="padding: 8px;" class="text-muted small">#{{ emp.employeeNumber }}</td>
-                <td style="padding: 8px;" class="text-muted small">{{ emp.occupation || '—' }}</td>
-                <td style="padding: 8px;" class="text-center">
+                <td class="p-2 fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
+                <td class="p-2 text-muted small">#{{ emp.employeeNumber }}</td>
+                <td class="p-2 text-muted small">{{ emp.occupation || '—' }}</td>
+                <td class="p-2 text-center">
                   <StatusBadge :status="emp.active ? 'active' : 'inactive'" />
                 </td>
-                <td style="padding: 8px;" class="text-center">
+                <td class="p-2 text-center">
                   <button
                     @click="toggleActive(emp)"
                     :disabled="saving"

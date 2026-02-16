@@ -766,7 +766,7 @@ export const createUserByAdmin = onCall({ secrets: [graphClientId, graphTenantId
     // Create a custom setup token for password creation
     const crypto = require('crypto')
     const setupToken = crypto.randomBytes(32).toString('hex')
-    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+    const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
     console.log(`[createUserByAdmin] Generated setup token: ${setupToken.substring(0, 10)}...`)
 
@@ -849,7 +849,16 @@ export const verifySetupToken = onCall(async (request) => {
     }
 
     // Check if token has expired
-    const expiryTime = userData.setupTokenExpiry?.toDate?.() || new Date(userData.setupTokenExpiry)
+    let expiryTime: Date
+    if (userData.setupTokenExpiry?.toDate) {
+      // It's a Firestore Timestamp
+      expiryTime = userData.setupTokenExpiry.toDate()
+    } else if (userData.setupTokenExpiry instanceof Date) {
+      expiryTime = userData.setupTokenExpiry
+    } else {
+      expiryTime = new Date(userData.setupTokenExpiry)
+    }
+    
     if (new Date() > expiryTime) {
       console.log(`[verifySetupToken] Token expired for user ${uid}`)
       throw new Error('Token expired')
@@ -900,7 +909,16 @@ export const setUserPassword = onCall(async (request) => {
     }
 
     // Check if token has expired
-    const expiryTime = userData?.setupTokenExpiry?.toDate?.() || new Date(userData?.setupTokenExpiry)
+    let expiryTime: Date
+    if (userData?.setupTokenExpiry?.toDate) {
+      // It's a Firestore Timestamp
+      expiryTime = userData.setupTokenExpiry.toDate()
+    } else if (userData?.setupTokenExpiry instanceof Date) {
+      expiryTime = userData.setupTokenExpiry
+    } else {
+      expiryTime = new Date(userData?.setupTokenExpiry)
+    }
+    
     if (new Date() > expiryTime) {
       throw new Error('Setup token has expired')
     }

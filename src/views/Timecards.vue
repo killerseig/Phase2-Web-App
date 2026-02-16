@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
@@ -63,6 +63,8 @@ const err = ref('')
 
 const editingTimecardId = ref<string | null>(null)
 const expandedId = ref<string | null>(null)
+const collapseRefs = ref<Record<string, HTMLElement | null>>({})
+const collapseHeights = ref<Record<string, number>>({})
 const editForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '' })
 
 const showCreateForm = ref(false)
@@ -270,6 +272,32 @@ function openDatePicker() {
 
 function toggleAccordion(id: string) {
   expandedId.value = expandedId.value === id ? null : id
+  nextTick(() => measureCollapse(id))
+}
+
+function setCollapseRef(id: string, el: HTMLElement | null) {
+  if (!el) {
+    delete collapseRefs.value[id]
+    delete collapseHeights.value[id]
+    return
+  }
+  collapseRefs.value[id] = el
+  collapseHeights.value[id] = el.scrollHeight
+}
+
+function measureCollapse(id: string) {
+  const el = collapseRefs.value[id]
+  if (!el) return
+  collapseHeights.value[id] = el.scrollHeight
+}
+
+function getCollapseStyle(id: string) {
+  const isOpen = expandedId.value === id
+  const h = collapseHeights.value[id] ?? 0
+  return {
+    maxHeight: isOpen ? `${h}px` : '0px',
+    opacity: isOpen ? '1' : '0',
+  }
 }
 
 function onDateChange(_dates: Date[], dateStr: string) {
@@ -698,16 +726,14 @@ onUnmounted(() => {
                       <input
                         v-model="editForm.firstName"
                         type="text"
-                        class="form-control form-control-sm flex-fill"
+                        class="form-control form-control-sm flex-fill shrink-input"
                         placeholder="First name"
-                        style="min-width: 0"
                       />
                       <input
                         v-model="editForm.lastName"
                         type="text"
-                        class="form-control form-control-sm flex-fill"
+                        class="form-control form-control-sm flex-fill shrink-input"
                         placeholder="Last name"
-                        style="min-width: 0"
                       />
                     </div>
                     <div v-else class="fw-semibold">{{ timecard.employeeName }}</div>
@@ -766,7 +792,9 @@ onUnmounted(() => {
             <div
               :id="`collapse-${timecard.id}`"
               :class="['tc-collapse', { show: expandedId === timecard.id }]"
+              :style="getCollapseStyle(timecard.id)"
               :aria-labelledby="`heading-${timecard.id}`"
+              :ref="(el) => setCollapseRef(timecard.id, el as HTMLElement | null)"
             >
               <div class="accordion-body p-0">
                 <div class="table-responsive">
@@ -1001,7 +1029,7 @@ onUnmounted(() => {
 
     <div
       v-if="showCreateForm"
-      class="position-fixed top-0 start-0 end-0 bottom-0 d-flex align-items-center justify-content-center modal-overlay"
+      class="position-fixed top-0 start-0 end-0 bottom-0 d-flex align-items-center justify-content-center bg-dark bg-opacity-50"
     >
       <div class="card border-0 shadow-lg modal-card">
         <div class="card-header bg-primary text-white">
@@ -1042,7 +1070,7 @@ onUnmounted(() => {
   </div>
 
   <!-- Timecard Summary Modal (Printable) -->
-  <div v-if="showSummaryModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+  <div v-if="showSummaryModal" class="modal d-block bg-dark bg-opacity-50">
     <div class="modal-dialog modal-lg">
       <div class="modal-content" id="timecard-summary">
         <div class="modal-header">
@@ -1187,11 +1215,12 @@ textarea.form-control {
 .tc-collapse {
   overflow: hidden;
   max-height: 0;
-  transition: max-height 0.45s ease;
+  opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
 }
 
 .tc-collapse.show {
-  max-height: 4000px; /* large enough for content */
+  opacity: 1;
 }
 
 .timecard-actions {
@@ -1239,6 +1268,10 @@ textarea.form-control {
 
 .text-xs {
   font-size: 0.875rem;
+}
+
+.shrink-input {
+  min-width: 0;
 }
 
 .timecard-table {
@@ -1294,11 +1327,6 @@ textarea.form-control {
   .col-div {
     min-width: 130px;
   }
-}
-
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 2000;
 }
 
 .modal-card {

@@ -133,10 +133,10 @@ function getCellValue(item: any, key: string) {
         </thead>
         <tbody>
           <tr v-for="item in filteredItems" :key="item.id">
-            <td v-for="column in columns" :key="column.key" :class="column.class" style="padding: 8px;">
+            <td v-for="column in columns" :key="column.key" :class="[column.class, 'p-2']">
               {{ getCellValue(item, column.key) }}
             </td>
-            <td v-if="showActions" style="padding: 8px;" class="text-center">
+            <td v-if="showActions" class="p-2 text-center">
               <button
                 type="button"
                 class="btn btn-sm btn-outline-primary me-1"

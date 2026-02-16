@@ -59,8 +59,8 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5)">
-    <div class="modal-dialog">
+  <div class="modal fade show d-block bg-dark bg-opacity-50 d-flex align-items-center" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <!-- Header -->
         <div class="modal-header">

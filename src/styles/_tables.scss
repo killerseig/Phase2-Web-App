@@ -1,0 +1,48 @@
+@use '@/styles/_variables.scss' as vars;
+
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text-body, vars.$body-color);
+  --bs-table-striped-bg: rgba(vars.$primary, 0.08);
+  --bs-table-striped-color: var(--text-body, vars.$body-color);
+  --bs-table-hover-bg: rgba(vars.$primary, 0.12);
+  --bs-table-hover-color: var(--text-body, vars.$body-color);
+  --bs-border-color: var(--border, vars.$border-color);
+  border-color: var(--border, vars.$border-color);
+  color: var(--text-body, vars.$body-color);
+  background: var(--surface, vars.$surface);
+}
+
+.table tbody tr {
+  color: var(--text-body, vars.$body-color);
+}
+
+.table th {
+  border-color: var(--border, vars.$border-color);
+  font-weight: 700;
+  background-color: rgba(vars.$primary, 0.08);
+  letter-spacing: 0.3px;
+  color: var(--text-body, vars.$body-color);
+}
+
+.table-hover tbody tr:hover {
+  background-color: rgba(vars.$primary, 0.10);
+  color: var(--text-body, vars.$body-color);
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+  background-color: rgba(vars.$primary, 0.08);
+  color: var(--text-body, vars.$body-color);
+}
+
+.table-striped > tbody > tr:nth-of-type(even) {
+  background-color: var(--surface, vars.$surface);
+  color: var(--text-body, vars.$body-color);
+}
+
+.table-responsive {
+  background: var(--surface, vars.$surface);
+  border: 1px solid var(--border, vars.$border-color) !important;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm, vars.$box-shadow-sm);
+}

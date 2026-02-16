@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useJobsStore } from '@/stores/jobs'
 import {
   assignJobToForeman as assignJobToForemanService,
   createUserByAdmin as createUserByAdminService,
@@ -8,11 +9,13 @@ import {
   listUsers as listUsersService,
   removeJobFromForeman as removeJobFromForemanService,
   setForemanJobs as setForemanJobsService,
+  syncForemanAssignmentsForJob,
   updateUser as updateUserService,
 } from '@/services'
 import type { UserProfile } from '@/types/models'
 
 export const useUsersStore = defineStore('users', () => {
+  const jobsStore = useJobsStore()
   const users = ref<UserProfile[]>([])
   const currentUserProfile = ref<UserProfile | null>(null)
   const loading = ref(false)
@@ -198,6 +201,19 @@ export const useUsersStore = defineStore('users', () => {
     }
   }
 
+  async function syncForemanAssignments(jobId: string) {
+    error.value = null
+    try {
+      await syncForemanAssignmentsForJob(jobId)
+      // Refresh cached data so UI reflects repaired links
+      await Promise.all([fetchAllUsers(), jobsStore.fetchJob(jobId)])
+    } catch (e: any) {
+      error.value = e?.message ?? 'Failed to sync foreman assignments'
+      console.error('[Users Store] Error syncing foreman assignments:', e)
+      throw e
+    }
+  }
+
   function clearError() {
     error.value = null
   }
@@ -236,6 +252,7 @@ export const useUsersStore = defineStore('users', () => {
     assignJobToForeman,
     removeJobFromForeman,
     setForemanJobs,
+    syncForemanAssignments,
     clearError,
     resetStore,
   }

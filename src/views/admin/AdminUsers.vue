@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
-import AdminFormModal from '../../components/admin/AdminFormModal.vue'
 import StatusBadge from '../../components/admin/StatusBadge.vue'
 import { useUsersStore } from '../../stores/users'
 import { useEmployeesStore } from '../../stores/employees'
@@ -17,10 +16,15 @@ const usersStore = useUsersStore()
 const employeesStore = useEmployeesStore()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
+const userFormRef = ref<HTMLElement | null>(null)
+const employeeFormRef = ref<HTMLElement | null>(null)
+const userFormHeight = ref(0)
+const employeeFormHeight = ref(0)
+
 const activeTab = ref<'users' | 'employees'>(route.query.tab === 'employees' ? 'employees' : 'users')
 
 // User form modal
-const showUserModal = ref(false)
+const showUserForm = ref(false)
 const userForm = ref({
   email: '',
   firstName: '',
@@ -46,7 +50,7 @@ const editUserFormOriginal = ref({
 const savingUserEdit = ref(false)
 
 // Employees form modal
-const showEmployeeModal = ref(false)
+const showEmployeeForm = ref(false)
 const employeeForm = ref({
   firstName: '',
   lastName: '',
@@ -70,14 +74,6 @@ const editFormOriginal = ref({
   occupation: '',
 })
 const savingEmployeeEdit = ref(false)
-
-// Employee columns for list component
-const employeeColumns = [
-  { key: 'firstName', label: 'First Name', sortable: true },
-  { key: 'lastName', label: 'Last Name', sortable: true },
-  { key: 'employeeNumber', label: 'Employee #', sortable: true },
-  { key: 'occupation', label: 'Occupation', sortable: true },
-]
 
 // Computed properties from stores
 const users = computed(() => usersStore.allUsers)
@@ -117,8 +113,8 @@ async function submitUserForm() {
       userForm.value.role
     )
     toastRef.value?.show(`User created successfully. Welcome email sent to ${userForm.value.email}`, 'success')
-    showUserModal.value = false
-    userForm.value = { email: '', firstName: '', lastName: '', role: 'none' }
+    showUserForm.value = false
+    resetUserForm()
     await loadUsers()
   } catch (e: any) {
     const msg = e?.message ?? String(e)
@@ -143,6 +139,33 @@ async function handleEditUser(user: UserProfile) {
     firstName: user.firstName || '',
     lastName: user.lastName || '',
     role: user.role,
+  }
+}
+
+function resetUserForm() {
+  userForm.value = { email: '', firstName: '', lastName: '', role: 'none' }
+}
+
+function cancelUserForm() {
+  resetUserForm()
+  showUserForm.value = false
+}
+
+function setUserFormRef(el: HTMLElement | null) {
+  userFormRef.value = el
+  measureUserForm()
+}
+
+function measureUserForm() {
+  if (!userFormRef.value) return
+  userFormHeight.value = userFormRef.value.scrollHeight
+}
+
+function getUserFormStyle() {
+  const h = userFormHeight.value || (userFormRef.value?.scrollHeight ?? 0)
+  return {
+    maxHeight: showUserForm.value ? `${h}px` : '0px',
+    opacity: showUserForm.value ? '1' : '0',
   }
 }
 
@@ -210,13 +233,40 @@ async function submitEmployeeForm() {
       active: true,
     })
     toastRef.value?.show('Employee created', 'success')
-    showEmployeeModal.value = false
-    employeeForm.value = { firstName: '', lastName: '', employeeNumber: '', occupation: '' }
+    showEmployeeForm.value = false
+    resetEmployeeForm()
     await loadEmployees()
   } catch (e: any) {
     toastRef.value?.show('Failed to create employee', 'error')
   } finally {
     creatingEmployee.value = false
+  }
+}
+
+function resetEmployeeForm() {
+  employeeForm.value = { firstName: '', lastName: '', employeeNumber: '', occupation: '' }
+}
+
+function cancelEmployeeForm() {
+  resetEmployeeForm()
+  showEmployeeForm.value = false
+}
+
+function setEmployeeFormRef(el: HTMLElement | null) {
+  employeeFormRef.value = el
+  measureEmployeeForm()
+}
+
+function measureEmployeeForm() {
+  if (!employeeFormRef.value) return
+  employeeFormHeight.value = employeeFormRef.value.scrollHeight
+}
+
+function getEmployeeFormStyle() {
+  const h = employeeFormHeight.value || (employeeFormRef.value?.scrollHeight ?? 0)
+  return {
+    maxHeight: showEmployeeForm.value ? `${h}px` : '0px',
+    opacity: showEmployeeForm.value ? '1' : '0',
   }
 }
 
@@ -277,6 +327,7 @@ function cancelEmployeeEdit() {
   editFormOriginal.value = { firstName: '', lastName: '', employeeNumber: '', occupation: '' }
 }
 
+
 async function handleDeleteEmployee(emp: Employee) {
   const name = `${emp.firstName} ${emp.lastName}`
   if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
@@ -292,13 +343,24 @@ async function handleDeleteEmployee(emp: Employee) {
 onMounted(() => {
   loadUsers()
   loadEmployees()
+  nextTick(() => {
+    measureUserForm()
+    measureEmployeeForm()
+  })
+})
+
+watch(showUserForm, (open) => {
+  if (open) nextTick(measureUserForm)
+})
+
+watch(showEmployeeForm, (open) => {
+  if (open) nextTick(measureEmployeeForm)
 })
 </script>
 
 <template>
   <Toast ref="toastRef" />
-  
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-xl py-4">
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">User Management</h2>
@@ -331,42 +393,80 @@ onMounted(() => {
 
     <!-- Users Tab -->
     <template v-if="activeTab === 'users'">
-      <!-- Create User Button -->
-      <div class="mb-4">
-        <button
-          v-if="!showUserModal"
-          @click="showUserModal = true"
-          class="btn btn-primary"
+      <!-- Create User Accordion -->
+      <div class="card mb-4">
+        <div
+          class="card-header d-flex align-items-center justify-content-between cursor-pointer"
+          role="button"
+          @click="showUserForm = !showUserForm; nextTick(measureUserForm)"
+          :aria-expanded="showUserForm"
         >
-          <i class="bi bi-plus-circle me-2"></i>Create User
-        </button>
+          <div>
+            <h5 class="mb-1">Create User</h5>
+            <p class="text-muted small mb-0">Add a new user account and set their role</p>
+          </div>
+          <i :class="['bi', 'bi-chevron-down', 'chevron', { open: showUserForm }]" aria-hidden="true"></i>
+        </div>
+        <div
+          class="card-body border-top inline-collapse"
+          :style="getUserFormStyle()"
+          :ref="setUserFormRef"
+        >
+          <div class="collapse-inner p-3">
+            <form class="row g-3" @submit.prevent="submitUserForm">
+              <div class="col-md-4">
+                <label class="form-label small">Email</label>
+                <input
+                  v-model="userForm.email"
+                  type="email"
+                  class="form-control"
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">First Name</label>
+                <input
+                  v-model="userForm.firstName"
+                  type="text"
+                  class="form-control"
+                  placeholder="John"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">Last Name</label>
+                <input
+                  v-model="userForm.lastName"
+                  type="text"
+                  class="form-control"
+                  placeholder="Doe"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">Role</label>
+                <select v-model="userForm.role" class="form-select" required>
+                  <option value="none">None (No Access)</option>
+                  <option value="employee">Employee</option>
+                  <option value="shop">Shop</option>
+                  <option value="foreman">Foreman</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="col-12 d-flex gap-2 justify-content-end pt-2">
+                <button type="button" class="btn btn-outline-secondary" @click.stop="cancelUserForm" :disabled="creatingUser">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" :disabled="creatingUser">
+                  <span v-if="creatingUser" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Create User
+                </button>
+              </div>
+            </form>
+          </div>
+          </div>
       </div>
-
-      <!-- Create User Modal -->
-      <AdminFormModal
-        v-if="showUserModal"
-        title="Create New User"
-        :fields="[
-          { name: 'email', label: 'Email', type: 'email', placeholder: 'user@example.com', required: true },
-          { name: 'firstName', label: 'First Name', type: 'text', placeholder: 'John', required: true },
-          { name: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe', required: true },
-          { name: 'role', label: 'Role', type: 'select', required: true, options: [
-            { value: 'none', label: 'None (No Access)' },
-            { value: 'employee', label: 'Employee' },
-            { value: 'shop', label: 'Shop' },
-            { value: 'foreman', label: 'Foreman' },
-            { value: 'admin', label: 'Admin' },
-          ]},
-        ]"
-        :initial-data="userForm"
-        :loading="creatingUser"
-        submit-label="Create User"
-        @submit="(data) => {
-          userForm = data as any
-          submitUserForm()
-        }"
-        @cancel="showUserModal = false"
-      />
 
       <!-- Users List -->
       <AdminCardWrapper
@@ -389,17 +489,17 @@ onMounted(() => {
           <table class="table table-sm table-striped table-hover mb-0">
             <thead>
               <tr>
-                <th style="width: 20%;" class="small fw-semibold">Email</th>
+                  <th class="small fw-semibold">Email</th>
                 <th style="width: 15%;" class="small fw-semibold">First Name</th>
                 <th style="width: 15%;" class="small fw-semibold">Last Name</th>
                 <th style="width: 12%;" class="small fw-semibold">Role</th>
                 <th style="width: 12%;" class="small fw-semibold">Status</th>
-                <th style="width: 26%;" class="small fw-semibold text-center">Actions</th>
+                  <th class="small fw-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="user in users" :key="user.id">
-                <td style="padding: 8px;">
+                <td class="p-2">
                   <template v-if="editingUserId === user.id">
                     <input
                       v-model="editUserForm.email"
@@ -410,7 +510,7 @@ onMounted(() => {
                   </template>
                   <span v-else class="small">{{ user.email }}</span>
                 </td>
-                <td style="padding: 8px;">
+                <td class="p-2">
                   <template v-if="editingUserId === user.id">
                     <input
                       v-model="editUserForm.firstName"
@@ -422,7 +522,7 @@ onMounted(() => {
                   </template>
                   <span v-else>{{ user.firstName }}</span>
                 </td>
-                <td style="padding: 8px;">
+                <td class="p-2">
                   <template v-if="editingUserId === user.id">
                     <input
                       v-model="editUserForm.lastName"
@@ -434,7 +534,7 @@ onMounted(() => {
                   </template>
                   <span v-else>{{ user.lastName }}</span>
                 </td>
-                <td style="padding: 8px;">
+                <td class="p-2">
                   <template v-if="editingUserId === user.id">
                     <select 
                       v-model="editUserForm.role" 
@@ -459,10 +559,10 @@ onMounted(() => {
                     {{ user.role }}
                   </span>
                 </td>
-                <td style="padding: 8px;">
+                <td class="p-2">
                   <StatusBadge :status="user.active ? 'active' : 'inactive'" />
                 </td>
-                <td style="padding: 8px;" class="text-center">
+                <td class="p-2 text-center">
                   <template v-if="editingUserId === user.id">
                     <button
                       @click="saveUserEdit(user)"
@@ -507,36 +607,79 @@ onMounted(() => {
 
     <!-- Employees Tab -->
     <template v-if="activeTab === 'employees'">
-      <!-- Create Employee Button -->
-      <div class="mb-4">
-        <button
-          v-if="!showEmployeeModal"
-          @click="showEmployeeModal = true"
-          class="btn btn-primary"
+      <!-- Create Employee Accordion -->
+      <div class="card mb-4">
+        <div
+          class="card-header d-flex align-items-center justify-content-between cursor-pointer"
+          role="button"
+          @click="showEmployeeForm = !showEmployeeForm; nextTick(measureEmployeeForm)"
+          :aria-expanded="showEmployeeForm"
         >
-          <i class="bi bi-person-plus me-2"></i>Add Employee
-        </button>
+          <div>
+            <h5 class="mb-1">Add Employee</h5>
+            <p class="text-muted small mb-0">Create an employee profile for job rosters</p>
+          </div>
+          <i :class="['bi', 'bi-chevron-down', 'chevron', { open: showEmployeeForm }]" aria-hidden="true"></i>
+        </div>
+        <div
+          class="card-body border-top inline-collapse"
+          :style="getEmployeeFormStyle()"
+          :ref="setEmployeeFormRef"
+        >
+          <div class="collapse-inner p-3">
+            <form class="row g-3" @submit.prevent="submitEmployeeForm">
+              <div class="col-md-4">
+                <label class="form-label small">First Name</label>
+                <input
+                  v-model="employeeForm.firstName"
+                  type="text"
+                  class="form-control"
+                  placeholder="John"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">Last Name</label>
+                <input
+                  v-model="employeeForm.lastName"
+                  type="text"
+                  class="form-control"
+                  placeholder="Doe"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">Employee Number</label>
+                <input
+                  v-model="employeeForm.employeeNumber"
+                  type="text"
+                  class="form-control"
+                  placeholder="EMP-001"
+                />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small">Occupation</label>
+                <input
+                  v-model="employeeForm.occupation"
+                  type="text"
+                  class="form-control"
+                  placeholder="Carpenter"
+                  required
+                />
+              </div>
+              <div class="col-12 d-flex gap-2 justify-content-end pt-2">
+                <button type="button" class="btn btn-outline-secondary" @click.stop="cancelEmployeeForm" :disabled="creatingEmployee">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" :disabled="creatingEmployee">
+                  <span v-if="creatingEmployee" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Add Employee
+                </button>
+              </div>
+            </form>
+          </div>
+          </div>
       </div>
-
-      <!-- Create Employee Modal -->
-      <AdminFormModal
-        v-if="showEmployeeModal"
-        title="Add Employee"
-        :fields="[
-          { name: 'firstName', label: 'First Name', type: 'text', placeholder: 'John', required: true },
-          { name: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe', required: true },
-          { name: 'employeeNumber', label: 'Employee Number', type: 'text', placeholder: 'EMP-001' },
-          { name: 'occupation', label: 'Occupation', type: 'text', placeholder: 'Carpenter', required: true },
-        ]"
-        :initial-data="employeeForm"
-        :loading="creatingEmployee"
-        submit-label="Add Employee"
-        @submit="(data) => {
-          employeeForm = data as any
-          submitEmployeeForm()
-        }"
-        @cancel="showEmployeeModal = false"
-      />
 
       <!-- Employees List -->
       <AdminCardWrapper
@@ -559,14 +702,14 @@ onMounted(() => {
             <thead>
               <tr>
                 <th style="width: 30%;" class="small fw-semibold">Name</th>
-                <th style="width: 20%;" class="small fw-semibold">Employee #</th>
+                <th class="small fw-semibold">Employee #</th>
                 <th style="width: 24%;" class="small fw-semibold">Occupation</th>
-                <th style="width: 26%;" class="small fw-semibold text-center">Actions</th>
+                <th class="small fw-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="emp in employees" :key="emp.id">
-                <td style="padding: 8px;" class="fw-semibold">
+                <td class="p-2 fw-semibold">
                   <template v-if="editingEmployeeId === emp.id">
                     <div class="row g-2">
                       <div class="col-6">
@@ -591,7 +734,7 @@ onMounted(() => {
                   </template>
                   <span v-else>{{ emp.firstName }} {{ emp.lastName }}</span>
                 </td>
-                <td style="padding: 8px;">
+                <td class="p-2">
                   <input
                     v-if="editingEmployeeId === emp.id"
                     v-model="editForm.employeeNumber"
@@ -602,7 +745,7 @@ onMounted(() => {
                   />
                   <span v-else class="small">{{ emp.employeeNumber || '—' }}</span>
                 </td>
-                <td style="padding: 8px;" class="text-muted">
+                <td class="p-2 text-muted">
                   <input
                     v-if="editingEmployeeId === emp.id"
                     v-model="editForm.occupation"
@@ -613,7 +756,7 @@ onMounted(() => {
                   />
                   <span v-else>{{ emp.occupation }}</span>
                 </td>
-                <td style="padding: 8px;" class="text-center">
+                <td class="p-2 text-center">
                   <template v-if="editingEmployeeId === emp.id">
                     <button
                       @click="saveEmployeeEdit(emp)"
@@ -657,3 +800,29 @@ onMounted(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.chevron {
+  transition: transform 0.3s ease-in-out;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.inline-collapse {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+}
+
+.collapse-inner {
+  padding: 1rem 1.25rem;
+}
+</style>

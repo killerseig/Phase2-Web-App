@@ -81,7 +81,7 @@ const sendReset = async () => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container" style="max-width: 420px;">
+  <div class="container auth-container">
     <div class="mt-5 card">
       <div class="card-body">
         <h4 class="mb-3">Sign In</h4>
@@ -126,7 +126,7 @@ const sendReset = async () => {
     </div>
   </div>
   <!-- Password Reset Modal -->
-  <div v-if="showResetModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.5);">
+  <div v-if="showResetModal" class="modal d-block bg-dark bg-opacity-50">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -161,9 +161,15 @@ const sendReset = async () => {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as vars;
+
+.auth-container {
+  max-width: 420px;
+}
+
 .btn-link {
-  color: #0d6efd;
+  color: var(--color-primary, vars.$primary);
   text-decoration: none;
   border: none;
   background: none;

@@ -103,7 +103,7 @@ function goToLogin() {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container" style="max-width: 420px;">
+  <div class="container auth-container">
     <div class="mt-5 card">
       <div class="card-body">
         <h4 class="mb-3">Create Account</h4>
@@ -202,9 +202,15 @@ function goToLogin() {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as vars;
+
+.auth-container {
+  max-width: 420px;
+}
+
 .btn-link {
-  color: #0d6efd;
+  color: var(--color-primary, vars.$primary);
   text-decoration: none;
   border: none;
   background: none;

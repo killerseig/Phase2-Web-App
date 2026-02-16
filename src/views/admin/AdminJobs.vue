@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
 import Toast from '../../components/Toast.vue'
@@ -30,12 +30,14 @@ const loadingJobs = computed(() => jobsStore.isLoading)
 const err = computed(() => jobsStore.error || '')
 
 // Job form
-const showJobModal = ref(false)
+const showJobForm = ref(false)
 const jobForm = ref({
   name: '',
   code: '',
 })
 const creatingJob = ref(false)
+const jobFormRef = ref<HTMLElement | null>(null)
+const jobFormHeight = ref(0)
 const togglingJobId = ref('')
 
 // Foreman modal (for job roster employees and foreman user assignment)
@@ -47,6 +49,7 @@ const loadingRoster = ref(false)
 // Foreman user assignment
 const selectedForemanUserId = ref<string>('')
 const assigningForemanUser = ref(false)
+const syncingForemanAssignments = ref(false)
 
 // Computed foreman users
 const foremanUsers = computed(() => usersStore.allUsers.filter(u => u.role === 'foreman' && u.active))
@@ -172,13 +175,36 @@ async function submitJobForm() {
   try {
     await jobsStore.createJob(jobForm.value.name, { code: jobForm.value.code })
     toastRef.value?.show('Job created successfully', 'success')
-    showJobModal.value = false
+    showJobForm.value = false
     jobForm.value = { name: '', code: '' }
     await loadJobs()
   } catch (e: any) {
     toastRef.value?.show(formatErr(e), 'error')
   } finally {
     creatingJob.value = false
+  }
+}
+
+function cancelJobForm() {
+  jobForm.value = { name: '', code: '' }
+  showJobForm.value = false
+}
+
+function setJobFormRef(el: HTMLElement | null) {
+  jobFormRef.value = el
+  measureJobForm()
+}
+
+function measureJobForm() {
+  if (!jobFormRef.value) return
+  jobFormHeight.value = jobFormRef.value.scrollHeight
+}
+
+function getJobFormStyle() {
+  const h = jobFormHeight.value || (jobFormRef.value?.scrollHeight ?? 0)
+  return {
+    maxHeight: showJobForm.value ? `${h}px` : '0px',
+    opacity: showJobForm.value ? '1' : '0',
   }
 }
 
@@ -256,7 +282,9 @@ async function assignForemanUserToJob() {
 
   assigningForemanUser.value = true
   try {
+    // Update both user AND job to keep them in sync
     await usersStore.assignJobToForeman(selectedForemanUserId.value, selectedJobForForeman.value.id)
+    await jobsStore.assignForemanToJob(selectedJobForForeman.value.id, selectedForemanUserId.value)
     toastRef.value?.show('Foreman assigned to job', 'success')
     selectedForemanUserId.value = ''
     // Refresh users to update assignedForemen
@@ -275,7 +303,9 @@ async function removeForemanFromJob(foremanId: string) {
 
   removingForemanId.value = foremanId
   try {
+    // Remove from both user AND job to keep them in sync
     await usersStore.removeJobFromForeman(foremanId, selectedJobForForeman.value.id)
+    await jobsStore.removeForemanFromJob(selectedJobForForeman.value.id, foremanId)
     toastRef.value?.show('Foreman removed from job', 'success')
     // Refresh users to update assignedForemen
     await usersStore.fetchAllUsers()
@@ -286,9 +316,30 @@ async function removeForemanFromJob(foremanId: string) {
   }
 }
 
+async function syncForemanAssignmentsForSelectedJob() {
+  if (!selectedJobForForeman.value) return
+  syncingForemanAssignments.value = true
+  try {
+    await usersStore.syncForemanAssignments(selectedJobForForeman.value.id)
+    toastRef.value?.show('Foreman assignments synced', 'success')
+    await usersStore.fetchAllUsers()
+  } catch (e: any) {
+    toastRef.value?.show(formatErr(e), 'error')
+  } finally {
+    syncingForemanAssignments.value = false
+  }
+}
+
 onMounted(async () => {
   loadJobs()
   await usersStore.fetchAllUsers()
+  nextTick(() => {
+    measureJobForm()
+  })
+})
+
+watch(showJobForm, open => {
+  if (open) nextTick(measureJobForm)
 })
 
 </script>
@@ -296,22 +347,54 @@ onMounted(async () => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-xl py-4">
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">Jobs</h2>
       <p class="text-muted small mb-0">Create and manage jobs</p>
     </div>
 
-    <!-- Create Job Button -->
-    <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
-      <button
-        v-if="!showJobModal"
-        @click="showJobModal = true"
-        class="btn btn-primary"
+    <!-- Create Job Accordion -->
+    <div class="card mb-4">
+      <div
+        class="card-header d-flex align-items-center justify-content-between cursor-pointer"
+        role="button"
+        @click="showJobForm = !showJobForm; nextTick(measureJobForm)"
+        :aria-expanded="showJobForm"
       >
-        <i class="bi bi-plus-circle me-2"></i>Create Job
-      </button>
+        <div>
+          <h5 class="mb-1">Create Job</h5>
+          <p class="text-muted small mb-0">Add a new job with code for tracking</p>
+        </div>
+        <i :class="['bi', 'bi-chevron-down', 'chevron', { open: showJobForm }]" aria-hidden="true"></i>
+      </div>
+      <div
+        class="card-body border-top inline-collapse"
+        :style="getJobFormStyle()"
+        :ref="setJobFormRef"
+      >
+        <div class="collapse-inner p-3">
+          <form class="row g-3" @submit.prevent="submitJobForm">
+            <div class="col-md-6">
+              <label class="form-label small">Job Name</label>
+              <input v-model="jobForm.name" type="text" class="form-control" placeholder="Project Name" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Job Code</label>
+              <input v-model="jobForm.code" type="text" class="form-control" placeholder="JOB-001" />
+            </div>
+            <div class="col-12 d-flex gap-2 justify-content-end pt-2">
+              <button type="button" class="btn btn-outline-secondary" @click.stop="cancelJobForm" :disabled="creatingJob">
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary" :disabled="creatingJob || !jobForm.name">
+                <span v-if="creatingJob" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Create Job
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
 
     <!-- Office Exports -->
@@ -339,38 +422,11 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Create Job Modal -->
-    <div v-if="showJobModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Create New Job</h5>
-            <button type="button" class="btn-close" @click="showJobModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Job Name</label>
-              <input v-model="jobForm.name" type="text" class="form-control" placeholder="Project Name" required />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Job Code</label>
-              <input v-model="jobForm.code" type="text" class="form-control" placeholder="JOB-001" />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showJobModal = false">Cancel</button>
-            <button type="button" class="btn btn-primary" @click="submitJobForm" :disabled="creatingJob || !jobForm.name">
-              <span v-if="creatingJob" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Create Job
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    
 
     <!-- Foreman Assignment Modal -->
-    <div v-if="showForemanModal && selectedJobForForeman" class="modal d-block" style="background: rgba(0,0,0,0.5);">
-      <div class="modal-dialog modal-lg">
+    <div v-if="showForemanModal && selectedJobForForeman" class="modal d-block bg-dark bg-opacity-50">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">Assign Foremen - {{ selectedJobForForeman.name }}</h5>
@@ -391,14 +447,14 @@ onMounted(async () => {
                       <tr>
                         <th style="width: 40%;" class="small fw-semibold">Name</th>
                         <th style="width: 40%;" class="small fw-semibold">Occupation</th>
-                        <th style="width: 20%;" class="small fw-semibold text-center">Role</th>
+                        <th class="small fw-semibold text-center">Role</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-for="emp in rosterEmployees" :key="emp.id">
-                        <td style="padding: 8px;" class="fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
-                        <td style="padding: 8px;" class="text-muted small">{{ emp.occupation }}</td>
-                        <td style="padding: 8px; text-center;">
+                        <td class="p-2 fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
+                        <td class="p-2 text-muted small">{{ emp.occupation }}</td>
+                        <td class="p-2 text-center">
                           <select 
                             :value="emp.isPrimaryForeman ? 'primary' : 'employee'"
                             @change="(e) => setForeman(emp.id, (e.target as HTMLSelectElement).value === 'primary')"
@@ -419,7 +475,24 @@ onMounted(async () => {
 
               <!-- Foreman User Assignment Section -->
               <div class="border-top pt-4">
-                <h6 class="mb-3">Assigned Foremen</h6>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <h6 class="mb-0">Assigned Foremen</h6>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    :disabled="syncingForemanAssignments || !selectedJobForForeman"
+                    @click="syncForemanAssignmentsForSelectedJob"
+                    title="Repair access if job and user records drift"
+                  >
+                    <span
+                      v-if="syncingForemanAssignments"
+                      class="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Sync Access
+                  </button>
+                </div>
                 <p class="text-muted small mb-3">Foremen users assigned to manage this job.</p>
                 
                 <!-- List of assigned foremen -->
@@ -507,21 +580,21 @@ onMounted(async () => {
           <table class="table table-sm table-striped table-hover mb-0">
             <thead>
               <tr>
-                <th style="width: 25%;" class="small fw-semibold">Job Name</th>
-                <th style="width: 15%;" class="small fw-semibold">Code</th>
-                <th style="width: 15%;" class="small fw-semibold">Status</th>
-                <th style="width: 15%;" class="small fw-semibold">Timecards This Week</th>
-                <th style="width: 30%;" class="small fw-semibold text-center">Actions</th>
+                <th class="small fw-semibold">Job Name</th>
+                <th class="small fw-semibold">Code</th>
+                <th class="small fw-semibold">Status</th>
+                <th class="small fw-semibold">Timecards This Week</th>
+                <th class="small fw-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="job in orderedJobs" :key="job.id">
-                <td style="padding: 8px;" class="fw-semibold">{{ job.name }}</td>
-                <td style="padding: 8px;" class="text-muted small">{{ job.code || '—' }}</td>
-                <td style="padding: 8px;">
+                <td class="p-2 fw-semibold">{{ job.name }}</td>
+                <td class="p-2 text-muted small">{{ job.code || '—' }}</td>
+                <td class="p-2">
                   <StatusBadge :status="job.active ? 'active' : 'archived'" />
                 </td>
-                <td style="padding: 8px;">
+                <td class="p-2">
                   <span
                     :class="['badge', job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger']"
                     :title="`Timecards for week ${currentWeekLabel}: ${job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
@@ -529,7 +602,7 @@ onMounted(async () => {
                     {{ job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'Submitted this week' : 'Not submitted this week' }}
                   </span>
                 </td>
-                <td style="padding: 8px;" class="text-center">
+                <td class="p-2 text-center">
                   <button
                     @click="openForemanModal(job)"
                     class="btn btn-sm btn-outline-info me-1"
@@ -579,3 +652,29 @@ onMounted(async () => {
 
   </div>
 </template>
+
+<style scoped>
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.chevron {
+  transition: transform 0.3s ease-in-out;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.inline-collapse {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+}
+
+.collapse-inner {
+  padding: 1rem 1.25rem;
+}
+</style>

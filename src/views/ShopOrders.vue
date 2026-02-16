@@ -543,7 +543,7 @@ onUnmounted(clearSubscriptions)
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-xl py-4">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
@@ -586,7 +586,7 @@ onUnmounted(clearSubscriptions)
           </div>
           <div v-if="loading" class="card-body text-center py-5"><div class="spinner-border spinner-border-sm"></div></div>
           <div v-else-if="!filtered.length" class="card-body text-center text-muted py-5">
-            <i class="bi bi-inbox mb-2 d-block" style="font-size: 1.6rem;"></i>
+            <i class="bi bi-inbox mb-2 d-block fs-4"></i>
             <div>No orders yet</div>
             <div class="small text-muted">Create one to get started</div>
           </div>
@@ -608,7 +608,7 @@ onUnmounted(clearSubscriptions)
       <!-- Order Details -->
       <div class="col-lg-8">
           <div v-if="!selected" class="card text-center text-muted py-5 order-empty">
-            <i class="bi bi-hand-index-thumb" style="font-size: 1.8rem;"></i>
+            <i class="bi bi-hand-index-thumb fs-3"></i>
             <p class="mb-0 mt-2">Select an order to view details</p>
           </div>
         <div v-else>
@@ -636,15 +636,15 @@ onUnmounted(clearSubscriptions)
                 <table class="table table-sm table-striped table-hover mb-0 align-middle">
                   <thead>
                     <tr>
-                      <th style="width: auto;" class="small fw-semibold">Description</th>
-                      <th style="width: 100px;" class="small fw-semibold text-center">Qty</th>
-                      <th style="width: auto;" class="small fw-semibold">Note</th>
-                      <th v-if="canEditOrder(selected)" style="width: 80px;" class="small fw-semibold text-center">Actions</th>
+                      <th class="small fw-semibold">Description</th>
+                      <th class="small fw-semibold text-center">Qty</th>
+                      <th class="small fw-semibold">Note</th>
+                      <th v-if="canEditOrder(selected)" class="small fw-semibold text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="(item, idx) in selected.items" :key="idx">
-                      <td style="padding: 8px;">
+                      <td class="p-2">
                         <template v-if="canEditOrder(selected)">
                           <input 
                             type="text"
@@ -658,7 +658,7 @@ onUnmounted(clearSubscriptions)
                           <small>{{ item.description }}</small>
                         </template>
                       </td>
-                      <td style="padding: 8px;" class="text-center">
+                      <td class="p-2 text-center">
                         <template v-if="canEditOrder(selected)">
                           <input 
                             type="number"
@@ -673,7 +673,7 @@ onUnmounted(clearSubscriptions)
                           <small class="text-center">{{ item.quantity }}</small>
                         </template>
                       </td>
-                      <td style="padding: 8px;">
+                      <td class="p-2">
                         <template v-if="canEditOrder(selected)">
                           <input 
                             type="text"
@@ -687,7 +687,7 @@ onUnmounted(clearSubscriptions)
                           <small class="text-muted">{{ item.note || '—' }}</small>
                         </template>
                       </td>
-                      <td v-if="canEditOrder(selected)" style="padding: 8px;" class="text-center">
+                      <td v-if="canEditOrder(selected)" class="p-2 text-center">
                         <button 
                           @click="deleteItem(idx)" 
                           class="btn btn-sm btn-outline-danger"

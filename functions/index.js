@@ -623,7 +623,7 @@ exports.createUserByAdmin = (0, https_1.onCall)({ secrets: [graphClientId, graph
         // Create a custom setup token for password creation
         const crypto = require('crypto');
         const setupToken = crypto.randomBytes(32).toString('hex');
-        const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
         console.log(`[createUserByAdmin] Generated setup token: ${setupToken.substring(0, 10)}...`);
         // Create Firestore profile with setup token
         await db.collection(constants_1.COLLECTIONS.USERS).doc(userRecord.uid).set({
@@ -690,7 +690,17 @@ exports.verifySetupToken = (0, https_1.onCall)(async (request) => {
             throw new Error('Invalid token');
         }
         // Check if token has expired
-        const expiryTime = userData.setupTokenExpiry?.toDate?.() || new Date(userData.setupTokenExpiry);
+        let expiryTime;
+        if (userData.setupTokenExpiry?.toDate) {
+            // It's a Firestore Timestamp
+            expiryTime = userData.setupTokenExpiry.toDate();
+        }
+        else if (userData.setupTokenExpiry instanceof Date) {
+            expiryTime = userData.setupTokenExpiry;
+        }
+        else {
+            expiryTime = new Date(userData.setupTokenExpiry);
+        }
         if (new Date() > expiryTime) {
             console.log(`[verifySetupToken] Token expired for user ${uid}`);
             throw new Error('Token expired');
@@ -732,7 +742,17 @@ exports.setUserPassword = (0, https_1.onCall)(async (request) => {
             throw new Error('Invalid setup token');
         }
         // Check if token has expired
-        const expiryTime = userData?.setupTokenExpiry?.toDate?.() || new Date(userData?.setupTokenExpiry);
+        let expiryTime;
+        if (userData?.setupTokenExpiry?.toDate) {
+            // It's a Firestore Timestamp
+            expiryTime = userData.setupTokenExpiry.toDate();
+        }
+        else if (userData?.setupTokenExpiry instanceof Date) {
+            expiryTime = userData.setupTokenExpiry;
+        }
+        else {
+            expiryTime = new Date(userData?.setupTokenExpiry);
+        }
         if (new Date() > expiryTime) {
             throw new Error('Setup token has expired');
         }

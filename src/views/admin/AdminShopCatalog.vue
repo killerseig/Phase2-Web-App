@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import ShopCatalogTreeNode from '../../components/admin/ShopCatalogTreeNode.vue'
@@ -18,11 +18,14 @@ const newItemDesc = ref('')
 const newItemSku = ref('')
 const newItemPrice = ref('')
 const showAddCategory = ref(false)
-const showAddItem = ref(false)
+const showAddItemForm = ref(false)
 const parentId = ref<string | null>(null) // Can be category ID or item ID
 const selectedCategoryForItem = ref<string | null>(null)
 const editingItemId = ref<string | null>(null)
 const editingCategoryId = ref<string | null>(null)
+const itemFormRef = ref<HTMLElement | null>(null)
+const itemFormHeight = ref(0)
+
 const editCategoryName = ref('')
 const editCategoryNameOriginal = ref('')
 const savingCategoryEdit = ref(false)
@@ -244,7 +247,10 @@ function openAddCategoryDialog(id: string | null = null) {
 function openAddItemDialog(categoryId: string | null = null) {
   selectedCategoryForItem.value = categoryId
   newItemDesc.value = ''
-  showAddItem.value = true
+  newItemSku.value = ''
+  newItemPrice.value = ''
+  showAddItemForm.value = true
+  nextTick(measureItemForm)
 }
 
 async function createCategory() {
@@ -283,11 +289,37 @@ async function createItem() {
     newItemSku.value = ''
     newItemPrice.value = ''
     toastRef.value?.show('Item added', 'success')
-    showAddItem.value = false
+    showAddItemForm.value = false
   } catch (e: any) {
     toastRef.value?.show('Failed to add item', 'error')
   } finally {
     saving.value = false
+  }
+}
+
+function cancelAddItem() {
+  newItemDesc.value = ''
+  newItemSku.value = ''
+  newItemPrice.value = ''
+  selectedCategoryForItem.value = null
+  showAddItemForm.value = false
+}
+
+function setItemFormRef(el: HTMLElement | null) {
+  itemFormRef.value = el
+  measureItemForm()
+}
+
+function measureItemForm() {
+  if (!itemFormRef.value) return
+  itemFormHeight.value = itemFormRef.value.scrollHeight
+}
+
+function getItemFormStyle() {
+  const h = itemFormHeight.value || (itemFormRef.value?.scrollHeight ?? 0)
+  return {
+    maxHeight: showAddItemForm.value ? `${h}px` : '0px',
+    opacity: showAddItemForm.value ? '1' : '0',
   }
 }
 
@@ -472,21 +504,87 @@ async function reactivateItem(item: ShopCatalogItem) {
 
 onMounted(() => {
   loadAll()
+  nextTick(() => {
+    measureItemForm()
+  })
+})
+
+watch(showAddItemForm, open => {
+  if (open) nextTick(measureItemForm)
 })
 </script>
 
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4" style="max-width: 1200px;">
+  <div class="container-xl py-4">
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">Shop Catalog</h2>
       <p class="text-muted small mb-0">Manage product categories and items in a unified tree view</p>
-      <div class="mt-3">
-        <button class="btn btn-primary" @click="openAddItemDialog()" :disabled="saving">
-          <i class="bi bi-plus-circle"></i> Add Item
-        </button>
+    </div>
+
+    <!-- Add Item Accordion -->
+    <div class="card mb-4">
+      <div
+        class="card-header d-flex align-items-center justify-content-between cursor-pointer"
+        role="button"
+        @click="showAddItemForm = !showAddItemForm; nextTick(measureItemForm)"
+        :aria-expanded="showAddItemForm"
+      >
+        <div>
+          <h5 class="mb-1">Add Top-Level Item</h5>
+          <p class="text-muted small mb-0">Create a root catalog item with optional SKU and price</p>
+        </div>
+        <i :class="['bi', 'bi-chevron-down', 'chevron', { open: showAddItemForm }]" aria-hidden="true"></i>
+      </div>
+      <div
+        class="card-body border-top inline-collapse"
+        :style="getItemFormStyle()"
+        :ref="setItemFormRef"
+      >
+        <div class="collapse-inner p-3">
+          <form class="row g-3" @submit.prevent="createItem">
+            <div class="col-md-6">
+              <label class="form-label small">Description</label>
+              <input
+                v-model="newItemDesc"
+                type="text"
+                class="form-control"
+                placeholder="Item description"
+                required
+              />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">SKU (optional)</label>
+              <input
+                v-model="newItemSku"
+                type="text"
+                class="form-control"
+                placeholder="e.g., SKU-12345"
+              />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Price (optional)</label>
+              <input
+                v-model="newItemPrice"
+                type="number"
+                class="form-control"
+                step="0.01"
+                placeholder="0.00"
+              />
+            </div>
+            <div class="col-12 d-flex gap-2 justify-content-end pt-2">
+              <button type="button" class="btn btn-outline-secondary" @click.stop="cancelAddItem" :disabled="saving">
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary" :disabled="saving || !newItemDesc.trim()">
+                <span v-if="saving" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Add Item
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 
@@ -498,7 +596,6 @@ onMounted(() => {
           type="text"
           class="form-control form-control-sm"
           placeholder="Search by description, SKU, or price..."
-          style="max-width: 400px;"
         />
       </div>
     </div>
@@ -587,8 +684,7 @@ onMounted(() => {
     <!-- Add Category Modal -->
     <div
       v-if="showAddCategory"
-      class="modal d-block bg-dark bg-opacity-50"
-      style="display: flex;"
+      class="modal d-block bg-dark bg-opacity-50 d-flex align-items-center justify-content-center"
     >
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -632,73 +728,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Add Item Modal -->
-    <div
-      v-if="showAddItem"
-      class="modal d-block bg-dark bg-opacity-50"
-      style="display: flex;"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Add Item</h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showAddItem = false"
-            />
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label small">Description</label>
-              <input
-                v-model="newItemDesc"
-                type="text"
-                class="form-control"
-                placeholder="Item description"
-                @keyup.enter="createItem"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label small">SKU (optional)</label>
-              <input
-                v-model="newItemSku"
-                type="text"
-                class="form-control"
-                placeholder="e.g., SKU-12345"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label small">Price (optional)</label>
-              <input
-                v-model="newItemPrice"
-                type="number"
-                class="form-control"
-                step="0.01"
-                placeholder="0.00"
-              />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              @click="showAddItem = false"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              @click="createItem"
-              :disabled="saving || !newItemDesc.trim()"
-            >
-              {{ saving ? 'Adding...' : 'Add' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -776,5 +805,29 @@ $select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);
 .form-select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23#{$select-arrow-hex}' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
   background-color: $surface-3;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.chevron {
+  transition: transform 0.3s ease-in-out;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.inline-collapse {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+}
+
+.collapse-inner {
+  padding: 1rem 1.25rem;
 }
 </style>

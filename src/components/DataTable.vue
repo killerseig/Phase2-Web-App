@@ -196,11 +196,11 @@ const onAddRow = () => props.onAddRow?.()
 }
 
 .table-responsive {
-  border: 1px solid $border-color;
+  border: 1px solid var(--border, $border-color);
   border-radius: 8px;
   overflow-x: auto;
-  background: $surface;
-  box-shadow: $box-shadow-sm;
+  background: var(--surface, $surface);
+  box-shadow: var(--shadow-sm, $box-shadow-sm);
 }
 
 .table {

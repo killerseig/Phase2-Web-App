@@ -117,7 +117,7 @@ export function buildWelcomeEmail(firstName: string, resetLink: string): string 
         </div>
         
         <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not create this account, please ignore this email.</p>
-        <p style="color: #999; font-size: 12px;"><strong>Note:</strong> This link expires in 24 hours.</p>
+        <p style="color: #999; font-size: 12px;"><strong>Note:</strong> This link expires in 7 days.</p>
       </div>
       <div class="footer">
         <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>

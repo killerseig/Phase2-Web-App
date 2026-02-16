@@ -89,10 +89,10 @@ async function onSignOut() {
 @use '@/styles/_variables.scss' as *;
 
 .topnav {
-  background: $surface;
-  color: $body-color;
-  border-bottom: 1px solid $border-color;
-  box-shadow: $box-shadow-sm;
+  background: var(--surface, $surface);
+  color: var(--text-body, $body-color);
+  border-bottom: 1px solid var(--border, $border-color);
+  box-shadow: var(--shadow-sm, $box-shadow-sm);
 }
 
 .topnav-sticky {
@@ -116,17 +116,17 @@ async function onSignOut() {
 }
 
 .topnav .navbar-text {
-  color: $body-color;
+  color: var(--text-body, $body-color);
 }
 
 .navbar-text .text-muted {
-  color: $text-muted !important;
+  color: var(--text-muted, $text-muted) !important;
 }
 
 .topnav .btn-outline-secondary {
-  color: $body-color;
-  border-color: $border-color;
-  background: $surface-2;
+  color: var(--text-body, $body-color);
+  border-color: var(--border, $border-color);
+  background: var(--surface-2, $surface-2);
 }
 
 .topnav-btn {
@@ -137,13 +137,13 @@ async function onSignOut() {
 .topnav .btn-outline-secondary:hover {
   background: rgba($primary, 0.12);
   border-color: $primary;
-  color: $body-color;
+  color: var(--text-body, $body-color);
 }
 
 .topnav .btn-outline-danger {
   color: $danger;
   border-color: rgba($danger, 0.5);
-  background: $surface-2;
+  background: var(--surface-2, $surface-2);
 }
 
 .topnav .btn-outline-danger:hover {

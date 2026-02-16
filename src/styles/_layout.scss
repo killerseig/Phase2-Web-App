@@ -1,0 +1,43 @@
+@use '@/styles/_variables.scss' as vars;
+
+// Section spacing helper
+.section {
+  padding: clamp(3rem, 5vw, 5rem) 0;
+}
+
+// Headline accent bar
+.h-accent {
+  position: relative;
+  padding-left: 1rem;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.25em;
+    width: 0.35rem;
+    height: 1.1em;
+    border-radius: 999px;
+    background: vars.$warning;
+  }
+}
+
+// Hero overlay
+.hero {
+  position: relative;
+  background: vars.$dark;
+  color: white;
+  overflow: hidden;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(11, 31, 51, 0.90), rgba(11, 31, 51, 0.55));
+  }
+
+  > .container {
+    position: relative;
+    z-index: 1;
+  }
+}

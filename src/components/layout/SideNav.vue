@@ -175,9 +175,9 @@ function onToggleClick() {
 @use '@/styles/_variables.scss' as *;
 
 .sidebar {
-  background: $surface;
-  color: $body-color;
-  border-right: 1px solid $border-color !important;
+  background: var(--surface, $surface);
+  color: var(--text-body, $body-color);
+  border-right: 1px solid var(--border, $border-color) !important;
   box-shadow: 6px 0 24px rgba(0, 0, 0, 0.25);
   overflow-y: auto;
   overflow-x: hidden;
@@ -201,7 +201,7 @@ function onToggleClick() {
 
 .sidebar .border-bottom,
 .sidebar .border-top {
-  border-color: $border-color !important;
+  border-color: var(--border, $border-color) !important;
 }
 
 .sidebar-header {
@@ -226,7 +226,7 @@ function onToggleClick() {
   border: none;
   background: none;
   padding: 8px;
-  color: #6c757d;
+  color: var(--text-muted, $text-muted);
   width: 50px;
   height: 50px;
   display: flex;

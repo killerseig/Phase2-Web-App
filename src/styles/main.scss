@@ -9,8 +9,15 @@
 // 2) Bootstrap
 @import "../../node_modules/bootstrap/scss/bootstrap";
 
-// 3) Your custom components/utilities last
-@import "components";
+// 3) Your custom layers
+@import "layout";
+@import "buttons";
+@import "cards";
+@import "nav";
+@import "badges";
+@import "forms";
+@import "tables";
+@import "alerts";
 @import "utilities";
 @import "flatpickr";
 

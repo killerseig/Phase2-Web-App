@@ -7,6 +7,7 @@ import {
   getDocs,
   orderBy,
   query,
+  where,
   updateDoc,
   type DocumentData,
 } from 'firebase/firestore'
@@ -20,13 +21,25 @@ import { normalizeError } from './serviceUtils'
 // Export as both old name (backward compatibility) and new name
 export type UserProfile = UserProfileModel
 
+const CANONICAL_ROLES = Object.values(ROLES) as Role[]
+
+const normalizeRoleValue = (value: unknown): Role => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (CANONICAL_ROLES.includes(normalized as Role)) {
+      return normalized as Role
+    }
+  }
+  return ROLES.NONE
+}
+
 function normalizeUser(id: string, data: DocumentData): UserProfile {
   return {
     id,
     email: data.email ?? null,
     firstName: data.firstName ?? null,
     lastName: data.lastName ?? null,
-    role: (data.role as Role) ?? ROLES.NONE,
+    role: normalizeRoleValue(data.role),
     active: typeof data.active === 'boolean' ? data.active : true,
     assignedJobIds: Array.isArray(data.assignedJobIds) ? data.assignedJobIds : [],
     createdAt: data.createdAt,
@@ -80,7 +93,9 @@ export async function updateUser(
 
     if ('firstName' in updates) payload.firstName = updates.firstName ?? null
     if ('lastName' in updates) payload.lastName = updates.lastName ?? null
-    if ('role' in updates && updates.role) payload.role = updates.role
+    if ('role' in updates && typeof updates.role !== 'undefined') {
+      payload.role = normalizeRoleValue(updates.role)
+    }
     if ('active' in updates && typeof updates.active === 'boolean') payload.active = updates.active
     if ('assignedJobIds' in updates) payload.assignedJobIds = updates.assignedJobIds ?? []
 
@@ -115,7 +130,8 @@ export async function createUserByAdmin(
 ): Promise<{ success: boolean; message: string; uid: string }> {
   const callable = httpsCallable(functions, 'createUserByAdmin')
   try {
-    const result = await callable({ email, firstName, lastName, role })
+    const normalizedRole = typeof role === 'string' ? normalizeRoleValue(role) : undefined
+    const result = await callable({ email, firstName, lastName, role: normalizedRole })
     return result.data as any
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to create user'))
@@ -211,6 +227,53 @@ export async function listForemen(): Promise<UserProfile[]> {
       .filter((user) => user.role === ROLES.FOREMAN)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load foremen'))
+  }
+}
+
+/**
+ * Admin utility: ensure a job's assignedForemanIds and each foreman's assignedJobIds stay in sync.
+ * Makes no destructive changes—only adds missing links in either direction.
+ */
+export async function syncForemanAssignmentsForJob(jobId: string): Promise<void> {
+  try {
+    const jobRef = doc(db, 'jobs', jobId)
+    const jobSnap = await getDoc(jobRef)
+    if (!jobSnap.exists()) {
+      throw new Error('Job not found')
+    }
+
+    const jobData = jobSnap.data()
+    const jobForemen = Array.isArray(jobData.assignedForemanIds)
+      ? jobData.assignedForemanIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : []
+
+    const usersWithJobSnap = await getDocs(
+      query(collection(db, 'users'), where('assignedJobIds', 'array-contains', jobId))
+    )
+
+    const union = new Set<string>(jobForemen)
+    usersWithJobSnap.docs.forEach((docSnap) => union.add(docSnap.id))
+
+    // Update job doc if we filled gaps
+    await updateDoc(jobRef, { assignedForemanIds: Array.from(union) })
+
+    // Ensure each foreman's user doc lists this job
+    await Promise.all(
+      Array.from(union).map(async (foremanId) => {
+        const existingUserSnap = usersWithJobSnap.docs.find((d) => d.id === foremanId) ?? (await getDoc(doc(db, 'users', foremanId)))
+        if (!existingUserSnap.exists()) return
+        const userData = existingUserSnap.data()
+        const assigned = Array.isArray(userData.assignedJobIds)
+          ? userData.assignedJobIds.slice()
+          : []
+        if (!assigned.includes(jobId)) {
+          assigned.push(jobId)
+          await updateDoc(doc(db, 'users', foremanId), { assignedJobIds: assigned })
+        }
+      })
+    )
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to sync foreman assignments'))
   }
 }
 

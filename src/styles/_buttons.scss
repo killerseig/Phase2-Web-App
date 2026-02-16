@@ -1,0 +1,17 @@
+@use '@/styles/_variables.scss' as vars;
+
+.btn {
+  letter-spacing: 0.2px;
+  box-shadow: var(--shadow-sm, vars.$box-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow, vars.$box-shadow);
+}
+
+.btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
