@@ -82,11 +82,12 @@ export const useUsersStore = defineStore('users', () => {
   async function deleteUser(userId: string) {
     error.value = null
     try {
-      await deleteUserService(userId)
+      const result = await deleteUserService(userId)
       users.value = users.value.filter(u => u.id !== userId)
       if (currentUserProfile.value?.id === userId) {
         currentUserProfile.value = null
       }
+      return result
     } catch (e: any) {
       error.value = e?.message ?? 'Failed to delete user'
       console.error('[Users Store] Error deleting user:', e)

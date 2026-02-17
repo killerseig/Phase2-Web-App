@@ -126,7 +126,7 @@ const routeConfigs: RouteConfig[] = [
     path: ROUTES.ADMIN_CATALOG,
     name: 'admin-shop-catalog',
     component: () => import('../views/admin/AdminShopCatalog.vue'),
-    roles: [ROLES.ADMIN, ROLES.SHOP],
+    roles: [ROLES.ADMIN],
     title: 'Admin · Shop Catalog',
   },
   {

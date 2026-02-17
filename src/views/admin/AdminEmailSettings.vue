@@ -11,8 +11,10 @@ import {
   updateTimecardSubmitRecipientsGlobal,
   updateShopOrderSubmitRecipientsGlobal,
   updateDailyLogSubmitRecipientsGlobal,
+  removeEmailFromAllRecipientLists,
   type Job,
 } from '@/services'
+import { isValidEmail } from '@/utils/emailValidation'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
@@ -20,6 +22,8 @@ const jobs = ref<Job[]>([])
 const loading = ref(true)
 const err = ref('')
 const saving = ref(false)
+const purgeEmail = ref('')
+const purging = ref(false)
 
 // Global default recipients
 const globalDefaultRecipients = ref<string[]>([])
@@ -176,6 +180,33 @@ async function saveGlobalDailyLogRecipients() {
   }
 }
 
+async function removeEmailEverywhere() {
+  const email = purgeEmail.value.trim()
+  if (!email || !isValidEmail(email)) {
+    toastRef.value?.show('Enter a valid email address', 'error')
+    return
+  }
+
+  purging.value = true
+  try {
+    const result = await removeEmailFromAllRecipientLists(email)
+    const updatedJobs = Number(result?.updatedJobCount || 0)
+    await loadJobs()
+    purgeEmail.value = ''
+    toastRef.value?.show(
+      result?.removedFromRecipientLists
+        ? `Removed from all recipient lists${updatedJobs > 0 ? ` (${updatedJobs} jobs updated)` : ''}`
+        : 'Email was not found in recipient lists',
+      'success'
+    )
+  } catch (e: any) {
+    err.value = e?.message ?? 'Failed to remove email from recipient lists'
+    toastRef.value?.show('Failed to remove email from recipient lists', 'error')
+  } finally {
+    purging.value = false
+  }
+}
+
 onMounted(loadJobs)
 </script>
 
@@ -189,11 +220,37 @@ onMounted(loadJobs)
       <p class="text-muted small mb-0">Configure recipients for daily logs (per job) and global recipients for timecards and shop orders.</p>
     </div>
 
+    <AdminCardWrapper
+      title="Remove Recipient Everywhere"
+      icon="person-x"
+      subtitle="Remove an email from all global recipient lists and all job-level daily log lists in one action."
+    >
+      <div class="row g-2 align-items-end">
+        <div class="col-md-8">
+          <label class="form-label small mb-1">Email to remove</label>
+          <input
+            v-model="purgeEmail"
+            type="email"
+            class="form-control"
+            placeholder="user@example.com"
+            :disabled="purging"
+          />
+        </div>
+        <div class="col-md-4 d-grid">
+          <button class="btn btn-outline-danger" :disabled="purging" @click="removeEmailEverywhere">
+            <span v-if="purging" class="spinner-border spinner-border-sm me-2"></span>
+            Remove From Everything
+          </button>
+        </div>
+      </div>
+    </AdminCardWrapper>
+
     <!-- Global Timecard Recipients -->
     <AdminCardWrapper
       title="Timecard Submission Recipients"
       icon="clock"
       subtitle="These recipients will receive all submitted timecards."
+      class="mt-4"
     >
       <EmailRecipientInput
         :key="'timecard-recips'"

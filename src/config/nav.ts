@@ -19,7 +19,7 @@ export const navItems: NavItem[] = [
   { label: 'Shop Orders', icon: 'bi-receipt', to: { name: 'job-shop-orders' }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN] },
   { label: 'Users', icon: 'bi-people', to: '/admin/users', section: 'admin', roles: [ROLES.ADMIN] },
   { label: 'Jobs', icon: 'bi-building', to: '/admin/jobs', section: 'admin', roles: [ROLES.ADMIN] },
-  { label: 'Shop Catalog', icon: 'bi-box-seam', to: '/admin/shop-catalog', section: 'admin', roles: [ROLES.ADMIN, ROLES.SHOP] },
+  { label: 'Shop Catalog', icon: 'bi-box-seam', to: '/admin/shop-catalog', section: 'admin', roles: [ROLES.ADMIN] },
   { label: 'Email Settings', icon: 'bi-envelope', to: '/admin/email-settings', section: 'admin', roles: [ROLES.ADMIN] },
 ]
 

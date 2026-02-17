@@ -33,11 +33,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.sendShopOrderEmail = exports.sendTimecardEmail = exports.sendDailyLogEmail = exports.sendPasswordResetEmail = void 0;
+exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.sendTimecardEmail = exports.sendDailyLogEmail = exports.sendPasswordResetEmail = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const https_2 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
+const firestore_1 = require("firebase-functions/v2/firestore");
 const params_1 = require("firebase-functions/params");
 const firestoreService_1 = require("./firestoreService");
 const emailService_1 = require("./emailService");
@@ -49,7 +50,77 @@ const constants_1 = require("./constants");
 admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();
+const storageBucket = admin.storage().bucket();
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024;
+const MAX_ATTACHMENT_COUNT = 10;
+function normalizeRecipients(...groups) {
+    const merged = groups.flatMap(group => (Array.isArray(group) ? group : []));
+    const cleaned = merged
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean);
+    return Array.from(new Set(cleaned));
+}
+function formatEmailDate(value) {
+    try {
+        if (!value)
+            return 'N/A';
+        const asDate = typeof value?.toDate === 'function'
+            ? value.toDate()
+            : value instanceof Date
+                ? value
+                : new Date(value);
+        if (Number.isNaN(asDate.getTime()))
+            return 'N/A';
+        return asDate.toLocaleDateString();
+    }
+    catch {
+        return 'N/A';
+    }
+}
+async function loadDailyLogAttachments(log) {
+    const attachments = [];
+    const files = Array.isArray(log?.attachments) ? log.attachments : [];
+    let totalBytes = 0;
+    for (const att of files) {
+        if (!att?.path)
+            continue;
+        if (attachments.length >= MAX_ATTACHMENT_COUNT) {
+            console.warn('[sendDailyLogEmail] Skipping extra attachments beyond limit', { limit: MAX_ATTACHMENT_COUNT });
+            break;
+        }
+        try {
+            const file = storageBucket.file(att.path);
+            const [exists] = await file.exists();
+            if (!exists) {
+                console.warn('[sendDailyLogEmail] Attachment missing in storage', { path: att.path });
+                continue;
+            }
+            const [metadata] = await file.getMetadata();
+            const size = Number(metadata?.size) || 0;
+            if (totalBytes + size > MAX_ATTACHMENT_TOTAL_BYTES) {
+                console.warn('[sendDailyLogEmail] Skipping attachment to respect size budget', {
+                    path: att.path,
+                    size,
+                    totalBytes,
+                    max: MAX_ATTACHMENT_TOTAL_BYTES,
+                });
+                continue;
+            }
+            const [buffer] = await file.download();
+            totalBytes += buffer.length;
+            attachments.push({
+                name: att?.name || file.name.split('/').pop() || 'attachment',
+                contentType: metadata?.contentType || 'application/octet-stream',
+                contentBytes: buffer.toString('base64'),
+            });
+        }
+        catch (err) {
+            console.warn('[sendDailyLogEmail] Failed to load attachment', { path: att?.path, err });
+        }
+    }
+    return attachments;
+}
 function normalizeTimecardForEmail(tc) {
     if (Array.isArray(tc?.lines) && tc.lines.length)
         return tc;
@@ -180,14 +251,16 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
-    const { jobId, dailyLogId, recipients } = request.data;
+    const { jobId, dailyLogId, recipients: requestRecipients } = request.data;
     if (!jobId) {
         throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
     }
     if (!dailyLogId) {
         throw new Error(constants_1.ERROR_MESSAGES.DAILY_LOG_ID_REQUIRED);
     }
-    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+    const settings = await (0, firestoreService_1.getEmailSettings)();
+    const recipients = normalizeRecipients(settings.dailyLogSubmitRecipients, requestRecipients);
+    if (!recipients || recipients.length === 0) {
         throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
     }
     try {
@@ -201,10 +274,12 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
         }
         const job = await (0, firestoreService_1.getJobDetails)(log?.jobId || '');
         const emailHtml = (0, emailService_1.buildDailyLogEmail)(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log);
+        const attachments = await loadDailyLogAttachments(log);
         await (0, emailService_1.sendEmail)({
             to: recipients,
             subject: `${constants_1.EMAIL.SUBJECTS.DAILY_LOG} - ${job?.name || 'Job'} - ${log?.logDate || 'N/A'}`,
             html: emailHtml,
+            ...(attachments.length ? { attachments } : {}),
         });
         console.log(`Daily log ${dailyLogId} emailed to ${recipients.join(', ')}`);
         return { success: true, message: 'Email sent successfully' };
@@ -232,11 +307,7 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
         throw new Error(constants_1.ERROR_MESSAGES.WEEK_START_REQUIRED);
     }
     const settings = await (0, firestoreService_1.getEmailSettings)();
-    const recipients = Array.isArray(settings.timecardSubmitRecipients) && settings.timecardSubmitRecipients.length
-        ? settings.timecardSubmitRecipients
-        : Array.isArray(requestRecipients)
-            ? requestRecipients
-            : [];
+    const recipients = normalizeRecipients(settings.timecardSubmitRecipients, requestRecipients);
     if (!recipients || recipients.length === 0) {
         throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
     }
@@ -275,129 +346,13 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
         const normalizedTimecards = timecards.map(normalizeTimecardForEmail);
         const job = await (0, firestoreService_1.getJobDetails)(jobId);
         const userName = await (0, firestoreService_1.getUserDisplayName)(request.auth.uid, request.auth.token.email);
-        const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const fmtNum = (val, digits = 2) => (Number(val) || 0).toFixed(digits);
-        const fmtMoney = (val) => `$${(Number(val) || 0).toFixed(2)}`;
-        const fmtCell = (val) => {
-            const n = Number(val) || 0;
-            return Number.isInteger(n) ? String(n) : n.toFixed(2);
-        };
-        const emailStyles = `
-      <style>
-        .tc-wrapper { font-family: 'Segoe UI', Arial, sans-serif; color: #e7ecff; background: #0d111f; padding: 12px; }
-        .tc-card { border: 1px solid #1f2638; border-radius: 8px; margin-bottom: 16px; background: #0f1424; box-shadow: 0 8px 18px rgba(0,0,0,0.35); }
-        .tc-card-header { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; background: linear-gradient(90deg, #0f1424, #182442); border-bottom: 1px solid #1f2638; }
-        .tc-emp-name { font-weight: 700; font-size: 16px; color: #f1f4ff; }
-        .tc-emp-meta { color: #9aa6c6; font-size: 13px; }
-        .tc-status { padding: 4px 10px; border-radius: 14px; font-size: 12px; font-weight: 700; text-transform: lowercase; background: #d1f4e8; color: #0f5132; }
-        .tc-status.draft { background: #fff3cd; color: #664d03; }
-        .tc-meta { font-size: 13px; color: #c7cee5; }
-        .tc-table { width: 100%; border-collapse: collapse; background: #0f1424; }
-        .tc-table th { font-size: 12px; font-weight: 700; text-align: center; padding: 8px 6px; background: #10182d; border-bottom: 1px solid #1f2638; color: #e7ecff; }
-        .tc-table td { padding: 8px 6px; text-align: center; font-size: 13px; color: #e7ecff; border-bottom: 1px solid #1f2638; }
-        .tc-row-soft td { background: #131b30; }
-        .tc-left { font-weight: 600; color: #f1f4ff; border-right: 1px solid #1f2638; }
-        .tc-label { font-weight: 700; width: 50px; border-right: 1px solid #1f2638; }
-        .tc-dif { border-right: 1px solid #1f2638; }
-        .tc-total { font-weight: 700; color: #f1f4ff; }
-        .col-job { width: 80px; }
-        .col-acct { width: 70px; }
-        .col-blank { width: 50px; }
-        .col-div { width: 70px; }
-        .col-day { width: 90px; }
-        .col-total { width: 80px; }
-        .tc-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #1f2638; background: #0f1424; }
-        .tc-notes { padding: 12px 14px; border-top: 1px solid #1f2638; background: #0f1424; font-size: 13px; color: #c7cee5; }
-        .pill { display: inline-block; padding: 6px 10px; background: #111933; border: 1px solid #1f2638; border-radius: 8px; font-weight: 700; color: #e7ecff; }
-      </style>
-    `;
-        const renderJobRows = (line, totals) => {
-            const hoursRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtCell(line[DAY_KEYS[idx]])}</td>`).join('');
-            const prodRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtCell(line.production?.[DAY_KEYS[idx]])}</td>`).join('');
-            const costRow = dayLabels.map((_, idx) => `<td class="col-day">${fmtMoney(line.unitCost?.[DAY_KEYS[idx]])}</td>`).join('');
-            return `
-        <tr>
-          <td rowspan="3" class="tc-left">${line.jobNumber || ''}</td>
-          <td rowspan="3" class="tc-left">${line.account || ''}</td>
-          <td class="tc-label">H</td>
-          <td class="tc-dif">${line.difH || ''}</td>
-          ${hoursRow}
-          <td class="tc-total">${fmtNum(line?.totals?.hours)}</td>
-        </tr>
-        <tr class="tc-row-soft">
-          <td class="tc-label">P</td>
-          <td class="tc-dif">${line.difP || ''}</td>
-          ${prodRow}
-          <td class="tc-total">${fmtNum(line?.totals?.production)}</td>
-        </tr>
-        <tr>
-          <td class="tc-label">C</td>
-          <td class="tc-dif">${line.difC || ''}</td>
-          ${costRow}
-          <td class="tc-total">${fmtMoney(line?.totals?.lineTotal)}</td>
-        </tr>
-      `;
-        };
-        const weekStartDate = new Date(weekStart);
-        const weekEndDate = new Date(weekStartDate);
-        weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 6);
-        const fmtDate = (d) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
-        let emailHtml = `
-      ${emailStyles}
-      <div class="tc-wrapper">
-        <div style="margin-bottom:14px;">
-          <h2 style="margin:0 0 6px 0; color:#f1f4ff;">Timecards Submitted</h2>
-          <div class="tc-meta">Job: ${job?.name || 'N/A'} ${job?.number ? `(#${job.number})` : ''}</div>
-          <div class="tc-meta">Week: ${fmtDate(weekStartDate)} – ${fmtDate(weekEndDate)}</div>
-          <div class="tc-meta">Submitted by: ${userName}</div>
-        </div>
-    `;
-        normalizedTimecards.forEach(tc => {
-            const lines = Array.isArray(tc?.lines) ? tc.lines : [];
-            const hasLines = lines.length > 0;
-            const statusClass = tc.status === 'submitted' ? 'submitted' : 'draft';
-            const hoursTotal = Number(tc?.totals?.hoursTotal) || 0;
-            const regularHours = Math.min(hoursTotal, 40);
-            const overtimeHours = Math.max(hoursTotal - 40, 0);
-            emailHtml += `
-        <div class="tc-card">
-          <div class="tc-card-header">
-            <div>
-              <div class="tc-emp-name">${tc.employeeName || 'Employee'}</div>
-              <div class="tc-emp-meta">#${tc.employeeNumber || ''}${tc.occupation ? ` · ${tc.occupation}` : ''}</div>
-            </div>
-            <div style="text-align:right;">
-              <div class="tc-meta">Totals: ${fmtNum(tc?.totals?.hoursTotal)} hrs · ${fmtNum(tc?.totals?.productionTotal)} prod · ${fmtMoney(tc?.totals?.lineTotal)}</div>
-              <div class="tc-status ${statusClass}">${tc.status || 'submitted'}</div>
-            </div>
-          </div>
-
-          <div style="padding:12px 14px;">
-            <table class="tc-table">
-              <thead>
-                <tr>
-                  <th class="col-job">Job #</th>
-                  <th class="col-acct">Acct</th>
-                  <th class="col-blank"></th>
-                  <th class="col-div">Dif</th>
-                  ${dayLabels.map(d => `<th class="col-day">${d}</th>`).join('')}
-                  <th class="col-total">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${hasLines ? lines.map((line) => renderJobRows(line, tc.totals)).join('') : '<tr><td colspan="12" style="padding:10px; text-align:center;">No entries</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-          <div class="tc-footer">
-            <div class="pill">Overtime: ${fmtNum(overtimeHours)}</div>
-            <div class="pill">Regular: ${fmtNum(regularHours)}</div>
-          </div>
-          ${tc.notes ? `<div class="tc-notes"><strong>Notes:</strong> ${tc.notes}</div>` : ''}
-        </div>
-      `;
+        const emailHtml = (0, emailService_1.buildTimecardsEmail)({
+            jobName: job?.name,
+            jobNumber: job?.number,
+            submittedBy: userName,
+            weekStart,
+            timecards: normalizedTimecards,
         });
-        emailHtml += '</div>';
         // Build CSV attachment for accounting upload
         const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart);
         await (0, emailService_1.sendEmail)({
@@ -492,11 +447,7 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
         throw new Error(constants_1.ERROR_MESSAGES.SHOP_ORDER_ID_REQUIRED);
     }
     const settings = await (0, firestoreService_1.getEmailSettings)();
-    const recipients = Array.isArray(settings.shopOrderSubmitRecipients) && settings.shopOrderSubmitRecipients.length
-        ? settings.shopOrderSubmitRecipients
-        : Array.isArray(requestRecipients)
-            ? requestRecipients
-            : [];
+    const recipients = normalizeRecipients(settings.shopOrderSubmitRecipients, requestRecipients);
     if (!recipients || recipients.length === 0) {
         throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
     }
@@ -520,9 +471,10 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
         }
         const job = await (0, firestoreService_1.getJobDetails)(order?.jobId || jobId);
         const emailHtml = (0, emailService_1.buildShopOrderEmail)(order);
+        const orderDateLabel = formatEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
         await (0, emailService_1.sendEmail)({
             to: recipients,
-            subject: `${constants_1.EMAIL.SUBJECTS.SHOP_ORDER} - ${job?.name || 'Job'} - ${order?.orderDate?.toDate?.()?.toLocaleDateString() || 'N/A'}`,
+            subject: `${constants_1.EMAIL.SUBJECTS.SHOP_ORDER} - ${job?.name || 'Job'} - ${orderDateLabel}`,
             html: emailHtml,
         });
         console.log(`Shop order ${shopOrderId} emailed to ${recipients.join(', ')}`);
@@ -547,12 +499,120 @@ async function sendDailyLogEmailInternal(jobId, dailyLogId, recipients) {
     }
     const job = await (0, firestoreService_1.getJobDetails)(log?.jobId || '');
     const emailHtml = (0, emailService_1.buildDailyLogAutoSubmitEmail)(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString());
+    const attachments = await loadDailyLogAttachments(log);
     await (0, emailService_1.sendEmail)({
         to: recipients,
         subject: `${constants_1.EMAIL.SUBJECTS.DAILY_LOG_AUTO} - ${job?.name || 'Job'} - ${log?.logDate || 'N/A'}`,
         html: emailHtml,
+        ...(attachments.length ? { attachments } : {}),
     });
 }
+async function removeEmailFromRecipientLists(email) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+        return { settingsUpdated: false, jobsUpdated: 0 };
+    }
+    let settingsUpdated = false;
+    let jobsUpdated = 0;
+    const settingsRef = db.collection('settings').doc('email');
+    const settingsSnap = await settingsRef.get();
+    if (settingsSnap.exists) {
+        const data = settingsSnap.data() || {};
+        const filterRecipientList = (values) => {
+            const list = Array.isArray(values) ? values : [];
+            return list.filter((value) => String(value || '').trim().toLowerCase() !== normalizedEmail);
+        };
+        const nextTimecard = filterRecipientList(data.timecardSubmitRecipients);
+        const nextShopOrder = filterRecipientList(data.shopOrderSubmitRecipients);
+        const nextDailyLog = filterRecipientList(data.dailyLogSubmitRecipients);
+        const changed = nextTimecard.length !== (Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients.length : 0) ||
+            nextShopOrder.length !== (Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients.length : 0) ||
+            nextDailyLog.length !== (Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients.length : 0);
+        if (changed) {
+            await settingsRef.set({
+                timecardSubmitRecipients: nextTimecard,
+                shopOrderSubmitRecipients: nextShopOrder,
+                dailyLogSubmitRecipients: nextDailyLog,
+            }, { merge: true });
+            settingsUpdated = true;
+        }
+    }
+    const jobsSnap = await db.collection(constants_1.COLLECTIONS.JOBS).get();
+    const batch = db.batch();
+    jobsSnap.docs.forEach((jobDoc) => {
+        const currentRecipients = Array.isArray(jobDoc.data()?.dailyLogRecipients)
+            ? jobDoc.data().dailyLogRecipients
+            : [];
+        if (!currentRecipients.length)
+            return;
+        const nextRecipients = currentRecipients.filter((value) => String(value || '').trim().toLowerCase() !== normalizedEmail);
+        if (nextRecipients.length !== currentRecipients.length) {
+            batch.update(jobDoc.ref, { dailyLogRecipients: nextRecipients });
+            jobsUpdated += 1;
+        }
+    });
+    if (jobsUpdated > 0) {
+        await batch.commit();
+    }
+    return { settingsUpdated, jobsUpdated };
+}
+exports.removeEmailFromAllRecipientLists = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    await (0, firestoreService_1.verifyAdminRole)(request.auth.uid);
+    const rawEmail = String(request.data?.email || '').trim();
+    if (!rawEmail) {
+        throw new Error(constants_1.ERROR_MESSAGES.EMAIL_REQUIRED);
+    }
+    const cleanup = await removeEmailFromRecipientLists(rawEmail);
+    return {
+        success: true,
+        message: 'Recipient cleanup completed',
+        removedFromRecipientLists: cleanup.settingsUpdated || cleanup.jobsUpdated > 0,
+        updatedJobCount: cleanup.jobsUpdated,
+    };
+});
+exports.handleUserAccessRevocationCleanup = (0, firestore_1.onDocumentUpdated)('users/{uid}', async (event) => {
+    const beforeData = event.data?.before?.data();
+    const afterData = event.data?.after?.data();
+    if (!afterData)
+        return;
+    const beforeRole = String(beforeData?.role || '').trim().toLowerCase();
+    const afterRole = String(afterData?.role || '').trim().toLowerCase();
+    const beforeActive = typeof beforeData?.active === 'boolean' ? beforeData.active : true;
+    const afterActive = typeof afterData?.active === 'boolean' ? afterData.active : true;
+    const changedToNoneRole = beforeRole !== afterRole && afterRole === 'none';
+    const changedToInactive = beforeActive !== afterActive && afterActive === false;
+    const roleChangedWhileInactive = beforeRole !== afterRole && afterActive === false;
+    if (!changedToNoneRole && !changedToInactive && !roleChangedWhileInactive) {
+        return;
+    }
+    const email = String(afterData?.email || beforeData?.email || '').trim();
+    if (!email)
+        return;
+    try {
+        const cleanup = await removeEmailFromRecipientLists(email);
+        console.log('[handleUserAccessRevocationCleanup] Recipient cleanup complete', {
+            uid: event.params.uid,
+            email,
+            reason: {
+                changedToNoneRole,
+                changedToInactive,
+                roleChangedWhileInactive,
+            },
+            settingsUpdated: cleanup.settingsUpdated,
+            jobsUpdated: cleanup.jobsUpdated,
+        });
+    }
+    catch (error) {
+        console.error('[handleUserAccessRevocationCleanup] Recipient cleanup failed', {
+            uid: event.params.uid,
+            email,
+            error,
+        });
+    }
+});
 /**
  * Delete a user from both Firestore and Firebase Authentication
  * Only callable by authenticated admin users
@@ -567,11 +627,41 @@ exports.deleteUser = (0, https_1.onCall)(async (request) => {
     }
     try {
         await (0, firestoreService_1.verifyAdminRole)(request.auth.uid);
+        const userDocRef = db.collection(constants_1.COLLECTIONS.USERS).doc(uid);
+        const userDocSnap = await userDocRef.get();
+        let authEmail = '';
+        try {
+            const authUser = await auth.getUser(uid);
+            authEmail = String(authUser.email || '').trim();
+        }
+        catch (lookupError) {
+            console.warn('[deleteUser] Unable to load auth user before delete', { uid, lookupError });
+        }
+        const firestoreEmail = String(userDocSnap.data()?.email || '').trim();
+        const candidateEmails = Array.from(new Set([authEmail, firestoreEmail].filter(Boolean)));
+        let settingsUpdated = false;
+        let jobsUpdated = 0;
+        for (const candidateEmail of candidateEmails) {
+            const cleanup = await removeEmailFromRecipientLists(candidateEmail);
+            settingsUpdated = settingsUpdated || cleanup.settingsUpdated;
+            jobsUpdated += cleanup.jobsUpdated;
+        }
         // Delete from Firebase Auth
         await auth.deleteUser(uid);
         // Delete from Firestore
-        await db.collection(constants_1.COLLECTIONS.USERS).doc(uid).delete();
-        return { success: true, message: 'User deleted successfully' };
+        await userDocRef.delete();
+        console.log('[deleteUser] Offboarding cleanup complete', {
+            uid,
+            candidateEmails,
+            settingsUpdated,
+            jobsUpdated,
+        });
+        return {
+            success: true,
+            message: 'User deleted successfully',
+            removedFromRecipientLists: settingsUpdated || jobsUpdated > 0,
+            updatedJobCount: jobsUpdated,
+        };
     }
     catch (error) {
         throw new Error(error.message || constants_1.ERROR_MESSAGES.FAILED_TO_DELETE_USER);

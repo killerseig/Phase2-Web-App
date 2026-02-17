@@ -175,6 +175,9 @@ function createDraft(): TimecardModel {
     jobs: [
       {
         jobNumber: '',
+        subsectionArea: '',
+        area: '',
+        account: '',
         acct: '',
         difH: '',
         difP: '',
@@ -596,7 +599,17 @@ function handleNotesInput(timecard: TimecardModel, value: string) {
 
 function addJobRow(timecard: TimecardModel) {
   if (!timecard.jobs) timecard.jobs = []
-  timecard.jobs.push({ jobNumber: '', acct: '', difH: '', difP: '', difC: '', days: makeDaysArray(weekStartDate.value) })
+  timecard.jobs.push({
+    jobNumber: '',
+    subsectionArea: '',
+    area: '',
+    account: '',
+    acct: '',
+    difH: '',
+    difP: '',
+    difC: '',
+    days: makeDaysArray(weekStartDate.value),
+  })
   recalcTotals(timecard)
   autoSave(timecard)
 }
@@ -615,8 +628,16 @@ function updateJobNumber(timecard: TimecardModel, index: number, value: string) 
   autoSave(timecard)
 }
 
+function updateSubsectionArea(timecard: TimecardModel, index: number, value: string) {
+  if (!timecard.jobs) return
+  timecard.jobs[index].subsectionArea = value
+  timecard.jobs[index].area = value
+  autoSave(timecard)
+}
+
 function updateAccount(timecard: TimecardModel, index: number, value: string) {
   if (!timecard.jobs) return
+  timecard.jobs[index].account = value
   timecard.jobs[index].acct = value
   autoSave(timecard)
 }
@@ -898,6 +919,7 @@ onUnmounted(() => {
                 <thead>
                   <tr>
                     <th class="text-center small fw-semibold col-job">Job #</th>
+                    <th class="text-center small fw-semibold col-subarea">Sub/Area</th>
                     <th class="text-center small fw-semibold col-acct">Acct</th>
                     <th class="text-center small fw-semibold col-blank"></th>
                     <th class="text-center small fw-semibold col-div">Dif</th>
@@ -924,7 +946,17 @@ onUnmounted(() => {
                       <td :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
                         <input
                           type="text"
-                          :value="job.acct || ''"
+                          :value="job.subsectionArea ?? job.area ?? ''"
+                          :disabled="timecard.status === 'submitted'"
+                          class="form-control form-control-sm text-center"
+                          placeholder="Sub/Area"
+                          @input="(e) => updateSubsectionArea(timecard, jobIdx, (e.target as HTMLInputElement).value)"
+                        />
+                      </td>
+                      <td :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                        <input
+                          type="text"
+                          :value="job.account ?? job.acct ?? ''"
                           :disabled="timecard.status === 'submitted'"
                           class="form-control form-control-sm text-center"
                           placeholder="Acct"
@@ -952,7 +984,7 @@ onUnmounted(() => {
                             max="24"
                             step="0.25"
                             :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center w-100 day-input"
+                            class="form-control form-control-sm text-center w-100 day-input hours-input"
                             placeholder="0"
                             @input="(e) => handleHoursInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
                             @focus="($event.target as HTMLInputElement).select()"
@@ -1276,7 +1308,7 @@ textarea.form-control {
 // Tighter rows for timecard tables
 .timecard-table th,
 .timecard-table td {
-  padding: 0.4rem 0.45rem;
+  padding: 0.16rem 0.22rem;
 }
 
 .summary-table th,
@@ -1358,30 +1390,35 @@ textarea.form-control {
 }
 
 .col-job {
-  width: 110px;
-  min-width: 110px;
+  width: 76px;
+  min-width: 76px;
+}
+
+.col-subarea {
+  width: 96px;
+  min-width: 96px;
 }
 
 .col-acct {
-  width: 110px;
-  min-width: 110px;
+  width: 72px;
+  min-width: 72px;
 }
 
 .col-blank {
-  width: 60px;
+  width: 42px;
 }
 
 .col-div {
-  width: 100px;
-  min-width: 100px;
+  width: 64px;
+  min-width: 64px;
 }
 
 .col-day {
-  width: 90px;
+  width: 56px;
 }
 
 .col-total {
-  width: 80px;
+  width: 66px;
 }
 
 .col-actions {
@@ -1409,7 +1446,7 @@ textarea.form-control {
   background: transparent;
   border: 0;
   box-shadow: none;
-  padding: 0.25rem 0.35rem;
+  padding: 0.05rem 0.14rem;
 }
 
 .timecard-table input:focus {
@@ -1442,8 +1479,16 @@ textarea.form-control {
 .day-input {
   background: transparent;
   color: $body-color;
-  min-width: 78px;
-  font-size: 0.95rem;
+  min-width: 0;
+  width: 100%;
+  font-size: 0.84rem;
+}
+
+.hours-input {
+  max-width: 4.6ch;
+  margin: 0 auto;
+  padding-left: 0.08rem;
+  padding-right: 0.08rem;
 }
 
 
@@ -1482,7 +1527,7 @@ textarea.form-control {
 @media (max-width: 768px) {
   .day-input {
     min-width: 68px;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
   }
 
   .timecard-header-row {
@@ -1495,7 +1540,7 @@ textarea.form-control {
 
   .timecard-table th,
   .timecard-table td {
-    padding: 0.35rem 0.35rem;
+    padding: 0.2rem 0.24rem;
   }
 
   .accordion-body {
@@ -1507,9 +1552,10 @@ textarea.form-control {
   }
 
   .col-job,
+  .col-subarea,
   .col-acct,
   .col-div {
-    min-width: 130px;
+    min-width: 105px;
   }
 }
 

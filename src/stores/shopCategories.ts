@@ -27,17 +27,32 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
   const categories = ref<ShopCategory[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const MAX_TREE_DEPTH = 100
 
   /**
    * Build a tree structure from flat category list
    */
-  function buildCategoryTree(items: ShopCategory[], parentId: string | null = null): CategoryNode[] {
+  function buildCategoryTree(
+    items: ShopCategory[],
+    parentId: string | null = null,
+    seen = new Set<string>(),
+    depth = 0,
+  ): CategoryNode[] {
+    if (depth > MAX_TREE_DEPTH) return []
+
     return items
       .filter(cat => cat.parentId === parentId)
-      .map(cat => ({
-        ...cat,
-        children: buildCategoryTree(items, cat.id),
-      }))
+      .map(cat => {
+        if (seen.has(cat.id)) {
+          return { ...cat, children: [] as CategoryNode[] }
+        }
+        const nextSeen = new Set(seen)
+        nextSeen.add(cat.id)
+        return {
+          ...cat,
+          children: buildCategoryTree(items, cat.id, nextSeen, depth + 1),
+        }
+      })
       .sort((a, b) => a.name.localeCompare(b.name))
   }
 
@@ -78,9 +93,18 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
   /**
    * Get all descendants of a category (recursive)
    */
-  function getDescendants(categoryId: string): ShopCategory[] {
+  function getDescendants(categoryId: string, seen = new Set<string>(), depth = 0): ShopCategory[] {
+    if (depth > MAX_TREE_DEPTH) return []
+    if (seen.has(categoryId)) return []
+
+    const nextSeen = new Set(seen)
+    nextSeen.add(categoryId)
+
     const direct = categories.value.filter(c => c.parentId === categoryId)
-    return [...direct, ...direct.flatMap(child => getDescendants(child.id))]
+    return [
+      ...direct,
+      ...direct.flatMap(child => getDescendants(child.id, nextSeen, depth + 1)),
+    ]
   }
 
   /**
@@ -88,10 +112,15 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
    */
   function getBreadcrumb(categoryId: string): ShopCategory[] {
     const path: ShopCategory[] = []
+    const seen = new Set<string>()
     let current = getCategoryById(categoryId)
-    while (current) {
+    let depth = 0
+    while (current && depth <= MAX_TREE_DEPTH) {
+      if (seen.has(current.id)) break
+      seen.add(current.id)
       path.unshift(current)
       current = current.parentId ? getCategoryById(current.parentId) : undefined
+      depth += 1
     }
     return path
   }

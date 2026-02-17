@@ -78,7 +78,15 @@ export const useJobsStore = defineStore('jobs', () => {
     }
   }
 
-  async function updateJob(jobId: string, updates: { name?: string; code?: string }) {
+  async function updateJob(
+    jobId: string,
+    updates: {
+      name?: string
+      code?: string | null
+      accountNumber?: string | null
+      type?: 'general' | 'subcontractor'
+    }
+  ) {
     error.value = null
     try {
       await updateJobService(jobId, updates)

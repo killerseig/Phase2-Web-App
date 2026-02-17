@@ -21,6 +21,13 @@ import { normalizeError } from './serviceUtils'
 // Export as both old name (backward compatibility) and new name
 export type UserProfile = UserProfileModel
 
+export type DeleteUserResult = {
+  success: boolean
+  message: string
+  removedFromRecipientLists?: boolean
+  updatedJobCount?: number
+}
+
 const CANONICAL_ROLES = Object.values(ROLES) as Role[]
 
 const normalizeRoleValue = (value: unknown): Role => {
@@ -109,10 +116,11 @@ export async function updateUser(
  * Admin: delete a user from both Firestore and Firebase Authentication (users/{uid}).
  * Note: This deletes the user completely from both Auth and Firestore.
  */
-export async function deleteUser(uid: string): Promise<void> {
+export async function deleteUser(uid: string): Promise<DeleteUserResult> {
   const callable = httpsCallable(functions, 'deleteUser')
   try {
-    await callable({ uid })
+    const result = await callable({ uid })
+    return result.data as DeleteUserResult
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to delete user'))
   }

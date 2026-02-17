@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTimecard,
+  createTimecardFromCopy,
   submitTimecard,
   submitAllWeekTimecards,
   updateTimecard,
@@ -152,5 +153,89 @@ describe('Timecards service', () => {
     expect(updateDocMock).toHaveBeenCalledTimes(1)
     const [, payload] = updateDocMock.mock.calls[0]
     expect(payload.status).toBe('submitted')
+  })
+
+  it('copies previous week metadata and resets day values', async () => {
+    addDocMock.mockResolvedValue({ id: 'tc-copy-1' })
+
+    const source = {
+      id: 'old-1',
+      jobId: 'job-1',
+      weekStartDate: '2024-02-04',
+      weekEndingDate: '2024-02-10',
+      status: 'submitted',
+      createdByUid: 'u1',
+      employeeRosterId: 'er1',
+      employeeNumber: '123',
+      employeeName: 'Jane Doe',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      occupation: 'Foreman',
+      employeeWage: 42.5,
+      subcontractedEmployee: true,
+      jobs: [
+        {
+          jobNumber: 'J-01',
+          subsectionArea: 'A1',
+          account: '4000',
+          days: Array.from({ length: 7 }, (_, idx) => ({
+            date: `2024-02-0${idx + 4}`,
+            dayOfWeek: idx,
+            hours: 8,
+            production: 10,
+            unitCost: 2.5,
+            lineTotal: 25,
+            notes: 'old',
+          })),
+        },
+      ],
+      days: Array.from({ length: 7 }, (_, idx) => ({
+        date: `2024-02-0${idx + 4}`,
+        dayOfWeek: idx,
+        hours: 8,
+        production: 10,
+        unitCost: 0,
+        lineTotal: 80,
+        notes: 'old',
+      })),
+      totals: { hours: Array(7).fill(8), production: Array(7).fill(10), hoursTotal: 56, productionTotal: 70, lineTotal: 560 },
+      notes: 'old note',
+      archived: false,
+    } as any
+
+    const id = await createTimecardFromCopy('job-1', source, '2024-02-17')
+    expect(id).toBe('tc-copy-1')
+
+    const [, payload] = addDocMock.mock.calls[0]
+    expect(payload).toMatchObject({
+      employeeNumber: '123',
+      employeeName: 'Jane Doe',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      employeeWage: 42.5,
+      subcontractedEmployee: true,
+      notes: '',
+    })
+
+    expect(payload.days).toHaveLength(7)
+    expect(payload.days[0]).toMatchObject({ dayOfWeek: 0, hours: 0, production: 0, lineTotal: 0, notes: '' })
+
+    expect(payload.jobs).toHaveLength(1)
+    expect(payload.jobs[0]).toMatchObject({
+      jobNumber: 'J-01',
+      subsectionArea: 'A1',
+      area: 'A1',
+      account: '4000',
+      acct: '4000',
+    })
+    expect(payload.jobs[0].days).toHaveLength(7)
+    expect(payload.jobs[0].days[0]).toMatchObject({
+      dayOfWeek: 0,
+      hours: 0,
+      production: 0,
+      unitCost: 2.5,
+      lineTotal: 0,
+      notes: '',
+    })
   })
 })

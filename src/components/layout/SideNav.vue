@@ -2,6 +2,7 @@
   <!-- Sidebar: Always 56px when collapsed, expands to 260px overlay -->
   <aside
     class="sidebar border-end d-flex flex-column h-100 position-fixed"
+    :class="{ 'is-collapsed': isSidebarCollapsed, 'is-mobile-open': app.sidebarOpenMobile }"
     role="dialog"
     aria-modal="true"
     aria-label="Main navigation"
@@ -10,7 +11,7 @@
   >
     <!-- Header with Toggle Button -->
     <div class="p-2 border-bottom sidebar-header">
-      <div :style="{ opacity: textOpacity }" class="d-flex align-items-center gap-2 sidebar-header-text">
+      <div class="d-flex align-items-center gap-2 sidebar-header-text">
         <div class="fw-bold fs-5 sidebar-title">Phase 2</div>
         <span v-if="role" class="badge text-bg-primary text-uppercase small sidebar-role">{{ role }}</span>
       </div>
@@ -18,11 +19,11 @@
         <button
           type="button"
           @click="onToggleClick"
-          :title="app.sidebarCollapsed ? 'Expand menu' : 'Collapse menu'"
+          :title="isSidebarCollapsed ? 'Expand menu' : 'Collapse menu'"
           class="sidebar-toggle"
           aria-label="Toggle sidebar"
         >
-          <i :class="app.sidebarCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left'" class="sidebar-toggle-icon"></i>
+          <i :class="isSidebarCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left'" class="sidebar-toggle-icon"></i>
         </button>
       </div>
     </div>
@@ -34,15 +35,15 @@
         to="/dashboard"
         class="nav-link py-2 px-3 d-flex align-items-center gap-3"
         :class="{ active: $route.path === '/dashboard' }"
-        :title="app.sidebarCollapsed ? 'Dashboard' : ''"
+        :title="isSidebarCollapsed ? 'Dashboard' : ''"
       >
         <i class="bi bi-grid-1x2 flex-shrink-0"></i>
-        <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">Dashboard</span>
+        <span class="text-nowrap sidebar-link-text">Dashboard</span>
       </router-link>
 
       <!-- Job Section -->
       <template v-if="jobId">
-        <div class="px-3 mt-3 mb-2 sidebar-section-label" :style="{ opacity: textOpacity }">
+        <div class="px-3 mt-3 mb-2 sidebar-section-label">
           <small class="text-uppercase text-muted fw-semibold">Job</small>
         </div>
 
@@ -51,16 +52,16 @@
           :key="item.label"
           :to="item.jobScoped ? { ...(item.to as any), params: { ...(item.to as any).params, jobId } } : item.to"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? item.label : ''"
+          :title="isSidebarCollapsed ? item.label : ''"
         >
           <i :class="['bi', item.icon, 'flex-shrink-0']"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">{{ item.label }}</span>
+          <span class="text-nowrap sidebar-link-text">{{ item.label }}</span>
         </router-link>
       </template>
 
       <!-- Admin Section -->
       <template v-if="isAdmin || isShopRole">
-        <div class="px-3 mt-4 mb-2 sidebar-section-label" :style="{ opacity: textOpacity }">
+        <div class="px-3 mt-4 mb-2 sidebar-section-label">
           <small class="text-uppercase text-muted fw-semibold">Admin</small>
         </div>
 
@@ -69,25 +70,21 @@
           :key="item.label"
           :to="item.to"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-          :title="app.sidebarCollapsed ? item.label : ''"
+          :title="isSidebarCollapsed ? item.label : ''"
         >
           <i :class="['bi', item.icon, 'flex-shrink-0']"></i>
-          <span :style="{ opacity: textOpacity }" class="text-nowrap sidebar-link-text">{{ item.label }}</span>
+          <span class="text-nowrap sidebar-link-text">{{ item.label }}</span>
         </router-link>
       </template>
     </nav>
 
     <!-- Current Job Footer -->
     <div v-if="jobName" class="p-2 border-top small sidebar-footer">
-      <div :style="{ opacity: textOpacity }" class="text-muted mb-1 sidebar-link-text">Current Job</div>
-      <div
-        :style="{ opacity: textOpacity }"
-        class="fw-semibold text-truncate"
-        :title="jobName"
-      >
+      <div class="text-muted mb-1 sidebar-link-text">Current Job</div>
+      <div class="fw-semibold text-truncate" :title="jobName">
         {{ jobName }}
       </div>
-      <div v-if="app.sidebarCollapsed" class="text-center" :title="jobName">
+      <div v-if="isSidebarCollapsed" class="text-center" :title="jobName">
         <i class="bi bi-briefcase-fill sidebar-footer-icon"></i>
       </div>
     </div>
@@ -124,17 +121,7 @@ const canSee = (itemRoles?: string[]) => {
 
 const jobNav = computed(() => navItems.filter((n) => n.section === 'job' && canSee(n.roles)))
 const adminNav = computed(() => navItems.filter((n) => n.section === 'admin' && canSee(n.roles)))
-
-// Smooth opacity transition for text without reflow
-const textOpacity = computed(() => {
-  // On mobile, show text when drawer is open
-  if (app.sidebarOpenMobile) return 1
-  return app.sidebarCollapsed ? 0 : 1
-})
-
-const headerTextStyle = computed(() => ({
-  transition: 'opacity 0.3s ease',
-}))
+const isSidebarCollapsed = computed(() => app.sidebarCollapsed && !app.sidebarOpenMobile)
 
 const onKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Escape' && app.sidebarOpenMobile) {
@@ -189,14 +176,44 @@ function onToggleClick() {
   width: var(--sidebar-width, 260px);
 }
 
+.sidebar.is-collapsed .sidebar-header-text,
+.sidebar.is-collapsed .sidebar-section-label,
+.sidebar.is-collapsed .sidebar-link-text,
+.sidebar.is-collapsed .sidebar-footer .text-truncate,
+.sidebar.is-collapsed .sidebar-footer .text-muted {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sidebar.is-collapsed .sidebar-header {
+  justify-content: center;
+}
+
+.sidebar.is-collapsed .sidebar-toggle {
+  margin: 0 auto;
+}
+
 @media (max-width: 991px) {
   .sidebar {
     width: 56px;
     transform: translateX(0);
   }
-  .app-shell.is-mobile-open .sidebar {
+
+  .sidebar.is-mobile-open {
     width: 260px;
   }
+
+  .sidebar:not(.is-mobile-open) .sidebar-header-text,
+  .sidebar:not(.is-mobile-open) .sidebar-section-label,
+  .sidebar:not(.is-mobile-open) .sidebar-link-text,
+  .sidebar:not(.is-mobile-open) .sidebar-footer .text-truncate,
+  .sidebar:not(.is-mobile-open) .sidebar-footer .text-muted {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
 }
 
 .sidebar .border-bottom,
@@ -213,7 +230,8 @@ function onToggleClick() {
 }
 
 .sidebar-header-text {
-  transition: opacity 0.3s ease;
+  max-width: 180px;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
   overflow: hidden;
 }
 
@@ -241,11 +259,27 @@ function onToggleClick() {
 }
 
 .sidebar-link-text {
-  transition: opacity 0.3s ease;
+  display: inline-block;
+  max-width: 180px;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  overflow: hidden;
 }
 
 .sidebar-section-label {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.sidebar-footer .text-truncate,
+.sidebar-footer .text-muted {
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.sidebar.is-collapsed .sidebar-header-text {
+  max-width: 0;
+}
+
+.sidebar.is-collapsed .sidebar-link-text {
+  max-width: 0;
 }
 
 .sidebar-footer {

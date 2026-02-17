@@ -49,6 +49,13 @@ type EmailSettings = {
   dailyLogSubmitRecipients?: string[]
 }
 
+export type RemoveEmailFromRecipientsResult = {
+  success: boolean
+  message: string
+  removedFromRecipientLists?: boolean
+  updatedJobCount?: number
+}
+
 const EMAIL_SETTINGS_DOC = doc(db, 'settings', 'email')
 
 export async function getEmailSettings(): Promise<EmailSettings> {
@@ -77,4 +84,15 @@ export async function updateShopOrderSubmitRecipientsGlobal(recipients: string[]
 
 export async function updateDailyLogSubmitRecipientsGlobal(recipients: string[]): Promise<void> {
   await setDoc(EMAIL_SETTINGS_DOC, { dailyLogSubmitRecipients: recipients }, { merge: true })
+}
+
+export async function removeEmailFromAllRecipientLists(email: string): Promise<RemoveEmailFromRecipientsResult> {
+  assertActiveUser()
+  const callable = httpsCallable(functions, 'removeEmailFromAllRecipientLists')
+  try {
+    const result = await callable({ email })
+    return result.data as RemoveEmailFromRecipientsResult
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to remove email from recipient lists'))
+  }
 }

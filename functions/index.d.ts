@@ -24,6 +24,15 @@ export declare const sendShopOrderEmail: import("firebase-functions/v2/https").C
     success: boolean;
     message: string;
 }>, unknown>;
+export declare const removeEmailFromAllRecipientLists: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    success: boolean;
+    message: string;
+    removedFromRecipientLists: boolean;
+    updatedJobCount: number;
+}>, unknown>;
+export declare const handleUserAccessRevocationCleanup: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+    uid: string;
+}>>;
 /**
  * Delete a user from both Firestore and Firebase Authentication
  * Only callable by authenticated admin users
@@ -31,6 +40,8 @@ export declare const sendShopOrderEmail: import("firebase-functions/v2/https").C
 export declare const deleteUser: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
     message: string;
+    removedFromRecipientLists: boolean;
+    updatedJobCount: number;
 }>, unknown>;
 /**
  * Create a new user account (admin-only)

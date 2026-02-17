@@ -131,12 +131,22 @@ export async function setJobActive(jobId: string, active: boolean) {
   }
 }
 
-export async function updateJob(jobId: string, updates: { name?: string; code?: string }) {
+export async function updateJob(
+  jobId: string,
+  updates: {
+    name?: string
+    code?: string | null
+    accountNumber?: string | null
+    type?: JobType
+  }
+) {
   try {
     const ref = doc(db, 'jobs', jobId)
     const data: any = {}
     if (updates.name !== undefined) data.name = updates.name.trim()
     if (updates.code !== undefined) data.code = updates.code?.trim() || null
+    if (updates.accountNumber !== undefined) data.accountNumber = updates.accountNumber?.trim() || null
+    if (updates.type !== undefined) data.type = updates.type
     await updateDoc(ref, data)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to update job'))

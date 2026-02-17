@@ -12,6 +12,7 @@ exports.getSenderEmail = getSenderEmail;
 exports.buildWelcomeEmail = buildWelcomeEmail;
 exports.buildDailyLogAutoSubmitEmail = buildDailyLogAutoSubmitEmail;
 exports.buildDailyLogEmail = buildDailyLogEmail;
+exports.buildTimecardsEmail = buildTimecardsEmail;
 exports.buildTimecardEmail = buildTimecardEmail;
 exports.buildShopOrderEmail = buildShopOrderEmail;
 exports.buildSecretExpirationEmail = buildSecretExpirationEmail;
@@ -83,6 +84,39 @@ function isEmailEnabled() {
  */
 function getSenderEmail() {
     return outlookSenderEmail.value();
+}
+function displayValue(value) {
+    if (value === null || value === undefined)
+        return 'N/A';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length ? trimmed : 'N/A';
+    }
+    if (typeof value === 'number' || typeof value === 'boolean')
+        return String(value);
+    return 'N/A';
+}
+function formatAnyDate(value) {
+    try {
+        if (!value)
+            return 'N/A';
+        const asDate = typeof value?.toDate === 'function'
+            ? value.toDate()
+            : value instanceof Date
+                ? value
+                : new Date(value);
+        if (Number.isNaN(asDate.getTime()))
+            return 'N/A';
+        return asDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+    }
+    catch {
+        return 'N/A';
+    }
 }
 // ============================================================================
 // EMAIL TEMPLATES
@@ -156,25 +190,42 @@ function buildDailyLogAutoSubmitEmail(jobDetails, logDate) {
  * Build HTML template for daily log email
  */
 function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
-    const formattedDate = new Date(logDate).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    });
-    const manpowerLines = dailyLog?.manpowerLines?.map((line) => `
+    const formattedDate = formatAnyDate(logDate);
+    const manpowerLines = (Array.isArray(dailyLog?.manpowerLines) && dailyLog.manpowerLines.length
+        ? dailyLog.manpowerLines
+        : [{ trade: '', count: 0, areas: '' }])
+        .map((line) => `
     <tr>
-      <td style="padding: 8px; border: 1px solid #ddd;">${line.trade || ''}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${line.count || 0}</td>
-      <td style="padding: 8px; border: 1px solid #ddd;">${line.areas || ''}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">${displayValue(line.trade)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(line.count)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">${displayValue(line.areas)}</td>
     </tr>
-  `).join('') || '';
+  `).join('');
+    const indoorClimateRows = (Array.isArray(dailyLog?.indoorClimateReadings) && dailyLog.indoorClimateReadings.length
+        ? dailyLog.indoorClimateReadings
+        : [{ area: '', high: '', low: '', humidity: '' }])
+        .map((reading) => `
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd;">${displayValue(reading.area)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(reading.high)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(reading.low)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(reading.humidity)}</td>
+    </tr>
+  `).join('');
     const attachments = (dailyLog?.attachments || [])
         .map((att) => {
         const label = att?.type === 'ptp' ? 'PTP Photo' : att?.type === 'photo' ? 'Photo' : 'Attachment';
         const name = att?.name || att?.path || 'Attachment';
         const url = att?.url || '#';
-        return `<li style="margin-bottom: 6px;"><strong>${label}:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${name}</a></li>`;
+        const hasImagePreview = typeof url === 'string' && /^https?:\/\//i.test(url);
+        return `
+        <li style="margin-bottom: 12px;">
+          <div style="margin-bottom: 4px;"><strong>${label}:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${name}</a></div>
+          ${hasImagePreview
+            ? `<a href="${url}" target="_blank" rel="noopener noreferrer"><img src="${url}" alt="${name}" style="max-width: 180px; max-height: 120px; border: 1px solid #ddd; border-radius: 4px; display: block;" /></a>`
+            : ''}
+        </li>
+      `;
     })
         .join('');
     return `
@@ -188,19 +239,18 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
         <p><strong>Date:</strong> ${formattedDate}</p>
 
         <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Site Information</h3>
-        ${dailyLog?.projectName ? `<p><strong>Project Name:</strong> ${dailyLog.projectName}</p>` : ''}
-        ${dailyLog?.jobSiteNumbers ? `<p><strong>Job Site Numbers / Notes:</strong> ${dailyLog.jobSiteNumbers}</p>` : ''}
-        ${dailyLog?.foremanOnSite ? `<p><strong>Foreman on Site:</strong> ${dailyLog.foremanOnSite}</p>` : ''}
-        ${dailyLog?.siteForemanAssistant ? `<p><strong>Site Foreman Assistant:</strong> ${dailyLog.siteForemanAssistant}</p>` : ''}
+        <p><strong>Project Name:</strong> ${displayValue(dailyLog?.projectName)}</p>
+        <p><strong>Job Site Numbers / Notes:</strong> ${displayValue(dailyLog?.jobSiteNumbers)}</p>
+        <p><strong>Foreman on Site:</strong> ${displayValue(dailyLog?.foremanOnSite)}</p>
+        <p><strong>Site Foreman Assistant:</strong> ${displayValue(dailyLog?.siteForemanAssistant)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Manpower</h3>
-        ${dailyLog?.manpower ? `<p><strong>Manpower Summary:</strong> ${dailyLog.manpower}</p>` : ''}
-        ${dailyLog?.weeklySchedule ? `<p><strong>Weekly Schedule:</strong> ${dailyLog.weeklySchedule}</p>` : ''}
-        ${dailyLog?.manpowerAssessment ? `<p><strong>Manpower Assessment:</strong> ${dailyLog.manpowerAssessment}</p>` : ''}
+        <p><strong>Manpower Summary:</strong> ${displayValue(dailyLog?.manpower)}</p>
+        <p><strong>Weekly Schedule:</strong> ${displayValue(dailyLog?.weeklySchedule)}</p>
+        <p><strong>Manpower Assessment:</strong> ${displayValue(dailyLog?.manpowerAssessment)}</p>
 
-        ${manpowerLines ? `
         <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
           <thead>
             <tr style="background-color: #f5f5f5;">
@@ -213,42 +263,317 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
             ${manpowerLines}
           </tbody>
         </table>
-        ` : ''}
+
+        <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Indoor Climate</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+          <thead>
+            <tr style="background-color: #f5f5f5;">
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Floor / Area</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">High (°F)</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Low (°F)</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Humidity (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${indoorClimateRows}
+          </tbody>
+        </table>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Safety & Concerns</h3>
-        ${dailyLog?.safetyConcerns ? `<p><strong>Safety Concerns:</strong> ${dailyLog.safetyConcerns}</p>` : ''}
-        ${dailyLog?.ahaReviewed ? `<p><strong>AHA Reviewed:</strong> ${dailyLog.ahaReviewed}</p>` : ''}
-        ${dailyLog?.scheduleConcerns ? `<p><strong>Schedule Concerns:</strong> ${dailyLog.scheduleConcerns}</p>` : ''}
-        ${dailyLog?.budgetConcerns ? `<p><strong>Budget Concerns:</strong> ${dailyLog.budgetConcerns}</p>` : ''}
-        ${dailyLog?.commentsAboutShip ? `<p><strong>Comments About Ship:</strong> ${dailyLog.commentsAboutShip}</p>` : ''}
+        <p><strong>Safety Concerns:</strong> ${displayValue(dailyLog?.safetyConcerns)}</p>
+        <p><strong>AHA Reviewed:</strong> ${displayValue(dailyLog?.ahaReviewed)}</p>
+        <p><strong>Schedule Concerns:</strong> ${displayValue(dailyLog?.scheduleConcerns)}</p>
+        <p><strong>Budget Concerns:</strong> ${displayValue(dailyLog?.budgetConcerns)}</p>
+        <p><strong>Comments About Ship:</strong> ${displayValue(dailyLog?.commentsAboutShip)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Deliveries & Materials</h3>
-        ${dailyLog?.deliveriesReceived ? `<p><strong>Deliveries Received:</strong> ${dailyLog.deliveriesReceived}</p>` : ''}
-        ${dailyLog?.deliveriesNeeded ? `<p><strong>Deliveries Needed:</strong> ${dailyLog.deliveriesNeeded}</p>` : ''}
-        ${dailyLog?.newWorkAuthorizations ? `<p><strong>New Work Authorizations:</strong> ${dailyLog.newWorkAuthorizations}</p>` : ''}
-        ${dailyLog?.qcInspection ? `<p><strong>QC Inspection:</strong> ${dailyLog.qcInspection}</p>` : ''}
+        <p><strong>Deliveries Received:</strong> ${displayValue(dailyLog?.deliveriesReceived)}</p>
+        <p><strong>Deliveries Needed:</strong> ${displayValue(dailyLog?.deliveriesNeeded)}</p>
+        <p><strong>New Work Authorizations:</strong> ${displayValue(dailyLog?.newWorkAuthorizations)}</p>
+        <p><strong>QC Inspection:</strong> ${displayValue(dailyLog?.qcInspection)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Notes & Action Items</h3>
-        ${dailyLog?.notesCorrespondence ? `<p><strong>Notes & Correspondence:</strong> ${dailyLog.notesCorrespondence}</p>` : ''}
-        ${dailyLog?.actionItems ? `<p><strong>Action Items:</strong> ${dailyLog.actionItems}</p>` : ''}
+        <p><strong>Notes & Correspondence:</strong> ${displayValue(dailyLog?.notesCorrespondence)}</p>
+        <p><strong>Action Items:</strong> ${displayValue(dailyLog?.actionItems)}</p>
 
-        ${attachments ? `
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Attachments</h3>
-        <ul style="padding-left: 18px; margin: 0; list-style: disc;">
-          ${attachments}
-        </ul>
-        ` : ''}
+        ${attachments
+        ? `<ul style="padding-left: 18px; margin: 0; list-style: disc;">${attachments}</ul>`
+        : '<p>N/A</p>'}
       </div>
       <div class="footer">
         <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
+    </div>
+  `;
+}
+function buildTimecardsEmail(payload) {
+    const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const fmtNum = (val, digits = 2) => (Number(val) || 0).toFixed(digits);
+    const fmtCell = (val) => {
+        const n = Number(val) || 0;
+        return Number.isInteger(n) ? String(n) : n.toFixed(2);
+    };
+    const fmtMoney = (val) => `$${(Number(val) || 0).toFixed(2)}`;
+    const start = payload.weekStart ? new Date(payload.weekStart) : null;
+    const end = start && !Number.isNaN(start.getTime()) ? new Date(start) : null;
+    if (end)
+        end.setUTCDate(end.getUTCDate() + 6);
+    const weekLabel = start && end
+        ? `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
+        : 'N/A';
+    const cardMarkupList = (Array.isArray(payload.timecards) ? payload.timecards : []).map((tc) => {
+        const lines = Array.isArray(tc?.lines) ? tc.lines : [];
+        const totalHoursByDay = {};
+        dayKeys.forEach((key) => {
+            totalHoursByDay[key] = lines.reduce((sum, line) => sum + (Number(line?.[key]) || 0), 0);
+        });
+        const accountSummaryMap = new Map();
+        lines.forEach((line) => {
+            const job = displayValue(line?.jobNumber);
+            const acct = displayValue(line?.account);
+            const office = displayValue(line?.area);
+            const amt = Number(line?.totals?.lineTotal) || 0;
+            const key = `${job}|${acct}|${office}`;
+            const existing = accountSummaryMap.get(key);
+            if (existing) {
+                existing.amt += amt;
+            }
+            else {
+                accountSummaryMap.set(key, { job, acct, office, amt });
+            }
+        });
+        const accountRows = Array.from(accountSummaryMap.values())
+            .map((row) => `
+        <tr>
+          <td style="padding: 4px 6px; border: 1px solid #222;">${row.job}</td>
+          <td style="padding: 4px 6px; border: 1px solid #222;">${row.acct}</td>
+          <td style="padding: 4px 6px; border: 1px solid #222;">${row.office}</td>
+          <td style="padding: 4px 6px; border: 1px solid #222; text-align: right;">${fmtMoney(row.amt)}</td>
+        </tr>
+      `)
+            .join('');
+        const hoursTotal = Number(tc?.totals?.hoursTotal) || 0;
+        const regularHours = Math.min(hoursTotal, 40);
+        const overtimeHours = Math.max(hoursTotal - 40, 0);
+        const lineRows = lines.length
+            ? lines.map((line) => {
+                const hoursRow = dayKeys.map((key) => `<td>${fmtCell(line?.[key])}</td>`).join('');
+                const prodRow = dayKeys.map((key) => `<td>${fmtCell(line?.production?.[key])}</td>`).join('');
+                const costRow = dayKeys.map((key) => `<td>${fmtMoney(line?.unitCost?.[key])}</td>`).join('');
+                return `
+            <tr>
+              <td rowspan="3">${displayValue(line?.jobNumber)}</td>
+              <td rowspan="3">${displayValue(line?.account)}</td>
+              <td rowspan="3">${displayValue(line?.difH || line?.difP || line?.difC || line?.costCode)}</td>
+              <td>H</td>
+              ${hoursRow}
+              <td>${fmtNum(line?.totals?.hours)}</td>
+              <td></td>
+              <td></td>
+            </tr>
+            <tr>
+              <td style="border-top: 1px dashed #777;">P</td>
+              ${prodRow}
+              <td></td>
+              <td>${fmtNum(line?.totals?.production)}</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td style="border-top: 1px dashed #777;">C</td>
+              ${costRow}
+              <td>${fmtMoney(line?.totals?.lineTotal)}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          `;
+            }).join('')
+            : '<tr><td colspan="14" style="text-align:center;">No entries</td></tr>';
+        return `
+      <div class="tc-card-wrap" style="border: 2px solid #111; padding: 8px; margin: 4px 0; background:#fff; font-size:11px;">
+      <div style="text-align:center; font-weight:700; font-size:16px; margin-bottom:6px;">PHASE 2 COMPANY</div>
+      <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+        <tr>
+          <td style="width:55%; padding:4px 6px; border-bottom:1px solid #222;"><strong>EMP. NAME:</strong> ${displayValue(tc?.employeeName)}</td>
+          <td style="width:20%; padding:4px 6px; border-bottom:1px solid #222;"><strong>EMPLOYEE #:</strong> ${displayValue(tc?.employeeNumber || tc?.employeeId)}</td>
+          <td style="width:25%; padding:4px 6px; border-bottom:1px solid #222;"><strong>WEEK ENDING:</strong> ${displayValue(end ? end.toLocaleDateString() : '')}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 6px;"><strong>OCCUPATION:</strong> ${displayValue(tc?.occupation)}</td>
+          <td style="padding:4px 6px;"><strong>WAGE:</strong> ${displayValue(tc?.wage)}</td>
+          <td style="padding:4px 6px;"><strong>STATUS:</strong> ${displayValue(tc?.status)}</td>
+        </tr>
+      </table>
+      <table style="width: 100%; border-collapse: collapse; margin: 8px 0; font-size:11px; table-layout: fixed;">
+        <thead>
+          <tr>
+            <th style="border:1px solid #222;">JOB #</th>
+            <th style="border:1px solid #222;">ACCT</th>
+            <th style="border:1px solid #222;">DIF</th>
+            <th style="border:1px solid #222;">TYPE</th>
+            ${dayLabels.map((day) => `<th>${day}</th>`).join('')}
+            <th style="border:1px solid #222;">TOTAL</th>
+            <th style="border:1px solid #222;">PROD</th>
+            <th style="border:1px solid #222;">OFF</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lineRows}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700;">
+            <td colspan="4" style="border:1px solid #222; padding:4px 6px;">TOTAL HOURS</td>
+            ${dayKeys.map((key) => `<td style="border:1px solid #222; text-align:center;">${fmtCell(totalHoursByDay[key])}</td>`).join('')}
+            <td style="border:1px solid #222; text-align:center;">${fmtNum(hoursTotal)}</td>
+            <td style="border:1px solid #222; text-align:center;">${fmtNum(tc?.totals?.productionTotal)}</td>
+            <td style="border:1px solid #222;"></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <table style="width:100%; border-collapse:collapse; margin-top:6px;">
+        <tr>
+        <td style="width:68%; vertical-align:top; padding-right:8px;">
+        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+          <thead>
+            <tr>
+              <th style="border:1px solid #222; padding:4px 6px; text-align:left;">JOB or GL</th>
+              <th style="border:1px solid #222; padding:4px 6px; text-align:left;">ACCT</th>
+              <th style="border:1px solid #222; padding:4px 6px; text-align:left;">OFFICE</th>
+              <th style="border:1px solid #222; padding:4px 6px; text-align:right;">AMT</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${accountRows || '<tr><td colspan="4" style="border:1px solid #222; padding:4px 6px; text-align:center;">N/A</td></tr>'}
+          </tbody>
+        </table>
+        </td>
+        <td style="width:32%; vertical-align:top;">
+        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+          <tbody>
+            <tr>
+              <td style="padding:4px 6px;"><strong>OT</strong></td>
+              <td style="padding:4px 6px; text-align:right;">${fmtNum(overtimeHours)}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;"><strong>REG</strong></td>
+              <td style="padding:4px 6px; text-align:right;">${fmtNum(regularHours)}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;"><strong>SUBCONTRACTED</strong></td>
+              <td style="padding:4px 6px; text-align:right;">${tc?.subcontracted ? 'YES' : 'NO'}</td>
+            </tr>
+          </tbody>
+        </table>
+        </td>
+        </tr>
+      </table>
+
+      <p style="margin-top:8px;"><strong>NOTES:</strong> ${displayValue(tc?.notes)}</p>
+      </div>
+    `;
+    });
+    const cardsHtml = cardMarkupList.length
+        ? `
+      <table role="presentation" class="tc-pair-table" style="width:100%; border-collapse:collapse; table-layout:fixed;">
+        ${Array.from({ length: Math.ceil(cardMarkupList.length / 2) }, (_, pairIndex) => {
+            const left = cardMarkupList[pairIndex * 2] || '';
+            const right = cardMarkupList[pairIndex * 2 + 1] || '';
+            return `
+            <tr class="tc-card-pair">
+              <td class="tc-card-cell" style="width:50%; vertical-align:top; padding-right:6px;">${left}</td>
+              <td class="tc-card-cell" style="width:50%; vertical-align:top; padding-left:6px;">${right || '&nbsp;'}</td>
+            </tr>
+          `;
+        }).join('')}
+      </table>
+    `
+        : '<p>No timecards found.</p>';
+    return `
+    ${constants_1.EMAIL_STYLES}
+    <style>
+      .tc-print .email-container {
+        background: #ffffff !important;
+        padding: 8px !important;
+        color: #111111 !important;
+      }
+      .tc-print .header {
+        background: #ffffff !important;
+        color: #111111 !important;
+        border: 1px solid #111111 !important;
+        border-bottom: 0 !important;
+        padding: 10px !important;
+      }
+      .tc-print .content {
+        background: #ffffff !important;
+        border: 1px solid #111111 !important;
+        border-top: 0 !important;
+        padding: 10px !important;
+      }
+      .tc-print .footer {
+        background: #ffffff !important;
+        color: #333333 !important;
+        border: 1px solid #111111 !important;
+        border-top: 0 !important;
+        padding: 8px !important;
+      }
+      .tc-print table,
+      .tc-print th,
+      .tc-print td {
+        color: #111111 !important;
+        background: #ffffff !important;
+        border-color: #111111 !important;
+      }
+      .tc-print tr {
+        background: #ffffff !important;
+      }
+      .tc-print .tc-card-wrap,
+      .tc-print .tc-card-cell,
+      .tc-print .tc-card-pair {
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+      }
+      .tc-print .tc-card-pair {
+        page-break-before: auto !important;
+        page-break-after: auto !important;
+      }
+      @media print {
+        .tc-print {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .tc-print .email-container,
+        .tc-print .content {
+          padding: 6px !important;
+        }
+        .tc-print .tc-card-wrap {
+          margin: 2px 0 !important;
+        }
+      }
+    </style>
+    <div class="tc-print">
+    <div class="email-container">
+      <div class="header">
+        <h1>Timecards Submitted</h1>
+      </div>
+      <div class="content">
+        <p><strong>Job:</strong> ${displayValue(payload.jobName)} ${payload.jobNumber ? `(#${payload.jobNumber})` : ''}</p>
+        <p><strong>Week:</strong> ${weekLabel}</p>
+        <p><strong>Submitted by:</strong> ${displayValue(payload.submittedBy)}</p>
+        ${cardsHtml}
+      </div>
+      <div class="footer">
+        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+      </div>
+    </div>
     </div>
   `;
 }
@@ -279,27 +604,57 @@ function buildTimecardEmail(employeeName, weekEnding) {
     </div>
   `;
 }
+function formatOrderEmailDate(value) {
+    try {
+        if (!value)
+            return 'N/A';
+        const dateValue = typeof value?.toDate === 'function'
+            ? value.toDate()
+            : value instanceof Date
+                ? value
+                : new Date(value);
+        if (Number.isNaN(dateValue.getTime()))
+            return 'N/A';
+        return dateValue.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+    }
+    catch {
+        return 'N/A';
+    }
+}
 /**
  * Build HTML template for shop order email
  */
 function buildShopOrderEmail(order) {
     const items = order?.items || [];
+    const totalAmount = Number(order?.totalAmount);
+    const hasTotalAmount = Number.isFinite(totalAmount);
+    const orderIdentifier = order?.orderNumber || order?.id || 'N/A';
+    const orderDate = formatOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
     const itemsHtml = items.length > 0 ? `
     <h3>Order Items:</h3>
     <table style="width: 100%; border-collapse: collapse;">
       <thead>
         <tr style="background-color: #f0f0f0; border-bottom: 2px solid #333;">
+          <th style="text-align: center; padding: 8px; border-right: 1px solid #ddd;">#</th>
           <th style="text-align: left; padding: 8px; border-right: 1px solid #ddd;">Item Description</th>
           <th style="text-align: center; padding: 8px;">Quantity</th>
+          <th style="text-align: left; padding: 8px; border-left: 1px solid #ddd;">Catalog Item ID</th>
           <th style="text-align: left; padding: 8px;">Notes</th>
         </tr>
       </thead>
       <tbody>
-        ${items.map((item) => `
+        ${items.map((item, index) => `
           <tr style="border-bottom: 1px solid #ddd;">
+            <td style="text-align: center; padding: 8px; border-right: 1px solid #ddd;">${index + 1}</td>
             <td style="padding: 8px; border-right: 1px solid #ddd;">${item.description || 'N/A'}</td>
             <td style="text-align: center; padding: 8px;">${item.quantity || 0}</td>
-            <td style="padding: 8px;">${item.note || '-'}</td>
+            <td style="padding: 8px; border-left: 1px solid #ddd;">${item.catalogItemId || '-'}</td>
+            <td style="padding: 8px;">${item.note || item.notes || '-'}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -312,8 +667,9 @@ function buildShopOrderEmail(order) {
         <h1>Shop Order Submitted</h1>
       </div>
       <div class="content">
-        <p><strong>Order Number:</strong> ${order?.orderNumber || 'N/A'}</p>
-        <p><strong>Total Amount:</strong> $${(order?.totalAmount || 0).toFixed(2)}</p>
+        <p><strong>Order Number:</strong> ${orderIdentifier}</p>
+        <p><strong>Order Date:</strong> ${orderDate}</p>
+        ${hasTotalAmount ? `<p><strong>Total Amount:</strong> $${totalAmount.toFixed(2)}</p>` : ''}
         <p><strong>Status:</strong> ${order?.status || 'draft'}</p>
         ${itemsHtml}
         <p>A shop order has been submitted. Please review the Phase 2 application for full details.</p>

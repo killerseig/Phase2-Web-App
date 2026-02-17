@@ -16,7 +16,7 @@ import { listSubmittedTimecards, listTimecardsByJobAndWeek } from '@/services/Ti
 import { downloadCsv } from '@/utils/plexisIntegration'
 
 type SortDir = 'asc' | 'desc'
-type JobSortKey = 'name' | 'code' | 'status'
+type JobSortKey = 'name' | 'code' | 'accountNumber' | 'type' | 'status'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
@@ -29,10 +29,12 @@ const loadingJobs = computed(() => jobsStore.isLoading)
 const err = computed(() => jobsStore.error || '')
 
 const jobColumns = [
-  { key: 'name', label: 'Job Name', sortable: true, width: '32%' },
-  { key: 'code', label: 'Code', sortable: true, width: '14%' },
-  { key: 'status', label: 'Status', sortable: true, width: '12%', slot: 'status' },
-  { key: 'timecards', label: 'Timecards This Week', width: '22%', slot: 'timecards' },
+  { key: 'name', label: 'Job Name', sortable: true, width: '24%' },
+  { key: 'code', label: 'Code', sortable: true, width: '10%' },
+  { key: 'accountNumber', label: 'Acct\u00A0#', sortable: true, width: '10%', slot: 'accountNumber' },
+  { key: 'type', label: 'Type', sortable: true, width: '10%', slot: 'type' },
+  { key: 'status', label: 'Status', sortable: true, width: '10%', slot: 'status' },
+  { key: 'timecards', label: 'Timecards This Week', width: '16%', slot: 'timecards' },
   { key: 'actions', label: 'Actions', width: '20%', align: 'end', slot: 'actions' },
 ]
 
@@ -72,12 +74,16 @@ const showJobForm = ref(false)
 const jobForm = ref({
   name: '',
   code: '',
+  accountNumber: '',
+  type: 'general' as 'general' | 'subcontractor',
 })
 const creatingJob = ref(false)
 const togglingJobId = ref('')
 const editingJobId = ref('')
 const editingJobName = ref('')
 const editingJobCode = ref('')
+const editingJobAccountNumber = ref('')
+const editingJobType = ref<'general' | 'subcontractor'>('general')
 const editingJobSaving = ref(false)
 
 // Foreman modal (for job roster employees and foreman user assignment)
@@ -215,18 +221,24 @@ function setInlineJob(job: Job) {
   editingJobId.value = job.id
   editingJobName.value = job.name || ''
   editingJobCode.value = job.code || ''
+  editingJobAccountNumber.value = job.accountNumber || ''
+  editingJobType.value = (job.type || 'general') as 'general' | 'subcontractor'
 }
 
 function clearInlineJob() {
   editingJobId.value = ''
   editingJobName.value = ''
   editingJobCode.value = ''
+  editingJobAccountNumber.value = ''
+  editingJobType.value = 'general'
 }
 
 function isJobDirty(job: Job) {
   return (
     editingJobName.value.trim() !== (job.name || '') ||
-    editingJobCode.value.trim() !== (job.code || '')
+    editingJobCode.value.trim() !== (job.code || '') ||
+    editingJobAccountNumber.value.trim() !== (job.accountNumber || '') ||
+    editingJobType.value !== (job.type || 'general')
   )
 }
 
@@ -234,10 +246,16 @@ async function saveInlineJob(job: Job) {
   if (editingJobId.value !== job.id) return
   const trimmedName = editingJobName.value.trim()
   const trimmedCode = editingJobCode.value.trim()
+  const trimmedAccountNumber = editingJobAccountNumber.value.trim()
   if (!isJobDirty(job)) return
   editingJobSaving.value = true
   try {
-    await jobsStore.updateJob(job.id, { name: trimmedName, code: trimmedCode || null })
+    await jobsStore.updateJob(job.id, {
+      name: trimmedName,
+      code: trimmedCode || null,
+      accountNumber: trimmedAccountNumber || null,
+      type: editingJobType.value,
+    })
     toastRef.value?.show('Job updated', 'success')
   } catch (e: any) {
     toastRef.value?.show(e?.message ?? 'Failed to update job', 'error')
@@ -263,10 +281,14 @@ async function toggleJobActions(job: Job) {
 async function submitJobForm() {
   creatingJob.value = true
   try {
-    await jobsStore.createJob(jobForm.value.name, { code: jobForm.value.code })
+    await jobsStore.createJob(jobForm.value.name, {
+      code: jobForm.value.code,
+      accountNumber: jobForm.value.accountNumber,
+      type: jobForm.value.type,
+    })
     toastRef.value?.show('Job created successfully', 'success')
     showJobForm.value = false
-    jobForm.value = { name: '', code: '' }
+    jobForm.value = { name: '', code: '', accountNumber: '', type: 'general' }
     await loadJobs()
   } catch (e: any) {
     toastRef.value?.show(formatErr(e), 'error')
@@ -276,7 +298,7 @@ async function submitJobForm() {
 }
 
 function cancelJobForm() {
-  jobForm.value = { name: '', code: '' }
+  jobForm.value = { name: '', code: '', accountNumber: '', type: 'general' }
   showJobForm.value = false
 }
 
@@ -430,13 +452,24 @@ onMounted(async () => {
       subtitle="Add a new job with code for tracking"
     >
       <form class="row g-3" @submit.prevent="submitJobForm">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label small">Job Name</label>
           <input v-model="jobForm.name" type="text" class="form-control" placeholder="Project Name" required />
         </div>
-        <div class="col-md-6">
+        <div class="col-md-3">
           <label class="form-label small">Job Code</label>
           <input v-model="jobForm.code" type="text" class="form-control" placeholder="JOB-001" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">Account #</label>
+          <input v-model="jobForm.accountNumber" type="text" class="form-control" placeholder="4000" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small">Type</label>
+          <select v-model="jobForm.type" class="form-select">
+            <option value="general">General</option>
+            <option value="subcontractor">Subcontractor</option>
+          </select>
         </div>
         <div class="col-12 d-flex gap-2 justify-content-end pt-2">
           <button type="button" class="btn btn-outline-secondary" @click.stop="cancelJobForm" :disabled="creatingJob">
@@ -674,6 +707,41 @@ onMounted(async () => {
               </template>
               <template v-else>
                 {{ row.code || '—' }}
+              </template>
+            </template>
+
+            <template #accountNumber="{ row }">
+              <template v-if="editingJobId === row.id">
+                <input
+                  v-model="editingJobAccountNumber"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Account #"
+                  @click.stop
+                  @mousedown.stop
+                  :disabled="editingJobSaving"
+                />
+              </template>
+              <template v-else>
+                {{ row.accountNumber || '—' }}
+              </template>
+            </template>
+
+            <template #type="{ row }">
+              <template v-if="editingJobId === row.id">
+                <select
+                  v-model="editingJobType"
+                  class="form-select form-select-sm"
+                  @click.stop
+                  @mousedown.stop
+                  :disabled="editingJobSaving"
+                >
+                  <option value="general">General</option>
+                  <option value="subcontractor">Subcontractor</option>
+                </select>
+              </template>
+              <template v-else>
+                {{ row.type === 'subcontractor' ? 'Subcontractor' : 'General' }}
               </template>
             </template>
 

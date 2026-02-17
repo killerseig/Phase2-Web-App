@@ -258,11 +258,16 @@ function cancelUserEdit() {
 
 async function handleDeleteUser(user: UserProfile) {
   const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
+  if (!confirm(`Delete "${name}"? This cannot be undone and will also remove them from email recipient lists.`)) return
 
   try {
-    await usersStore.deleteUser(user.id)
-    toastRef.value?.show('User deleted', 'success')
+    const result = await usersStore.deleteUser(user.id)
+    const jobCount = Number(result?.updatedJobCount || 0)
+    const removed = !!result?.removedFromRecipientLists
+    const cleanupMessage = removed
+      ? ` and removed from recipient lists${jobCount > 0 ? ` (${jobCount} job list${jobCount === 1 ? '' : 's'} updated)` : ''}`
+      : ''
+    toastRef.value?.show(`User deleted${cleanupMessage}`, 'success')
     if (activeUserActionsId.value === user.id) {
       cancelUserEdit()
     }
@@ -420,6 +425,13 @@ onMounted(() => {
     <div class="mb-4">
       <h2 class="h3 mb-1">User Management</h2>
       <p class="text-muted small mb-0">Manage user profiles and employees</p>
+    </div>
+
+    <div class="alert access-note small d-flex align-items-start gap-2" role="alert">
+      <i class="bi bi-info-circle mt-1"></i>
+      <div>
+        Setting a user to <strong>None</strong> role or <strong>Inactive</strong> automatically removes their email from all recipient lists.
+      </div>
     </div>
 
     <!-- Tab Navigation -->
@@ -794,3 +806,18 @@ onMounted(() => {
     </template>
   </div>
 </template>
+
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
+.access-note {
+  background: $surface-2;
+  border: 1px solid $border-color;
+  color: $body-color;
+  box-shadow: $box-shadow-sm;
+}
+
+.access-note .bi-info-circle {
+  color: $primary;
+}
+</style>

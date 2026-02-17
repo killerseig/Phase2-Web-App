@@ -400,26 +400,50 @@ export async function createTimecardFromCopy(
 ): Promise<string> {
   try {
     assertJobAccess(jobId)
-    // Create new days array with zeroed hours
-    const newDays = sourceTimecard.days.map((day, index) => {
-      // Calculate new date for this day
-      const weekStart = new Date(newWeekEndingDate + 'T00:00:00Z')
-      weekStart.setUTCDate(weekStart.getUTCDate() - 6) // Go back to Sunday
-      weekStart.setUTCDate(weekStart.getUTCDate() + index)
-      
-      const year = weekStart.getUTCFullYear()
-      const month = String(weekStart.getUTCMonth() + 1).padStart(2, '0')
-      const dateDay = String(weekStart.getUTCDate()).padStart(2, '0')
-      const dateStr = `${year}-${month}-${dateDay}`
-      
-      return {
-        ...day,
-        date: dateStr,
-        hours: 0, // ZERO OUT hours
-        lineTotal: 0,
-        notes: '',
-      }
-    })
+    const newWeekStart = new Date(newWeekEndingDate + 'T00:00:00Z')
+    newWeekStart.setUTCDate(newWeekStart.getUTCDate() - 6)
+
+    const makeDateForIndex = (index: number) => {
+      const d = new Date(newWeekStart)
+      d.setUTCDate(newWeekStart.getUTCDate() + index)
+      const year = d.getUTCFullYear()
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+      const day = String(d.getUTCDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
+    // Create new summary days array for the new week
+    const newDays: TimecardDay[] = Array.from({ length: 7 }, (_, index) => ({
+      date: makeDateForIndex(index),
+      dayOfWeek: index,
+      hours: 0,
+      production: 0,
+      unitCost: 0,
+      lineTotal: 0,
+      notes: '',
+    }))
+
+    // Copy jobs/accounting metadata but reset daily work values
+    const copiedJobs = (sourceTimecard.jobs ?? []).map(job => ({
+      jobNumber: job.jobNumber ?? '',
+      subsectionArea: job.subsectionArea ?? job.area ?? '',
+      area: job.area ?? job.subsectionArea ?? '',
+      account: job.account ?? job.acct ?? '',
+      acct: job.acct ?? job.account ?? '',
+      div: job.div ?? '',
+      days: Array.from({ length: 7 }, (_, index) => {
+        const sourceDay = job.days?.[index]
+        return {
+          date: makeDateForIndex(index),
+          dayOfWeek: index,
+          hours: 0,
+          production: 0,
+          unitCost: sourceDay?.unitCost ?? 0,
+          lineTotal: 0,
+          notes: '',
+        }
+      }),
+    }))
     
     // Create the timecard input
     const timecardInput: TimecardInput = {
@@ -427,7 +451,12 @@ export async function createTimecardFromCopy(
       employeeRosterId: sourceTimecard.employeeRosterId,
       employeeNumber: sourceTimecard.employeeNumber,
       employeeName: sourceTimecard.employeeName,
+      firstName: sourceTimecard.firstName ?? '',
+      lastName: sourceTimecard.lastName ?? '',
       occupation: sourceTimecard.occupation,
+      employeeWage: sourceTimecard.employeeWage ?? null,
+      subcontractedEmployee: sourceTimecard.subcontractedEmployee ?? false,
+      jobs: copiedJobs,
       days: newDays,
       notes: '', // Don't copy notes, start fresh
     }

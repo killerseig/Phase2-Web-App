@@ -10,6 +10,7 @@ export interface JobDetails {
 export interface EmailSettings {
     timecardSubmitRecipients?: string[];
     shopOrderSubmitRecipients?: string[];
+    dailyLogSubmitRecipients?: string[];
 }
 export interface UserProfile {
     uid: string;

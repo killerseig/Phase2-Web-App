@@ -36,6 +36,7 @@ const app = useAppStore()
 <style scoped lang="scss">
 .app-shell {
   --sidebar-width: 260px;
+  overflow: hidden;
 }
 
 .app-shell.is-collapsed {
@@ -59,6 +60,12 @@ const app = useAppStore()
   transition: margin-left 0.3s ease;
   overflow: hidden;
   margin-left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
+  min-width: 0;
+}
+
+.main-pane > main {
+  min-width: 0;
 }
 
 .sidebar-backdrop {

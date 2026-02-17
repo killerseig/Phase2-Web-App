@@ -23,6 +23,13 @@ export declare function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, log
  * Build HTML template for daily log email
  */
 export declare function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dailyLog: any): string;
+export declare function buildTimecardsEmail(payload: {
+    jobName?: string;
+    jobNumber?: string;
+    submittedBy?: string;
+    weekStart?: string;
+    timecards: any[];
+}): string;
 /**
  * Build HTML template for timecard email
  */

@@ -319,32 +319,44 @@ async function archiveCategory(categoryId: string) {
 }
 
 async function reactivateCategory(categoryId: string) {
-  const cat = categoriesStore.getCategoryById(categoryId)
-  if (!cat) return
+  const visited = new Set<string>()
+  const MAX_DEPTH = 100
+  const reactivateRecursive = async (id: string, depth = 0): Promise<void> => {
+    if (depth > MAX_DEPTH) return
+    if (visited.has(id)) return
+    visited.add(id)
 
-  saving.value = true
-  try {
+    const current = categoriesStore.getCategoryById(id)
+    if (!current) return
+
     // Reactivate this category
-    await categoriesStore.reactivateCategory(categoryId)
-    
+    await categoriesStore.reactivateCategory(id)
+
     // Then reactivate parent chain if needed
-    if (cat.parentId) {
-      if (cat.parentId.startsWith('item-')) {
+    if (current.parentId) {
+      if (current.parentId.startsWith('item-')) {
         // Parent is an item - reactivate the item
-        const itemId = cat.parentId.slice(5)
+        const itemId = current.parentId.slice(5)
         const item = allItems.value.find(i => i.id === itemId)
         if (item && !item.active) {
           await catalogStore.setItemActive(itemId, true)
         }
       } else {
         // Parent is a category - reactivate it recursively
-        const parentCat = categoriesStore.getCategoryById(cat.parentId)
+        const parentCat = categoriesStore.getCategoryById(current.parentId)
         if (parentCat && !parentCat.active) {
-          await reactivateCategory(cat.parentId)
+          await reactivateRecursive(current.parentId, depth + 1)
         }
       }
     }
-    
+  }
+
+  const cat = categoriesStore.getCategoryById(categoryId)
+  if (!cat) return
+
+  saving.value = true
+  try {
+    await reactivateRecursive(categoryId)
     toastRef.value?.show(`Reactivated "${cat.name}"`, 'success')
   } catch (e: any) {
     console.error('[AdminShopCatalog] Error reactivating category:', e)
@@ -358,17 +370,46 @@ async function deleteCategory(categoryId: string) {
   const cat = categoriesStore.getCategoryById(categoryId)
   if (!cat) return
 
-  if (categoriesStore.hasChildren(categoryId)) {
-    toastRef.value?.show('Cannot delete category with subcategories', 'error')
-    return
+  const categoryIds: string[] = []
+  const visited = new Set<string>()
+  const MAX_DEPTH = 100
+  const collectCategoryDescendants = (id: string, depth = 0) => {
+    if (depth > MAX_DEPTH) return
+    if (visited.has(id)) return
+    visited.add(id)
+    const children = categoriesStore.getChildren(id)
+    children.forEach(child => {
+      collectCategoryDescendants(child.id, depth + 1)
+      categoryIds.push(child.id)
+    })
   }
+  collectCategoryDescendants(categoryId)
 
-  if (!confirm(`Delete "${cat.name}"? This cannot be undone.`)) return
+  const itemIds = allItems.value
+    .filter(item => item.categoryId && [categoryId, ...categoryIds].includes(item.categoryId))
+    .map(item => item.id)
+
+  const totalDescendants = categoryIds.length + itemIds.length
+  const confirmMessage = totalDescendants > 0
+    ? `Delete "${cat.name}" and ${totalDescendants} descendant item(s)/category(ies)? This cannot be undone.`
+    : `Delete "${cat.name}"? This cannot be undone.`
+  if (!confirm(confirmMessage)) return
 
   saving.value = true
   try {
+    // Delete descendant items first
+    for (const itemId of itemIds) {
+      await catalogStore.deleteItem(itemId)
+    }
+
+    // Delete descendant categories deepest-first
+    for (const childCategoryId of categoryIds) {
+      await categoriesStore.deleteCategory(childCategoryId)
+    }
+
+    // Delete selected category
     await categoriesStore.deleteCategory(categoryId)
-    toastRef.value?.show(`Deleted "${cat.name}"`, 'success')
+    toastRef.value?.show(`Deleted "${cat.name}"${totalDescendants ? ` with ${totalDescendants} descendants` : ''}`, 'success')
   } catch (e: any) {
     toastRef.value?.show('Failed to delete category', 'error')
   } finally {
@@ -433,12 +474,55 @@ function cancelCategoryEdit() {
 }
 
 async function deleteItem(item: ShopCatalogItem) {
-  if (!confirm(`Delete "${item.description}"? This cannot be undone.`)) return
+  const childCategories = categoriesStore.categories.filter(
+    c => c.parentId === `item-${item.id}` || c.parentId === item.id
+  )
+
+  const descendantCategoryIds: string[] = []
+  const visited = new Set<string>()
+  const MAX_DEPTH = 100
+  const collectCategoryDescendants = (parentCategoryId: string, depth = 0) => {
+    if (depth > MAX_DEPTH) return
+    if (visited.has(parentCategoryId)) return
+    visited.add(parentCategoryId)
+    const children = categoriesStore.getChildren(parentCategoryId)
+    children.forEach(child => {
+      collectCategoryDescendants(child.id, depth + 1)
+      descendantCategoryIds.push(child.id)
+    })
+  }
+
+  childCategories.forEach(cat => {
+    collectCategoryDescendants(cat.id)
+    descendantCategoryIds.push(cat.id)
+  })
+
+  const allCascadeCategoryIds = Array.from(new Set(descendantCategoryIds))
+  const descendantItemIds = allItems.value
+    .filter(i => i.categoryId && allCascadeCategoryIds.includes(i.categoryId))
+    .map(i => i.id)
+
+  const cascadeCount = allCascadeCategoryIds.length + descendantItemIds.length
+  const confirmMessage = cascadeCount > 0
+    ? `Delete "${item.description}" and ${cascadeCount} descendant item(s)/category(ies)? This cannot be undone.`
+    : `Delete "${item.description}"? This cannot be undone.`
+  if (!confirm(confirmMessage)) return
 
   saving.value = true
   try {
+    // Delete descendant items first
+    for (const childItemId of descendantItemIds) {
+      await catalogStore.deleteItem(childItemId)
+    }
+
+    // Delete descendant categories deepest-first
+    for (const categoryId of allCascadeCategoryIds) {
+      await categoriesStore.deleteCategory(categoryId)
+    }
+
+    // Delete selected item
     await catalogStore.deleteItem(item.id)
-    toastRef.value?.show('Item deleted', 'success')
+    toastRef.value?.show(cascadeCount > 0 ? `Item and ${cascadeCount} descendants deleted` : 'Item deleted', 'success')
   } catch (e: any) {
     toastRef.value?.show('Failed to delete item', 'error')
   } finally {
