@@ -27,7 +27,7 @@ const handleFocus = (e: FocusEvent, line: any) => {
         <div class="col-12">
           <label class="form-label">Manpower</label>
           <div class="table-responsive">
-            <table class="table table-sm table-striped table-hover mb-0 manpower-table">
+            <table class="table table-sm table-dark table-striped table-hover mb-0 manpower-table">
               <thead>
                 <tr>
                   <th class="small fw-semibold col-trade">Trade</th>

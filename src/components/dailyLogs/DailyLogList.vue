@@ -7,6 +7,7 @@ const props = defineProps<{
   onSelect?: (id: string) => void
   formatTimestamp: (ts?: any) => string
   title?: string
+  selectedId?: string | null
 }>()
 
 const emit = defineEmits<{ (e: 'select', id: string): void }>()
@@ -29,7 +30,10 @@ const handleSelect = (id: string) => {
           v-for="log in logs"
           :key="log.id"
           type="button"
-          class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
+          :class="[
+            'list-group-item list-group-item-action d-flex justify-content-between align-items-start log-list-item',
+            log.id === props.selectedId ? 'log-list-item-active' : ''
+          ]"
           @click="handleSelect(log.id)"
         >
           <div class="me-2">
@@ -46,3 +50,44 @@ const handleSelect = (id: string) => {
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
+.log-list-item {
+  background-color: $surface;
+  color: $body-color;
+  border-color: rgba($border-color, 0.6);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background-color: mix($primary, $surface, 12%);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary;
+    outline-offset: -4px;
+  }
+}
+
+.log-list-item-active {
+  background: linear-gradient(135deg, mix($primary, $surface, 20%), mix($primary, $surface, 28%));
+  border-color: mix($primary, $border-color, 55%);
+  box-shadow: 0 0 0 1px rgba($primary, 0.35);
+  color: $body-color !important;
+}
+
+.log-list-item-active .badge {
+  background-color: rgba($primary, 0.2);
+  color: $body-color;
+  border: 1px solid rgba($primary, 0.35);
+}
+
+.log-list-item-active .text-muted {
+  color: lighten($text-muted-2, 12%) !important;
+}
+
+.log-list-item:active {
+  background-color: mix($primary, $surface, 16%);
+}
+</style>

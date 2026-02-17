@@ -1,6 +1,8 @@
 @use '@/styles/_variables.scss' as vars;
 
 .table {
+  font-family: var(--bs-body-font-family);
+  font-size: 0.98rem;
   --bs-table-bg: transparent;
   --bs-table-color: var(--text-body, vars.$body-color);
   --bs-table-striped-bg: rgba(vars.$primary, 0.08);
@@ -23,6 +25,28 @@
   background-color: rgba(vars.$primary, 0.08);
   letter-spacing: 0.3px;
   color: var(--text-body, vars.$body-color);
+  padding: 0.85rem 0.9rem;
+}
+
+.table td {
+  padding: 0.85rem 0.9rem;
+  vertical-align: middle;
+}
+
+.table-sort-trigger {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.table-sort-trigger:focus-visible {
+  outline: 2px solid var(--bs-primary, vars.$primary);
+  outline-offset: 2px;
 }
 
 .table-hover tbody tr:hover {

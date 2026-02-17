@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
 import { useRoute, useRouter } from 'vue-router'
 import Toast from '@/components/Toast.vue'
+import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { usePermissions } from '@/composables/usePermissions'
@@ -31,6 +32,8 @@ interface TimecardModel extends Timecard {
   totals: TimecardTotals
 }
 
+const props = defineProps<{ jobId?: string }>()
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -41,7 +44,7 @@ const isAdmin = computed(() => auth.role === 'admin')
 const toastRef = ref<ToastInstance | null>(null)
 const datePickerRef = ref<any>(null)
 
-const jobId = computed(() => String(route.params.jobId))
+const jobId = computed(() => String(props.jobId ?? route.params.jobId))
 const jobName = computed(() => jobsStore.currentJob?.name ?? 'Timecards')
 const selectedDate = ref<string>('')
 const weekStartDate = computed(() => snapToSunday(selectedDate.value || new Date()))
@@ -63,8 +66,6 @@ const err = ref('')
 
 const editingTimecardId = ref<string | null>(null)
 const expandedId = ref<string | null>(null)
-const collapseRefs = ref<Record<string, HTMLElement | null>>({})
-const collapseHeights = ref<Record<string, number>>({})
 const editForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '' })
 
 const showCreateForm = ref(false)
@@ -270,34 +271,8 @@ function openDatePicker() {
   if (picker?.open) picker.open()
 }
 
-function toggleAccordion(id: string) {
-  expandedId.value = expandedId.value === id ? null : id
-  nextTick(() => measureCollapse(id))
-}
-
-function setCollapseRef(id: string, el: HTMLElement | null) {
-  if (!el) {
-    delete collapseRefs.value[id]
-    delete collapseHeights.value[id]
-    return
-  }
-  collapseRefs.value[id] = el
-  collapseHeights.value[id] = el.scrollHeight
-}
-
-function measureCollapse(id: string) {
-  const el = collapseRefs.value[id]
-  if (!el) return
-  collapseHeights.value[id] = el.scrollHeight
-}
-
-function getCollapseStyle(id: string) {
-  const isOpen = expandedId.value === id
-  const h = collapseHeights.value[id] ?? 0
-  return {
-    maxHeight: isOpen ? `${h}px` : '0px',
-    opacity: isOpen ? '1' : '0',
-  }
+function handleTimecardToggle(id: string, open: boolean) {
+  expandedId.value = open ? id : null
 }
 
 function onDateChange(_dates: Date[], dateStr: string) {
@@ -535,6 +510,14 @@ function cancelEditingEmployee() {
   editForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '' }
 }
 
+function toggleEditingEmployee(timecard: TimecardModel) {
+  if (editingTimecardId.value === timecard.id) {
+    confirmEditingEmployee(timecard)
+  } else {
+    startEditingEmployee(timecard)
+  }
+}
+
 function confirmEditingEmployee(timecard: TimecardModel) {
   if (!editForm.value.firstName.trim()) {
     toastRef.value?.show('First name is required', 'error')
@@ -620,7 +603,7 @@ onUnmounted(() => {
   <div class="timecards-page">
     <Toast ref="toastRef" />
 
-    <div class="container-fluid py-4 wide-container">
+    <div class="container-fluid py-4 wide-container-1200">
       <div class="mb-4 d-flex justify-content-between align-items-center">
         <div>
           <h2 class="h4 mb-1">{{ jobName }}</h2>
@@ -646,12 +629,12 @@ onUnmounted(() => {
 
       <div v-if="loading" class="text-center py-5">
         <div class="spinner-border text-primary mb-3"></div>
-        <p class="text-muted">Loading timecards…</p>
+        <p class="text-muted">Loading timecardsΓÇª</p>
       </div>
 
       <div v-else>
         <div class="timecards-toolbar mb-3">
-          <div class="container-fluid wide-container">
+          <div class="container-fluid wide-container-1200">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-primary btn-sm" :disabled="loading || showCreateForm" @click="startCreateTimecard">
@@ -706,323 +689,301 @@ onUnmounted(() => {
           <i class="bi bi-inbox me-2"></i>No timecards yet.
         </div>
 
-        <div v-else class="accordion accordion-flush" id="timecardsAccordion">
-          <div v-for="timecard in allTimecards" :key="timecard.id" class="accordion-item">
-            <h2 class="accordion-header" :id="`heading-${timecard.id}`">
-              <button
-                :class="['accordion-button', { collapsed: expandedId !== timecard.id }]"
-                type="button"
-                :aria-expanded="expandedId === timecard.id"
-                :aria-controls="`collapse-${timecard.id}`"
-                @click="toggleAccordion(timecard.id)"
-              >
-                <div class="row g-2 align-items-center w-100 timecard-header-row">
-                  <div class="col-6 col-md-3">
-                    <div
-                      v-if="editingTimecardId === timecard.id"
-                      class="d-flex align-items-center gap-2 flex-nowrap w-100"
-                      @click.stop
-                    >
-                      <input
-                        v-model="editForm.firstName"
-                        type="text"
-                        class="form-control form-control-sm flex-fill shrink-input"
-                        placeholder="First name"
-                      />
-                      <input
-                        v-model="editForm.lastName"
-                        type="text"
-                        class="form-control form-control-sm flex-fill shrink-input"
-                        placeholder="Last name"
-                      />
-                    </div>
-                    <div v-else class="fw-semibold">{{ timecard.employeeName }}</div>
-                  </div>
-
-                  <div class="col-3 col-md-2">
-                    <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
-                      <input
-                        v-model="editForm.employeeNumber"
-                        type="text"
-                        class="form-control form-control-sm"
-                        placeholder="Employee #"
-                      />
-                    </div>
-                    <div v-else class="fw-semibold">#{{ timecard.employeeNumber }}</div>
-                  </div>
-
-                  <div class="col-6 col-md-3">
-                    <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
-                      <input
-                        v-model="editForm.occupation"
-                        type="text"
-                        class="form-control form-control-sm"
-                        placeholder="Occupation"
-                      />
-                    </div>
-                    <div v-else class="text-muted">{{ timecard.occupation }}</div>
-                  </div>
-
-                  <div class="col-12 col-md-4 order-first order-md-last text-start text-md-end d-flex align-items-center justify-content-between justify-content-md-end gap-2 tc-header-actions" @click.stop>
-                    <span v-if="editingTimecardId === timecard.id" class="d-flex gap-1">
-                      <button class="btn btn-primary btn-sm" @click="confirmEditingEmployee(timecard)">
-                        <i class="bi bi-check"></i>
-                      </button>
-                      <button class="btn btn-secondary btn-sm" @click="cancelEditingEmployee">
-                        <i class="bi bi-x"></i>
-                      </button>
-                    </span>
-                    <span v-else class="d-flex gap-2 align-items-center">
-                      <button
-                        class="btn btn-outline-secondary btn-sm"
-                        :disabled="timecard.status === 'submitted'"
-                        @click="startEditingEmployee(timecard)"
-                      >
-                        <i class="bi bi-pencil"></i>
-                      </button>
-                      <span :class="timecard.status === 'submitted' ? 'badge bg-success' : 'badge bg-warning text-dark'">
-                        {{ timecard.status }}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-              </button>
-            </h2>
-
-            <div
-              :id="`collapse-${timecard.id}`"
-              :class="['tc-collapse', { show: expandedId === timecard.id }]"
-              :style="getCollapseStyle(timecard.id)"
-              :aria-labelledby="`heading-${timecard.id}`"
-              :ref="(el) => setCollapseRef(timecard.id, el as HTMLElement | null)"
-            >
-              <div class="accordion-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm mb-0 timecard-table">
-                    <thead>
-                      <tr>
-                        <th class="text-center small fw-semibold col-job">Job #</th>
-                        <th class="text-center small fw-semibold col-acct">Acct</th>
-                        <th class="text-center small fw-semibold col-blank"></th>
-                        <th class="text-center small fw-semibold col-div">Dif</th>
-                        <th v-for="dayIdx in 7" :key="dayIdx" class="text-center col-day">
-                          <div class="fw-semibold small">{{ ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayIdx - 1] }}</div>
-                        </th>
-                        <th class="text-center small fw-semibold col-total">Total</th>
-                        <th class="col-actions"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <template v-for="(job, jobIdx) in (timecard.jobs || [])" :key="`job-${jobIdx}`">
-                        <tr class="align-middle">
-                          <td v-if="true" :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
-                            <input
-                              type="text"
-                              :value="job.jobNumber || ''"
-                              :disabled="timecard.status === 'submitted'"
-                              class="form-control form-control-sm text-center"
-                              placeholder="Job #"
-                              @input="(e) => updateJobNumber(timecard, jobIdx, (e.target as HTMLInputElement).value)"
-                            />
-                          </td>
-                          <td v-if="true" :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
-                            <input
-                              type="text"
-                              :value="job.acct || ''"
-                              :disabled="timecard.status === 'submitted'"
-                              class="form-control form-control-sm text-center"
-                              placeholder="Acct"
-                              @input="(e) => updateAccount(timecard, jobIdx, (e.target as HTMLInputElement).value)"
-                            />
-                          </td>
-                          <td class="bg-soft small fw-semibold text-center">H</td>
-                          <td class="bg-soft text-center px-2 py-0">
-                            <input
-                              type="text"
-                              :value="job.difH || ''"
-                              :disabled="timecard.status === 'submitted'"
-                              class="form-control form-control-sm text-center"
-                              placeholder="Dif"
-                              @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difH = (e.target as HTMLInputElement).value }"
-                            />
-                          </td>
-                          <td v-for="dayIdx in 7" :key="`h-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
-                            <template v-if="job.days && job.days[dayIdx - 1]">
-                              <input
-                                v-model.number="job.days[dayIdx - 1].hours"
-                                type="number"
-                                inputmode="decimal"
-                                min="0"
-                                max="24"
-                                step="0.25"
-                                :disabled="timecard.status === 'submitted'"
-                                class="form-control form-control-sm text-center w-100 day-input"
-                                placeholder="0"
-                                @input="(e) => handleHoursInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
-                                @focus="($event.target as HTMLInputElement).select()"
-                                @click.stop
-                              />
-                            </template>
-                          </td>
-                          <td class="text-center fw-semibold small">{{ (timecard.totals.hoursTotal ?? 0).toFixed(2) }}</td>
-                          <td :rowspan="3" class="text-center align-middle">
-                            <button
-                              v-if="(timecard.jobs?.length || 0) > 1"
-                              class="btn btn-sm btn-danger btn-icon"
-                              title="Remove job"
-                              :disabled="timecard.status === 'submitted'"
-                              @click="removeJobRow(timecard, jobIdx)"
-                            >
-                              <i class="bi bi-x"></i>
-                            </button>
-                          </td>
-                        </tr>
-
-                        <tr class="align-middle bg-soft">
-                          <td class="bg-soft small fw-semibold text-center">P</td>
-                          <td class="bg-soft text-center px-2 py-0">
-                            <input
-                              type="text"
-                              :value="job.difP || ''"
-                              :disabled="timecard.status === 'submitted'"
-                              class="form-control form-control-sm text-center"
-                              placeholder="Dif"
-                              @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difP = (e.target as HTMLInputElement).value }"
-                            />
-                          </td>
-                          <td v-for="dayIdx in 7" :key="`p-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
-                            <template v-if="job.days && job.days[dayIdx - 1]">
-                              <input
-                                v-model.number="job.days[dayIdx - 1].production"
-                                type="number"
-                                inputmode="decimal"
-                                min="0"
-                                step="0.1"
-                                :disabled="timecard.status === 'submitted'"
-                                class="form-control form-control-sm text-center w-100 day-input"
-                                title="Production units"
-                                placeholder="0"
-                                @input="recalcTotals(timecard); autoSave(timecard)"
-                                @focus="($event.target as HTMLInputElement).select()"
-                                @click.stop
-                              />
-                            </template>
-                          </td>
-                          <td class="text-center fw-semibold small">{{ (timecard.totals.productionTotal ?? 0).toFixed(2) }}</td>
-                        </tr>
-
-                        <tr class="align-middle">
-                          <td class="bg-soft small fw-semibold text-center">C</td>
-                          <td class="bg-soft text-center px-2 py-0">
-                            <input
-                              type="text"
-                              :value="job.difC || ''"
-                              :disabled="timecard.status === 'submitted'"
-                              class="form-control form-control-sm text-center"
-                              placeholder="Dif"
-                              @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difC = (e.target as HTMLInputElement).value }"
-                            />
-                          </td>
-                          <td v-for="dayIdx in 7" :key="`c-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0">
-                            <template v-if="job.days && job.days[dayIdx - 1]">
-                              <input
-                                v-model.number="job.days[dayIdx - 1].unitCost"
-                                type="number"
-                                inputmode="decimal"
-                                min="0"
-                                step="0.01"
-                                :disabled="timecard.status === 'submitted'"
-                                class="form-control form-control-sm text-center text-xs day-input"
-                                title="Cost per unit"
-                                placeholder="0"
-                                @input="recalcTotals(timecard); autoSave(timecard)"
-                                @focus="($event.target as HTMLInputElement).select()"
-                                @click.stop
-                              />
-                            </template>
-                          </td>
-                          <td class="text-center fw-semibold small">${{ (timecard.totals.lineTotal ?? 0).toFixed(2) }}</td>
-                        </tr>
-                      </template>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div class="p-2 border-top d-flex justify-content-between align-items-center">
-                  <small class="text-muted">
-                    Showing {{ timecard.jobs?.length || 1 }} job{{ (timecard.jobs?.length || 1) !== 1 ? 's' : '' }}
-                  </small>
-                  <button
-                    class="btn btn-sm btn-outline-primary"
-                    title="Add another job row"
-                    :disabled="timecard.status === 'submitted'"
-                    @click="addJobRow(timecard)"
+        <div v-else class="timecards-accordion">
+          <BaseAccordionCard
+            v-for="timecard in allTimecards"
+            :key="timecard.id"
+            :title="timecard.employeeName"
+            :open="expandedId === timecard.id"
+            body-class="p-0"
+            @update:open="(open) => handleTimecardToggle(timecard.id, open)"
+          >
+            <template #header>
+              <div class="row g-2 align-items-center w-100 timecard-header-row">
+                <div class="col-6 col-md-3">
+                  <div
+                    v-if="editingTimecardId === timecard.id"
+                    class="d-flex align-items-center gap-2 flex-nowrap w-100"
+                    @click.stop
                   >
-                    <i class="bi bi-plus-circle me-1"></i>
-                    Add Job Row
-                  </button>
+                    <input
+                      v-model="editForm.firstName"
+                      type="text"
+                      class="form-control form-control-sm flex-fill shrink-input"
+                      placeholder="First name"
+                    />
+                    <input
+                      v-model="editForm.lastName"
+                      type="text"
+                      class="form-control form-control-sm flex-fill shrink-input"
+                      placeholder="Last name"
+                    />
+                  </div>
+                  <div v-else class="fw-semibold">{{ timecard.employeeName }}</div>
                 </div>
 
-                <div class="pt-3 border-top">
-                  <div class="row g-3 mb-3">
-                    <div class="col-md-2">
-                      <label class="form-label small text-muted">Overtime</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.25"
-                        :value="Math.max((timecard.totals.hoursTotal ?? 0) - 40, 0).toFixed(2)"
-                        class="form-control form-control-sm"
-                        :disabled="true"
-                      />
-                    </div>
-                    <div class="col-md-2">
-                      <label class="form-label small text-muted">Regular</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.25"
-                        :value="Math.min((timecard.totals.hoursTotal ?? 0), 40).toFixed(2)"
-                        class="form-control form-control-sm"
-                        :disabled="true"
-                      />
-                    </div>
-                    <div class="col-md-8">
-                      <label class="form-label small text-muted">Notes</label>
-                      <textarea
-                        :value="timecard.notes"
-                        rows="2"
-                        class="form-control form-control-sm"
-                        placeholder="Additional notes"
-                        :disabled="timecard.status === 'submitted'"
-                        @input="(e) => handleNotesInput(timecard, (e.target as HTMLTextAreaElement).value)"
-                      ></textarea>
-                    </div>
+                <div class="col-3 col-md-2">
+                  <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
+                    <input
+                      v-model="editForm.employeeNumber"
+                      type="text"
+                      class="form-control form-control-sm"
+                      placeholder="Employee #"
+                    />
                   </div>
+                  <div v-else class="fw-semibold">#{{ timecard.employeeNumber }}</div>
+                </div>
 
-                  <div class="d-flex gap-2 flex-wrap timecard-actions">
-                    <button
-                      class="btn btn-primary btn-sm"
-                      :disabled="saving || timecard.status === 'submitted'"
-                      @click="saveTimecard(timecard)"
-                    >
-                      <i class="bi bi-save me-1"></i>
-                      Save
-                    </button>
-                    <button
-                      class="btn btn-danger btn-sm"
-                      :disabled="saving || timecard.status === 'submitted'"
-                      @click="handleDeleteTimecard(timecard.id, timecard.employeeName)"
-                    >
-                      <i class="bi bi-trash me-1"></i>
-                      Delete
-                    </button>
-                    <!-- Individual submit disabled; use global Submit All -->
+                <div class="col-6 col-md-3">
+                  <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
+                    <input
+                      v-model="editForm.occupation"
+                      type="text"
+                      class="form-control form-control-sm"
+                      placeholder="Occupation"
+                    />
                   </div>
+                  <div v-else class="text-muted">{{ timecard.occupation }}</div>
+                </div>
+
+                <div class="col-12 col-md-4 order-first order-md-last text-start text-md-end d-flex align-items-center justify-content-between justify-content-md-end gap-2 tc-header-actions">
+                  <div class="d-flex align-items-center justify-content-end gap-2 flex-nowrap">
+                    <div v-if="editingTimecardId === timecard.id" class="btn-group btn-group-sm flex-nowrap" role="group">
+                      <button
+                        class="btn btn-outline-danger"
+                        :disabled="timecard.status === 'submitted'"
+                        @click.stop="handleDeleteTimecard(timecard.id, timecard.employeeName)"
+                        title="Delete timecard"
+                      >
+                        <i class="bi bi-trash text-danger"></i>
+                      </button>
+                    </div>
+
+                    <button
+                      class="btn btn-sm btn-outline-secondary"
+                      @click.stop="toggleEditingEmployee(timecard)"
+                      :aria-pressed="editingTimecardId === timecard.id"
+                      :disabled="timecard.status === 'submitted'"
+                      title="Toggle edit mode"
+                    >
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                  </div>
+                  <span :class="timecard.status === 'submitted' ? 'badge bg-success' : 'badge bg-warning text-dark'">
+                    {{ timecard.status }}
+                  </span>
                 </div>
               </div>
+            </template>
+
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0 timecard-table">
+                <thead>
+                  <tr>
+                    <th class="text-center small fw-semibold col-job">Job #</th>
+                    <th class="text-center small fw-semibold col-acct">Acct</th>
+                    <th class="text-center small fw-semibold col-blank"></th>
+                    <th class="text-center small fw-semibold col-div">Dif</th>
+                    <th v-for="dayIdx in 7" :key="dayIdx" class="text-center col-day">
+                      <div class="fw-semibold small">{{ ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayIdx - 1] }}</div>
+                    </th>
+                    <th class="text-center small fw-semibold col-total">Total</th>
+                    <th class="col-actions"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="(job, jobIdx) in (timecard.jobs || [])" :key="`job-${jobIdx}`">
+                    <tr :class="['align-middle', 'timecard-job-row', jobIdx % 2 === 1 ? 'timecard-job-alt' : '']">
+                      <td :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                        <input
+                          type="text"
+                          :value="job.jobNumber || ''"
+                          :disabled="timecard.status === 'submitted'"
+                          class="form-control form-control-sm text-center"
+                          placeholder="Job #"
+                          @input="(e) => updateJobNumber(timecard, jobIdx, (e.target as HTMLInputElement).value)"
+                        />
+                      </td>
+                      <td :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                        <input
+                          type="text"
+                          :value="job.acct || ''"
+                          :disabled="timecard.status === 'submitted'"
+                          class="form-control form-control-sm text-center"
+                          placeholder="Acct"
+                          @input="(e) => updateAccount(timecard, jobIdx, (e.target as HTMLInputElement).value)"
+                        />
+                      </td>
+                      <td class="bg-soft small fw-semibold text-center">H</td>
+                      <td class="bg-soft text-center px-2 py-0">
+                        <input
+                          type="text"
+                          :value="job.difH || ''"
+                          :disabled="timecard.status === 'submitted'"
+                          class="form-control form-control-sm text-center"
+                          placeholder="Dif"
+                          @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difH = (e.target as HTMLInputElement).value }"
+                        />
+                      </td>
+                      <td v-for="dayIdx in 7" :key="`h-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0 day-cell">
+                        <template v-if="job.days && job.days[dayIdx - 1]">
+                          <input
+                            v-model.number="job.days[dayIdx - 1].hours"
+                            type="number"
+                            inputmode="decimal"
+                            min="0"
+                            max="24"
+                            step="0.25"
+                            :disabled="timecard.status === 'submitted'"
+                            class="form-control form-control-sm text-center w-100 day-input"
+                            placeholder="0"
+                            @input="(e) => handleHoursInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
+                            @focus="($event.target as HTMLInputElement).select()"
+                            @click.stop
+                          />
+                        </template>
+                      </td>
+                      <td class="text-center fw-semibold small">{{ (timecard.totals.hoursTotal ?? 0).toFixed(2) }}</td>
+                      <td :rowspan="3" class="text-center align-middle">
+                        <button
+                          v-if="(timecard.jobs?.length || 0) > 1"
+                          class="btn btn-sm btn-danger btn-icon"
+                          title="Remove job"
+                          :disabled="timecard.status === 'submitted'"
+                          @click="removeJobRow(timecard, jobIdx)"
+                        >
+                          <i class="bi bi-x"></i>
+                        </button>
+                      </td>
+                    </tr>
+
+                    <tr :class="['align-middle', 'bg-soft', 'timecard-job-row', jobIdx % 2 === 1 ? 'timecard-job-alt' : '']">
+                      <td class="bg-soft small fw-semibold text-center">P</td>
+                      <td class="bg-soft text-center px-2 py-0">
+                        <input
+                          type="text"
+                          :value="job.difP || ''"
+                          :disabled="timecard.status === 'submitted'"
+                          class="form-control form-control-sm text-center"
+                          placeholder="Dif"
+                          @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difP = (e.target as HTMLInputElement).value }"
+                        />
+                      </td>
+                      <td v-for="dayIdx in 7" :key="`p-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0 day-cell">
+                        <template v-if="job.days && job.days[dayIdx - 1]">
+                          <input
+                            v-model.number="job.days[dayIdx - 1].production"
+                            type="number"
+                            inputmode="decimal"
+                            min="0"
+                            step="0.1"
+                            :disabled="timecard.status === 'submitted'"
+                            class="form-control form-control-sm text-center w-100 day-input"
+                            title="Production units"
+                            placeholder="0"
+                            @input="recalcTotals(timecard); autoSave(timecard)"
+                            @focus="($event.target as HTMLInputElement).select()"
+                            @click.stop
+                          />
+                        </template>
+                      </td>
+                      <td class="text-center fw-semibold small">{{ (timecard.totals.productionTotal ?? 0).toFixed(2) }}</td>
+                    </tr>
+
+                    <tr :class="['align-middle', 'timecard-job-row', jobIdx % 2 === 1 ? 'timecard-job-alt' : '']">
+                      <td class="bg-soft small fw-semibold text-center">C</td>
+                      <td class="bg-soft text-center px-2 py-0">
+                        <input
+                          type="text"
+                          :value="job.difC || ''"
+                          :disabled="timecard.status === 'submitted'"
+                          class="form-control form-control-sm text-center"
+                          placeholder="Dif"
+                          @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difC = (e.target as HTMLInputElement).value }"
+                        />
+                      </td>
+                      <td v-for="dayIdx in 7" :key="`c-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0 day-cell">
+                        <template v-if="job.days && job.days[dayIdx - 1]">
+                          <input
+                            v-model.number="job.days[dayIdx - 1].unitCost"
+                            type="number"
+                            inputmode="decimal"
+                            min="0"
+                            step="0.01"
+                            :disabled="timecard.status === 'submitted'"
+                            class="form-control form-control-sm text-center text-xs day-input"
+                            title="Cost per unit"
+                            placeholder="0"
+                            @input="recalcTotals(timecard); autoSave(timecard)"
+                            @focus="($event.target as HTMLInputElement).select()"
+                            @click.stop
+                          />
+                        </template>
+                      </td>
+                      <td class="text-center fw-semibold small">${{ (timecard.totals.lineTotal ?? 0).toFixed(2) }}</td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
-          </div>
+
+            <div class="py-2 px-3 border-top d-flex justify-content-between align-items-center">
+              <small class="text-muted">
+                Showing {{ timecard.jobs?.length || 1 }} job{{ (timecard.jobs?.length || 1) !== 1 ? 's' : '' }}
+              </small>
+              <button
+                class="btn btn-sm btn-outline-primary"
+                title="Add another job row"
+                :disabled="timecard.status === 'submitted'"
+                @click="addJobRow(timecard)"
+              >
+                <i class="bi bi-plus-circle me-1"></i>
+                Add Job Row
+              </button>
+            </div>
+
+            <div class="pt-3 px-3 pb-3 border-top">
+              <div class="row g-3 mb-3">
+                <div class="col-md-2">
+                  <label class="form-label small text-muted">Overtime</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    :value="Math.max((timecard.totals.hoursTotal ?? 0) - 40, 0).toFixed(2)"
+                    class="form-control form-control-sm"
+                    :disabled="true"
+                  />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small text-muted">Regular</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    :value="Math.min((timecard.totals.hoursTotal ?? 0), 40).toFixed(2)"
+                    class="form-control form-control-sm"
+                    :disabled="true"
+                  />
+                </div>
+                <div class="col-md-8">
+                  <label class="form-label small text-muted">Notes</label>
+                  <textarea
+                    :value="timecard.notes"
+                    rows="2"
+                    class="form-control form-control-sm"
+                    placeholder="Additional notes"
+                    :disabled="timecard.status === 'submitted'"
+                    @input="(e) => handleNotesInput(timecard, (e.target as HTMLTextAreaElement).value)"
+                  ></textarea>
+                </div>
+              </div>
+
+              <div class="d-flex gap-2 flex-wrap timecard-actions">
+                <!-- Auto-saves on change; no manual save button needed. -->
+              </div>
+            </div>
+          </BaseAccordionCard>
         </div>
       </div>
     </div>
@@ -1074,7 +1035,7 @@ onUnmounted(() => {
     <div class="modal-dialog modal-lg">
       <div class="modal-content" id="timecard-summary">
         <div class="modal-header">
-          <h5 class="modal-title">Timecard Summary – Week ending {{ weekEndingDate }}</h5>
+          <h5 class="modal-title">Timecard Summary ΓÇô Week ending {{ weekEndingDate }}</h5>
           <button type="button" class="btn-close" @click="closeSummary" :disabled="printing"></button>
         </div>
         <div class="modal-body">
@@ -1085,7 +1046,7 @@ onUnmounted(() => {
             </button>
           </div>
           <div class="table-responsive">
-            <table class="table table-sm align-middle summary-table">
+            <table class="table table-sm table-striped align-middle summary-table">
               <thead>
                 <tr>
                   <th>Employee</th>
@@ -1184,6 +1145,17 @@ textarea.form-control {
   background-color: rgba($primary, 0.12);
 }
 
+// Tighter rows for timecard tables
+.timecard-table th,
+.timecard-table td {
+  padding: 0.4rem 0.45rem;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 0.5rem 0.55rem;
+}
+
 .accordion-button:not(.collapsed) {
   background: linear-gradient(180deg, rgba($primary, 0.16) 0%, rgba($primary-200, 0.55) 60%, $surface-2 100%);
   border-color: rgba($primary, 0.4);
@@ -1227,8 +1199,30 @@ textarea.form-control {
   padding-bottom: 0.75rem;
 }
 
-.wide-container {
-  max-width: 1600px;
+.timecards-accordion .card {
+  margin-bottom: 0 !important;
+}
+
+.timecards-accordion .card:last-child {
+  margin-bottom: 0 !important;
+}
+
+.timecards-page {
+  padding-bottom: 1.5rem;
+}
+
+.timecards-accordion .card {
+  border-radius: 0;
+}
+
+.timecards-accordion .card:first-child {
+  border-top-left-radius: var(--bs-border-radius);
+  border-top-right-radius: var(--bs-border-radius);
+}
+
+.timecards-accordion .card:last-child {
+  border-bottom-left-radius: var(--bs-border-radius);
+  border-bottom-right-radius: var(--bs-border-radius);
 }
 
 .date-input-group {
@@ -1283,8 +1277,42 @@ textarea.form-control {
   border-color: transparent;
 }
 
+.timecard-table input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0.25rem 0.35rem;
+}
+
+.timecard-table input:focus {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+.timecard-job-row td {
+  transition: background-color 0.12s ease;
+}
+
+.timecard-job-row .day-cell {
+  background-color: mix($primary, $surface, 10%);
+}
+
+.timecard-job-row:hover .day-cell {
+  background-color: mix($primary, $surface, 16%);
+}
+
+.timecard-job-alt .day-cell {
+  background-color: mix($primary, $surface, 18%);
+}
+
+.timecard-job-alt:hover .day-cell {
+  background-color: mix($primary, $surface, 24%);
+}
+
 .day-input {
-  background: $surface;
+  background: transparent;
   color: $body-color;
   min-width: 78px;
   font-size: 0.95rem;
@@ -1338,6 +1366,12 @@ textarea.form-control {
 .bg-soft {
   background-color: rgba($secondary, 0.08);
 }
+
+/* Neutral left columns; tint only day cells with subtle base and stronger alt */
+.timecard-job-row td,
+.timecard-job-row td.bg-soft {
+  background-color: transparent !important;
+}
 </style>
 
 <style lang="scss">
@@ -1358,3 +1392,4 @@ textarea.form-control {
   }
 }
 </style>
+

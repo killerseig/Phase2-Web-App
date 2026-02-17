@@ -543,7 +543,7 @@ onUnmounted(clearSubscriptions)
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-xl py-4">
+  <div class="container-fluid py-4 wide-container-1200">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
@@ -633,7 +633,7 @@ onUnmounted(clearSubscriptions)
               <!-- Items Table -->
               <div v-if="selected.items.length > 0" class="table-responsive mb-3 order-table">
                 <h6 class="mb-2">Order Items</h6>
-                <table class="table table-sm table-striped table-hover mb-0 align-middle">
+                <table class="table table-sm table-dark table-striped table-hover mb-0 align-middle">
                   <thead>
                     <tr>
                       <th class="small fw-semibold">Description</th>

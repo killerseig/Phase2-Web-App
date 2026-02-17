@@ -41,3 +41,14 @@
     z-index: 1;
   }
 }
+
+// Consistent page widths
+.wide-container,
+.wide-container-1200 {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(1rem, 4vw, 1.5rem);
+  padding-right: clamp(1rem, 4vw, 1.5rem);
+}

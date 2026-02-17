@@ -50,6 +50,7 @@ const editDescOriginal = ref('')
 const editSkuOriginal = ref('')
 const editPriceOriginal = ref('')
 const isSaving = ref(false)
+const showActions = ref(false)
 
 const ITEM_PREFIX = 'item-'
 
@@ -104,6 +105,23 @@ function forwardToggle(id: string) {
 
 function handleAddChild() {
   emit('add-child', props.nodeId)
+}
+
+function toggleActions() {
+  if (isItem.value) {
+    if (!showActions.value) {
+      handleEditItem()
+      showActions.value = true
+    } else {
+      if (isEditing.value) {
+        handleSaveItem()
+        emit('cancel-item-edit')
+      }
+      showActions.value = false
+    }
+  } else {
+    showActions.value = !showActions.value
+  }
 }
 
 function handleSelectForOrder() {
@@ -258,21 +276,36 @@ function runAccordionLeave(el: HTMLElement) {
           <i class="bi bi-plus-circle"></i>
         </button>
       </div>
-      <div v-else-if="!orderMode" class="btn-group btn-group-sm" role="group" style="margin-left: auto;">
-        <button v-if="!isArchived" class="btn btn-outline-secondary" @click.stop="handleAddChild" title="Add subcategory">
-          <i class="bi bi-folder-plus"></i>
-        </button>
-        <button class="btn btn-outline-secondary" @click.stop="handleEditCategory" title="Edit">
+      <div
+        v-else-if="!orderMode"
+        class="d-flex align-items-center justify-content-end gap-1 flex-nowrap"
+        style="margin-left: auto;"
+      >
+        <div v-if="showActions" class="btn-group btn-group-sm flex-nowrap" role="group">
+          <button class="btn btn-outline-danger" @click.stop="handleDeleteCategory" title="Delete">
+            <i class="bi bi-trash text-danger"></i>
+          </button>
+          <button v-if="!isArchived" class="btn btn-outline-primary" @click.stop="handleAddChild" title="Add subcategory">
+            <i class="bi bi-folder-plus text-primary"></i>
+          </button>
+          <button class="btn btn-outline-secondary" @click.stop="handleEditCategory" title="Rename">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button v-if="!isArchived" class="btn btn-outline-warning" @click.stop="handleArchiveCategory" title="Archive">
+            <i class="bi bi-archive text-warning"></i>
+          </button>
+          <button v-else class="btn btn-outline-success" @click.stop="handleReactivateCategory" title="Reactivate">
+            <i class="bi bi-arrow-counterclockwise text-success"></i>
+          </button>
+        </div>
+
+        <button
+          class="btn btn-sm btn-outline-secondary"
+          @click.stop="toggleActions"
+          :aria-pressed="showActions"
+          title="Toggle edit actions"
+        >
           <i class="bi bi-pencil"></i>
-        </button>
-        <button v-if="!isArchived" class="btn btn-outline-warning" @click.stop="handleArchiveCategory" title="Archive">
-          <i class="bi bi-archive"></i>
-        </button>
-        <button v-else class="btn btn-outline-success" @click.stop="handleReactivateCategory" title="Reactivate">
-          <i class="bi bi-arrow-counterclockwise"></i>
-        </button>
-        <button class="btn btn-outline-danger" @click.stop="handleDeleteCategory" title="Delete">
-          <i class="bi bi-trash"></i>
         </button>
       </div>
     </div>
@@ -355,7 +388,36 @@ function runAccordionLeave(el: HTMLElement) {
         :class="{ collapsed: !isExpanded && hasChildren, 'has-children': hasChildren, 'not-expandable': !hasChildren }"
       >
         <i class="bi bi-file-text me-2" style="flex-shrink: 0;"></i>
-        <span class="item-label flex-grow-1" :style="{ opacity: itemArchived ? 0.5 : 1 }">
+        <template v-if="isEditing">
+          <div class="item-edit-fields w-100">
+            <input
+              v-model="editDesc"
+              type="text"
+              class="form-control form-control-sm"
+              placeholder="Description"
+              @click.stop
+              @mousedown.stop
+            />
+            <input
+              v-model="editSku"
+              type="text"
+              class="form-control form-control-sm"
+              placeholder="SKU"
+              @click.stop
+              @mousedown.stop
+            />
+            <input
+              v-model="editPrice"
+              type="number"
+              step="0.01"
+              class="form-control form-control-sm"
+              placeholder="Price"
+              @click.stop
+              @mousedown.stop
+            />
+          </div>
+        </template>
+        <span v-else class="item-label flex-grow-1" :style="{ opacity: itemArchived ? 0.5 : 1 }">
           {{ item.description }}
           <span v-if="itemArchived" class="badge bg-secondary bg-opacity-75 ms-2" style="font-size: 0.65rem;">archived</span>
           <span v-if="item.sku" class="badge bg-info bg-opacity-75 ms-2" style="font-size: 0.85rem;">{{ item.sku }}</span>
@@ -363,12 +425,29 @@ function runAccordionLeave(el: HTMLElement) {
         </span>
       </button>
 
-      <div v-if="!orderMode" class="btn-group btn-group-sm" role="group" style="margin-left: auto;" @click.stop>
-        <button class="btn btn-outline-primary" @click.stop="handleAddChild" title="Add subcategory"><i class="bi bi-folder-plus"></i></button>
-        <button class="btn btn-outline-secondary" @click.stop="handleEditItem" title="Edit"><i class="bi bi-pencil"></i></button>
-        <button v-if="item.active" class="btn btn-outline-warning" @click.stop="handleArchiveItem" title="Archive"><i class="bi bi-archive"></i></button>
-        <button v-else class="btn btn-outline-success" @click.stop="handleReactivateItem" title="Reactivate"><i class="bi bi-arrow-counterclockwise"></i></button>
-        <button class="btn btn-outline-danger" @click.stop="handleDeleteItem" title="Delete"><i class="bi bi-trash"></i></button>
+      <div
+        v-if="!orderMode"
+        class="d-flex align-items-center justify-content-end gap-1 flex-nowrap"
+        style="margin-left: auto;"
+        @click.stop
+      >
+        <div v-if="showActions" class="btn-group btn-group-sm flex-nowrap" role="group">
+          <button class="btn btn-outline-danger" @click.stop="handleDeleteItem" title="Delete">
+            <i class="bi bi-trash text-danger"></i>
+          </button>
+          <button class="btn btn-outline-primary" @click.stop="handleAddChild" title="Add subcategory"><i class="bi bi-folder-plus text-primary"></i></button>
+          <button v-if="item.active" class="btn btn-outline-warning" @click.stop="handleArchiveItem" title="Archive"><i class="bi bi-archive text-warning"></i></button>
+          <button v-else class="btn btn-outline-success" @click.stop="handleReactivateItem" title="Reactivate"><i class="bi bi-arrow-counterclockwise text-success"></i></button>
+        </div>
+
+        <button
+          class="btn btn-sm btn-outline-secondary"
+          @click.stop="toggleActions"
+          :aria-pressed="showActions"
+          title="Toggle edit actions"
+        >
+          <i class="bi bi-pencil"></i>
+        </button>
       </div>
     </div>
 
@@ -532,6 +611,28 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
   cursor: pointer;
   user-select: none;
   color: $body-color;
+}
+
+.item-edit-fields {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.item-edit-fields input {
+  min-width: 0;
+}
+
+.item-edit-fields input:nth-child(1) {
+  flex: 1;
+}
+
+.item-edit-fields input:nth-child(2) {
+  width: 130px;
+}
+
+.item-edit-fields input:nth-child(3) {
+  width: 120px;
 }
 
 .btn-group {

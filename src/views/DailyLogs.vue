@@ -347,6 +347,7 @@ function onDateChange(_dates: Date[], dateStr: string) {
           :logs="logsForSelectedDate"
           :current-user-id="auth.user?.uid || null"
           :format-timestamp="formatTimestamp"
+          :selected-id="currentId"
           @select="loadLogById"
         />
 

@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
+import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
 import EmailRecipientInput from '../../components/admin/EmailRecipientInput.vue'
 import {
   listAllJobs,
@@ -27,6 +28,7 @@ const shopOrderSubmitRecipients = ref<string[]>([])
 
 // Job-specific recipients
 const jobRecipients = ref<Map<string, string[]>>(new Map())
+const openJobId = ref<string | null>(null)
 
 async function loadJobs() {
   loading.value = true
@@ -264,45 +266,25 @@ onMounted(loadJobs)
         No jobs found.
       </div>
 
-      <div v-else class="accordion" id="jobsAccordion">
-        <div 
-          v-for="job in jobs" 
-          :key="job.id" 
-          class="accordion-item"
+      <div v-else>
+        <BaseAccordionCard
+          v-for="job in jobs"
+          :key="job.id"
+          :open="openJobId === job.id"
+          :title="job.name"
+          :subtitle="jobRecipients.get(job.id)?.length ? `${jobRecipients.get(job.id)?.length} recipients` : 'No recipients'"
+          body-class="p-3"
+          @update:open="(open) => { openJobId = open ? job.id : null }"
         >
-          <h2 class="accordion-header">
-            <button
-              class="accordion-button collapsed"
-              type="button"
-              :data-bs-target="`#job-${job.id}`"
-              data-bs-toggle="collapse"
-              :aria-controls="`job-${job.id}`"
-            >
-              <strong>{{ job.name }}</strong>
-              <span v-if="jobRecipients.get(job.id)?.length" class="badge text-bg-secondary ms-2">
-                {{ jobRecipients.get(job.id)?.length }} recipients
-              </span>
-            </button>
-          </h2>
-          <div
-            :id="`job-${job.id}`"
-            class="accordion-collapse collapse"
-            :data-bs-parent="`#jobsAccordion`"
-          >
-            <div class="accordion-body">
-              <div>
-                <h6 class="section-label">Daily Logs</h6>
-                <EmailRecipientInput
-                  :emails="jobRecipients.get(job.id) ?? []"
-                  :label="`Recipients for ${job.name}`"
-                  :disabled="saving"
-                  @add="(email) => addJobRecipient(job.id, email)"
-                  @remove="(email) => removeJobRecipient(job.id, email)"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+          <h6 class="section-label">Daily Logs</h6>
+          <EmailRecipientInput
+            :emails="jobRecipients.get(job.id) ?? []"
+            :label="`Recipients for ${job.name}`"
+            :disabled="saving"
+            @add="(email) => addJobRecipient(job.id, email)"
+            @remove="(email) => removeJobRecipient(job.id, email)"
+          />
+        </BaseAccordionCard>
       </div>
     </AdminCardWrapper>
   </div>
@@ -310,10 +292,6 @@ onMounted(loadJobs)
 
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as *;
-
-.accordion-item {
-  border: 1px solid $border-color;
-}
 
 .wide-container-1200 {
   max-width: 1200px;

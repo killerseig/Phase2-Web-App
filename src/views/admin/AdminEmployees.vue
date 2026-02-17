@@ -128,7 +128,7 @@ onMounted(() => loadRoster())
 <template>
   <Toast ref="toastRef" />
 
-  <div class="container-xl py-4">
+  <div class="container-fluid py-4 wide-container-1200">
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">Job Roster</h2>
@@ -168,7 +168,7 @@ onMounted(() => loadRoster())
               All employees are already in the roster.
             </div>
             <div v-else class="table-responsive">
-                <table class="table table-sm table-striped table-hover mb-0">
+                <table class="table table-sm table-dark table-striped table-hover mb-0">
                   <thead>
                   <tr>
                     <th class="small fw-semibold">Name</th>
@@ -228,7 +228,7 @@ onMounted(() => loadRoster())
 
         <!-- Table -->
         <div v-else class="table-responsive">
-          <table class="table table-sm table-striped table-hover mb-0">
+          <table class="table table-sm table-dark table-striped table-hover mb-0">
               <thead>
               <tr>
                 <th class="small fw-semibold">Name</th>

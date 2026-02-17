@@ -111,7 +111,7 @@ function getCellValue(item: any, key: string) {
 
     <!-- Table -->
     <div v-else class="table-responsive">
-      <table class="table table-sm table-striped table-hover mb-0">
+      <table class="table table-sm table-dark table-striped table-hover mb-0">
         <thead>
           <tr>
             <th
@@ -139,7 +139,7 @@ function getCellValue(item: any, key: string) {
             <td v-if="showActions" class="p-2 text-center">
               <button
                 type="button"
-                class="btn btn-sm btn-outline-primary me-1"
+                class="btn btn-sm btn-outline-secondary me-1"
                 @click="emit('edit', item)"
                 title="Edit"
               >

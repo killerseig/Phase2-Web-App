@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import ShopCatalogTreeNode from '../../components/admin/ShopCatalogTreeNode.vue'
+import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
 import { useShopCategoriesStore } from '../../stores/shopCategories'
 import { useShopCatalogStore } from '../../stores/shopCatalog'
 import type { ShopCatalogItem } from '@/services'
@@ -12,6 +13,7 @@ const categoriesStore = useShopCategoriesStore()
 const catalogStore = useShopCatalogStore()
 
 const saving = ref(false)
+const downloading = ref(false)
 const expandedNodes = ref<Set<string>>(new Set())
 const newCategoryName = ref('')
 const newItemDesc = ref('')
@@ -23,9 +25,6 @@ const parentId = ref<string | null>(null) // Can be category ID or item ID
 const selectedCategoryForItem = ref<string | null>(null)
 const editingItemId = ref<string | null>(null)
 const editingCategoryId = ref<string | null>(null)
-const itemFormRef = ref<HTMLElement | null>(null)
-const itemFormHeight = ref(0)
-
 const editCategoryName = ref('')
 const editCategoryNameOriginal = ref('')
 const savingCategoryEdit = ref(false)
@@ -250,7 +249,6 @@ function openAddItemDialog(categoryId: string | null = null) {
   newItemSku.value = ''
   newItemPrice.value = ''
   showAddItemForm.value = true
-  nextTick(measureItemForm)
 }
 
 async function createCategory() {
@@ -303,24 +301,6 @@ function cancelAddItem() {
   newItemPrice.value = ''
   selectedCategoryForItem.value = null
   showAddItemForm.value = false
-}
-
-function setItemFormRef(el: HTMLElement | null) {
-  itemFormRef.value = el
-  measureItemForm()
-}
-
-function measureItemForm() {
-  if (!itemFormRef.value) return
-  itemFormHeight.value = itemFormRef.value.scrollHeight
-}
-
-function getItemFormStyle() {
-  const h = itemFormHeight.value || (itemFormRef.value?.scrollHeight ?? 0)
-  return {
-    maxHeight: showAddItemForm.value ? `${h}px` : '0px',
-    opacity: showAddItemForm.value ? '1' : '0',
-  }
 }
 
 async function archiveCategory(categoryId: string) {
@@ -502,91 +482,215 @@ async function reactivateItem(item: ShopCatalogItem) {
   }
 }
 
+const normalizeCategoryId = (value?: string | null) => {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed
+}
+
+const escapeCsv = (value: unknown) => {
+  if (value === null || value === undefined) return ''
+  const str = String(value)
+  if (/[",\n]/.test(str)) {
+    return '"' + str.replace(/"/g, '""') + '"'
+  }
+  return str
+}
+
+async function downloadCatalog() {
+  if (!allItems.value.length && !categoriesStore.categories.length) return
+
+  downloading.value = true
+  try {
+    const header = ['Name', 'Type', 'SKU', 'Price', 'Active', 'Path', 'Hierarchy Level', 'Is Sub Item', 'ID']
+
+    const getChildrenNormalized = (parentId: string | null) =>
+      categoriesStore.categories
+        .filter(c => normalizeCategoryId(c.parentId) === normalizeCategoryId(parentId))
+        .sort((a, b) => a.name.localeCompare(b.name))
+
+    // Group items by normalized categoryId for fast lookup (handles null/empty)
+    const itemsByCategory = new Map<string | null, ShopCatalogItem[]>()
+    allItems.value.forEach(item => {
+      const key = normalizeCategoryId(item.categoryId)
+      const arr = itemsByCategory.get(key) ?? []
+      arr.push(item)
+      itemsByCategory.set(key, arr)
+    })
+
+    const sortItems = (arr: ShopCatalogItem[] = []) => arr.slice().sort((a, b) => a.description.localeCompare(b.description))
+
+    const rows: (string | number)[][] = []
+    const MAX_DEPTH = 200
+    const visitedCategories = new Set<string>()
+    const visitedItems = new Set<string>()
+
+    const addItemRow = (item: ShopCatalogItem, path: string, level: number, depth: number) => {
+      if (depth > MAX_DEPTH) return
+      if (visitedItems.has(item.id)) return
+      visitedItems.add(item.id)
+
+      const isSubItem = level > 0 ? 'Yes' : 'No'
+      rows.push([
+        item.description || '',
+        'Item',
+        item.sku || '',
+        typeof item.price === 'number' ? item.price.toFixed(2) : '',
+        item.active === false ? 'Inactive' : 'Active',
+        path,
+        level,
+        isSubItem,
+        item.id,
+      ])
+
+      // Traverse subcategories that hang off this item (parentId = item-<id>)
+      const childCategories = getChildrenNormalized(`item-${item.id}`)
+      const childCategoriesLegacy = getChildrenNormalized(item.id)
+      const nextPathBase = path ? `${path} > ${item.description}` : item.description
+      childCategories.forEach(childCat => traverseCategory(childCat.id, nextPathBase, level + 1, depth + 1))
+      childCategoriesLegacy.forEach(childCat => traverseCategory(childCat.id, nextPathBase, level + 1, depth + 1))
+    }
+
+    const traverseCategory = (categoryId: string, parentPath: string, level: number, depth: number) => {
+      if (depth > MAX_DEPTH) return
+      if (visitedCategories.has(categoryId)) return
+      visitedCategories.add(categoryId)
+
+      const cat = categoriesStore.getCategoryById(categoryId)
+      if (!cat) return
+      const path = parentPath ? `${parentPath} > ${cat.name}` : cat.name
+
+      rows.push([
+        cat.name,
+        'Category',
+        '',
+        '',
+        cat.active === false ? 'Inactive' : 'Active',
+        path,
+        level,
+        level > 0 ? 'Yes' : 'No',
+        cat.id,
+      ])
+
+      const itemsInCategory = sortItems(itemsByCategory.get(normalizeCategoryId(categoryId)) ?? [])
+      itemsInCategory.forEach(item => addItemRow(item, path, level + 1, depth + 1))
+
+      const childCategories = getChildrenNormalized(categoryId)
+      childCategories.forEach(child => traverseCategory(child.id, path, level + 1, depth + 1))
+    }
+
+    // Root-level items (no category / empty category)
+    sortItems(itemsByCategory.get(null) ?? []).forEach(item => addItemRow(item, '', 0, 0))
+
+    // Root-level categories (parentId === null or empty)
+    const rootCategories = getChildrenNormalized(null)
+    const seenRootIds = new Set<string>()
+    rootCategories
+      .filter(cat => {
+        if (seenRootIds.has(cat.id)) return false
+        seenRootIds.add(cat.id)
+        return true
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(cat => traverseCategory(cat.id, '', 0, 0))
+
+    const csv = [header, ...rows]
+      .map(row => row.map(escapeCsv).join(','))
+      .join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'shop-catalog.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (e: any) {
+    console.error('[AdminShopCatalog] Failed to download catalog', e)
+    toastRef.value?.show('Failed to download catalog', 'error')
+  } finally {
+    downloading.value = false
+  }
+}
+
 onMounted(() => {
   loadAll()
-  nextTick(() => {
-    measureItemForm()
-  })
-})
-
-watch(showAddItemForm, open => {
-  if (open) nextTick(measureItemForm)
 })
 </script>
 
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-xl py-4">
+  <div class="container-fluid py-4 wide-container-1200">
     <!-- Header -->
-    <div class="mb-4">
-      <h2 class="h3 mb-1">Shop Catalog</h2>
-      <p class="text-muted small mb-0">Manage product categories and items in a unified tree view</p>
+    <div class="d-flex align-items-start justify-content-between mb-2 flex-wrap gap-2">
+      <div>
+        <h2 class="h3 mb-1">Shop Catalog</h2>
+        <p class="text-muted small mb-0">Manage product categories and items in a unified tree view</p>
+      </div>
+      <button
+        class="btn btn-outline-primary align-self-start"
+        type="button"
+        @click="downloadCatalog"
+        :disabled="loading || !allItems.length || downloading"
+      >
+        <span
+          v-if="downloading"
+          class="spinner-border spinner-border-sm me-2"
+          role="status"
+          aria-hidden="true"
+        ></span>
+        Download catalog
+      </button>
     </div>
 
-    <!-- Add Item Accordion -->
-    <div class="card mb-4">
-      <div
-        class="card-header d-flex align-items-center justify-content-between cursor-pointer"
-        role="button"
-        @click="showAddItemForm = !showAddItemForm; nextTick(measureItemForm)"
-        :aria-expanded="showAddItemForm"
-      >
-        <div>
-          <h5 class="mb-1">Add Top-Level Item</h5>
-          <p class="text-muted small mb-0">Create a root catalog item with optional SKU and price</p>
+    <BaseAccordionCard
+      v-model:open="showAddItemForm"
+      title="Add Top-Level Item"
+      subtitle="Create a root catalog item with optional SKU and price"
+    >
+      <form class="row g-3" @submit.prevent="createItem">
+        <div class="col-md-6">
+          <label class="form-label small">Description</label>
+          <input
+            v-model="newItemDesc"
+            type="text"
+            class="form-control"
+            placeholder="Item description"
+            required
+          />
         </div>
-        <i :class="['bi', 'bi-chevron-down', 'chevron', { open: showAddItemForm }]" aria-hidden="true"></i>
-      </div>
-      <div
-        class="card-body border-top inline-collapse"
-        :style="getItemFormStyle()"
-        :ref="setItemFormRef"
-      >
-        <div class="collapse-inner p-3">
-          <form class="row g-3" @submit.prevent="createItem">
-            <div class="col-md-6">
-              <label class="form-label small">Description</label>
-              <input
-                v-model="newItemDesc"
-                type="text"
-                class="form-control"
-                placeholder="Item description"
-                required
-              />
-            </div>
-            <div class="col-md-3">
-              <label class="form-label small">SKU (optional)</label>
-              <input
-                v-model="newItemSku"
-                type="text"
-                class="form-control"
-                placeholder="e.g., SKU-12345"
-              />
-            </div>
-            <div class="col-md-3">
-              <label class="form-label small">Price (optional)</label>
-              <input
-                v-model="newItemPrice"
-                type="number"
-                class="form-control"
-                step="0.01"
-                placeholder="0.00"
-              />
-            </div>
-            <div class="col-12 d-flex gap-2 justify-content-end pt-2">
-              <button type="button" class="btn btn-outline-secondary" @click.stop="cancelAddItem" :disabled="saving">
-                Cancel
-              </button>
-              <button type="submit" class="btn btn-primary" :disabled="saving || !newItemDesc.trim()">
-                <span v-if="saving" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Add Item
-              </button>
-            </div>
-          </form>
+        <div class="col-md-3">
+          <label class="form-label small">SKU (optional)</label>
+          <input
+            v-model="newItemSku"
+            type="text"
+            class="form-control"
+            placeholder="e.g., SKU-12345"
+          />
         </div>
-      </div>
-    </div>
+        <div class="col-md-3">
+          <label class="form-label small">Price (optional)</label>
+          <input
+            v-model="newItemPrice"
+            type="number"
+            class="form-control"
+            step="0.01"
+            placeholder="0.00"
+          />
+        </div>
+        <div class="col-12 d-flex gap-2 justify-content-end pt-2">
+          <button type="button" class="btn btn-outline-secondary" @click.stop="cancelAddItem" :disabled="saving">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" :disabled="saving || !newItemDesc.trim()">
+            <span v-if="saving" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Add Item
+          </button>
+        </div>
+      </form>
+    </BaseAccordionCard>
 
     <!-- Search Bar -->
     <div class="row mb-4">
@@ -805,29 +909,5 @@ $select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);
 .form-select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23#{$select-arrow-hex}' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
   background-color: $surface-3;
-}
-
-.cursor-pointer {
-  cursor: pointer;
-}
-
-.chevron {
-  transition: transform 0.3s ease-in-out;
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-.inline-collapse {
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0;
-  padding: 0;
-  transition: max-height 0.3s ease, opacity 0.2s ease;
-}
-
-.collapse-inner {
-  padding: 1rem 1.25rem;
 }
 </style>

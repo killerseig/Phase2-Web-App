@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import StatusBadge from '../../components/admin/StatusBadge.vue'
+import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
+import BaseTable from '../../components/common/BaseTable.vue'
 import { useJobsStore } from '../../stores/jobs'
 import { useJobRosterStore } from '../../stores/jobRoster'
 import { useUsersStore } from '../../stores/users'
@@ -13,6 +15,9 @@ import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/mo
 import { listSubmittedTimecards, listTimecardsByJobAndWeek } from '@/services/Timecards'
 import { downloadCsv } from '@/utils/plexisIntegration'
 
+type SortDir = 'asc' | 'desc'
+type JobSortKey = 'name' | 'code' | 'status'
+
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
 const rosterStore = useJobRosterStore()
@@ -20,14 +25,47 @@ const usersStore = useUsersStore()
 
 // Jobs state from store
 const jobs = computed(() => jobsStore.allJobs)
+const loadingJobs = computed(() => jobsStore.isLoading)
+const err = computed(() => jobsStore.error || '')
+
+const jobColumns = [
+  { key: 'name', label: 'Job Name', sortable: true, width: '32%' },
+  { key: 'code', label: 'Code', sortable: true, width: '14%' },
+  { key: 'status', label: 'Status', sortable: true, width: '12%', slot: 'status' },
+  { key: 'timecards', label: 'Timecards This Week', width: '22%', slot: 'timecards' },
+  { key: 'actions', label: 'Actions', width: '20%', align: 'end', slot: 'actions' },
+]
+
+const jobSortKey = ref<JobSortKey>('name')
+const jobSortDir = ref<SortDir>('asc')
+
 const orderedJobs = computed(() =>
   [...jobsStore.allJobs].sort((a, b) => {
     if (a.active !== b.active) return Number(b.active) - Number(a.active)
     return (a.name || '').localeCompare(b.name || '')
   })
 )
-const loadingJobs = computed(() => jobsStore.isLoading)
-const err = computed(() => jobsStore.error || '')
+
+const sortedJobs = computed(() => {
+  const key = jobSortKey.value
+  const dir = jobSortDir.value === 'asc' ? 1 : -1
+  const normalize = (val: unknown) => {
+    if (val === undefined || val === null) return ''
+    if (typeof val === 'string') return val.toLowerCase()
+    return String(val).toLowerCase()
+  }
+
+  return [...orderedJobs.value].sort((a, b) => {
+    if (key === 'status') {
+      if (a.active === b.active) return 0
+      return a.active ? -dir : dir
+    }
+    const aVal = normalize((a as any)[key])
+    const bVal = normalize((b as any)[key])
+    if (aVal === bVal) return 0
+    return aVal > bVal ? dir : -dir
+  })
+})
 
 // Job form
 const showJobForm = ref(false)
@@ -36,9 +74,11 @@ const jobForm = ref({
   code: '',
 })
 const creatingJob = ref(false)
-const jobFormRef = ref<HTMLElement | null>(null)
-const jobFormHeight = ref(0)
 const togglingJobId = ref('')
+const editingJobId = ref('')
+const editingJobName = ref('')
+const editingJobCode = ref('')
+const editingJobSaving = ref(false)
 
 // Foreman modal (for job roster employees and foreman user assignment)
 const showForemanModal = ref(false)
@@ -69,6 +109,7 @@ const currentWeekStart = computed(() => snapToSunday(new Date()))
 const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.value))
 const currentWeekLabel = computed(() => formatWeekRange(currentWeekStart.value, currentWeekEnd.value))
 const exportWeekEnding = ref<string>(currentWeekEnd.value)
+const activeJobActionsId = ref('')
 
 const exportDateConfig = computed(() => ({
   dateFormat: 'Y-m-d',
@@ -170,6 +211,55 @@ async function loadJobs() {
   await jobsStore.fetchAllJobs(true)
 }
 
+function setInlineJob(job: Job) {
+  editingJobId.value = job.id
+  editingJobName.value = job.name || ''
+  editingJobCode.value = job.code || ''
+}
+
+function clearInlineJob() {
+  editingJobId.value = ''
+  editingJobName.value = ''
+  editingJobCode.value = ''
+}
+
+function isJobDirty(job: Job) {
+  return (
+    editingJobName.value.trim() !== (job.name || '') ||
+    editingJobCode.value.trim() !== (job.code || '')
+  )
+}
+
+async function saveInlineJob(job: Job) {
+  if (editingJobId.value !== job.id) return
+  const trimmedName = editingJobName.value.trim()
+  const trimmedCode = editingJobCode.value.trim()
+  if (!isJobDirty(job)) return
+  editingJobSaving.value = true
+  try {
+    await jobsStore.updateJob(job.id, { name: trimmedName, code: trimmedCode || null })
+    toastRef.value?.show('Job updated', 'success')
+  } catch (e: any) {
+    toastRef.value?.show(e?.message ?? 'Failed to update job', 'error')
+  } finally {
+    editingJobSaving.value = false
+  }
+}
+
+async function toggleJobActions(job: Job) {
+  const isOpen = activeJobActionsId.value === job.id
+  if (isOpen) {
+    await saveInlineJob(job)
+    clearInlineJob()
+    activeJobActionsId.value = ''
+    return
+  }
+
+  clearInlineJob()
+  setInlineJob(job)
+  activeJobActionsId.value = job.id
+}
+
 async function submitJobForm() {
   creatingJob.value = true
   try {
@@ -188,24 +278,6 @@ async function submitJobForm() {
 function cancelJobForm() {
   jobForm.value = { name: '', code: '' }
   showJobForm.value = false
-}
-
-function setJobFormRef(el: HTMLElement | null) {
-  jobFormRef.value = el
-  measureJobForm()
-}
-
-function measureJobForm() {
-  if (!jobFormRef.value) return
-  jobFormHeight.value = jobFormRef.value.scrollHeight
-}
-
-function getJobFormStyle() {
-  const h = jobFormHeight.value || (jobFormRef.value?.scrollHeight ?? 0)
-  return {
-    maxHeight: showJobForm.value ? `${h}px` : '0px',
-    opacity: showJobForm.value ? '1' : '0',
-  }
 }
 
 async function handleEditJob(job: Job) {
@@ -316,6 +388,11 @@ async function removeForemanFromJob(foremanId: string) {
   }
 }
 
+function handleJobSort({ sortKey, sortDir }: { sortKey: string; sortDir: SortDir }) {
+  jobSortKey.value = sortKey as JobSortKey
+  jobSortDir.value = sortDir
+}
+
 async function syncForemanAssignmentsForSelectedJob() {
   if (!selectedJobForForeman.value) return
   syncingForemanAssignments.value = true
@@ -333,13 +410,6 @@ async function syncForemanAssignmentsForSelectedJob() {
 onMounted(async () => {
   loadJobs()
   await usersStore.fetchAllUsers()
-  nextTick(() => {
-    measureJobForm()
-  })
-})
-
-watch(showJobForm, open => {
-  if (open) nextTick(measureJobForm)
 })
 
 </script>
@@ -347,55 +417,38 @@ watch(showJobForm, open => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-xl py-4">
+  <div class="container-fluid py-4 wide-container-1200">
     <!-- Header -->
     <div class="mb-4">
       <h2 class="h3 mb-1">Jobs</h2>
       <p class="text-muted small mb-0">Create and manage jobs</p>
     </div>
 
-    <!-- Create Job Accordion -->
-    <div class="card mb-4">
-      <div
-        class="card-header d-flex align-items-center justify-content-between cursor-pointer"
-        role="button"
-        @click="showJobForm = !showJobForm; nextTick(measureJobForm)"
-        :aria-expanded="showJobForm"
-      >
-        <div>
-          <h5 class="mb-1">Create Job</h5>
-          <p class="text-muted small mb-0">Add a new job with code for tracking</p>
+    <BaseAccordionCard
+      v-model:open="showJobForm"
+      title="Create Job"
+      subtitle="Add a new job with code for tracking"
+    >
+      <form class="row g-3" @submit.prevent="submitJobForm">
+        <div class="col-md-6">
+          <label class="form-label small">Job Name</label>
+          <input v-model="jobForm.name" type="text" class="form-control" placeholder="Project Name" required />
         </div>
-        <i :class="['bi', 'bi-chevron-down', 'chevron', { open: showJobForm }]" aria-hidden="true"></i>
-      </div>
-      <div
-        class="card-body border-top inline-collapse"
-        :style="getJobFormStyle()"
-        :ref="setJobFormRef"
-      >
-        <div class="collapse-inner p-3">
-          <form class="row g-3" @submit.prevent="submitJobForm">
-            <div class="col-md-6">
-              <label class="form-label small">Job Name</label>
-              <input v-model="jobForm.name" type="text" class="form-control" placeholder="Project Name" required />
-            </div>
-            <div class="col-md-6">
-              <label class="form-label small">Job Code</label>
-              <input v-model="jobForm.code" type="text" class="form-control" placeholder="JOB-001" />
-            </div>
-            <div class="col-12 d-flex gap-2 justify-content-end pt-2">
-              <button type="button" class="btn btn-outline-secondary" @click.stop="cancelJobForm" :disabled="creatingJob">
-                Cancel
-              </button>
-              <button type="submit" class="btn btn-primary" :disabled="creatingJob || !jobForm.name">
-                <span v-if="creatingJob" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Create Job
-              </button>
-            </div>
-          </form>
+        <div class="col-md-6">
+          <label class="form-label small">Job Code</label>
+          <input v-model="jobForm.code" type="text" class="form-control" placeholder="JOB-001" />
         </div>
-      </div>
-    </div>
+        <div class="col-12 d-flex gap-2 justify-content-end pt-2">
+          <button type="button" class="btn btn-outline-secondary" @click.stop="cancelJobForm" :disabled="creatingJob">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" :disabled="creatingJob || !jobForm.name">
+            <span v-if="creatingJob" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Create Job
+          </button>
+        </div>
+      </form>
+    </BaseAccordionCard>
 
     <!-- Office Exports -->
     <div class="card mb-4">
@@ -429,7 +482,10 @@ watch(showJobForm, open => {
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Assign Foremen - {{ selectedJobForForeman.name }}</h5>
+            <div>
+              <h5 class="modal-title mb-0">Assign Foremen</h5>
+              <div class="text-muted small">{{ selectedJobForForeman.name }} <span v-if="selectedJobForForeman.code" class="badge text-bg-light ms-1">{{ selectedJobForForeman.code }}</span></div>
+            </div>
             <button type="button" class="btn-close" @click="showForemanModal = false"></button>
           </div>
           <div class="modal-body">
@@ -438,39 +494,42 @@ watch(showJobForm, open => {
             </div>
             <div v-else>
               <!-- Roster Employees Section -->
-              <div v-if="rosterEmployees.length > 0" class="mb-5">
-                <h6 class="mb-3">Roster Employees</h6>
-                <p class="text-muted small mb-3">Designate employees as foremen for this job. Primary foreman can manage timecards and approve submissions.</p>
-                <div class="table-responsive">
-                  <table class="table table-sm table-striped table-hover mb-0">
+              <div class="mb-4">
+                <div class="d-flex align-items-baseline justify-content-between mb-2">
+                  <h6 class="mb-0">Roster Employees</h6>
+                  <span class="badge text-bg-light">{{ rosterEmployees.length }} total</span>
+                </div>
+                <p class="text-muted small mb-3">Select which roster employees are primary foremen for this job.</p>
+                <div v-if="rosterEmployees.length > 0" class="table-responsive rounded border">
+                  <table class="table table-sm table-dark table-striped table-hover align-middle mb-0">
                     <thead>
                       <tr>
                         <th style="width: 40%;" class="small fw-semibold">Name</th>
-                        <th style="width: 40%;" class="small fw-semibold">Occupation</th>
+                        <th style="width: 35%;" class="small fw-semibold">Occupation</th>
                         <th class="small fw-semibold text-center">Role</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-for="emp in rosterEmployees" :key="emp.id">
                         <td class="p-2 fw-semibold">{{ emp.firstName }} {{ emp.lastName }}</td>
-                        <td class="p-2 text-muted small">{{ emp.occupation }}</td>
+                        <td class="p-2 text-muted small">{{ emp.occupation || '—' }}</td>
                         <td class="p-2 text-center">
                           <select 
                             :value="emp.isPrimaryForeman ? 'primary' : 'employee'"
                             @change="(e) => setForeman(emp.id, (e.target as HTMLSelectElement).value === 'primary')"
-                            class="form-select form-select-sm"
+                            class="form-select form-select-sm w-auto d-inline-block"
                           >
                             <option value="employee">Employee</option>
-                            <option value="primary">Primary Foreman</option>
+                            <option value="primary">Primary</option>
                           </select>
                         </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-              </div>
-              <div v-else class="alert alert-info mb-5">
-                No employees in roster yet.
+                <div v-else class="alert alert-info mb-0">
+                  No employees in roster yet.
+                </div>
               </div>
 
               <!-- Foreman User Assignment Section -->
@@ -497,8 +556,8 @@ watch(showJobForm, open => {
                 
                 <!-- List of assigned foremen -->
                 <div v-if="assignedForemen.length > 0" class="mb-4">
-                  <div class="list-group">
-                    <div v-for="foreman in assignedForemen" :key="foreman.id" class="list-group-item d-flex justify-content-between align-items-center">
+                  <div class="list-group list-group-flush border rounded">
+                    <div v-for="foreman in assignedForemen" :key="foreman.id" class="list-group-item d-flex justify-content-between align-items-center py-2">
                       <div>
                         <strong>{{ foreman.firstName }} {{ foreman.lastName }}</strong>
                         <div class="text-muted small">{{ foreman.email }}</div>
@@ -522,7 +581,7 @@ watch(showJobForm, open => {
                 <!-- Add new foreman -->
                 <div class="border-top pt-3">
                   <label class="form-label">Add Foreman</label>
-                  <div class="d-flex gap-2">
+                  <div class="d-flex gap-2 flex-wrap align-items-center">
                     <select v-model="selectedForemanUserId" class="form-select" :disabled="loadingForemanUsers">
                       <option value="">-- Choose a foreman --</option>
                       <option 
@@ -572,109 +631,119 @@ watch(showJobForm, open => {
           </div>
         </div>
 
-        <div v-else-if="orderedJobs.length === 0" class="alert alert-info text-center mb-0">
+        <div v-else-if="sortedJobs.length === 0" class="alert alert-info text-center mb-0">
           No jobs found. Create your first job above.
         </div>
 
-        <div v-else class="table-responsive">
-          <table class="table table-sm table-striped table-hover mb-0">
-            <thead>
-              <tr>
-                <th class="small fw-semibold">Job Name</th>
-                <th class="small fw-semibold">Code</th>
-                <th class="small fw-semibold">Status</th>
-                <th class="small fw-semibold">Timecards This Week</th>
-                <th class="small fw-semibold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="job in orderedJobs" :key="job.id">
-                <td class="p-2 fw-semibold">{{ job.name }}</td>
-                <td class="p-2 text-muted small">{{ job.code || '—' }}</td>
-                <td class="p-2">
-                  <StatusBadge :status="job.active ? 'active' : 'archived'" />
-                </td>
-                <td class="p-2">
-                  <span
-                    :class="['badge', job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger']"
-                    :title="`Timecards for week ${currentWeekLabel}: ${job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
-                  >
-                    {{ job.timecardStatus === 'submitted' && job.timecardPeriodEndDate === currentWeekEnd ? 'Submitted this week' : 'Not submitted this week' }}
-                  </span>
-                </td>
-                <td class="p-2 text-center">
+        <div v-else>
+          <BaseTable
+            :rows="sortedJobs"
+            :columns="jobColumns"
+            row-key="id"
+            :sort-key="jobSortKey"
+            :sort-dir="jobSortDir"
+            @sort-change="handleJobSort"
+          >
+            <template #cell-name="{ row }">
+              <template v-if="editingJobId === row.id">
+                <input
+                  v-model="editingJobName"
+                  type="text"
+                  class="form-control form-control-sm"
+                  @click.stop
+                  @mousedown.stop
+                  :disabled="editingJobSaving"
+                />
+              </template>
+              <template v-else>
+                {{ row.name }}
+              </template>
+            </template>
+
+            <template #cell-code="{ row }">
+              <template v-if="editingJobId === row.id">
+                <input
+                  v-model="editingJobCode"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Job code"
+                  @click.stop
+                  @mousedown.stop
+                  :disabled="editingJobSaving"
+                />
+              </template>
+              <template v-else>
+                {{ row.code || '—' }}
+              </template>
+            </template>
+
+            <template #status="{ row }">
+              <StatusBadge :status="row.active ? 'active' : 'archived'" />
+            </template>
+
+            <template #timecards="{ row }">
+              <span
+                :class="['badge', row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger']"
+                :title="`Timecards for week ${currentWeekLabel}: ${row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
+              >
+                {{ row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'Submitted this week' : 'Not submitted this week' }}
+              </span>
+            </template>
+
+            <template #actions="{ row }">
+              <div class="d-flex flex-wrap gap-2 justify-content-start" style="min-width: 360px;">
+                <button
+                  @click="openForemanModal(row)"
+                  class="btn btn-sm btn-outline-info"
+                  title="Assign foremen to this job"
+                >
+                  <i class="bi bi-person-badge me-1"></i>Foremen
+                </button>
+
+                <div class="d-flex align-items-center justify-content-end gap-1 flex-nowrap ms-auto">
+                  <div v-if="activeJobActionsId === row.id" class="btn-group btn-group-sm flex-nowrap" role="group">
+                    <button
+                      class="btn btn-outline-danger"
+                      @click.stop="handleDeleteJob(row)"
+                      title="Delete job permanently"
+                    >
+                      <i class="bi bi-trash text-danger"></i>
+                    </button>
+                    <button
+                      v-if="row.active"
+                      @click.stop="toggleArchive(row, false)"
+                      class="btn btn-outline-warning"
+                      :disabled="togglingJobId === row.id"
+                      title="Archive job"
+                    >
+                      <i class="bi bi-archive text-warning"></i>
+                    </button>
+                    <button
+                      v-else
+                      @click.stop="toggleArchive(row, true)"
+                      class="btn btn-outline-success"
+                      :disabled="togglingJobId === row.id"
+                      title="Restore job"
+                    >
+                      <i class="bi bi-arrow-counterclockwise text-success"></i>
+                    </button>
+                  </div>
+
                   <button
-                    @click="openForemanModal(job)"
-                    class="btn btn-sm btn-outline-info me-1"
-                    title="Assign foremen to this job"
-                  >
-                    <i class="bi bi-person-badge me-1"></i>Foremen
-                  </button>
-                  <button
-                    @click="handleEditJob(job)"
-                    class="btn btn-sm btn-outline-primary me-1"
-                    title="Edit job"
+                    class="btn btn-sm btn-outline-secondary"
+                    @click.stop="toggleJobActions(row)"
+                    :aria-pressed="activeJobActionsId === row.id"
+                    title="Toggle edit mode"
                   >
                     <i class="bi bi-pencil"></i>
                   </button>
-                  <button
-                    v-if="job.active"
-                    @click="toggleArchive(job, false)"
-                    class="btn btn-sm btn-outline-secondary me-1"
-                    :disabled="togglingJobId === job.id"
-                    title="Archive job"
-                  >
-                    <i class="bi bi-archive"></i>
-                  </button>
-                  <button
-                    v-else
-                    @click="toggleArchive(job, true)"
-                    class="btn btn-sm btn-outline-success me-1"
-                    :disabled="togglingJobId === job.id"
-                    title="Restore job"
-                  >
-                    <i class="bi bi-arrow-counterclockwise"></i>
-                  </button>
-                  <button
-                    @click="handleDeleteJob(job)"
-                    class="btn btn-sm btn-outline-danger"
-                    title="Delete job permanently"
-                  >
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </div>
+              </div>
+            </template>
+          </BaseTable>
         </div>
       </template>
     </AdminCardWrapper>
 
   </div>
 </template>
-
-<style scoped>
-.cursor-pointer {
-  cursor: pointer;
-}
-
-.chevron {
-  transition: transform 0.3s ease-in-out;
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-.inline-collapse {
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0;
-  padding: 0;
-  transition: max-height 0.3s ease, opacity 0.2s ease;
-}
-
-.collapse-inner {
-  padding: 1rem 1.25rem;
-}
-</style>
