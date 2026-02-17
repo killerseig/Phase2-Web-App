@@ -48,7 +48,11 @@ function normalize(id: string, data: DocumentData): Timecard {
     employeeRosterId: data.employeeRosterId ?? '',
     employeeNumber: data.employeeNumber ?? '',
     employeeName: data.employeeName ?? '',
+    firstName: data.firstName ?? '',
+    lastName: data.lastName ?? '',
     occupation: data.occupation ?? '',
+    employeeWage: data.employeeWage ?? null,
+    subcontractedEmployee: data.subcontractedEmployee ?? false,
     
     // Job entries
     jobs: Array.isArray(data.jobs) ? data.jobs : [],
@@ -254,7 +258,14 @@ export async function createTimecard(jobId: string, input: TimecardInput): Promi
       employeeRosterId: input.employeeRosterId,
       employeeNumber: input.employeeNumber,
       employeeName: input.employeeName,
+      firstName: input.firstName ?? '',
+      lastName: input.lastName ?? '',
       occupation: input.occupation,
+      employeeWage: input.employeeWage ?? null,
+      subcontractedEmployee: input.subcontractedEmployee ?? false,
+
+      // Job entries
+      jobs: input.jobs ?? [],
 
       // Daily entries & totals
       days: input.days,
@@ -302,7 +313,11 @@ export async function updateTimecard(
     if ('notes' in updates) payload.notes = updates.notes ?? ''
     if ('employeeNumber' in updates) payload.employeeNumber = updates.employeeNumber
     if ('employeeName' in updates) payload.employeeName = updates.employeeName
+    if ('firstName' in updates) payload.firstName = updates.firstName ?? ''
+    if ('lastName' in updates) payload.lastName = updates.lastName ?? ''
     if ('occupation' in updates) payload.occupation = updates.occupation
+    if ('employeeWage' in updates) payload.employeeWage = updates.employeeWage ?? null
+    if ('subcontractedEmployee' in updates) payload.subcontractedEmployee = updates.subcontractedEmployee ?? false
 
     payload.updatedAt = serverTimestamp()
 

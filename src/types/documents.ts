@@ -49,6 +49,13 @@ export interface ManpowerLine {
   addedByUserId?: string
 }
 
+export interface IndoorClimateReading {
+  area: string
+  high: string
+  low: string
+  humidity: string
+}
+
 /**
  * Submittable Document - Draft/Submitted workflow
  */

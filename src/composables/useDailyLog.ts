@@ -90,6 +90,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     manpower: '',
     weeklySchedule: '',
     manpowerAssessment: '',
+    indoorClimateReadings: [{ area: '', high: '', low: '', humidity: '' }],
     manpowerLines: [{ trade: '', count: 0, areas: '' }],
     safetyConcerns: '',
     ahaReviewed: '',
@@ -117,6 +118,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       manpower: '',
       weeklySchedule: '',
       manpowerAssessment: '',
+      indoorClimateReadings: [{ area: '', high: '', low: '', humidity: '' }],
       manpowerLines: [{ trade: '', count: 0, areas: '' }],
       safetyConcerns: '',
       ahaReviewed: '',
@@ -154,6 +156,9 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       manpower: log.manpower,
       weeklySchedule: log.weeklySchedule,
       manpowerAssessment: log.manpowerAssessment,
+      indoorClimateReadings: log.indoorClimateReadings?.length
+        ? log.indoorClimateReadings
+        : [{ area: '', high: '', low: '', humidity: '' }],
       manpowerLines: log.manpowerLines?.length ? log.manpowerLines : [{ trade: '', count: 0, areas: '' }],
       safetyConcerns: log.safetyConcerns,
       ahaReviewed: log.ahaReviewed,
@@ -592,6 +597,36 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     autoSave()
   }
 
+  const addIndoorClimateReading = () => {
+    form.value.indoorClimateReadings = form.value.indoorClimateReadings || []
+    form.value.indoorClimateReadings.push({ area: '', high: '', low: '', humidity: '' })
+    autoSave()
+  }
+
+  const updateIndoorClimateField = ({
+    index,
+    field,
+    value,
+  }: {
+    index: number
+    field: 'area' | 'high' | 'low' | 'humidity'
+    value: string
+  }) => {
+    if (!form.value.indoorClimateReadings?.[index]) return
+    form.value.indoorClimateReadings[index][field] = value
+    autoSave()
+  }
+
+  const removeIndoorClimateReading = (index: number) => {
+    if (!form.value.indoorClimateReadings) return
+    if (form.value.indoorClimateReadings.length <= 1) {
+      form.value.indoorClimateReadings = [{ area: '', high: '', low: '', humidity: '' }]
+    } else {
+      form.value.indoorClimateReadings.splice(index, 1)
+    }
+    autoSave()
+  }
+
   const canDeleteManpowerLine = (line: any): boolean => {
     return !line.addedByUserId || line.addedByUserId === auth.user?.uid
   }
@@ -648,6 +683,9 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     updateManpowerField,
     updateManpowerCount,
     removeManpowerLine,
+    addIndoorClimateReading,
+    updateIndoorClimateField,
+    removeIndoorClimateReading,
     canDeleteManpowerLine,
     isAdminAddedLine,
     deleteAttachment,

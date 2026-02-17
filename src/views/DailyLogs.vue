@@ -58,6 +58,9 @@ const {
   updateManpowerField,
   updateManpowerCount,
   removeManpowerLine,
+  addIndoorClimateReading,
+  updateIndoorClimateField,
+  removeIndoorClimateReading,
   canDeleteManpowerLine,
   isAdminAddedLine,
   deleteAttachment,
@@ -195,6 +198,83 @@ function onDateChange(_dates: Date[], dateStr: string) {
                   :disabled="!canEditDraft"
                   @update:model-value="(val) => { form.manpowerAssessment = val; autoSave(); }"
                 />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Indoor Climate -->
+        <div class="card mb-4">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-thermometer-half me-2"></i>Indoor Temperature Readings</h5>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary"
+              :disabled="!canEditDraft"
+              @click="addIndoorClimateReading"
+            >
+              <i class="bi bi-plus-lg me-1"></i>Add Floor / Area
+            </button>
+          </div>
+          <div class="card-body">
+            <div
+              v-for="(reading, idx) in form.indoorClimateReadings"
+              :key="`indoor-climate-${idx}`"
+              class="row g-2 align-items-end mb-2"
+            >
+              <div class="col-md-4">
+                <label class="form-label">Floor / Area</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  :value="reading.area"
+                  :disabled="!canEditDraft"
+                  placeholder="e.g., Level 2"
+                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'area', value: (e.target as HTMLInputElement).value })"
+                />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">High (°F)</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  :value="reading.high"
+                  :disabled="!canEditDraft"
+                  placeholder="High"
+                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'high', value: (e.target as HTMLInputElement).value })"
+                />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Low (°F)</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  :value="reading.low"
+                  :disabled="!canEditDraft"
+                  placeholder="Low"
+                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'low', value: (e.target as HTMLInputElement).value })"
+                />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Humidity (%)</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  :value="reading.humidity"
+                  :disabled="!canEditDraft"
+                  placeholder="Humidity"
+                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'humidity', value: (e.target as HTMLInputElement).value })"
+                />
+              </div>
+              <div class="col-md-2 d-grid">
+                <button
+                  type="button"
+                  class="btn btn-outline-danger"
+                  :disabled="!canEditDraft"
+                  @click="removeIndoorClimateReading(idx)"
+                >
+                  <i class="bi bi-trash"></i>
+                </button>
               </div>
             </div>
           </div>

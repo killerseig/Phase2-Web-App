@@ -122,6 +122,9 @@ export interface TimecardTotals {
 // Job entry within a timecard (supports multiple jobs per timecard)
 export interface TimecardJobEntry {
   jobNumber?: string                // Job # or reference
+  subsectionArea?: string           // Subsection/Area
+  area?: string                     // Subsection/Area (legacy alias)
+  account?: string                  // Account number (alias)
   acct?: string                     // Account number
   div?: string                      // Division
   // Daily tracking per job (0=Sun, 6=Sat)
@@ -145,7 +148,11 @@ export interface Timecard {
   employeeRosterId: string          // Reference to jobs/{jobId}/roster/{employeeId}
   employeeNumber: string            // Denormalized (quick display)
   employeeName: string              // Denormalized (firstName + lastName)
+  firstName?: string                // Denormalized first name
+  lastName?: string                 // Denormalized last name
   occupation: string                // Denormalized
+  employeeWage?: number | null      // Hourly wage
+  subcontractedEmployee?: boolean   // Is subcontracted employee
   
   // Job entries (multiple jobs per timecard)
   jobs?: TimecardJobEntry[]         // Can have multiple jobs with H/P/C tracking

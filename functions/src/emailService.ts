@@ -174,6 +174,15 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
     </tr>
   `).join('') || ''
 
+  const indoorClimateRows = dailyLog?.indoorClimateReadings?.map((reading: any) => `
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd;">${reading.area || ''}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${reading.high || ''}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${reading.low || ''}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${reading.humidity || ''}</td>
+    </tr>
+  `).join('') || ''
+
   const attachments = (dailyLog?.attachments || [])
     .map((att: any) => {
       const label = att?.type === 'ptp' ? 'PTP Photo' : att?.type === 'photo' ? 'Photo' : 'Attachment'
@@ -217,6 +226,23 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
           </thead>
           <tbody>
             ${manpowerLines}
+          </tbody>
+        </table>
+        ` : ''}
+
+        ${indoorClimateRows ? `
+        <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Indoor Climate</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+          <thead>
+            <tr style="background-color: #f5f5f5;">
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Floor / Area</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">High (°F)</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Low (°F)</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Humidity (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${indoorClimateRows}
           </tbody>
         </table>
         ` : ''}

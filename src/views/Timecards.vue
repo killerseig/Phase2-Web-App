@@ -66,10 +66,10 @@ const err = ref('')
 
 const editingTimecardId = ref<string | null>(null)
 const expandedId = ref<string | null>(null)
-const editForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '' })
+const editForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: false })
 
 const showCreateForm = ref(false)
-const newTimecardForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '' })
+const newTimecardForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: 'no' })
 
 const flatpickrConfig = ref<any>({
   dateFormat: 'Y-m-d',
@@ -124,8 +124,38 @@ function makeDaysArray(start: string): TimecardDay[] {
   }))
 }
 
+function parseWage(value: string): number | null {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return parsed
+}
+
+function parseSubcontractedEmployee(value: boolean | string): boolean {
+  return value === true || value === 'yes'
+}
+
+function getTimecardFirstName(timecard: TimecardModel): string {
+  if (timecard.firstName?.trim()) return timecard.firstName.trim()
+  const [first] = (timecard.employeeName || '').trim().split(/\s+/)
+  return first || ''
+}
+
+function getTimecardLastName(timecard: TimecardModel): string {
+  if (timecard.lastName?.trim()) return timecard.lastName.trim()
+  const [, ...rest] = (timecard.employeeName || '').trim().split(/\s+/)
+  return rest.join(' ')
+}
+
+function getTimecardDisplayName(timecard: TimecardModel): string {
+  const first = getTimecardFirstName(timecard)
+  const last = getTimecardLastName(timecard)
+  return `${first} ${last}`.trim() || timecard.employeeName || 'Unnamed Employee'
+}
+
 function createDraft(): TimecardModel {
   const days = makeDaysArray(weekStartDate.value)
+  const firstName = newTimecardForm.value.firstName.trim()
+  const lastName = newTimecardForm.value.lastName.trim()
   return {
     id: `temp-${Date.now()}`,
     jobId: jobId.value,
@@ -136,7 +166,11 @@ function createDraft(): TimecardModel {
     submittedAt: null as any,
     employeeRosterId: '',
     employeeNumber: newTimecardForm.value.employeeNumber,
-    employeeName: `${newTimecardForm.value.firstName} ${newTimecardForm.value.lastName}`.trim(),
+    employeeName: `${firstName} ${lastName}`.trim(),
+    firstName,
+    lastName,
+    employeeWage: parseWage(newTimecardForm.value.employeeWage),
+    subcontractedEmployee: parseSubcontractedEmployee(newTimecardForm.value.subcontractedEmployee),
     occupation: newTimecardForm.value.occupation,
     jobs: [
       {
@@ -284,7 +318,7 @@ function onDateInputFocus() {
 }
 
 function startCreateTimecard() {
-  newTimecardForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '' }
+  newTimecardForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: 'no' }
   showCreateForm.value = true
 }
 
@@ -308,7 +342,7 @@ function confirmCreateTimecard() {
   const draft = createDraft()
   draftTimecards.value.set(draft.id, draft)
   editingTimecardId.value = null
-  editForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '' }
+  editForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: false }
   expandedId.value = draft.id
   showCreateForm.value = false
 }
@@ -333,8 +367,12 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
       const id = await createTimecard(jobId.value, {
         weekEndingDate: timecard.weekEndingDate,
         employeeRosterId: '',
+        firstName: timecard.firstName,
+        lastName: timecard.lastName,
         employeeNumber: timecard.employeeNumber,
         employeeName: timecard.employeeName,
+        employeeWage: timecard.employeeWage,
+        subcontractedEmployee: timecard.subcontractedEmployee ?? false,
         occupation: timecard.occupation,
         jobs: timecard.jobs || [],
         days: timecard.days,
@@ -352,8 +390,12 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
         days: timecard.days,
         jobs: timecard.jobs,
         notes: timecard.notes,
+        firstName: timecard.firstName,
+        lastName: timecard.lastName,
         employeeName: timecard.employeeName,
         employeeNumber: timecard.employeeNumber,
+        employeeWage: timecard.employeeWage,
+        subcontractedEmployee: timecard.subcontractedEmployee ?? false,
         occupation: timecard.occupation,
       })
       if (showToast) toastRef.value?.show(`Updated timecard for ${timecard.employeeName}`, 'success')
@@ -361,8 +403,12 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
       const id = await createTimecard(jobId.value, {
         weekEndingDate: timecard.weekEndingDate,
         employeeRosterId: '',
+        firstName: timecard.firstName,
+        lastName: timecard.lastName,
         employeeNumber: timecard.employeeNumber,
         employeeName: timecard.employeeName,
+        employeeWage: timecard.employeeWage,
+        subcontractedEmployee: timecard.subcontractedEmployee ?? false,
         occupation: timecard.occupation,
         jobs: timecard.jobs || [],
         days: timecard.days,
@@ -496,18 +542,19 @@ async function generateFromPreviousWeek() {
 
 function startEditingEmployee(timecard: TimecardModel) {
   editingTimecardId.value = timecard.id
-  const [firstName, ...rest] = timecard.employeeName.split(' ')
   editForm.value = {
     employeeNumber: timecard.employeeNumber,
-    firstName,
-    lastName: rest.join(' '),
+    firstName: getTimecardFirstName(timecard),
+    lastName: getTimecardLastName(timecard),
     occupation: timecard.occupation,
+    employeeWage: timecard.employeeWage != null ? String(timecard.employeeWage) : '',
+    subcontractedEmployee: !!timecard.subcontractedEmployee,
   }
 }
 
 function cancelEditingEmployee() {
   editingTimecardId.value = null
-  editForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '' }
+  editForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: false }
 }
 
 function toggleEditingEmployee(timecard: TimecardModel) {
@@ -532,7 +579,11 @@ function confirmEditingEmployee(timecard: TimecardModel) {
     return
   }
   timecard.employeeNumber = editForm.value.employeeNumber
-  timecard.employeeName = `${editForm.value.firstName} ${editForm.value.lastName}`
+  timecard.firstName = editForm.value.firstName.trim()
+  timecard.lastName = editForm.value.lastName.trim()
+  timecard.employeeName = `${timecard.firstName} ${timecard.lastName}`
+  timecard.employeeWage = parseWage(editForm.value.employeeWage)
+  timecard.subcontractedEmployee = parseSubcontractedEmployee(editForm.value.subcontractedEmployee)
   timecard.occupation = editForm.value.occupation
   autoSave(timecard)
   editingTimecardId.value = null
@@ -693,60 +744,126 @@ onUnmounted(() => {
           <BaseAccordionCard
             v-for="timecard in allTimecards"
             :key="timecard.id"
-            :title="timecard.employeeName"
+            :title="getTimecardDisplayName(timecard)"
             :open="expandedId === timecard.id"
             body-class="p-0"
             @update:open="(open) => handleTimecardToggle(timecard.id, open)"
           >
             <template #header>
               <div class="row g-2 align-items-center w-100 timecard-header-row">
-                <div class="col-6 col-md-3">
-                  <div
-                    v-if="editingTimecardId === timecard.id"
-                    class="d-flex align-items-center gap-2 flex-nowrap w-100"
-                    @click.stop
-                  >
-                    <input
-                      v-model="editForm.firstName"
-                      type="text"
-                      class="form-control form-control-sm flex-fill shrink-input"
-                      placeholder="First name"
-                    />
-                    <input
-                      v-model="editForm.lastName"
-                      type="text"
-                      class="form-control form-control-sm flex-fill shrink-input"
-                      placeholder="Last name"
-                    />
-                  </div>
-                  <div v-else class="fw-semibold">{{ timecard.employeeName }}</div>
-                </div>
-
-                <div class="col-3 col-md-2">
+                <div class="col-6 col-md-2">
                   <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
-                    <input
-                      v-model="editForm.employeeNumber"
-                      type="text"
-                      class="form-control form-control-sm"
-                      placeholder="Employee #"
-                    />
+                    <div class="w-100">
+                      <div class="tc-meta-label mb-1">First Name</div>
+                      <input
+                        v-model="editForm.firstName"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="First name"
+                      />
+                    </div>
                   </div>
-                  <div v-else class="fw-semibold">#{{ timecard.employeeNumber }}</div>
+                  <div v-else class="tc-meta">
+                    <div class="tc-meta-label">First Name</div>
+                    <div class="tc-meta-value">{{ getTimecardFirstName(timecard) || '-' }}</div>
+                  </div>
                 </div>
 
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-2">
                   <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
-                    <input
-                      v-model="editForm.occupation"
-                      type="text"
-                      class="form-control form-control-sm"
-                      placeholder="Occupation"
-                    />
+                    <div class="w-100">
+                      <div class="tc-meta-label mb-1">Last Name</div>
+                      <input
+                        v-model="editForm.lastName"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="Last name"
+                      />
+                    </div>
                   </div>
-                  <div v-else class="text-muted">{{ timecard.occupation }}</div>
+                  <div v-else class="tc-meta">
+                    <div class="tc-meta-label">Last Name</div>
+                    <div class="tc-meta-value">{{ getTimecardLastName(timecard) || '-' }}</div>
+                  </div>
                 </div>
 
-                <div class="col-12 col-md-4 order-first order-md-last text-start text-md-end d-flex align-items-center justify-content-between justify-content-md-end gap-2 tc-header-actions">
+                <div class="col-6 col-md-2">
+                  <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
+                    <div class="w-100">
+                      <div class="tc-meta-label mb-1">Employee #</div>
+                      <input
+                        v-model="editForm.employeeNumber"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="Employee #"
+                      />
+                    </div>
+                  </div>
+                  <div v-else class="tc-meta">
+                    <div class="tc-meta-label">Employee #</div>
+                    <div class="tc-meta-value">{{ timecard.employeeNumber || '-' }}</div>
+                  </div>
+                </div>
+
+                <div class="col-6 col-md-2">
+                  <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
+                    <div class="w-100">
+                      <div class="tc-meta-label mb-1">Occupation</div>
+                      <input
+                        v-model="editForm.occupation"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="Occupation"
+                      />
+                    </div>
+                  </div>
+                  <div v-else class="tc-meta">
+                    <div class="tc-meta-label">Occupation</div>
+                    <div class="tc-meta-value">{{ timecard.occupation || '-' }}</div>
+                  </div>
+                </div>
+
+                <div class="col-6 col-md-2">
+                  <div v-if="editingTimecardId === timecard.id" class="d-flex align-items-center gap-2 w-100" @click.stop>
+                    <div class="d-flex align-items-start gap-2 w-100 tc-inline-edit">
+                      <div class="tc-inline-field flex-grow-1">
+                        <div class="tc-meta-label mb-1">Wage</div>
+                        <input
+                          v-model="editForm.employeeWage"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          class="form-control form-control-sm"
+                          placeholder="Wage"
+                        />
+                      </div>
+                      <div class="tc-inline-field">
+                        <div class="tc-meta-label mb-1">Sub</div>
+                        <div class="form-check form-check-sm m-0 d-flex align-items-center tc-sub-check">
+                          <input
+                            v-model="editForm.subcontractedEmployee"
+                            class="form-check-input mt-0"
+                            type="checkbox"
+                            :id="`subcontracted-${timecard.id}`"
+                          />
+                          <label class="form-check-label ms-2 small" :for="`subcontracted-${timecard.id}`">Yes</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="d-flex align-items-end gap-2 w-100 tc-inline-display">
+                    <div class="tc-meta tc-inline-field flex-grow-1">
+                      <div class="tc-meta-label">Wage</div>
+                      <div class="tc-meta-value">{{ timecard.employeeWage != null ? `$${Number(timecard.employeeWage).toFixed(2)}` : '-' }}</div>
+                    </div>
+                    <div class="tc-meta tc-inline-field">
+                      <div class="tc-meta-label">Sub</div>
+                      <div class="tc-meta-value">{{ timecard.subcontractedEmployee ? 'Yes' : 'No' }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12 col-md-2 order-first order-md-last text-start text-md-end d-flex align-items-center justify-content-between justify-content-md-end gap-2 tc-header-actions">
                   <div class="d-flex align-items-center justify-content-end gap-2 flex-nowrap">
                     <div v-if="editingTimecardId === timecard.id" class="btn-group btn-group-sm flex-nowrap" role="group">
                       <button
@@ -1020,6 +1137,17 @@ onUnmounted(() => {
           <div class="mb-4">
             <label class="form-label">Occupation</label>
             <input v-model="newTimecardForm.occupation" type="text" class="form-control" placeholder="e.g., Carpenter" />
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Wage</label>
+            <input v-model="newTimecardForm.employeeWage" type="number" min="0" step="0.01" class="form-control" placeholder="e.g., 28.50" />
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Subcontracted Employee</label>
+            <select v-model="newTimecardForm.subcontractedEmployee" class="form-select">
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
           </div>
           <div class="d-flex gap-2">
             <button class="btn btn-primary" @click="confirmCreateTimecard">Create</button>
@@ -1321,6 +1449,34 @@ textarea.form-control {
 
 .tc-header-actions {
   padding-top: 0.25rem;
+}
+
+.tc-meta {
+  min-height: 2.25rem;
+}
+
+.tc-meta-label {
+  font-size: 0.75rem;
+  line-height: 1;
+  color: rgba($body-color, 0.65);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.15rem;
+}
+
+.tc-meta-value {
+  font-weight: 600;
+  color: $body-color;
+  line-height: 1.1;
+}
+
+.tc-inline-field {
+  min-width: 0;
+}
+
+.tc-sub-check {
+  min-height: 31px;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {

@@ -15,7 +15,7 @@ import {
   where,
   type DocumentData,
 } from 'firebase/firestore'
-import type { Attachment, ManpowerLine } from '@/types/documents'
+import type { Attachment, IndoorClimateReading, ManpowerLine } from '@/types/documents'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { normalizeError } from './serviceUtils'
 
@@ -59,6 +59,7 @@ export type DailyLog = {
   manpower: string
   weeklySchedule: string
   manpowerAssessment: string
+  indoorClimateReadings?: IndoorClimateReading[]
 
   manpowerLines?: ManpowerLine[]
 
@@ -105,6 +106,7 @@ function normalize(id: string, data: DocumentData): DailyLog {
     manpower: data.manpower ?? '',
     weeklySchedule: data.weeklySchedule ?? '',
     manpowerAssessment: data.manpowerAssessment ?? '',
+    indoorClimateReadings: Array.isArray(data.indoorClimateReadings) ? data.indoorClimateReadings : [],
 
     manpowerLines: Array.isArray(data.manpowerLines) ? data.manpowerLines : [],
 
