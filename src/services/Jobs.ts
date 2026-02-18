@@ -26,8 +26,19 @@ export type Job = JobModel
 function normalize(id: string, data: DocumentData): Job {
   return {
     id,
+    header: data.header ?? null,
     name: data.name,
     code: data.code ?? null,
+    projectManager: data.projectManager ?? null,
+    foreman: data.foreman ?? null,
+    gc: data.gc ?? null,
+    jobAddress: data.jobAddress ?? null,
+    startDate: data.startDate ?? null,
+    finishDate: data.finishDate ?? null,
+    taxExempt: data.taxExempt ?? null,
+    certified: data.certified ?? null,
+    cip: data.cip ?? null,
+    kjic: data.kjic ?? null,
     accountNumber: data.accountNumber ?? null,
     type: (data.type ?? 'general') as JobType,
     active: data.active ?? true,
@@ -88,7 +99,18 @@ export async function listAllJobs(includeArchived = true, options?: { assignedOn
 export async function createJob(
   name: string,
   options?: {
+    header?: string
     code?: string
+    projectManager?: string
+    foreman?: string
+    gc?: string
+    jobAddress?: string
+    startDate?: string
+    finishDate?: string
+    taxExempt?: string
+    certified?: string
+    cip?: string
+    kjic?: string
     accountNumber?: string
     type?: JobType
     assignedForemanIds?: string[]
@@ -97,7 +119,18 @@ export async function createJob(
   try {
     const ref = await addDoc(collection(db, 'jobs'), {
       name: name.trim(),
+      header: options?.header?.trim() || null,
       code: options?.code?.trim() || null,
+      projectManager: options?.projectManager?.trim() || null,
+      foreman: options?.foreman?.trim() || null,
+      gc: options?.gc?.trim() || null,
+      jobAddress: options?.jobAddress?.trim() || null,
+      startDate: options?.startDate?.trim() || null,
+      finishDate: options?.finishDate?.trim() || null,
+      taxExempt: options?.taxExempt?.trim() || null,
+      certified: options?.certified?.trim() || null,
+      cip: options?.cip?.trim() || null,
+      kjic: options?.kjic?.trim() || null,
       accountNumber: options?.accountNumber?.trim() || null,
       type: options?.type ?? 'general',
       active: true,
@@ -134,8 +167,19 @@ export async function setJobActive(jobId: string, active: boolean) {
 export async function updateJob(
   jobId: string,
   updates: {
+    header?: string | null
     name?: string
     code?: string | null
+    projectManager?: string | null
+    foreman?: string | null
+    gc?: string | null
+    jobAddress?: string | null
+    startDate?: string | null
+    finishDate?: string | null
+    taxExempt?: string | null
+    certified?: string | null
+    cip?: string | null
+    kjic?: string | null
     accountNumber?: string | null
     type?: JobType
   }
@@ -143,8 +187,19 @@ export async function updateJob(
   try {
     const ref = doc(db, 'jobs', jobId)
     const data: any = {}
+    if (updates.header !== undefined) data.header = updates.header?.trim() || null
     if (updates.name !== undefined) data.name = updates.name.trim()
     if (updates.code !== undefined) data.code = updates.code?.trim() || null
+    if (updates.projectManager !== undefined) data.projectManager = updates.projectManager?.trim() || null
+    if (updates.foreman !== undefined) data.foreman = updates.foreman?.trim() || null
+    if (updates.gc !== undefined) data.gc = updates.gc?.trim() || null
+    if (updates.jobAddress !== undefined) data.jobAddress = updates.jobAddress?.trim() || null
+    if (updates.startDate !== undefined) data.startDate = updates.startDate?.trim() || null
+    if (updates.finishDate !== undefined) data.finishDate = updates.finishDate?.trim() || null
+    if (updates.taxExempt !== undefined) data.taxExempt = updates.taxExempt?.trim() || null
+    if (updates.certified !== undefined) data.certified = updates.certified?.trim() || null
+    if (updates.cip !== undefined) data.cip = updates.cip?.trim() || null
+    if (updates.kjic !== undefined) data.kjic = updates.kjic?.trim() || null
     if (updates.accountNumber !== undefined) data.accountNumber = updates.accountNumber?.trim() || null
     if (updates.type !== undefined) data.type = updates.type
     await updateDoc(ref, data)

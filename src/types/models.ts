@@ -36,8 +36,19 @@ export type TimecardStatus = 'pending' | 'submitted' | 'archived'
 
 export interface Job {
   id: string
+  header?: string | null
   name: string
   code?: string | null              // 3-digit GL code
+  projectManager?: string | null
+  foreman?: string | null
+  gc?: string | null
+  jobAddress?: string | null
+  startDate?: string | null
+  finishDate?: string | null
+  taxExempt?: string | null
+  certified?: string | null
+  cip?: string | null
+  kjic?: string | null
   accountNumber?: string | null     // 4-digit account number
   type: JobType                     // general or subcontractor
   active: boolean

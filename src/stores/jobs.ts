@@ -61,7 +61,25 @@ export const useJobsStore = defineStore('jobs', () => {
     }
   }
 
-  async function createJob(name: string, options?: { code?: string; accountNumber?: string; type?: 'general' | 'subcontractor' }) {
+  async function createJob(
+    name: string,
+    options?: {
+      header?: string
+      code?: string
+      projectManager?: string
+      foreman?: string
+      gc?: string
+      jobAddress?: string
+      startDate?: string
+      finishDate?: string
+      taxExempt?: string
+      certified?: string
+      cip?: string
+      kjic?: string
+      accountNumber?: string
+      type?: 'general' | 'subcontractor'
+    }
+  ) {
     error.value = null
     try {
       const jobId = await createJobService(name, options)
@@ -81,8 +99,19 @@ export const useJobsStore = defineStore('jobs', () => {
   async function updateJob(
     jobId: string,
     updates: {
+      header?: string | null
       name?: string
       code?: string | null
+      projectManager?: string | null
+      foreman?: string | null
+      gc?: string | null
+      jobAddress?: string | null
+      startDate?: string | null
+      finishDate?: string | null
+      taxExempt?: string | null
+      certified?: string | null
+      cip?: string | null
+      kjic?: string | null
       accountNumber?: string | null
       type?: 'general' | 'subcontractor'
     }

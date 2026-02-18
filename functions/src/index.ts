@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin'
+import PDFDocument from 'pdfkit'
 import { onCall } from 'firebase-functions/v2/https'
 import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
@@ -396,22 +397,36 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
       timecards: normalizedTimecards,
     })
 
-      // Build CSV attachment for accounting upload
       const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart)
+      const csvFileName = buildTimecardCsvFilename(weekStart, job?.number)
+      const pdfFileName = buildTimecardPdfFilename(weekStart, job?.number)
+      const pdfBuffer = await buildTimecardPdfBuffer({
+        jobName: job?.name,
+        jobNumber: job?.number,
+        submittedBy: userName,
+        weekStart,
+        timecards: normalizedTimecards,
+      })
+
+      const attachments: Array<{ name: string; contentType?: string; contentBytes: string }> = []
+      if (csvAttachment) {
+        attachments.push({
+          name: csvFileName,
+          contentType: 'text/csv',
+          contentBytes: Buffer.from(csvAttachment, 'utf-8').toString('base64'),
+        })
+      }
+      attachments.push({
+        name: pdfFileName,
+        contentType: 'application/pdf',
+        contentBytes: pdfBuffer.toString('base64'),
+      })
 
       await sendEmail({
         to: recipients,
         subject: `${EMAIL.SUBJECTS.TIMECARD} - ${timecards.length} timecard(s) - Week of ${weekStart}`,
         html: emailHtml,
-        attachments: csvAttachment
-          ? [
-              {
-                name: `timecards-${weekStart}.csv`,
-                contentType: 'text/csv',
-                contentBytes: Buffer.from(csvAttachment, 'utf-8').toString('base64'),
-              },
-            ]
-          : undefined,
+        attachments,
       })
 
     console.log(`Timecards ${timecardIds.join(', ')} emailed to ${recipients.join(', ')}`)
@@ -424,7 +439,7 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
 
 function buildTimecardCsv(timecards: any[], weekStart: string): string {
   const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', '']
-  const rows: string[][] = [headers]
+  const rows: string[][] = [headers, Array(headers.length).fill('')]
 
   if (!timecards || timecards.length === 0) {
     return rows.map(r => r.join(',')).join('\n')
@@ -455,6 +470,15 @@ function buildTimecardCsv(timecards: any[], weekStart: string): string {
     return `${month}/${day}/${year}`
   }
 
+  const escapeCsv = (value: any): string => {
+    const str = String(value ?? '')
+    if (!str.length) return ''
+    if (/[",\n\r]/.test(str)) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
+  }
+
   for (const tc of timecards) {
     const lines = Array.isArray(tc?.lines) ? tc.lines : []
     for (const line of lines) {
@@ -464,15 +488,15 @@ function buildTimecardCsv(timecards: any[], weekStart: string): string {
         if (hoursVal === 0 && productionVal === 0) continue
 
         rows.push([
-          tc?.employeeName || '',
-          tc?.employeeId || tc?.employeeNumber || '',
-          line?.jobNumber || '',
-          formatDate(offset.index),
-          line?.area || '',
-          line?.account || '',
-          line?.costCode || '',
-          hoursVal ? String(hoursVal) : '',
-          productionVal ? String(productionVal) : '',
+          escapeCsv(tc?.employeeName || ''),
+          escapeCsv(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || ''),
+          escapeCsv(line?.jobNumber || ''),
+          escapeCsv(formatDate(offset.index)),
+          escapeCsv(line?.area || line?.subsectionArea || ''),
+          escapeCsv(line?.account || line?.acct || ''),
+          escapeCsv(line?.costCode || line?.difC || ''),
+          escapeCsv(hoursVal ? String(hoursVal) : ''),
+          escapeCsv(productionVal ? String(productionVal) : ''),
           '',
           '',
         ])
@@ -481,6 +505,154 @@ function buildTimecardCsv(timecards: any[], weekStart: string): string {
   }
 
   return rows.map(r => r.join(',')).join('\n')
+}
+
+function buildTimecardCsvFilename(weekStart: string, jobCode?: string): string {
+  const weekDate = new Date(weekStart)
+  if (!Number.isNaN(weekDate.getTime())) {
+    weekDate.setDate(weekDate.getDate() + 6)
+    const yyyy = weekDate.getFullYear()
+    const mm = String(weekDate.getMonth() + 1).padStart(2, '0')
+    const dd = String(weekDate.getDate()).padStart(2, '0')
+    const normalizedJobCode = String(jobCode || '').trim()
+    return normalizedJobCode ? `${yyyy}-${mm}-${dd} ${normalizedJobCode}.csv` : `${yyyy}-${mm}-${dd}.csv`
+  }
+
+  const normalizedWeekStart = String(weekStart || '').trim() || 'timecards'
+  const normalizedJobCode = String(jobCode || '').trim()
+  return normalizedJobCode ? `${normalizedWeekStart} ${normalizedJobCode}.csv` : `${normalizedWeekStart}.csv`
+}
+
+function buildTimecardPdfFilename(weekStart: string, jobCode?: string): string {
+  const weekDate = new Date(weekStart)
+  if (!Number.isNaN(weekDate.getTime())) {
+    weekDate.setDate(weekDate.getDate() + 6)
+    const yyyy = weekDate.getFullYear()
+    const mm = String(weekDate.getMonth() + 1).padStart(2, '0')
+    const dd = String(weekDate.getDate()).padStart(2, '0')
+    const normalizedJobCode = String(jobCode || '').trim()
+    return normalizedJobCode ? `${yyyy}-${mm}-${dd} ${normalizedJobCode}.pdf` : `${yyyy}-${mm}-${dd}.pdf`
+  }
+
+  const normalizedWeekStart = String(weekStart || '').trim() || 'timecards'
+  const normalizedJobCode = String(jobCode || '').trim()
+  return normalizedJobCode ? `${normalizedWeekStart} ${normalizedJobCode}.pdf` : `${normalizedWeekStart}.pdf`
+}
+
+async function buildTimecardPdfBuffer(payload: {
+  jobName?: string
+  jobNumber?: string
+  submittedBy?: string
+  weekStart?: string
+  timecards: any[]
+}): Promise<Buffer> {
+  const doc = new PDFDocument({ margin: 36, size: 'LETTER' })
+  const chunks: Buffer[] = []
+
+  const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+  const safeText = (value: any) => String(value ?? '').trim() || '-'
+  const fmt = (value: any) => {
+    const n = Number(value) || 0
+    return Number.isInteger(n) ? String(n) : n.toFixed(2)
+  }
+
+  const weekStartDate = payload.weekStart ? new Date(payload.weekStart) : null
+  const weekEndDate = weekStartDate && !Number.isNaN(weekStartDate.getTime()) ? new Date(weekStartDate) : null
+  if (weekEndDate) weekEndDate.setDate(weekEndDate.getDate() + 6)
+  const weekLabel = weekStartDate && weekEndDate
+    ? `${weekStartDate.toLocaleDateString()} - ${weekEndDate.toLocaleDateString()}`
+    : safeText(payload.weekStart)
+
+  const ensureSpace = (y: number, needed = 24): number => {
+    const bottomLimit = doc.page.height - doc.page.margins.bottom
+    if (y + needed > bottomLimit) {
+      doc.addPage()
+      return doc.page.margins.top
+    }
+    return y
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+    doc.on('end', () => resolve())
+    doc.on('error', (err) => reject(err))
+
+    let y = doc.page.margins.top
+    doc.font('Helvetica-Bold').fontSize(14).text('Timecards This Week', doc.page.margins.left, y)
+    y += 20
+    doc.font('Helvetica').fontSize(10)
+    doc.text(`Job: ${safeText(payload.jobName)}${payload.jobNumber ? ` (#${payload.jobNumber})` : ''}`, doc.page.margins.left, y)
+    y += 14
+    doc.text(`Week: ${weekLabel}`, doc.page.margins.left, y)
+    y += 14
+    doc.text(`Submitted By: ${safeText(payload.submittedBy)}`, doc.page.margins.left, y)
+    y += 18
+
+    const timecards = Array.isArray(payload.timecards) ? payload.timecards : []
+    if (!timecards.length) {
+      doc.font('Helvetica').fontSize(10).text('No submitted timecards found.', doc.page.margins.left, y)
+      doc.end()
+      return
+    }
+
+    for (const tc of timecards) {
+      y = ensureSpace(y, 48)
+      doc.font('Helvetica-Bold').fontSize(11).text(`Employee: ${safeText(tc?.employeeName)}`, doc.page.margins.left, y)
+      y += 14
+      doc.font('Helvetica').fontSize(9)
+      doc.text(`Employee Code: ${safeText(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber)}`, doc.page.margins.left, y)
+      y += 12
+
+      const header = ['Job', 'Area', 'Acct', 'Cost', ...dayLabels, 'Tot Hrs', 'Tot Prod', 'Line $'].join(' | ')
+      y = ensureSpace(y, 24)
+      doc.font('Helvetica-Bold').fontSize(8).text(header, doc.page.margins.left, y, {
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      })
+      y += 12
+      doc.font('Helvetica').fontSize(8)
+
+      const lines = Array.isArray(tc?.lines) ? tc.lines : []
+      for (const line of lines) {
+        y = ensureSpace(y, 14)
+        const dayHours = dayKeys.map((k) => fmt(line?.[k]))
+        const row = [
+          safeText(line?.jobNumber),
+          safeText(line?.area || line?.subsectionArea),
+          safeText(line?.account || line?.acct),
+          safeText(line?.costCode || line?.difC),
+          ...dayHours,
+          fmt(line?.totals?.hours),
+          fmt(line?.totals?.production),
+          fmt(line?.totals?.lineTotal),
+        ].join(' | ')
+
+        doc.text(row, doc.page.margins.left, y, {
+          width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+          ellipsis: true,
+        })
+        y += 11
+      }
+
+      y = ensureSpace(y, 18)
+      doc.font('Helvetica-Bold').fontSize(9)
+      doc.text(
+        `Totals - Hours: ${fmt(tc?.totals?.hoursTotal)} | Production: ${fmt(tc?.totals?.productionTotal)} | Line Total: ${fmt(tc?.totals?.lineTotal)}`,
+        doc.page.margins.left,
+        y,
+        { width: doc.page.width - doc.page.margins.left - doc.page.margins.right }
+      )
+      y += 18
+      doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.width - doc.page.margins.right, y).strokeColor('#AAAAAA').stroke()
+      y += 12
+      doc.font('Helvetica').fillColor('black')
+    }
+
+    doc.end()
+  })
+
+  return Buffer.concat(chunks)
 }
 
 /**
