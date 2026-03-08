@@ -133,7 +133,6 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     error.value = null
     try {
       categories.value = await getAllCategories()
-      console.log('[ShopCategories Store] Fetched categories:', categories.value)
     } catch (e: any) {
       error.value = e?.message || 'Failed to fetch categories'
       console.error('[ShopCategories Store]', error.value, e)
@@ -147,11 +146,8 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
    */
   async function createCategory(name: string, parentId: string | null = null): Promise<ShopCategory> {
     try {
-      console.log('[ShopCategories Store] Creating category:', { name, parentId })
       const newCat = await createCategoryService(name, parentId)
-      console.log('[ShopCategories Store] Category created from service:', { id: newCat.id, name: newCat.name, parentId: newCat.parentId })
       categories.value.push(newCat)
-      console.log('[ShopCategories Store] Categories after push:', categories.value.map(c => ({ id: c.id, name: c.name, parentId: c.parentId })))
       return newCat
     } catch (e: any) {
       error.value = e?.message || 'Failed to create category'

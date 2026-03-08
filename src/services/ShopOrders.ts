@@ -2,16 +2,18 @@ import { db } from '../firebase'
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
-  getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
   where,
   type DocumentData,
+  type Unsubscribe,
 } from 'firebase/firestore'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { normalizeError } from './serviceUtils'
@@ -35,6 +37,11 @@ export type ShopOrder = {
   createdAt?: any
   updatedAt?: any
   items: ShopOrderItem[]
+}
+
+type ShopOrderSnapshotHandlers = {
+  onUpdate: (orders: ShopOrder[]) => void
+  onError?: (error: Error) => void
 }
 
 function normalize(id: string, data: DocumentData): ShopOrder {
@@ -121,6 +128,31 @@ export async function createShopOrder(jobId: string, scopeKey = 'scope:employee'
   }
 }
 
+export async function subscribeShopOrders(
+  jobId: string,
+  handlers: ShopOrderSnapshotHandlers
+): Promise<Unsubscribe> {
+  try {
+    assertJobAccess(jobId)
+    requireUser()
+
+    const q = query(collection(db, 'jobs', jobId, 'shop_orders'), orderBy('orderDate', 'desc'))
+
+    return onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs.map((item) => normalize(item.id, item.data()))
+        handlers.onUpdate(orders)
+      },
+      (err) => {
+        handlers.onError?.(new Error(normalizeError(err, 'Failed to subscribe to shop orders')))
+      }
+    )
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to subscribe to shop orders'))
+  }
+}
+
 /**
  * Update shop order items
  */
@@ -184,5 +216,16 @@ export async function updateShopOrderScope(
     })
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to update shop order scope'))
+  }
+}
+
+export async function deleteShopOrder(jobId: string, orderId: string) {
+  try {
+    assertJobAccess(jobId)
+    requireUser()
+    const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
+    await deleteDoc(ref)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to delete shop order'))
   }
 }

@@ -28,6 +28,10 @@ export type ToastHandle = {
   show: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void
 }
 
+type ManpowerLineAccess = {
+  addedByUserId?: string
+}
+
 export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRef?: { value: ToastHandle | null } }) {
   const auth = useAuthStore()
   const jobs = useJobsStore()
@@ -393,7 +397,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         try {
           await jobService.sendDailyLogEmail({ jobId: jobId.value, dailyLogId: currentId.value, recipients: combinedRecipients })
           toastRef?.value?.show('Daily log submitted and emailed successfully!', 'success')
-        } catch (emailError: any) {
+        } catch {
           toastRef?.value?.show('Daily log submitted, but email failed to send', 'warning')
         }
       } else {
@@ -425,7 +429,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       jobEmailRecipients.value = updated
       newEmailRecipient.value = ''
       toastRef?.value?.show('Email recipient added', 'success')
-    } catch (e: any) {
+    } catch {
       toastRef?.value?.show('Failed to add email recipient', 'error')
     } finally {
       savingRecipients.value = false
@@ -439,7 +443,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       await updateDailyLogRecipients(jobId.value, updated)
       jobEmailRecipients.value = updated
       toastRef?.value?.show('Email recipient removed', 'success')
-    } catch (e: any) {
+    } catch {
       toastRef?.value?.show('Failed to remove email recipient', 'error')
     } finally {
       savingRecipients.value = false
@@ -483,7 +487,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       }
       await loadLogsForSelectedDate(logDate.value)
       toastRef?.value?.show('Daily log deleted', 'success')
-    } catch (e: any) {
+    } catch {
       toastRef?.value?.show('Failed to delete daily log', 'error')
     } finally {
       saving.value = false
@@ -627,11 +631,11 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     autoSave()
   }
 
-  const canDeleteManpowerLine = (line: any): boolean => {
+  const canDeleteManpowerLine = (line: ManpowerLineAccess): boolean => {
     return !line.addedByUserId || line.addedByUserId === auth.user?.uid
   }
 
-  const isAdminAddedLine = (line: any): boolean => {
+  const isAdminAddedLine = (line: ManpowerLineAccess): boolean => {
     return !!line.addedByUserId && line.addedByUserId !== auth.user?.uid
   }
 

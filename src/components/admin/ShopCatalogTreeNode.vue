@@ -37,6 +37,7 @@ const emit = defineEmits<{
   'reactivate-item': [item: ShopCatalogItem]
   'delete-category': [id: string]
   'select-for-order': [item: ShopCatalogItem]
+  'update:catalogItemQty': [payload: { id: string; qty: number }]
   'update:editCategoryName': [name: string]
 }>()
 
@@ -126,6 +127,12 @@ function toggleActions() {
 
 function handleSelectForOrder() {
   if (item.value) emit('select-for-order', item.value)
+}
+
+function handleCatalogQtyInput(categoryItemId: string, event: Event) {
+  const rawValue = Number((event.target as HTMLInputElement).value)
+  const qty = Math.max(1, Math.floor(rawValue || 1))
+  emit('update:catalogItemQty', { id: categoryItemId, qty })
 }
 
 function handleEditItem() {
@@ -241,12 +248,12 @@ function runAccordionLeave(el: HTMLElement) {
 <template>
   <!-- Category nodes -->
   <div v-if="category" class="tree-node accordion-item">
-    <div v-if="props.editingCategoryId !== props.nodeId" class="node-header">
+    <div v-if="props.editingCategoryId !== props.nodeId" class="node-header" @click="handleNodeHeaderClick">
       <button
         :id="`btn-${props.nodeId}`"
         class="accordion-button"
         type="button"
-        @click="toggleSelf"
+        @click.stop="toggleSelf"
         :aria-expanded="hasChildren ? isExpanded : undefined"
         :aria-controls="hasChildren ? `collapse-${props.nodeId}` : undefined"
         :class="{ collapsed: !isExpanded && hasChildren, 'has-children': hasChildren, 'not-expandable': !hasChildren }"
@@ -264,7 +271,7 @@ function runAccordionLeave(el: HTMLElement) {
           min="1"
           step="1"
           :value="catalogItemQtys?.[category.id] || 1"
-          @input="(e) => { if (catalogItemQtys) { const v = Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value) || 1)); catalogItemQtys[category.id] = v } }"
+          @input="(e) => handleCatalogQtyInput(category.id, e)"
           class="form-control form-control-sm"
           style="width: 70px;"
         />
@@ -366,6 +373,7 @@ function runAccordionLeave(el: HTMLElement) {
                 @reactivate-item="(child) => emit('reactivate-item', child)"
                 @delete-category="(id) => emit('delete-category', id)"
                 @select-for-order="(child) => emit('select-for-order', child)"
+                @update:catalogItemQty="(payload) => emit('update:catalogItemQty', payload)"
                 @update:editCategoryName="(name) => emit('update:editCategoryName', name)"
               />
             </div>
@@ -490,6 +498,7 @@ function runAccordionLeave(el: HTMLElement) {
                 @reactivate-item="(child) => emit('reactivate-item', child)"
                 @delete-category="(id) => emit('delete-category', id)"
                 @select-for-order="(child) => emit('select-for-order', child)"
+                @update:catalogItemQty="(payload) => emit('update:catalogItemQty', payload)"
                 @update:editCategoryName="(name) => emit('update:editCategoryName', name)"
               />
             </div>

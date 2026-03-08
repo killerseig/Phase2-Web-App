@@ -9,7 +9,6 @@ import DailyLogList from '../components/dailyLogs/DailyLogList.vue'
 import DailyLogManpower from '../components/dailyLogs/DailyLogManpower.vue'
 import DailyLogRecipients from '../components/dailyLogs/DailyLogRecipients.vue'
 import DailyLogTextField from '../components/dailyLogs/DailyLogTextField.vue'
-import { EMAIL_UI_ENABLED } from '../config'
 import { useDailyLog } from '../composables/useDailyLog'
 
 defineProps<{ jobId?: string }>()
@@ -24,7 +23,6 @@ const {
   jobName,
   jobCode,
   today,
-  loading,
   saving,
   uploading,
   err,
@@ -46,10 +44,8 @@ const {
   loadLogById,
   loadForDate,
   startNewDraftForToday,
-  saveDraft,
   submit,
   deleteDraft,
-  deleteLogById,
   handleFileChange,
   addEmailRecipient,
   removeEmailRecipient,

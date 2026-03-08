@@ -3,13 +3,22 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import ShopCatalogTreeNode from '../components/admin/ShopCatalogTreeNode.vue'
-import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, type Unsubscribe } from 'firebase/firestore'
-import { db } from '../firebase'
 import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 import { useShopCatalogStore } from '../stores/shopCatalog'
 import { useShopCategoriesStore } from '../stores/shopCategories'
-import { createShopOrder, useShopService, getEmailSettings } from '@/services'
+import {
+  createShopOrder,
+  deleteShopOrder,
+  getEmailSettings,
+  subscribeShopOrders,
+  updateShopOrderItems,
+  updateShopOrderStatus,
+  useShopService,
+  type ShopOrder,
+  type ShopOrderItem,
+  type ShopOrderStatus,
+} from '@/services'
 import { useJobAccess } from '@/composables/useJobAccess'
 
 defineProps<{ jobId?: string }>()
@@ -24,9 +33,19 @@ const shopService = useShopService()
 const jobAccess = useJobAccess()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
-type ShopOrderStatus = 'draft' | 'order' | 'receive'
-interface ShopOrderItem { description: string; quantity: number; note?: string; catalogItemId?: string | null }
-interface ShopOrder { id: string; jobId: string; uid: string; ownerUid: string; status: ShopOrderStatus; orderDate?: any; createdAt?: any; updatedAt?: any; items: ShopOrderItem[] }
+interface CategoryTreeNode {
+  id: string
+  children?: CategoryTreeNode[]
+}
+
+type CatalogSelectable = {
+  id?: string
+  name?: string
+  description?: string
+  sku?: string
+  price?: string | number
+  quantity?: number
+}
 
 const jobId = computed(() => String(route.params.jobId))
 const job = computed(() => jobs.currentJob)
@@ -44,13 +63,12 @@ const newItemDescription = ref('')
 const newItemCatalogId = ref<string | null>(null)
 const newItemQty = ref<string>('')
 const newItemNote = ref('')
-const selectedCatalogItem = ref<any | null>(null)
+const selectedCatalogItem = ref<CatalogSelectable | null>(null)
 const catalogItemQtys = ref<Record<string, number>>({})
 const expandedNodes = ref<Set<string>>(new Set())
 const shopOrderRecipients = ref<string[]>([])
 const sendingEmail = ref(false)
 
-const isAdmin = computed(() => auth.role === 'admin')
 const catalog = computed(() => shopCatalogStore.allItems)
 
 // Helper to get all categories that should be in the tree (matching categories + their parents)
@@ -75,7 +93,7 @@ const getTreeCategoriesWithParents = (): string[] => {
 }
 
 // Recursively filter tree to only include categories that should be visible
-const filterCategoryTree = (tree: any[]): any[] => {
+const filterCategoryTree = (tree: CategoryTreeNode[]): CategoryTreeNode[] => {
   const visibleIds = getTreeCategoriesWithParents()
   return tree
     .filter(cat => {
@@ -87,7 +105,7 @@ const filterCategoryTree = (tree: any[]): any[] => {
     })
     .map(cat => ({
       ...cat,
-      children: filterCategoryTree(cat.children)
+      children: filterCategoryTree(cat.children ?? [])
     }))
 }
 
@@ -105,8 +123,16 @@ const statusLabel = (st: ShopOrderStatus) => {
   const map: Record<ShopOrderStatus, string> = { draft: 'Draft', order: 'Submitted', receive: 'Received' }
   return map[st] ?? st
 }
-const fmtDate = (ts: any) => {
-  try { return ts?.toDate ? ts.toDate().toLocaleString() : '' } catch { return '' }
+const fmtDate = (ts: unknown) => {
+  try {
+    if (ts && typeof ts === 'object' && 'toDate' in ts) {
+      const toDate = (ts as { toDate?: () => Date }).toDate
+      return typeof toDate === 'function' ? toDate().toLocaleString() : ''
+    }
+    return ''
+  } catch {
+    return ''
+  }
 }
 
 const selected = computed(() => orders.value.find(o => o.id === selectedId.value) ?? null)
@@ -125,9 +151,7 @@ const canEditOrder = (o: ShopOrder) => o.status === 'draft'
 const canSubmit = (o: ShopOrder) => o.status === 'draft' && o.items.length > 0
 const canOrder = (o: ShopOrder) => o.status === 'order'
 const canReceive = (o: ShopOrder) => o.status === 'order'
-const canChangeScope = (_o: ShopOrder) => false
-
-const itemMatchesSearch = (item: any) => {
+const itemMatchesSearch = (item: CatalogSelectable) => {
   if (!catalogSearch.value.trim()) return true
   const q = catalogSearch.value.toLowerCase()
   const desc = item.description ? item.description.toLowerCase() : ''
@@ -279,17 +303,23 @@ const expandAncestors = (nodeId: string, set: Set<string>, depth: number = 0) =>
   expandAncestors(parentNodeId, set, depth + 1)
 }
 
-let unsubs: Unsubscribe[] = []
+let unsubs: Array<() => void> = []
 
 const clearSubscriptions = () => {
   unsubs.forEach(u => u())
   unsubs = []
 }
 
+const toMillis = (value: unknown): number => {
+  if (!value || typeof value !== 'object' || !('toMillis' in value)) return 0
+  const candidate = value as { toMillis?: () => number }
+  return typeof candidate.toMillis === 'function' ? candidate.toMillis() : 0
+}
+
 const replaceMerged = (map: Map<string, ShopOrder>) => {
   orders.value = Array.from(map.values()).sort((a, b) => {
-    const ta = a.orderDate?.toMillis ? a.orderDate.toMillis() : 0
-    const tb = b.orderDate?.toMillis ? b.orderDate.toMillis() : 0
+    const ta = toMillis(a.orderDate)
+    const tb = toMillis(b.orderDate)
     return tb - ta
   })
   if (selectedId.value && !orders.value.some(o => o.id === selectedId.value)) selectedId.value = null
@@ -299,39 +329,31 @@ const replaceMerged = (map: Map<string, ShopOrder>) => {
 const loadOrders = () => {
   clearSubscriptions()
   loading.value = true
-  console.log('Loading orders for jobId:', jobId.value)
-  const q = query(collection(db, 'jobs', jobId.value, 'shop_orders'), orderBy('orderDate', 'desc'))
   const mergedMap = new Map<string, ShopOrder>()
-  
-  const u = onSnapshot(q, (snap) => {
-    console.log('Orders snapshot received, doc count:', snap.docs.length)
-    snap.docChanges().forEach(change => {
-      const d = change.doc.data() as any
-      const items = Array.isArray(d.items) ? d.items.map((it: any) => ({ ...it })) : []
-      const order: ShopOrder = { id: change.doc.id, jobId: d.jobId, uid: d.uid, ownerUid: d.ownerUid, status: d.status, orderDate: d.orderDate, createdAt: d.createdAt, updatedAt: d.updatedAt, items }
-      if (change.type === 'removed') {
-        mergedMap.delete(change.doc.id)
-      } else {
-        mergedMap.set(change.doc.id, order)
-      }
-    })
-    replaceMerged(mergedMap)
-    loading.value = false
-  }, (e) => {
-    console.error('Failed to load orders:', e)
-    err.value = e?.message ?? 'Failed to load orders'
-    toastRef.value?.show('Failed to load orders: ' + (e?.message ?? 'Unknown error'), 'error')
-    loading.value = false
-  })
-  unsubs.push(u)
-}
 
-const loadCatalog = async () => {
-  try {
-    await shopCatalogStore.fetchCatalog()
-  } catch (e: any) {
-    toastRef.value?.show('Failed to load catalog', 'error')
-  }
+  subscribeShopOrders(jobId.value, {
+    onUpdate(snapshotOrders) {
+      mergedMap.clear()
+      snapshotOrders.forEach((order) => {
+        mergedMap.set(order.id, { ...order, items: Array.isArray(order.items) ? [...order.items] : [] })
+      })
+      replaceMerged(mergedMap)
+      loading.value = false
+    },
+    onError(error) {
+      err.value = error.message ?? 'Failed to load orders'
+      toastRef.value?.show('Failed to load orders: ' + (error.message ?? 'Unknown error'), 'error')
+      loading.value = false
+    },
+  })
+    .then((unsubscribe) => {
+      unsubs.push(unsubscribe)
+    })
+    .catch((error) => {
+      err.value = error?.message ?? 'Failed to load orders'
+      toastRef.value?.show('Failed to load orders: ' + (error?.message ?? 'Unknown error'), 'error')
+      loading.value = false
+    })
 }
 
 const init = async () => {
@@ -382,7 +404,7 @@ const addItem = async () => {
     const note = newItemNote.value.trim() || undefined
     const catalogItemId = newItemCatalogId.value ?? null
     const updatedItems = [...(selected.value.items || []), { description, quantity, ...(note ? { note } : {}), catalogItemId }]
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { items: updatedItems, updatedAt: serverTimestamp() })
+    await updateShopOrderItems(jobId.value, selected.value.id, updatedItems)
     newItemDescription.value = ''
     newItemQty.value = ''
     newItemNote.value = ''
@@ -395,7 +417,7 @@ const addItem = async () => {
   }
 }
 
-const normalizeCatalogSelection = (item: any) => {
+const normalizeCatalogSelection = (item: CatalogSelectable) => {
   const description = (item?.description || item?.name || '').trim()
   const quantity = Math.max(1, Math.floor(Number(item?.quantity ?? catalogItemQtys.value[item?.id] ?? 1) || 1))
   const catalogItemId = item?.id ?? null
@@ -406,7 +428,7 @@ const normalizeCatalogSelection = (item: any) => {
   return { description, quantity, catalogItemId, note }
 }
 
-const selectCatalogItem = (item: any) => {
+const selectCatalogItem = (item: CatalogSelectable) => {
   const normalized = normalizeCatalogSelection(item)
   if (!normalized.description) {
     toastRef.value?.show('Catalog item is missing a description', 'error')
@@ -418,14 +440,20 @@ const selectCatalogItem = (item: any) => {
   newItemNote.value = normalized.note
   selectedCatalogItem.value = item
   addItem()
-  catalogItemQtys.value[item.id] = 1
+  if (item.id) {
+    catalogItemQtys.value[item.id] = 1
+  }
+}
+
+const updateCatalogItemQty = ({ id, qty }: { id: string; qty: number }) => {
+  catalogItemQtys.value[id] = qty
 }
 
 const deleteItem = async (idx: number) => {
   if (!selected.value) return
   try {
     const updatedItems = selected.value.items.filter((_, i) => i !== idx)
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { items: updatedItems, updatedAt: serverTimestamp() })
+    await updateShopOrderItems(jobId.value, selected.value.id, updatedItems)
   } catch (e: any) {
     toastRef.value?.show('Failed to delete item', 'error')
   }
@@ -440,7 +468,7 @@ const persistItems = async () => {
       ...(it.note ? { note: it.note } : {}),
       catalogItemId: it.catalogItemId ?? null,
     }))
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { items: sanitized, updatedAt: serverTimestamp() })
+    await updateShopOrderItems(jobId.value, selected.value.id, sanitized)
   } catch (e) {
     console.error('Failed to persist items', e)
   }
@@ -448,9 +476,7 @@ const persistItems = async () => {
 
 const createDraft = async () => {
   try {
-    console.log('Creating order with jobId:', jobId.value)
     const orderId = await createShopOrder(jobId.value, 'scope:employee')
-    console.log('Order created with ID:', orderId)
     selectedId.value = orderId
     toastRef.value?.show('New order created', 'success')
   } catch (e: any) {
@@ -462,14 +488,12 @@ const createDraft = async () => {
 const deleteOrder = async () => {
   if (!selected.value || !confirm('Delete this order?')) return
   try {
-    await deleteDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id))
+    await deleteShopOrder(jobId.value, selected.value.id)
     toastRef.value?.show('Order deleted', 'success')
   } catch (e: any) {
     toastRef.value?.show('Failed to delete order', 'error')
   }
 }
-
-const changeScope = async (_newScope: string) => {}
 
 const submitOrder = async () => {
   if (!selected.value) return
@@ -480,7 +504,8 @@ const submitOrder = async () => {
       toastRef.value?.show('Order must have at least one item with quantity > 0', 'error')
       return
     }
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { status: 'order' as ShopOrderStatus, items: filteredItems, updatedAt: serverTimestamp() })
+    await updateShopOrderItems(jobId.value, selected.value.id, filteredItems)
+    await updateShopOrderStatus(jobId.value, selected.value.id, 'order')
     toastRef.value?.show('Order submitted', 'success')
   } catch (e: any) {
     toastRef.value?.show('Failed to submit order', 'error')
@@ -490,7 +515,7 @@ const submitOrder = async () => {
 const orderOrder = async () => {
   if (!selected.value) return
   try {
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { status: 'receive' as ShopOrderStatus, updatedAt: serverTimestamp() })
+    await updateShopOrderStatus(jobId.value, selected.value.id, 'receive')
     toastRef.value?.show('Order placed', 'success')
   } catch (e: any) {
     toastRef.value?.show('Failed to place order', 'error')
@@ -500,7 +525,7 @@ const orderOrder = async () => {
 const receiveOrder = async () => {
   if (!selected.value) return
   try {
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), { status: 'receive' as ShopOrderStatus, updatedAt: serverTimestamp() })
+    await updateShopOrderStatus(jobId.value, selected.value.id, 'receive')
     toastRef.value?.show('Order received', 'success')
   } catch (e: any) {
     toastRef.value?.show('Failed to receive order', 'error')
@@ -524,10 +549,7 @@ const sendOrderEmail = async () => {
       recipients: finalRecipients,
     })
     // Treat email as submit: move status to 'order'
-    await updateDoc(doc(db, 'jobs', jobId.value, 'shop_orders', selected.value.id), {
-      status: 'order' as ShopOrderStatus,
-      updatedAt: serverTimestamp(),
-    })
+    await updateShopOrderStatus(jobId.value, selected.value.id, 'order')
     toastRef.value?.show('Order emailed successfully', 'success')
   } catch (e: any) {
     toastRef.value?.show(e?.message ?? 'Failed to email order', 'error')
@@ -739,6 +761,7 @@ onUnmounted(clearSubscriptions)
                     :catalog-item-qtys="catalogItemQtys"
                     :item-filter="itemMatchesSearch"
                     @toggle-expand="toggleExpand"
+                    @update:catalog-item-qty="updateCatalogItemQty"
                     @select-for-order="selectCatalogItem"
                   />
                 </div>
@@ -753,6 +776,7 @@ onUnmounted(clearSubscriptions)
                     :catalog-item-qtys="catalogItemQtys"
                     :item-filter="itemMatchesSearch"
                     @toggle-expand="toggleExpand"
+                    @update:catalog-item-qty="updateCatalogItemQty"
                     @select-for-order="selectCatalogItem"
                   />
                 </div>
@@ -823,12 +847,31 @@ onUnmounted(clearSubscriptions)
 }
 
 .order-panel .list-group-item {
+  background: $surface;
+  color: $body-color;
+  border-color: $border-color;
   border-left: 3px solid transparent;
 }
 
+.order-panel .card-header {
+  border-bottom: 1px solid $border-color;
+  background: $surface-2 !important;
+  color: $body-color;
+}
+
+.order-panel .text-muted {
+  color: $body-color !important;
+}
+
 .order-list-item.active {
+  background: rgba($primary, 0.22);
+  color: $body-color;
   border-left-color: $primary;
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.05);
+}
+
+.order-list-item.active .text-muted {
+  color: rgba($body-color, 0.85) !important;
 }
 
 .order-card .card-header {

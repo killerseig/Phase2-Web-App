@@ -35,9 +35,6 @@ interface Props {
   striped?: boolean
   hover?: boolean
   compact?: boolean
-  onAddRow?: () => void
-  onDeleteRow?: (rowIndex: number) => void
-  onUpdateRow?: (rowIndex: number, row: Record<string, unknown>) => void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -51,6 +48,12 @@ const props = withDefaults(defineProps<Props>(), {
   hover: true,
   compact: true,
 })
+
+const emit = defineEmits<{
+  (e: 'add-row'): void
+  (e: 'delete-row', rowIndex: number): void
+  (e: 'update-row', rowIndex: number, row: Record<string, unknown>): void
+}>()
 
 const visibleColumns = computed(() => props.columns.filter((col) => !col.hidden))
 
@@ -68,13 +71,13 @@ const tableClasses = computed(() =>
 
 const handleDelete = (rowIndex: number) => {
   if (confirm(props.deleteConfirmMessage)) {
-    props.onDeleteRow?.(rowIndex)
+    emit('delete-row', rowIndex)
   }
 }
 
 const handleCellUpdate = (rowIndex: number, colKey: string, value: unknown) => {
   const updated = { ...props.rows[rowIndex], [colKey]: value }
-  props.onUpdateRow?.(rowIndex, updated)
+  emit('update-row', rowIndex, updated)
 }
 
 const getInputType = (col: Column): InputType => col.type || 'text'
@@ -82,7 +85,7 @@ const getInputType = (col: Column): InputType => col.type || 'text'
 const getInputClasses = (): string =>
   ['form-control', props.compact ? 'form-control-sm' : ''].filter(Boolean).join(' ')
 
-const onAddRow = () => props.onAddRow?.()
+const onAddRow = () => emit('add-row')
 </script>
 
 <template>

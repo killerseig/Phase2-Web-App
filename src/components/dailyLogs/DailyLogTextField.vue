@@ -5,15 +5,17 @@ const props = defineProps<{
   rows?: number
   placeholder?: string
   disabled?: boolean
-  onInput?: () => void
 }>()
 
-const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+  (e: 'input'): void
+}>()
 
 const handleInput = (event: Event) => {
   const value = (event.target as HTMLTextAreaElement).value
   emit('update:modelValue', value)
-  props.onInput?.()
+  emit('input')
 }
 </script>
 

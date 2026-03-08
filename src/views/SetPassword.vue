@@ -29,8 +29,6 @@ onMounted(async () => {
   const token = route.query.setupToken as string
   const userId = route.query.uid as string
 
-  console.log('[SetPassword] Mounted with params:', { token: token?.substring(0, 10) + '...', userId })
-
   if (!token || !userId) {
     err.value = 'Invalid setup link. Please request a new password creation link.'
     verifying.value = false
@@ -43,11 +41,9 @@ onMounted(async () => {
 
   // Verify the token using Cloud Function
   try {
-    console.log('[SetPassword] Calling verifySetupToken function')
     const verifyTokenFn = httpsCallable(functions, 'verifySetupToken')
     const result = await verifyTokenFn({ uid: userId, setupToken: token })
-    
-    console.log('[SetPassword] Token verified successfully:', (result.data as any).email)
+
     email.value = (result.data as any).email || ''
     verifying.value = false
   } catch (e: any) {

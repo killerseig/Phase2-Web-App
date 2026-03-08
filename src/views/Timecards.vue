@@ -17,7 +17,6 @@ import {
   deleteTimecard,
   listTimecardsByJobAndWeek,
   submitAllWeekTimecards,
-  submitTimecard,
   updateTimecard,
 } from '@/services/Timecards'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
@@ -449,23 +448,6 @@ async function handleDeleteTimecard(timecardId: string, employeeName: string) {
   }
 }
 
-async function handleSubmitTimecard(timecard: TimecardModel) {
-  if (!confirm(`Submit timecard for ${timecard.employeeName}?`)) return
-  saving.value = true
-  err.value = ''
-  try {
-    await submitTimecard(jobId.value, timecard.id)
-    timecard.status = 'submitted'
-    toastRef.value?.show(`Submitted timecard for ${timecard.employeeName}`, 'success')
-    await loadTimecards()
-  } catch (e: any) {
-    err.value = e?.message ?? 'Failed to submit timecard'
-    toastRef.value?.show(err.value, 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
 async function submitAllTimecards() {
   if (!confirm(`Submit all timecards for the week of ${weekRange.value}?`)) return
   submittingAll.value = true
@@ -555,11 +537,6 @@ function startEditingEmployee(timecard: TimecardModel) {
   }
 }
 
-function cancelEditingEmployee() {
-  editingTimecardId.value = null
-  editForm.value = { employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: false }
-}
-
 function toggleEditingEmployee(timecard: TimecardModel) {
   if (editingTimecardId.value === timecard.id) {
     confirmEditingEmployee(timecard)
@@ -639,15 +616,6 @@ function updateAccount(timecard: TimecardModel, index: number, value: string) {
   if (!timecard.jobs) return
   timecard.jobs[index].account = value
   timecard.jobs[index].acct = value
-  autoSave(timecard)
-}
-
-type TimecardDayNumberField = 'hours' | 'production' | 'unitCost' | 'lineTotal'
-
-function updateDayValue(timecard: TimecardModel, jobIndex: number, dayIndex: number, field: TimecardDayNumberField, raw: number) {
-  if (!timecard.jobs || !timecard.jobs[jobIndex] || !timecard.jobs[jobIndex].days) return
-  timecard.jobs[jobIndex].days![dayIndex][field] = raw
-  recalcTotals(timecard)
   autoSave(timecard)
 }
 

@@ -4,8 +4,7 @@ import type { DailyLog } from '@/services'
 const props = defineProps<{
   logs: DailyLog[]
   currentUserId?: string | null
-  onSelect?: (id: string) => void
-  formatTimestamp: (ts?: any) => string
+  formatTimestamp: (ts?: unknown) => string
   title?: string
   selectedId?: string | null
 }>()
@@ -14,7 +13,6 @@ const emit = defineEmits<{ (e: 'select', id: string): void }>()
 
 const handleSelect = (id: string) => {
   emit('select', id)
-  props.onSelect?.(id)
 }
 </script>
 
@@ -32,7 +30,7 @@ const handleSelect = (id: string) => {
           type="button"
           :class="[
             'list-group-item list-group-item-action d-flex justify-content-between align-items-start log-list-item',
-            log.id === props.selectedId ? 'log-list-item-active' : ''
+            log.id === selectedId ? 'log-list-item-active' : ''
           ]"
           @click="handleSelect(log.id)"
         >
