@@ -18,30 +18,17 @@ import {
 import type { Attachment, IndoorClimateReading, ManpowerLine } from '@/types/documents'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { normalizeError } from './serviceUtils'
+import { formatDateTime, toMillis as toMillisFromUnknown } from '@/utils/datetime'
 
 export type DailyLogStatus = 'draft' | 'submitted'
 
 
-export function toMillis(ts: any): number {
-  if (!ts) return 0
-  if (typeof ts === 'number') return ts
-  if (typeof ts === 'string') return new Date(ts).getTime()
-  if (typeof ts?.toMillis === 'function') return ts.toMillis()
-  try {
-    const d = ts.toDate?.() ?? ts
-    const asDate = typeof d === 'string' || typeof d === 'number' ? new Date(d) : d
-    return asDate instanceof Date ? asDate.getTime() : 0
-  } catch {
-    return 0
-  }
+export function toMillis(ts: unknown): number {
+  return toMillisFromUnknown(ts)
 }
 
-export function formatTimestamp(ts: any): string {
-  if (!ts) return ''
-  const date = ts?.toDate?.() ?? ts
-  const parsed = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
-  if (!(parsed instanceof Date) || Number.isNaN(parsed.getTime())) return ''
-  return parsed.toLocaleString()
+export function formatTimestamp(ts: unknown): string {
+  return formatDateTime(ts)
 }
 
 export type DailyLog = {
@@ -79,9 +66,9 @@ export type DailyLog = {
 
   attachments?: Attachment[]
 
-  createdAt?: any
-  updatedAt?: any
-  submittedAt?: any
+  createdAt?: unknown
+  updatedAt?: unknown
+  submittedAt?: unknown
 }
 
 // Draft input does NOT include logDate (we pass it separately)
@@ -400,7 +387,7 @@ export function subscribeToDailyLog(
   jobId: string,
   dailyLogId: string,
   onData: (log: DailyLog) => void,
-  onError?: (error: any) => void
+  onError?: (error: unknown) => void
 ) {
   try {
     assertJobAccess(jobId)

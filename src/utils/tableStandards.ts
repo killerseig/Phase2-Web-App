@@ -45,11 +45,20 @@ export const TABLE_MESSAGES = {
  */
 export interface ValidationRule {
   type: 'required' | 'minLength' | 'maxLength' | 'min' | 'max' | 'email' | 'custom'
-  value?: any
+  value?: unknown
   message: string
 }
 
-export function validateCell(value: any, rules: ValidationRule[]): string | null {
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+export function validateCell(value: unknown, rules: ValidationRule[]): string | null {
   for (const rule of rules) {
     switch (rule.type) {
       case 'required':
@@ -58,32 +67,32 @@ export function validateCell(value: any, rules: ValidationRule[]): string | null
         }
         break
       case 'minLength':
-        if (typeof value === 'string' && value.length < rule.value) {
+        if (typeof value === 'string' && value.length < (toFiniteNumber(rule.value) ?? 0)) {
           return rule.message
         }
         break
       case 'maxLength':
-        if (typeof value === 'string' && value.length > rule.value) {
+        if (typeof value === 'string' && value.length > (toFiniteNumber(rule.value) ?? Number.MAX_SAFE_INTEGER)) {
           return rule.message
         }
         break
       case 'min':
-        if (typeof value === 'number' && value < rule.value) {
+        if (typeof value === 'number' && value < (toFiniteNumber(rule.value) ?? value)) {
           return rule.message
         }
         break
       case 'max':
-        if (typeof value === 'number' && value > rule.value) {
+        if (typeof value === 'number' && value > (toFiniteNumber(rule.value) ?? value)) {
           return rule.message
         }
         break
       case 'email':
-        if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        if (typeof value === 'string' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
           return rule.message
         }
         break
       case 'custom':
-        if (rule.value && !rule.value(value)) {
+        if (typeof rule.value === 'function' && !(rule.value as (cellValue: unknown) => boolean)(value)) {
           return rule.message
         }
         break
@@ -95,19 +104,19 @@ export function validateCell(value: any, rules: ValidationRule[]): string | null
 /**
  * Standard row operations
  */
-export function createEmptyRow<T extends Record<string, any>>(template: T): T {
-  const row: any = {}
+export function createEmptyRow<T extends Record<string, unknown>>(template: T): T {
+  const row: Record<string, unknown> = {}
   for (const key in template) {
     row[key] = typeof template[key] === 'number' ? 0 : ''
   }
   return row as T
 }
 
-export function cloneRow<T extends Record<string, any>>(row: T): T {
+export function cloneRow<T extends Record<string, unknown>>(row: T): T {
   return JSON.parse(JSON.stringify(row))
 }
 
-export function mergeRowUpdates<T extends Record<string, any>>(original: T, updates: Partial<T>): T {
+export function mergeRowUpdates<T extends Record<string, unknown>>(original: T, updates: Partial<T>): T {
   return { ...original, ...updates }
 }
 
@@ -148,8 +157,11 @@ export type TableInputType = 'text' | 'number' | 'email' | 'date' | 'select' | '
 /**
  * Format values for display
  */
-export function formatCellValue(value: any, type: 'currency' | 'percent' | 'date' | 'time' | 'default' = 'default'): string {
+export function formatCellValue(value: unknown, type: 'currency' | 'percent' | 'date' | 'time' | 'default' = 'default'): string {
   if (value === null || value === undefined) return '-'
+  const dateInput = (typeof value === 'string' || typeof value === 'number' || value instanceof Date)
+    ? value
+    : null
   
   switch (type) {
     case 'currency':
@@ -157,9 +169,9 @@ export function formatCellValue(value: any, type: 'currency' | 'percent' | 'date
     case 'percent':
       return `${Number(value).toFixed(1)}%`
     case 'date':
-      return new Date(value).toLocaleDateString()
+      return dateInput ? new Date(dateInput).toLocaleDateString() : '-'
     case 'time':
-      return new Date(value).toLocaleTimeString()
+      return dateInput ? new Date(dateInput).toLocaleTimeString() : '-'
     default:
       return String(value)
   }

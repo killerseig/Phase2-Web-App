@@ -19,8 +19,8 @@ export type SubmittableStatus = 'draft' | 'submitted'
  * Audit Metadata - Track who created/updated documents
  */
 export interface AuditMetadata {
-  createdAt: Timestamp | any // any for backwards compat with serverTimestamp
-  updatedAt: Timestamp | any
+  createdAt: Timestamp | unknown // unknown for backwards compat with serverTimestamp
+  updatedAt: Timestamp | unknown
 }
 
 /**
@@ -38,7 +38,7 @@ export interface Attachment {
   url: string
   path: string
   type?: AttachmentType
-  createdAt?: Timestamp | any
+  createdAt?: Timestamp | unknown
 }
 
 // Manpower line item for daily logs
@@ -61,7 +61,7 @@ export interface IndoorClimateReading {
  */
 export interface SubmittableDocument extends UserTrackedDocument {
   status: SubmittableStatus
-  submittedAt?: Timestamp | any
+  submittedAt?: Timestamp | unknown
 }
 
 /**
@@ -69,21 +69,23 @@ export interface SubmittableDocument extends UserTrackedDocument {
  */
 export interface ApprovableDocument extends UserTrackedDocument {
   status: DocumentStatus
-  submittedAt?: Timestamp | any
-  approvedAt?: Timestamp | any
+  submittedAt?: Timestamp | unknown
+  approvedAt?: Timestamp | unknown
 }
 
 /**
  * Helper to normalize a Firestore doc with defaults
  */
-export function normalizeDoc<T extends Record<string, any>>(
+export function normalizeDoc<T extends Record<string, unknown>>(
   id: string,
-  data: any,
+  data: unknown,
   defaults: Partial<T> = {}
 ): T & { id: string } {
+  const safeData = (data && typeof data === 'object' ? data : {}) as Partial<T>
   return {
     id,
     ...defaults,
-    ...data,
+    ...safeData,
   } as T & { id: string }
 }
+

@@ -239,6 +239,15 @@ import {
 import { addRosterEmployee, listTimecardsByJobAndWeek } from '@/services'
 import type { JobRosterEmployee } from '../../types/models'
 
+type MigrationResults = {
+  timecardsMigrated: number
+  dailyLogsMigrated: number
+  rostersCreated: number
+  startTime: Date
+  endTime: Date | null
+  errors: string[]
+}
+
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
 
@@ -247,14 +256,21 @@ const migrationStarted = ref(false)
 const migrationInProgress = ref(false)
 const migrationComplete = ref(false)
 const migrationError = ref('')
-const migrationResults = ref<any>({})
+const migrationResults = ref<MigrationResults>({
+  timecardsMigrated: 0,
+  dailyLogsMigrated: 0,
+  rostersCreated: 0,
+  startTime: new Date(),
+  endTime: null,
+  errors: [],
+})
 const migrationStartTime = ref<Date | null>(null)
 
 // Export state
 const selectedJobId = ref('')
 const selectedWeekDate = ref('')
 const plexisExportData = ref('')
-const datePickerConfig = ref<any>({
+const datePickerConfig = ref({
   dateFormat: 'Y-m-d',
   disableMobile: true,
   prevArrow: '<i class="bi bi-chevron-left"></i>',
@@ -263,7 +279,7 @@ const datePickerConfig = ref<any>({
 
 // Import state
 const selectedJobIdForImport = ref('')
-const csvValidation = ref<any>(null)
+const csvValidation = ref<ReturnType<typeof validatePlexisCsv> | null>(null)
 const importedEmployees = ref<JobRosterEmployee[]>([])
 const importInProgress = ref(false)
 const importStatus = ref<{ success: boolean; message: string } | null>(null)
@@ -290,7 +306,7 @@ async function runMigration() {
     migrationComplete.value = true
     migrationStarted.value = true
     toastRef.value?.show('Migration completed successfully', 'success')
-  } catch (error: any) {
+  } catch (error) {
     migrationError.value = error?.message ?? 'Migration failed'
     toastRef.value?.show('Migration failed', 'error')
   } finally {
@@ -306,7 +322,7 @@ async function verifyMigration() {
     } else {
       toastRef.value?.show('Migration verification failed', 'warning')
     }
-  } catch (error: any) {
+  } catch (error) {
     toastRef.value?.show('Verification error', 'error')
   }
 }
@@ -328,7 +344,7 @@ async function exportToPlexis() {
 
     downloadCsv(csvContent, `plexis-timecards-${selectedWeekDate.value}.csv`)
     toastRef.value?.show('Timecards exported to Plexis', 'success')
-  } catch (error: any) {
+  } catch (error) {
     toastRef.value?.show(error?.message ?? 'Export failed', 'error')
   }
 }
@@ -377,7 +393,7 @@ async function importFromPlexis() {
       message: `Successfully imported ${imported}/${importedEmployees.value.length} employees`,
     }
     toastRef.value?.show('Employees imported successfully', 'success')
-  } catch (error: any) {
+  } catch (error) {
     importStatus.value = {
       success: false,
       message: error?.message ?? 'Import failed',
@@ -426,3 +442,4 @@ pre {
   margin-top: 10px;
 }
 </style>
+

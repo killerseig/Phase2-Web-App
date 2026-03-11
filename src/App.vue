@@ -7,6 +7,7 @@
       <router-view />
     </AppShell>
     <router-view v-else />
+    <GlobalConfirmModal />
   </template>
 </template>
 
@@ -14,6 +15,7 @@
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
 import AppShell from './components/layout/AppShell.vue'
+import GlobalConfirmModal from './components/common/GlobalConfirmModal.vue'
 import { useAuthStore } from './stores/auth'
 
 const $route = useRoute()
@@ -21,11 +23,7 @@ const auth = useAuthStore()
 
 const isAuthReady = computed(() => auth.ready)
 
-const isPublicRoute = computed(() => {
-  const routeName = $route.name as string | undefined
-  const explicitPublic = ($route.meta?.public as boolean) ?? false
-  return explicitPublic || ['login', 'signup', 'set-password'].includes(routeName || '')
-})
+const isPublicRoute = computed(() => (($route.meta?.public as boolean) ?? false))
 </script>
 
 <style scoped lang="scss">

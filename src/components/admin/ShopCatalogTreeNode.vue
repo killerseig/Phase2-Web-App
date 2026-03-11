@@ -25,7 +25,7 @@ const emit = defineEmits<{
   'add-child': [parentId: string]
   'add-item': [categoryId: string]
   'edit-item': [item: ShopCatalogItem]
-  'save-item': [itemId: string, updates: { description?: string; sku?: string; price?: number }]
+  'save-item': [itemId: string, updates: { description?: string; sku?: string | null; price?: number | null }]
   'delete-item': [item: ShopCatalogItem]
   'edit-category': [id: string]
   'save-category': [id: string, name: string]
@@ -36,7 +36,7 @@ const emit = defineEmits<{
   'archive-item': [item: ShopCatalogItem]
   'reactivate-item': [item: ShopCatalogItem]
   'delete-category': [id: string]
-  'select-for-order': [item: ShopCatalogItem]
+  'select-for-order': [item: ShopCatalogItem | { id: string; description: string; quantity: number }]
   'update:catalogItemQty': [payload: { id: string; qty: number }]
   'update:editCategoryName': [name: string]
 }>()
@@ -125,14 +125,15 @@ function toggleActions() {
   }
 }
 
-function handleSelectForOrder() {
-  if (item.value) emit('select-for-order', item.value)
-}
-
 function handleCatalogQtyInput(categoryItemId: string, event: Event) {
   const rawValue = Number((event.target as HTMLInputElement).value)
   const qty = Math.max(1, Math.floor(rawValue || 1))
   emit('update:catalogItemQty', { id: categoryItemId, qty })
+}
+
+function handleSelectCategoryForOrder(categoryId: string, categoryName: string) {
+  const qty = props.catalogItemQtys?.[categoryId] || 1
+  emit('select-for-order', { id: categoryId, description: categoryName, quantity: qty })
 }
 
 function handleEditItem() {
@@ -151,7 +152,9 @@ function handleSaveItem() {
   if (!item.value || !editDesc.value.trim()) return
 
   isSaving.value = true
-  const updates: any = { description: editDesc.value.trim() }
+  const updates: { description: string; sku?: string | null; price?: number | null } = {
+    description: editDesc.value.trim(),
+  }
 
   const skuValue = editSku.value.trim()
   if (skuValue !== editSkuOriginal.value.trim()) {
@@ -166,16 +169,6 @@ function handleSaveItem() {
   setTimeout(() => {
     isSaving.value = false
   }, 500)
-}
-
-function handleCancelEdit() {
-  editDesc.value = ''
-  editSku.value = ''
-  editPrice.value = ''
-  editDescOriginal.value = ''
-  editSkuOriginal.value = ''
-  editPriceOriginal.value = ''
-  emit('cancel-item-edit')
 }
 
 function handleNodeHeaderClick(event: MouseEvent) {
@@ -277,7 +270,7 @@ function runAccordionLeave(el: HTMLElement) {
         />
         <button
           class="btn btn-sm btn-success"
-          @click.stop="() => { const qty = catalogItemQtys?.[category.id] || 1; emit('select-for-order', { id: category.id, description: category.name, quantity: qty } as any) }"
+          @click.stop="handleSelectCategoryForOrder(category.id, category.name)"
           title="Add to order"
         >
           <i class="bi bi-plus-circle"></i>

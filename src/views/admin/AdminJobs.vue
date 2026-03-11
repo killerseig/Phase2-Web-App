@@ -9,10 +9,11 @@ import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
 import BaseTable from '../../components/common/BaseTable.vue'
 import { useJobsStore } from '../../stores/jobs'
 import { useUsersStore } from '../../stores/users'
-import type { Job } from '@/services'
+import type { Job, UserProfile } from '@/services'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 import { listSubmittedTimecards, listTimecardsByJobAndWeek } from '@/services/Timecards'
 import { downloadCsv } from '@/utils/plexisIntegration'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 type Align = 'start' | 'center' | 'end'
 type Column = { key: string; label: string; sortable?: boolean; width?: string; align?: Align; slot?: string }
@@ -23,6 +24,7 @@ type JobSortKey = 'code' | 'name' | 'projectManager' | 'foreman' | 'gc' | 'jobAd
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
 const usersStore = useUsersStore()
+const { confirm } = useConfirmDialog()
 
 // Jobs state from store
 const jobs = computed(() => jobsStore.allJobs)
@@ -49,6 +51,7 @@ const jobColumns: Column[] = [
 
 const jobSortKey = ref<JobSortKey>('name')
 const jobSortDir = ref<SortDir>('asc')
+type NonStatusSortKey = Exclude<JobSortKey, 'status'>
 
 const orderedJobs = computed(() =>
   [...jobsStore.allJobs].sort((a, b) => {
@@ -71,8 +74,9 @@ const sortedJobs = computed(() => {
       if (a.active === b.active) return 0
       return a.active ? -dir : dir
     }
-    const aVal = normalize((a as any)[key])
-    const bVal = normalize((b as any)[key])
+    const sortKey = key as NonStatusSortKey
+    const aVal = normalize(a[sortKey])
+    const bVal = normalize(b[sortKey])
     if (aVal === bVal) return 0
     return aVal > bVal ? dir : -dir
   })
@@ -118,7 +122,7 @@ const editingJobSaving = ref(false)
 // Computed foreman users
 const foremanUsers = computed(() => usersStore.allUsers.filter(u => u.role === 'foreman' && u.active))
 
-const foremanDisplayName = (user: any) => `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || ''
+const foremanDisplayName = (user: UserProfile) => `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || ''
 
 const currentWeekStart = computed(() => snapToSunday(new Date()))
 const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.value))
@@ -210,14 +214,20 @@ async function exportAllSubmittedAllJobs(weekEndingInput?: string | Date | null)
 
     downloadCsv(toCsv(headers, rows), filename)
     toastRef.value?.show('Exported submitted timecards', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show(e?.message ?? 'Failed to export timecards', 'error')
   }
 }
 
-function formatErr(e: any) {
-  const msg = e?.message ? String(e.message) : String(e)
+function formatErr(e: unknown) {
+  const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message ?? e) : String(e)
   return msg
+}
+
+function asText(value: unknown, fallback = '—'): string {
+  if (value === null || value === undefined) return fallback
+  const text = String(value).trim()
+  return text ? text : fallback
 }
 
 async function loadJobs() {
@@ -304,7 +314,7 @@ async function saveInlineJob(job: Job) {
       type: editingJobType.value,
     })
     toastRef.value?.show('Job updated', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show(e?.message ?? 'Failed to update job', 'error')
   } finally {
     editingJobSaving.value = false
@@ -362,7 +372,7 @@ async function submitJobForm() {
       type: 'general',
     }
     await loadJobs()
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show(formatErr(e), 'error')
   } finally {
     creatingJob.value = false
@@ -389,26 +399,22 @@ function cancelJobForm() {
   showJobForm.value = false
 }
 
-async function handleEditJob(job: Job) {
-  const newName = prompt('Edit job name:', job.name)
-  if (!newName || newName === job.name) return
-
-  try {
-    await jobsStore.updateJob(job.id, { name: newName })
-    toastRef.value?.show('Job updated', 'success')
-  } catch (e: any) {
-    toastRef.value?.show('Failed to update job', 'error')
-  }
-}
-
 async function handleDeleteJob(job: Job) {
-  if (!confirm(`Delete "${job.name}"? This action cannot be undone and will remove all associated data (daily logs, timecards, orders, etc.).`)) return
+  const confirmed = await confirm(
+    `Delete "${job.name}"? This action cannot be undone and will remove all associated data (daily logs, timecards, orders, etc.).`,
+    {
+      title: 'Delete Job',
+      confirmText: 'Delete',
+      variant: 'danger',
+    }
+  )
+  if (!confirmed) return
 
   try {
     await jobsStore.deleteJob(job.id)
     toastRef.value?.show('Job deleted', 'success')
     await loadJobs()
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to delete job', 'error')
   }
 }
@@ -419,7 +425,7 @@ async function toggleArchive(job: Job, active: boolean) {
     await jobsStore.setJobActive(job.id, active)
     toastRef.value?.show(active ? 'Job restored' : 'Job archived', 'success')
     await loadJobs()
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show(e?.message ?? 'Failed to update job status', 'error')
   } finally {
     togglingJobId.value = ''
@@ -583,7 +589,7 @@ onMounted(async () => {
                 />
               </template>
               <template v-else>
-                <span class="cell-ellipsis" :title="row.name">{{ row.name }}</span>
+                <span class="cell-ellipsis" :title="asText(row.name, '')">{{ asText(row.name) }}</span>
               </template>
             </template>
 
@@ -617,7 +623,7 @@ onMounted(async () => {
                 />
               </template>
               <template v-else>
-                <span class="cell-ellipsis" :title="row.projectManager || '—'">{{ row.projectManager || '—' }}</span>
+                <span class="cell-ellipsis" :title="asText(row.projectManager)">{{ asText(row.projectManager) }}</span>
               </template>
             </template>
 
@@ -637,7 +643,7 @@ onMounted(async () => {
                 </select>
               </template>
               <template v-else>
-                <span class="cell-ellipsis" :title="row.foreman || '—'">{{ row.foreman || '—' }}</span>
+                <span class="cell-ellipsis" :title="asText(row.foreman)">{{ asText(row.foreman) }}</span>
               </template>
             </template>
 
@@ -654,7 +660,7 @@ onMounted(async () => {
                 />
               </template>
               <template v-else>
-                <span class="cell-ellipsis" :title="row.gc || '—'">{{ row.gc || '—' }}</span>
+                <span class="cell-ellipsis" :title="asText(row.gc)">{{ asText(row.gc) }}</span>
               </template>
             </template>
 
@@ -671,7 +677,7 @@ onMounted(async () => {
                 />
               </template>
               <template v-else>
-                <span class="cell-ellipsis" :title="row.jobAddress || '—'">{{ row.jobAddress || '—' }}</span>
+                <span class="cell-ellipsis" :title="asText(row.jobAddress)">{{ asText(row.jobAddress) }}</span>
               </template>
             </template>
 
@@ -866,3 +872,4 @@ onMounted(async () => {
   white-space: nowrap;
 }
 </style>
+

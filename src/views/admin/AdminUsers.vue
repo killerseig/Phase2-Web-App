@@ -8,9 +8,9 @@ import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
 import BaseTable from '../../components/common/BaseTable.vue'
 import { useUsersStore } from '../../stores/users'
 import { useEmployeesStore } from '../../stores/employees'
-import { useAuthStore } from '../../stores/auth'
 import { type Employee, type UserProfile } from '@/services'
 import { type Role } from '@/constants/app'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 type Align = 'start' | 'center' | 'end'
 type Column = { key: string; label: string; sortable?: boolean; width?: string; align?: Align; slot?: string }
@@ -19,9 +19,9 @@ type SortDir = 'asc' | 'desc'
 type UserSortKey = 'email' | 'firstName' | 'lastName' | 'role'
 
 const route = useRoute()
-const auth = useAuthStore()
 const usersStore = useUsersStore()
 const employeesStore = useEmployeesStore()
+const { confirm } = useConfirmDialog()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 const activeTab = ref<'users' | 'employees'>(route.query.tab === 'employees' ? 'employees' : 'users')
@@ -106,8 +106,8 @@ const sortedUsers = computed(() => {
     return String(val).toLowerCase()
   }
   return [...users.value].sort((a, b) => {
-    const aVal = normalize((a as any)[key])
-    const bVal = normalize((b as any)[key])
+    const aVal = normalize(a[key])
+    const bVal = normalize(b[key])
     if (aVal === bVal) return 0
     return aVal > bVal ? dir : -dir
   })
@@ -138,8 +138,8 @@ const sortedEmployees = computed(() => {
     return String(val).toLowerCase()
   }
   return [...employees.value].sort((a, b) => {
-    const aVal = normalize((a as any)[key])
-    const bVal = normalize((b as any)[key])
+    const aVal = normalize(a[key])
+    const bVal = normalize(b[key])
     if (aVal === bVal) return 0
     return aVal > bVal ? dir : -dir
   })
@@ -178,7 +178,7 @@ async function submitUserForm() {
     showUserForm.value = false
     resetUserForm()
     await loadUsers()
-  } catch (e: any) {
+  } catch (e) {
     const msg = e?.message ?? String(e)
     toastRef.value?.show(friendlyError(msg), 'error')
   } finally {
@@ -226,7 +226,7 @@ async function saveUserEdit(user: UserProfile, closeActions = false) {
 
   savingUserEdit.value = true
   try {
-    const updates: Record<string, any> = {}
+    const updates: Partial<Pick<UserProfile, 'firstName' | 'lastName' | 'role'>> = {}
     if (editUserForm.value.firstName.trim() !== editUserFormOriginal.value.firstName) {
       updates.firstName = editUserForm.value.firstName.trim()
     }
@@ -243,7 +243,7 @@ async function saveUserEdit(user: UserProfile, closeActions = false) {
     clearUserEdit()
     if (closeActions) activeUserActionsId.value = ''
     return true
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to update user', 'error')
     return false
   } finally {
@@ -258,7 +258,15 @@ function cancelUserEdit() {
 
 async function handleDeleteUser(user: UserProfile) {
   const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
-  if (!confirm(`Delete "${name}"? This cannot be undone and will also remove them from email recipient lists.`)) return
+  const confirmed = await confirm(
+    `Delete "${name}"? This cannot be undone and will also remove them from email recipient lists.`,
+    {
+      title: 'Delete User',
+      confirmText: 'Delete',
+      variant: 'danger',
+    }
+  )
+  if (!confirmed) return
 
   try {
     const result = await usersStore.deleteUser(user.id)
@@ -271,7 +279,7 @@ async function handleDeleteUser(user: UserProfile) {
     if (activeUserActionsId.value === user.id) {
       cancelUserEdit()
     }
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to delete user', 'error')
   }
 }
@@ -308,7 +316,7 @@ async function submitEmployeeForm() {
     showEmployeeForm.value = false
     resetEmployeeForm()
     await loadEmployees()
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to create employee', 'error')
   } finally {
     creatingEmployee.value = false
@@ -344,7 +352,7 @@ async function saveEmployeeEdit(emp: Employee, closeActions = false) {
   if (editingEmployeeId.value !== emp.id) return true
   savingEmployeeEdit.value = true
   try {
-    const updates: Record<string, any> = {}
+    const updates: Partial<Pick<Employee, 'firstName' | 'lastName' | 'employeeNumber' | 'occupation'>> = {}
     if (editForm.value.firstName !== editFormOriginal.value.firstName) {
       updates.firstName = editForm.value.firstName
     }
@@ -364,7 +372,7 @@ async function saveEmployeeEdit(emp: Employee, closeActions = false) {
     editingEmployeeId.value = null
     if (closeActions) activeEmployeeActionsId.value = ''
     return true
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to update employee', 'error')
     return false
   } finally {
@@ -381,7 +389,12 @@ function cancelEmployeeEdit() {
 
 async function handleDeleteEmployee(emp: Employee) {
   const name = `${emp.firstName} ${emp.lastName}`
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
+  const confirmed = await confirm(`Delete "${name}"? This cannot be undone.`, {
+    title: 'Delete Employee',
+    confirmText: 'Delete',
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   try {
     await employeesStore.deleteEmployee(emp.id)
@@ -389,7 +402,7 @@ async function handleDeleteEmployee(emp: Employee) {
     if (activeEmployeeActionsId.value === emp.id) {
       cancelEmployeeEdit()
     }
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to delete employee', 'error')
   }
 }
@@ -821,3 +834,4 @@ onMounted(() => {
   color: $primary;
 }
 </style>
+

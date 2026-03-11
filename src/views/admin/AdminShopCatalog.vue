@@ -4,13 +4,15 @@ import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import ShopCatalogTreeNode from '../../components/admin/ShopCatalogTreeNode.vue'
 import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
-import { useShopCategoriesStore } from '../../stores/shopCategories'
+import { useShopCategoriesStore, type CategoryNode } from '../../stores/shopCategories'
 import { useShopCatalogStore } from '../../stores/shopCatalog'
 import type { ShopCatalogItem } from '@/services'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const categoriesStore = useShopCategoriesStore()
 const catalogStore = useShopCatalogStore()
+const { confirm } = useConfirmDialog()
 
 const saving = ref(false)
 const downloading = ref(false)
@@ -31,11 +33,7 @@ const savingCategoryEdit = ref(false)
 const searchQuery = ref('')
 
 // Computed
-const categoryTree = computed(() => categoriesStore.fullTree)
 const allItems = computed(() => catalogStore.allItems)
-const uncategorizedItems = computed(() => 
-  allItems.value.filter(item => !item.categoryId).map(item => `item-${item.id}`)
-)
 const loading = computed(() => categoriesStore.isLoading || catalogStore.isLoading)
 const err = computed(() => categoriesStore.error || catalogStore.error || '')
 
@@ -86,24 +84,8 @@ const categoryHasMatchingDescendants = (categoryId: string, depth: number = 0): 
   return children.some(child => categoryHasMatchingItems(child.id, depth + 1))
 }
 
-const filteredItems = computed(() => {
-  const query = searchQuery.value.toLowerCase()
-  if (!query) return allItems.value
-  
-  return allItems.value.filter(item => itemMatchesSearch(item))
-})
-
-const filteredCategories = computed(() => {
-  const query = searchQuery.value.toLowerCase()
-  if (!query) return categoriesStore.categories
-  
-  return categoriesStore.categories.filter(cat =>
-    cat.name.toLowerCase().includes(query)
-  )
-})
-
 // Recursively filter tree to only include categories that should be visible
-const filterCategoryTree = (tree: any[]): any[] => {
+const filterCategoryTree = (tree: CategoryNode[]): CategoryNode[] => {
   return tree
     .filter(cat => {
       if (!searchQuery.value.trim()) return true
@@ -122,13 +104,6 @@ const filteredUncategorizedItems = computed(() => {
   return allItems.value
     .filter(item => !item.categoryId && itemMatchesSearch(item))
     .map(item => `item-${item.id}`)
-})
-
-const hasMatchingItems = computed(() => {
-  const itemIds = new Set(filteredItems.value.map(i => i.id))
-  const categoryIds = new Set(filteredCategories.value.map(c => c.id))
-  
-  return { itemIds, categoryIds }
 })
 
 async function loadAll() {
@@ -265,7 +240,7 @@ async function createCategory() {
     if (parentId.value) {
       expandedNodes.value.add(parentId.value)
     }
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to create category', 'error')
   } finally {
     saving.value = false
@@ -288,7 +263,7 @@ async function createItem() {
     newItemPrice.value = ''
     toastRef.value?.show('Item added', 'success')
     showAddItemForm.value = false
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to add item', 'error')
   } finally {
     saving.value = false
@@ -311,7 +286,7 @@ async function archiveCategory(categoryId: string) {
   try {
     await categoriesStore.archiveCategory(categoryId)
     toastRef.value?.show(`Archived "${cat.name}"`, 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to archive category', 'error')
   } finally {
     saving.value = false
@@ -358,7 +333,7 @@ async function reactivateCategory(categoryId: string) {
   try {
     await reactivateRecursive(categoryId)
     toastRef.value?.show(`Reactivated "${cat.name}"`, 'success')
-  } catch (e: any) {
+  } catch (e) {
     console.error('[AdminShopCatalog] Error reactivating category:', e)
     toastRef.value?.show('Failed to reactivate category', 'error')
   } finally {
@@ -393,7 +368,12 @@ async function deleteCategory(categoryId: string) {
   const confirmMessage = totalDescendants > 0
     ? `Delete "${cat.name}" and ${totalDescendants} descendant item(s)/category(ies)? This cannot be undone.`
     : `Delete "${cat.name}"? This cannot be undone.`
-  if (!confirm(confirmMessage)) return
+  const confirmed = await confirm(confirmMessage, {
+    title: 'Delete Category',
+    confirmText: 'Delete',
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   saving.value = true
   try {
@@ -410,7 +390,7 @@ async function deleteCategory(categoryId: string) {
     // Delete selected category
     await categoriesStore.deleteCategory(categoryId)
     toastRef.value?.show(`Deleted "${cat.name}"${totalDescendants ? ` with ${totalDescendants} descendants` : ''}`, 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to delete category', 'error')
   } finally {
     saving.value = false
@@ -427,7 +407,7 @@ async function saveItemFromTree(itemId: string, updates: { description?: string;
     await catalogStore.updateItem(itemId, updates)
     toastRef.value?.show('Item updated', 'success')
     editingItemId.value = null
-  } catch (e: any) {
+  } catch (e) {
     console.error('Failed to update item:', e)
     toastRef.value?.show(`Failed to update item: ${e?.message ?? 'Unknown error'}`, 'error')
   } finally {
@@ -459,7 +439,7 @@ async function saveCategoryEdit(categoryId: string) {
   try {
     await categoriesStore.updateCategory(categoryId, { name: editCategoryName.value.trim() })
     toastRef.value?.show('Category updated', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to update category', 'error')
   } finally {
     savingCategoryEdit.value = false
@@ -506,7 +486,12 @@ async function deleteItem(item: ShopCatalogItem) {
   const confirmMessage = cascadeCount > 0
     ? `Delete "${item.description}" and ${cascadeCount} descendant item(s)/category(ies)? This cannot be undone.`
     : `Delete "${item.description}"? This cannot be undone.`
-  if (!confirm(confirmMessage)) return
+  const confirmed = await confirm(confirmMessage, {
+    title: 'Delete Item',
+    confirmText: 'Delete',
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   saving.value = true
   try {
@@ -523,7 +508,7 @@ async function deleteItem(item: ShopCatalogItem) {
     // Delete selected item
     await catalogStore.deleteItem(item.id)
     toastRef.value?.show(cascadeCount > 0 ? `Item and ${cascadeCount} descendants deleted` : 'Item deleted', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to delete item', 'error')
   } finally {
     saving.value = false
@@ -535,7 +520,6 @@ async function archiveItem(item: ShopCatalogItem) {
   try {
     // Get all child categories of this item
     const childCategories = categoriesStore.categories.filter(c => c.parentId === `item-${item.id}`)
-    const allToArchive = [item.id, ...childCategories.map(c => c.id)]
     
     // Archive the item
     await catalogStore.setItemActive(item.id, false)
@@ -546,7 +530,7 @@ async function archiveItem(item: ShopCatalogItem) {
     }
     
     toastRef.value?.show(`Archived "${item.description}" and ${childCategories.length} subcategories`, 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to archive item', 'error')
   } finally {
     saving.value = false
@@ -559,7 +543,7 @@ async function reactivateItem(item: ShopCatalogItem) {
     // Just reactivate the item - children stay archived
     await catalogStore.setItemActive(item.id, true)
     toastRef.value?.show(`Reactivated "${item.description}"`, 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to reactivate item', 'error')
   } finally {
     saving.value = false
@@ -690,7 +674,7 @@ async function downloadCatalog() {
     link.download = 'shop-catalog.csv'
     link.click()
     URL.revokeObjectURL(url)
-  } catch (e: any) {
+  } catch (e) {
     console.error('[AdminShopCatalog] Failed to download catalog', e)
     toastRef.value?.show('Failed to download catalog', 'error')
   } finally {
@@ -995,3 +979,4 @@ $select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);
   background-color: $surface-3;
 }
 </style>
+

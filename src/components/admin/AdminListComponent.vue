@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
+type ListItem = Record<string, unknown> & { id?: string | number }
+
 interface Column {
   key: string
   label: string
   sortable?: boolean
   class?: string
-  format?: (value: any) => string
+  format?: (value: unknown) => string
 }
 
 interface Props {
-  items: any[]
+  items: ListItem[]
   columns: Column[]
   searchable?: boolean
   searchFields?: string[]
@@ -21,8 +23,8 @@ interface Props {
 }
 
 interface Emits {
-  edit: [item: any]
-  delete: [item: any]
+  edit: [item: ListItem]
+  delete: [item: ListItem]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -39,6 +41,10 @@ const emit = defineEmits<Emits>()
 const searchQuery = ref('')
 const sortKey = ref<string | null>(null)
 const sortOrder = ref<'asc' | 'desc'>('asc')
+
+const normalizeSortValue = (value: unknown): number | string => {
+  return typeof value === 'number' ? value : String(value ?? '')
+}
 
 const filteredItems = computed(() => {
   let result = [...props.items]
@@ -57,8 +63,8 @@ const filteredItems = computed(() => {
   // Sort
   if (sortKey.value) {
     result.sort((a, b) => {
-      const aVal = a[sortKey.value!]
-      const bVal = b[sortKey.value!]
+      const aVal = normalizeSortValue(a[sortKey.value!])
+      const bVal = normalizeSortValue(b[sortKey.value!])
 
       if (aVal < bVal) return sortOrder.value === 'asc' ? -1 : 1
       if (aVal > bVal) return sortOrder.value === 'asc' ? 1 : -1
@@ -78,7 +84,7 @@ function toggleSort(key: string) {
   }
 }
 
-function getCellValue(item: any, key: string) {
+function getCellValue(item: ListItem, key: string) {
   const column = props.columns.find(c => c.key === key)
   const value = item[key]
   return column?.format ? column.format(value) : value

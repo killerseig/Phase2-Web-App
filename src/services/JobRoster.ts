@@ -15,7 +15,6 @@ import {
   query,
   serverTimestamp,
   updateDoc,
-  Timestamp,
   type DocumentData,
 } from 'firebase/firestore'
 import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
@@ -72,7 +71,7 @@ export async function listRosterEmployees(jobId: string): Promise<JobRosterEmplo
     )
     const snap = await getDocs(q)
     return snap.docs.map(d => normalize(d.id, d.data()))
-  } catch (e: any) {
+  } catch (e) {
     // Fallback to client-side sorting if composite index missing
     if (e.code === 'failed-precondition' || e.message?.includes('composite index')) {
       const q = query(collection(db, `jobs/${jobId}/roster`))
@@ -177,7 +176,7 @@ export async function updateRosterEmployee(
     }
     
     const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
-    const payload: any = {}
+    const payload: Record<string, unknown> = {}
     
     if ('employeeNumber' in updates) payload.employeeNumber = updates.employeeNumber?.trim()
     if ('firstName' in updates) payload.firstName = updates.firstName?.trim()
@@ -320,3 +319,4 @@ export async function exportRosterToCsv(jobId: string): Promise<string> {
     throw new Error(normalizeError(err, 'Failed to export roster'))
   }
 }
+

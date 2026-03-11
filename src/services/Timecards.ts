@@ -298,10 +298,10 @@ export async function updateTimecard(
 ): Promise<void> {
   try {
     assertJobAccess(jobId)
-    const u = requireUser()
+    requireUser()
     const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
 
-    const payload: any = {}
+    const payload: Record<string, unknown> = {}
 
     if ('days' in updates && updates.days) {
       payload.days = updates.days
@@ -779,7 +779,7 @@ export async function getWeeklyStats(
 export async function listTimecardsByJobAndWeekLegacy(
   jobId: string,
   weekStart: string,
-  onUpdate: (timecards: any[]) => void
+  onUpdate: (timecards: Timecard[]) => void
 ): Promise<Unsubscribe> {
   try {
     assertJobAccess(jobId)
@@ -815,11 +815,26 @@ export type TimecardLine = {
   note?: string
 }
 
+export type LegacyTimecardInput = {
+  weekEnding: string
+  employeeId: string
+  employeeName: string
+  occupation: string
+  notes?: string
+  sun?: number
+  mon?: number
+  tue?: number
+  wed?: number
+  thu?: number
+  fri?: number
+  sat?: number
+}
+
 /**
  * @deprecated Use createTimecard instead (new API)
  * Legacy wrapper for old upsertTimecard function
  */
-export async function upsertTimecard(jobId: string, input: any): Promise<string> {
+export async function upsertTimecard(jobId: string, input: LegacyTimecardInput): Promise<string> {
   try {
     assertJobAccess(jobId)
     // Map old format to new

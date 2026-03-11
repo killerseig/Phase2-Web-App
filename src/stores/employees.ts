@@ -7,6 +7,7 @@ import {
   listEmployeesByJob as listEmployeesByJobService,
   updateEmployee as updateEmployeeService,
   type Employee,
+  type EmployeeInput,
 } from '@/services'
 
 export const useEmployeesStore = defineStore('employees', () => {
@@ -27,7 +28,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     error.value = null
     try {
       employees.value = await listAllEmployeesService()
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load employees'
       console.error('[Employees Store] Error loading employees:', e)
     } finally {
@@ -42,7 +43,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       const jobEmployees = await listEmployeesByJobService(jobId)
       employeesByJob.value.set(jobId, jobEmployees)
       return jobEmployees
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load employees for job'
       console.error('[Employees Store] Error loading employees by job:', e)
       return []
@@ -55,7 +56,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     return employeesByJob.value.get(jobId) ?? []
   }
 
-  async function createEmployee(jobId: string | null, input: any) {
+  async function createEmployee(jobId: string | null, input: Omit<EmployeeInput, 'jobId'>) {
     loading.value = true
     error.value = null
     try {
@@ -69,7 +70,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       const newEmployee = employees.value.find(e => e.id === employeeId)
       if (!newEmployee) throw new Error('Failed to retrieve created employee')
       return newEmployee
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to create employee'
       console.error('[Employees Store] Error creating employee:', e)
       throw e
@@ -78,7 +79,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     }
   }
 
-  async function updateEmployee(employeeId: string, updates: any) {
+  async function updateEmployee(employeeId: string, updates: Partial<Omit<EmployeeInput, 'jobId'>>) {
     error.value = null
     try {
       await updateEmployeeService(employeeId, updates)
@@ -89,18 +90,8 @@ export const useEmployeesStore = defineStore('employees', () => {
         const old = employees.value[idx]
         const updated = { ...old, ...updates }
         employees.value[idx] = updated
-        
-        // Update job-specific list if job changed
-        if (old.jobId && old.jobId !== updates.jobId) {
-          const oldList = employeesByJob.value.get(old.jobId) ?? []
-          employeesByJob.value.set(old.jobId, oldList.filter(e => e.id !== employeeId))
-        }
-        if (updates.jobId) {
-          const newList = employeesByJob.value.get(updates.jobId) ?? []
-          employeesByJob.value.set(updates.jobId, [...newList, updated])
-        }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update employee'
       console.error('[Employees Store] Error updating employee:', e)
       throw e
@@ -123,7 +114,7 @@ export const useEmployeesStore = defineStore('employees', () => {
         const jobList = employeesByJob.value.get(emp.jobId) ?? []
         employeesByJob.value.set(emp.jobId, jobList.filter(e => e.id !== employeeId))
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to delete employee'
       console.error('[Employees Store] Error deleting employee:', e)
       throw e
@@ -165,3 +156,4 @@ export const useEmployeesStore = defineStore('employees', () => {
     resetStore,
   }
 })
+

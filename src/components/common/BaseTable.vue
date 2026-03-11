@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="TRow extends Record<string, unknown>">
 import { computed } from 'vue'
 
 type Align = 'start' | 'center' | 'end'
@@ -13,11 +13,12 @@ type Column = {
 }
 
 type SortDir = 'asc' | 'desc'
+type TableRow = TRow & { id?: string | number }
 
 const props = defineProps<{
-  rows: any[]
+  rows: TableRow[]
   columns: Column[]
-  rowKey?: string
+  rowKey?: keyof TableRow & string
   striped?: boolean
   hover?: boolean
   small?: boolean
@@ -80,14 +81,28 @@ function sortIcon(col: Column) {
   return currentSortDir.value === 'asc' ? 'bi bi-sort-down-alt' : 'bi bi-sort-up'
 }
 
-function rowId(row: any, index: number) {
-  if (props.rowKey && row && row[props.rowKey] !== undefined) return row[props.rowKey]
-  if (row && row.id !== undefined) return row.id
+const toRowKey = (value: unknown): PropertyKey | null => {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'symbol') {
+    return value
+  }
+  return null
+}
+
+function rowId(row: TableRow, index: number) {
+  if (props.rowKey && row) {
+    const keyValue = toRowKey(row[props.rowKey as keyof TableRow])
+    if (keyValue !== null) return keyValue
+  }
+  if (row) {
+    const idValue = toRowKey(row.id)
+    if (idValue !== null) return idValue
+  }
   return index
 }
 
-function cellValue(row: any, key: string) {
-  return row ? row[key] : undefined
+function cellValue(row: TableRow, key: string) {
+  if (!row || !(key in row)) return undefined
+  return row[key as keyof TableRow]
 }
 </script>
 

@@ -30,7 +30,7 @@ export interface UserProfile {
   lastName: string | null
   role: UserRole
   active: boolean
-  createdAt?: any
+  createdAt?: unknown
 }
 
 // ============================================================================
@@ -43,8 +43,8 @@ export interface Job {
   name: string
   address: string
   status: 'active' | 'inactive' | 'completed'
-  createdAt: any
-  updatedAt: any
+  createdAt: unknown
+  updatedAt: unknown
 }
 
 // ============================================================================
@@ -57,8 +57,8 @@ export interface Employee {
   lastName: string
   employeeNumber?: string
   occupation: string
-  createdAt: any
-  updatedAt: any
+  createdAt: unknown
+  updatedAt: unknown
 }
 
 export type EmployeeInput = Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>
@@ -80,7 +80,7 @@ export interface DailyLogAttachment {
   url: string
   path?: string
   type?: string
-  createdAt?: any
+  createdAt?: unknown
 }
 
 export interface DailyLog {
@@ -108,8 +108,8 @@ export interface DailyLog {
   actionItems: string
   attachments: DailyLogAttachment[]
   createdBy: string
-  createdAt: any
-  updatedAt: any
+  createdAt: unknown
+  updatedAt: unknown
 }
 
 export type DailyLogDraftInput = Omit<
@@ -145,11 +145,11 @@ export interface Timecard {
   employeeName: string
   status: TimecardStatus
   lines: TimecardLine[]
-  submittedAt?: any
-  approvedAt?: any
+  submittedAt?: unknown
+  approvedAt?: unknown
   approvedBy?: string
-  createdAt: any
-  updatedAt: any
+  createdAt: unknown
+  updatedAt: unknown
 }
 
 export type TimecardDraftInput = Omit<
@@ -169,8 +169,8 @@ export interface ShopCatalogItem {
   unit: string
   category: string
   inStock: boolean
-  createdAt: any
-  updatedAt: any
+  createdAt: unknown
+  updatedAt: unknown
 }
 
 // ============================================================================
@@ -189,13 +189,13 @@ export interface ShopOrderItem {
 export interface ShopOrder {
   id: string
   jobId: string
-  orderDate: any
+  orderDate: unknown
   status: ShopOrderStatus
   items: ShopOrderItem[]
-  submittedAt?: any
+  submittedAt?: unknown
   createdBy: string
-  createdAt: any
-  updatedAt: any
+  createdAt: unknown
+  updatedAt: unknown
 }
 
 // ============================================================================
@@ -209,7 +209,7 @@ export interface Attachment {
   url: string
   type: AttachmentType
   size: number
-  uploadedAt: any
+  uploadedAt: unknown
 }
 
 // ============================================================================
@@ -240,3 +240,4 @@ export interface ValidationResult {
   valid: boolean
   errors: ValidationError[]
 }
+

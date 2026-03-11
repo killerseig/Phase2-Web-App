@@ -21,8 +21,8 @@ export type ShopCatalogItem = {
   sku?: string
   price?: number
   active: boolean
-  createdAt?: any
-  updatedAt?: any
+  createdAt?: unknown
+  updatedAt?: unknown
 }
 
 export type ShopCategory = {
@@ -30,8 +30,8 @@ export type ShopCategory = {
   name: string
   parentId: string | null
   active: boolean
-  createdAt?: any
-  updatedAt?: any
+  createdAt?: unknown
+  updatedAt?: unknown
 }
 
 function normalize(id: string, data: DocumentData): ShopCatalogItem {

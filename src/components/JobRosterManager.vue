@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { JobRosterEmployee } from '@/types/models'
 import { useJobRosterStore } from '../stores/jobRoster'
 
 interface Props {
@@ -9,7 +8,7 @@ interface Props {
   showSearch?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   canManage: false,
   showSearch: true,
 })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DailyLog } from '@/services'
 
-const props = defineProps<{
+defineProps<{
   logs: DailyLog[]
   currentUserId?: string | null
   formatTimestamp: (ts?: unknown) => string

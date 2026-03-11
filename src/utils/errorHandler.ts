@@ -11,10 +11,22 @@ export interface ServiceError {
   cause?: Error
 }
 
+type ErrorLike = {
+  code?: unknown
+  message?: unknown
+}
+
+const toErrorLike = (value: unknown): ErrorLike => {
+  if (value && typeof value === 'object') {
+    return value as ErrorLike
+  }
+  return {}
+}
+
 /**
  * Parse Firebase error and return standardized service error
  */
-export function handleServiceError(error: any, context: string = 'Service'): ServiceError {
+export function handleServiceError(error: unknown, context: string = 'Service'): ServiceError {
   if (!error) {
     return {
       code: ErrorCodes.INTERNAL_ERROR,
@@ -22,81 +34,86 @@ export function handleServiceError(error: any, context: string = 'Service'): Ser
     }
   }
 
+  const parsedError = toErrorLike(error)
+  const code = typeof parsedError.code === 'string' ? parsedError.code : undefined
+  const message = typeof parsedError.message === 'string' ? parsedError.message : undefined
+  const cause = error instanceof Error ? error : undefined
+
   // Firebase Firestore errors
-  if (error.code === 'permission-denied') {
+  if (code === 'permission-denied') {
     return {
       code: ErrorCodes.PERMISSION_DENIED,
       message: 'You do not have permission to perform this action',
-      cause: error,
+      cause,
     }
   }
 
-  if (error.code === 'not-found') {
+  if (code === 'not-found') {
     return {
       code: ErrorCodes.NOT_FOUND,
       message: 'The requested resource was not found',
-      cause: error,
+      cause,
     }
   }
 
-  if (error.code === 'already-exists') {
+  if (code === 'already-exists') {
     return {
       code: 'ALREADY_EXISTS',
       message: 'This resource already exists',
-      cause: error,
+      cause,
     }
   }
 
-  if (error.code === 'unauthenticated') {
+  if (code === 'unauthenticated') {
     return {
       code: 'UNAUTHENTICATED',
       message: 'You must be signed in to perform this action',
-      cause: error,
+      cause,
     }
   }
 
-  if (error.code === 'failed-precondition') {
+  if (code === 'failed-precondition') {
     return {
       code: 'FAILED_PRECONDITION',
       message: 'The service is not in the required state for this operation',
-      cause: error,
+      cause,
     }
   }
 
   // Network errors
-  if (error.code === 'unavailable') {
+  if (code === 'unavailable') {
     return {
       code: 'UNAVAILABLE',
       message: 'Service temporarily unavailable. Please try again later.',
-      cause: error,
+      cause,
     }
   }
 
   // Timeout
-  if (error.code === 'deadline-exceeded') {
+  if (code === 'deadline-exceeded') {
     return {
       code: 'TIMEOUT',
       message: 'Operation timed out. Please try again.',
-      cause: error,
+      cause,
     }
   }
 
   // Firebase Auth errors
-  if (error.code?.startsWith('auth/')) {
-    const authMessage = getAuthErrorMessage(error.code)
+  if (code?.startsWith('auth/')) {
+    const authMessage = getAuthErrorMessage(code)
     return {
-      code: error.code,
+      code,
       message: authMessage,
-      cause: error,
+      cause,
     }
   }
 
   // Generic error with message
-  if (error.message) {
+  if (message) {
     return {
       code: ErrorCodes.INTERNAL_ERROR,
-      message: error.message,
-      cause: error,
+      message,
+      cause,
     }
   }
 
@@ -104,7 +121,7 @@ export function handleServiceError(error: any, context: string = 'Service'): Ser
   return {
     code: ErrorCodes.INTERNAL_ERROR,
     message: `${context} error: An unexpected error occurred`,
-    cause: error,
+    cause,
   }
 }
 

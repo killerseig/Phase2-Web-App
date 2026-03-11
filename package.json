@@ -10,6 +10,7 @@
     "test": "vitest",
     "lint": "vue-tsc --noEmit",
     "lint:vue": "eslint \"src/**/*.{ts,vue}\"",
+    "lint:ci": "eslint \"src/**/*.{ts,vue}\" --max-warnings 0",
     "lint:all": "npm run lint && npm run lint:vue"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/test-utils": "^2.4.6",
     "eslint": "^10.0.2",
     "eslint-plugin-vue": "^10.8.0",
     "jsdom": "^28.0.0",

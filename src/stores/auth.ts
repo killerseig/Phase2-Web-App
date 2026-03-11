@@ -31,6 +31,7 @@ type AuthState = {
   assignedJobIds: string[]
   ready: boolean
   _initPromise: Promise<void> | null
+  _unsubscribeAuth: (() => void) | null
   _unsubscribeProfile: (() => void) | null
 }
 
@@ -42,6 +43,7 @@ export const useAuthStore = defineStore('auth', {
     assignedJobIds: [],
     ready: false,
     _initPromise: null,
+    _unsubscribeAuth: null,
     _unsubscribeProfile: null,
   }),
 
@@ -66,7 +68,7 @@ export const useAuthStore = defineStore('auth', {
           (snap) => {
             if (!snap.exists()) {
               // User document was deleted - sign out immediately
-              this.signOut()
+              void this.signOut()
               resolve()
               return
             }
@@ -87,7 +89,7 @@ export const useAuthStore = defineStore('auth', {
 
               // If deactivated, sign out immediately
               if (!newActive) {
-                this.signOut()
+                void this.signOut()
               }
             }
 
@@ -102,7 +104,7 @@ export const useAuthStore = defineStore('auth', {
               resolve()
             }
           },
-          (error) => {
+          () => {
             resolve() // Resolve even on error to not block
           }
         )
@@ -113,19 +115,32 @@ export const useAuthStore = defineStore('auth', {
       if (this._initPromise) return this._initPromise
 
       this._initPromise = new Promise<void>((resolve) => {
-        onAuthStateChanged(auth, async (u) => {
+        let hasResolvedInit = false
+        const resolveInit = () => {
+          if (hasResolvedInit) return
+          hasResolvedInit = true
+          this.ready = true
+          resolve()
+        }
+
+        if (this._unsubscribeAuth) {
+          resolveInit()
+          return
+        }
+
+        this._unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
           this.user = u
 
           if (!u) {
             this.role = null
             this.active = true
+            this.assignedJobIds = []
             // Clean up listener if signing out
             if (this._unsubscribeProfile) {
               this._unsubscribeProfile()
               this._unsubscribeProfile = null
             }
-            this.ready = true
-            resolve()
+            resolveInit()
             return
           }
 
@@ -157,12 +172,11 @@ export const useAuthStore = defineStore('auth', {
 
             // Set up real-time listener for future changes
             await this.setupProfileListener(u.uid)
-          } catch (e) {
+          } catch {
             this.role = null
           }
 
-          this.ready = true
-          resolve()
+          resolveInit()
         })
       })
 
@@ -173,7 +187,6 @@ export const useAuthStore = defineStore('auth', {
     async login(email: string, password: string) {
       const cred = await signInWithEmailAndPassword(auth, email, password)
       this.user = cred.user
-      this._initPromise = null // Reset so init() creates a new promise for this session
       if (!this.ready) {
         await this.init()
       }
@@ -211,8 +224,6 @@ export const useAuthStore = defineStore('auth', {
       this.role = null
       this.active = true
       this.assignedJobIds = []
-      this.ready = false // Reset ready so next login/init works fresh
-      this._initPromise = null // Reset promise so next init() creates a new one
     },
 
     // Backwards-compatible aliases (if any files use these)

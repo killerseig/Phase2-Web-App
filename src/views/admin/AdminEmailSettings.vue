@@ -59,7 +59,7 @@ async function loadJobs() {
       recipientMap.set(job.id, job.dailyLogRecipients ?? [])
     }
     jobRecipients.value = recipientMap
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to load jobs'
     toastRef.value?.show('Failed to load jobs', 'error')
   } finally {
@@ -133,7 +133,7 @@ async function saveJobRecipients(jobId: string) {
     const recipients = jobRecipients.value.get(jobId) ?? []
     await updateDailyLogRecipients(jobId, recipients)
     toastRef.value?.show('Email recipients updated', 'success')
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to save recipients'
     toastRef.value?.show('Failed to save recipients', 'error')
   } finally {
@@ -146,7 +146,7 @@ async function saveTimecardRecipients() {
   try {
     await updateTimecardSubmitRecipientsGlobal(timecardSubmitRecipients.value)
     toastRef.value?.show('Timecard submit recipients updated', 'success')
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to save timecard recipients'
     toastRef.value?.show('Failed to save timecard recipients', 'error')
   } finally {
@@ -159,7 +159,7 @@ async function saveShopOrderRecipients() {
   try {
     await updateShopOrderSubmitRecipientsGlobal(shopOrderSubmitRecipients.value)
     toastRef.value?.show('Shop order submit recipients updated', 'success')
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to save shop order recipients'
     toastRef.value?.show('Failed to save shop order recipients', 'error')
   } finally {
@@ -172,7 +172,7 @@ async function saveGlobalDailyLogRecipients() {
   try {
     await updateDailyLogSubmitRecipientsGlobal(globalDefaultRecipients.value)
     toastRef.value?.show('Daily log global recipients updated', 'success')
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to save daily log global recipients'
     toastRef.value?.show('Failed to save daily log global recipients', 'error')
   } finally {
@@ -199,7 +199,7 @@ async function removeEmailEverywhere() {
         : 'Email was not found in recipient lists',
       'success'
     )
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to remove email from recipient lists'
     toastRef.value?.show('Failed to remove email from recipient lists', 'error')
   } finally {
@@ -379,3 +379,4 @@ onMounted(loadJobs)
   margin-top: 1.5rem;
 }
 </style>
+

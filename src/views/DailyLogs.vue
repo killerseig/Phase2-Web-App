@@ -68,6 +68,25 @@ function onDateChange(_dates: Date[], dateStr: string) {
   logDate.value = dateStr
   loadForDate(dateStr)
 }
+
+function formatSubmittedAt(value: unknown): string {
+  if (!value) return ''
+  if (value instanceof Date) return value.toLocaleString()
+  if (typeof value === 'string' || typeof value === 'number') {
+    return new Date(value).toLocaleString()
+  }
+  if (typeof value === 'object') {
+    const toDate = (value as { toDate?: () => unknown }).toDate
+    if (typeof toDate === 'function') {
+      const parsed = toDate()
+      if (parsed instanceof Date) return parsed.toLocaleString()
+      if (typeof parsed === 'string' || typeof parsed === 'number') {
+        return new Date(parsed).toLocaleString()
+      }
+    }
+  }
+  return ''
+}
 </script>
 
 <template>
@@ -115,7 +134,7 @@ function onDateChange(_dates: Date[], dateStr: string) {
               <span v-if="logDate !== today && currentStatus === 'draft'" class="badge rounded-pill text-bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ logDate > today ? 'Future' : 'Past' }} draft</span>
               <span v-if="logDate !== today && currentStatus === 'submitted'" class="badge rounded-pill text-bg-info"><i class="bi bi-eye me-1"></i>View only</span>
             </div>
-            <div v-if="currentStatus === 'submitted' && currentSubmittedAt" class="text-muted small">Submitted: {{ new Date(currentSubmittedAt.toDate?.() || currentSubmittedAt).toLocaleString() }}</div>
+            <div v-if="currentStatus === 'submitted' && currentSubmittedAt" class="text-muted small">Submitted: {{ formatSubmittedAt(currentSubmittedAt) }}</div>
           </div>
           <div class="col-md-4 d-flex justify-content-md-end align-items-center gap-2">
             <button v-if="logDate === today && currentStatus === 'submitted'" type="button" class="btn btn-outline-primary btn-sm" @click="startNewDraftForToday" :disabled="creatingDraft">

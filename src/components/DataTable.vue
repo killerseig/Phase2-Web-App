@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 type InputType = 'text' | 'email' | 'date' | 'number' | 'select' | 'textarea'
 
@@ -54,6 +55,7 @@ const emit = defineEmits<{
   (e: 'delete-row', rowIndex: number): void
   (e: 'update-row', rowIndex: number, row: Record<string, unknown>): void
 }>()
+const { confirm } = useConfirmDialog()
 
 const visibleColumns = computed(() => props.columns.filter((col) => !col.hidden))
 
@@ -69,10 +71,14 @@ const tableClasses = computed(() =>
     .join(' ')
 )
 
-const handleDelete = (rowIndex: number) => {
-  if (confirm(props.deleteConfirmMessage)) {
-    emit('delete-row', rowIndex)
-  }
+const handleDelete = async (rowIndex: number) => {
+  const confirmed = await confirm(props.deleteConfirmMessage, {
+    title: 'Delete Row',
+    confirmText: 'Delete',
+    variant: 'danger',
+  })
+  if (!confirmed) return
+  emit('delete-row', rowIndex)
 }
 
 const handleCellUpdate = (rowIndex: number, colKey: string, value: unknown) => {

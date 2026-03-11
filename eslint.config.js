@@ -23,11 +23,16 @@ export default [
       '@typescript-eslint': tsPlugin,
     },
     rules: {
+      // Vue safety/style baselines
       'vue/no-mutating-props': 'error',
       'vue/require-v-for-key': 'error',
       'vue/valid-v-model': 'error',
+      'vue/no-use-v-if-with-v-for': 'error',
+      'vue/no-unused-components': 'warn',
+
+      // TypeScript safety baselines
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },

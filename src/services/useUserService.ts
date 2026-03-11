@@ -6,7 +6,7 @@
 import { ref, Ref } from 'vue'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/firebase'
-import { Role, VALID_ROLES } from '@/constants/app'
+import { Role } from '@/constants/app'
 import { normalizeError } from './serviceUtils'
 
 export type UserRole = Role

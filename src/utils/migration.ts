@@ -12,11 +12,7 @@ import {
   collection,
   getDocs,
   doc,
-  addDoc,
   writeBatch,
-  query,
-  where,
-  getDoc,
   type DocumentData,
 } from 'firebase/firestore'
 
@@ -39,7 +35,6 @@ export async function migrateLegacyTimecards(): Promise<number> {
 
     let migratedCount = 0
     const batch = writeBatch(db)
-    const jobTimecardBatches: Map<string, typeof batch> = new Map()
 
     // Process each legacy timecard
     for (const legacyDoc of legacySnap.docs) {

@@ -13,7 +13,7 @@ const props = withDefaults(defineProps<Props>(), {
   selected: false,
 })
 
-const emit = defineEmits<{
+defineEmits<{
   select: [id: string]
   'toggle-expand': [id: string]
   'add-child': [parentId: string]

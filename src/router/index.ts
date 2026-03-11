@@ -113,35 +113,35 @@ const routeConfigs: RouteConfig[] = [
     name: 'admin-users',
     component: () => import('../views/admin/AdminUsers.vue'),
     roles: [ROLES.ADMIN],
-    title: 'Admin · Users',
+    title: 'Admin - Users',
   },
   {
     path: ROUTES.ADMIN_JOBS,
     name: 'admin-jobs',
     component: () => import('../views/admin/AdminJobs.vue'),
     roles: [ROLES.ADMIN],
-    title: 'Admin · Jobs',
+    title: 'Admin - Jobs',
   },
   {
     path: ROUTES.ADMIN_CATALOG,
     name: 'admin-shop-catalog',
     component: () => import('../views/admin/AdminShopCatalog.vue'),
     roles: [ROLES.ADMIN],
-    title: 'Admin · Shop Catalog',
+    title: 'Admin - Shop Catalog',
   },
   {
     path: ROUTES.ADMIN_EMAIL_SETTINGS,
     name: 'admin-email-settings',
     component: () => import('../views/admin/AdminEmailSettings.vue'),
     roles: [ROLES.ADMIN],
-    title: 'Admin · Email Settings',
+    title: 'Admin - Email Settings',
   },
   {
     path: ROUTES.ADMIN_DATA_MIGRATION,
     name: 'admin-data-migration',
     component: () => import('../views/admin/AdminDataMigration.vue'),
     roles: [ROLES.ADMIN],
-    title: 'Admin · Data Migration',
+    title: 'Admin - Data Migration',
   },
 
   // Access denied
@@ -234,5 +234,6 @@ router.beforeEach(runNavigationGuard)
 // Update document title after navigation completes
 router.afterEach((to) => {
   const pageTitle = to.meta.title as string | undefined
-  document.title = pageTitle ? `${pageTitle} · ${BASE_TITLE}` : BASE_TITLE
+  document.title = pageTitle ? `${pageTitle} - ${BASE_TITLE}` : BASE_TITLE
 })
+

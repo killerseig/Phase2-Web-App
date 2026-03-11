@@ -3,41 +3,58 @@
  * Common functions used across services
  */
 
-import { ErrorCodes, errorResponse, successResponse } from '@/types/api'
+import { ErrorCodes, errorResponse } from '@/types/api'
 import type { ApiResponse } from '@/types/api'
 
 /**
  * Normalize Firestore document response
  * Converts { id, data: {...} } to { id, ...data }
  */
-export function normalizeFSDoc<T extends Record<string, any>>(
+export function normalizeFSDoc<T extends Record<string, unknown>>(
   id: string,
-  data: any
+  data: unknown
 ): T & { id: string } {
+  const safeData = (data && typeof data === 'object' ? data : {}) as T
   return {
     id,
-    ...data,
+    ...safeData,
   } as T & { id: string }
 }
 
 /**
  * Handle Firebase errors and convert to ApiResponse
  */
-export function handleFirebaseError(error: any): ApiResponse {
+type ErrorLike = {
+  code?: unknown
+  message?: unknown
+}
+
+const asErrorLike = (error: unknown): ErrorLike => {
+  if (error && typeof error === 'object') {
+    return error as ErrorLike
+  }
+  return {}
+}
+
+export function handleFirebaseError(error: unknown): ApiResponse {
   if (!error) {
     return errorResponse(ErrorCodes.INTERNAL_ERROR, 'An unexpected error occurred')
   }
 
-  if (error.code === 'permission-denied') {
+  const parsedError = asErrorLike(error)
+  const code = typeof parsedError.code === 'string' ? parsedError.code : undefined
+  const message = typeof parsedError.message === 'string' ? parsedError.message : undefined
+
+  if (code === 'permission-denied') {
     return errorResponse(ErrorCodes.PERMISSION_DENIED, 'You do not have permission to perform this action')
   }
 
-  if (error.code === 'not-found') {
+  if (code === 'not-found') {
     return errorResponse(ErrorCodes.NOT_FOUND, 'The requested document was not found')
   }
 
-  if (error.message) {
-    return errorResponse(ErrorCodes.INTERNAL_ERROR, `Error: ${error.message}`)
+  if (message) {
+    return errorResponse(ErrorCodes.INTERNAL_ERROR, `Error: ${message}`)
   }
 
   return errorResponse(ErrorCodes.INTERNAL_ERROR, 'An unexpected error occurred')
@@ -47,7 +64,7 @@ export function handleFirebaseError(error: any): ApiResponse {
  * Validate required fields in an object
  */
 export function validateRequiredFields(
-  obj: Record<string, any>,
+  obj: Record<string, unknown>,
   fields: string[]
 ): { valid: boolean; missing?: string[] } {
   const missing = fields.filter((field) => !obj[field])

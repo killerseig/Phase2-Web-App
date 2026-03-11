@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import { useAuthStore } from '../stores/auth'
+import { sendPasswordResetEmail } from '@/services'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -22,7 +23,7 @@ const submit = async () => {
   try {
     await authStore.login(email.value, password.value)
     router.push('/dashboard')
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Auth failed'
     toastRef.value?.show(err.value, 'error')
   } finally {
@@ -41,36 +42,12 @@ function closeResetModal() {
 }
 
 const sendReset = async () => {
-  if (!resetEmail.value.trim()) {
-    toastRef.value?.show('Please enter your email', 'warning')
-    return
-  }
-
   resetLoading.value = true
   try {
-    // Use Firebase REST API directly - no reCAPTCHA issues
-    const apiKey = import.meta.env.VITE_FIREBASE_API_KEY
-    const response = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestType: 'PASSWORD_RESET',
-          email: resetEmail.value,
-        }),
-      }
-    )
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error?.message || 'Failed to send reset email')
-    }
-
+    await sendPasswordResetEmail(resetEmail.value)
     toastRef.value?.show('Password reset email sent! Check your inbox.', 'success')
     closeResetModal()
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show(e?.message ?? 'Failed to send reset email', 'error')
   } finally {
     resetLoading.value = false
@@ -105,7 +82,7 @@ const sendReset = async () => {
             class="form-control"
             type="password"
             autocomplete="current-password"
-            placeholder="••••••••"
+            placeholder="********"
             @keyup.enter="submit"
           />
         </div>
@@ -181,3 +158,5 @@ const sendReset = async () => {
   text-decoration: underline;
 }
 </style>
+
+

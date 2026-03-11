@@ -3,8 +3,7 @@
   <aside
     class="sidebar border-end d-flex flex-column h-100 position-fixed"
     :class="{ 'is-collapsed': isSidebarCollapsed, 'is-mobile-open': app.sidebarOpenMobile }"
-    role="dialog"
-    aria-modal="true"
+    role="navigation"
     aria-label="Main navigation"
     tabindex="-1"
     ref="sidebarRef"
@@ -60,7 +59,7 @@
       </template>
 
       <!-- Admin Section -->
-      <template v-if="isAdmin || isShopRole">
+      <template v-if="adminNav.length > 0">
         <div class="px-3 mt-4 mb-2 sidebar-section-label">
           <small class="text-uppercase text-muted fw-semibold">Admin</small>
         </div>
@@ -110,9 +109,6 @@ const role = computed(() => auth.role)
 
 const jobId = computed(() => app.currentJobId || (route.params.jobId as string | undefined) || jobs.currentJob?.id || null)
 const jobName = computed(() => app.currentJobName || jobs.currentJob?.name || null)
-
-const isAdmin = computed(() => role.value === ROLES.ADMIN)
-const isShopRole = computed(() => role.value === ROLES.SHOP)
 
 const canSee = (itemRoles?: string[]) => {
   if (!itemRoles || itemRoles.length === 0) return true

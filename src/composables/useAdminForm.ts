@@ -3,7 +3,8 @@
  * Provides reusable form state and CRUD operation utilities for admin components
  */
 
-import { ref, reactive, Ref } from 'vue'
+import { ref, Ref } from 'vue'
+import { useConfirmDialog } from './useConfirmDialog'
 
 export interface FormState {
   isOpen: boolean
@@ -59,7 +60,7 @@ export function useAdminForm(options?: CrudFormOptions) {
         await options.onSuccess()
       }
       close()
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = err?.message || 'Operation failed'
       error.value = errorMessage
       if (options?.onError) {
@@ -112,7 +113,7 @@ export function useAdminList<T>(
 
     try {
       allItems.value = await loadFn()
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = err?.message || 'Failed to load items'
       error.value = errorMessage
       console.error('List refresh error:', err)
@@ -143,20 +144,19 @@ export function useAdminList<T>(
  * Usage:
  * const confirm = useAdminConfirm()
  * 
- * if (!confirm.ask('Delete this item?')) return
+ * if (!await confirm.ask('Delete this item?')) return
  * // proceed with delete
  */
 export function useAdminConfirm() {
-  const ask = (message: string): boolean => {
-    return window.confirm(message)
-  }
+  const { confirm, confirmDelete } = useConfirmDialog()
 
-  const askDelete = (itemName: string): boolean => {
-    return ask(`Delete "${itemName}"? This cannot be undone.`)
-  }
+  const ask = (message: string): Promise<boolean> => confirm(message)
+
+  const askDelete = (itemName: string): Promise<boolean> => confirmDelete(itemName)
 
   return {
     ask,
     askDelete,
   }
 }
+

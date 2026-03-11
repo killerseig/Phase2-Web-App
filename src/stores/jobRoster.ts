@@ -12,7 +12,7 @@ import {
   removeRosterEmployee,
   updateRosterEmployee,
 } from '@/services'
-import type { JobRosterEmployee } from '@/types/models'
+import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
 
 export const useJobRosterStore = defineStore('jobRoster', () => {
   // State: by job ID
@@ -59,7 +59,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       }
 
       return employees
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load roster'
       console.error(`[JobRoster Store] Error loading roster for job ${jobId}:`, e)
       throw e
@@ -86,7 +86,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
   }
 
   // Actions: CRUD
-  async function addEmployee(jobId: string, employee: any) {
+  async function addEmployee(jobId: string, employee: JobRosterEmployeeInput) {
     error.value = null
     try {
       const employeeId = await addRosterEmployee(jobId, employee)
@@ -97,14 +97,12 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
         ...employee,
         id: employeeId,
         jobId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
       } as JobRosterEmployee
       roster.push(newEmployee)
       rosterByJob.value.set(jobId, roster)
 
       return employeeId
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to add employee'
       console.error('[JobRoster Store] Error adding employee:', e)
       throw e
@@ -126,7 +124,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
         roster[idx] = { ...roster[idx], ...updates }
         rosterByJob.value.set(jobId, [...roster])
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update employee'
       console.error('[JobRoster Store] Error updating employee:', e)
       throw e
@@ -145,7 +143,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       const roster = rosterByJob.value.get(jobId) ?? []
       const filtered = roster.filter(e => e.id !== employeeId)
       rosterByJob.value.set(jobId, filtered)
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to remove employee'
       console.error('[JobRoster Store] Error removing employee:', e)
       throw e
@@ -245,3 +243,4 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     resetStore,
   }
 })
+

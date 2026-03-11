@@ -2,17 +2,12 @@
  * Application Constants & Configuration
  * Centralized configuration for the entire app
  */
+import { ROLES } from '@/constants/app'
 
 // ============================================================================
 // USER ROLES
 // ============================================================================
-export const USER_ROLES = {
-  ADMIN: 'admin',
-  EMPLOYEE: 'employee',
-  SHOP: 'shop',
-  FOREMAN: 'foreman',
-  NONE: 'none',
-} as const
+export const USER_ROLES = ROLES
 
 export const ROLE_LABELS = {
   admin: 'Administrator',
@@ -22,7 +17,7 @@ export const ROLE_LABELS = {
   none: 'None',
 } as const
 
-export const VALID_ROLES = ['admin', 'employee', 'shop', 'foreman', 'none'] as const
+export const VALID_ROLES = Object.values(USER_ROLES)
 
 // ============================================================================
 // STATUS & WORKFLOW

@@ -186,7 +186,7 @@ export async function updateJob(
 ) {
   try {
     const ref = doc(db, 'jobs', jobId)
-    const data: any = {}
+    const data: Record<string, unknown> = {}
     if (updates.header !== undefined) data.header = updates.header?.trim() || null
     if (updates.name !== undefined) data.name = updates.name.trim()
     if (updates.code !== undefined) data.code = updates.code?.trim() || null
@@ -336,7 +336,7 @@ export async function getTimecardStatus(jobId: string): Promise<TimecardStatus |
 export async function updateTimecardStatus(jobId: string, status: TimecardStatus): Promise<void> {
   try {
     const ref = doc(db, 'jobs', jobId)
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       timecardStatus: status,
     }
     

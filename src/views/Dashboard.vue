@@ -7,7 +7,7 @@ import { useJobAccess } from '@/composables/useJobAccess'
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 const router = useRouter()
-const { isAdmin, isForeman, visibleActiveJobs, visibleArchivedJobs, loadJobsForCurrentUser } = useJobAccess()
+const { isAdmin, visibleActiveJobs, visibleArchivedJobs, loadJobsForCurrentUser } = useJobAccess()
 
 const err = ref('')
 
@@ -18,7 +18,7 @@ async function init() {
   err.value = ''
   try {
     await loadJobsForCurrentUser()
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to load jobs'
     toastRef.value?.show('Failed to load jobs', 'error')
   }
@@ -140,3 +140,4 @@ onMounted(async () => {
   box-shadow: 0 0 0 0.15rem rgba($primary, 0.25);
 }
 </style>
+

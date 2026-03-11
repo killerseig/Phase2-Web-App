@@ -16,10 +16,11 @@ import {
   updateShopOrderStatus,
   useShopService,
   type ShopOrder,
-  type ShopOrderItem,
   type ShopOrderStatus,
 } from '@/services'
 import { useJobAccess } from '@/composables/useJobAccess'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { toMillis } from '@/utils/datetime'
 
 defineProps<{ jobId?: string }>()
 
@@ -31,6 +32,7 @@ const shopCatalogStore = useShopCatalogStore()
 const shopCategoriesStore = useShopCategoriesStore()
 const shopService = useShopService()
 const jobAccess = useJobAccess()
+const { confirm } = useConfirmDialog()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 interface CategoryTreeNode {
@@ -310,12 +312,6 @@ const clearSubscriptions = () => {
   unsubs = []
 }
 
-const toMillis = (value: unknown): number => {
-  if (!value || typeof value !== 'object' || !('toMillis' in value)) return 0
-  const candidate = value as { toMillis?: () => number }
-  return typeof candidate.toMillis === 'function' ? candidate.toMillis() : 0
-}
-
 const replaceMerged = (map: Map<string, ShopOrder>) => {
   orders.value = Array.from(map.values()).sort((a, b) => {
     const ta = toMillis(a.orderDate)
@@ -380,7 +376,7 @@ const init = async () => {
     await shopCatalogStore.fetchCatalog()
     await shopCategoriesStore.fetchAllCategories()
     loadOrders()
-  } catch (e: any) {
+  } catch (e) {
     console.error('Init error:', e)
     err.value = e?.message ?? 'Failed to initialize'
     loading.value = false
@@ -411,7 +407,7 @@ const addItem = async () => {
     newItemCatalogId.value = null
     selectedCatalogItem.value = null
     toastRef.value?.show('Item added successfully', 'success')
-  } catch (e: any) {
+  } catch (e) {
     console.error('Add item error:', e)
     toastRef.value?.show('Failed to add item: ' + (e?.message || 'Unknown error'), 'error')
   }
@@ -454,7 +450,7 @@ const deleteItem = async (idx: number) => {
   try {
     const updatedItems = selected.value.items.filter((_, i) => i !== idx)
     await updateShopOrderItems(jobId.value, selected.value.id, updatedItems)
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to delete item', 'error')
   }
 }
@@ -479,18 +475,24 @@ const createDraft = async () => {
     const orderId = await createShopOrder(jobId.value, 'scope:employee')
     selectedId.value = orderId
     toastRef.value?.show('New order created', 'success')
-  } catch (e: any) {
+  } catch (e) {
     console.error('Failed to create order:', e)
     toastRef.value?.show('Failed to create order: ' + (e?.message ?? 'Unknown error'), 'error')
   }
 }
 
 const deleteOrder = async () => {
-  if (!selected.value || !confirm('Delete this order?')) return
+  if (!selected.value) return
+  const confirmed = await confirm('Delete this order?', {
+    title: 'Delete Order',
+    confirmText: 'Delete',
+    variant: 'danger',
+  })
+  if (!confirmed) return
   try {
     await deleteShopOrder(jobId.value, selected.value.id)
     toastRef.value?.show('Order deleted', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to delete order', 'error')
   }
 }
@@ -507,7 +509,7 @@ const submitOrder = async () => {
     await updateShopOrderItems(jobId.value, selected.value.id, filteredItems)
     await updateShopOrderStatus(jobId.value, selected.value.id, 'order')
     toastRef.value?.show('Order submitted', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to submit order', 'error')
   }
 }
@@ -517,7 +519,7 @@ const orderOrder = async () => {
   try {
     await updateShopOrderStatus(jobId.value, selected.value.id, 'receive')
     toastRef.value?.show('Order placed', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to place order', 'error')
   }
 }
@@ -527,7 +529,7 @@ const receiveOrder = async () => {
   try {
     await updateShopOrderStatus(jobId.value, selected.value.id, 'receive')
     toastRef.value?.show('Order received', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to receive order', 'error')
   }
 }
@@ -551,7 +553,7 @@ const sendOrderEmail = async () => {
     // Treat email as submit: move status to 'order'
     await updateShopOrderStatus(jobId.value, selected.value.id, 'order')
     toastRef.value?.show('Order emailed successfully', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show(e?.message ?? 'Failed to email order', 'error')
   } finally {
     sendingEmail.value = false
@@ -894,3 +896,4 @@ onUnmounted(clearSubscriptions)
   background: $surface-2;
 }
 </style>
+

@@ -7,7 +7,7 @@
  * Standard API Response wrapper
  * All Cloud Functions should return this structure
  */
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: {

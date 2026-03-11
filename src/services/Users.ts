@@ -1,7 +1,6 @@
 import { db } from '../firebase'
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -26,6 +25,12 @@ export type DeleteUserResult = {
   message: string
   removedFromRecipientLists?: boolean
   updatedJobCount?: number
+}
+
+type CreateUserByAdminResult = {
+  success: boolean
+  message: string
+  uid: string
 }
 
 const CANONICAL_ROLES = Object.values(ROLES) as Role[]
@@ -96,7 +101,7 @@ export async function updateUser(
   try {
     const ref = doc(db, 'users', uid)
 
-    const payload: Record<string, any> = {}
+    const payload: Record<string, unknown> = {}
 
     if ('firstName' in updates) payload.firstName = updates.firstName ?? null
     if ('lastName' in updates) payload.lastName = updates.lastName ?? null
@@ -140,7 +145,7 @@ export async function createUserByAdmin(
   try {
     const normalizedRole = typeof role === 'string' ? normalizeRoleValue(role) : undefined
     const result = await callable({ email, firstName, lastName, role: normalizedRole })
-    return result.data as any
+    return result.data as CreateUserByAdminResult
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to create user'))
   }

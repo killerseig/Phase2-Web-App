@@ -1,9 +1,16 @@
 <script setup lang="ts">
-const props = defineProps<{
-  lines: any[]
+type ManpowerLine = {
+  trade?: string
+  areas?: string
+  count?: number
+  addedByUserId?: string
+}
+
+defineProps<{
+  lines: ManpowerLine[]
   canEdit: boolean
-  canDeleteLine: (line: any) => boolean
-  isAdminLine: (line: any) => boolean
+  canDeleteLine: (line: ManpowerLine) => boolean
+  isAdminLine: (line: ManpowerLine) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -13,7 +20,7 @@ const emit = defineEmits<{
   (e: 'update-count', payload: { index: number; value: number }): void
 }>()
 
-const handleFocus = (e: FocusEvent, line: any) => {
+const handleFocus = (e: FocusEvent, line: ManpowerLine) => {
   const input = e.target as HTMLInputElement
   if (!line.count || line.count === 0) input.select()
 }
@@ -43,7 +50,7 @@ const handleFocus = (e: FocusEvent, line: any) => {
                       type="text"
                       class="form-control form-control-sm"
                       placeholder="Trade"
-                      :value="(ln as any).trade"
+                      :value="ln.trade"
                       :disabled="!canEdit"
                       @input="emit('update-field', { index: idx, field: 'trade', value: ($event.target as HTMLInputElement).value })"
                     />
@@ -56,7 +63,7 @@ const handleFocus = (e: FocusEvent, line: any) => {
                       step="1"
                       class="form-control form-control-sm text-center count-input"
                       placeholder="1"
-                      :value="(ln as any).count"
+                      :value="ln.count"
                       :disabled="!canEdit"
                       @input="emit('update-count', { index: idx, value: Number(($event.target as HTMLInputElement).value) })"
                       @focus="(e) => handleFocus(e, ln)"
@@ -68,7 +75,7 @@ const handleFocus = (e: FocusEvent, line: any) => {
                         type="text"
                         class="form-control form-control-sm"
                         placeholder="Areas (optional)"
-                        :value="(ln as any).areas"
+                        :value="ln.areas"
                         :disabled="!canEdit"
                         @input="emit('update-field', { index: idx, field: 'areas', value: ($event.target as HTMLInputElement).value })"
                       />

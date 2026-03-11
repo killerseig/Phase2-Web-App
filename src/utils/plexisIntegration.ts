@@ -29,20 +29,6 @@ interface PlexisTimecardRow {
 }
 
 /**
- * Plexis CSV import format for employees
- * Expected columns: EmployeeID, FirstName, LastName, SSN, Classification, HireDate, Status
- */
-interface PlexisEmployeeRow {
-  EmployeeID: string
-  FirstName: string
-  LastName: string
-  SSN?: string
-  Classification: string
-  HireDate?: string
-  Status: 'Active' | 'Inactive'
-}
-
-/**
  * Convert timecard to Plexis CSV row format
  * @param timecard - Timecard to export
  * @param jobCode - Job account/project code
@@ -57,16 +43,6 @@ export function convertTimecardToPlexisRow(
       `Invalid timecard: expected 7 days, got ${timecard.days?.length ?? 0}`
     )
   }
-
-  const dayLabels = [
-    'SundayHours',
-    'MondayHours',
-    'TuesdayHours',
-    'WednesdayHours',
-    'ThursdayHours',
-    'FridayHours',
-    'SaturdayHours',
-  ] as const
 
   const hours = timecard.days.map((day) => day.hours || 0)
   const totalHours = hours.reduce((sum, h) => sum + h, 0)

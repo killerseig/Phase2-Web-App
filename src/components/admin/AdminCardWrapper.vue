@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-
 interface Props {
   title: string
   icon?: string
@@ -9,7 +7,7 @@ interface Props {
   subtitle?: string
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   loading: false,
   error: '',
   subtitle: '',

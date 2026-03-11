@@ -5,7 +5,6 @@
 
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { useAppStore } from '@/stores/app'
 
 export interface AccessLevel {
   canManageUsers: boolean
@@ -24,7 +23,6 @@ export interface AccessLevel {
  */
 export function usePermissions() {
   const authStore = useAuthStore()
-  const appStore = useAppStore()
 
   // Basic role checks
   const isAdmin = computed(() => authStore.role === 'admin')

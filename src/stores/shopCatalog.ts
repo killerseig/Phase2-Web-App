@@ -26,7 +26,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     error.value = null
     try {
       items.value = await listCatalogService(activeOnly)
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load catalog'
       console.error('[Shop Catalog Store] Error loading catalog:', e)
     } finally {
@@ -47,7 +47,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
         return newItem
       }
       throw new Error('Failed to retrieve created item')
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to create item'
       console.error('[Shop Catalog Store] Error creating item:', e)
       throw e
@@ -64,7 +64,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       if (idx !== -1) {
         items.value[idx] = { ...items.value[idx], ...updates }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update item'
       console.error('[Shop Catalog Store] Error updating item:', e)
       throw e
@@ -79,7 +79,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       if (idx !== -1) {
         items.value[idx] = { ...items.value[idx], active }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update item status'
       console.error('[Shop Catalog Store] Error updating item status:', e)
       throw e
@@ -91,7 +91,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     try {
       await deleteCatalogItemService(itemId)
       items.value = items.value.filter(i => i.id !== itemId)
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to delete item'
       console.error('[Shop Catalog Store] Error deleting item:', e)
       throw e
@@ -130,3 +130,4 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     resetStore,
   }
 })
+

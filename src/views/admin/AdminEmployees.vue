@@ -3,15 +3,17 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
-import AdminFormModal from '../../components/admin/AdminFormModal.vue'
 import StatusBadge from '../../components/admin/StatusBadge.vue'
 import { useJobRosterStore } from '../../stores/jobRoster'
 import { useEmployeesStore } from '../../stores/employees'
 import type { JobRosterEmployee } from '@/types/models'
+import type { Employee } from '@/services'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 const route = useRoute()
 const rosterStore = useJobRosterStore()
 const employeesStore = useEmployeesStore()
+const { confirm } = useConfirmDialog()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 const jobId = computed(() => String(route.params.jobId))
@@ -56,7 +58,7 @@ async function loadRoster() {
       rosterStore.fetchJobRoster(jobId.value),
       employeesStore.fetchAllEmployees()
     ])
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to load data'
     toastRef.value?.show(err.value, 'error')
   } finally {
@@ -64,21 +66,21 @@ async function loadRoster() {
   }
 }
 
-async function addToRoster(employee: any) {
+async function addToRoster(employee: Employee) {
   saving.value = true
   try {
     await rosterStore.addEmployee(jobId.value, {
       firstName: employee.firstName,
       lastName: employee.lastName,
       occupation: employee.occupation,
-      employeeNumber: employee.employeeNumber,
+      employeeNumber: employee.employeeNumber ?? '',
       active: true,
       isPrimaryForeman: false,
     })
     toastRef.value?.show(`Added ${employee.firstName} ${employee.lastName} to roster`, 'success')
     showModal.value = false
     await rosterStore.fetchJobRoster(jobId.value)
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show(e?.message ?? 'Failed to add employee', 'error')
   } finally {
     saving.value = false
@@ -90,7 +92,7 @@ async function toggleActive(emp: JobRosterEmployee) {
   try {
     await rosterStore.updateEmployee(jobId.value, emp.id, { active: !emp.active })
     toastRef.value?.show(`Employee ${!emp.active ? 'activated' : 'deactivated'}`, 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to update employee', 'error')
   } finally {
     saving.value = false
@@ -99,20 +101,25 @@ async function toggleActive(emp: JobRosterEmployee) {
 
 async function removeFromRoster(emp: JobRosterEmployee) {
   const fullName = `${emp.firstName} ${emp.lastName}`.trim()
-  if (!confirm(`Remove "${fullName}" from roster?`)) return
+  const confirmed = await confirm(`Remove "${fullName}" from roster?`, {
+    title: 'Remove Employee',
+    confirmText: 'Remove',
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   saving.value = true
   try {
     await rosterStore.removeEmployee(jobId.value, emp.id)
     toastRef.value?.show('Employee removed from roster', 'success')
-  } catch (e: any) {
+  } catch (e) {
     toastRef.value?.show('Failed to remove employee', 'error')
   } finally {
     saving.value = false
   }
 }
 
-function selectEmployeeToAdd(emp: any) {
+function selectEmployeeToAdd(emp: Employee) {
   formData.value = {
     firstName: emp.firstName,
     lastName: emp.lastName,
@@ -271,3 +278,4 @@ onMounted(() => loadRoster())
     </AdminCardWrapper>
   </div>
 </template>
+

@@ -14,6 +14,10 @@ import {
 } from '@/services'
 import type { UserProfile } from '@/types/models'
 
+type UserProfileUpdates = Partial<
+  Pick<UserProfile, 'firstName' | 'lastName' | 'role' | 'active' | 'assignedJobIds'>
+>
+
 export const useUsersStore = defineStore('users', () => {
   const jobsStore = useJobsStore()
   const users = ref<UserProfile[]>([])
@@ -35,7 +39,7 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
     try {
       users.value = await listUsersService()
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load users'
       console.error('[Users Store] Error loading users:', e)
     } finally {
@@ -49,7 +53,7 @@ export const useUsersStore = defineStore('users', () => {
     try {
       currentUserProfile.value = await getMyUserProfileService()
       return currentUserProfile.value
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load user profile'
       console.error('[Users Store] Error loading profile:', e)
     } finally {
@@ -57,7 +61,7 @@ export const useUsersStore = defineStore('users', () => {
     }
   }
 
-  async function updateUserProfile(userId: string, updates: any) {
+  async function updateUserProfile(userId: string, updates: UserProfileUpdates) {
     error.value = null
     try {
       await updateUserService(userId, updates)
@@ -72,7 +76,7 @@ export const useUsersStore = defineStore('users', () => {
       if (currentUserProfile.value?.id === userId) {
         currentUserProfile.value = { ...currentUserProfile.value, ...updates }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update user profile'
       console.error('[Users Store] Error updating profile:', e)
       throw e
@@ -88,7 +92,7 @@ export const useUsersStore = defineStore('users', () => {
         currentUserProfile.value = null
       }
       return result
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to delete user'
       console.error('[Users Store] Error deleting user:', e)
       throw e
@@ -114,7 +118,7 @@ export const useUsersStore = defineStore('users', () => {
       // Refresh users list after creation
       await fetchAllUsers()
       return result
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to create user'
       console.error('[Users Store] Error creating user:', e)
       throw e
@@ -145,7 +149,7 @@ export const useUsersStore = defineStore('users', () => {
           currentUserProfile.value.assignedJobIds.push(jobId)
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to assign job to foreman'
       console.error('[Users Store] Error assigning job:', e)
       throw e
@@ -173,7 +177,7 @@ export const useUsersStore = defineStore('users', () => {
           currentUserProfile.value.assignedJobIds = currentUserProfile.value.assignedJobIds.filter(id => id !== jobId)
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to remove job from foreman'
       console.error('[Users Store] Error removing job:', e)
       throw e
@@ -195,7 +199,7 @@ export const useUsersStore = defineStore('users', () => {
       if (currentUserProfile.value?.id === foremanId) {
         currentUserProfile.value = { ...currentUserProfile.value, assignedJobIds: jobIds }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to set foreman jobs'
       console.error('[Users Store] Error setting foreman jobs:', e)
       throw e
@@ -208,7 +212,7 @@ export const useUsersStore = defineStore('users', () => {
       await syncForemanAssignmentsForJob(jobId)
       // Refresh cached data so UI reflects repaired links
       await Promise.all([fetchAllUsers(), jobsStore.fetchJob(jobId)])
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to sync foreman assignments'
       console.error('[Users Store] Error syncing foreman assignments:', e)
       throw e
@@ -258,3 +262,4 @@ export const useUsersStore = defineStore('users', () => {
     resetStore,
   }
 })
+

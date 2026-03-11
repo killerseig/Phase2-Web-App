@@ -33,7 +33,7 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
     try {
       jobs.value = await listAllJobsService(includeArchived, options)
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load jobs'
       console.error('[Jobs Store] Error loading jobs:', e)
     } finally {
@@ -53,7 +53,7 @@ export const useJobsStore = defineStore('jobs', () => {
       } else if (currentJob.value) {
         jobs.value.push(currentJob.value)
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to load job'
       console.error('[Jobs Store] Error loading job:', e)
     } finally {
@@ -89,7 +89,7 @@ export const useJobsStore = defineStore('jobs', () => {
         return newJob
       }
       throw new Error('Failed to retrieve created job')
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to create job'
       console.error('[Jobs Store] Error creating job:', e)
       throw e
@@ -126,7 +126,7 @@ export const useJobsStore = defineStore('jobs', () => {
       if (currentJob.value?.id === jobId) {
         currentJob.value = { ...currentJob.value, ...updates }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update job'
       console.error('[Jobs Store] Error updating job:', e)
       throw e
@@ -144,7 +144,7 @@ export const useJobsStore = defineStore('jobs', () => {
       if (currentJob.value?.id === jobId) {
         currentJob.value = { ...currentJob.value, active }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update job status'
       console.error('[Jobs Store] Error updating job status:', e)
       throw e
@@ -162,7 +162,7 @@ export const useJobsStore = defineStore('jobs', () => {
       if (currentJob.value?.id === jobId) {
         currentJob.value = null
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to delete job'
       console.error('[Jobs Store] Error deleting job:', e)
       throw e
@@ -189,7 +189,7 @@ export const useJobsStore = defineStore('jobs', () => {
           currentJob.value.assignedForemanIds.push(foremanId)
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to assign foreman'
       console.error('[Jobs Store] Error assigning foreman:', e)
       throw e
@@ -213,7 +213,7 @@ export const useJobsStore = defineStore('jobs', () => {
           currentJob.value.assignedForemanIds = currentJob.value.assignedForemanIds.filter(id => id !== foremanId)
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to remove foreman'
       console.error('[Jobs Store] Error removing foreman:', e)
       throw e
@@ -232,7 +232,7 @@ export const useJobsStore = defineStore('jobs', () => {
       if (currentJob.value?.id === jobId) {
         currentJob.value = { ...currentJob.value, timecardStatus: status }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update timecard status'
       console.error('[Jobs Store] Error updating timecard status:', e)
       throw e
@@ -250,7 +250,7 @@ export const useJobsStore = defineStore('jobs', () => {
       if (currentJob.value?.id === jobId) {
         currentJob.value = { ...currentJob.value, timecardPeriodEndDate: date }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message ?? 'Failed to update timecard period end date'
       console.error('[Jobs Store] Error updating timecard period end date:', e)
       throw e
@@ -297,3 +297,4 @@ export const useJobsStore = defineStore('jobs', () => {
     resetStore,
   }
 })
+

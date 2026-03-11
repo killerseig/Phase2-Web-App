@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { normalizeError } from './serviceUtils'
+import { toMillis } from '@/utils/datetime'
 
 export type ShopOrderStatus = 'draft' | 'order' | 'receive'
 
@@ -33,9 +34,9 @@ export type ShopOrder = {
   uid: string // scope key: 'scope:employee', 'scope:shop', 'scope:admin'
   ownerUid: string // real creator
   status: ShopOrderStatus
-  orderDate?: any
-  createdAt?: any
-  updatedAt?: any
+  orderDate?: unknown
+  createdAt?: unknown
+  updatedAt?: unknown
   items: ShopOrderItem[]
 }
 
@@ -92,8 +93,8 @@ export async function listShopOrders(
     }
 
     return Array.from(docMap.values()).sort((a, b) => {
-      const ta = a.orderDate?.toMillis ? a.orderDate.toMillis() : 0
-      const tb = b.orderDate?.toMillis ? b.orderDate.toMillis() : 0
+      const ta = toMillis(a.orderDate)
+      const tb = toMillis(b.orderDate)
       return tb - ta
     })
   } catch (err) {

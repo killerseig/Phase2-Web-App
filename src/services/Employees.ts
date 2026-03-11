@@ -22,8 +22,8 @@ export type Employee = {
   employeeNumber?: string
   occupation: string
   active: boolean
-  createdAt?: any
-  updatedAt?: any
+  createdAt?: unknown
+  updatedAt?: unknown
 }
 
 export type EmployeeInput = Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>
@@ -67,7 +67,7 @@ export async function listEmployeesByJob(jobId: string): Promise<Employee[]> {
     )
     const snap = await getDocs(q)
     return snap.docs.map(d => normalize(d.id, d.data()))
-  } catch (e: any) {
+  } catch (e) {
     // If composite index is missing, fall back to client-side sorting
     if (e.code === 'failed-precondition' || e.message?.includes('composite index')) {
       const q = query(
@@ -120,3 +120,4 @@ export async function deleteEmployee(employeeId: string) {
     throw new Error(normalizeError(err, 'Failed to delete employee'))
   }
 }
+

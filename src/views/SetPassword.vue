@@ -2,11 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Toast from '../components/Toast.vue'
-import { updatePassword } from 'firebase/auth'
-import { auth } from '../firebase'
-import { httpsCallable } from 'firebase/functions'
-import { functions } from '../firebase'
 import { useAuthStore } from '@/stores/auth'
+import { setPasswordFromSetupLink, verifySetupToken } from '@/services'
 
 const router = useRouter()
 const route = useRoute()
@@ -41,12 +38,9 @@ onMounted(async () => {
 
   // Verify the token using Cloud Function
   try {
-    const verifyTokenFn = httpsCallable(functions, 'verifySetupToken')
-    const result = await verifyTokenFn({ uid: userId, setupToken: token })
-
-    email.value = (result.data as any).email || ''
+    email.value = await verifySetupToken(userId, token)
     verifying.value = false
-  } catch (e: any) {
+  } catch (e) {
     let errorMsg = 'Invalid or expired password setup link.'
     console.error('[SetPassword] Error during verification:', e.message)
     
@@ -84,42 +78,15 @@ const submit = async () => {
 
   loading.value = true
   try {
-    // Get the current user and update password
-    try {
-      // Try to update password directly using the auth user
-      const currentUser = auth.currentUser
-      if (currentUser && currentUser.uid === uid.value) {
-        await updatePassword(currentUser, password.value)
-        await authStore.login(email.value, password.value)
-        toastRef.value?.show('Password set successfully! Logging you in...', 'success')
-        if (authStore.role === 'none') {
-          await router.push('/unauthorized')
-        } else {
-          await router.push('/dashboard')
-        }
-      } else {
-        // User not currently signed in, use Firebase Admin SDK approach via function call
-        const { httpsCallable } = await import('firebase/functions')
-        const { functions } = await import('../firebase')
-        
-        const setUserPassword = httpsCallable(functions, 'setUserPassword')
-        await setUserPassword({ 
-          uid: uid.value, 
-          password: password.value,
-          setupToken: setupToken.value 
-        })
-        await authStore.login(email.value, password.value)
-        toastRef.value?.show('Password set successfully! Logging you in...', 'success')
-        if (authStore.role === 'none') {
-          await router.push('/unauthorized')
-        } else {
-          await router.push('/dashboard')
-        }
-      }
-    } catch (e: any) {
-      throw e
+    await setPasswordFromSetupLink(uid.value, password.value, setupToken.value)
+    await authStore.login(email.value, password.value)
+    toastRef.value?.show('Password set successfully! Logging you in...', 'success')
+    if (authStore.role === 'none') {
+      await router.push('/unauthorized')
+    } else {
+      await router.push('/dashboard')
     }
-  } catch (e: any) {
+  } catch (e) {
     let errorMsg = 'Failed to set password. Please try again.'
     if (e.message?.includes('auth/weak-password')) {
       errorMsg = 'Password is too weak. Please use a stronger password.'
@@ -266,3 +233,4 @@ const toggleConfirmPasswordVisibility = () => {
   background-color: $surface-2;
 }
 </style>
+

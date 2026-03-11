@@ -99,7 +99,7 @@ export function validatePattern(
 /**
  * Create a custom validator
  */
-export function createValidator(fn: (value: any) => ValidationError[]): (value: any) => ValidationError[] {
+export function createValidator(fn: (value: unknown) => ValidationError[]): (value: unknown) => ValidationError[] {
   return fn
 }
 
@@ -107,8 +107,8 @@ export function createValidator(fn: (value: any) => ValidationError[]): (value: 
  * Combine multiple validators
  */
 export function combineValidators(
-  ...validators: Array<(value: any) => ValidationError[]>
-): (value: any) => ValidationError[] {
+  ...validators: Array<(value: unknown) => ValidationError[]>
+): (value: unknown) => ValidationError[] {
   return (value) => {
     return validators.flatMap(validator => validator(value))
   }
@@ -117,15 +117,15 @@ export function combineValidators(
 /**
  * Validate a form object with field-specific validators
  */
-export function validateForm<T extends Record<string, any>>(
+export function validateForm<T extends Record<string, unknown>>(
   formData: T,
-  validators: Partial<Record<keyof T, (value: any) => ValidationError[]>>
+  validators: Partial<Record<keyof T, (value: unknown) => ValidationError[]>>
 ): ValidationResult {
   const errors: ValidationError[] = []
 
   for (const [field, validator] of Object.entries(validators)) {
     if (validator) {
-      const fieldErrors = validator(formData[field])
+      const fieldErrors = validator(formData[field as keyof T])
       errors.push(...fieldErrors)
     }
   }

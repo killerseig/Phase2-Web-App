@@ -29,12 +29,13 @@ export const crumbByRouteName: Record<string, string> = {
   'job-daily-logs': 'Daily Logs',
   'job-timecards': 'Timecards',
   'job-shop-orders': 'Shop Orders',
-  'admin-users': 'Admin · Users',
-  'admin-jobs': 'Admin · Jobs',
-  'admin-shop-catalog': 'Admin · Shop Catalog',
-  'admin-email-settings': 'Admin · Email Settings',
-  'admin-data-migration': 'Admin · Data Migration',
+  'admin-users': 'Admin - Users',
+  'admin-jobs': 'Admin - Jobs',
+  'admin-shop-catalog': 'Admin - Shop Catalog',
+  'admin-email-settings': 'Admin - Email Settings',
+  'admin-data-migration': 'Admin - Data Migration',
   unauthorized: 'Unauthorized',
   login: 'Auth',
   'set-password': 'Auth',
 }
+

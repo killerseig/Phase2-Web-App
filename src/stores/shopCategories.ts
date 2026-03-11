@@ -6,8 +6,8 @@ export interface ShopCategory {
   name: string
   parentId: string | null
   active: boolean
-  createdAt?: any
-  updatedAt?: any
+  createdAt?: unknown
+  updatedAt?: unknown
 }
 
 export interface CategoryNode extends ShopCategory {
@@ -133,7 +133,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     error.value = null
     try {
       categories.value = await getAllCategories()
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message || 'Failed to fetch categories'
       console.error('[ShopCategories Store]', error.value, e)
     } finally {
@@ -149,7 +149,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
       const newCat = await createCategoryService(name, parentId)
       categories.value.push(newCat)
       return newCat
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message || 'Failed to create category'
       console.error('[ShopCategories Store] createCategory failed:', e)
       throw e
@@ -168,7 +168,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
         if (updates.active !== undefined) cat.active = updates.active
         cat.updatedAt = new Date()
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message || 'Failed to update category'
       console.error('[ShopCategories Store] updateCategory failed:', e)
       throw e
@@ -195,7 +195,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
           cat.updatedAt = new Date()
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message || 'Failed to archive category'
       console.error('[ShopCategories Store] archiveCategory failed:', e)
       throw e
@@ -213,7 +213,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
         cat.active = true
         cat.updatedAt = new Date()
       }
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message || 'Failed to reactivate category'
       console.error('[ShopCategories Store] reactivateCategory failed:', e)
       throw e
@@ -232,7 +232,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
 
       await deleteCategoryService(id)
       categories.value = categories.value.filter(c => c.id !== id)
-    } catch (e: any) {
+    } catch (e) {
       error.value = e?.message || 'Failed to delete category'
       console.error('[ShopCategories Store] deleteCategory failed:', e)
       throw e
@@ -264,3 +264,4 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     deleteCategory,
   }
 })
+

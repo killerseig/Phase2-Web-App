@@ -68,10 +68,11 @@ export async function listAttachments(logId: string): Promise<string[]> {
     const folderRef = ref(storage, `daily-logs/${logId}`)
     const result = await listAll(folderRef)
     return result.items.map((item) => item.fullPath)
-  } catch (e: any) {
+  } catch (e) {
     if (e?.code === 'storage/object-not-found') {
       return []
     }
     throw new Error(normalizeError(e, 'Failed to list attachments'))
   }
 }
+

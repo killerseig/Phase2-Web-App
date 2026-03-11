@@ -9,6 +9,7 @@ import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { usePermissions } from '@/composables/usePermissions'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { markTimecardsSent } from '@/services/Jobs'
 import { getEmailSettings, sendTimecardEmail } from '@/services/Email'
 import {
@@ -20,15 +21,24 @@ import {
   updateTimecard,
 } from '@/services/Timecards'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
-import type { Timecard, TimecardDay, TimecardJobEntry, TimecardTotals } from '@/types/models'
+import {
+  getTimecardDisplayName,
+  getTimecardFirstName,
+  getTimecardLastName,
+  makeDaysArray,
+  parseSubcontractedEmployee,
+  parseWage,
+  recalcTotalsForTimecard,
+  type TimecardModel,
+} from './timecards/timecardUtils'
 
 type ToastInstance = ComponentPublicInstance<{ show: (message: string, type?: 'success' | 'error' | 'info' | 'warning', duration?: number) => string; remove: (id: string) => void }>
-
-type TimecardJobUi = TimecardJobEntry & { difH?: string; difP?: string; difC?: string }
-
-interface TimecardModel extends Timecard {
-  jobs?: TimecardJobUi[]
-  totals: TimecardTotals
+type FlatpickrOpenHandle = {
+  open?: () => void
+}
+type FlatpickrRefHandle = {
+  fp?: FlatpickrOpenHandle
+  flatpickr?: FlatpickrOpenHandle
 }
 
 const props = defineProps<{ jobId?: string }>()
@@ -38,10 +48,11 @@ const router = useRouter()
 const auth = useAuthStore()
 const jobsStore = useJobsStore()
 const permissions = usePermissions()
+const { confirm } = useConfirmDialog()
 const isAdmin = computed(() => auth.role === 'admin')
 
 const toastRef = ref<ToastInstance | null>(null)
-const datePickerRef = ref<any>(null)
+const datePickerRef = ref<FlatpickrRefHandle | null>(null)
 
 const jobId = computed(() => String(props.jobId ?? route.params.jobId))
 const jobName = computed(() => jobsStore.currentJob?.name ?? 'Timecards')
@@ -70,7 +81,7 @@ const editForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupati
 const showCreateForm = ref(false)
 const newTimecardForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: 'no' })
 
-const flatpickrConfig = ref<any>({
+const flatpickrConfig = ref({
   dateFormat: 'Y-m-d',
   disableMobile: true,
   // Use Bootstrap icons instead of default inline SVG path strings
@@ -97,60 +108,6 @@ const draftCount = computed(() => allTimecards.value.filter(tc => tc.status === 
 const submittedCount = computed(() => allTimecards.value.filter(tc => tc.status === 'submitted').length)
 const timecardRecipients = ref<string[]>([])
 
-function buildWeekDates(start: string): string[] {
-  const dates: string[] = []
-  const base = new Date(start + 'T00:00:00Z')
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(base)
-    d.setUTCDate(base.getUTCDate() + i)
-    const yyyy = d.getUTCFullYear()
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
-    const dd = String(d.getUTCDate()).padStart(2, '0')
-    dates.push(`${yyyy}-${mm}-${dd}`)
-  }
-  return dates
-}
-
-function makeDaysArray(start: string): TimecardDay[] {
-  return buildWeekDates(start).map((date, idx) => ({
-    date,
-    dayOfWeek: idx,
-    hours: 0,
-    production: 0,
-    unitCost: 0,
-    lineTotal: 0,
-    notes: '',
-  }))
-}
-
-function parseWage(value: string): number | null {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed < 0) return null
-  return parsed
-}
-
-function parseSubcontractedEmployee(value: boolean | string): boolean {
-  return value === true || value === 'yes'
-}
-
-function getTimecardFirstName(timecard: TimecardModel): string {
-  if (timecard.firstName?.trim()) return timecard.firstName.trim()
-  const [first] = (timecard.employeeName || '').trim().split(/\s+/)
-  return first || ''
-}
-
-function getTimecardLastName(timecard: TimecardModel): string {
-  if (timecard.lastName?.trim()) return timecard.lastName.trim()
-  const [, ...rest] = (timecard.employeeName || '').trim().split(/\s+/)
-  return rest.join(' ')
-}
-
-function getTimecardDisplayName(timecard: TimecardModel): string {
-  const first = getTimecardFirstName(timecard)
-  const last = getTimecardLastName(timecard)
-  return `${first} ${last}`.trim() || timecard.employeeName || 'Unnamed Employee'
-}
-
 function createDraft(): TimecardModel {
   const days = makeDaysArray(weekStartDate.value)
   const firstName = newTimecardForm.value.firstName.trim()
@@ -162,7 +119,7 @@ function createDraft(): TimecardModel {
     weekEndingDate: weekEndingDate.value,
     status: 'draft',
     createdByUid: auth.user?.uid ?? '',
-    submittedAt: null as any,
+    submittedAt: undefined,
     employeeRosterId: '',
     employeeNumber: newTimecardForm.value.employeeNumber,
     employeeName: `${firstName} ${lastName}`.trim(),
@@ -194,41 +151,12 @@ function createDraft(): TimecardModel {
     },
     notes: '',
     archived: false,
-    archivedAt: null as any,
+    archivedAt: undefined,
   }
 }
 
 function recalcTotals(timecard: TimecardModel) {
-  const hours: number[] = Array(7).fill(0)
-  const production: number[] = Array(7).fill(0)
-  const lineTotals: number[] = Array(7).fill(0)
-
-  timecard.jobs?.forEach(job => {
-    job.days?.forEach((day, idx) => {
-      hours[idx] += day.hours || 0
-      production[idx] += day.production || 0
-      lineTotals[idx] += (day.production || 0) * (day.unitCost || 0)
-    })
-  })
-
-  const dates = buildWeekDates(weekStartDate.value)
-  timecard.days = dates.map((date, idx) => ({
-    date,
-    dayOfWeek: idx,
-    hours: hours[idx],
-    production: production[idx],
-    unitCost: 0,
-    lineTotal: lineTotals[idx],
-    notes: timecard.days?.[idx]?.notes ?? '',
-  }))
-
-  timecard.totals = {
-    hours,
-    production,
-    hoursTotal: hours.reduce((sum, h) => sum + h, 0),
-    productionTotal: production.reduce((sum, p) => sum + p, 0),
-    lineTotal: lineTotals.reduce((sum, v) => sum + v, 0),
-  }
+  recalcTotalsForTimecard(timecard, weekStartDate.value)
 }
 
 async function ensureAccess(): Promise<boolean> {
@@ -240,7 +168,7 @@ async function ensureAccess(): Promise<boolean> {
     }
     await jobsStore.fetchJob(jobId.value)
     return true
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to load job'
     toastRef.value?.show(err.value, 'error')
     return false
@@ -252,7 +180,7 @@ async function loadTimecards() {
   err.value = ''
   try {
     timecards.value = await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to load timecards'
     toastRef.value?.show(err.value, 'error')
   } finally {
@@ -275,7 +203,7 @@ async function init() {
       timecardRecipients.value = []
     }
     await loadTimecards()
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to initialize'
     toastRef.value?.show(err.value, 'error')
   } finally {
@@ -423,7 +351,7 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
       if (!timecards.value.find(t => t.id === id)) timecards.value.push(timecard)
       if (showToast) toastRef.value?.show(`Created timecard for ${timecard.employeeName}`, 'success')
     }
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to save timecard'
     if (showToast) toastRef.value?.show(err.value, 'error')
   } finally {
@@ -432,7 +360,12 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
 }
 
 async function handleDeleteTimecard(timecardId: string, employeeName: string) {
-  if (!confirm(`Delete timecard for ${employeeName}?`)) return
+  const confirmed = await confirm(`Delete timecard for ${employeeName}?`, {
+    title: 'Delete Timecard',
+    confirmText: 'Delete',
+    variant: 'danger',
+  })
+  if (!confirmed) return
   saving.value = true
   err.value = ''
   try {
@@ -440,7 +373,7 @@ async function handleDeleteTimecard(timecardId: string, employeeName: string) {
     draftTimecards.value.delete(timecardId)
     toastRef.value?.show(`Deleted timecard for ${employeeName}`, 'success')
     await loadTimecards()
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to delete timecard'
     toastRef.value?.show(err.value, 'error')
   } finally {
@@ -449,7 +382,12 @@ async function handleDeleteTimecard(timecardId: string, employeeName: string) {
 }
 
 async function submitAllTimecards() {
-  if (!confirm(`Submit all timecards for the week of ${weekRange.value}?`)) return
+  const confirmed = await confirm(`Submit all timecards for the week of ${weekRange.value}?`, {
+    title: 'Submit Timecards',
+    confirmText: 'Submit',
+    variant: 'warning',
+  })
+  if (!confirmed) return
   submittingAll.value = true
   err.value = ''
   try {
@@ -464,12 +402,12 @@ async function submitAllTimecards() {
         const submitted = await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)
         const submittedIds = submitted.filter(tc => tc.status === 'submitted').map(tc => tc.id)
         if (submittedIds.length) {
-          await sendTimecardEmail(jobId.value, submittedIds, weekStartDate.value as any, timecardRecipients.value)
+          await sendTimecardEmail(jobId.value, submittedIds, weekStartDate.value, timecardRecipients.value)
           toastRef.value?.show(`Timecards emailed to ${timecardRecipients.value.length} recipient(s)`, 'success')
         } else {
           toastRef.value?.show('No submitted timecards to email', 'info')
         }
-      } catch (emailErr: any) {
+      } catch (emailErr) {
         console.error('Failed to send timecard email', emailErr)
         toastRef.value?.show('Timecards submitted, but email failed to send', 'warning')
       }
@@ -479,7 +417,7 @@ async function submitAllTimecards() {
     }
     await loadTimecards()
     draftTimecards.value.clear()
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to submit timecards'
     toastRef.value?.show(err.value, 'error')
   } finally {
@@ -517,7 +455,7 @@ async function generateFromPreviousWeek() {
     } else {
       toastRef.value?.show('No timecards in previous week to copy', 'info')
     }
-  } catch (e: any) {
+  } catch (e) {
     err.value = e?.message ?? 'Failed to generate timecards'
     toastRef.value?.show(err.value, 'error')
   } finally {
@@ -1562,4 +1500,5 @@ textarea.form-control {
   }
 }
 </style>
+
 

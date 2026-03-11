@@ -87,7 +87,7 @@ export function validateEmployeeNumber(value: string | null | undefined): string
 export function validateEmployeeNumberUnique(
   employeeNumber: string,
   existingNumbers: string[],
-  excludeId?: string
+  _excludeId?: string
 ): string | null {
   const normalized = employeeNumber.trim()
   

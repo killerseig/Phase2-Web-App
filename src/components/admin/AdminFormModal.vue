@@ -14,14 +14,14 @@ interface FormField {
 interface Props {
   title: string
   fields: FormField[]
-  initialData?: Record<string, any>
+  initialData?: Record<string, string>
   loading?: boolean
   submitLabel?: string
   cancelLabel?: string
 }
 
 interface Emits {
-  submit: [data: Record<string, any>]
+  submit: [data: Record<string, string>]
   cancel: []
 }
 
@@ -34,11 +34,11 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-const formData = ref<Record<string, any>>(
+const formData = ref<Record<string, string>>(
   props.fields.reduce((acc, field) => {
     acc[field.name] = props.initialData?.[field.name] || ''
     return acc
-  }, {})
+  }, {} as Record<string, string>)
 )
 
 watch(() => props.initialData, (newData) => {

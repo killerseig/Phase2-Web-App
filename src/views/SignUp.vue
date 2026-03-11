@@ -2,10 +2,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
-import { updateProfile } from 'firebase/auth'
-import { doc, updateDoc } from 'firebase/firestore'
-import { db } from '../firebase'
 import { useAuthStore } from '../stores/auth'
+import { finalizeRegisteredUserProfile } from '@/services'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -52,20 +50,8 @@ async function handleSignUp() {
     // Register using auth store (creates both auth account and Firestore profile)
     const cred = await auth.register(email.value, password.value)
     
-    // Update display name in Firebase Auth if provided
-    const displayName = `${firstName.value.trim()} ${lastName.value.trim()}`.trim()
-    if (displayName && cred.user) {
-      await updateProfile(cred.user, {
-        displayName,
-      })
-    }
-    
-    // Update first name and last name (role is already set to 'none' by auth.register)
     if (cred.user) {
-      await updateDoc(doc(db, 'users', cred.user.uid), {
-        firstName: firstName.value.trim() || null,
-        lastName: lastName.value.trim() || null,
-      })
+      await finalizeRegisteredUserProfile(cred.user, firstName.value, lastName.value)
     }
     
     toastRef.value?.show('Account created! Redirecting...', 'success')
@@ -74,7 +60,7 @@ async function handleSignUp() {
     setTimeout(() => {
       router.push({ name: 'dashboard' })
     }, 1000)
-  } catch (e: any) {
+  } catch (e) {
     let message = 'Failed to create account'
     
     if (e.code === 'auth/email-already-in-use') {
@@ -96,7 +82,7 @@ async function handleSignUp() {
 }
 
 function goToLogin() {
-  router.push({ name: 'Login' })
+  router.push({ name: 'login' })
 }
 </script>
 
@@ -222,3 +208,4 @@ function goToLogin() {
   text-decoration: underline;
 }
 </style>
+

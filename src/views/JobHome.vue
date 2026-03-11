@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 import { useJobRosterStore } from '../stores/jobRoster'
+import { useAppStore } from '@/stores/app'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 
@@ -16,6 +17,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const jobs = useJobsStore()
 const roster = useJobRosterStore()
+const app = useAppStore()
 const jobAccess = useJobAccess()
 
 const jobId = computed(() => String(route.params.jobId))
@@ -55,6 +57,7 @@ async function boot() {
   if (!auth.ready) await auth.init()
 
   if (!jobAccess.canAccessJob(jobId.value)) {
+    app.clearJob()
     await router.push({ name: 'unauthorized' })
     return
   }
@@ -62,11 +65,13 @@ async function boot() {
   try {
     // Load job
     await jobs.fetchJob(jobId.value)
+    app.setCurrentJob(jobId.value, jobs.currentJob?.name ?? null)
     
     // Load roster
     await roster.setCurrentJob(jobId.value)
     await roster.fetchJobRoster(jobId.value)
   } catch (e) {
+    app.clearJob()
     console.error('Failed to load job:', e)
   }
 }
