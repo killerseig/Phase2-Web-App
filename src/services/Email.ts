@@ -3,7 +3,7 @@ import { httpsCallable } from 'firebase/functions'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from './serviceUtils'
 import { db } from '@/firebase'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
 
 const assertActiveUser = () => {
   const auth = useAuthStore()
@@ -58,20 +58,40 @@ export type RemoveEmailFromRecipientsResult = {
 
 const EMAIL_SETTINGS_DOC = doc(db, 'settings', 'email')
 
+const normalizeEmailSettings = (data: Record<string, unknown> | undefined): EmailSettings => ({
+  timecardSubmitRecipients: Array.isArray(data?.timecardSubmitRecipients) ? data?.timecardSubmitRecipients as string[] : [],
+  shopOrderSubmitRecipients: Array.isArray(data?.shopOrderSubmitRecipients) ? data?.shopOrderSubmitRecipients as string[] : [],
+  dailyLogSubmitRecipients: Array.isArray(data?.dailyLogSubmitRecipients) ? data?.dailyLogSubmitRecipients as string[] : [],
+})
+
 export async function getEmailSettings(): Promise<EmailSettings> {
   try {
     const snap = await getDoc(EMAIL_SETTINGS_DOC)
     if (!snap.exists()) return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [], dailyLogSubmitRecipients: [] }
-    const data = snap.data() || {}
-    return {
-      timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
-      shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
-      dailyLogSubmitRecipients: Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients : [],
-    }
+    return normalizeEmailSettings(snap.data())
   } catch (e) {
     console.warn('[getEmailSettings] Falling back to defaults due to error:', e)
     return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [], dailyLogSubmitRecipients: [] }
   }
+}
+
+export function subscribeEmailSettings(
+  onUpdate: (settings: EmailSettings) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  return onSnapshot(
+    EMAIL_SETTINGS_DOC,
+    (snap) => {
+      if (!snap.exists()) {
+        onUpdate({ timecardSubmitRecipients: [], shopOrderSubmitRecipients: [], dailyLogSubmitRecipients: [] })
+        return
+      }
+      onUpdate(normalizeEmailSettings(snap.data()))
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
 }
 
 export async function updateTimecardSubmitRecipientsGlobal(recipients: string[]): Promise<void> {

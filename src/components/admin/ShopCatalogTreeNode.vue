@@ -60,6 +60,8 @@ const itemId = computed(() => (isItem.value ? props.nodeId.slice(ITEM_PREFIX.len
 const categoryId = computed(() => (!isItem.value ? props.nodeId : null))
 
 const category = computed(() => (categoryId.value ? categoriesStore.getCategoryById(categoryId.value) : null))
+const categorySafeId = computed(() => category.value?.id ?? '')
+const categorySafeName = computed(() => category.value?.name ?? '')
 const item = computed(() => {
   if (!itemId.value || !props.items) return null
   return props.items.find(i => i.id === itemId.value) ?? null
@@ -205,35 +207,49 @@ function handleEditCategory() {
   emit('edit-category', props.nodeId)
 }
 
-function setAccordionEnter(el: HTMLElement) {
-  el.style.maxHeight = '0px'
-  el.style.overflow = 'hidden'
+function asHTMLElement(el: Element): HTMLElement | null {
+  return el instanceof HTMLElement ? el : null
 }
 
-function runAccordionEnter(el: HTMLElement) {
+function setAccordionEnter(el: Element) {
+  const node = asHTMLElement(el)
+  if (!node) return
+  node.style.maxHeight = '0px'
+  node.style.overflow = 'hidden'
+}
+
+function runAccordionEnter(el: Element) {
+  const node = asHTMLElement(el)
+  if (!node) return
   // Use measured height for smooth, adaptable animation
-  const target = `${el.scrollHeight}px`
-  el.style.transition = 'max-height 0.3s ease-in-out'
+  const target = `${node.scrollHeight}px`
+  node.style.transition = 'max-height 0.3s ease-in-out'
   requestAnimationFrame(() => {
-    el.style.maxHeight = target
+    node.style.maxHeight = target
   })
 }
 
-function cleanupAccordion(el: HTMLElement) {
-  el.style.maxHeight = ''
-  el.style.transition = ''
-  el.style.overflow = ''
+function cleanupAccordion(el: Element) {
+  const node = asHTMLElement(el)
+  if (!node) return
+  node.style.maxHeight = ''
+  node.style.transition = ''
+  node.style.overflow = ''
 }
 
-function setAccordionLeave(el: HTMLElement) {
-  el.style.maxHeight = `${el.scrollHeight}px`
-  el.style.overflow = 'hidden'
+function setAccordionLeave(el: Element) {
+  const node = asHTMLElement(el)
+  if (!node) return
+  node.style.maxHeight = `${node.scrollHeight}px`
+  node.style.overflow = 'hidden'
 }
 
-function runAccordionLeave(el: HTMLElement) {
-  el.style.transition = 'max-height 0.3s ease-in-out'
+function runAccordionLeave(el: Element) {
+  const node = asHTMLElement(el)
+  if (!node) return
+  node.style.transition = 'max-height 0.3s ease-in-out'
   requestAnimationFrame(() => {
-    el.style.maxHeight = '0px'
+    node.style.maxHeight = '0px'
   })
 }
 </script>
@@ -251,26 +267,25 @@ function runAccordionLeave(el: HTMLElement) {
         :aria-controls="hasChildren ? `collapse-${props.nodeId}` : undefined"
         :class="{ collapsed: !isExpanded && hasChildren, 'has-children': hasChildren, 'not-expandable': !hasChildren }"
       >
-        <span class="category-label" :style="{ opacity: isArchived ? 0.5 : 1 }">
+        <span class="category-label" :class="{ 'is-archived': isArchived }">
           {{ category.name }}
-          <span v-if="isArchived" class="badge bg-secondary bg-opacity-75 ms-2" style="font-size: 0.65rem;">archived</span>
+          <span v-if="isArchived" class="badge bg-secondary bg-opacity-75 ms-2 archived-badge">archived</span>
         </span>
       </button>
 
-      <div v-if="orderMode && catalogItemQtys" class="btn-group btn-group-sm" role="group" style="margin-left: auto;">
+      <div v-if="orderMode && catalogItemQtys && categorySafeId" class="btn-group btn-group-sm node-actions" role="group">
         <input
           type="number"
           inputmode="numeric"
           min="1"
           step="1"
-          :value="catalogItemQtys?.[category.id] || 1"
-          @input="(e) => handleCatalogQtyInput(category.id, e)"
-          class="form-control form-control-sm"
-          style="width: 70px;"
+          :value="catalogItemQtys?.[categorySafeId] || 1"
+          @input="(e) => handleCatalogQtyInput(categorySafeId, e)"
+          class="form-control form-control-sm qty-input"
         />
         <button
           class="btn btn-sm btn-success"
-          @click.stop="handleSelectCategoryForOrder(category.id, category.name)"
+          @click.stop="handleSelectCategoryForOrder(categorySafeId, categorySafeName)"
           title="Add to order"
         >
           <i class="bi bi-plus-circle"></i>
@@ -278,8 +293,7 @@ function runAccordionLeave(el: HTMLElement) {
       </div>
       <div
         v-else-if="!orderMode"
-        class="d-flex align-items-center justify-content-end gap-1 flex-nowrap"
-        style="margin-left: auto;"
+        class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions"
       >
         <div v-if="showActions" class="btn-group btn-group-sm flex-nowrap" role="group">
           <button class="btn btn-outline-danger" @click.stop="handleDeleteCategory" title="Delete">
@@ -310,14 +324,13 @@ function runAccordionLeave(el: HTMLElement) {
       </div>
     </div>
 
-    <div v-else class="node-header" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem;">
+    <div v-else class="node-header editing-category-header">
       <input
         :value="props.editCategoryName"
         @input="(e) => emit('update:editCategoryName', (e.target as HTMLInputElement).value)"
         type="text"
-        class="form-control form-control-sm"
+        class="form-control form-control-sm edit-category-input"
         placeholder="Category name"
-        style="flex: 1;"
       />
       <button class="btn btn-sm btn-success" @click.stop="() => emit('save-category', props.nodeId, props.editCategoryName || '')" :disabled="props.savingCategoryEdit" title="Save">
         <i class="bi bi-check"></i>
@@ -388,7 +401,7 @@ function runAccordionLeave(el: HTMLElement) {
         :aria-controls="hasChildren ? `collapse-${props.nodeId}` : undefined"
         :class="{ collapsed: !isExpanded && hasChildren, 'has-children': hasChildren, 'not-expandable': !hasChildren }"
       >
-        <i class="bi bi-file-text me-2" style="flex-shrink: 0;"></i>
+        <i class="bi bi-file-text me-2 node-item-icon"></i>
         <template v-if="isEditing">
           <div class="item-edit-fields w-100">
             <input
@@ -418,18 +431,17 @@ function runAccordionLeave(el: HTMLElement) {
             />
           </div>
         </template>
-        <span v-else class="item-label flex-grow-1" :style="{ opacity: itemArchived ? 0.5 : 1 }">
+        <span v-else class="item-label flex-grow-1" :class="{ 'is-archived': itemArchived }">
           {{ item.description }}
-          <span v-if="itemArchived" class="badge bg-secondary bg-opacity-75 ms-2" style="font-size: 0.65rem;">archived</span>
-          <span v-if="item.sku" class="badge bg-info bg-opacity-75 ms-2" style="font-size: 0.85rem;">{{ item.sku }}</span>
-          <span v-if="item.price" class="badge bg-success bg-opacity-75 ms-1" style="font-size: 0.85rem;">${{ item.price.toFixed(2) }}</span>
+          <span v-if="itemArchived" class="badge bg-secondary bg-opacity-75 ms-2 archived-badge">archived</span>
+          <span v-if="item.sku" class="badge bg-info bg-opacity-75 ms-2 item-meta-badge">{{ item.sku }}</span>
+          <span v-if="item.price" class="badge bg-success bg-opacity-75 ms-1 item-meta-badge">${{ item.price.toFixed(2) }}</span>
         </span>
       </button>
 
       <div
         v-if="!orderMode"
-        class="d-flex align-items-center justify-content-end gap-1 flex-nowrap"
-        style="margin-left: auto;"
+        class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions"
         @click.stop
       >
         <div v-if="showActions" class="btn-group btn-group-sm flex-nowrap" role="group">
@@ -571,7 +583,7 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
 }
 
 .accordion-button:not(.has-children)::after {
-  display: none !important;
+  display: none;
 }
 
 .accordion-button.has-children::after {
@@ -615,10 +627,44 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
   color: $body-color;
 }
 
+.category-label.is-archived,
+.item-label.is-archived {
+  opacity: 0.5;
+}
+
+.archived-badge {
+  font-size: 0.65rem;
+}
+
+.item-meta-badge {
+  font-size: 0.85rem;
+}
+
 .item-edit-fields {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+}
+
+.editing-category-header {
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.edit-category-input {
+  flex: 1;
+}
+
+.node-item-icon {
+  flex-shrink: 0;
+}
+
+.node-actions {
+  margin-left: auto;
+}
+
+.qty-input {
+  width: 70px;
 }
 
 .item-edit-fields input {

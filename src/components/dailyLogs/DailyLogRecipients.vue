@@ -14,7 +14,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="card mb-4">
-    <div class="card-header bg-light"><h5 class="mb-0"><i class="bi bi-envelope me-2"></i>Email Recipients</h5></div>
+    <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-envelope me-2"></i>Email Recipients</h5></div>
     <div class="card-body">
       <div class="mb-3">
         <input

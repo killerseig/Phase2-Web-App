@@ -29,9 +29,8 @@
             <strong>Migration in progress...</strong>
             <div class="progress mt-2">
               <div
-                class="progress-bar progress-bar-striped progress-bar-animated"
+                class="progress-bar progress-bar-striped progress-bar-animated progress-bar-full"
                 role="progressbar"
-                style="width: 100%"
               />
             </div>
           </div>
@@ -164,25 +163,25 @@
           </small>
         </div>
 
-        <div v-if="csvValidation && !csvValidation.valid" class="alert alert-danger">
+        <div v-if="csvHasErrors" class="alert alert-danger">
           <strong>CSV Validation Errors:</strong>
           <ul class="mb-0 mt-2">
-            <li v-for="(err, idx) in csvValidation.errors" :key="idx">
+            <li v-for="(err, idx) in csvErrors" :key="idx">
               {{ err }}
             </li>
           </ul>
         </div>
 
-        <div v-if="csvValidation?.warnings?.length > 0" class="alert alert-warning">
+        <div v-if="csvWarnings.length > 0" class="alert alert-warning">
           <strong>CSV Warnings:</strong>
           <ul class="mb-0">
-            <li v-for="(warn, idx) in csvValidation.warnings" :key="idx">
+            <li v-for="(warn, idx) in csvWarnings" :key="idx">
               {{ warn }}
             </li>
           </ul>
         </div>
 
-        <div v-if="importedEmployees" class="alert alert-info">
+        <div v-if="importedEmployees.length > 0" class="alert alert-info">
           <strong>Preview:</strong> {{ importedEmployees.length }} employees ready to import
           <div class="mt-2 small">
             <div v-for="emp in importedEmployees.slice(0, 3)" :key="emp.id">
@@ -196,7 +195,7 @@
 
         <button
           @click="importFromPlexis"
-          :disabled="!selectedJobIdForImport || !importedEmployees || importInProgress"
+          :disabled="!selectedJobIdForImport || importedEmployees.length === 0 || importInProgress"
           class="btn btn-info"
         >
           <span v-if="!importInProgress">
@@ -237,6 +236,7 @@ import {
   validatePlexisCsv,
 } from '../../utils/plexisIntegration'
 import { addRosterEmployee, listTimecardsByJobAndWeek } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 import type { JobRosterEmployee } from '../../types/models'
 
 type MigrationResults = {
@@ -285,6 +285,9 @@ const importInProgress = ref(false)
 const importStatus = ref<{ success: boolean; message: string } | null>(null)
 
 const jobs = computed(() => jobsStore.allJobs)
+const csvErrors = computed(() => csvValidation.value?.errors ?? [])
+const csvWarnings = computed(() => csvValidation.value?.warnings ?? [])
+const csvHasErrors = computed(() => Boolean(csvValidation.value) && !csvValidation.value?.valid)
 
 const migrationDuration = computed(() => {
   if (!migrationResults.value?.startTime || !migrationResults.value?.endTime) {
@@ -307,7 +310,7 @@ async function runMigration() {
     migrationStarted.value = true
     toastRef.value?.show('Migration completed successfully', 'success')
   } catch (error) {
-    migrationError.value = error?.message ?? 'Migration failed'
+    migrationError.value = normalizeError(error, 'Migration failed')
     toastRef.value?.show('Migration failed', 'error')
   } finally {
     migrationInProgress.value = false
@@ -345,7 +348,7 @@ async function exportToPlexis() {
     downloadCsv(csvContent, `plexis-timecards-${selectedWeekDate.value}.csv`)
     toastRef.value?.show('Timecards exported to Plexis', 'success')
   } catch (error) {
-    toastRef.value?.show(error?.message ?? 'Export failed', 'error')
+    toastRef.value?.show(normalizeError(error, 'Export failed'), 'error')
   }
 }
 
@@ -360,7 +363,7 @@ function onFileSelected(event: Event) {
     const content = e.target?.result as string
     csvValidation.value = validatePlexisCsv(content)
 
-    if (csvValidation.value.valid) {
+    if (csvValidation.value?.valid) {
       importedEmployees.value = importEmployeesFromCsv(content)
     } else {
       importedEmployees.value = []
@@ -370,7 +373,7 @@ function onFileSelected(event: Event) {
 }
 
 async function importFromPlexis() {
-  if (!selectedJobIdForImport.value || !importedEmployees.value?.length) return
+  if (!selectedJobIdForImport.value || importedEmployees.value.length === 0) return
 
   importInProgress.value = true
   importStatus.value = null
@@ -396,7 +399,7 @@ async function importFromPlexis() {
   } catch (error) {
     importStatus.value = {
       success: false,
-      message: error?.message ?? 'Import failed',
+      message: normalizeError(error, 'Import failed'),
     }
     toastRef.value?.show('Import failed', 'error')
   } finally {
@@ -440,6 +443,10 @@ pre {
 
 .btn {
   margin-top: 10px;
+}
+
+.progress-bar-full {
+  width: 100%;
 }
 </style>
 

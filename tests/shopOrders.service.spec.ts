@@ -92,7 +92,9 @@ describe('ShopOrders service', () => {
     const id = await createShopOrder('job-1', 'scope:shop')
 
     expect(id).toBe('order-1')
-    const [, payload] = addDocMock.mock.calls[0]
+    const addDocCall = addDocMock.mock.calls[0]
+    expect(addDocCall).toBeDefined()
+    const [, payload] = addDocCall!
     expect(payload).toMatchObject({
       jobId: 'job-1',
       uid: 'scope:shop',
@@ -108,7 +110,9 @@ describe('ShopOrders service', () => {
     await updateShopOrderItems('job-1', 'order-1', [{ description: 'Item', quantity: 1 }])
 
     expect(updateDocMock).toHaveBeenCalledTimes(1)
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload).toMatchObject({ items: [{ description: 'Item', quantity: 1 }], updatedAt: 'ts' })
   })
 
@@ -117,7 +121,9 @@ describe('ShopOrders service', () => {
 
     await updateShopOrderStatus('job-1', 'order-1', 'order')
 
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload).toMatchObject({ status: 'order', updatedAt: 'ts' })
   })
 })

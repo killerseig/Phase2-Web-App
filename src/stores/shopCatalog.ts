@@ -5,14 +5,17 @@ import {
   deleteCatalogItem as deleteCatalogItemService,
   listCatalog as listCatalogService,
   setCatalogItemActive as setCatalogItemActiveService,
+  subscribeCatalog as subscribeCatalogService,
   updateCatalogItem as updateCatalogItemService,
   type ShopCatalogItem,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 
 export const useShopCatalogStore = defineStore('shopCatalog', () => {
   const items = ref<ShopCatalogItem[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const unsubscribeCatalog = ref<(() => void) | null>(null)
 
   // Computed
   const allItems = computed(() => items.value)
@@ -20,18 +23,52 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
   const isLoading = computed(() => loading.value)
   const hasError = computed(() => error.value !== null)
 
+  const setStoreError = (err: unknown, fallback: string) => {
+    error.value = normalizeError(err, fallback)
+  }
+
+  const updateCachedItem = (itemId: string, updater: (item: ShopCatalogItem) => void) => {
+    const item = items.value.find((entry) => entry.id === itemId)
+    if (item) updater(item)
+  }
+
+  const stopCatalogSubscription = () => {
+    if (!unsubscribeCatalog.value) return
+    unsubscribeCatalog.value()
+    unsubscribeCatalog.value = null
+  }
+
   // Actions
   async function fetchCatalog(activeOnly = false) {
     loading.value = true
     error.value = null
     try {
       items.value = await listCatalogService(activeOnly)
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load catalog'
-      console.error('[Shop Catalog Store] Error loading catalog:', e)
+    } catch (err) {
+      setStoreError(err, 'Failed to load catalog')
+      console.error('[Shop Catalog Store] Error loading catalog:', err)
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeCatalog(activeOnly = false) {
+    stopCatalogSubscription()
+    loading.value = true
+    error.value = null
+
+    unsubscribeCatalog.value = subscribeCatalogService(
+      activeOnly,
+      (nextItems) => {
+        items.value = nextItems
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to catalog')
+        loading.value = false
+        console.error('[Shop Catalog Store] Error subscribing to catalog:', err)
+      }
+    )
   }
 
   async function createItem(description: string, categoryId?: string, sku?: string, price?: number) {
@@ -47,27 +84,31 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
         return newItem
       }
       throw new Error('Failed to retrieve created item')
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to create item'
-      console.error('[Shop Catalog Store] Error creating item:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to create item')
+      console.error('[Shop Catalog Store] Error creating item:', err)
+      throw err
     } finally {
       loading.value = false
     }
   }
 
-  async function updateItem(itemId: string, updates: { description?: string; sku?: string; price?: number }) {
+  async function updateItem(
+    itemId: string,
+    updates: { description?: string; sku?: string | null; price?: number | null }
+  ) {
     error.value = null
     try {
       await updateCatalogItemService(itemId, updates)
-      const idx = items.value.findIndex(i => i.id === itemId)
-      if (idx !== -1) {
-        items.value[idx] = { ...items.value[idx], ...updates }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update item'
-      console.error('[Shop Catalog Store] Error updating item:', e)
-      throw e
+      updateCachedItem(itemId, (item) => {
+        if (updates.description !== undefined) item.description = updates.description
+        if (updates.sku !== undefined) item.sku = updates.sku ?? undefined
+        if (updates.price !== undefined) item.price = updates.price ?? undefined
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to update item')
+      console.error('[Shop Catalog Store] Error updating item:', err)
+      throw err
     }
   }
 
@@ -75,14 +116,13 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     error.value = null
     try {
       await setCatalogItemActiveService(itemId, active)
-      const idx = items.value.findIndex(i => i.id === itemId)
-      if (idx !== -1) {
-        items.value[idx] = { ...items.value[idx], active }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update item status'
-      console.error('[Shop Catalog Store] Error updating item status:', e)
-      throw e
+      updateCachedItem(itemId, (item) => {
+        item.active = active
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to update item status')
+      console.error('[Shop Catalog Store] Error updating item status:', err)
+      throw err
     }
   }
 
@@ -91,10 +131,10 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     try {
       await deleteCatalogItemService(itemId)
       items.value = items.value.filter(i => i.id !== itemId)
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to delete item'
-      console.error('[Shop Catalog Store] Error deleting item:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to delete item')
+      console.error('[Shop Catalog Store] Error deleting item:', err)
+      throw err
     }
   }
 
@@ -103,6 +143,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
   }
 
   function resetStore() {
+    stopCatalogSubscription()
     items.value = []
     loading.value = false
     error.value = null
@@ -122,10 +163,12 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
 
     // Actions
     fetchCatalog,
+    subscribeCatalog,
     createItem,
     updateItem,
     setItemActive,
     deleteItem,
+    stopCatalogSubscription,
     clearError,
     resetStore,
   }

@@ -4,6 +4,7 @@ import { ROLES } from '@/constants/app'
 let mockAuth: any
 let mockJobAccess: any
 let runNavigationGuard: any
+let getRouteAccessRedirect: any
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => mockAuth,
@@ -13,10 +14,13 @@ vi.mock('@/composables/useJobAccess', () => ({
   useJobAccess: () => mockJobAccess,
 }))
 
-const loadGuard = async () => {
+const loadGuards = async () => {
   vi.resetModules()
   const mod = await import('@/router')
-  return mod.runNavigationGuard
+  return {
+    runNavigationGuard: mod.runNavigationGuard,
+    getRouteAccessRedirect: mod.getRouteAccessRedirect,
+  }
 }
 
 describe('router navigation guard', () => {
@@ -35,7 +39,9 @@ describe('router navigation guard', () => {
       canAccessJob: vi.fn().mockReturnValue(true),
     }
 
-    runNavigationGuard = await loadGuard()
+    const guards = await loadGuards()
+    runNavigationGuard = guards.runNavigationGuard
+    getRouteAccessRedirect = guards.getRouteAccessRedirect
   })
 
   it('redirects authenticated users away from login', async () => {
@@ -82,6 +88,42 @@ describe('router navigation guard', () => {
     })
 
     expect(mockJobAccess.canAccessJob).toHaveBeenCalledWith('job-2')
+    expect(result).toEqual({ name: 'unauthorized' })
+  })
+
+  it('returns unauthorized when a user loses required role on current route', () => {
+    const result = getRouteAccessRedirect(
+      {
+        meta: { roles: [ROLES.ADMIN] },
+        name: 'admin-users',
+        params: {},
+      },
+      {
+        user: { uid: 'user-1' },
+        active: true,
+        role: ROLES.NONE,
+      },
+      mockJobAccess.canAccessJob
+    )
+
+    expect(result).toEqual({ name: 'unauthorized' })
+  })
+
+  it('returns unauthorized when a foreman loses assignment for the open job route', () => {
+    const result = getRouteAccessRedirect(
+      {
+        meta: {},
+        name: 'job-home',
+        params: { jobId: 'job-99' },
+      },
+      {
+        user: { uid: 'user-1' },
+        active: true,
+        role: ROLES.FOREMAN,
+      },
+      () => false
+    )
+
     expect(result).toEqual({ name: 'unauthorized' })
   })
 })

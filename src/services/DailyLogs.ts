@@ -13,6 +13,7 @@ import {
   updateDoc,
   deleteDoc,
   where,
+  type Unsubscribe,
   type DocumentData,
 } from 'firebase/firestore'
 import type { Attachment, IndoorClimateReading, ManpowerLine } from '@/types/documents'
@@ -214,6 +215,86 @@ export async function listDailyLogsForDate(jobId: string, logDate: string): Prom
   }
 }
 
+export function subscribeDailyLogsForDate(
+  jobId: string,
+  logDate: string,
+  onData: (logs: DailyLog[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  assertJobAccess(jobId)
+  const u = requireUser()
+
+  const submittedQuery = query(
+    collection(db, `jobs/${jobId}/dailyLogs`),
+    where('logDate', '==', logDate),
+    where('status', '==', 'submitted')
+  )
+
+  const myDraftsQuery = query(
+    collection(db, `jobs/${jobId}/dailyLogs`),
+    where('logDate', '==', logDate),
+    where('status', '==', 'draft'),
+    where('uid', '==', u.uid)
+  )
+
+  const rank = (status: DailyLog['status']) => (status === 'submitted' ? 0 : 1)
+  const merged = new Map<string, DailyLog>()
+
+  const emit = () => {
+    const list = Array.from(merged.values()).sort((a, b) => {
+      if (rank(a.status) !== rank(b.status)) return rank(a.status) - rank(b.status)
+      const aTs = toMillis(a.submittedAt || a.updatedAt || a.createdAt)
+      const bTs = toMillis(b.submittedAt || b.updatedAt || b.createdAt)
+      return bTs - aTs
+    })
+    onData(list)
+  }
+
+  const syncFromSnapshot = (entries: DailyLog[], mode: 'submitted' | 'draft') => {
+    const expectedStatus = mode === 'submitted' ? 'submitted' : 'draft'
+    for (const [id, value] of merged.entries()) {
+      if (value.status === expectedStatus) {
+        merged.delete(id)
+      }
+    }
+    entries.forEach((entry) => {
+      merged.set(entry.id, entry)
+    })
+    emit()
+  }
+
+  const unsubSubmitted = onSnapshot(
+    submittedQuery,
+    (snap) => {
+      syncFromSnapshot(
+        snap.docs.map((d) => normalize(d.id, d.data())),
+        'submitted'
+      )
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
+
+  const unsubDrafts = onSnapshot(
+    myDraftsQuery,
+    (snap) => {
+      syncFromSnapshot(
+        snap.docs.map((d) => normalize(d.id, d.data())),
+        'draft'
+      )
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
+
+  return () => {
+    unsubSubmitted()
+    unsubDrafts()
+  }
+}
+
 export async function getMyDailyLogByDate(jobId: string, logDate: string): Promise<DailyLog | null> {
   try {
     assertJobAccess(jobId)
@@ -239,6 +320,7 @@ export async function getMyDailyLogByDate(jobId: string, logDate: string): Promi
       }, null)
 
       const d = latestDraft?.doc ?? draftSnap.docs[0]
+      if (!d) return null
       return normalize(d.id, d.data())
     }
 
@@ -262,6 +344,7 @@ export async function getMyDailyLogByDate(jobId: string, logDate: string): Promi
     }, null)
 
     const d = latestSubmitted?.doc ?? submittedSnap.docs[0]
+    if (!d) return null
     return normalize(d.id, d.data())
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load daily log'))
@@ -389,28 +472,23 @@ export function subscribeToDailyLog(
   onData: (log: DailyLog) => void,
   onError?: (error: unknown) => void
 ) {
-  try {
-    assertJobAccess(jobId)
-    const u = requireUser()
-    const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
-    return onSnapshot(
-      ref,
-      (snap) => {
-        if (!snap.exists()) return
-        const log = normalize(snap.id, snap.data())
-        
-        // Draft logs are only accessible to their owner
-        if (log.status === 'draft' && log.uid !== u.uid) {
-          if (onError) onError(new Error('Access denied: This is a private draft'))
-          return
-        }
-        
-        onData(log)
-      },
-      onError
-    )
-  } catch (err) {
-    if (onError) onError(err)
-    throw new Error(normalizeError(err, 'Failed to subscribe to daily log'))
-  }
+  assertJobAccess(jobId)
+  const u = requireUser()
+  const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) return
+      const log = normalize(snap.id, snap.data())
+
+      // Draft logs are only accessible to their owner
+      if (log.status === 'draft' && log.uid !== u.uid) {
+        onError?.(new Error('Access denied: This is a private draft'))
+        return
+      }
+
+      onData(log)
+    },
+    onError
+  )
 }

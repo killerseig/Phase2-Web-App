@@ -2,6 +2,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
+// Suppress known third-party legacy Sass API warnings until upstream fully migrates.
+if (!process.env.SASS_SILENCE_DEPRECATIONS) {
+  process.env.SASS_SILENCE_DEPRECATIONS = 'legacy-js-api'
+}
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -13,7 +18,7 @@ export default defineConfig({
     preprocessorOptions: {
       scss: {
         quietDeps: true,
-        silenceDeprecations: ['import', 'global-builtin', 'color-functions', 'if-function'],
+        silenceDeprecations: ['import', 'global-builtin', 'color-functions', 'if-function', 'legacy-js-api'],
       },
     },
   },

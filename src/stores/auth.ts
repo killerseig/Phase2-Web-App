@@ -48,6 +48,19 @@ export const useAuthStore = defineStore('auth', {
   }),
 
   actions: {
+    async waitForProfileHydration(uid: string, timeoutMs = 5000) {
+      const startedAt = Date.now()
+      while (Date.now() - startedAt < timeoutMs) {
+        // Auth user changed during wait; stop waiting for previous uid.
+        if (this.user?.uid !== uid) return
+
+        // role === null means profile has not hydrated yet.
+        if (this.role !== null) return
+
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+    },
+
     /**
      * Set up a real-time listener on the user's profile document
      * Updates role and active status immediately when changed
@@ -96,6 +109,11 @@ export const useAuthStore = defineStore('auth', {
             // Update assigned job IDs if changed
             if (JSON.stringify(this.assignedJobIds) !== JSON.stringify(newAssignedJobIds)) {
               this.assignedJobIds = newAssignedJobIds
+            }
+
+            // If role is removed, revoke access immediately.
+            if (newRole === ROLES.NONE) {
+              void this.signOut()
             }
             
             // Resolve on first snapshot to signal that listener is active
@@ -187,9 +205,10 @@ export const useAuthStore = defineStore('auth', {
     async login(email: string, password: string) {
       const cred = await signInWithEmailAndPassword(auth, email, password)
       this.user = cred.user
-      if (!this.ready) {
+      if (!this.ready || !this._unsubscribeAuth) {
         await this.init()
       }
+      await this.waitForProfileHydration(cred.user.uid)
       return cred
     },
 

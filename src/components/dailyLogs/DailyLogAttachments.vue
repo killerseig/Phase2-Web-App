@@ -36,9 +36,10 @@ const ptpPhotos = computed(() => ((props.attachments || []) as AttachmentWithPat
 const handleChange = (type: 'photo' | 'ptp', event: Event) => {
   const target = event.target as HTMLInputElement | null
   const files = target?.files
+  const firstFile = files?.[0]
   const label = files?.length
-    ? files.length === 1
-      ? files[0].name
+    ? files.length === 1 && firstFile
+      ? firstFile.name
       : `${files.length} files`
     : ''
 
@@ -49,6 +50,11 @@ const handleChange = (type: 'photo' | 'ptp', event: Event) => {
   }
 
   emit('upload', { event, type })
+}
+
+const emitDelete = (path?: string) => {
+  if (!path) return
+  emit('delete', path)
 }
 </script>
 
@@ -72,12 +78,12 @@ const handleChange = (type: 'photo' | 'ptp', event: Event) => {
         <div class="form-text">{{ photoDisplay }}</div>
 
         <div v-if="photos.length" class="thumb-grid mt-2">
-          <div v-for="att in photos" :key="att.path" class="thumb-card">
+          <div v-for="att in photos" :key="att.path ?? att.url" class="thumb-card">
             <img :src="att.url" class="thumb-image" />
             <button
               type="button"
               class="btn btn-sm btn-outline-secondary w-100"
-              @click="emit('delete', att.path)"
+              @click="emitDelete(att.path)"
               :disabled="uploading"
             >
               <i class="bi bi-trash me-1"></i>Remove
@@ -102,12 +108,12 @@ const handleChange = (type: 'photo' | 'ptp', event: Event) => {
         <div class="form-text">{{ ptpDisplay }}</div>
 
         <div v-if="ptpPhotos.length" class="thumb-grid mt-2">
-          <div v-for="att in ptpPhotos" :key="att.path" class="thumb-card">
+          <div v-for="att in ptpPhotos" :key="att.path ?? att.url" class="thumb-card">
             <img :src="att.url" class="thumb-image" />
             <button
               type="button"
               class="btn btn-sm btn-outline-secondary w-100"
-              @click="emit('delete', att.path)"
+              @click="emitDelete(att.path)"
               :disabled="uploading"
             >
               <i class="bi bi-trash me-1"></i>Remove
@@ -123,7 +129,7 @@ const handleChange = (type: 'photo' | 'ptp', event: Event) => {
 @use '@/styles/_variables.scss' as *;
 
 .attachment-header {
-  background: $surface-2 !important;
+  background: $surface-2;
   border-bottom: 1px solid rgba($border-color, 0.5);
   color: $body-color;
 }
@@ -134,32 +140,32 @@ const handleChange = (type: 'photo' | 'ptp', event: Event) => {
 
 .form-control[type="file"]::file-selector-button,
 .form-control[type="file"]::-webkit-file-upload-button {
-  background: $surface-3 !important;
-  color: $body-color !important;
-  border: none !important;
-  border-right: 1px solid $border-color !important;
-  padding: 0.375rem 0.75rem !important;
-  margin-right: 0.75rem !important;
-  cursor: pointer !important;
+  background: $surface-3;
+  color: $body-color;
+  border: none;
+  border-right: 1px solid $border-color;
+  padding: 0.375rem 0.75rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
 }
 
 .form-control[type="file"]::file-selector-button:hover,
 .form-control[type="file"]::-webkit-file-upload-button:hover {
-  background: lighten($surface-3, 3%) !important;
+  background: lighten($surface-3, 3%);
 }
 
 .form-control[type="file"]::-moz-file-upload-button {
-  background: $surface-3 !important;
-  color: $body-color !important;
-  border: none !important;
-  border-right: 1px solid $border-color !important;
-  padding: 0.375rem 0.75rem !important;
-  margin-right: 0.75rem !important;
-  cursor: pointer !important;
+  background: $surface-3;
+  color: $body-color;
+  border: none;
+  border-right: 1px solid $border-color;
+  padding: 0.375rem 0.75rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
 }
 
 .form-control[type="file"]::-moz-file-upload-button:hover {
-  background: lighten($surface-3, 3%) !important;
+  background: lighten($surface-3, 3%);
 }
 
 .thumb-grid {

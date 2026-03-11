@@ -37,23 +37,22 @@ const isArchived = computed(() => !props.node.active)
       <!-- Expand Toggle -->
       <button
         v-if="hasChildren"
-        class="btn btn-sm p-0"
-        style="width: 24px; height: 24px;"
+        class="btn btn-sm p-0 category-toggle-btn"
         @click.stop="$emit('toggle-expand', node.id)"
         :title="isExpanded ? 'Collapse' : 'Expand'"
       >
         <i :class="['bi', isExpanded ? 'bi-chevron-down' : 'bi-chevron-right']"></i>
       </button>
-      <div v-else style="width: 24px;"></div>
+      <div v-else class="category-toggle-spacer"></div>
 
       <!-- Category Name -->
       <span
         class="flex-grow-1 category-label"
         @click="$emit('select', node.id)"
-        :style="{ opacity: isArchived ? 0.5 : 1 }"
+        :class="{ 'is-archived-label': isArchived }"
       >
         {{ node.name }}
-        <span v-if="isArchived" class="badge bg-secondary bg-opacity-75 ms-2" style="font-size: 0.65rem;">
+        <span v-if="isArchived" class="badge bg-secondary bg-opacity-75 ms-2 archived-badge">
           archived
         </span>
       </span>
@@ -100,7 +99,7 @@ const isArchived = computed(() => !props.node.active)
     </div>
 
     <!-- Children -->
-    <div v-if="isExpanded && hasChildren" class="ms-4 mt-2 border-start border-secondary" style="padding-left: 12px;">
+    <div v-if="isExpanded && hasChildren" class="ms-4 mt-2 border-start border-secondary category-children">
       <div v-for="child of children" :key="child.id" class="mb-2">
         <CategoryTreeNode
           :node="child"
@@ -119,6 +118,15 @@ const isArchived = computed(() => !props.node.active)
 </template>
 
 <style scoped>
+.category-toggle-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.category-toggle-spacer {
+  width: 24px;
+}
+
 .category-node {
   margin-bottom: 0.5rem;
 }
@@ -138,9 +146,21 @@ const isArchived = computed(() => !props.node.active)
   transition: opacity 0.2s;
 }
 
+.category-label.is-archived-label {
+  opacity: 0.5;
+}
+
 .category-label:hover {
   opacity: 0.8;
   text-decoration: underline;
+}
+
+.archived-badge {
+  font-size: 0.65rem;
+}
+
+.category-children {
+  padding-left: 12px;
 }
 
 .btn-group {

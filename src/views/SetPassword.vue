@@ -21,6 +21,12 @@ const err = ref('')
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return ''
+}
+
 onMounted(async () => {
   // Get parameters from URL
   const token = route.query.setupToken as string
@@ -42,13 +48,14 @@ onMounted(async () => {
     verifying.value = false
   } catch (e) {
     let errorMsg = 'Invalid or expired password setup link.'
-    console.error('[SetPassword] Error during verification:', e.message)
+    const message = getErrorMessage(e)
+    console.error('[SetPassword] Error during verification:', message)
     
-    if (e.message?.includes('Token expired')) {
+    if (message.includes('Token expired')) {
       errorMsg = 'This link has expired. Please request a new password setup link.'
-    } else if (e.message?.includes('Invalid token')) {
+    } else if (message.includes('Invalid token')) {
       errorMsg = 'This link is invalid. Please request a new password setup link.'
-    } else if (e.message?.includes('User not found')) {
+    } else if (message.includes('User not found')) {
       errorMsg = 'User account not found.'
     }
     err.value = errorMsg
@@ -88,12 +95,13 @@ const submit = async () => {
     }
   } catch (e) {
     let errorMsg = 'Failed to set password. Please try again.'
-    if (e.message?.includes('auth/weak-password')) {
+    const message = getErrorMessage(e)
+    if (message.includes('auth/weak-password')) {
       errorMsg = 'Password is too weak. Please use a stronger password.'
-    } else if (e.message?.includes('requires recent authentication')) {
+    } else if (message.includes('requires recent authentication')) {
       errorMsg = 'Please request a new password setup link.'
-    } else if (e.message) {
-      errorMsg = e.message
+    } else if (message) {
+      errorMsg = message
     }
     err.value = errorMsg
     toastRef.value?.show(errorMsg, 'error')
@@ -114,8 +122,8 @@ const toggleConfirmPasswordVisibility = () => {
 <template>
   <Toast ref="toastRef" />
 
-  <div class="container d-flex align-items-center justify-content-center" style="min-height: 100vh; max-width: 420px;">
-    <div class="card w-100" style="margin-top: -100px;">
+  <div class="container d-flex align-items-center justify-content-center set-password-shell">
+    <div class="card w-100 set-password-card">
       <div class="card-body">
         <!-- Loading state -->
         <div v-if="verifying" class="text-center py-5">
@@ -128,7 +136,7 @@ const toggleConfirmPasswordVisibility = () => {
         <!-- Error state -->
         <div v-else-if="err && !email" class="text-center py-5">
           <div class="mb-3">
-            <i class="bi bi-exclamation-circle text-danger" style="font-size: 3rem;"></i>
+            <i class="bi bi-exclamation-circle text-danger invalid-link-icon"></i>
           </div>
           <h5 class="card-title">Link Invalid or Expired</h5>
           <p class="text-muted mb-4">{{ err }}</p>
@@ -231,6 +239,19 @@ const toggleConfirmPasswordVisibility = () => {
 
 .input-group > .btn-outline-secondary:hover {
   background-color: $surface-2;
+}
+
+.set-password-shell {
+  min-height: 100vh;
+  max-width: 420px;
+}
+
+.set-password-card {
+  margin-top: -100px;
+}
+
+.invalid-link-icon {
+  font-size: 3rem;
 }
 </style>
 

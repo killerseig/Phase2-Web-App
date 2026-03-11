@@ -157,6 +157,56 @@ export function validateCreateUserForm(data: {
 }
 
 /**
+ * Validate login form fields
+ */
+export function validateLoginForm(data: {
+  email: string
+  password: string
+}): ValidationResult {
+  const errors: ValidationError[] = []
+
+  errors.push(...validateEmail(data.email))
+  errors.push(...validateRequired(data.password, 'Password'))
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  }
+}
+
+/**
+ * Validate signup form fields
+ */
+export function validateSignUpForm(data: {
+  email: string
+  password: string
+  confirmPassword: string
+}): ValidationResult {
+  const errors: ValidationError[] = []
+
+  errors.push(...validateEmail(data.email))
+  errors.push(...validateRequired(data.password, 'Password'))
+  errors.push(...validateMinLength(data.password, 'Password', 6))
+  errors.push(...validateRequired(data.confirmPassword, 'Confirm password'))
+
+  if (data.password && data.confirmPassword && data.password !== data.confirmPassword) {
+    errors.push({ field: 'confirmPassword', message: 'Passwords do not match' })
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  }
+}
+
+/**
+ * Get first validation error message
+ */
+export function getFirstValidationMessage(result: ValidationResult): string | null {
+  return result.errors[0]?.message ?? null
+}
+
+/**
  * Get error message for a specific field
  */
 export function getFieldError(errors: ValidationError[], fieldName: string): string | null {

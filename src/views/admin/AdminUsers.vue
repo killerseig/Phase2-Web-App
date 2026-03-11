@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
@@ -11,6 +11,8 @@ import { useEmployeesStore } from '../../stores/employees'
 import { type Employee, type UserProfile } from '@/services'
 import { type Role } from '@/constants/app'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { normalizeError } from '@/services/serviceUtils'
+import { getFirstValidationMessage, validateCreateUserForm } from '@/utils/validation'
 
 type Align = 'start' | 'center' | 'end'
 type Column = { key: string; label: string; sortable?: boolean; width?: string; align?: Align; slot?: string }
@@ -152,17 +154,23 @@ function friendlyError(message: string) {
   return message
 }
 
-async function loadUsers() {
-  await usersStore.fetchAllUsers()
+function loadUsers() {
+  usersStore.subscribeAllUsers()
 }
 
-async function loadEmployees() {
-  await employeesStore.fetchAllEmployees()
+function loadEmployees() {
+  employeesStore.subscribeAllEmployees()
 }
 
 async function submitUserForm() {
-  if (!userForm.value.email.trim() || !userForm.value.firstName.trim() || !userForm.value.lastName.trim()) {
-    toastRef.value?.show('Email, first name, and last name are required', 'error')
+  const validation = validateCreateUserForm({
+    email: userForm.value.email,
+    firstName: userForm.value.firstName,
+    lastName: userForm.value.lastName,
+  })
+  const validationMessage = getFirstValidationMessage(validation)
+  if (validationMessage) {
+    toastRef.value?.show(validationMessage, 'error')
     return
   }
 
@@ -179,7 +187,7 @@ async function submitUserForm() {
     resetUserForm()
     await loadUsers()
   } catch (e) {
-    const msg = e?.message ?? String(e)
+    const msg = normalizeError(e, 'Failed to create user')
     toastRef.value?.show(friendlyError(msg), 'error')
   } finally {
     creatingUser.value = false
@@ -360,7 +368,7 @@ async function saveEmployeeEdit(emp: Employee, closeActions = false) {
       updates.lastName = editForm.value.lastName
     }
     if (editForm.value.employeeNumber !== editFormOriginal.value.employeeNumber) {
-      updates.employeeNumber = editForm.value.employeeNumber || null
+      updates.employeeNumber = editForm.value.employeeNumber.trim()
     }
     if (editForm.value.occupation !== editFormOriginal.value.occupation) {
       updates.occupation = editForm.value.occupation
@@ -428,6 +436,11 @@ async function toggleEmployeeActions(emp: Employee) {
 onMounted(() => {
   loadUsers()
   loadEmployees()
+})
+
+onUnmounted(() => {
+  usersStore.stopUsersSubscription()
+  employeesStore.stopAllEmployeesSubscription()
 })
 </script>
 
@@ -791,7 +804,7 @@ onMounted(() => {
             </template>
 
             <template #emp-actions="{ row }">
-              <div class="d-flex align-items-center justify-content-end gap-1 flex-nowrap" style="min-width: 200px;">
+              <div class="d-flex align-items-center justify-content-end gap-1 flex-nowrap employee-actions-cell">
                 <div v-if="activeEmployeeActionsId === row.id" class="btn-group btn-group-sm flex-nowrap" role="group">
                   <button
                     @click.stop="handleDeleteEmployee(row)"
@@ -832,6 +845,10 @@ onMounted(() => {
 
 .access-note .bi-info-circle {
   color: $primary;
+}
+
+.employee-actions-cell {
+  min-width: 200px;
 }
 </style>
 

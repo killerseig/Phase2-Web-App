@@ -29,7 +29,6 @@ export const ROUTES = {
   ADMIN_USERS: '/admin/users',
   ADMIN_JOBS: '/admin/jobs',
   ADMIN_CATALOG: '/admin/shop-catalog',
-  ADMIN_EMPLOYEES: '/admin/employees',
   ADMIN_EMAIL_SETTINGS: '/admin/email-settings',
   ADMIN_DATA_MIGRATION: '/admin/data-migration',
   UNAUTHORIZED: '/unauthorized',

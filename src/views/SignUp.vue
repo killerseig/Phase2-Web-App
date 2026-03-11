@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import { useAuthStore } from '../stores/auth'
 import { finalizeRegisteredUserProfile } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
+import { getFirstValidationMessage, validateSignUpForm } from '@/utils/validation'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -17,41 +19,39 @@ const lastName = ref('')
 const loading = ref(false)
 const err = ref('')
 
+const getAuthErrorCode = (error: unknown): string | null => {
+  if (typeof error !== 'object' || error === null) return null
+  if (!('code' in error)) return null
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' ? code : null
+}
+
 async function handleSignUp() {
   err.value = ''
-  
-  // Validation
-  if (!email.value.trim()) {
-    err.value = 'Email is required'
-    toastRef.value?.show(err.value, 'error')
+
+  const validation = validateSignUpForm({
+    email: email.value,
+    password: password.value,
+    confirmPassword: confirmPassword.value,
+  })
+  const validationMessage = getFirstValidationMessage(validation)
+  if (validationMessage) {
+    err.value = validationMessage
+    toastRef.value?.show(validationMessage, 'error')
     return
   }
-  
-  if (!password.value) {
-    err.value = 'Password is required'
-    toastRef.value?.show(err.value, 'error')
-    return
-  }
-  
-  if (password.value !== confirmPassword.value) {
-    err.value = 'Passwords do not match'
-    toastRef.value?.show(err.value, 'error')
-    return
-  }
-  
-  if (password.value.length < 6) {
-    err.value = 'Password must be at least 6 characters'
-    toastRef.value?.show(err.value, 'error')
-    return
-  }
+
+  const normalizedEmail = email.value.trim()
+  const normalizedFirstName = firstName.value.trim()
+  const normalizedLastName = lastName.value.trim()
 
   loading.value = true
   try {
     // Register using auth store (creates both auth account and Firestore profile)
-    const cred = await auth.register(email.value, password.value)
+    const cred = await auth.register(normalizedEmail, password.value)
     
     if (cred.user) {
-      await finalizeRegisteredUserProfile(cred.user, firstName.value, lastName.value)
+      await finalizeRegisteredUserProfile(cred.user, normalizedFirstName, normalizedLastName)
     }
     
     toastRef.value?.show('Account created! Redirecting...', 'success')
@@ -61,15 +61,16 @@ async function handleSignUp() {
       router.push({ name: 'dashboard' })
     }, 1000)
   } catch (e) {
-    let message = 'Failed to create account'
-    
-    if (e.code === 'auth/email-already-in-use') {
+    const code = getAuthErrorCode(e)
+    let message = normalizeError(e, 'Failed to create account')
+
+    if (code === 'auth/email-already-in-use') {
       message = 'Email already in use'
-    } else if (e.code === 'auth/invalid-email') {
+    } else if (code === 'auth/invalid-email') {
       message = 'Invalid email address'
-    } else if (e.code === 'auth/operation-not-allowed') {
+    } else if (code === 'auth/operation-not-allowed') {
       message = 'Sign up is currently disabled'
-    } else if (e.code === 'auth/weak-password') {
+    } else if (code === 'auth/weak-password') {
       message = 'Password is too weak'
     }
     
@@ -99,57 +100,67 @@ function goToLogin() {
           <!-- First Name & Last Name -->
           <div class="row g-2 mb-3">
             <div class="col-6">
-              <label class="form-label">First Name</label>
+              <label class="form-label" for="signup-first-name">First Name</label>
               <input
+                id="signup-first-name"
                 v-model="firstName"
                 type="text"
                 class="form-control"
                 placeholder="First name"
+                autocomplete="given-name"
               />
             </div>
             <div class="col-6">
-              <label class="form-label">Last Name</label>
+              <label class="form-label" for="signup-last-name">Last Name</label>
               <input
+                id="signup-last-name"
                 v-model="lastName"
                 type="text"
                 class="form-control"
                 placeholder="Last name"
+                autocomplete="family-name"
               />
             </div>
           </div>
 
           <!-- Email -->
           <div class="mb-3">
-            <label class="form-label">Email Address</label>
+            <label class="form-label" for="signup-email">Email Address</label>
             <input
+              id="signup-email"
               v-model="email"
               type="email"
               class="form-control"
               placeholder="you@example.com"
+              autocomplete="email"
               required
             />
           </div>
 
           <!-- Password -->
           <div class="mb-3">
-            <label class="form-label">Password</label>
+            <label class="form-label" for="signup-password">Password</label>
             <input
+              id="signup-password"
               v-model="password"
               type="password"
               class="form-control"
               placeholder="At least 6 characters"
+              autocomplete="new-password"
               required
             />
           </div>
 
           <!-- Confirm Password -->
           <div class="mb-3">
-            <label class="form-label">Confirm Password</label>
+            <label class="form-label" for="signup-confirm-password">Confirm Password</label>
             <input
+              id="signup-confirm-password"
               v-model="confirmPassword"
               type="password"
               class="form-control"
               placeholder="Confirm your password"
+              autocomplete="new-password"
               required
             />
           </div>
@@ -201,7 +212,7 @@ function goToLogin() {
   border: none;
   background: none;
   cursor: pointer;
-  padding: 0 !important;
+  padding: 0;
 }
 
 .btn-link:hover {

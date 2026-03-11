@@ -70,7 +70,8 @@ describe('ShopCatalog service', () => {
     expect(getDocsMock).toHaveBeenCalledTimes(1)
     const constraints = (query as any).mock.calls[0].slice(1)
     expect(constraints.some((c: any) => c.field === 'active')).toBe(true)
-    expect(items[0].id).toBe('1')
+    expect(items).toHaveLength(1)
+    expect(items[0]?.id).toBe('1')
   })
 
   it('creates catalog item with trims and timestamps', async () => {
@@ -79,7 +80,9 @@ describe('ShopCatalog service', () => {
     const id = await createCatalogItem('  Widget  ', 'cat', '  SKU  ', 10)
 
     expect(id).toBe('cat-1')
-    const [, payload] = addDocMock.mock.calls[0]
+    const addDocCall = addDocMock.mock.calls[0]
+    expect(addDocCall).toBeDefined()
+    const [, payload] = addDocCall!
     expect(payload).toMatchObject({ description: 'Widget', categoryId: 'cat', sku: 'SKU', price: 10, active: true })
     expect(serverTimestamp).toHaveBeenCalled()
   })
@@ -89,7 +92,9 @@ describe('ShopCatalog service', () => {
 
     await updateCatalogItem('item-1', { description: 'New', sku: undefined })
 
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload).toMatchObject({ description: 'New', updatedAt: 'ts' })
     expect(payload).not.toHaveProperty('sku')
   })
@@ -97,7 +102,9 @@ describe('ShopCatalog service', () => {
   it('archives category by setting active false', async () => {
     await archiveCategory('cat-1')
 
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload).toMatchObject({ active: false, updatedAt: 'ts' })
   })
 })

@@ -5,11 +5,13 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
   where,
+  type Unsubscribe,
   type DocumentData,
 } from 'firebase/firestore'
 import { normalizeError } from './serviceUtils'
@@ -28,6 +30,16 @@ export type Employee = {
 
 export type EmployeeInput = Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>
 
+type FirestoreLikeError = {
+  code?: string
+  message?: string
+}
+
+const asFirestoreLikeError = (error: unknown): FirestoreLikeError | null => {
+  if (typeof error !== 'object' || error === null) return null
+  return error as FirestoreLikeError
+}
+
 function normalize(id: string, data: DocumentData): Employee {
   return {
     id,
@@ -42,19 +54,37 @@ function normalize(id: string, data: DocumentData): Employee {
   }
 }
 
+function sortEmployeesByName(employees: Employee[]): Employee[] {
+  return employees.slice().sort((a, b) => {
+    const lastNameCmp = a.lastName.localeCompare(b.lastName)
+    return lastNameCmp !== 0 ? lastNameCmp : a.firstName.localeCompare(b.firstName)
+  })
+}
+
 export async function listAllEmployees(): Promise<Employee[]> {
   try {
     const q = query(collection(db, 'employees'))
     const snap = await getDocs(q)
-    const employees = snap.docs.map((d) => normalize(d.id, d.data()))
-    employees.sort((a, b) => {
-      const lastNameCmp = a.lastName.localeCompare(b.lastName)
-      return lastNameCmp !== 0 ? lastNameCmp : a.firstName.localeCompare(b.firstName)
-    })
-    return employees
+    return sortEmployeesByName(snap.docs.map((d) => normalize(d.id, d.data())))
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load employees'))
   }
+}
+
+export function subscribeAllEmployees(
+  onUpdate: (employees: Employee[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  const q = query(collection(db, 'employees'))
+  return onSnapshot(
+    q,
+    (snap) => {
+      onUpdate(sortEmployeesByName(snap.docs.map((d) => normalize(d.id, d.data()))))
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
 }
 
 export async function listEmployeesByJob(jobId: string): Promise<Employee[]> {
@@ -69,7 +99,11 @@ export async function listEmployeesByJob(jobId: string): Promise<Employee[]> {
     return snap.docs.map(d => normalize(d.id, d.data()))
   } catch (e) {
     // If composite index is missing, fall back to client-side sorting
-    if (e.code === 'failed-precondition' || e.message?.includes('composite index')) {
+    const firestoreError = asFirestoreLikeError(e)
+    if (
+      firestoreError?.code === 'failed-precondition' ||
+      firestoreError?.message?.includes('composite index')
+    ) {
       const q = query(
         collection(db, 'employees'),
         where('jobId', '==', jobId)
@@ -84,6 +118,23 @@ export async function listEmployeesByJob(jobId: string): Promise<Employee[]> {
     }
     throw new Error(normalizeError(e, 'Failed to load employees'))
   }
+}
+
+export function subscribeEmployeesByJob(
+  jobId: string,
+  onUpdate: (employees: Employee[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  const q = query(collection(db, 'employees'), where('jobId', '==', jobId))
+  return onSnapshot(
+    q,
+    (snap) => {
+      onUpdate(sortEmployeesByName(snap.docs.map((d) => normalize(d.id, d.data()))))
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
 }
 
 export async function createEmployee(jobId: string | null, input: Omit<EmployeeInput, 'jobId'>): Promise<string> {

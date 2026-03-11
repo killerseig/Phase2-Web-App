@@ -3,6 +3,7 @@ import {
   createDailyLog,
   listDailyLogsForDate,
   submitDailyLog,
+  type DailyLogDraftInput,
   updateDailyLog,
 } from '@/services/DailyLogs'
 import {
@@ -68,7 +69,7 @@ const snap = (docs: Array<{ id: string; data: any }>) => ({
   empty: docs.length === 0,
 })
 
-const baseDraft = {
+const baseDraft: DailyLogDraftInput = {
   jobSiteNumbers: '',
   foremanOnSite: '',
   siteForemanAssistant: '',
@@ -141,7 +142,9 @@ describe('DailyLogs service', () => {
     const newId = await createDailyLog('job-1', '2024-02-01', baseDraft)
 
     expect(newId).toBe('new-log')
-    const [, payload] = addDocMock.mock.calls[0]
+    const addDocCall = addDocMock.mock.calls[0]
+    expect(addDocCall).toBeDefined()
+    const [, payload] = addDocCall!
     expect(payload).toMatchObject({
       jobId: 'job-1',
       uid: 'user-1',
@@ -158,7 +161,9 @@ describe('DailyLogs service', () => {
     await updateDailyLog('job-1', 'log-1', { notesCorrespondence: 'Updated' })
 
     expect(updateDocMock).toHaveBeenCalledTimes(1)
-    const [, updates] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, updates] = updateCall!
     expect(updates).toMatchObject({ notesCorrespondence: 'Updated', updatedAt: 'ts' })
   })
 
@@ -169,7 +174,9 @@ describe('DailyLogs service', () => {
     await submitDailyLog('job-1', 'log-1')
 
     expect(updateDocMock).toHaveBeenCalledTimes(1)
-    const [, updates] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, updates] = updateCall!
     expect(updates).toMatchObject({ status: 'submitted', submittedAt: 'ts', updatedAt: 'ts' })
   })
 })

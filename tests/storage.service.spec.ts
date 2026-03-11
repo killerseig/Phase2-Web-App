@@ -46,7 +46,9 @@ describe('Storage service', () => {
     const expectedPath = 'daily-logs/log-1/1707523200000-bad_name_____.png'
     expect(refMock).toHaveBeenCalledWith(expect.anything(), expectedPath)
     expect(uploadBytesMock).toHaveBeenCalled()
-    const metadata = uploadBytesMock.mock.calls[0][2]
+    const uploadCall = uploadBytesMock.mock.calls[0]
+    expect(uploadCall).toBeDefined()
+    const metadata = uploadCall![2]
     expect(metadata.customMetadata).toMatchObject({
       type: 'photo',
       uploadedBy: 'u1',

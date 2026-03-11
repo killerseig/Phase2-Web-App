@@ -1,11 +1,19 @@
-import { computed, nextTick, onMounted, ref, watch, type Ref } from 'vue'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  ref,
+  watch,
+  type ComponentPublicInstance,
+  type Ref,
+} from 'vue'
 
 export function useCollapseMeasure(open: Ref<boolean>) {
   const contentRef = ref<HTMLElement | null>(null)
   const contentHeight = ref(0)
 
-  function setContentRef(el: HTMLElement | null) {
-    contentRef.value = el
+  function setContentRef(el: Element | ComponentPublicInstance | null) {
+    contentRef.value = el instanceof HTMLElement ? el : null
     measure()
   }
 

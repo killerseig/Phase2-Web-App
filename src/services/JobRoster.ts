@@ -11,15 +11,27 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  type Unsubscribe,
   type DocumentData,
 } from 'firebase/firestore'
 import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { normalizeError } from './serviceUtils'
+
+type FirestoreLikeError = {
+  code?: string
+  message?: string
+}
+
+const asFirestoreLikeError = (error: unknown): FirestoreLikeError | null => {
+  if (typeof error !== 'object' || error === null) return null
+  return error as FirestoreLikeError
+}
 
 /**
  * Normalize Firestore document to JobRosterEmployee type
@@ -57,6 +69,13 @@ function normalize(id: string, data: DocumentData): JobRosterEmployee {
   }
 }
 
+function sortRosterEmployeesByName(employees: JobRosterEmployee[]): JobRosterEmployee[] {
+  return employees.slice().sort((a, b) => {
+    const lastNameCmp = a.lastName.localeCompare(b.lastName)
+    return lastNameCmp !== 0 ? lastNameCmp : a.firstName.localeCompare(b.firstName)
+  })
+}
+
 /**
  * List all employees in a job roster, sorted by lastName, firstName
  */
@@ -73,18 +92,36 @@ export async function listRosterEmployees(jobId: string): Promise<JobRosterEmplo
     return snap.docs.map(d => normalize(d.id, d.data()))
   } catch (e) {
     // Fallback to client-side sorting if composite index missing
-    if (e.code === 'failed-precondition' || e.message?.includes('composite index')) {
+    const firestoreError = asFirestoreLikeError(e)
+    if (
+      firestoreError?.code === 'failed-precondition' ||
+      firestoreError?.message?.includes('composite index')
+    ) {
       const q = query(collection(db, `jobs/${jobId}/roster`))
       const snap = await getDocs(q)
-      const employees = snap.docs.map(d => normalize(d.id, d.data()))
-      employees.sort((a, b) => {
-        const lastNameCmp = a.lastName.localeCompare(b.lastName)
-        return lastNameCmp !== 0 ? lastNameCmp : a.firstName.localeCompare(b.firstName)
-      })
-      return employees
+      return sortRosterEmployeesByName(snap.docs.map(d => normalize(d.id, d.data())))
     }
     throw new Error(normalizeError(e, 'Failed to load roster'))
   }
+}
+
+export function subscribeRosterEmployees(
+  jobId: string,
+  onUpdate: (employees: JobRosterEmployee[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  assertJobAccess(jobId)
+  // Keep this query index-light and sort client-side.
+  const q = query(collection(db, `jobs/${jobId}/roster`))
+  return onSnapshot(
+    q,
+    (snap) => {
+      onUpdate(sortRosterEmployeesByName(snap.docs.map((d) => normalize(d.id, d.data()))))
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
 }
 
 /**

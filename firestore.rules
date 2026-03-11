@@ -7,6 +7,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
     function userDoc() {
       return signedIn() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
     }
@@ -19,6 +23,18 @@ service cloud.firestore {
       return userDocExists() ? userDoc().data.role : null;
     }
 
+    function userIsActive() {
+      return userDocExists() && userDoc().data.active == true;
+    }
+
+    function roleCanUseApp() {
+      return userRole() in ['admin', 'employee', 'shop', 'foreman'];
+    }
+
+    function activeAppUser() {
+      return signedIn() && userDocExists() && userIsActive() && roleCanUseApp();
+    }
+
     function userAssignedJobs() {
       return userDocExists() && userDoc().data.assignedJobIds != null
         ? userDoc().data.assignedJobIds
@@ -26,16 +42,32 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return userRole() == 'admin';
+      return activeAppUser() && userRole() == 'admin';
     }
 
-    function hasJobWriteAccess(jobId) {
-      return signedIn() && userDocExists() && (
+    function hasJobReadAccess(jobId) {
+      return activeAppUser() && (
         isAdmin() ||
         userRole() == 'employee' ||
         userRole() == 'shop' ||
         (userRole() == 'foreman' && userAssignedJobs().hasAny([jobId]))
       );
+    }
+
+    function hasJobWriteAccess(jobId) {
+      return activeAppUser() && (
+        isAdmin() ||
+        userRole() == 'employee' ||
+        userRole() == 'shop' ||
+        (userRole() == 'foreman' && userAssignedJobs().hasAny([jobId]))
+      );
+    }
+
+    function selfUpdateKeepsPrivileges(uid) {
+      return isSelf(uid) &&
+             request.resource.data.role == resource.data.role &&
+             request.resource.data.active == resource.data.active &&
+             request.resource.data.assignedJobIds == resource.data.assignedJobIds;
     }
 
     function isDraft() {
@@ -44,39 +76,59 @@ service cloud.firestore {
 
     /* ---------------- users ---------------- */
     match /users/{uid} {
-      allow read: if signedIn();
-      allow create: if signedIn() && request.auth.uid == uid;
-      allow update: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // Users can always read their own profile so role/active changes can be applied immediately client-side.
+      allow get: if signedIn() && (isSelf(uid) || isAdmin());
+      allow list: if isAdmin();
+
+      // Self-create is only allowed as a locked-down role.
+      allow create: if isSelf(uid) && request.resource.data.role == 'none';
+
+      // Admins can manage users. Users can update only non-privileged fields on themselves.
+      allow update: if isAdmin() || selfUpdateKeepsPrivileges(uid);
       allow delete: if isAdmin();
 
       match /jobs/{jobId} {
-        allow read: if signedIn();
+        allow read: if isSelf(uid) || isAdmin();
         allow write: if isAdmin();
       }
     }
 
     /* ---------------- jobs ---------------- */
     match /jobs/{jobId} {
-      allow read: if signedIn();
+      allow read: if hasJobReadAccess(jobId);
       allow create, update, delete: if isAdmin();
 
       /* -------- job roster (employees) -------- */
       match /roster/{employeeId} {
-        allow read: if signedIn();
+        allow read: if hasJobReadAccess(jobId);
         allow create, update, delete: if isAdmin();
       }
 
       /* -------- job shop orders -------- */
       match /shop_orders/{orderId} {
-        allow read: if signedIn();
+        allow read: if hasJobReadAccess(jobId);
         allow create, update, delete: if hasJobWriteAccess(jobId);
       }
 
       /* -------- job daily logs -------- */
       match /dailyLogs/{logId} {
-        allow get, list, read: if signedIn();
-        allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.status == 'draft';
-        allow update: if signedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'draft';
+        function isOwnerOfDoc() {
+          return signedIn() && resource.data.uid == request.auth.uid;
+        }
+
+        allow read: if hasJobReadAccess(jobId) &&
+                     (resource.data.status == 'submitted' || isOwnerOfDoc() || isAdmin());
+        allow create: if hasJobWriteAccess(jobId) &&
+                      request.resource.data.uid == request.auth.uid &&
+                      request.resource.data.status == 'draft' &&
+                      request.resource.data.jobId == jobId;
+        allow update: if isAdmin() ||
+                      (hasJobWriteAccess(jobId) &&
+                       isOwnerOfDoc() &&
+                       resource.data.status == 'draft' &&
+                       request.resource.data.uid == resource.data.uid &&
+                       request.resource.data.jobId == resource.data.jobId &&
+                       (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
         allow delete: if isAdmin();
       }
 
@@ -92,25 +144,30 @@ service cloud.firestore {
                  request.resource.data.uid == resource.data.uid;
         }
 
-        allow read: if signedIn();
-        allow create, update, delete: if isAdmin();
-        allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.status == 'draft';
-        allow update: if signedIn() && isOwnerOfDoc() && resource.data.status == 'draft' && fieldsUnchanged() &&
-                      (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted');
+        allow read: if hasJobReadAccess(jobId);
+        allow create: if isAdmin() ||
+                      (hasJobWriteAccess(jobId) &&
+                       request.resource.data.uid == request.auth.uid &&
+                       request.resource.data.status == 'draft' &&
+                       request.resource.data.jobId == jobId);
+        allow update: if isAdmin() ||
+                      (hasJobWriteAccess(jobId) &&
+                       isOwnerOfDoc() &&
+                       resource.data.status == 'draft' &&
+                       fieldsUnchanged() &&
+                       (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
+        allow delete: if isAdmin();
       }
     }
 
     /* ---------------- daily logs (legacy, flat collection) ---------------- */
     match /dailyLogs/{logId} {
-      allow get, list, read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.status == 'draft';
-      allow update: if signedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'draft';
-      allow delete: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
-    /* ---------------- timecards (dev) ---------------- */
+    /* ---------------- timecards (legacy/dev) ---------------- */
     match /timecards/{timecardId} {
-      allow read, write: if signedIn();
+      allow read, write: if isAdmin();
     }
 
     /* ---------------- nested timecards by week ---------------- */
@@ -127,54 +184,62 @@ service cloud.firestore {
                request.resource.data.uid == resource.data.uid;
       }
 
-      function withinWeek() {
+      function withinExistingWeek() {
         return resource.data.weekStartTs != null && resource.data.weekEndTs != null &&
                request.time >= resource.data.weekStartTs &&
                request.time <= resource.data.weekEndTs;
       }
 
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid &&
-                    request.resource.data.status == 'draft' &&
-                    request.resource.data.employeeId == employeeId &&
-                    request.resource.data.jobId == jobId && withinWeek();
-      allow update: if signedIn() && isOwnerOfDoc() && isDraft() && withinWeek() && fieldsUnchanged() &&
-                    (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted');
+      function withinRequestedWeek() {
+        return request.resource.data.weekStartTs != null && request.resource.data.weekEndTs != null &&
+               request.time >= request.resource.data.weekStartTs &&
+               request.time <= request.resource.data.weekEndTs;
+      }
+
+      allow read: if hasJobReadAccess(jobId);
+      allow create: if isAdmin() ||
+                    (hasJobWriteAccess(jobId) &&
+                     request.resource.data.uid == request.auth.uid &&
+                     request.resource.data.status == 'draft' &&
+                     request.resource.data.employeeId == employeeId &&
+                     request.resource.data.jobId == jobId &&
+                     withinRequestedWeek());
+      allow update: if isAdmin() ||
+                    (hasJobWriteAccess(jobId) &&
+                     isOwnerOfDoc() &&
+                     isDraft() &&
+                     withinExistingWeek() &&
+                     fieldsUnchanged() &&
+                     (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
+      allow delete: if isAdmin();
     }
 
     /* ---------------- shop catalog (items with categories) ---------------- */
     match /shopCatalog/{itemId} {
-      allow read: if signedIn();
+      allow read: if activeAppUser();
       allow write: if isAdmin();
     }
 
     /* ---------------- shop categories (hierarchical) ---------------- */
     match /shopCategories/{categoryId} {
-      allow read: if signedIn();
+      allow read: if activeAppUser();
       allow create, update, delete: if isAdmin();
     }
 
     /* ---------------- settings (app-wide) ---------------- */
     match /settings/{settingId} {
-      allow read: if signedIn();
+      allow read: if activeAppUser();
       allow write: if isAdmin();
     }
 
-    /* ---------------- shop orders (DEV - simplified) ---------------- */
+    /* ---------------- shop orders (legacy/dev) ---------------- */
     match /shopOrders/{orderId} {
-      allow read, write: if signedIn();
-    }
-
-    /* ---------------- nested shop orders by job ---------------- */
-    match /jobs/{jobId}/shop_orders/{orderId} {
-      allow read: if signedIn();
-      allow create, update, delete: if hasJobWriteAccess(jobId);
+      allow read, write: if isAdmin();
     }
 
     /* ---------------- employees ---------------- */
     match /employees/{employeeId} {
-      allow read: if signedIn();
+      allow read: if activeAppUser();
       allow create, update, delete: if isAdmin();
     }
 

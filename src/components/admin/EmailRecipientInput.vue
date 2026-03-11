@@ -68,8 +68,7 @@ function removeEmail(email: string) {
         {{ email }}
         <button
           type="button"
-          class="btn-close btn-close-white"
-          style="font-size: 0.65rem; padding: 0"
+          class="btn-close btn-close-white recipient-remove-btn"
           @click="removeEmail(email)"
           :disabled="disabled"
           aria-label="Remove"
@@ -114,3 +113,10 @@ function removeEmail(email: string) {
     </small>
   </div>
 </template>
+
+<style scoped>
+.recipient-remove-btn {
+  font-size: 0.65rem;
+  padding: 0;
+}
+</style>

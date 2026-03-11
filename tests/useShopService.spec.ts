@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useShopService } from '@/services/useShopService'
+import type { SendShopOrderEmailRequest } from '@/services/useShopService'
 import { httpsCallable } from 'firebase/functions'
 import { useJobAccess } from '@/composables/useJobAccess'
 
@@ -31,7 +32,7 @@ describe('useShopService', () => {
   it('sends shop order email when authorized', async () => {
     const sendFn = vi.fn().mockResolvedValue({ data: { success: true, message: 'sent' } })
     httpsCallableMock.mockReturnValue(sendFn)
-    const request = { jobId: 'job-1', shopOrderId: 'order-1', recipients: ['a@example.com'] }
+    const request: SendShopOrderEmailRequest = { jobId: 'job-1', shopOrderId: 'order-1', recipients: ['a@example.com'] }
 
     const { sendShopOrderEmail, isLoading, error } = useShopService()
     const result = await sendShopOrderEmail(request)
@@ -47,7 +48,7 @@ describe('useShopService', () => {
     canAccessJob.mockReturnValue(false)
     const sendFn = vi.fn()
     httpsCallableMock.mockReturnValue(sendFn)
-    const request = { jobId: 'job-1', shopOrderId: 'order-1', recipients: [] }
+    const request: SendShopOrderEmailRequest = { jobId: 'job-1', shopOrderId: 'order-1', recipients: [] }
 
     const { sendShopOrderEmail, isLoading, error } = useShopService()
 
@@ -60,7 +61,7 @@ describe('useShopService', () => {
   it('surfaces errors from callable', async () => {
     const sendFn = vi.fn().mockRejectedValue(new Error('boom'))
     httpsCallableMock.mockReturnValue(sendFn)
-    const request = { jobId: 'job-1', shopOrderId: 'order-1', recipients: ['a@example.com'] }
+    const request: SendShopOrderEmailRequest = { jobId: 'job-1', shopOrderId: 'order-1', recipients: ['a@example.com'] }
 
     const { sendShopOrderEmail, error, isLoading } = useShopService()
 

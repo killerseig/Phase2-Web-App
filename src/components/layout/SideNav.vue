@@ -1,7 +1,7 @@
 <template>
   <!-- Sidebar: Always 56px when collapsed, expands to 260px overlay -->
   <aside
-    class="sidebar border-end d-flex flex-column h-100 position-fixed"
+    class="sidebar d-flex flex-column h-100 position-fixed"
     :class="{ 'is-collapsed': isSidebarCollapsed, 'is-mobile-open': app.sidebarOpenMobile }"
     role="navigation"
     aria-label="Main navigation"
@@ -9,7 +9,7 @@
     ref="sidebarRef"
   >
     <!-- Header with Toggle Button -->
-    <div class="p-2 border-bottom sidebar-header">
+    <div class="p-2 sidebar-header">
       <div class="d-flex align-items-center gap-2 sidebar-header-text">
         <div class="fw-bold fs-5 sidebar-title">Phase 2</div>
         <span v-if="role" class="badge text-bg-primary text-uppercase small sidebar-role">{{ role }}</span>
@@ -49,7 +49,7 @@
         <router-link
           v-for="item in jobNav"
           :key="item.label"
-          :to="item.jobScoped ? { ...(item.to as any), params: { ...(item.to as any).params, jobId } } : item.to"
+          :to="resolveNavTarget(item)"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
           :title="isSidebarCollapsed ? item.label : ''"
         >
@@ -78,7 +78,7 @@
     </nav>
 
     <!-- Current Job Footer -->
-    <div v-if="jobName" class="p-2 border-top small sidebar-footer">
+    <div v-if="jobName" class="p-2 small sidebar-footer">
       <div class="text-muted mb-1 sidebar-link-text">Current Job</div>
       <div class="fw-semibold text-truncate" :title="jobName">
         {{ jobName }}
@@ -92,11 +92,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, type RouteLocationNamedRaw, type RouteLocationRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useJobsStore } from '@/stores/jobs'
-import { navItems } from '@/config/nav'
+import { navItems, type NavItem } from '@/config/nav'
 import { ROLES } from '@/constants/app'
 
 const auth = useAuthStore()
@@ -118,6 +118,23 @@ const canSee = (itemRoles?: string[]) => {
 const jobNav = computed(() => navItems.filter((n) => n.section === 'job' && canSee(n.roles)))
 const adminNav = computed(() => navItems.filter((n) => n.section === 'admin' && canSee(n.roles)))
 const isSidebarCollapsed = computed(() => app.sidebarCollapsed && !app.sidebarOpenMobile)
+
+function isNamedRouteTarget(target: RouteLocationRaw): target is RouteLocationNamedRaw {
+  return typeof target === 'object' && target !== null && !Array.isArray(target) && 'name' in target
+}
+
+function resolveNavTarget(item: NavItem): RouteLocationRaw {
+  if (!item.jobScoped || !jobId.value) return item.to
+  if (!isNamedRouteTarget(item.to)) return item.to
+
+  return {
+    ...item.to,
+    params: {
+      ...(item.to.params ?? {}),
+      jobId: jobId.value,
+    },
+  }
+}
 
 const onKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Escape' && app.sidebarOpenMobile) {
@@ -160,7 +177,7 @@ function onToggleClick() {
 .sidebar {
   background: var(--surface, $surface);
   color: var(--text-body, $body-color);
-  border-right: 1px solid var(--border, $border-color) !important;
+  border-right: 1px solid var(--border, $border-color);
   box-shadow: 6px 0 24px rgba(0, 0, 0, 0.25);
   overflow-y: auto;
   overflow-x: hidden;
@@ -212,17 +229,13 @@ function onToggleClick() {
 
 }
 
-.sidebar .border-bottom,
-.sidebar .border-top {
-  border-color: var(--border, $border-color) !important;
-}
-
 .sidebar-header {
   min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  border-bottom: 1px solid var(--border, $border-color);
 }
 
 .sidebar-header-text {
@@ -283,6 +296,7 @@ function onToggleClick() {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  border-top: 1px solid var(--border, $border-color);
 }
 
 .sidebar-footer-icon {
@@ -295,10 +309,10 @@ function onToggleClick() {
   text-decoration: none;
   border: none;
   background: none;
-  padding-top: 0.5rem !important;
-  padding-bottom: 0.5rem !important;
-  padding-left: 0.75rem !important;
-  padding-right: 0.75rem !important;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
 }
 
 .nav-link:hover {

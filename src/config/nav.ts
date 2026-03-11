@@ -1,11 +1,12 @@
 import { ROLES } from '@/constants/app'
+import type { RouteLocationRaw } from 'vue-router'
 
 export type NavRole = typeof ROLES[keyof typeof ROLES]
 
 export interface NavItem {
   label: string
   icon: string
-  to: string | { name: string; params?: Record<string, string> }
+  to: RouteLocationRaw
   roles?: NavRole[]
   section?: 'dashboard' | 'job' | 'admin'
   jobScoped?: boolean

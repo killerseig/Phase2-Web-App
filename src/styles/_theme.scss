@@ -1,0 +1,34 @@
+@use '@/styles/_variables.scss' as vars;
+
+:root {
+  --color-primary: #{vars.$primary};
+  --color-secondary: #{vars.$secondary};
+  --color-success: #{vars.$success};
+  --color-warning: #{vars.$warning};
+  --color-danger: #{vars.$danger};
+  --color-info: #{vars.$info};
+  --color-light: #{vars.$light};
+  --color-dark: #{vars.$dark};
+
+  --surface: #{vars.$surface};
+  --surface-2: #{vars.$surface-2};
+  --surface-3: #{vars.$surface-3};
+  --text-body: #{vars.$body-color};
+  --text-muted: #{vars.$text-muted};
+  --text-muted-2: #{vars.$text-muted-2};
+  --text-muted-3: #{vars.$text-muted-3};
+  --border: #{vars.$border-color};
+  --bs-border-color: #{vars.$border-color};
+  --bs-border-color-translucent: rgba(230, 237, 247, 0.10);
+  --bs-table-border-color: #{vars.$border-color};
+  --bs-list-group-border-color: #{vars.$border-color};
+  --bs-card-border-color: #{vars.$border-color};
+
+  --radius: #{vars.$border-radius};
+  --radius-sm: #{vars.$border-radius-sm};
+  --radius-lg: #{vars.$border-radius-lg};
+
+  --shadow-sm: #{vars.$box-shadow-sm};
+  --shadow: #{vars.$box-shadow};
+  --shadow-lg: #{vars.$box-shadow-lg};
+}

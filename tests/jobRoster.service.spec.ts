@@ -79,7 +79,9 @@ describe('JobRoster service', () => {
 
     await updateRosterEmployee('job-1', 'target', { firstName: 'Jane' })
 
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload).toMatchObject({ firstName: 'Jane', updatedAt: 'ts' })
   })
 })

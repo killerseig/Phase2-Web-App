@@ -18,7 +18,7 @@ withDefaults(defineProps<Props>(), {
 <template>
   <div class="card">
     <!-- Header -->
-    <div class="card-header bg-light">
+    <div class="card-header panel-header">
       <h5 class="mb-0">
         <i v-if="icon" :class="`bi bi-${icon} me-2`"></i>{{ title }}
       </h5>

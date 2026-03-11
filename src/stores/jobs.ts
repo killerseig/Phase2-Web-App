@@ -9,9 +9,12 @@ import {
   removeForemanFromJob as removeForemanFromJobService,
   setJobActive as setJobActiveService,
   setTimecardPeriodEndDate as setTimecardPeriodEndDateService,
+  subscribeAllJobs as subscribeAllJobsService,
+  subscribeJob as subscribeJobService,
   updateJob as updateJobService,
   updateTimecardStatus as updateTimecardStatusService,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 import type { Job } from '@/types/models'
 
 export const useJobsStore = defineStore('jobs', () => {
@@ -19,6 +22,8 @@ export const useJobsStore = defineStore('jobs', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const currentJob = ref<Job | null>(null)
+  const unsubscribeJobs = ref<(() => void) | null>(null)
+  const unsubscribeCurrentJob = ref<(() => void) | null>(null)
 
   // Computed
   const allJobs = computed(() => jobs.value)
@@ -27,18 +32,60 @@ export const useJobsStore = defineStore('jobs', () => {
   const isLoading = computed(() => loading.value)
   const hasError = computed(() => error.value !== null)
 
+  const setStoreError = (err: unknown, fallback: string) => {
+    error.value = normalizeError(err, fallback)
+  }
+
+  const updateCachedJob = (jobId: string, updater: (job: Job) => void) => {
+    const cachedJob = jobs.value.find((job) => job.id === jobId)
+    if (cachedJob) updater(cachedJob)
+    if (currentJob.value?.id === jobId) updater(currentJob.value)
+  }
+
+  const stopJobsSubscription = () => {
+    if (!unsubscribeJobs.value) return
+    unsubscribeJobs.value()
+    unsubscribeJobs.value = null
+  }
+
+  const stopCurrentJobSubscription = () => {
+    if (!unsubscribeCurrentJob.value) return
+    unsubscribeCurrentJob.value()
+    unsubscribeCurrentJob.value = null
+  }
+
   // Actions
   async function fetchAllJobs(includeArchived = true, options?: { assignedOnlyForUid?: string }) {
     loading.value = true
     error.value = null
     try {
       jobs.value = await listAllJobsService(includeArchived, options)
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load jobs'
-      console.error('[Jobs Store] Error loading jobs:', e)
+    } catch (err) {
+      setStoreError(err, 'Failed to load jobs')
+      console.error('[Jobs Store] Error loading jobs:', err)
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeAllJobs(includeArchived = true, options?: { assignedOnlyForUid?: string }) {
+    stopJobsSubscription()
+    loading.value = true
+    error.value = null
+
+    unsubscribeJobs.value = subscribeAllJobsService(
+      includeArchived,
+      options,
+      (nextJobs) => {
+        jobs.value = nextJobs
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to jobs')
+        loading.value = false
+        console.error('[Jobs Store] Error subscribing to jobs:', err)
+      }
+    )
   }
 
   async function fetchJob(jobId: string) {
@@ -47,18 +94,49 @@ export const useJobsStore = defineStore('jobs', () => {
     try {
       currentJob.value = await getJobService(jobId)
       // Also update in the jobs list if present
-      const idx = jobs.value.findIndex(j => j.id === jobId)
+      const idx = jobs.value.findIndex((job) => job.id === jobId)
       if (idx !== -1 && currentJob.value) {
-        jobs.value[idx] = currentJob.value
+        const cachedJob = jobs.value[idx]
+        if (cachedJob) Object.assign(cachedJob, currentJob.value)
       } else if (currentJob.value) {
         jobs.value.push(currentJob.value)
       }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load job'
-      console.error('[Jobs Store] Error loading job:', e)
+    } catch (err) {
+      setStoreError(err, 'Failed to load job')
+      console.error('[Jobs Store] Error loading job:', err)
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeJob(jobId: string) {
+    stopCurrentJobSubscription()
+    loading.value = true
+    error.value = null
+
+    unsubscribeCurrentJob.value = subscribeJobService(
+      jobId,
+      (job) => {
+        currentJob.value = job
+        const idx = jobs.value.findIndex((entry) => entry.id === jobId)
+        if (!job) {
+          if (idx !== -1) jobs.value.splice(idx, 1)
+          loading.value = false
+          return
+        }
+        if (idx === -1) {
+          jobs.value.push(job)
+        } else {
+          jobs.value[idx] = job
+        }
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to job')
+        loading.value = false
+        console.error('[Jobs Store] Error subscribing to job:', err)
+      }
+    )
   }
 
   async function createJob(
@@ -89,10 +167,10 @@ export const useJobsStore = defineStore('jobs', () => {
         return newJob
       }
       throw new Error('Failed to retrieve created job')
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to create job'
-      console.error('[Jobs Store] Error creating job:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to create job')
+      console.error('[Jobs Store] Error creating job:', err)
+      throw err
     }
   }
 
@@ -119,17 +197,11 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
     try {
       await updateJobService(jobId, updates)
-      const idx = jobs.value.findIndex(j => j.id === jobId)
-      if (idx !== -1) {
-        jobs.value[idx] = { ...jobs.value[idx], ...updates }
-      }
-      if (currentJob.value?.id === jobId) {
-        currentJob.value = { ...currentJob.value, ...updates }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update job'
-      console.error('[Jobs Store] Error updating job:', e)
-      throw e
+      updateCachedJob(jobId, (job) => Object.assign(job, updates))
+    } catch (err) {
+      setStoreError(err, 'Failed to update job')
+      console.error('[Jobs Store] Error updating job:', err)
+      throw err
     }
   }
 
@@ -137,17 +209,13 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
     try {
       await setJobActiveService(jobId, active)
-      const idx = jobs.value.findIndex(j => j.id === jobId)
-      if (idx !== -1) {
-        jobs.value[idx] = { ...jobs.value[idx], active }
-      }
-      if (currentJob.value?.id === jobId) {
-        currentJob.value = { ...currentJob.value, active }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update job status'
-      console.error('[Jobs Store] Error updating job status:', e)
-      throw e
+      updateCachedJob(jobId, (job) => {
+        job.active = active
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to update job status')
+      console.error('[Jobs Store] Error updating job status:', err)
+      throw err
     }
   }
 
@@ -162,10 +230,10 @@ export const useJobsStore = defineStore('jobs', () => {
       if (currentJob.value?.id === jobId) {
         currentJob.value = null
       }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to delete job'
-      console.error('[Jobs Store] Error deleting job:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to delete job')
+      console.error('[Jobs Store] Error deleting job:', err)
+      throw err
     }
   }
 
@@ -174,25 +242,16 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
     try {
       await assignForemanToJobService(jobId, foremanId)
-      const idx = jobs.value.findIndex(j => j.id === jobId)
-      if (idx !== -1) {
-        const updated = jobs.value[idx]
-        if (!updated.assignedForemanIds) updated.assignedForemanIds = []
-        if (!updated.assignedForemanIds.includes(foremanId)) {
-          updated.assignedForemanIds.push(foremanId)
-          jobs.value[idx] = { ...updated }
+      updateCachedJob(jobId, (job) => {
+        if (!job.assignedForemanIds) job.assignedForemanIds = []
+        if (!job.assignedForemanIds.includes(foremanId)) {
+          job.assignedForemanIds.push(foremanId)
         }
-      }
-      if (currentJob.value?.id === jobId) {
-        if (!currentJob.value.assignedForemanIds) currentJob.value.assignedForemanIds = []
-        if (!currentJob.value.assignedForemanIds.includes(foremanId)) {
-          currentJob.value.assignedForemanIds.push(foremanId)
-        }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to assign foreman'
-      console.error('[Jobs Store] Error assigning foreman:', e)
-      throw e
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to assign foreman')
+      console.error('[Jobs Store] Error assigning foreman:', err)
+      throw err
     }
   }
 
@@ -200,23 +259,15 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
     try {
       await removeForemanFromJobService(jobId, foremanId)
-      const idx = jobs.value.findIndex(j => j.id === jobId)
-      if (idx !== -1) {
-        const updated = jobs.value[idx]
-        if (updated.assignedForemanIds) {
-          updated.assignedForemanIds = updated.assignedForemanIds.filter(id => id !== foremanId)
-          jobs.value[idx] = { ...updated }
+      updateCachedJob(jobId, (job) => {
+        if (job.assignedForemanIds) {
+          job.assignedForemanIds = job.assignedForemanIds.filter(id => id !== foremanId)
         }
-      }
-      if (currentJob.value?.id === jobId) {
-        if (currentJob.value.assignedForemanIds) {
-          currentJob.value.assignedForemanIds = currentJob.value.assignedForemanIds.filter(id => id !== foremanId)
-        }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to remove foreman'
-      console.error('[Jobs Store] Error removing foreman:', e)
-      throw e
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to remove foreman')
+      console.error('[Jobs Store] Error removing foreman:', err)
+      throw err
     }
   }
 
@@ -225,17 +276,13 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
     try {
       await updateTimecardStatusService(jobId, status)
-      const idx = jobs.value.findIndex(j => j.id === jobId)
-      if (idx !== -1) {
-        jobs.value[idx] = { ...jobs.value[idx], timecardStatus: status }
-      }
-      if (currentJob.value?.id === jobId) {
-        currentJob.value = { ...currentJob.value, timecardStatus: status }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update timecard status'
-      console.error('[Jobs Store] Error updating timecard status:', e)
-      throw e
+      updateCachedJob(jobId, (job) => {
+        job.timecardStatus = status
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to update timecard status')
+      console.error('[Jobs Store] Error updating timecard status:', err)
+      throw err
     }
   }
 
@@ -243,17 +290,13 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
     try {
       await setTimecardPeriodEndDateService(jobId, date)
-      const idx = jobs.value.findIndex(j => j.id === jobId)
-      if (idx !== -1) {
-        jobs.value[idx] = { ...jobs.value[idx], timecardPeriodEndDate: date }
-      }
-      if (currentJob.value?.id === jobId) {
-        currentJob.value = { ...currentJob.value, timecardPeriodEndDate: date }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update timecard period end date'
-      console.error('[Jobs Store] Error updating timecard period end date:', e)
-      throw e
+      updateCachedJob(jobId, (job) => {
+        job.timecardPeriodEndDate = date
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to update timecard period end date')
+      console.error('[Jobs Store] Error updating timecard period end date:', err)
+      throw err
     }
   }
 
@@ -262,6 +305,8 @@ export const useJobsStore = defineStore('jobs', () => {
   }
 
   function resetStore() {
+    stopJobsSubscription()
+    stopCurrentJobSubscription()
     jobs.value = []
     currentJob.value = null
     loading.value = false
@@ -284,7 +329,9 @@ export const useJobsStore = defineStore('jobs', () => {
 
     // Actions
     fetchAllJobs,
+    subscribeAllJobs,
     fetchJob,
+    subscribeJob,
     createJob,
     updateJob,
     deleteJob,
@@ -294,6 +341,8 @@ export const useJobsStore = defineStore('jobs', () => {
     setTimecardStatus,
     setTimecardPeriodEndDate,
     clearError,
+    stopJobsSubscription,
+    stopCurrentJobSubscription,
     resetStore,
   }
 })

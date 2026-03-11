@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { isValidEmail } from '@/utils/emailValidation'
 import {
   cleanupDeletedLogs,
@@ -7,12 +7,11 @@ import {
   deleteDailyLog,
   formatTimestamp,
   getDailyLogById,
-  getDailyLogRecipients,
-  getEmailSettings,
-  getMyDailyLogByDate,
-  listDailyLogsForDate,
+  subscribeDailyLogRecipients,
+  subscribeDailyLogsForDate,
   subscribeToDailyLog,
   submitDailyLog,
+  subscribeEmailSettings,
   toMillis,
   updateDailyLog,
   updateDailyLogRecipients,
@@ -21,6 +20,7 @@ import {
   type DailyLog,
   type DailyLogDraftInput,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { useConfirmDialog } from './useConfirmDialog'
@@ -92,6 +92,9 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   const form = ref<DailyLogDraftInput>(createEmptyDailyLogDraft(jobName.value))
 
   let unsubscribeLiveLog: (() => void) | null = null
+  let unsubscribeLogsForDate: (() => void) | null = null
+  let unsubscribeJobRecipients: (() => void) | null = null
+  let unsubscribeGlobalRecipients: (() => void) | null = null
   let autoSaveTimeout: ReturnType<typeof setTimeout>
   const creatingDraft = ref(false)
 
@@ -108,6 +111,28 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       unsubscribeLiveLog()
       unsubscribeLiveLog = null
     }
+  }
+
+  const stopLogsForDate = () => {
+    if (unsubscribeLogsForDate) {
+      unsubscribeLogsForDate()
+      unsubscribeLogsForDate = null
+    }
+  }
+
+  const stopRecipientSubscriptions = () => {
+    if (unsubscribeJobRecipients) {
+      unsubscribeJobRecipients()
+      unsubscribeJobRecipients = null
+    }
+    if (unsubscribeGlobalRecipients) {
+      unsubscribeGlobalRecipients()
+      unsubscribeGlobalRecipients = null
+    }
+  }
+
+  const setError = (errorValue: unknown, fallback: string) => {
+    err.value = normalizeError(errorValue, fallback)
   }
 
   const applyDailyLogToForm = (log: DailyLog) => {
@@ -149,13 +174,62 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     }, () => {})
   }
 
+  const getMineFromLogs = (logs: DailyLog[], dateStr: string): DailyLog | null => {
+    const mine = logs.filter((log) => log.uid === auth.user?.uid && log.logDate === dateStr)
+    const drafts = mine
+      .filter((log) => log.status === 'draft')
+      .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt))
+    if (drafts[0]) return drafts[0]
+
+    const submitted = mine
+      .filter((log) => log.status === 'submitted')
+      .sort((a, b) => toMillis(b.submittedAt || b.updatedAt || b.createdAt) - toMillis(a.submittedAt || a.updatedAt || a.createdAt))
+    return submitted[0] ?? null
+  }
+
+  const subscribeLogsForSelectedDate = (dateStr: string): Promise<DailyLog[]> => {
+    stopLogsForDate()
+    selectedLogs.value = []
+
+    return new Promise((resolve) => {
+      let resolved = false
+      unsubscribeLogsForDate = subscribeDailyLogsForDate(
+        jobId.value,
+        dateStr,
+        (logs) => {
+          selectedLogs.value = logs
+
+          const mine = getMineFromLogs(logs, dateStr)
+          if (mine && mine.id === currentId.value) {
+            currentStatus.value = mine.status
+            applyDailyLogToForm(mine)
+          } else if (!currentId.value && mine) {
+            currentId.value = mine.id
+            currentStatus.value = mine.status
+            logDate.value = mine.logDate
+            applyDailyLogToForm(mine)
+            startLiveLog(mine.id)
+          }
+
+          if (!resolved) {
+            resolved = true
+            resolve(logs)
+          }
+        },
+        (e) => {
+          console.error('Failed to subscribe logs for date:', e)
+          selectedLogs.value = []
+          if (!resolved) {
+            resolved = true
+            resolve([])
+          }
+        }
+      )
+    })
+  }
+
   const loadLogsForSelectedDate = async (dateStr: string) => {
-    try {
-      selectedLogs.value = await listDailyLogsForDate(jobId.value, dateStr)
-    } catch (e) {
-      console.error('Failed to load logs for date:', e)
-      selectedLogs.value = []
-    }
+    await subscribeLogsForSelectedDate(dateStr)
   }
 
   const loadLogById = async (logId: string) => {
@@ -175,7 +249,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         toastRef?.value?.show('Failed to load daily log', 'error')
       }
     } catch (e) {
-      err.value = e?.message ?? 'Failed to load daily log'
+      setError(e, 'Failed to load daily log')
       toastRef?.value?.show('Failed to load daily log', 'error')
     }
   }
@@ -189,9 +263,8 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     try {
       const isToday = dateStr === today.value
 
-      await loadLogsForSelectedDate(dateStr)
-
-      const existingLog = await getMyDailyLogByDate(jobId.value, dateStr)
+      const logsForDate = await subscribeLogsForSelectedDate(dateStr)
+      const existingLog = getMineFromLogs(logsForDate, dateStr)
 
       if (existingLog) {
         currentId.value = existingLog.id
@@ -216,9 +289,8 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       currentStatus.value = 'draft'
       currentOwnerId.value = auth.user?.uid ?? null
       startLiveLog(id)
-      await loadLogsForSelectedDate(dateStr)
     } catch (e) {
-      err.value = e?.message ?? 'Failed to create daily log'
+      setError(e, 'Failed to create daily log')
       toastRef?.value?.show('Failed to create daily log', 'error')
     } finally {
       creatingDraft.value = false
@@ -240,10 +312,9 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       currentStatus.value = 'draft'
       currentOwnerId.value = auth.user?.uid ?? null
       startLiveLog(id)
-      await loadLogsForSelectedDate(today.value)
       toastRef?.value?.show('New draft created for today.', 'success')
     } catch (e) {
-      err.value = e?.message ?? 'Failed to create new draft'
+      setError(e, 'Failed to create new draft')
       toastRef?.value?.show('Failed to create new draft', 'error')
     } finally {
       creatingDraft.value = false
@@ -260,7 +331,8 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       return
     }
 
-    const label = files.length === 1 ? files[0].name : `${files.length} files selected`
+    const firstFile = files[0]
+    const label = files.length === 1 && firstFile ? firstFile.name : `${files.length} files selected`
     if (type === 'photo') photoFileName.value = label
     else ptpFileName.value = label
 
@@ -272,7 +344,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     loading.value = true
     err.value = ''
     try {
-      await jobs.fetchJob(jobId.value)
+      jobs.subscribeJob(jobId.value)
 
       try {
         await cleanupDeletedLogs(jobId.value)
@@ -280,25 +352,30 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         console.warn('Cleanup deleted logs failed', cleanupError)
       }
 
-      try {
-        jobEmailRecipients.value = await getDailyLogRecipients(jobId.value)
-      } catch (recipientError) {
-        console.warn('Failed to load daily log recipients', recipientError)
-        jobEmailRecipients.value = []
-      }
+      stopRecipientSubscriptions()
+      unsubscribeJobRecipients = subscribeDailyLogRecipients(
+        jobId.value,
+        (recipients) => {
+          jobEmailRecipients.value = recipients
+        },
+        (recipientError) => {
+          console.warn('Failed to subscribe to daily log recipients', recipientError)
+          jobEmailRecipients.value = []
+        }
+      )
+      unsubscribeGlobalRecipients = subscribeEmailSettings(
+        (settings) => {
+          globalDailyLogRecipients.value = settings.dailyLogSubmitRecipients ?? []
+        },
+        (globalRecipientError) => {
+          console.warn('Failed to subscribe to global daily log recipients', globalRecipientError)
+          globalDailyLogRecipients.value = []
+        }
+      )
 
-      try {
-        const settings = await getEmailSettings()
-        globalDailyLogRecipients.value = settings.dailyLogSubmitRecipients ?? []
-      } catch (globalRecipientError) {
-        console.warn('Failed to load global daily log recipients', globalRecipientError)
-        globalDailyLogRecipients.value = []
-      }
-
-      await loadLogsForSelectedDate(logDate.value)
       await loadForDate(logDate.value)
     } catch (e) {
-      err.value = e?.message ?? 'Failed to load daily logs'
+      setError(e, 'Failed to load daily logs')
       toastRef?.value?.show('Failed to load daily logs', 'error')
     } finally {
       loading.value = false
@@ -326,9 +403,8 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     err.value = ''
     try {
       await updateDailyLog(jobId.value, currentId.value, { ...form.value })
-      await loadLogsForSelectedDate(logDate.value)
     } catch (e) {
-      err.value = e?.message ?? 'Failed to save daily log'
+      setError(e, 'Failed to save daily log')
       toastRef?.value?.show('Failed to save daily log', 'error')
     } finally {
       saving.value = false
@@ -347,7 +423,6 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       await updateDailyLog(jobId.value, currentId.value, { ...form.value })
       await submitDailyLog(jobId.value, currentId.value)
       currentStatus.value = 'submitted'
-      await loadLogsForSelectedDate(logDate.value)
 
       const combinedRecipients = Array.from(new Set([
         ...globalDailyLogRecipients.value,
@@ -365,7 +440,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         toastRef?.value?.show('Daily log submitted successfully!', 'success')
       }
     } catch (e) {
-      err.value = e?.message ?? 'Failed to submit daily log'
+      setError(e, 'Failed to submit daily log')
       toastRef?.value?.show('Failed to submit daily log', 'error')
     } finally {
       saving.value = false
@@ -429,11 +504,10 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       await deleteDailyLog(jobId.value, currentId.value)
       currentId.value = null
       resetForm()
-      await loadLogsForSelectedDate(logDate.value)
       await loadForDate(today.value)
       toastRef?.value?.show('Daily log deleted', 'success')
     } catch (e) {
-      err.value = e?.message ?? 'Failed to delete daily log'
+      setError(e, 'Failed to delete daily log')
       toastRef?.value?.show('Failed to delete daily log', 'error')
     } finally {
       saving.value = false
@@ -456,7 +530,6 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         resetForm()
         await loadForDate(today.value)
       }
-      await loadLogsForSelectedDate(logDate.value)
       toastRef?.value?.show('Daily log deleted', 'success')
     } catch {
       toastRef?.value?.show('Failed to delete daily log', 'error')
@@ -494,7 +567,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       }
     } catch (e) {
       console.error('[uploadAttachment] Error:', e)
-      const errorMsg = e?.message || 'Failed to upload file'
+      const errorMsg = normalizeError(e, 'Failed to upload file')
       err.value = errorMsg
       toastRef?.value?.show(`Upload failed: ${errorMsg}`, 'error')
     } finally {
@@ -510,7 +583,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       if (currentId.value) await updateDailyLog(jobId.value, currentId.value, { ...form.value })
       toastRef?.value?.show('Photo removed', 'success')
     } catch (e) {
-      err.value = e?.message || 'Failed to delete photo'
+      setError(e, 'Failed to delete photo')
       toastRef?.value?.show('Failed to delete photo', 'error')
     } finally {
       uploading.value = false
@@ -537,7 +610,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       })
       toastRef?.value?.show(`Email sent to ${combinedRecipients.length} recipient(s)`, 'success')
     } catch (e) {
-      err.value = e?.message ?? 'Failed to send email'
+      setError(e, 'Failed to send email')
       toastRef?.value?.show('Failed to send email', 'error')
       console.error('[sendEmail] Error:', e)
     } finally {
@@ -545,8 +618,14 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     }
   }
 
+  const ensureManpowerLines = () => {
+    if (!form.value.manpowerLines) form.value.manpowerLines = []
+    return form.value.manpowerLines
+  }
+
   const addManpowerLine = () => {
-    form.value.manpowerLines.push({ trade: '', count: 0, areas: '', addedByUserId: auth.user?.uid })
+    const lines = ensureManpowerLines()
+    lines.push({ trade: '', count: 0, areas: '', addedByUserId: auth.user?.uid })
     autoSave()
   }
 
@@ -556,19 +635,24 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   }
 
   const updateManpowerField = ({ index, field, value }: { index: number; field: 'trade' | 'areas'; value: string }) => {
-    if (!form.value.manpowerLines[index]) return
-    form.value.manpowerLines[index][field] = value
+    const lines = ensureManpowerLines()
+    const line = lines[index]
+    if (!line) return
+    line[field] = value
     autoSave()
   }
 
   const updateManpowerCount = ({ index, value }: { index: number; value: number }) => {
-    if (!form.value.manpowerLines[index]) return
-    form.value.manpowerLines[index].count = clampCount(value)
+    const lines = ensureManpowerLines()
+    const line = lines[index]
+    if (!line) return
+    line.count = clampCount(value)
     autoSave()
   }
 
   const removeManpowerLine = (index: number) => {
-    form.value.manpowerLines.splice(index, 1)
+    const lines = ensureManpowerLines()
+    lines.splice(index, 1)
     autoSave()
   }
 
@@ -611,7 +695,19 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   }
 
   onMounted(init)
-  onUnmounted(stopLiveLog)
+  watch(
+    () => jobId.value,
+    (next, prev) => {
+      if (!next || next === prev) return
+      void init()
+    }
+  )
+  onUnmounted(() => {
+    stopLiveLog()
+    stopLogsForDate()
+    stopRecipientSubscriptions()
+    jobs.stopCurrentJobSubscription()
+  })
 
   return {
     // state

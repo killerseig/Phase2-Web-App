@@ -10,7 +10,7 @@ import { useShopCategoriesStore } from '../stores/shopCategories'
 import {
   createShopOrder,
   deleteShopOrder,
-  getEmailSettings,
+  subscribeEmailSettings,
   subscribeShopOrders,
   updateShopOrderItems,
   updateShopOrderStatus,
@@ -18,9 +18,11 @@ import {
   type ShopOrder,
   type ShopOrderStatus,
 } from '@/services'
+import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
-import { toMillis } from '@/utils/datetime'
+import { normalizeError } from '@/services/serviceUtils'
+import { formatDateTime, toMillis } from '@/utils/datetime'
 
 defineProps<{ jobId?: string }>()
 
@@ -34,11 +36,6 @@ const shopService = useShopService()
 const jobAccess = useJobAccess()
 const { confirm } = useConfirmDialog()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
-
-interface CategoryTreeNode {
-  id: string
-  children?: CategoryTreeNode[]
-}
 
 type CatalogSelectable = {
   id?: string
@@ -72,49 +69,19 @@ const shopOrderRecipients = ref<string[]>([])
 const sendingEmail = ref(false)
 
 const catalog = computed(() => shopCatalogStore.allItems)
-
-// Helper to get all categories that should be in the tree (matching categories + their parents)
-const getTreeCategoriesWithParents = (): string[] => {
-  const categoryIds = new Set<string>()
-  
-  // First, find all categories with matching items
-  const allCategories = shopCategoriesStore.categories
-  allCategories.forEach(cat => {
-    if (categoryHasMatchingItems(cat.id)) {
-      categoryIds.add(cat.id)
-      // Also add all parent categories
-      let current = cat.parentId ? shopCategoriesStore.getCategoryById(cat.parentId) : null
-      while (current) {
-        categoryIds.add(current.id)
-        current = current.parentId ? shopCategoriesStore.getCategoryById(current.parentId) : null
-      }
-    }
-  })
-  
-  return Array.from(categoryIds)
-}
-
-// Recursively filter tree to only include categories that should be visible
-const filterCategoryTree = (tree: CategoryTreeNode[]): CategoryTreeNode[] => {
-  const visibleIds = getTreeCategoriesWithParents()
-  return tree
-    .filter(cat => {
-      // Only include this category if it's in visibleIds AND it has matching descendants
-      if (!visibleIds.includes(cat.id)) return false
-      if (!catalogSearch.value.trim()) return true
-      // Must have matching descendants (not just matching by name)
-      return categoryHasMatchingDescendants(cat.id)
-    })
-    .map(cat => ({
-      ...cat,
-      children: filterCategoryTree(cat.children ?? [])
-    }))
-}
-
-
-const categoryTree = computed(() => filterCategoryTree(shopCategoriesStore.fullTree))
-const uncategorizedItems = computed(() => {
-  return catalog.value.filter(item => !item.categoryId && item.active && itemMatchesSearch(item)).map(item => `item-${item.id}`)
+const {
+  itemMatchesSearch,
+  filteredCategoryTree: categoryTree,
+  filteredUncategorizedItemNodeIds: uncategorizedItems,
+  buildExpandedNodesForSearch,
+} = useCatalogTreeSearch({
+  searchQuery: catalogSearch,
+  categories: computed(() => shopCategoriesStore.categories),
+  allItems: catalog,
+  fullTree: computed(() => shopCategoriesStore.fullTree),
+  getCategoryById: (id) => shopCategoriesStore.getCategoryById(id),
+  getChildren: (parentId) => shopCategoriesStore.getChildren(parentId),
+  includeItem: (item) => item.active,
 })
 
 const statusBadgeClass = (st: ShopOrderStatus) => {
@@ -125,17 +92,7 @@ const statusLabel = (st: ShopOrderStatus) => {
   const map: Record<ShopOrderStatus, string> = { draft: 'Draft', order: 'Submitted', receive: 'Received' }
   return map[st] ?? st
 }
-const fmtDate = (ts: unknown) => {
-  try {
-    if (ts && typeof ts === 'object' && 'toDate' in ts) {
-      const toDate = (ts as { toDate?: () => Date }).toDate
-      return typeof toDate === 'function' ? toDate().toLocaleString() : ''
-    }
-    return ''
-  } catch {
-    return ''
-  }
-}
+const fmtDate = (ts: unknown) => formatDateTime(ts)
 
 const selected = computed(() => orders.value.find(o => o.id === selectedId.value) ?? null)
 
@@ -153,114 +110,20 @@ const canEditOrder = (o: ShopOrder) => o.status === 'draft'
 const canSubmit = (o: ShopOrder) => o.status === 'draft' && o.items.length > 0
 const canOrder = (o: ShopOrder) => o.status === 'order'
 const canReceive = (o: ShopOrder) => o.status === 'order'
-const itemMatchesSearch = (item: CatalogSelectable) => {
-  if (!catalogSearch.value.trim()) return true
-  const q = catalogSearch.value.toLowerCase()
-  const desc = item.description ? item.description.toLowerCase() : ''
-  const sku = item.sku ? item.sku.toLowerCase() : ''
-  return desc.includes(q) || sku.includes(q)
-}
-
-const categoryHasMatchingItems = (categoryId: string, depth: number = 0): boolean => {
-  // Prevent infinite recursion (max 50 levels deep)
-  if (depth > 50) return false
-  
-  const q = catalogSearch.value.toLowerCase()
-  if (!q) return true
-  
-  // Check if the category name itself matches
-  const cat = shopCategoriesStore.categories.find(c => c.id === categoryId)
-  if (cat && cat.name?.toLowerCase().includes(q)) {
-    return true
-  }
-  
-  // Check direct items in this category
-  const directItems = catalog.value.filter(i => i.categoryId === categoryId && i.active)
-  if (directItems.some(i => itemMatchesSearch(i))) return true
-  
-  // Check child categories recursively
-  const children = shopCategoriesStore.getChildren(categoryId)
-  return children.some(child => categoryHasMatchingItems(child.id, depth + 1))
-}
-
-// Check if a category has matching items/descendants (but not counting the category name itself)
-const categoryHasMatchingDescendants = (categoryId: string, depth: number = 0): boolean => {
-  if (depth > 50) return false
-  
-  const q = catalogSearch.value.toLowerCase()
-  if (!q) return false
-  
-  // Check direct items in this category
-  const directItems = catalog.value.filter(i => i.categoryId === categoryId && i.active)
-  if (directItems.some(i => itemMatchesSearch(i))) return true
-  
-  // Check child categories recursively (including their names and descendants)
-  const children = shopCategoriesStore.getChildren(categoryId)
-  return children.some(child => categoryHasMatchingItems(child.id, depth + 1))
-}
-
-// Auto-expand categories and items when search has matches
-const autoExpandOnSearch = () => {
-  if (!catalogSearch.value.trim()) {
-    // Don't clear - let manual expansions persist
-    return
-  }
-  
-  const nodesToExpand = new Set<string>()
-  
-  // Helper to expand category and all its parents up the tree
-  const expandCategoryAndParents = (categoryId: string, depth: number = 0) => {
-    if (depth > 50) return // Prevent infinite recursion
-    nodesToExpand.add(categoryId)
-    const cat = shopCategoriesStore.categories.find(c => c.id === categoryId)
-    if (cat?.parentId) {
-      expandCategoryAndParents(cat.parentId, depth + 1)
-    }
-  }
-  
-  // Helper to recursively expand all child categories with matches
-  const expandChildrenWithMatches = (parentId: string, depth: number = 0) => {
-    if (depth > 50) return // Prevent infinite recursion
-    const children = shopCategoriesStore.getChildren(parentId)
-    children.forEach(child => {
-      // Only expand children that have descendants matching the search (not just matching by name)
-      if (categoryHasMatchingDescendants(child.id)) {
-        nodesToExpand.add(child.id)
-        expandChildrenWithMatches(child.id, depth + 1) // Recurse into grandchildren
-      }
-    })
-  }
-  
-  // Find all root categories with matching descendants and expand them
-  const allCategories = shopCategoriesStore.categories
-  allCategories.forEach(cat => {
-    if (categoryHasMatchingDescendants(cat.id)) {
-      expandCategoryAndParents(cat.id)
-      expandChildrenWithMatches(cat.id)
-    }
-  })
-  
-  // Also expand uncategorized items that match the search, and their matching children
-  catalog.value.forEach(item => {
-    if (!item.categoryId && item.active && itemMatchesSearch(item)) {
-      // Only expand if it has matching descendants
-      if (categoryHasMatchingDescendants(`item-${item.id}`)) {
-        nodesToExpand.add(`item-${item.id}`)
-        expandChildrenWithMatches(`item-${item.id}`)
-      }
-    }
-  })
-  
-  // Replace the entire ref to ensure Vue reactivity properly updates
-  expandedNodes.value = new Set(nodesToExpand)
-}
-
-watch(() => catalogSearch.value, () => {
-  autoExpandOnSearch()
-}, { immediate: false })
+watch(
+  () => catalogSearch.value,
+  () => {
+    if (!catalogSearch.value.trim()) return
+    expandedNodes.value = buildExpandedNodesForSearch()
+  },
+  { immediate: false }
+)
 
 const pickFirstIfNeeded = () => {
-  if (!selectedId.value && orders.value.length > 0) selectedId.value = orders.value[0].id
+  if (!selectedId.value && orders.value.length > 0) {
+    const firstOrder = orders.value[0]
+    if (firstOrder) selectedId.value = firstOrder.id
+  }
 }
 
 const toggleExpand = (nodeId: string) => {
@@ -306,6 +169,7 @@ const expandAncestors = (nodeId: string, set: Set<string>, depth: number = 0) =>
 }
 
 let unsubs: Array<() => void> = []
+let unsubscribeEmailSettings: (() => void) | null = null
 
 const clearSubscriptions = () => {
   unsubs.forEach(u => u())
@@ -326,30 +190,29 @@ const loadOrders = () => {
   clearSubscriptions()
   loading.value = true
   const mergedMap = new Map<string, ShopOrder>()
-
-  subscribeShopOrders(jobId.value, {
-    onUpdate(snapshotOrders) {
-      mergedMap.clear()
-      snapshotOrders.forEach((order) => {
-        mergedMap.set(order.id, { ...order, items: Array.isArray(order.items) ? [...order.items] : [] })
-      })
-      replaceMerged(mergedMap)
-      loading.value = false
-    },
-    onError(error) {
-      err.value = error.message ?? 'Failed to load orders'
-      toastRef.value?.show('Failed to load orders: ' + (error.message ?? 'Unknown error'), 'error')
-      loading.value = false
-    },
-  })
-    .then((unsubscribe) => {
-      unsubs.push(unsubscribe)
+  try {
+    const unsubscribe = subscribeShopOrders(jobId.value, {
+      onUpdate(snapshotOrders) {
+        mergedMap.clear()
+        snapshotOrders.forEach((order) => {
+          mergedMap.set(order.id, { ...order, items: Array.isArray(order.items) ? [...order.items] : [] })
+        })
+        replaceMerged(mergedMap)
+        loading.value = false
+      },
+      onError(error) {
+        err.value = error.message ?? 'Failed to load orders'
+        toastRef.value?.show('Failed to load orders: ' + (error.message ?? 'Unknown error'), 'error')
+        loading.value = false
+      },
     })
-    .catch((error) => {
-      err.value = error?.message ?? 'Failed to load orders'
-      toastRef.value?.show('Failed to load orders: ' + (error?.message ?? 'Unknown error'), 'error')
-      loading.value = false
-    })
+    unsubs.push(unsubscribe)
+  } catch (error) {
+    const message = normalizeError(error, 'Failed to load orders')
+    err.value = message
+    toastRef.value?.show(`Failed to load orders: ${message}`, 'error')
+    loading.value = false
+  }
 }
 
 const init = async () => {
@@ -363,22 +226,27 @@ const init = async () => {
       return
     }
 
-    // Load job details
-    await jobs.fetchJob(jobId.value)
-    try {
-      const settings = await getEmailSettings()
-      shopOrderRecipients.value = settings.shopOrderSubmitRecipients ?? []
-    } catch (settingsError) {
-      console.warn('[ShopOrders] Failed to load email settings, using defaults', settingsError)
-      shopOrderRecipients.value = []
+    jobs.subscribeJob(jobId.value)
+    if (unsubscribeEmailSettings) {
+      unsubscribeEmailSettings()
+      unsubscribeEmailSettings = null
     }
-    
-    await shopCatalogStore.fetchCatalog()
-    await shopCategoriesStore.fetchAllCategories()
+    unsubscribeEmailSettings = subscribeEmailSettings(
+      (settings) => {
+        shopOrderRecipients.value = settings.shopOrderSubmitRecipients ?? []
+      },
+      (settingsError) => {
+        console.warn('[ShopOrders] Failed to subscribe to email settings, using defaults', settingsError)
+        shopOrderRecipients.value = []
+      }
+    )
+
+    shopCatalogStore.subscribeCatalog()
+    shopCategoriesStore.subscribeAllCategories()
     loadOrders()
   } catch (e) {
     console.error('Init error:', e)
-    err.value = e?.message ?? 'Failed to initialize'
+    err.value = normalizeError(e, 'Failed to initialize')
     loading.value = false
   }
 }
@@ -409,13 +277,15 @@ const addItem = async () => {
     toastRef.value?.show('Item added successfully', 'success')
   } catch (e) {
     console.error('Add item error:', e)
-    toastRef.value?.show('Failed to add item: ' + (e?.message || 'Unknown error'), 'error')
+    toastRef.value?.show(`Failed to add item: ${normalizeError(e, 'Unknown error')}`, 'error')
   }
 }
 
 const normalizeCatalogSelection = (item: CatalogSelectable) => {
   const description = (item?.description || item?.name || '').trim()
-  const quantity = Math.max(1, Math.floor(Number(item?.quantity ?? catalogItemQtys.value[item?.id] ?? 1) || 1))
+  const itemId = item?.id
+  const defaultQty = itemId ? catalogItemQtys.value[itemId] : undefined
+  const quantity = Math.max(1, Math.floor(Number(item?.quantity ?? defaultQty ?? 1) || 1))
   const catalogItemId = item?.id ?? null
   const noteParts: string[] = []
   if (item?.sku) noteParts.push(`SKU: ${item.sku}`)
@@ -477,7 +347,7 @@ const createDraft = async () => {
     toastRef.value?.show('New order created', 'success')
   } catch (e) {
     console.error('Failed to create order:', e)
-    toastRef.value?.show('Failed to create order: ' + (e?.message ?? 'Unknown error'), 'error')
+    toastRef.value?.show(`Failed to create order: ${normalizeError(e, 'Unknown error')}`, 'error')
   }
 }
 
@@ -554,14 +424,30 @@ const sendOrderEmail = async () => {
     await updateShopOrderStatus(jobId.value, selected.value.id, 'order')
     toastRef.value?.show('Order emailed successfully', 'success')
   } catch (e) {
-    toastRef.value?.show(e?.message ?? 'Failed to email order', 'error')
+    toastRef.value?.show(normalizeError(e, 'Failed to email order'), 'error')
   } finally {
     sendingEmail.value = false
   }
 }
 
 onMounted(init)
-onUnmounted(clearSubscriptions)
+watch(
+  () => jobId.value,
+  (next, prev) => {
+    if (!next || next === prev) return
+    void init()
+  }
+)
+onUnmounted(() => {
+  clearSubscriptions()
+  if (unsubscribeEmailSettings) {
+    unsubscribeEmailSettings()
+    unsubscribeEmailSettings = null
+  }
+  jobs.stopCurrentJobSubscription()
+  shopCatalogStore.stopCatalogSubscription()
+  shopCategoriesStore.stopCategoriesSubscription()
+})
 </script>
 
 <template>
@@ -604,7 +490,7 @@ onUnmounted(clearSubscriptions)
       <!-- Orders List -->
       <div class="col-lg-4">
         <div class="card order-panel">
-          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+          <div class="card-header panel-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Orders</h5>
             <span class="badge rounded-pill text-bg-secondary">{{ filtered.length }}</span>
           </div>
@@ -619,11 +505,11 @@ onUnmounted(clearSubscriptions)
               <div class="d-flex justify-content-between align-items-start">
                 <div>
                   <div class="small fw-semibold">{{ fmtDate(order.orderDate) }}</div>
-                  <small class="text-muted">{{ order.id.slice(0, 8) }}</small>
+                  <small class="order-meta">{{ order.id.slice(0, 8) }}</small>
                 </div>
                 <span :class="`badge rounded-pill ${statusBadgeClass(order.status)}`">{{ statusLabel(order.status) }}</span>
               </div>
-              <div class="small mt-1 text-muted">{{ order.items.length }} item(s)</div>
+              <div class="small mt-1 order-meta">{{ order.items.length }} item(s)</div>
             </button>
           </div>
         </div>
@@ -638,7 +524,7 @@ onUnmounted(clearSubscriptions)
         <div v-else>
           <!-- Order Header -->
           <div class="card mb-3 order-card">
-            <div class="card-header bg-light">
+            <div class="card-header panel-header">
               <div class="d-flex justify-content-between align-items-center">
                 <div>
                   <h5 class="mb-1">Order {{ selected.id.slice(0, 8) }}</h5>
@@ -736,7 +622,7 @@ onUnmounted(clearSubscriptions)
 
           <!-- Catalog Browser (when editing) -->
           <div v-if="canEditOrder(selected)" class="card">
-            <div class="card-header bg-light">
+            <div class="card-header panel-header">
               <h5 class="mb-3">Add Items from Catalog</h5>
               <input 
                 v-model="catalogSearch" 
@@ -786,7 +672,7 @@ onUnmounted(clearSubscriptions)
             </div>
 
             <!-- Manual Entry (Secondary) -->
-            <div class="card-footer bg-light">
+            <div class="card-footer panel-footer">
               <h6 class="mb-2">Or add a custom item</h6>
               <div class="row g-2 mb-2">
                 <div class="col-7"><input v-model="newItemDescription" type="text" class="form-control form-control-sm" placeholder="Description" /></div>
@@ -855,14 +741,13 @@ onUnmounted(clearSubscriptions)
   border-left: 3px solid transparent;
 }
 
-.order-panel .card-header {
+.order-panel .panel-header {
   border-bottom: 1px solid $border-color;
-  background: $surface-2 !important;
   color: $body-color;
 }
 
-.order-panel .text-muted {
-  color: $body-color !important;
+.order-meta {
+  color: rgba($body-color, 0.72);
 }
 
 .order-list-item.active {
@@ -872,8 +757,8 @@ onUnmounted(clearSubscriptions)
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.05);
 }
 
-.order-list-item.active .text-muted {
-  color: rgba($body-color, 0.85) !important;
+.order-list-item.active .order-meta {
+  color: rgba($body-color, 0.9);
 }
 
 .order-card .card-header {

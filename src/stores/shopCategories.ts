@@ -20,14 +20,27 @@ import {
   deleteCategory as deleteCategoryService,
   getAllCategories,
   reactivateCategory as reactivateCategoryService,
+  subscribeCategories as subscribeCategoriesService,
   updateCategory as updateCategoryService,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 
 export const useShopCategoriesStore = defineStore('shopCategories', () => {
   const categories = ref<ShopCategory[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const unsubscribeCategories = ref<(() => void) | null>(null)
   const MAX_TREE_DEPTH = 100
+
+  const setStoreError = (err: unknown, fallback: string) => {
+    error.value = normalizeError(err, fallback)
+  }
+
+  const stopCategoriesSubscription = () => {
+    if (!unsubscribeCategories.value) return
+    unsubscribeCategories.value()
+    unsubscribeCategories.value = null
+  }
 
   /**
    * Build a tree structure from flat category list
@@ -133,12 +146,30 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     error.value = null
     try {
       categories.value = await getAllCategories()
-    } catch (e) {
-      error.value = e?.message || 'Failed to fetch categories'
-      console.error('[ShopCategories Store]', error.value, e)
+    } catch (err) {
+      setStoreError(err, 'Failed to fetch categories')
+      console.error('[ShopCategories Store]', error.value, err)
     } finally {
       isLoading.value = false
     }
+  }
+
+  function subscribeAllCategories() {
+    stopCategoriesSubscription()
+    isLoading.value = true
+    error.value = null
+
+    unsubscribeCategories.value = subscribeCategoriesService(
+      (nextCategories) => {
+        categories.value = nextCategories
+        isLoading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to categories')
+        isLoading.value = false
+        console.error('[ShopCategories Store] subscribeAllCategories failed:', err)
+      }
+    )
   }
 
   /**
@@ -149,10 +180,10 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
       const newCat = await createCategoryService(name, parentId)
       categories.value.push(newCat)
       return newCat
-    } catch (e) {
-      error.value = e?.message || 'Failed to create category'
-      console.error('[ShopCategories Store] createCategory failed:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to create category')
+      console.error('[ShopCategories Store] createCategory failed:', err)
+      throw err
     }
   }
 
@@ -168,10 +199,10 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
         if (updates.active !== undefined) cat.active = updates.active
         cat.updatedAt = new Date()
       }
-    } catch (e) {
-      error.value = e?.message || 'Failed to update category'
-      console.error('[ShopCategories Store] updateCategory failed:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to update category')
+      console.error('[ShopCategories Store] updateCategory failed:', err)
+      throw err
     }
   }
 
@@ -195,10 +226,10 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
           cat.updatedAt = new Date()
         }
       }
-    } catch (e) {
-      error.value = e?.message || 'Failed to archive category'
-      console.error('[ShopCategories Store] archiveCategory failed:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to archive category')
+      console.error('[ShopCategories Store] archiveCategory failed:', err)
+      throw err
     }
   }
 
@@ -213,10 +244,10 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
         cat.active = true
         cat.updatedAt = new Date()
       }
-    } catch (e) {
-      error.value = e?.message || 'Failed to reactivate category'
-      console.error('[ShopCategories Store] reactivateCategory failed:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to reactivate category')
+      console.error('[ShopCategories Store] reactivateCategory failed:', err)
+      throw err
     }
   }
 
@@ -232,11 +263,18 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
 
       await deleteCategoryService(id)
       categories.value = categories.value.filter(c => c.id !== id)
-    } catch (e) {
-      error.value = e?.message || 'Failed to delete category'
-      console.error('[ShopCategories Store] deleteCategory failed:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to delete category')
+      console.error('[ShopCategories Store] deleteCategory failed:', err)
+      throw err
     }
+  }
+
+  function resetStore() {
+    stopCategoriesSubscription()
+    categories.value = []
+    isLoading.value = false
+    error.value = null
   }
 
   return {
@@ -257,11 +295,14 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     getDescendants,
     getBreadcrumb,
     fetchAllCategories,
+    subscribeAllCategories,
     createCategory,
     updateCategory,
     archiveCategory,
     reactivateCategory,
     deleteCategory,
+    stopCategoriesSubscription,
+    resetStore,
   }
 })
 

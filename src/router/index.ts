@@ -68,19 +68,21 @@ const routeConfigs: RouteConfig[] = [
   //   title: 'Sign Up',
   // },
 
-  // User dashboard (job selector) - publicly accessible after login, shows role-specific content
+  // User dashboard (job selector)
   {
     path: ROUTES.DASHBOARD,
     name: 'dashboard',
     component: () => import('../views/Dashboard.vue'),
+    roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
     title: 'Dashboard',
   },
 
-  // Job home (module selector) - accessible to any authenticated user, shows role-specific modules
+  // Job home (module selector)
   {
     path: `${ROUTES.JOB}/:jobId`,
     name: 'job-home',
     component: () => import('../views/JobHome.vue'),
+    roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
     title: 'Job Home',
   },
 
@@ -157,59 +159,65 @@ const routeConfigs: RouteConfig[] = [
   { path: '/:pathMatch(.*)*', redirect: ROUTES.DASHBOARD },
 ]
 
-// Build routes array for Vue Router
-const routes: RouteRecordRaw[] = routeConfigs.map((config) => {
-  // If the route is a redirect, do not include component or props
+const toRouteRecord = (config: RouteConfig): RouteRecordRaw => {
   if (config.redirect) {
     return {
       path: config.path,
       redirect: config.redirect,
       meta: toMeta(config),
-      ...(config.name && { name: config.name }),
+      ...(config.name ? { name: config.name } : {}),
     }
   }
-  // Otherwise, normal route
+
+  if (!config.component) {
+    throw new Error(`Route "${config.path}" is missing a component`)
+  }
+
   return {
     path: config.path,
-    ...(config.name && { name: config.name }),
-    ...(config.component && { component: config.component }),
+    component: config.component,
     meta: toMeta(config),
-    props: config.path.includes(':') ? true : undefined,
+    ...(config.name ? { name: config.name } : {}),
+    ...(config.path.includes(':') ? { props: true } : {}),
   }
-})
+}
+
+// Build routes array for Vue Router
+const routes: RouteRecordRaw[] = routeConfigs.map(toRouteRecord)
 
 export const router = createRouter({
   history: createWebHistory(),
   routes,
 })
 
-export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to: RouteLocationNormalized) => {
-  const auth = useAuthStore()
-  const jobAccess = useJobAccess()
+type RouteRedirectName = 'dashboard' | 'login' | 'unauthorized'
+type RouteAccessRedirect = true | { name: RouteRedirectName }
 
+type AccessSnapshot = {
+  user: unknown
+  active: boolean
+  role: Role | null
+}
+
+type RouteAccessTarget = Pick<RouteLocationNormalized, 'meta' | 'name' | 'params'>
+
+export const getRouteAccessRedirect = (
+  to: RouteAccessTarget,
+  auth: AccessSnapshot,
+  canAccessJob: (jobId: string) => boolean
+): RouteAccessRedirect => {
   const meta = (to.meta ?? {}) as Partial<RouteMeta>
   const isPublicRoute = meta.public ?? false
   const allowedRoles = Array.isArray(meta.roles) ? meta.roles : []
 
-  // Ensure auth state is resolved (no polling loop)
-  if (!auth.ready) await auth.init()
-
-  // Public routes
   if (isPublicRoute) {
     if (auth.user && to.name === 'login') return { name: 'dashboard' }
     return true
   }
 
-  // Authentication required
   if (!auth.user) return { name: 'login' }
+  if (!auth.active) return { name: 'login' }
 
-  // Check if user is active (deactivated users should be signed out)
-  if (!auth.active) {
-    await auth.signOut()
-    return { name: 'login' }
-  }
-
-  // Role-based access control
   if (allowedRoles.length > 0) {
     const userRole = (auth.role ?? ROLES.NONE) as Role
     if (!allowedRoles.includes(userRole)) {
@@ -217,16 +225,36 @@ export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to:
     }
   }
 
-  // Foremen can only access jobs assigned to them
   if (auth.role === ROLES.FOREMAN && to.params?.jobId) {
     const jobIdParam = Array.isArray(to.params.jobId) ? to.params.jobId[0] : to.params.jobId
     const jobId = String(jobIdParam)
-    if (!jobAccess.canAccessJob(jobId)) {
+    if (!canAccessJob(jobId)) {
       return { name: 'unauthorized' }
     }
   }
 
   return true
+}
+
+export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to: RouteLocationNormalized) => {
+  const auth = useAuthStore()
+  const jobAccess = useJobAccess()
+
+  // Ensure auth state is resolved (no polling loop)
+  if (!auth.ready) await auth.init()
+
+  const redirect = getRouteAccessRedirect(
+    to,
+    { user: auth.user, active: auth.active, role: auth.role },
+    jobAccess.canAccessJob
+  )
+
+  // Keep existing behavior: inactive users are actively signed out.
+  if (redirect !== true && redirect.name === 'login' && auth.user && !auth.active) {
+    await auth.signOut()
+  }
+
+  return redirect
 }
 
 router.beforeEach(runNavigationGuard)

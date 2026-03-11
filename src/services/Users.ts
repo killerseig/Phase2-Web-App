@@ -4,10 +4,11 @@ import {
   doc,
   getDoc,
   getDocs,
-  orderBy,
+  onSnapshot,
   query,
   where,
   updateDoc,
+  type Unsubscribe,
   type DocumentData,
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -82,12 +83,51 @@ export async function listUsers(): Promise<UserProfile[]> {
   try {
     requireUser()
 
-    const q = query(collection(db, 'users'), orderBy('email', 'asc'))
+    const q = buildUsersQuery()
     const snap = await getDocs(q)
-    return snap.docs.map((d) => normalizeUser(d.id, d.data()))
+    return sortUsersByEmail(snap.docs.map((d) => normalizeUser(d.id, d.data())))
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load users'))
   }
+}
+
+export function subscribeUsers(
+  onUpdate: (users: UserProfile[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  requireUser()
+  return onSnapshot(
+    buildUsersQuery(),
+    (snap) => {
+      const users = sortUsersByEmail(snap.docs.map((d) => normalizeUser(d.id, d.data())))
+      onUpdate(users)
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
+}
+
+export function subscribeUserProfile(
+  uid: string,
+  onUpdate: (user: UserProfile | null) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  requireUser()
+  const ref = doc(db, 'users', uid)
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        onUpdate(null)
+        return
+      }
+      onUpdate(normalizeUser(snap.id, snap.data()))
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
 }
 
 /**
@@ -149,6 +189,16 @@ export async function createUserByAdmin(
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to create user'))
   }
+}
+
+function sortUsersByEmail(users: UserProfile[]): UserProfile[] {
+  return users
+    .slice()
+    .sort((a, b) => (a.email || '').localeCompare(b.email || ''))
+}
+
+function buildUsersQuery() {
+  return query(collection(db, 'users'))
 }
 
 // ============================================================================
@@ -230,13 +280,9 @@ export async function listForemen(): Promise<UserProfile[]> {
   try {
     requireUser()
 
-    const q = query(
-      collection(db, 'users'),
-      orderBy('email', 'asc')
-    )
+    const q = buildUsersQuery()
     const snap = await getDocs(q)
-    return snap.docs
-      .map((d) => normalizeUser(d.id, d.data()))
+    return sortUsersByEmail(snap.docs.map((d) => normalizeUser(d.id, d.data())))
       .filter((user) => user.role === ROLES.FOREMAN)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load foremen'))

@@ -9,9 +9,12 @@ import {
   listUsers as listUsersService,
   removeJobFromForeman as removeJobFromForemanService,
   setForemanJobs as setForemanJobsService,
+  subscribeUserProfile as subscribeUserProfileService,
+  subscribeUsers as subscribeUsersService,
   syncForemanAssignmentsForJob,
   updateUser as updateUserService,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 import type { UserProfile } from '@/types/models'
 
 type UserProfileUpdates = Partial<
@@ -24,6 +27,8 @@ export const useUsersStore = defineStore('users', () => {
   const currentUserProfile = ref<UserProfile | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const unsubscribeUsers = ref<(() => void) | null>(null)
+  const unsubscribeMyProfile = ref<(() => void) | null>(null)
 
   // Computed
   const allUsers = computed(() => users.value)
@@ -33,18 +38,58 @@ export const useUsersStore = defineStore('users', () => {
   const isLoading = computed(() => loading.value)
   const hasError = computed(() => error.value !== null)
 
+  const setStoreError = (err: unknown, fallback: string) => {
+    error.value = normalizeError(err, fallback)
+  }
+
+  const updateCachedUser = (userId: string, updater: (user: UserProfile) => void) => {
+    const cachedUser = users.value.find((user) => user.id === userId)
+    if (cachedUser) updater(cachedUser)
+    if (currentUserProfile.value?.id === userId) updater(currentUserProfile.value)
+  }
+
+  const stopUsersSubscription = () => {
+    if (!unsubscribeUsers.value) return
+    unsubscribeUsers.value()
+    unsubscribeUsers.value = null
+  }
+
+  const stopMyProfileSubscription = () => {
+    if (!unsubscribeMyProfile.value) return
+    unsubscribeMyProfile.value()
+    unsubscribeMyProfile.value = null
+  }
+
   // Actions
   async function fetchAllUsers() {
     loading.value = true
     error.value = null
     try {
       users.value = await listUsersService()
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load users'
-      console.error('[Users Store] Error loading users:', e)
+    } catch (err) {
+      setStoreError(err, 'Failed to load users')
+      console.error('[Users Store] Error loading users:', err)
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeAllUsers() {
+    stopUsersSubscription()
+    loading.value = true
+    error.value = null
+
+    unsubscribeUsers.value = subscribeUsersService(
+      (nextUsers) => {
+        users.value = nextUsers
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to users')
+        loading.value = false
+        console.error('[Users Store] Error subscribing to users:', err)
+      }
+    )
   }
 
   async function fetchMyProfile() {
@@ -53,33 +98,43 @@ export const useUsersStore = defineStore('users', () => {
     try {
       currentUserProfile.value = await getMyUserProfileService()
       return currentUserProfile.value
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load user profile'
-      console.error('[Users Store] Error loading profile:', e)
+    } catch (err) {
+      setStoreError(err, 'Failed to load user profile')
+      console.error('[Users Store] Error loading profile:', err)
+      return null
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeMyProfile(userId: string) {
+    stopMyProfileSubscription()
+    loading.value = true
+    error.value = null
+
+    unsubscribeMyProfile.value = subscribeUserProfileService(
+      userId,
+      (profile) => {
+        currentUserProfile.value = profile
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to user profile')
+        loading.value = false
+        console.error('[Users Store] Error subscribing to profile:', err)
+      }
+    )
   }
 
   async function updateUserProfile(userId: string, updates: UserProfileUpdates) {
     error.value = null
     try {
       await updateUserService(userId, updates)
-      
-      // Update in list
-      const idx = users.value.findIndex(u => u.id === userId)
-      if (idx !== -1) {
-        users.value[idx] = { ...users.value[idx], ...updates }
-      }
-      
-      // Update current profile if it's the current user
-      if (currentUserProfile.value?.id === userId) {
-        currentUserProfile.value = { ...currentUserProfile.value, ...updates }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update user profile'
-      console.error('[Users Store] Error updating profile:', e)
-      throw e
+      updateCachedUser(userId, (user) => Object.assign(user, updates))
+    } catch (err) {
+      setStoreError(err, 'Failed to update user profile')
+      console.error('[Users Store] Error updating profile:', err)
+      throw err
     }
   }
 
@@ -92,10 +147,10 @@ export const useUsersStore = defineStore('users', () => {
         currentUserProfile.value = null
       }
       return result
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to delete user'
-      console.error('[Users Store] Error deleting user:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to delete user')
+      console.error('[Users Store] Error deleting user:', err)
+      throw err
     }
   }
 
@@ -118,10 +173,10 @@ export const useUsersStore = defineStore('users', () => {
       // Refresh users list after creation
       await fetchAllUsers()
       return result
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to create user'
-      console.error('[Users Store] Error creating user:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to create user')
+      console.error('[Users Store] Error creating user:', err)
+      throw err
     }
   }
 
@@ -130,29 +185,16 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
     try {
       await assignJobToForemanService(foremanId, jobId)
-      
-      // Update in list
-      const idx = users.value.findIndex(u => u.id === foremanId)
-      if (idx !== -1) {
-        const user = users.value[idx]
+      updateCachedUser(foremanId, (user) => {
         if (!user.assignedJobIds) user.assignedJobIds = []
         if (!user.assignedJobIds.includes(jobId)) {
           user.assignedJobIds.push(jobId)
-          users.value[idx] = { ...user }
         }
-      }
-
-      // Update current profile if it's this user
-      if (currentUserProfile.value?.id === foremanId) {
-        if (!currentUserProfile.value.assignedJobIds) currentUserProfile.value.assignedJobIds = []
-        if (!currentUserProfile.value.assignedJobIds.includes(jobId)) {
-          currentUserProfile.value.assignedJobIds.push(jobId)
-        }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to assign job to foreman'
-      console.error('[Users Store] Error assigning job:', e)
-      throw e
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to assign job to foreman')
+      console.error('[Users Store] Error assigning job:', err)
+      throw err
     }
   }
 
@@ -160,27 +202,15 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
     try {
       await removeJobFromForemanService(foremanId, jobId)
-      
-      // Update in list
-      const idx = users.value.findIndex(u => u.id === foremanId)
-      if (idx !== -1) {
-        const user = users.value[idx]
+      updateCachedUser(foremanId, (user) => {
         if (user.assignedJobIds) {
           user.assignedJobIds = user.assignedJobIds.filter(id => id !== jobId)
-          users.value[idx] = { ...user }
         }
-      }
-
-      // Update current profile if it's this user
-      if (currentUserProfile.value?.id === foremanId) {
-        if (currentUserProfile.value.assignedJobIds) {
-          currentUserProfile.value.assignedJobIds = currentUserProfile.value.assignedJobIds.filter(id => id !== jobId)
-        }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to remove job from foreman'
-      console.error('[Users Store] Error removing job:', e)
-      throw e
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to remove job from foreman')
+      console.error('[Users Store] Error removing job:', err)
+      throw err
     }
   }
 
@@ -188,21 +218,13 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
     try {
       await setForemanJobsService(foremanId, jobIds)
-      
-      // Update in list
-      const idx = users.value.findIndex(u => u.id === foremanId)
-      if (idx !== -1) {
-        users.value[idx] = { ...users.value[idx], assignedJobIds: jobIds }
-      }
-
-      // Update current profile if it's this user
-      if (currentUserProfile.value?.id === foremanId) {
-        currentUserProfile.value = { ...currentUserProfile.value, assignedJobIds: jobIds }
-      }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to set foreman jobs'
-      console.error('[Users Store] Error setting foreman jobs:', e)
-      throw e
+      updateCachedUser(foremanId, (user) => {
+        user.assignedJobIds = [...jobIds]
+      })
+    } catch (err) {
+      setStoreError(err, 'Failed to set foreman jobs')
+      console.error('[Users Store] Error setting foreman jobs:', err)
+      throw err
     }
   }
 
@@ -212,10 +234,10 @@ export const useUsersStore = defineStore('users', () => {
       await syncForemanAssignmentsForJob(jobId)
       // Refresh cached data so UI reflects repaired links
       await Promise.all([fetchAllUsers(), jobsStore.fetchJob(jobId)])
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to sync foreman assignments'
-      console.error('[Users Store] Error syncing foreman assignments:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to sync foreman assignments')
+      console.error('[Users Store] Error syncing foreman assignments:', err)
+      throw err
     }
   }
 
@@ -224,6 +246,8 @@ export const useUsersStore = defineStore('users', () => {
   }
 
   function resetStore() {
+    stopUsersSubscription()
+    stopMyProfileSubscription()
     users.value = []
     currentUserProfile.value = null
     loading.value = false
@@ -247,7 +271,9 @@ export const useUsersStore = defineStore('users', () => {
 
     // Actions
     fetchAllUsers,
+    subscribeAllUsers,
     fetchMyProfile,
+    subscribeMyProfile,
     updateUserProfile,
     deleteUser,
     deactivateUser,
@@ -258,6 +284,8 @@ export const useUsersStore = defineStore('users', () => {
     removeJobFromForeman,
     setForemanJobs,
     syncForemanAssignments,
+    stopUsersSubscription,
+    stopMyProfileSubscription,
     clearError,
     resetStore,
   }

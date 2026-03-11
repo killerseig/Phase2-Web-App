@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
 import EmailRecipientInput from '../../components/admin/EmailRecipientInput.vue'
 import {
-  listAllJobs,
   updateDailyLogRecipients,
-  getEmailSettings,
+  subscribeAllJobs,
+  subscribeEmailSettings,
   updateTimecardSubmitRecipientsGlobal,
   updateShopOrderSubmitRecipientsGlobal,
   updateDailyLogSubmitRecipientsGlobal,
   removeEmailFromAllRecipientLists,
   type Job,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 import { isValidEmail } from '@/utils/emailValidation'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
@@ -33,36 +34,60 @@ const shopOrderSubmitRecipients = ref<string[]>([])
 // Job-specific recipients
 const jobRecipients = ref<Map<string, string[]>>(new Map())
 const openJobId = ref<string | null>(null)
+let unsubscribeJobs: (() => void) | null = null
+let unsubscribeSettings: (() => void) | null = null
 
-async function loadJobs() {
+function stopRealtime() {
+  if (unsubscribeJobs) {
+    unsubscribeJobs()
+    unsubscribeJobs = null
+  }
+  if (unsubscribeSettings) {
+    unsubscribeSettings()
+    unsubscribeSettings = null
+  }
+}
+
+function loadJobs() {
+  stopRealtime()
   loading.value = true
   err.value = ''
-  try {
-    // Load global email settings (timecards & shop orders)
-    try {
-      const settings = await getEmailSettings()
-      timecardSubmitRecipients.value = settings.timecardSubmitRecipients ?? []
-      shopOrderSubmitRecipients.value = settings.shopOrderSubmitRecipients ?? []
-      globalDefaultRecipients.value = settings.dailyLogSubmitRecipients ?? []
-    } catch (settingsError) {
-      console.warn('[AdminEmailSettings] Failed to load global email settings, using defaults', settingsError)
-      timecardSubmitRecipients.value = []
-      shopOrderSubmitRecipients.value = []
-      globalDefaultRecipients.value = []
-    }
+  try {    
+    unsubscribeSettings = subscribeEmailSettings(
+      (settings) => {
+        timecardSubmitRecipients.value = settings.timecardSubmitRecipients ?? []
+        shopOrderSubmitRecipients.value = settings.shopOrderSubmitRecipients ?? []
+        globalDefaultRecipients.value = settings.dailyLogSubmitRecipients ?? []
+      },
+      (settingsError) => {
+        console.warn('[AdminEmailSettings] Failed to subscribe global email settings, using defaults', settingsError)
+        timecardSubmitRecipients.value = []
+        shopOrderSubmitRecipients.value = []
+        globalDefaultRecipients.value = []
+      }
+    )
 
-    jobs.value = await listAllJobs(true)
-    
-    // Initialize job recipient maps
-    const recipientMap = new Map<string, string[]>()
-    for (const job of jobs.value) {
-      recipientMap.set(job.id, job.dailyLogRecipients ?? [])
-    }
-    jobRecipients.value = recipientMap
+    unsubscribeJobs = subscribeAllJobs(
+      true,
+      undefined,
+      (nextJobs) => {
+        jobs.value = nextJobs
+        const recipientMap = new Map<string, string[]>()
+        for (const job of nextJobs) {
+          recipientMap.set(job.id, job.dailyLogRecipients ?? [])
+        }
+        jobRecipients.value = recipientMap
+        loading.value = false
+      },
+      (jobsError) => {
+        err.value = normalizeError(jobsError, 'Failed to load jobs')
+        toastRef.value?.show('Failed to load jobs', 'error')
+        loading.value = false
+      }
+    )
   } catch (e) {
-    err.value = e?.message ?? 'Failed to load jobs'
+    err.value = normalizeError(e, 'Failed to load jobs')
     toastRef.value?.show('Failed to load jobs', 'error')
-  } finally {
     loading.value = false
   }
 }
@@ -134,7 +159,7 @@ async function saveJobRecipients(jobId: string) {
     await updateDailyLogRecipients(jobId, recipients)
     toastRef.value?.show('Email recipients updated', 'success')
   } catch (e) {
-    err.value = e?.message ?? 'Failed to save recipients'
+    err.value = normalizeError(e, 'Failed to save recipients')
     toastRef.value?.show('Failed to save recipients', 'error')
   } finally {
     saving.value = false
@@ -147,7 +172,7 @@ async function saveTimecardRecipients() {
     await updateTimecardSubmitRecipientsGlobal(timecardSubmitRecipients.value)
     toastRef.value?.show('Timecard submit recipients updated', 'success')
   } catch (e) {
-    err.value = e?.message ?? 'Failed to save timecard recipients'
+    err.value = normalizeError(e, 'Failed to save timecard recipients')
     toastRef.value?.show('Failed to save timecard recipients', 'error')
   } finally {
     saving.value = false
@@ -160,7 +185,7 @@ async function saveShopOrderRecipients() {
     await updateShopOrderSubmitRecipientsGlobal(shopOrderSubmitRecipients.value)
     toastRef.value?.show('Shop order submit recipients updated', 'success')
   } catch (e) {
-    err.value = e?.message ?? 'Failed to save shop order recipients'
+    err.value = normalizeError(e, 'Failed to save shop order recipients')
     toastRef.value?.show('Failed to save shop order recipients', 'error')
   } finally {
     saving.value = false
@@ -173,7 +198,7 @@ async function saveGlobalDailyLogRecipients() {
     await updateDailyLogSubmitRecipientsGlobal(globalDefaultRecipients.value)
     toastRef.value?.show('Daily log global recipients updated', 'success')
   } catch (e) {
-    err.value = e?.message ?? 'Failed to save daily log global recipients'
+    err.value = normalizeError(e, 'Failed to save daily log global recipients')
     toastRef.value?.show('Failed to save daily log global recipients', 'error')
   } finally {
     saving.value = false
@@ -191,7 +216,6 @@ async function removeEmailEverywhere() {
   try {
     const result = await removeEmailFromAllRecipientLists(email)
     const updatedJobs = Number(result?.updatedJobCount || 0)
-    await loadJobs()
     purgeEmail.value = ''
     toastRef.value?.show(
       result?.removedFromRecipientLists
@@ -200,7 +224,7 @@ async function removeEmailEverywhere() {
       'success'
     )
   } catch (e) {
-    err.value = e?.message ?? 'Failed to remove email from recipient lists'
+    err.value = normalizeError(e, 'Failed to remove email from recipient lists')
     toastRef.value?.show('Failed to remove email from recipient lists', 'error')
   } finally {
     purging.value = false
@@ -208,6 +232,7 @@ async function removeEmailEverywhere() {
 }
 
 onMounted(loadJobs)
+onUnmounted(stopRealtime)
 </script>
 
 <template>

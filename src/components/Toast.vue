@@ -45,7 +45,7 @@ defineExpose({ show, remove })
 </script>
 
 <template>
-  <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 9999;">
+  <div class="position-fixed top-0 start-50 translate-middle-x p-3 toast-stack">
     <div
       v-for="toast in toasts"
       :key="toast.id"
@@ -60,6 +60,10 @@ defineExpose({ show, remove })
 </template>
 
 <style scoped>
+.toast-stack {
+  z-index: 9999;
+}
+
 .toast {
   animation: fadeInOut 3s ease-in-out forwards;
   min-width: 300px;

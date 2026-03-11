@@ -134,7 +134,7 @@ function getCellValue(item: ListItem, key: string) {
                 ></i>
               </div>
             </th>
-            <th v-if="showActions" style="width: 100px;" class="small fw-semibold text-center">Actions</th>
+            <th v-if="showActions" class="small fw-semibold text-center actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -180,5 +180,9 @@ function getCellValue(item: ListItem, key: string) {
   border-radius: 8px;
   background: $surface;
   box-shadow: $box-shadow-sm;
+}
+
+.actions-col {
+  width: 100px;
 }
 </style>

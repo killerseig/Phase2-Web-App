@@ -225,12 +225,17 @@ export function validateTimecardDays(days: Partial<TimecardDay>[]): {
   let totalLineTotal = 0
   
   for (let i = 0; i < 7; i++) {
-    const error = validateTimecardDay(days[i], i)
+    const candidateDay = days[i]
+    if (!candidateDay) {
+      return { valid: false, error: `Day ${i + 1} data is required` }
+    }
+
+    const error = validateTimecardDay(candidateDay, i)
     if (error) {
       return { valid: false, error }
     }
     
-    const day = days[i] as TimecardDay
+    const day = candidateDay as TimecardDay
     totalHours += day.hours
     totalProduction += day.production
     totalLineTotal += day.lineTotal

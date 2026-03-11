@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import ShopCatalogTreeNode from '../../components/admin/ShopCatalogTreeNode.vue'
 import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
-import { useShopCategoriesStore, type CategoryNode } from '../../stores/shopCategories'
+import { useShopCategoriesStore } from '../../stores/shopCategories'
 import { useShopCatalogStore } from '../../stores/shopCatalog'
 import type { ShopCatalogItem } from '@/services'
+import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { normalizeError } from '@/services/serviceUtils'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const categoriesStore = useShopCategoriesStore()
@@ -36,79 +38,22 @@ const searchQuery = ref('')
 const allItems = computed(() => catalogStore.allItems)
 const loading = computed(() => categoriesStore.isLoading || catalogStore.isLoading)
 const err = computed(() => categoriesStore.error || catalogStore.error || '')
-
-// Search filter
-const itemMatchesSearch = (item: ShopCatalogItem) => {
-  if (!searchQuery.value.trim()) return true
-  const q = searchQuery.value.toLowerCase()
-  const desc = item.description ? item.description.toLowerCase() : ''
-  const sku = item.sku ? item.sku.toLowerCase() : ''
-  return desc.includes(q) || sku.includes(q)
-}
-
-const categoryHasMatchingItems = (categoryId: string, depth: number = 0): boolean => {
-  // Prevent infinite recursion (max 50 levels deep)
-  if (depth > 50) return false
-  
-  const q = searchQuery.value.toLowerCase()
-  if (!q) return true
-  
-  // Check if the category name itself matches
-  const cat = categoriesStore.categories.find(c => c.id === categoryId)
-  if (cat && cat.name?.toLowerCase().includes(q)) {
-    return true
-  }
-  
-  // Check direct items in this category
-  const directItems = allItems.value.filter(i => i.categoryId === categoryId)
-  if (directItems.some(i => itemMatchesSearch(i))) return true
-  
-  // Check child categories recursively
-  const children = categoriesStore.getChildren(categoryId)
-  return children.some(child => categoryHasMatchingItems(child.id, depth + 1))
-}
-
-// Check if a category has matching items/descendants (but not counting the category name itself)
-const categoryHasMatchingDescendants = (categoryId: string, depth: number = 0): boolean => {
-  if (depth > 50) return false
-  
-  const q = searchQuery.value.toLowerCase()
-  if (!q) return false
-  
-  // Check direct items in this category
-  const directItems = allItems.value.filter(i => i.categoryId === categoryId)
-  if (directItems.some(i => itemMatchesSearch(i))) return true
-  
-  // Check child categories recursively (including their names and descendants)
-  const children = categoriesStore.getChildren(categoryId)
-  return children.some(child => categoryHasMatchingItems(child.id, depth + 1))
-}
-
-// Recursively filter tree to only include categories that should be visible
-const filterCategoryTree = (tree: CategoryNode[]): CategoryNode[] => {
-  return tree
-    .filter(cat => {
-      if (!searchQuery.value.trim()) return true
-      // Must have matching descendants (not just matching by name)
-      return categoryHasMatchingDescendants(cat.id)
-    })
-    .map(cat => ({
-      ...cat,
-      children: filterCategoryTree(cat.children)
-    }))
-}
-
-const filteredCategoryTree = computed(() => filterCategoryTree(categoriesStore.fullTree))
-
-const filteredUncategorizedItems = computed(() => {
-  return allItems.value
-    .filter(item => !item.categoryId && itemMatchesSearch(item))
-    .map(item => `item-${item.id}`)
+const {
+  filteredCategoryTree,
+  filteredUncategorizedItemNodeIds: filteredUncategorizedItems,
+  buildExpandedNodesForSearch,
+} = useCatalogTreeSearch({
+  searchQuery,
+  categories: computed(() => categoriesStore.categories),
+  allItems,
+  fullTree: computed(() => categoriesStore.fullTree),
+  getCategoryById: (id) => categoriesStore.getCategoryById(id),
+  getChildren: (parentId) => categoriesStore.getChildren(parentId),
 })
 
-async function loadAll() {
-  await categoriesStore.fetchAllCategories()
-  await catalogStore.fetchCatalog()
+function loadAll() {
+  categoriesStore.subscribeAllCategories()
+  catalogStore.subscribeCatalog()
 }
 
 function toggleExpand(nodeId: string) {
@@ -153,64 +98,14 @@ function expandAncestors(nodeId: string, set: Set<string>, depth: number = 0) {
   expandAncestors(parentNodeId, set, depth + 1)
 }
 
-// Auto-expand categories and items when search has matches
-const autoExpandOnSearch = () => {
-  if (!searchQuery.value.trim()) {
-    // Don't clear - let manual expansions persist
-    return
-  }
-  
-  const nodesToExpand = new Set<string>()
-  
-  // Helper to expand category and all its parents up the tree
-  const expandCategoryAndParents = (categoryId: string, depth: number = 0) => {
-    if (depth > 50) return // Prevent infinite recursion
-    nodesToExpand.add(categoryId)
-    const cat = categoriesStore.categories.find(c => c.id === categoryId)
-    if (cat?.parentId) {
-      expandCategoryAndParents(cat.parentId, depth + 1)
-    }
-  }
-  
-  // Helper to recursively expand all child categories with matches
-  const expandChildrenWithMatches = (parentId: string, depth: number = 0) => {
-    if (depth > 50) return // Prevent infinite recursion
-    const children = categoriesStore.getChildren(parentId)
-    children.forEach(child => {
-      // Only expand children that have descendants matching the search (not just matching by name)
-      if (categoryHasMatchingDescendants(child.id)) {
-        nodesToExpand.add(child.id)
-        expandChildrenWithMatches(child.id, depth + 1) // Recurse into grandchildren
-      }
-    })
-  }
-  
-  // Find all root categories with matching descendants and expand them
-  const allCategories = categoriesStore.categories
-  allCategories.forEach(cat => {
-    if (categoryHasMatchingDescendants(cat.id)) {
-      expandCategoryAndParents(cat.id)
-      expandChildrenWithMatches(cat.id)
-    }
-  })
-  
-  // Also expand uncategorized items that match the search, and their matching children
-  allItems.value.forEach(item => {
-    if (!item.categoryId && itemMatchesSearch(item)) {
-      if (categoryHasMatchingDescendants(`item-${item.id}`)) {
-        nodesToExpand.add(`item-${item.id}`)
-        expandChildrenWithMatches(`item-${item.id}`)
-      }
-    }
-  })
-  
-  // Replace the entire ref to ensure Vue reactivity properly updates
-  expandedNodes.value = new Set(nodesToExpand)
-}
-
-watch(() => searchQuery.value, () => {
-  autoExpandOnSearch()
-}, { immediate: false })
+watch(
+  () => searchQuery.value,
+  () => {
+    if (!searchQuery.value.trim()) return
+    expandedNodes.value = buildExpandedNodesForSearch()
+  },
+  { immediate: false }
+)
 
 function openAddCategoryDialog(id: string | null = null) {
   parentId.value = id
@@ -401,15 +296,18 @@ async function editItem(item: ShopCatalogItem) {
   editingItemId.value = item.id
 }
 
-async function saveItemFromTree(itemId: string, updates: { description?: string; sku?: string; price?: number }) {
+async function saveItemFromTree(
+  itemId: string,
+  updates: { description?: string; sku?: string | null; price?: number | null }
+) {
   saving.value = true
   try {
     await catalogStore.updateItem(itemId, updates)
     toastRef.value?.show('Item updated', 'success')
     editingItemId.value = null
-  } catch (e) {
-    console.error('Failed to update item:', e)
-    toastRef.value?.show(`Failed to update item: ${e?.message ?? 'Unknown error'}`, 'error')
+  } catch (err) {
+    console.error('Failed to update item:', err)
+    toastRef.value?.show(`Failed to update item: ${normalizeError(err, 'Unknown error')}`, 'error')
   } finally {
     saving.value = false
   }
@@ -685,6 +583,11 @@ async function downloadCatalog() {
 onMounted(() => {
   loadAll()
 })
+
+onUnmounted(() => {
+  categoriesStore.stopCategoriesSubscription()
+  catalogStore.stopCatalogSubscription()
+})
 </script>
 
 <template>
@@ -847,7 +750,7 @@ onMounted(() => {
           </div>
         </div>
         <div v-else class="text-center py-5 text-muted">
-          <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+          <i class="bi bi-inbox empty-catalog-icon"></i>
           <p class="mt-3 mb-0">No categories or items yet. Create one to get started.</p>
         </div>
       </AdminCardWrapper>
@@ -856,7 +759,7 @@ onMounted(() => {
     <!-- Add Category Modal -->
     <div
       v-if="showAddCategory"
-      class="modal d-block bg-dark bg-opacity-50 d-flex align-items-center justify-content-center"
+      class="modal d-block bg-dark bg-opacity-50 catalog-modal"
     >
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -907,10 +810,14 @@ onMounted(() => {
 @use '@/styles/_variables.scss' as *;
 $select-arrow-color: $body-color;
 $select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);
-.modal.d-block {
-  display: flex !important;
+.catalog-modal {
+  display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.empty-catalog-icon {
+  font-size: 2rem;
 }
 
 .catalog-tree {

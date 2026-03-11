@@ -68,9 +68,10 @@ export function recalcTotalsForTimecard(timecard: TimecardModel, weekStartDate: 
 
   timecard.jobs?.forEach((job) => {
     job.days?.forEach((day, idx) => {
-      hours[idx] += day.hours || 0
-      production[idx] += day.production || 0
-      lineTotals[idx] += (day.production || 0) * (day.unitCost || 0)
+      if (idx < 0 || idx >= hours.length) return
+      hours[idx] = (hours[idx] ?? 0) + (day.hours || 0)
+      production[idx] = (production[idx] ?? 0) + (day.production || 0)
+      lineTotals[idx] = (lineTotals[idx] ?? 0) + (day.production || 0) * (day.unitCost || 0)
     })
   })
 
@@ -78,10 +79,10 @@ export function recalcTotalsForTimecard(timecard: TimecardModel, weekStartDate: 
   timecard.days = dates.map((date, idx) => ({
     date,
     dayOfWeek: idx,
-    hours: hours[idx],
-    production: production[idx],
+    hours: hours[idx] ?? 0,
+    production: production[idx] ?? 0,
     unitCost: 0,
-    lineTotal: lineTotals[idx],
+    lineTotal: lineTotals[idx] ?? 0,
     notes: timecard.days?.[idx]?.notes ?? '',
   }))
 

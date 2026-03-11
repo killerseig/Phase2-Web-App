@@ -120,7 +120,7 @@ async function onSignOut() {
 }
 
 .navbar-text .text-muted {
-  color: var(--text-muted, $text-muted) !important;
+  color: var(--text-muted, $text-muted);
 }
 
 .topnav .btn-outline-secondary {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
 import Toast from '../../components/Toast.vue'
@@ -215,7 +215,7 @@ async function exportAllSubmittedAllJobs(weekEndingInput?: string | Date | null)
     downloadCsv(toCsv(headers, rows), filename)
     toastRef.value?.show('Exported submitted timecards', 'success')
   } catch (e) {
-    toastRef.value?.show(e?.message ?? 'Failed to export timecards', 'error')
+    toastRef.value?.show(formatErr(e), 'error')
   }
 }
 
@@ -230,8 +230,8 @@ function asText(value: unknown, fallback = '—'): string {
   return text ? text : fallback
 }
 
-async function loadJobs() {
-  await jobsStore.fetchAllJobs(true)
+function loadJobs() {
+  jobsStore.subscribeAllJobs(true)
 }
 
 function setInlineJob(job: Job) {
@@ -315,7 +315,7 @@ async function saveInlineJob(job: Job) {
     })
     toastRef.value?.show('Job updated', 'success')
   } catch (e) {
-    toastRef.value?.show(e?.message ?? 'Failed to update job', 'error')
+    toastRef.value?.show(formatErr(e), 'error')
   } finally {
     editingJobSaving.value = false
   }
@@ -426,7 +426,7 @@ async function toggleArchive(job: Job, active: boolean) {
     toastRef.value?.show(active ? 'Job restored' : 'Job archived', 'success')
     await loadJobs()
   } catch (e) {
-    toastRef.value?.show(e?.message ?? 'Failed to update job status', 'error')
+    toastRef.value?.show(formatErr(e), 'error')
   } finally {
     togglingJobId.value = ''
   }
@@ -439,7 +439,12 @@ function handleJobSort({ sortKey, sortDir }: { sortKey: string; sortDir: SortDir
 
 onMounted(async () => {
   loadJobs()
-  await usersStore.fetchAllUsers()
+  usersStore.subscribeAllUsers()
+})
+
+onUnmounted(() => {
+  jobsStore.stopJobsSubscription()
+  usersStore.stopUsersSubscription()
 })
 
 </script>

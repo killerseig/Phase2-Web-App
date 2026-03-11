@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
@@ -63,13 +63,12 @@ async function boot() {
   }
 
   try {
-    // Load job
-    await jobs.fetchJob(jobId.value)
+    jobs.subscribeJob(jobId.value)
     app.setCurrentJob(jobId.value, jobs.currentJob?.name ?? null)
-    
-    // Load roster
+
     await roster.setCurrentJob(jobId.value)
-    await roster.fetchJobRoster(jobId.value)
+    roster.stopJobRosterSubscription()
+    roster.subscribeJobRoster(jobId.value)
   } catch (e) {
     app.clearJob()
     console.error('Failed to load job:', e)
@@ -84,6 +83,20 @@ watch(
     await boot()
   }
 )
+
+watch(
+  () => job.value?.name ?? null,
+  (name) => {
+    if (!jobId.value) return
+    app.setCurrentJob(jobId.value, name)
+  }
+)
+
+onUnmounted(() => {
+  jobs.stopCurrentJobSubscription()
+  roster.stopJobRosterSubscription()
+  app.clearJob()
+})
 
 </script>
 

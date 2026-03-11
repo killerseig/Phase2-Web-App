@@ -94,7 +94,9 @@ describe('Timecards service', () => {
     })
 
     expect(id).toBe('tc-1')
-    const [, payload] = addDocMock.mock.calls[0]
+    const addDocCall = addDocMock.mock.calls[0]
+    expect(addDocCall).toBeDefined()
+    const [, payload] = addDocCall!
     expect(payload).toMatchObject({
       jobId: 'job-1',
       weekStartDate: '2024-01-01',
@@ -123,7 +125,9 @@ describe('Timecards service', () => {
       notes: 'updated',
     })
 
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload.notes).toBe('updated')
     expect(payload.totals).toMatchObject({ hoursTotal: 5, productionTotal: 7, lineTotal: 9 })
     expect(payload.updatedAt).toBe('ts')
@@ -134,7 +138,9 @@ describe('Timecards service', () => {
 
     await submitTimecard('job-1', 'tc-1')
 
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload).toMatchObject({ status: 'submitted', submittedAt: 'ts', updatedAt: 'ts', uid: 'u1' })
   })
 
@@ -151,7 +157,9 @@ describe('Timecards service', () => {
 
     expect(count).toBe(1)
     expect(updateDocMock).toHaveBeenCalledTimes(1)
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload.status).toBe('submitted')
   })
 
@@ -206,7 +214,9 @@ describe('Timecards service', () => {
     const id = await createTimecardFromCopy('job-1', source, '2024-02-17')
     expect(id).toBe('tc-copy-1')
 
-    const [, payload] = addDocMock.mock.calls[0]
+    const addDocCall = addDocMock.mock.calls[0]
+    expect(addDocCall).toBeDefined()
+    const [, payload] = addDocCall!
     expect(payload).toMatchObject({
       employeeNumber: '123',
       employeeName: 'Jane Doe',

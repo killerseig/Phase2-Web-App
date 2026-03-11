@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import { useJobAccess } from '@/composables/useJobAccess'
+import { normalizeError } from '@/services/serviceUtils'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 const router = useRouter()
-const { isAdmin, visibleActiveJobs, visibleArchivedJobs, loadJobsForCurrentUser } = useJobAccess()
+const { isAdmin, visibleActiveJobs, visibleArchivedJobs, loadJobsForCurrentUser, stopJobsForCurrentUser } = useJobAccess()
 
 const err = ref('')
 
@@ -19,7 +20,7 @@ async function init() {
   try {
     await loadJobsForCurrentUser()
   } catch (e) {
-    err.value = e?.message ?? 'Failed to load jobs'
+    err.value = normalizeError(e, 'Failed to load jobs')
     toastRef.value?.show('Failed to load jobs', 'error')
   }
 }
@@ -31,6 +32,10 @@ async function openJob(jobId: string) {
 
 onMounted(async () => {
   await init()
+})
+
+onUnmounted(() => {
+  stopJobsForCurrentUser()
 })
 </script>
 

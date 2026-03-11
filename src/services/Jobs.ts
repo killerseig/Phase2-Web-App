@@ -6,11 +6,12 @@ import {
   doc,
   getDoc,
   getDocs,
-  orderBy,
+  onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
   where,
+  type Unsubscribe,
   type DocumentData,
 } from 'firebase/firestore'
 import type { Job as JobModel, JobType, TimecardStatus } from '@/types/models'
@@ -56,6 +57,23 @@ function normalize(id: string, data: DocumentData): Job {
   }
 }
 
+function sortJobsByName(jobs: Job[]): Job[] {
+  return jobs.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+}
+
+function applyJobFilters(jobs: Job[], includeArchived: boolean): Job[] {
+  if (includeArchived) return jobs
+  return jobs.filter((job) => job.active)
+}
+
+function buildJobsQuery(options?: { assignedOnlyForUid?: string }) {
+  const assignedUid = options?.assignedOnlyForUid
+  if (assignedUid) {
+    return query(collection(db, 'jobs'), where('assignedForemanIds', 'array-contains', assignedUid))
+  }
+  return query(collection(db, 'jobs'))
+}
+
 export async function getJob(jobId: string): Promise<Job | null> {
   try {
     assertJobAccess(jobId)
@@ -70,30 +88,53 @@ export async function getJob(jobId: string): Promise<Job | null> {
 
 export async function listAllJobs(includeArchived = true, options?: { assignedOnlyForUid?: string }): Promise<Job[]> {
   try {
-    const assignedUid = options?.assignedOnlyForUid
-
-    const jobsQ = assignedUid
-      ? query(collection(db, 'jobs'), where('assignedForemanIds', 'array-contains', assignedUid))
-      : query(collection(db, 'jobs'), orderBy('name', 'asc'))
-
-    const snap = await getDocs(jobsQ)
-    
-    let jobs = snap.docs.map((d) => normalize(d.id, d.data()))
-    
-    // Filter to active jobs only if not including archived
-    if (!includeArchived) {
-      jobs = jobs.filter(j => j.active)
-    }
-
-    // For foreman-restricted queries we sort client-side to avoid composite indexes
-    if (assignedUid) {
-      jobs = jobs.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    }
-    
-    return jobs
+    const snap = await getDocs(buildJobsQuery(options))
+    const jobs = snap.docs.map((d) => normalize(d.id, d.data()))
+    return applyJobFilters(sortJobsByName(jobs), includeArchived)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load jobs'))
   }
+}
+
+export function subscribeAllJobs(
+  includeArchived = true,
+  options: { assignedOnlyForUid?: string } | undefined,
+  onUpdate: (jobs: Job[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  const jobsQuery = buildJobsQuery(options)
+  return onSnapshot(
+    jobsQuery,
+    (snap) => {
+      const jobs = snap.docs.map((d) => normalize(d.id, d.data()))
+      onUpdate(applyJobFilters(sortJobsByName(jobs), includeArchived))
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
+}
+
+export function subscribeJob(
+  jobId: string,
+  onUpdate: (job: Job | null) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  assertJobAccess(jobId)
+  const ref = doc(db, 'jobs', jobId)
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        onUpdate(null)
+        return
+      }
+      onUpdate(normalize(snap.id, snap.data()))
+    },
+    (err) => {
+      onError?.(err)
+    }
+  )
 }
 
 export async function createJob(
@@ -227,6 +268,20 @@ export async function getDailyLogRecipients(jobId: string): Promise<string[]> {
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load daily log recipients'))
   }
+}
+
+export function subscribeDailyLogRecipients(
+  jobId: string,
+  onUpdate: (recipients: string[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  return subscribeJob(
+    jobId,
+    (job) => {
+      onUpdate(job?.dailyLogRecipients ?? [])
+    },
+    onError
+  )
 }
 
 /**

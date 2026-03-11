@@ -11,6 +11,7 @@ export function useJobAccess() {
   const isForeman = computed(() => auth.role === ROLES.FOREMAN)
 
   const visibleActiveJobs = computed(() => {
+    if (!auth.user || auth.active === false || !auth.role || auth.role === ROLES.NONE) return []
     const base = jobsStore.activeJobs
     if (isForeman.value) {
       return base.filter((j) => auth.assignedJobIds?.includes(j.id))
@@ -24,13 +25,30 @@ export function useJobAccess() {
   })
 
   const loadJobsForCurrentUser = async () => {
-    await jobsStore.fetchAllJobs(isAdmin.value, {
+    const includeArchived = isAdmin.value
+    const options = {
       assignedOnlyForUid: isForeman.value ? auth.user?.uid ?? undefined : undefined,
-    })
+    }
+
+    if (typeof jobsStore.subscribeAllJobs === 'function') {
+      jobsStore.subscribeAllJobs(includeArchived, options)
+      return
+    }
+
+    if (typeof jobsStore.fetchAllJobs === 'function') {
+      await jobsStore.fetchAllJobs(includeArchived, options)
+    }
+  }
+
+  const stopJobsForCurrentUser = () => {
+    if (typeof jobsStore.stopJobsSubscription === 'function') {
+      jobsStore.stopJobsSubscription()
+    }
   }
 
   const canAccessJob = (jobId: string): boolean => {
     if (!jobId) return false
+    if (!auth.user || auth.active === false || !auth.role || auth.role === ROLES.NONE) return false
     if (isForeman.value) {
       const assignedJobIds = auth.assignedJobIds ?? []
       return assignedJobIds.includes(jobId)
@@ -44,6 +62,7 @@ export function useJobAccess() {
     visibleActiveJobs,
     visibleArchivedJobs,
     loadJobsForCurrentUser,
+    stopJobsForCurrentUser,
     canAccessJob,
   }
 }

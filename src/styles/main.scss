@@ -3,39 +3,68 @@
  * Bootstrap 5 + Custom Components
  */
 
-// 1) Your overrides first
-@import "variables";
+@use "variables" as vars;
 
-// 2) Bootstrap
-@import "../../node_modules/bootstrap/scss/bootstrap";
+@use "../../node_modules/bootstrap/scss/bootstrap" with (
+  $primary: vars.$primary,
+  $secondary: vars.$secondary,
+  $success: vars.$success,
+  $warning: vars.$warning,
+  $danger: vars.$danger,
+  $info: vars.$info,
+  $light: vars.$light,
+  $dark: vars.$dark,
+  $body-bg: vars.$body-bg,
+  $body-color: vars.$body-color,
+  $border-color: vars.$border-color,
+  $table-border-color: vars.$border-color,
+  $list-group-border-color: vars.$border-color,
+  $card-border-color: vars.$border-color,
+  $font-family-sans-serif: vars.$font-family-sans-serif,
+  $headings-font-weight: vars.$headings-font-weight,
+  $headings-line-height: vars.$headings-line-height,
+  $font-size-base: vars.$font-size-base,
+  $line-height-base: vars.$line-height-base,
+  $border-radius: vars.$border-radius,
+  $border-radius-sm: vars.$border-radius-sm,
+  $border-radius-lg: vars.$border-radius-lg,
+  $btn-font-weight: vars.$btn-font-weight,
+  $btn-padding-y: vars.$btn-padding-y,
+  $btn-padding-x: vars.$btn-padding-x,
+  $navbar-padding-y: vars.$navbar-padding-y,
+  $input-padding-y: vars.$input-padding-y,
+  $input-padding-x: vars.$input-padding-x,
+  $input-border-radius: vars.$input-border-radius,
+  $container-max-widths: vars.$container-max-widths
+);
 
-// 3) Your custom layers
-@import "layout";
-@import "buttons";
-@import "cards";
-@import "nav";
-@import "badges";
-@import "forms";
-@import "tables";
-@import "alerts";
-@import "utilities";
-@import "flatpickr";
+@use "theme";
+@use "layout";
+@use "buttons";
+@use "cards";
+@use "nav";
+@use "badges";
+@use "forms";
+@use "tables";
+@use "alerts";
+@use "utilities";
+@use "flatpickr";
 
 // ---- Autofill theming (keep dark inputs consistent) ----
 input:-webkit-autofill,
 textarea:-webkit-autofill,
 select:-webkit-autofill {
-	box-shadow: 0 0 0 1000px $surface-2 inset;
-	-webkit-text-fill-color: $body-color;
-	border-color: $border-color;
-	caret-color: $body-color;
+	box-shadow: 0 0 0 1000px vars.$surface-2 inset;
+	-webkit-text-fill-color: vars.$body-color;
+	border-color: vars.$border-color;
+	caret-color: vars.$body-color;
 }
 
 input:-webkit-autofill:focus,
 textarea:-webkit-autofill:focus,
 select:-webkit-autofill:focus {
-	box-shadow: 0 0 0 1000px $surface-3 inset;
-	border-color: $primary;
+	box-shadow: 0 0 0 1000px vars.$surface-3 inset;
+	border-color: vars.$primary;
 }
 
 

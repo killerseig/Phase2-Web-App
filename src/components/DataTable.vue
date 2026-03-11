@@ -24,9 +24,12 @@ interface Column {
   format?: (value: unknown) => string
 }
 
+type DataRow = Record<string, unknown>
+
 interface Props {
   columns: Column[]
-  rows: Record<string, unknown>[]
+  rows: DataRow[]
+  rowKeyField?: string
   editable?: boolean
   showAddButton?: boolean
   addButtonLabel?: string
@@ -39,6 +42,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  rowKeyField: 'id',
   editable: true,
   showAddButton: true,
   addButtonLabel: 'Add Row',
@@ -53,7 +57,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'add-row'): void
   (e: 'delete-row', rowIndex: number): void
-  (e: 'update-row', rowIndex: number, row: Record<string, unknown>): void
+  (e: 'update-row', rowIndex: number, row: DataRow): void
 }>()
 const { confirm } = useConfirmDialog()
 
@@ -86,6 +90,23 @@ const handleCellUpdate = (rowIndex: number, colKey: string, value: unknown) => {
   emit('update-row', rowIndex, updated)
 }
 
+const getCellValue = (row: DataRow, colKey: string): unknown => row[colKey]
+
+const getCellInputValue = (row: DataRow, colKey: string): string | number => {
+  const value = getCellValue(row, colKey)
+  if (typeof value === 'number') return value
+  if (typeof value === 'string') return value
+  return ''
+}
+
+const getRowKey = (row: DataRow, rowIndex: number): string | number => {
+  const candidate = row[props.rowKeyField]
+  if (typeof candidate === 'string' || typeof candidate === 'number') {
+    return candidate
+  }
+  return rowIndex
+}
+
 const getInputType = (col: Column): InputType => col.type || 'text'
 
 const getInputClasses = (): string =>
@@ -116,17 +137,17 @@ const onAddRow = () => emit('add-row')
             >
               {{ col.label }}
             </th>
-            <th v-if="editable" style="width: 50px;" class="text-center">Actions</th>
+            <th v-if="editable" class="text-center actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, rowIdx) in rows" :key="rowIdx">
+          <tr v-for="(row, rowIdx) in rows" :key="getRowKey(row, rowIdx)">
             <td v-for="col in visibleColumns" :key="String(col.key)" :style="{ width: col.width }">
               <template v-if="editable && col.editable !== false">
                 <input
                   v-if="['text', 'email', 'date'].includes(getInputType(col))"
                   :type="getInputType(col)"
-                  :value="(row as any)[col.key]"
+                  :value="getCellInputValue(row, col.key)"
                   :placeholder="col.placeholder"
                   :class="`${getInputClasses()} text-center`"
                   @input="(e) => handleCellUpdate(rowIdx, col.key, (e.target as HTMLInputElement).value)"
@@ -136,7 +157,7 @@ const onAddRow = () => emit('add-row')
                 <input
                   v-else-if="getInputType(col) === 'number'"
                   type="number"
-                  :value="(row as any)[col.key]"
+                  :value="getCellInputValue(row, col.key)"
                   :placeholder="col.placeholder"
                   :step="col.step"
                   :min="col.min"
@@ -148,7 +169,7 @@ const onAddRow = () => emit('add-row')
 
                 <select
                   v-else-if="getInputType(col) === 'select'"
-                  :value="(row as any)[col.key]"
+                  :value="getCellInputValue(row, col.key)"
                   :class="`${getInputClasses()} text-center`"
                   @input="(e) => handleCellUpdate(rowIdx, col.key, (e.target as HTMLSelectElement).value)"
                 >
@@ -160,7 +181,7 @@ const onAddRow = () => emit('add-row')
 
                 <textarea
                   v-else-if="getInputType(col) === 'textarea'"
-                  :value="(row as any)[col.key]"
+                  :value="getCellInputValue(row, col.key)"
                   :placeholder="col.placeholder"
                   rows="2"
                   :class="getInputClasses()"
@@ -169,8 +190,8 @@ const onAddRow = () => emit('add-row')
               </template>
 
               <template v-else>
-                <span v-if="col.format">{{ col.format((row as any)[col.key]) }}</span>
-                <span v-else>{{ (row as any)[col.key] }}</span>
+                <span v-if="col.format">{{ col.format(getCellValue(row, col.key)) }}</span>
+                <span v-else>{{ getCellValue(row, col.key) }}</span>
               </template>
             </td>
 
@@ -227,5 +248,9 @@ select {
 select:focus {
   border-color: lighten($primary, 6%);
   box-shadow: 0 0 0 0.2rem rgba($primary, 0.25);
+}
+
+.actions-col {
+  width: 50px;
 }
 </style>

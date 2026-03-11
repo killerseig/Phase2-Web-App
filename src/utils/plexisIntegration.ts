@@ -45,6 +45,7 @@ export function convertTimecardToPlexisRow(
   }
 
   const hours = timecard.days.map((day) => day.hours || 0)
+  const [sundayHours = 0, mondayHours = 0, tuesdayHours = 0, wednesdayHours = 0, thursdayHours = 0, fridayHours = 0, saturdayHours = 0] = hours
   const totalHours = hours.reduce((sum, h) => sum + h, 0)
 
   return {
@@ -52,13 +53,13 @@ export function convertTimecardToPlexisRow(
     EmployeeName: timecard.employeeName,
     JobCode: jobCode,
     WeekEndingDate: timecard.weekEndingDate,
-    SundayHours: hours[0],
-    MondayHours: hours[1],
-    TuesdayHours: hours[2],
-    WednesdayHours: hours[3],
-    ThursdayHours: hours[4],
-    FridayHours: hours[5],
-    SaturdayHours: hours[6],
+    SundayHours: sundayHours,
+    MondayHours: mondayHours,
+    TuesdayHours: tuesdayHours,
+    WednesdayHours: wednesdayHours,
+    ThursdayHours: thursdayHours,
+    FridayHours: fridayHours,
+    SaturdayHours: saturdayHours,
     TotalHours: totalHours,
   }
 }
@@ -133,7 +134,8 @@ export function importEmployeesFromCsv(csvContent: string): JobRosterEmployee[] 
   }
 
   // Parse headers (case-insensitive)
-  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase())
+  const headerLine = lines[0] ?? ''
+  const headers = headerLine.split(',').map((h) => h.trim().toLowerCase())
 
   const expectedFields = [
     'employeeid',
@@ -154,7 +156,9 @@ export function importEmployeesFromCsv(csvContent: string): JobRosterEmployee[] 
   const employees: JobRosterEmployee[] = []
 
   for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim()
+    const rawLine = lines[i]
+    if (!rawLine) continue // Defensive: skip missing lines
+    const line = rawLine.trim()
     if (!line) continue // Skip empty lines
 
     const values = parseCSVLine(line)
@@ -273,7 +277,9 @@ function zipRowWithHeaders(
 ): Record<string, string> {
   const result: Record<string, string> = {}
   for (let i = 0; i < headers.length; i++) {
-    result[headers[i]] = values[i] ?? ''
+    const header = headers[i]
+    if (!header) continue
+    result[header] = values[i] ?? ''
   }
   return result
 }
@@ -300,7 +306,8 @@ export function validatePlexisCsv(csvContent: string): {
     }
 
     // Validate headers
-    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase())
+    const headerLine = lines[0] ?? ''
+    const headers = headerLine.split(',').map((h) => h.trim().toLowerCase())
     const expectedFields = [
       'employeeid',
       'firstname',
@@ -320,7 +327,9 @@ export function validatePlexisCsv(csvContent: string): {
     // Validate data rows
     let validRows = 0
     for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
+      const rawLine = lines[i]
+      if (!rawLine) continue
+      const line = rawLine.trim()
       if (!line) continue
 
       const values = parseCSVLine(line)

@@ -66,7 +66,9 @@ describe('Employees service', () => {
     })
 
     expect(id).toBe('emp-1')
-    const [, payload] = addDocMock.mock.calls[0]
+    const addDocCall = addDocMock.mock.calls[0]
+    expect(addDocCall).toBeDefined()
+    const [, payload] = addDocCall!
     expect(payload).toMatchObject({ jobId: 'job-1', firstName: 'A', lastName: 'B', employeeNumber: '123', occupation: 'Foreman' })
     expect(serverTimestamp).toHaveBeenCalled()
   })

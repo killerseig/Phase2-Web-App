@@ -4,11 +4,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import Login from '@/views/Login.vue'
 
 let mockPush: ReturnType<typeof vi.fn>
+let mockReplace: ReturnType<typeof vi.fn>
 let mockLogin: ReturnType<typeof vi.fn>
 let mockSendPasswordResetEmail: ReturnType<typeof vi.fn>
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -39,6 +40,7 @@ const mountLogin = () =>
 describe('Login view', () => {
   beforeEach(() => {
     mockPush = vi.fn()
+    mockReplace = vi.fn()
     mockLogin = vi.fn().mockResolvedValue(undefined)
     mockSendPasswordResetEmail = vi.fn().mockResolvedValue(undefined)
   })
@@ -46,14 +48,16 @@ describe('Login view', () => {
   it('submits credentials and redirects to dashboard', async () => {
     const wrapper = mountLogin()
     const inputs = wrapper.findAll('input.form-control')
+    expect(inputs.length).toBeGreaterThanOrEqual(2)
 
-    await inputs[0].setValue('user@example.com')
-    await inputs[1].setValue('secret123')
+    await inputs[0]!.setValue('user@example.com')
+    await inputs[1]!.setValue('secret123')
     await wrapper.get('button.btn.btn-primary.w-100').trigger('click')
     await flushPromises()
 
     expect(mockLogin).toHaveBeenCalledWith('user@example.com', 'secret123')
-    expect(mockPush).toHaveBeenCalledWith('/dashboard')
+    expect(mockReplace).toHaveBeenCalledWith({ name: 'dashboard' })
+    expect(mockPush).not.toHaveBeenCalled()
   })
 
   it('sends password reset request from the modal', async () => {

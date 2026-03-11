@@ -55,7 +55,9 @@ describe('Users service', () => {
 
     await assignJobToForeman('f1', 'b')
 
-    const [, payload] = updateDocMock.mock.calls[0]
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
     expect(payload.assignedJobIds).toEqual(['a', 'b'])
   })
 

@@ -10,6 +10,7 @@ import DailyLogManpower from '../components/dailyLogs/DailyLogManpower.vue'
 import DailyLogRecipients from '../components/dailyLogs/DailyLogRecipients.vue'
 import DailyLogTextField from '../components/dailyLogs/DailyLogTextField.vue'
 import { useDailyLog } from '../composables/useDailyLog'
+import { formatDateTime } from '@/utils/datetime'
 
 defineProps<{ jobId?: string }>()
 
@@ -70,22 +71,7 @@ function onDateChange(_dates: Date[], dateStr: string) {
 }
 
 function formatSubmittedAt(value: unknown): string {
-  if (!value) return ''
-  if (value instanceof Date) return value.toLocaleString()
-  if (typeof value === 'string' || typeof value === 'number') {
-    return new Date(value).toLocaleString()
-  }
-  if (typeof value === 'object') {
-    const toDate = (value as { toDate?: () => unknown }).toDate
-    if (typeof toDate === 'function') {
-      const parsed = toDate()
-      if (parsed instanceof Date) return parsed.toLocaleString()
-      if (typeof parsed === 'string' || typeof parsed === 'number') {
-        return new Date(parsed).toLocaleString()
-      }
-    }
-  }
-  return ''
+  return formatDateTime(value)
 }
 </script>
 
@@ -116,7 +102,7 @@ function formatSubmittedAt(value: unknown): string {
           <div class="col-md-4">
             <label class="form-label small text-muted mb-1">Date</label>
             <div class="input-group input-group-sm">
-              <span class="input-group-text bg-light"><i class="bi bi-calendar-date"></i></span>
+              <span class="input-group-text"><i class="bi bi-calendar-date"></i></span>
               <flat-pickr
                 v-model="logDate"
                 :config="datePickerConfig"
@@ -158,7 +144,7 @@ function formatSubmittedAt(value: unknown): string {
       <div class="col-lg-8">
         <!-- Site Information -->
         <div class="card mb-4">
-          <div class="card-header bg-light"><h5 class="mb-0"><i class="bi bi-briefcase me-2"></i>Site Information</h5></div>
+          <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-briefcase me-2"></i>Site Information</h5></div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-12">
@@ -183,7 +169,7 @@ function formatSubmittedAt(value: unknown): string {
 
         <!-- Manpower -->
         <DailyLogManpower
-          :lines="form.manpowerLines"
+          :lines="form.manpowerLines ?? []"
           :can-edit="canEditDraft"
           :can-delete-line="canDeleteManpowerLine"
           :is-admin-line="isAdminAddedLine"
@@ -193,7 +179,7 @@ function formatSubmittedAt(value: unknown): string {
           @update-count="updateManpowerCount"
         />
         <div class="card mb-4">
-          <div class="card-header bg-light"><h5 class="mb-0"><i class="bi bi-calendar-event me-2"></i>Schedule & Assessment</h5></div>
+          <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-calendar-event me-2"></i>Schedule & Assessment</h5></div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-12">
@@ -220,7 +206,7 @@ function formatSubmittedAt(value: unknown): string {
 
         <!-- Indoor Climate -->
         <div class="card mb-4">
-          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+          <div class="card-header panel-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-thermometer-half me-2"></i>Indoor Temperature Readings</h5>
             <button
               type="button"
@@ -297,7 +283,7 @@ function formatSubmittedAt(value: unknown): string {
 
         <!-- Safety & Concerns -->
         <div class="card mb-4">
-          <div class="card-header bg-light"><h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Safety & Concerns</h5></div>
+          <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Safety & Concerns</h5></div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-12">
@@ -353,7 +339,7 @@ function formatSubmittedAt(value: unknown): string {
 
         <!-- Deliveries -->
         <div class="card mb-4">
-          <div class="card-header bg-light"><h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Deliveries & Materials</h5></div>
+          <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Deliveries & Materials</h5></div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-12">
@@ -398,7 +384,7 @@ function formatSubmittedAt(value: unknown): string {
 
         <!-- Notes -->
         <div class="card mb-4">
-          <div class="card-header bg-light"><h5 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>Notes & Action Items</h5></div>
+          <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>Notes & Action Items</h5></div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-12">
@@ -551,10 +537,6 @@ input[type='file'].form-control:focus::file-selector-button {
 
 :deep(.panel-muted .list-group-item) {
   border-color: rgba(230, 237, 247, 0.08);
-}
-
-.card-header.bg-light {
-  background: $surface-2 !important;
 }
 
 .wide-container-1200 {

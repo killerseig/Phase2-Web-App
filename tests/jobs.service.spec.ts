@@ -73,7 +73,9 @@ describe('Jobs service', () => {
     const id = await createJob('  Alpha  ', { code: ' 123 ' })
 
     expect(id).toBe('job-1')
-    const [, payload] = addDocMock.mock.calls[0]
+    const addDocCall = addDocMock.mock.calls[0]
+    expect(addDocCall).toBeDefined()
+    const [, payload] = addDocCall!
     expect(payload).toMatchObject({
       name: 'Alpha',
       code: '123',

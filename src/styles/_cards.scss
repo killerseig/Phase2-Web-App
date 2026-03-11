@@ -12,3 +12,25 @@
   box-shadow: var(--shadow, vars.$box-shadow);
   transform: translateY(-2px);
 }
+
+.panel-header {
+  background: var(--surface-2, vars.$surface-2);
+  color: var(--text-body, vars.$body-color);
+  border-bottom: 1px solid var(--border, vars.$border-color);
+}
+
+.panel-header h1,
+.panel-header h2,
+.panel-header h3,
+.panel-header h4,
+.panel-header h5,
+.panel-header h6,
+.panel-header .text-muted {
+  color: inherit;
+}
+
+.panel-footer {
+  background: var(--surface-2, vars.$surface-2);
+  color: var(--text-body, vars.$body-color);
+  border-top: 1px solid var(--border, vars.$border-color);
+}

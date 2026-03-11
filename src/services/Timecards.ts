@@ -200,27 +200,30 @@ export async function listSubmittedTimecards(jobId: string): Promise<Timecard[]>
 /**
  * Real-time listener for timecards in a week
  */
-export async function watchTimecardsByWeek(
+export function watchTimecardsByWeek(
   jobId: string,
   weekEndingDate: string,
-  onUpdate: (timecards: Timecard[]) => void
-): Promise<Unsubscribe> {
-  try {
-    assertJobAccess(jobId)
-    const q = query(
-      collection(db, `jobs/${jobId}/timecards`),
-      where('weekEndingDate', '==', weekEndingDate),
-      where('archived', '==', false),
-      orderBy('employeeNumber', 'asc')
-    )
+  onUpdate: (timecards: Timecard[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  assertJobAccess(jobId)
+  const q = query(
+    collection(db, `jobs/${jobId}/timecards`),
+    where('weekEndingDate', '==', weekEndingDate),
+    where('archived', '==', false),
+    orderBy('employeeNumber', 'asc')
+  )
 
-    return onSnapshot(q, snap => {
-      const timecards = snap.docs.map(d => normalize(d.id, d.data()))
+  return onSnapshot(
+    q,
+    (snap) => {
+      const timecards = snap.docs.map((d) => normalize(d.id, d.data()))
       onUpdate(timecards)
-    })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to watch timecards'))
-  }
+    },
+    (err) => {
+      onError?.(new Error(normalizeError(err, 'Failed to subscribe to timecards')))
+    }
+  )
 }
 
 // ============================================================================
@@ -776,27 +779,23 @@ export async function getWeeklyStats(
  * @deprecated Use watchTimecardsByWeek instead (new API)
  * Legacy wrapper that matches old listTimecardsByJobAndWeek signature
  */
-export async function listTimecardsByJobAndWeekLegacy(
+export function listTimecardsByJobAndWeekLegacy(
   jobId: string,
   weekStart: string,
   onUpdate: (timecards: Timecard[]) => void
-): Promise<Unsubscribe> {
-  try {
-    assertJobAccess(jobId)
-    // Map old weekStart (Monday) to new weekEndingDate (Saturday)
-    // Assume weekStart is the Monday, so Saturday is weekStart + 5 days
-    const startDate = new Date(weekStart + 'T00:00:00Z')
-    startDate.setUTCDate(startDate.getUTCDate() + 5) // Add 5 days to get Saturday
-    
-    const year = startDate.getUTCFullYear()
-    const month = String(startDate.getUTCMonth() + 1).padStart(2, '0')
-    const day = String(startDate.getUTCDate()).padStart(2, '0')
-    const weekEndingDate = `${year}-${month}-${day}`
-    
-    return watchTimecardsByWeek(jobId, weekEndingDate, onUpdate)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to watch legacy timecards'))
-  }
+): Unsubscribe {
+  assertJobAccess(jobId)
+  // Map old weekStart (Monday) to new weekEndingDate (Saturday)
+  // Assume weekStart is the Monday, so Saturday is weekStart + 5 days
+  const startDate = new Date(weekStart + 'T00:00:00Z')
+  startDate.setUTCDate(startDate.getUTCDate() + 5) // Add 5 days to get Saturday
+
+  const year = startDate.getUTCFullYear()
+  const month = String(startDate.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(startDate.getUTCDate()).padStart(2, '0')
+  const weekEndingDate = `${year}-${month}-${day}`
+
+  return watchTimecardsByWeek(jobId, weekEndingDate, onUpdate)
 }
 
 // Export old types for compatibility

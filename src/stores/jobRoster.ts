@@ -10,8 +10,10 @@ import {
   addRosterEmployee,
   listRosterEmployees,
   removeRosterEmployee,
+  subscribeRosterEmployees,
   updateRosterEmployee,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
 
 export const useJobRosterStore = defineStore('jobRoster', () => {
@@ -20,6 +22,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const currentJobId = ref<string | null>(null)
+  const rosterSubscriptions = ref<Map<string, () => void>>(new Map())
 
   // Computed
   const currentJobRoster = computed(() => {
@@ -37,6 +40,24 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
 
   const isLoading = computed(() => loading.value)
   const hasError = computed(() => error.value !== null)
+
+  const setStoreError = (err: unknown, fallback: string) => {
+    error.value = normalizeError(err, fallback)
+  }
+
+  const stopJobRosterSubscription = (jobId?: string) => {
+    if (jobId) {
+      const unsubscribe = rosterSubscriptions.value.get(jobId)
+      if (unsubscribe) {
+        unsubscribe()
+        rosterSubscriptions.value.delete(jobId)
+      }
+      return
+    }
+
+    rosterSubscriptions.value.forEach((unsubscribe) => unsubscribe())
+    rosterSubscriptions.value.clear()
+  }
 
   // Actions: Roster Loading
   async function setCurrentJob(jobId: string) {
@@ -59,13 +80,37 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       }
 
       return employees
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load roster'
-      console.error(`[JobRoster Store] Error loading roster for job ${jobId}:`, e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to load roster')
+      console.error(`[JobRoster Store] Error loading roster for job ${jobId}:`, err)
+      throw err
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeJobRoster(jobId: string) {
+    stopJobRosterSubscription(jobId)
+    loading.value = true
+    error.value = null
+
+    const unsubscribe = subscribeRosterEmployees(
+      jobId,
+      (employees) => {
+        rosterByJob.value.set(jobId, employees)
+        if (currentJobId.value === jobId) {
+          currentJobId.value = jobId
+        }
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to roster')
+        loading.value = false
+        console.error(`[JobRoster Store] Error subscribing to roster for job ${jobId}:`, err)
+      }
+    )
+
+    rosterSubscriptions.value.set(jobId, unsubscribe)
   }
 
   /**
@@ -102,10 +147,10 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       rosterByJob.value.set(jobId, roster)
 
       return employeeId
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to add employee'
-      console.error('[JobRoster Store] Error adding employee:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to add employee')
+      console.error('[JobRoster Store] Error adding employee:', err)
+      throw err
     }
   }
 
@@ -121,13 +166,14 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       const roster = rosterByJob.value.get(jobId) ?? []
       const idx = roster.findIndex(e => e.id === employeeId)
       if (idx !== -1) {
-        roster[idx] = { ...roster[idx], ...updates }
+        const existing = roster[idx]
+        if (existing) Object.assign(existing, updates)
         rosterByJob.value.set(jobId, [...roster])
       }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update employee'
-      console.error('[JobRoster Store] Error updating employee:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to update employee')
+      console.error('[JobRoster Store] Error updating employee:', err)
+      throw err
     }
   }
 
@@ -143,10 +189,10 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       const roster = rosterByJob.value.get(jobId) ?? []
       const filtered = roster.filter(e => e.id !== employeeId)
       rosterByJob.value.set(jobId, filtered)
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to remove employee'
-      console.error('[JobRoster Store] Error removing employee:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to remove employee')
+      console.error('[JobRoster Store] Error removing employee:', err)
+      throw err
     }
   }
 
@@ -200,6 +246,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
    * Clear cache for a job (forces reload on next fetch)
    */
   function clearJobCache(jobId: string) {
+    stopJobRosterSubscription(jobId)
     rosterByJob.value.delete(jobId)
   }
 
@@ -207,6 +254,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
    * Reset entire store
    */
   function resetStore() {
+    stopJobRosterSubscription()
     rosterByJob.value.clear()
     currentJobId.value = null
     loading.value = false
@@ -230,6 +278,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     // Actions
     setCurrentJob,
     fetchJobRoster,
+    subscribeJobRoster,
     getRoster,
     getEmployee,
     addEmployee,
@@ -240,6 +289,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     getEmployeesByContractor,
     clearError,
     clearJobCache,
+    stopJobRosterSubscription,
     resetStore,
   }
 })

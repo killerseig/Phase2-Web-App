@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
@@ -11,7 +11,7 @@ import { useJobsStore } from '@/stores/jobs'
 import { usePermissions } from '@/composables/usePermissions'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { markTimecardsSent } from '@/services/Jobs'
-import { getEmailSettings, sendTimecardEmail } from '@/services/Email'
+import { sendTimecardEmail, subscribeEmailSettings } from '@/services/Email'
 import {
   autoGenerateTimecards,
   createTimecard,
@@ -19,8 +19,11 @@ import {
   listTimecardsByJobAndWeek,
   submitAllWeekTimecards,
   updateTimecard,
+  watchTimecardsByWeek,
 } from '@/services/Timecards'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
+import { normalizeError } from '@/services/serviceUtils'
+import { validateRequired } from '@/utils/validation'
 import {
   getTimecardDisplayName,
   getTimecardFirstName,
@@ -31,6 +34,7 @@ import {
   recalcTotalsForTimecard,
   type TimecardModel,
 } from './timecards/timecardUtils'
+import { useTimecardJobEditing } from './timecards/useTimecardJobEditing'
 
 type ToastInstance = ComponentPublicInstance<{ show: (message: string, type?: 'success' | 'error' | 'info' | 'warning', duration?: number) => string; remove: (id: string) => void }>
 type FlatpickrOpenHandle = {
@@ -74,6 +78,13 @@ const submittingAll = ref(false)
 const autoGenerating = ref(false)
 const err = ref('')
 
+function setError(error: unknown, fallback: string, showToast = true) {
+  err.value = normalizeError(error, fallback)
+  if (showToast) {
+    toastRef.value?.show(err.value, 'error')
+  }
+}
+
 const editingTimecardId = ref<string | null>(null)
 const expandedId = ref<string | null>(null)
 const editForm = ref({ employeeNumber: '', firstName: '', lastName: '', occupation: '', employeeWage: '', subcontractedEmployee: false })
@@ -107,6 +118,23 @@ const summaryRows = computed(() => allTimecards.value.map(tc => ({
 const draftCount = computed(() => allTimecards.value.filter(tc => tc.status === 'draft').length)
 const submittedCount = computed(() => allTimecards.value.filter(tc => tc.status === 'submitted').length)
 const timecardRecipients = ref<string[]>([])
+let unsubscribeTimecards: (() => void) | null = null
+let unsubscribeEmailSettings: (() => void) | null = null
+
+type TimecardIdentityInput = {
+  firstName: string
+  lastName: string
+  employeeNumber: string
+}
+
+function validateTimecardIdentity(input: TimecardIdentityInput): string | null {
+  const errors = [
+    ...validateRequired(input.firstName, 'First name'),
+    ...validateRequired(input.lastName, 'Last name'),
+    ...validateRequired(input.employeeNumber, 'Employee number'),
+  ]
+  return errors[0]?.message ?? null
+}
 
 function createDraft(): TimecardModel {
   const days = makeDaysArray(weekStartDate.value)
@@ -166,24 +194,39 @@ async function ensureAccess(): Promise<boolean> {
       await router.push({ name: 'unauthorized' })
       return false
     }
-    await jobsStore.fetchJob(jobId.value)
+    jobsStore.subscribeJob(jobId.value)
     return true
   } catch (e) {
-    err.value = e?.message ?? 'Failed to load job'
-    toastRef.value?.show(err.value, 'error')
+    setError(e, 'Failed to load job')
     return false
   }
 }
 
+function stopTimecardSubscription() {
+  if (!unsubscribeTimecards) return
+  unsubscribeTimecards()
+  unsubscribeTimecards = null
+}
+
 async function loadTimecards() {
+  stopTimecardSubscription()
   loading.value = true
   err.value = ''
   try {
-    timecards.value = await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)
+    unsubscribeTimecards = watchTimecardsByWeek(
+      jobId.value,
+      weekEndingDate.value,
+      (snapshotTimecards) => {
+        timecards.value = snapshotTimecards as TimecardModel[]
+        loading.value = false
+      },
+      (listenerError) => {
+        setError(listenerError, 'Failed to subscribe to timecards')
+        loading.value = false
+      }
+    )
   } catch (e) {
-    err.value = e?.message ?? 'Failed to load timecards'
-    toastRef.value?.show(err.value, 'error')
-  } finally {
+    setError(e, 'Failed to load timecards')
     loading.value = false
   }
 }
@@ -192,20 +235,27 @@ async function init() {
   loading.value = true
   err.value = ''
   try {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().slice(0, 10)
     selectedDate.value = today
     if (!await ensureAccess()) return
-    try {
-      const settings = await getEmailSettings()
-      timecardRecipients.value = settings.timecardSubmitRecipients ?? []
-    } catch (recipientErr) {
-      console.warn('Failed to load timecard email recipients', recipientErr)
-      timecardRecipients.value = []
+
+    if (unsubscribeEmailSettings) {
+      unsubscribeEmailSettings()
+      unsubscribeEmailSettings = null
     }
+    unsubscribeEmailSettings = subscribeEmailSettings(
+      (settings) => {
+        timecardRecipients.value = settings.timecardSubmitRecipients ?? []
+      },
+      (recipientErr) => {
+        console.warn('Failed to subscribe to timecard email recipients', recipientErr)
+        timecardRecipients.value = []
+      }
+    )
+
     await loadTimecards()
   } catch (e) {
-    err.value = e?.message ?? 'Failed to initialize'
-    toastRef.value?.show(err.value, 'error')
+    setError(e, 'Failed to initialize')
   } finally {
     loading.value = false
   }
@@ -257,18 +307,19 @@ function cancelCreateTimecard() {
 }
 
 function confirmCreateTimecard() {
-  if (!newTimecardForm.value.firstName.trim()) {
-    toastRef.value?.show('First name is required', 'error')
+  const validationMessage = validateTimecardIdentity({
+    firstName: newTimecardForm.value.firstName,
+    lastName: newTimecardForm.value.lastName,
+    employeeNumber: newTimecardForm.value.employeeNumber,
+  })
+  if (validationMessage) {
+    toastRef.value?.show(validationMessage, 'error')
     return
   }
-  if (!newTimecardForm.value.lastName.trim()) {
-    toastRef.value?.show('Last name is required', 'error')
-    return
-  }
-  if (!newTimecardForm.value.employeeNumber.trim()) {
-    toastRef.value?.show('Employee number is required', 'error')
-    return
-  }
+  newTimecardForm.value.firstName = newTimecardForm.value.firstName.trim()
+  newTimecardForm.value.lastName = newTimecardForm.value.lastName.trim()
+  newTimecardForm.value.employeeNumber = newTimecardForm.value.employeeNumber.trim()
+  newTimecardForm.value.occupation = newTimecardForm.value.occupation.trim()
   const draft = createDraft()
   draftTimecards.value.set(draft.id, draft)
   editingTimecardId.value = null
@@ -352,8 +403,7 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
       if (showToast) toastRef.value?.show(`Created timecard for ${timecard.employeeName}`, 'success')
     }
   } catch (e) {
-    err.value = e?.message ?? 'Failed to save timecard'
-    if (showToast) toastRef.value?.show(err.value, 'error')
+    setError(e, 'Failed to save timecard', showToast)
   } finally {
     saving.value = false
   }
@@ -372,10 +422,8 @@ async function handleDeleteTimecard(timecardId: string, employeeName: string) {
     await deleteTimecard(jobId.value, timecardId)
     draftTimecards.value.delete(timecardId)
     toastRef.value?.show(`Deleted timecard for ${employeeName}`, 'success')
-    await loadTimecards()
   } catch (e) {
-    err.value = e?.message ?? 'Failed to delete timecard'
-    toastRef.value?.show(err.value, 'error')
+    setError(e, 'Failed to delete timecard')
   } finally {
     saving.value = false
   }
@@ -415,11 +463,9 @@ async function submitAllTimecards() {
     if (isAdmin.value) {
       await markTimecardsSent(jobId.value, weekEndingDate.value)
     }
-    await loadTimecards()
     draftTimecards.value.clear()
   } catch (e) {
-    err.value = e?.message ?? 'Failed to submit timecards'
-    toastRef.value?.show(err.value, 'error')
+    setError(e, 'Failed to submit timecards')
   } finally {
     submittingAll.value = false
   }
@@ -451,13 +497,11 @@ async function generateFromPreviousWeek() {
     const newIds = await autoGenerateTimecards(jobId.value, weekEndingDate.value)
     if (newIds.length > 0) {
       toastRef.value?.show(`Generated ${newIds.length} timecard(s) from previous week`, 'success')
-      await loadTimecards()
     } else {
       toastRef.value?.show('No timecards in previous week to copy', 'info')
     }
   } catch (e) {
-    err.value = e?.message ?? 'Failed to generate timecards'
-    toastRef.value?.show(err.value, 'error')
+    setError(e, 'Failed to generate timecards')
   } finally {
     autoGenerating.value = false
   }
@@ -484,25 +528,22 @@ function toggleEditingEmployee(timecard: TimecardModel) {
 }
 
 function confirmEditingEmployee(timecard: TimecardModel) {
-  if (!editForm.value.firstName.trim()) {
-    toastRef.value?.show('First name is required', 'error')
+  const validationMessage = validateTimecardIdentity({
+    firstName: editForm.value.firstName,
+    lastName: editForm.value.lastName,
+    employeeNumber: editForm.value.employeeNumber,
+  })
+  if (validationMessage) {
+    toastRef.value?.show(validationMessage, 'error')
     return
   }
-  if (!editForm.value.lastName.trim()) {
-    toastRef.value?.show('Last name is required', 'error')
-    return
-  }
-  if (!editForm.value.employeeNumber.trim()) {
-    toastRef.value?.show('Employee number is required', 'error')
-    return
-  }
-  timecard.employeeNumber = editForm.value.employeeNumber
+  timecard.employeeNumber = editForm.value.employeeNumber.trim()
   timecard.firstName = editForm.value.firstName.trim()
   timecard.lastName = editForm.value.lastName.trim()
   timecard.employeeName = `${timecard.firstName} ${timecard.lastName}`
   timecard.employeeWage = parseWage(editForm.value.employeeWage)
   timecard.subcontractedEmployee = parseSubcontractedEmployee(editForm.value.subcontractedEmployee)
-  timecard.occupation = editForm.value.occupation
+  timecard.occupation = editForm.value.occupation.trim()
   autoSave(timecard)
   editingTimecardId.value = null
 }
@@ -512,66 +553,39 @@ function handleNotesInput(timecard: TimecardModel, value: string) {
   autoSave(timecard)
 }
 
-function addJobRow(timecard: TimecardModel) {
-  if (!timecard.jobs) timecard.jobs = []
-  timecard.jobs.push({
-    jobNumber: '',
-    subsectionArea: '',
-    area: '',
-    account: '',
-    acct: '',
-    difH: '',
-    difP: '',
-    difC: '',
-    days: makeDaysArray(weekStartDate.value),
-  })
-  recalcTotals(timecard)
-  autoSave(timecard)
-}
-
-function removeJobRow(timecard: TimecardModel, index: number) {
-  if (timecard.jobs && timecard.jobs.length > 1) {
-    timecard.jobs.splice(index, 1)
-    recalcTotals(timecard)
-    autoSave(timecard)
-  }
-}
-
-function updateJobNumber(timecard: TimecardModel, index: number, value: string) {
-  if (!timecard.jobs) return
-  timecard.jobs[index].jobNumber = value
-  autoSave(timecard)
-}
-
-function updateSubsectionArea(timecard: TimecardModel, index: number, value: string) {
-  if (!timecard.jobs) return
-  timecard.jobs[index].subsectionArea = value
-  timecard.jobs[index].area = value
-  autoSave(timecard)
-}
-
-function updateAccount(timecard: TimecardModel, index: number, value: string) {
-  if (!timecard.jobs) return
-  timecard.jobs[index].account = value
-  timecard.jobs[index].acct = value
-  autoSave(timecard)
-}
-
-function clampHours(value: number) {
-  if (Number.isNaN(value)) return 0
-  return Math.min(24, Math.max(0, value))
-}
-
-function handleHoursInput(timecard: TimecardModel, jobIndex: number, dayIndex: number, rawValue: number) {
-  if (!timecard.jobs || !timecard.jobs[jobIndex] || !timecard.jobs[jobIndex].days) return
-  const clamped = clampHours(rawValue)
-  timecard.jobs[jobIndex].days![dayIndex].hours = clamped
-  recalcTotals(timecard)
-  autoSave(timecard)
-}
+const {
+  addJobRow,
+  removeJobRow,
+  updateJobNumber,
+  updateSubsectionArea,
+  updateAccount,
+  updateDiffValue,
+  getJobDay,
+  getDayMetric,
+  handleHoursInput,
+  handleProductionInput,
+  handleUnitCostInput,
+} = useTimecardJobEditing({
+  getWeekStartDate: () => weekStartDate.value,
+  recalcTotals,
+  autoSave,
+})
 
 onMounted(() => init())
+watch(
+  () => jobId.value,
+  (next, prev) => {
+    if (!next || next === prev) return
+    void init()
+  }
+)
 onUnmounted(() => {
+  stopTimecardSubscription()
+  if (unsubscribeEmailSettings) {
+    unsubscribeEmailSettings()
+    unsubscribeEmailSettings = null
+  }
+  jobsStore.stopCurrentJobSubscription()
   autoSaveTimers.value.forEach(timer => clearTimeout(timer))
   autoSaveTimers.value.clear()
 })
@@ -602,12 +616,14 @@ onUnmounted(() => {
 
       <div v-if="err" class="alert alert-danger alert-dismissible fade show mb-4">
         <strong>Error:</strong> {{ err }}
-        <button type="button" class="btn-close" @click="err = ''"></button>
+        <button type="button" class="btn-close" aria-label="Dismiss error" @click="err = ''"></button>
       </div>
 
       <div v-if="loading" class="text-center py-5">
-        <div class="spinner-border text-primary mb-3"></div>
-        <p class="text-muted">Loading timecardsΓÇª</p>
+        <div class="spinner-border text-primary mb-3" role="status" aria-live="polite">
+          <span class="visually-hidden">Loading timecards</span>
+        </div>
+        <p class="text-muted">Loading timecards...</p>
       </div>
 
       <div v-else>
@@ -627,8 +643,15 @@ onUnmounted(() => {
                     @on-change="onDateChange"
                     @focus="onDateInputFocus"
                     class="form-control date-input"
+                    aria-label="Select week date"
                   />
-                  <button type="button" class="btn btn-outline-secondary" @click="openDatePicker" title="Open date picker">
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary"
+                    @click="openDatePicker"
+                    title="Open date picker"
+                    aria-label="Open date picker"
+                  >
                     <i class="bi bi-calendar3"></i>
                   </button>
                 </div>
@@ -798,6 +821,7 @@ onUnmounted(() => {
                         :disabled="timecard.status === 'submitted'"
                         @click.stop="handleDeleteTimecard(timecard.id, timecard.employeeName)"
                         title="Delete timecard"
+                        :aria-label="`Delete timecard for ${timecard.employeeName}`"
                       >
                         <i class="bi bi-trash text-danger"></i>
                       </button>
@@ -809,6 +833,7 @@ onUnmounted(() => {
                       :aria-pressed="editingTimecardId === timecard.id"
                       :disabled="timecard.status === 'submitted'"
                       title="Toggle edit mode"
+                      :aria-label="editingTimecardId === timecard.id ? 'Save employee details' : 'Edit employee details'"
                     >
                       <i class="bi bi-pencil"></i>
                     </button>
@@ -839,51 +864,55 @@ onUnmounted(() => {
                 <tbody>
                   <template v-for="(job, jobIdx) in (timecard.jobs || [])" :key="`job-${jobIdx}`">
                     <tr :class="['align-middle', 'timecard-job-row', jobIdx % 2 === 1 ? 'timecard-job-alt' : '']">
-                      <td :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                      <td :rowspan="3" class="tc-soft text-center px-2 py-0 align-middle">
                         <input
                           type="text"
                           :value="job.jobNumber || ''"
                           :disabled="timecard.status === 'submitted'"
                           class="form-control form-control-sm text-center"
                           placeholder="Job #"
+                          :aria-label="`Job ${jobIdx + 1} number`"
                           @input="(e) => updateJobNumber(timecard, jobIdx, (e.target as HTMLInputElement).value)"
                         />
                       </td>
-                      <td :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                      <td :rowspan="3" class="tc-soft text-center px-2 py-0 align-middle">
                         <input
                           type="text"
                           :value="job.subsectionArea ?? job.area ?? ''"
                           :disabled="timecard.status === 'submitted'"
                           class="form-control form-control-sm text-center"
                           placeholder="Sub/Area"
+                          :aria-label="`Job ${jobIdx + 1} subsection area`"
                           @input="(e) => updateSubsectionArea(timecard, jobIdx, (e.target as HTMLInputElement).value)"
                         />
                       </td>
-                      <td :rowspan="3" class="bg-soft text-center px-2 py-0 align-middle">
+                      <td :rowspan="3" class="tc-soft text-center px-2 py-0 align-middle">
                         <input
                           type="text"
                           :value="job.account ?? job.acct ?? ''"
                           :disabled="timecard.status === 'submitted'"
                           class="form-control form-control-sm text-center"
                           placeholder="Acct"
+                          :aria-label="`Job ${jobIdx + 1} account`"
                           @input="(e) => updateAccount(timecard, jobIdx, (e.target as HTMLInputElement).value)"
                         />
                       </td>
-                      <td class="bg-soft small fw-semibold text-center">H</td>
-                      <td class="bg-soft text-center px-2 py-0">
+                      <td class="tc-soft small fw-semibold text-center">H</td>
+                      <td class="tc-soft text-center px-2 py-0">
                         <input
                           type="text"
                           :value="job.difH || ''"
                           :disabled="timecard.status === 'submitted'"
                           class="form-control form-control-sm text-center"
                           placeholder="Dif"
-                          @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difH = (e.target as HTMLInputElement).value }"
+                          :aria-label="`Job ${jobIdx + 1} hours diff note`"
+                          @input="(e) => updateDiffValue(timecard, jobIdx, 'difH', (e.target as HTMLInputElement).value)"
                         />
                       </td>
                       <td v-for="dayIdx in 7" :key="`h-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0 day-cell">
-                        <template v-if="job.days && job.days[dayIdx - 1]">
+                        <template v-if="getJobDay(job, dayIdx - 1)">
                           <input
-                            v-model.number="job.days[dayIdx - 1].hours"
+                            :value="getDayMetric(job, dayIdx - 1, 'hours')"
                             type="number"
                             inputmode="decimal"
                             min="0"
@@ -892,6 +921,7 @@ onUnmounted(() => {
                             :disabled="timecard.status === 'submitted'"
                             class="form-control form-control-sm text-center w-100 day-input hours-input"
                             placeholder="0"
+                            :aria-label="`Job ${jobIdx + 1} ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIdx - 1]} hours`"
                             @input="(e) => handleHoursInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
                             @focus="($event.target as HTMLInputElement).select()"
                             @click.stop
@@ -905,6 +935,7 @@ onUnmounted(() => {
                           class="btn btn-sm btn-danger btn-icon"
                           title="Remove job"
                           :disabled="timecard.status === 'submitted'"
+                          :aria-label="`Remove job row ${jobIdx + 1}`"
                           @click="removeJobRow(timecard, jobIdx)"
                         >
                           <i class="bi bi-x"></i>
@@ -912,22 +943,23 @@ onUnmounted(() => {
                       </td>
                     </tr>
 
-                    <tr :class="['align-middle', 'bg-soft', 'timecard-job-row', jobIdx % 2 === 1 ? 'timecard-job-alt' : '']">
-                      <td class="bg-soft small fw-semibold text-center">P</td>
-                      <td class="bg-soft text-center px-2 py-0">
+                    <tr :class="['align-middle', 'tc-soft', 'timecard-job-row', jobIdx % 2 === 1 ? 'timecard-job-alt' : '']">
+                      <td class="tc-soft small fw-semibold text-center">P</td>
+                      <td class="tc-soft text-center px-2 py-0">
                         <input
                           type="text"
                           :value="job.difP || ''"
                           :disabled="timecard.status === 'submitted'"
                           class="form-control form-control-sm text-center"
                           placeholder="Dif"
-                          @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difP = (e.target as HTMLInputElement).value }"
+                          :aria-label="`Job ${jobIdx + 1} production diff note`"
+                          @input="(e) => updateDiffValue(timecard, jobIdx, 'difP', (e.target as HTMLInputElement).value)"
                         />
                       </td>
                       <td v-for="dayIdx in 7" :key="`p-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0 day-cell">
-                        <template v-if="job.days && job.days[dayIdx - 1]">
+                        <template v-if="getJobDay(job, dayIdx - 1)">
                           <input
-                            v-model.number="job.days[dayIdx - 1].production"
+                            :value="getDayMetric(job, dayIdx - 1, 'production')"
                             type="number"
                             inputmode="decimal"
                             min="0"
@@ -936,7 +968,8 @@ onUnmounted(() => {
                             class="form-control form-control-sm text-center w-100 day-input"
                             title="Production units"
                             placeholder="0"
-                            @input="recalcTotals(timecard); autoSave(timecard)"
+                            :aria-label="`Job ${jobIdx + 1} ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIdx - 1]} production`"
+                            @input="(e) => handleProductionInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
                             @focus="($event.target as HTMLInputElement).select()"
                             @click.stop
                           />
@@ -946,21 +979,22 @@ onUnmounted(() => {
                     </tr>
 
                     <tr :class="['align-middle', 'timecard-job-row', jobIdx % 2 === 1 ? 'timecard-job-alt' : '']">
-                      <td class="bg-soft small fw-semibold text-center">C</td>
-                      <td class="bg-soft text-center px-2 py-0">
+                      <td class="tc-soft small fw-semibold text-center">C</td>
+                      <td class="tc-soft text-center px-2 py-0">
                         <input
                           type="text"
                           :value="job.difC || ''"
                           :disabled="timecard.status === 'submitted'"
                           class="form-control form-control-sm text-center"
                           placeholder="Dif"
-                          @input="(e) => { if (timecard.jobs) timecard.jobs[jobIdx].difC = (e.target as HTMLInputElement).value }"
+                          :aria-label="`Job ${jobIdx + 1} cost diff note`"
+                          @input="(e) => updateDiffValue(timecard, jobIdx, 'difC', (e.target as HTMLInputElement).value)"
                         />
                       </td>
                       <td v-for="dayIdx in 7" :key="`c-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0 day-cell">
-                        <template v-if="job.days && job.days[dayIdx - 1]">
+                        <template v-if="getJobDay(job, dayIdx - 1)">
                           <input
-                            v-model.number="job.days[dayIdx - 1].unitCost"
+                            :value="getDayMetric(job, dayIdx - 1, 'unitCost')"
                             type="number"
                             inputmode="decimal"
                             min="0"
@@ -969,7 +1003,8 @@ onUnmounted(() => {
                             class="form-control form-control-sm text-center text-xs day-input"
                             title="Cost per unit"
                             placeholder="0"
-                            @input="recalcTotals(timecard); autoSave(timecard)"
+                            :aria-label="`Job ${jobIdx + 1} ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIdx - 1]} unit cost`"
+                            @input="(e) => handleUnitCostInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
                             @focus="($event.target as HTMLInputElement).select()"
                             @click.stop
                           />
@@ -1008,6 +1043,7 @@ onUnmounted(() => {
                     :value="Math.max((timecard.totals.hoursTotal ?? 0) - 40, 0).toFixed(2)"
                     class="form-control form-control-sm"
                     :disabled="true"
+                    aria-readonly="true"
                   />
                 </div>
                 <div class="col-md-2">
@@ -1019,6 +1055,7 @@ onUnmounted(() => {
                     :value="Math.min((timecard.totals.hoursTotal ?? 0), 40).toFixed(2)"
                     class="form-control form-control-sm"
                     :disabled="true"
+                    aria-readonly="true"
                   />
                 </div>
                 <div class="col-md-8">
@@ -1029,6 +1066,7 @@ onUnmounted(() => {
                     class="form-control form-control-sm"
                     placeholder="Additional notes"
                     :disabled="timecard.status === 'submitted'"
+                    :aria-label="`Notes for ${timecard.employeeName}`"
                     @input="(e) => handleNotesInput(timecard, (e.target as HTMLTextAreaElement).value)"
                   ></textarea>
                 </div>
@@ -1046,63 +1084,78 @@ onUnmounted(() => {
     <div
       v-if="showCreateForm"
       class="position-fixed top-0 start-0 end-0 bottom-0 d-flex align-items-center justify-content-center bg-dark bg-opacity-50"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-timecard-title"
+      tabindex="-1"
+      @keydown.esc="cancelCreateTimecard"
     >
       <div class="card border-0 shadow-lg modal-card">
         <div class="card-header bg-primary text-white">
-          <h5 class="mb-0">Create New Timecard</h5>
+          <h5 id="create-timecard-title" class="mb-0">Create New Timecard</h5>
         </div>
-        <div class="card-body">
+        <form class="card-body" @submit.prevent="confirmCreateTimecard">
           <div class="mb-3">
-            <label class="form-label">Employee Number *</label>
+            <label class="form-label" for="tc-create-employee-number">Employee Number *</label>
             <input
+              id="tc-create-employee-number"
               v-model="newTimecardForm.employeeNumber"
               type="text"
               class="form-control"
               placeholder="e.g., 1234"
+              autocomplete="off"
               autofocus
             />
           </div>
           <div class="row g-2 mb-3">
             <div class="col-6">
-              <label class="form-label">First Name *</label>
-              <input v-model="newTimecardForm.firstName" type="text" class="form-control" placeholder="First" />
+              <label class="form-label" for="tc-create-first-name">First Name *</label>
+              <input id="tc-create-first-name" v-model="newTimecardForm.firstName" type="text" class="form-control" placeholder="First" autocomplete="given-name" />
             </div>
             <div class="col-6">
-              <label class="form-label">Last Name *</label>
-              <input v-model="newTimecardForm.lastName" type="text" class="form-control" placeholder="Last" />
+              <label class="form-label" for="tc-create-last-name">Last Name *</label>
+              <input id="tc-create-last-name" v-model="newTimecardForm.lastName" type="text" class="form-control" placeholder="Last" autocomplete="family-name" />
             </div>
           </div>
           <div class="mb-4">
-            <label class="form-label">Occupation</label>
-            <input v-model="newTimecardForm.occupation" type="text" class="form-control" placeholder="e.g., Carpenter" />
+            <label class="form-label" for="tc-create-occupation">Occupation</label>
+            <input id="tc-create-occupation" v-model="newTimecardForm.occupation" type="text" class="form-control" placeholder="e.g., Carpenter" />
           </div>
           <div class="mb-4">
-            <label class="form-label">Wage</label>
-            <input v-model="newTimecardForm.employeeWage" type="number" min="0" step="0.01" class="form-control" placeholder="e.g., 28.50" />
+            <label class="form-label" for="tc-create-wage">Wage</label>
+            <input id="tc-create-wage" v-model="newTimecardForm.employeeWage" type="number" min="0" step="0.01" class="form-control" placeholder="e.g., 28.50" />
           </div>
           <div class="mb-4">
-            <label class="form-label">Subcontracted Employee</label>
-            <select v-model="newTimecardForm.subcontractedEmployee" class="form-select">
+            <label class="form-label" for="tc-create-subcontracted">Subcontracted Employee</label>
+            <select id="tc-create-subcontracted" v-model="newTimecardForm.subcontractedEmployee" class="form-select">
               <option value="no">No</option>
               <option value="yes">Yes</option>
             </select>
           </div>
           <div class="d-flex gap-2">
-            <button class="btn btn-primary" @click="confirmCreateTimecard">Create</button>
-            <button class="btn btn-secondary" @click="cancelCreateTimecard">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create</button>
+            <button type="button" class="btn btn-secondary" @click="cancelCreateTimecard">Cancel</button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   </div>
 
   <!-- Timecard Summary Modal (Printable) -->
-  <div v-if="showSummaryModal" class="modal d-block bg-dark bg-opacity-50">
+  <div
+    v-if="showSummaryModal"
+    class="modal d-block bg-dark bg-opacity-50"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="timecard-summary-title"
+    tabindex="-1"
+    @keydown.esc="closeSummary"
+  >
     <div class="modal-dialog modal-lg">
       <div class="modal-content" id="timecard-summary">
         <div class="modal-header">
-          <h5 class="modal-title">Timecard Summary ΓÇô Week ending {{ weekEndingDate }}</h5>
-          <button type="button" class="btn-close" @click="closeSummary" :disabled="printing"></button>
+          <h5 id="timecard-summary-title" class="modal-title">Timecard Summary - Week ending {{ weekEndingDate }}</h5>
+          <button type="button" class="btn-close" aria-label="Close summary" @click="closeSummary" :disabled="printing"></button>
         </div>
         <div class="modal-body">
           <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1187,7 +1240,7 @@ input[type='number']::-webkit-inner-spin-button {
 
 .form-control {
   border-radius: 0;
-  padding: 0.25rem 0.5rem !important;
+  padding: 0.25rem 0.5rem;
 }
 
 .form-control:focus {
@@ -1266,11 +1319,11 @@ textarea.form-control {
 }
 
 .timecards-accordion .card {
-  margin-bottom: 0 !important;
+  margin-bottom: 0;
 }
 
 .timecards-accordion .card:last-child {
-  margin-bottom: 0 !important;
+  margin-bottom: 0;
 }
 
 .timecards-page {
@@ -1471,14 +1524,14 @@ textarea.form-control {
   margin: 0 20px;
 }
 
-.bg-soft {
+.tc-soft {
   background-color: rgba($secondary, 0.08);
 }
 
 /* Neutral left columns; tint only day cells with subtle base and stronger alt */
 .timecard-job-row td,
-.timecard-job-row td.bg-soft {
-  background-color: transparent !important;
+.timecard-job-row td.tc-soft {
+  background-color: transparent;
 }
 </style>
 
@@ -1500,5 +1553,6 @@ textarea.form-control {
   }
 }
 </style>
+
 
 

@@ -5,16 +5,21 @@ import {
   deleteEmployee as deleteEmployeeService,
   listAllEmployees as listAllEmployeesService,
   listEmployeesByJob as listEmployeesByJobService,
+  subscribeAllEmployees as subscribeAllEmployeesService,
+  subscribeEmployeesByJob as subscribeEmployeesByJobService,
   updateEmployee as updateEmployeeService,
   type Employee,
   type EmployeeInput,
 } from '@/services'
+import { normalizeError } from '@/services/serviceUtils'
 
 export const useEmployeesStore = defineStore('employees', () => {
   const employees = ref<Employee[]>([])
   const employeesByJob = ref<Map<string, Employee[]>>(new Map())
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const unsubscribeAllEmployees = ref<(() => void) | null>(null)
+  const employeesByJobSubscriptions = ref<Map<string, () => void>>(new Map())
 
   // Computed
   const allEmployees = computed(() => employees.value)
@@ -22,18 +27,60 @@ export const useEmployeesStore = defineStore('employees', () => {
   const isLoading = computed(() => loading.value)
   const hasError = computed(() => error.value !== null)
 
+  const setStoreError = (err: unknown, fallback: string) => {
+    error.value = normalizeError(err, fallback)
+  }
+
+  const stopAllEmployeesSubscription = () => {
+    if (!unsubscribeAllEmployees.value) return
+    unsubscribeAllEmployees.value()
+    unsubscribeAllEmployees.value = null
+  }
+
+  const stopEmployeesByJobSubscription = (jobId?: string) => {
+    if (jobId) {
+      const unsubscribe = employeesByJobSubscriptions.value.get(jobId)
+      if (unsubscribe) {
+        unsubscribe()
+        employeesByJobSubscriptions.value.delete(jobId)
+      }
+      return
+    }
+
+    employeesByJobSubscriptions.value.forEach((unsubscribe) => unsubscribe())
+    employeesByJobSubscriptions.value.clear()
+  }
+
   // Actions
   async function fetchAllEmployees() {
     loading.value = true
     error.value = null
     try {
       employees.value = await listAllEmployeesService()
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load employees'
-      console.error('[Employees Store] Error loading employees:', e)
+    } catch (err) {
+      setStoreError(err, 'Failed to load employees')
+      console.error('[Employees Store] Error loading employees:', err)
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeAllEmployees() {
+    stopAllEmployeesSubscription()
+    loading.value = true
+    error.value = null
+
+    unsubscribeAllEmployees.value = subscribeAllEmployeesService(
+      (nextEmployees) => {
+        employees.value = nextEmployees
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to employees')
+        loading.value = false
+        console.error('[Employees Store] Error subscribing to employees:', err)
+      }
+    )
   }
 
   async function fetchEmployeesByJob(jobId: string) {
@@ -43,9 +90,9 @@ export const useEmployeesStore = defineStore('employees', () => {
       const jobEmployees = await listEmployeesByJobService(jobId)
       employeesByJob.value.set(jobId, jobEmployees)
       return jobEmployees
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to load employees for job'
-      console.error('[Employees Store] Error loading employees by job:', e)
+    } catch (err) {
+      setStoreError(err, 'Failed to load employees for job')
+      console.error('[Employees Store] Error loading employees by job:', err)
       return []
     } finally {
       loading.value = false
@@ -70,13 +117,34 @@ export const useEmployeesStore = defineStore('employees', () => {
       const newEmployee = employees.value.find(e => e.id === employeeId)
       if (!newEmployee) throw new Error('Failed to retrieve created employee')
       return newEmployee
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to create employee'
-      console.error('[Employees Store] Error creating employee:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to create employee')
+      console.error('[Employees Store] Error creating employee:', err)
+      throw err
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeEmployeesByJob(jobId: string) {
+    stopEmployeesByJobSubscription(jobId)
+    loading.value = true
+    error.value = null
+
+    const unsubscribe = subscribeEmployeesByJobService(
+      jobId,
+      (jobEmployees) => {
+        employeesByJob.value.set(jobId, jobEmployees)
+        loading.value = false
+      },
+      (err) => {
+        setStoreError(err, 'Failed to subscribe to employees for job')
+        loading.value = false
+        console.error('[Employees Store] Error subscribing to employees by job:', err)
+      }
+    )
+
+    employeesByJobSubscriptions.value.set(jobId, unsubscribe)
   }
 
   async function updateEmployee(employeeId: string, updates: Partial<Omit<EmployeeInput, 'jobId'>>) {
@@ -87,14 +155,13 @@ export const useEmployeesStore = defineStore('employees', () => {
       // Update in main list
       const idx = employees.value.findIndex(e => e.id === employeeId)
       if (idx !== -1) {
-        const old = employees.value[idx]
-        const updated = { ...old, ...updates }
-        employees.value[idx] = updated
+        const employee = employees.value[idx]
+        if (employee) Object.assign(employee, updates)
       }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to update employee'
-      console.error('[Employees Store] Error updating employee:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to update employee')
+      console.error('[Employees Store] Error updating employee:', err)
+      throw err
     }
   }
 
@@ -114,10 +181,10 @@ export const useEmployeesStore = defineStore('employees', () => {
         const jobList = employeesByJob.value.get(emp.jobId) ?? []
         employeesByJob.value.set(emp.jobId, jobList.filter(e => e.id !== employeeId))
       }
-    } catch (e) {
-      error.value = e?.message ?? 'Failed to delete employee'
-      console.error('[Employees Store] Error deleting employee:', e)
-      throw e
+    } catch (err) {
+      setStoreError(err, 'Failed to delete employee')
+      console.error('[Employees Store] Error deleting employee:', err)
+      throw err
     }
   }
 
@@ -126,6 +193,8 @@ export const useEmployeesStore = defineStore('employees', () => {
   }
 
   function resetStore() {
+    stopAllEmployeesSubscription()
+    stopEmployeesByJobSubscription()
     employees.value = []
     employeesByJob.value.clear()
     loading.value = false
@@ -147,11 +216,15 @@ export const useEmployeesStore = defineStore('employees', () => {
 
     // Actions
     fetchAllEmployees,
+    subscribeAllEmployees,
     fetchEmployeesByJob,
+    subscribeEmployeesByJob,
     getEmployeesByJob,
     createEmployee,
     updateEmployee,
     deleteEmployee,
+    stopAllEmployeesSubscription,
+    stopEmployeesByJobSubscription,
     clearError,
     resetStore,
   }

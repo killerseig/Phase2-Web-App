@@ -129,29 +129,24 @@ export async function createShopOrder(jobId: string, scopeKey = 'scope:employee'
   }
 }
 
-export async function subscribeShopOrders(
+export function subscribeShopOrders(
   jobId: string,
   handlers: ShopOrderSnapshotHandlers
-): Promise<Unsubscribe> {
-  try {
-    assertJobAccess(jobId)
-    requireUser()
+): Unsubscribe {
+  assertJobAccess(jobId)
+  requireUser()
 
-    const q = query(collection(db, 'jobs', jobId, 'shop_orders'), orderBy('orderDate', 'desc'))
-
-    return onSnapshot(
-      q,
-      (snap) => {
-        const orders = snap.docs.map((item) => normalize(item.id, item.data()))
-        handlers.onUpdate(orders)
-      },
-      (err) => {
-        handlers.onError?.(new Error(normalizeError(err, 'Failed to subscribe to shop orders')))
-      }
-    )
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to subscribe to shop orders'))
-  }
+  const q = query(collection(db, 'jobs', jobId, 'shop_orders'), orderBy('orderDate', 'desc'))
+  return onSnapshot(
+    q,
+    (snap) => {
+      const orders = snap.docs.map((item) => normalize(item.id, item.data()))
+      handlers.onUpdate(orders)
+    },
+    (err) => {
+      handlers.onError?.(new Error(normalizeError(err, 'Failed to subscribe to shop orders')))
+    }
+  )
 }
 
 /**
