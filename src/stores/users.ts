@@ -22,21 +22,17 @@ type UserProfileUpdates = Partial<
 >
 
 export const useUsersStore = defineStore('users', () => {
-  const jobsStore = useJobsStore()
   const users = ref<UserProfile[]>([])
   const currentUserProfile = ref<UserProfile | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const unsubscribeUsers = ref<(() => void) | null>(null)
-  const unsubscribeMyProfile = ref<(() => void) | null>(null)
+  let unsubscribeUsers: (() => void) | null = null
+  let unsubscribeMyProfile: (() => void) | null = null
 
   // Computed
-  const allUsers = computed(() => users.value)
   const activeUsers = computed(() => users.value.filter(u => u.active !== false))
   const adminUsers = computed(() => users.value.filter(u => u.role === 'admin'))
   const foremanUsers = computed(() => users.value.filter(u => u.role === 'foreman'))
-  const isLoading = computed(() => loading.value)
-  const hasError = computed(() => error.value !== null)
 
   const setStoreError = (err: unknown, fallback: string) => {
     error.value = normalizeError(err, fallback)
@@ -49,15 +45,15 @@ export const useUsersStore = defineStore('users', () => {
   }
 
   const stopUsersSubscription = () => {
-    if (!unsubscribeUsers.value) return
-    unsubscribeUsers.value()
-    unsubscribeUsers.value = null
+    if (!unsubscribeUsers) return
+    unsubscribeUsers()
+    unsubscribeUsers = null
   }
 
   const stopMyProfileSubscription = () => {
-    if (!unsubscribeMyProfile.value) return
-    unsubscribeMyProfile.value()
-    unsubscribeMyProfile.value = null
+    if (!unsubscribeMyProfile) return
+    unsubscribeMyProfile()
+    unsubscribeMyProfile = null
   }
 
   // Actions
@@ -79,7 +75,7 @@ export const useUsersStore = defineStore('users', () => {
     loading.value = true
     error.value = null
 
-    unsubscribeUsers.value = subscribeUsersService(
+    unsubscribeUsers = subscribeUsersService(
       (nextUsers) => {
         users.value = nextUsers
         loading.value = false
@@ -112,7 +108,7 @@ export const useUsersStore = defineStore('users', () => {
     loading.value = true
     error.value = null
 
-    unsubscribeMyProfile.value = subscribeUserProfileService(
+    unsubscribeMyProfile = subscribeUserProfileService(
       userId,
       (profile) => {
         currentUserProfile.value = profile
@@ -231,6 +227,7 @@ export const useUsersStore = defineStore('users', () => {
   async function syncForemanAssignments(jobId: string) {
     error.value = null
     try {
+      const jobsStore = useJobsStore()
       await syncForemanAssignmentsForJob(jobId)
       // Refresh cached data so UI reflects repaired links
       await Promise.all([fetchAllUsers(), jobsStore.fetchJob(jobId)])
@@ -245,7 +242,7 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
   }
 
-  function resetStore() {
+  function $reset() {
     stopUsersSubscription()
     stopMyProfileSubscription()
     users.value = []
@@ -262,12 +259,9 @@ export const useUsersStore = defineStore('users', () => {
     error,
 
     // Computed
-    allUsers,
     activeUsers,
     adminUsers,
     foremanUsers,
-    isLoading,
-    hasError,
 
     // Actions
     fetchAllUsers,
@@ -287,7 +281,7 @@ export const useUsersStore = defineStore('users', () => {
     stopUsersSubscription,
     stopMyProfileSubscription,
     clearError,
-    resetStore,
+    $reset,
   }
 })
 

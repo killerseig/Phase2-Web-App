@@ -46,12 +46,23 @@ describe('router navigation guard', () => {
 
   it('redirects authenticated users away from login', async () => {
     const result = await runNavigationGuard({
-      meta: { public: true },
+      meta: { requiresAuth: false },
       name: 'login',
       params: {},
     })
 
     expect(result).toEqual({ name: 'dashboard' })
+  })
+
+  it('allows unauthenticated users to access public not-found route', async () => {
+    mockAuth.user = null
+    const result = await runNavigationGuard({
+      meta: { requiresAuth: false },
+      name: 'not-found',
+      params: { pathMatch: ['missing-page'] },
+    })
+
+    expect(result).toBe(true)
   })
 
   it('forces login when unauthenticated', async () => {

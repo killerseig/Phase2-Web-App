@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import ShopCatalogTreeNode from '../components/admin/ShopCatalogTreeNode.vue'
@@ -32,6 +33,8 @@ const auth = useAuthStore()
 const jobs = useJobsStore()
 const shopCatalogStore = useShopCatalogStore()
 const shopCategoriesStore = useShopCategoriesStore()
+const { items: catalog } = storeToRefs(shopCatalogStore)
+const { categories: shopCategories, fullTree: shopCategoriesTree } = storeToRefs(shopCategoriesStore)
 const shopService = useShopService()
 const jobAccess = useJobAccess()
 const { confirm } = useConfirmDialog()
@@ -68,7 +71,6 @@ const expandedNodes = ref<Set<string>>(new Set())
 const shopOrderRecipients = ref<string[]>([])
 const sendingEmail = ref(false)
 
-const catalog = computed(() => shopCatalogStore.allItems)
 const {
   itemMatchesSearch,
   filteredCategoryTree: categoryTree,
@@ -76,9 +78,9 @@ const {
   buildExpandedNodesForSearch,
 } = useCatalogTreeSearch({
   searchQuery: catalogSearch,
-  categories: computed(() => shopCategoriesStore.categories),
+  categories: shopCategories,
   allItems: catalog,
-  fullTree: computed(() => shopCategoriesStore.fullTree),
+  fullTree: shopCategoriesTree,
   getCategoryById: (id) => shopCategoriesStore.getCategoryById(id),
   getChildren: (parentId) => shopCategoriesStore.getChildren(parentId),
   includeItem: (item) => item.active,
@@ -158,7 +160,7 @@ const expandAncestors = (nodeId: string, set: Set<string>, depth: number = 0) =>
     return
   }
 
-  const category = shopCategoriesStore.categories.find(c => c.id === nodeId)
+  const category = shopCategories.value.find(c => c.id === nodeId)
   if (!category?.parentId) {
     return
   }
@@ -594,7 +596,7 @@ onUnmounted(() => {
                           />
                         </template>
                         <template v-else>
-                          <small class="text-muted">{{ item.note || '—' }}</small>
+                          <small class="text-muted">{{ item.note || '--' }}</small>
                         </template>
                       </td>
                       <td v-if="canEditOrder(selected)" class="p-2 text-center">

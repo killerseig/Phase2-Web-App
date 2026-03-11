@@ -106,7 +106,7 @@ function getCellValue(item: ListItem, key: string) {
     <!-- Loading State -->
     <div v-if="loading" class="text-center py-5">
       <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading…</span>
+        <span class="visually-hidden">Loading...</span>
       </div>
     </div>
 

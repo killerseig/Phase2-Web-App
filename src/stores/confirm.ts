@@ -62,11 +62,21 @@ export const useConfirmStore = defineStore('confirm', () => {
   const confirm = () => close(true)
   const cancel = () => close(false)
 
+  const $reset = () => {
+    if (resolver) {
+      resolver(false)
+      resolver = null
+    }
+    isOpen.value = false
+    reset()
+  }
+
   return {
     isOpen,
     options,
     ask,
     confirm,
     cancel,
+    $reset,
   }
 })

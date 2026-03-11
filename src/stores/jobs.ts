@@ -22,15 +22,12 @@ export const useJobsStore = defineStore('jobs', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const currentJob = ref<Job | null>(null)
-  const unsubscribeJobs = ref<(() => void) | null>(null)
-  const unsubscribeCurrentJob = ref<(() => void) | null>(null)
+  let unsubscribeJobs: (() => void) | null = null
+  let unsubscribeCurrentJob: (() => void) | null = null
 
   // Computed
-  const allJobs = computed(() => jobs.value)
   const activeJobs = computed(() => jobs.value.filter(j => j.active !== false))
   const archivedJobs = computed(() => jobs.value.filter(j => j.active === false))
-  const isLoading = computed(() => loading.value)
-  const hasError = computed(() => error.value !== null)
 
   const setStoreError = (err: unknown, fallback: string) => {
     error.value = normalizeError(err, fallback)
@@ -43,15 +40,15 @@ export const useJobsStore = defineStore('jobs', () => {
   }
 
   const stopJobsSubscription = () => {
-    if (!unsubscribeJobs.value) return
-    unsubscribeJobs.value()
-    unsubscribeJobs.value = null
+    if (!unsubscribeJobs) return
+    unsubscribeJobs()
+    unsubscribeJobs = null
   }
 
   const stopCurrentJobSubscription = () => {
-    if (!unsubscribeCurrentJob.value) return
-    unsubscribeCurrentJob.value()
-    unsubscribeCurrentJob.value = null
+    if (!unsubscribeCurrentJob) return
+    unsubscribeCurrentJob()
+    unsubscribeCurrentJob = null
   }
 
   // Actions
@@ -73,7 +70,7 @@ export const useJobsStore = defineStore('jobs', () => {
     loading.value = true
     error.value = null
 
-    unsubscribeJobs.value = subscribeAllJobsService(
+    unsubscribeJobs = subscribeAllJobsService(
       includeArchived,
       options,
       (nextJobs) => {
@@ -114,7 +111,7 @@ export const useJobsStore = defineStore('jobs', () => {
     loading.value = true
     error.value = null
 
-    unsubscribeCurrentJob.value = subscribeJobService(
+    unsubscribeCurrentJob = subscribeJobService(
       jobId,
       (job) => {
         currentJob.value = job
@@ -304,7 +301,7 @@ export const useJobsStore = defineStore('jobs', () => {
     error.value = null
   }
 
-  function resetStore() {
+  function $reset() {
     stopJobsSubscription()
     stopCurrentJobSubscription()
     jobs.value = []
@@ -321,11 +318,8 @@ export const useJobsStore = defineStore('jobs', () => {
     error,
 
     // Computed
-    allJobs,
     activeJobs,
     archivedJobs,
-    isLoading,
-    hasError,
 
     // Actions
     fetchAllJobs,
@@ -343,7 +337,7 @@ export const useJobsStore = defineStore('jobs', () => {
     clearError,
     stopJobsSubscription,
     stopCurrentJobSubscription,
-    resetStore,
+    $reset,
   }
 })
 

@@ -291,7 +291,7 @@ export async function listForemen(): Promise<UserProfile[]> {
 
 /**
  * Admin utility: ensure a job's assignedForemanIds and each foreman's assignedJobIds stay in sync.
- * Makes no destructive changes—only adds missing links in either direction.
+ * Makes no destructive changes--only adds missing links in either direction.
  */
 export async function syncForemanAssignmentsForJob(jobId: string): Promise<void> {
   try {

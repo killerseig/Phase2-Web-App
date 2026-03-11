@@ -10,6 +10,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -255,8 +256,6 @@ export async function getRosterEmployee(jobId: string, employeeId: string): Prom
   assertJobAccess(jobId)
   try {
     const ref = doc(db, `jobs/${jobId}/roster`, employeeId)
-    // Note: Using getDoc when available from firestore
-    const { getDoc } = await import('firebase/firestore')
     const snap = await getDoc(ref)
     if (!snap.exists()) return null
     return normalize(snap.id, snap.data())

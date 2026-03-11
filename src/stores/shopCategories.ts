@@ -29,7 +29,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
   const categories = ref<ShopCategory[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
-  const unsubscribeCategories = ref<(() => void) | null>(null)
+  let unsubscribeCategories: (() => void) | null = null
   const MAX_TREE_DEPTH = 100
 
   const setStoreError = (err: unknown, fallback: string) => {
@@ -37,9 +37,9 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
   }
 
   const stopCategoriesSubscription = () => {
-    if (!unsubscribeCategories.value) return
-    unsubscribeCategories.value()
-    unsubscribeCategories.value = null
+    if (!unsubscribeCategories) return
+    unsubscribeCategories()
+    unsubscribeCategories = null
   }
 
   /**
@@ -159,7 +159,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     isLoading.value = true
     error.value = null
 
-    unsubscribeCategories.value = subscribeCategoriesService(
+    unsubscribeCategories = subscribeCategoriesService(
       (nextCategories) => {
         categories.value = nextCategories
         isLoading.value = false
@@ -270,7 +270,11 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     }
   }
 
-  function resetStore() {
+  function clearError() {
+    error.value = null
+  }
+
+  function $reset() {
     stopCategoriesSubscription()
     categories.value = []
     isLoading.value = false
@@ -301,8 +305,9 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     archiveCategory,
     reactivateCategory,
     deleteCategory,
+    clearError,
     stopCategoriesSubscription,
-    resetStore,
+    $reset,
   }
 })
 

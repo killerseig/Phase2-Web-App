@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import ShopCatalogTreeNode from '../../components/admin/ShopCatalogTreeNode.vue'
@@ -15,6 +16,13 @@ const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const categoriesStore = useShopCategoriesStore()
 const catalogStore = useShopCatalogStore()
 const { confirm } = useConfirmDialog()
+const {
+  categories,
+  fullTree,
+  isLoading: categoriesLoading,
+  error: categoriesError,
+} = storeToRefs(categoriesStore)
+const { items: allItems, loading: catalogLoading, error: catalogError } = storeToRefs(catalogStore)
 
 const saving = ref(false)
 const downloading = ref(false)
@@ -35,18 +43,21 @@ const savingCategoryEdit = ref(false)
 const searchQuery = ref('')
 
 // Computed
-const allItems = computed(() => catalogStore.allItems)
-const loading = computed(() => categoriesStore.isLoading || catalogStore.isLoading)
-const err = computed(() => categoriesStore.error || catalogStore.error || '')
+const loading = computed(() => categoriesLoading.value || catalogLoading.value)
+const err = computed(() => categoriesError.value || catalogError.value || '')
+const clearErrors = () => {
+  categoriesStore.clearError()
+  catalogStore.clearError()
+}
 const {
   filteredCategoryTree,
   filteredUncategorizedItemNodeIds: filteredUncategorizedItems,
   buildExpandedNodesForSearch,
 } = useCatalogTreeSearch({
   searchQuery,
-  categories: computed(() => categoriesStore.categories),
+  categories,
   allItems,
-  fullTree: computed(() => categoriesStore.fullTree),
+  fullTree,
   getCategoryById: (id) => categoriesStore.getCategoryById(id),
   getChildren: (parentId) => categoriesStore.getChildren(parentId),
 })
@@ -88,7 +99,7 @@ function expandAncestors(nodeId: string, set: Set<string>, depth: number = 0) {
     return
   }
 
-  const category = categoriesStore.categories.find(c => c.id === nodeId)
+  const category = categories.value.find(c => c.id === nodeId)
   if (!category?.parentId) {
     return
   }
@@ -352,7 +363,7 @@ function cancelCategoryEdit() {
 }
 
 async function deleteItem(item: ShopCatalogItem) {
-  const childCategories = categoriesStore.categories.filter(
+  const childCategories = categories.value.filter(
     c => c.parentId === `item-${item.id}` || c.parentId === item.id
   )
 
@@ -417,7 +428,7 @@ async function archiveItem(item: ShopCatalogItem) {
   saving.value = true
   try {
     // Get all child categories of this item
-    const childCategories = categoriesStore.categories.filter(c => c.parentId === `item-${item.id}`)
+  const childCategories = categories.value.filter(c => c.parentId === `item-${item.id}`)
     
     // Archive the item
     await catalogStore.setItemActive(item.id, false)
@@ -465,14 +476,14 @@ const escapeCsv = (value: unknown) => {
 }
 
 async function downloadCatalog() {
-  if (!allItems.value.length && !categoriesStore.categories.length) return
+  if (!allItems.value.length && !categories.value.length) return
 
   downloading.value = true
   try {
     const header = ['Name', 'Type', 'SKU', 'Price', 'Active', 'Path', 'Hierarchy Level', 'Is Sub Item', 'ID']
 
     const getChildrenNormalized = (parentId: string | null) =>
-      categoriesStore.categories
+      categories.value
         .filter(c => normalizeCategoryId(c.parentId) === normalizeCategoryId(parentId))
         .sort((a, b) => a.name.localeCompare(b.name))
 
@@ -678,7 +689,7 @@ onUnmounted(() => {
     <!-- Error Alert -->
     <div v-if="err" class="alert alert-danger alert-dismissible fade show" role="alert">
       {{ err }}
-      <button type="button" class="btn-close" @click="err = ''" />
+      <button type="button" class="btn-close" @click="clearErrors" />
     </div>
 
     <!-- Loading State -->

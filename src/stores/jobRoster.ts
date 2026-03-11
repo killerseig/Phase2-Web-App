@@ -18,16 +18,16 @@ import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
 
 export const useJobRosterStore = defineStore('jobRoster', () => {
   // State: by job ID
-  const rosterByJob = ref<Map<string, JobRosterEmployee[]>>(new Map())
+  const rosterByJob = ref<Record<string, JobRosterEmployee[]>>({})
   const loading = ref(false)
   const error = ref<string | null>(null)
   const currentJobId = ref<string | null>(null)
-  const rosterSubscriptions = ref<Map<string, () => void>>(new Map())
+  const rosterSubscriptions = new Map<string, () => void>()
 
   // Computed
   const currentJobRoster = computed(() => {
     if (!currentJobId.value) return []
-    return rosterByJob.value.get(currentJobId.value) ?? []
+    return rosterByJob.value[currentJobId.value] ?? []
   })
 
   const activeInCurrentJob = computed(() =>
@@ -38,29 +38,26 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     currentJobRoster.value.filter(e => !e.active)
   )
 
-  const isLoading = computed(() => loading.value)
-  const hasError = computed(() => error.value !== null)
-
   const setStoreError = (err: unknown, fallback: string) => {
     error.value = normalizeError(err, fallback)
   }
 
   const stopJobRosterSubscription = (jobId?: string) => {
     if (jobId) {
-      const unsubscribe = rosterSubscriptions.value.get(jobId)
+      const unsubscribe = rosterSubscriptions.get(jobId)
       if (unsubscribe) {
         unsubscribe()
-        rosterSubscriptions.value.delete(jobId)
+        rosterSubscriptions.delete(jobId)
       }
       return
     }
 
-    rosterSubscriptions.value.forEach((unsubscribe) => unsubscribe())
-    rosterSubscriptions.value.clear()
+    rosterSubscriptions.forEach((unsubscribe) => unsubscribe())
+    rosterSubscriptions.clear()
   }
 
   // Actions: Roster Loading
-  async function setCurrentJob(jobId: string) {
+  function setCurrentJob(jobId: string) {
     currentJobId.value = jobId
   }
 
@@ -72,7 +69,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     error.value = null
     try {
       const employees = await listRosterEmployees(jobId)
-      rosterByJob.value.set(jobId, employees)
+      rosterByJob.value[jobId] = employees
 
       // If this becomes current job, update currentJobId
       if (currentJobId.value === jobId) {
@@ -97,7 +94,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     const unsubscribe = subscribeRosterEmployees(
       jobId,
       (employees) => {
-        rosterByJob.value.set(jobId, employees)
+        rosterByJob.value[jobId] = employees
         if (currentJobId.value === jobId) {
           currentJobId.value = jobId
         }
@@ -110,23 +107,23 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       }
     )
 
-    rosterSubscriptions.value.set(jobId, unsubscribe)
+    rosterSubscriptions.set(jobId, unsubscribe)
   }
 
   /**
    * Get roster for a job (from cache if available, otherwise fetch)
    */
   async function getRoster(jobId: string): Promise<JobRosterEmployee[]> {
-    const cached = rosterByJob.value.get(jobId)
+    const cached = rosterByJob.value[jobId]
     if (cached) return cached
-    return await fetchJobRoster(jobId)
+    return fetchJobRoster(jobId)
   }
 
   /**
    * Get a single employee from the roster
    */
   function getEmployee(jobId: string, employeeId: string): JobRosterEmployee | undefined {
-    const roster = rosterByJob.value.get(jobId)
+    const roster = rosterByJob.value[jobId]
     return roster?.find(e => e.id === employeeId)
   }
 
@@ -137,14 +134,14 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       const employeeId = await addRosterEmployee(jobId, employee)
 
       // Update local cache
-      const roster = rosterByJob.value.get(jobId) ?? []
+      const roster = rosterByJob.value[jobId] ?? []
       const newEmployee = {
         ...employee,
         id: employeeId,
         jobId,
       } as JobRosterEmployee
       roster.push(newEmployee)
-      rosterByJob.value.set(jobId, roster)
+      rosterByJob.value[jobId] = roster
 
       return employeeId
     } catch (err) {
@@ -163,12 +160,12 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       await updateRosterEmployee(jobId, employeeId, updates)
 
       // Update local cache
-      const roster = rosterByJob.value.get(jobId) ?? []
+      const roster = rosterByJob.value[jobId] ?? []
       const idx = roster.findIndex(e => e.id === employeeId)
       if (idx !== -1) {
         const existing = roster[idx]
         if (existing) Object.assign(existing, updates)
-        rosterByJob.value.set(jobId, [...roster])
+        rosterByJob.value[jobId] = [...roster]
       }
     } catch (err) {
       setStoreError(err, 'Failed to update employee')
@@ -186,9 +183,9 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       await removeRosterEmployee(jobId, employeeId)
 
       // Update local cache
-      const roster = rosterByJob.value.get(jobId) ?? []
+      const roster = rosterByJob.value[jobId] ?? []
       const filtered = roster.filter(e => e.id !== employeeId)
-      rosterByJob.value.set(jobId, filtered)
+      rosterByJob.value[jobId] = filtered
     } catch (err) {
       setStoreError(err, 'Failed to remove employee')
       console.error('[JobRoster Store] Error removing employee:', err)
@@ -213,7 +210,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
    * Search roster by name, number, or occupation
    */
   function searchRoster(jobId: string, term: string): JobRosterEmployee[] {
-    const roster = rosterByJob.value.get(jobId) ?? []
+    const roster = rosterByJob.value[jobId] ?? []
     if (!term.trim()) return roster
 
     const lower = term.toLowerCase()
@@ -230,7 +227,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
    * Get employees by contractor
    */
   function getEmployeesByContractor(jobId: string, contractorName: string): JobRosterEmployee[] {
-    const roster = rosterByJob.value.get(jobId) ?? []
+    const roster = rosterByJob.value[jobId] ?? []
     return roster.filter(e => e.contractor?.name === contractorName)
   }
 
@@ -247,15 +244,15 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
    */
   function clearJobCache(jobId: string) {
     stopJobRosterSubscription(jobId)
-    rosterByJob.value.delete(jobId)
+    delete rosterByJob.value[jobId]
   }
 
   /**
    * Reset entire store
    */
-  function resetStore() {
+  function $reset() {
     stopJobRosterSubscription()
-    rosterByJob.value.clear()
+    rosterByJob.value = {}
     currentJobId.value = null
     loading.value = false
     error.value = null
@@ -272,8 +269,6 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     currentJobRoster,
     activeInCurrentJob,
     inactiveInCurrentJob,
-    isLoading,
-    hasError,
 
     // Actions
     setCurrentJob,
@@ -290,7 +285,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     clearError,
     clearJobCache,
     stopJobRosterSubscription,
-    resetStore,
+    $reset,
   }
 })
 

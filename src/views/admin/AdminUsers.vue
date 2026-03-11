@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
@@ -25,6 +26,8 @@ const usersStore = useUsersStore()
 const employeesStore = useEmployeesStore()
 const { confirm } = useConfirmDialog()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
+const { users, loading: loadingUsers, error: usersError } = storeToRefs(usersStore)
+const { employees, loading: loadingEmployees } = storeToRefs(employeesStore)
 
 const activeTab = ref<'users' | 'employees'>(route.query.tab === 'employees' ? 'employees' : 'users')
 
@@ -83,9 +86,7 @@ const savingEmployeeEdit = ref(false)
 const activeEmployeeActionsId = ref('')
 
 // Computed properties from stores
-const users = computed(() => usersStore.allUsers)
-const loadingUsers = computed(() => usersStore.isLoading)
-const err = computed(() => usersStore.error || '')
+const err = computed(() => usersError.value || '')
 
 const userColumns: Column[] = [
   { key: 'email', label: 'Email', sortable: true },
@@ -114,9 +115,6 @@ const sortedUsers = computed(() => {
     return aVal > bVal ? dir : -dir
   })
 })
-
-const employees = computed(() => employeesStore.allEmployees)
-const loadingEmployees = computed(() => employeesStore.isLoading)
 
 const employeeColumns: Column[] = [
   { key: 'firstName', label: 'First Name', sortable: true, width: '26%', slot: 'firstName' },
@@ -553,7 +551,7 @@ onUnmounted(() => {
       >
         <div v-if="loadingUsers" class="text-center py-5">
           <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading…</span>
+            <span class="visually-hidden">Loading...</span>
           </div>
         </div>
 
@@ -733,7 +731,7 @@ onUnmounted(() => {
       >
         <div v-if="loadingEmployees" class="text-center py-5">
           <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading…</span>
+            <span class="visually-hidden">Loading...</span>
           </div>
         </div>
 
@@ -787,7 +785,7 @@ onUnmounted(() => {
                   @keydown.esc="cancelEmployeeEdit"
                 />
               </template>
-              <span v-else class="small">{{ row.employeeNumber || '—' }}</span>
+              <span v-else class="small">{{ row.employeeNumber || '--' }}</span>
             </template>
 
             <template #occupation="{ row }">

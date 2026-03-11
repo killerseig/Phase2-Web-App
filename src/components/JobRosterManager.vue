@@ -52,7 +52,7 @@ const primaryForeman = computed(() =>
         v-model="search"
         type="text"
         class="form-control form-control-sm"
-        placeholder="Search employees…"
+        placeholder="Search employees..."
       />
     </div>
 
@@ -87,7 +87,7 @@ const primaryForeman = computed(() =>
                 <span v-if="emp.isPrimaryForeman" class="badge bg-success ms-1">Foreman</span>
               </div>
               <small class="text-muted d-block">
-                #{{ emp.employeeNumber }} • {{ emp.occupation || 'Unspecified' }}
+                #{{ emp.employeeNumber }} - {{ emp.occupation || 'Unspecified' }}
               </small>
             </div>
             <slot name="actions" :employee="emp"></slot>
@@ -109,7 +109,7 @@ const primaryForeman = computed(() =>
                 {{ emp.firstName }} {{ emp.lastName }}
               </div>
               <small class="text-muted d-block">
-                #{{ emp.employeeNumber }} • {{ emp.occupation || 'Unspecified' }}
+                #{{ emp.employeeNumber }} - {{ emp.occupation || 'Unspecified' }}
               </small>
             </div>
             <slot name="actions" :employee="emp"></slot>

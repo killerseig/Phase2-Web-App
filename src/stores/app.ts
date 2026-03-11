@@ -1,43 +1,59 @@
 import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
 
-export const useAppStore = defineStore('app', {
-  state: () => {
-    // Read from localStorage, default to false (expanded).
-    const savedState = typeof localStorage !== 'undefined' ? localStorage.getItem('sidebarCollapsed') : null
-    const initialCollapsed = savedState === 'true'
+const getInitialSidebarCollapsed = () => {
+  if (typeof localStorage === 'undefined') return false
+  return localStorage.getItem('sidebarCollapsed') === 'true'
+}
 
-    return {
-      currentJobId: null as string | null,
-      currentJobName: null as string | null,
-      sidebarCollapsed: initialCollapsed,
-      sidebarOpenMobile: false,
-    }
-  },
+const persistSidebarCollapsed = (value: boolean) => {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem('sidebarCollapsed', String(value))
+}
 
-  getters: {
-    hasJob: (s) => !!s.currentJobId,
-  },
+export const useAppStore = defineStore('app', () => {
+  const currentJobId = ref<string | null>(null)
+  const currentJobName = ref<string | null>(null)
+  const sidebarCollapsed = ref(getInitialSidebarCollapsed())
+  const sidebarOpenMobile = ref(false)
 
-  actions: {
-    clearJob() {
-      this.currentJobId = null
-      this.currentJobName = null
-    },
+  const hasJob = computed(() => !!currentJobId.value)
 
-    setCurrentJob(jobId: string, jobName: string | null) {
-      this.currentJobId = jobId
-      this.currentJobName = jobName
-    },
+  const clearJob = () => {
+    currentJobId.value = null
+    currentJobName.value = null
+  }
 
-    toggleSidebar() {
-      this.sidebarCollapsed = !this.sidebarCollapsed
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed.toString())
-      }
-    },
+  const setCurrentJob = (jobId: string, jobName: string | null) => {
+    currentJobId.value = jobId
+    currentJobName.value = jobName
+  }
 
-    setSidebarOpenMobile(open: boolean) {
-      this.sidebarOpenMobile = open
-    },
-  },
+  const toggleSidebar = () => {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+    persistSidebarCollapsed(sidebarCollapsed.value)
+  }
+
+  const setSidebarOpenMobile = (open: boolean) => {
+    sidebarOpenMobile.value = open
+  }
+
+  const $reset = () => {
+    clearJob()
+    sidebarCollapsed.value = getInitialSidebarCollapsed()
+    sidebarOpenMobile.value = false
+  }
+
+  return {
+    currentJobId,
+    currentJobName,
+    sidebarCollapsed,
+    sidebarOpenMobile,
+    hasJob,
+    clearJob,
+    setCurrentJob,
+    toggleSidebar,
+    setSidebarOpenMobile,
+    $reset,
+  }
 })

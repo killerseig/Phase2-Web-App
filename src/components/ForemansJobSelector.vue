@@ -14,7 +14,7 @@ const auth = useAuthStore()
 const foremansJobs = computed(() => {
   if (!auth.user?.uid) return []
   
-  return jobs.allJobs.filter(job => {
+  return jobs.jobs.filter(job => {
     if (!job.active) return false
     
     // Check if user is foreman in this job's roster
@@ -27,7 +27,7 @@ async function selectJob(jobId: string) {
   try {
     // Load the job and its roster
     await jobs.fetchJob(jobId)
-    await roster.setCurrentJob(jobId)
+    roster.setCurrentJob(jobId)
     await roster.fetchJobRoster(jobId)
     
     // Navigate to job home

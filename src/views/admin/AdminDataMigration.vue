@@ -19,9 +19,9 @@
           <div v-if="!migrationStarted" class="alert alert-info">
             <strong>Ready to migrate:</strong>
             <ul class="mb-0 mt-2">
-              <li>Legacy timecards → jobs/{jobId}/timecards/</li>
-              <li>Legacy daily logs → jobs/{jobId}/dailyLogs/</li>
-              <li>Employee references → job rosters</li>
+              <li>Legacy timecards -> jobs/{jobId}/timecards/</li>
+              <li>Legacy daily logs -> jobs/{jobId}/dailyLogs/</li>
+              <li>Employee references -> job rosters</li>
             </ul>
           </div>
 
@@ -38,9 +38,9 @@
           <div v-if="migrationComplete" class="alert alert-success">
             <h6>Migration Complete!</h6>
             <ul class="mb-0 mt-2">
-              <li>✓ Timecards migrated: {{ migrationResults.timecardsMigrated }}</li>
-              <li>✓ Daily logs migrated: {{ migrationResults.dailyLogsMigrated }}</li>
-              <li>✓ Rosters created: {{ migrationResults.rostersCreated }}</li>
+              <li>OK Timecards migrated: {{ migrationResults.timecardsMigrated }}</li>
+              <li>OK Daily logs migrated: {{ migrationResults.dailyLogsMigrated }}</li>
+              <li>OK Rosters created: {{ migrationResults.rostersCreated }}</li>
               <li>Duration: {{ migrationDuration }}</li>
             </ul>
             <div v-if="migrationResults.errors?.length > 0" class="alert alert-danger mt-2 mb-0">
@@ -185,7 +185,7 @@
           <strong>Preview:</strong> {{ importedEmployees.length }} employees ready to import
           <div class="mt-2 small">
             <div v-for="emp in importedEmployees.slice(0, 3)" :key="emp.id">
-              • {{ emp.employeeNumber }}: {{ emp.firstName }} {{ emp.lastName }}
+              - {{ emp.employeeNumber }}: {{ emp.firstName }} {{ emp.lastName }}
             </div>
             <div v-if="importedEmployees.length > 3" class="text-muted">
               ... and {{ importedEmployees.length - 3 }} more
@@ -221,6 +221,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
 import Toast from '../../components/Toast.vue'
@@ -250,6 +251,7 @@ type MigrationResults = {
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
+const { jobs } = storeToRefs(jobsStore)
 
 // Migration state
 const migrationStarted = ref(false)
@@ -284,7 +286,6 @@ const importedEmployees = ref<JobRosterEmployee[]>([])
 const importInProgress = ref(false)
 const importStatus = ref<{ success: boolean; message: string } | null>(null)
 
-const jobs = computed(() => jobsStore.allJobs)
 const csvErrors = computed(() => csvValidation.value?.errors ?? [])
 const csvWarnings = computed(() => csvValidation.value?.warnings ?? [])
 const csvHasErrors = computed(() => Boolean(csvValidation.value) && !csvValidation.value?.valid)
@@ -321,7 +322,7 @@ async function verifyMigration() {
   try {
     const verified = await verifyMigrationData()
     if (verified) {
-      toastRef.value?.show('Migration verification passed ✓', 'success')
+      toastRef.value?.show('Migration verification passed OK', 'success')
     } else {
       toastRef.value?.show('Migration verification failed', 'warning')
     }

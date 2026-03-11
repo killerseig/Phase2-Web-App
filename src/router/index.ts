@@ -13,7 +13,7 @@ import { ROUTES, ROLES, type Role } from '@/constants/app'
 
 declare module 'vue-router' {
   interface RouteMeta {
-    public: boolean
+    requiresAuth: boolean
     roles: Role[]
     title: string
   }
@@ -27,7 +27,7 @@ interface RouteConfig {
   name?: string
   component?: LazyView
   roles?: Role[]
-  isPublic?: boolean
+  requiresAuth?: boolean
   title?: string
   redirect?: string
 }
@@ -35,7 +35,7 @@ interface RouteConfig {
 const BASE_TITLE = 'Phase 2'
 
 const toMeta = (config: RouteConfig): RouteMeta => ({
-  public: config.isPublic ?? false,
+  requiresAuth: config.requiresAuth ?? true,
   roles: config.roles ?? [],
   title: config.title ?? 'App',
 })
@@ -49,14 +49,14 @@ const routeConfigs: RouteConfig[] = [
     path: ROUTES.LOGIN,
     name: 'login',
     component: () => import('../views/Login.vue'),
-    isPublic: true,
+    requiresAuth: false,
     title: 'Login',
   },
   {
     path: '/set-password',
     name: 'set-password',
     component: () => import('../views/SetPassword.vue'),
-    isPublic: true,
+    requiresAuth: false,
     title: 'Set Your Password',
   },
   // Signup disabled - accounts created by admin only
@@ -64,7 +64,7 @@ const routeConfigs: RouteConfig[] = [
   //   path: ROUTES.SIGNUP,
   //   name: 'signup',
   //   component: () => import('../views/SignUp.vue'),
-  //   isPublic: true,
+  //   requiresAuth: false,
   //   title: 'Sign Up',
   // },
 
@@ -151,12 +151,18 @@ const routeConfigs: RouteConfig[] = [
     path: ROUTES.UNAUTHORIZED,
     name: 'unauthorized',
     component: () => import('../views/Unauthorized.vue'),
-    isPublic: true,
+    requiresAuth: false,
     title: 'Unauthorized',
   },
 
   // Catch-all
-  { path: '/:pathMatch(.*)*', redirect: ROUTES.DASHBOARD },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('../views/NotFound.vue'),
+    requiresAuth: false,
+    title: 'Not Found',
+  },
 ]
 
 const toRouteRecord = (config: RouteConfig): RouteRecordRaw => {
@@ -186,8 +192,13 @@ const toRouteRecord = (config: RouteConfig): RouteRecordRaw => {
 const routes: RouteRecordRaw[] = routeConfigs.map(toRouteRecord)
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash }
+    return { top: 0 }
+  },
 })
 
 type RouteRedirectName = 'dashboard' | 'login' | 'unauthorized'
@@ -207,10 +218,10 @@ export const getRouteAccessRedirect = (
   canAccessJob: (jobId: string) => boolean
 ): RouteAccessRedirect => {
   const meta = (to.meta ?? {}) as Partial<RouteMeta>
-  const isPublicRoute = meta.public ?? false
+  const requiresAuth = meta.requiresAuth ?? true
   const allowedRoles = Array.isArray(meta.roles) ? meta.roles : []
 
-  if (isPublicRoute) {
+  if (!requiresAuth) {
     if (auth.user && to.name === 'login') return { name: 'dashboard' }
     return true
   }

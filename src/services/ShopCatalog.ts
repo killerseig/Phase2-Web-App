@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -184,9 +185,8 @@ export async function createCategory(name: string, parentId: string | null = nul
     })
     
     // Fetch the created document to get serverTimestamp values
-    const snap = await getDocs(query(collection(db, 'shopCategories'), where('__name__', '==', ref.id)))
-    const createdDoc = snap.docs[0]
-    if (!createdDoc) {
+    const createdDoc = await getDoc(ref)
+    if (!createdDoc.exists()) {
       throw new Error('Failed to load created category')
     }
     return normalizeCategory(createdDoc.id, createdDoc.data())

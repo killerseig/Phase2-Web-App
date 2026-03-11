@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
 import Toast from '../../components/Toast.vue'
@@ -25,11 +26,11 @@ const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
 const usersStore = useUsersStore()
 const { confirm } = useConfirmDialog()
+const { jobs, loading: loadingJobs, error: jobsError } = storeToRefs(jobsStore)
+const { users: allUsers } = storeToRefs(usersStore)
 
 // Jobs state from store
-const jobs = computed(() => jobsStore.allJobs)
-const loadingJobs = computed(() => jobsStore.isLoading)
-const err = computed(() => jobsStore.error || '')
+const err = computed(() => jobsError.value || '')
 
 const jobColumns: Column[] = [
   { key: 'code', label: 'Job #', sortable: true, width: '8%', slot: 'code' },
@@ -54,7 +55,7 @@ const jobSortDir = ref<SortDir>('asc')
 type NonStatusSortKey = Exclude<JobSortKey, 'status'>
 
 const orderedJobs = computed(() =>
-  [...jobsStore.allJobs].sort((a, b) => {
+  [...jobs.value].sort((a, b) => {
     if (a.active !== b.active) return Number(b.active) - Number(a.active)
     return (a.name || '').localeCompare(b.name || '')
   })
@@ -120,7 +121,7 @@ const editingJobType = ref<'general' | 'subcontractor'>('general')
 const editingJobSaving = ref(false)
 
 // Computed foreman users
-const foremanUsers = computed(() => usersStore.allUsers.filter(u => u.role === 'foreman' && u.active))
+const foremanUsers = computed(() => allUsers.value.filter(u => u.role === 'foreman' && u.active))
 
 const foremanDisplayName = (user: UserProfile) => `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || ''
 
@@ -224,7 +225,7 @@ function formatErr(e: unknown) {
   return msg
 }
 
-function asText(value: unknown, fallback = '—'): string {
+function asText(value: unknown, fallback = '--'): string {
   if (value === null || value === undefined) return fallback
   const text = String(value).trim()
   return text ? text : fallback
@@ -564,7 +565,7 @@ onUnmounted(() => {
       <template #default>
         <div v-if="loadingJobs" class="text-center py-5">
           <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading…</span>
+            <span class="visually-hidden">Loading...</span>
           </div>
         </div>
 
@@ -611,7 +612,7 @@ onUnmounted(() => {
                 />
               </template>
               <template v-else>
-                {{ row.code || '—' }}
+                {{ row.code || '--' }}
               </template>
             </template>
 
@@ -698,7 +699,7 @@ onUnmounted(() => {
                 />
               </template>
               <template v-else>
-                <span class="cell-nowrap">{{ row.startDate || '—' }}</span>
+                <span class="cell-nowrap">{{ row.startDate || '--' }}</span>
               </template>
             </template>
 
@@ -714,7 +715,7 @@ onUnmounted(() => {
                 />
               </template>
               <template v-else>
-                <span class="cell-nowrap">{{ row.finishDate || '—' }}</span>
+                <span class="cell-nowrap">{{ row.finishDate || '--' }}</span>
               </template>
             </template>
 
@@ -735,7 +736,7 @@ onUnmounted(() => {
                 />
               </template>
               <template v-else>
-                {{ row.taxExempt || '—' }}
+                {{ row.taxExempt || '--' }}
               </template>
             </template>
 
@@ -752,7 +753,7 @@ onUnmounted(() => {
                 />
               </template>
               <template v-else>
-                {{ row.certified || '—' }}
+                {{ row.certified || '--' }}
               </template>
             </template>
 
@@ -769,7 +770,7 @@ onUnmounted(() => {
                 />
               </template>
               <template v-else>
-                {{ row.cip || '—' }}
+                {{ row.cip || '--' }}
               </template>
             </template>
 
@@ -786,7 +787,7 @@ onUnmounted(() => {
                 />
               </template>
               <template v-else>
-                {{ row.kjic || '—' }}
+                {{ row.kjic || '--' }}
               </template>
             </template>
 

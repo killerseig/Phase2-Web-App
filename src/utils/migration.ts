@@ -2,9 +2,9 @@
  * Data Migration Utilities (Phase 3F)
  * 
  * Migrates legacy data structure to Phase 3 job-scoped structure:
- * - timecards: {} → jobs/{jobId}/timecards/{}
- * - dailyLogs: {} → jobs/{jobId}/dailyLogs/{}
- * - employees: {} → jobs/{jobId}/roster/{} (with Plexis integration)
+ * - timecards: {} -> jobs/{jobId}/timecards/{}
+ * - dailyLogs: {} -> jobs/{jobId}/dailyLogs/{}
+ * - employees: {} -> jobs/{jobId}/roster/{} (with Plexis integration)
  */
 
 import { db } from '../firebase'
@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore'
 
 /**
- * Timecard migration: Move legacy timecards/{id} → jobs/{jobId}/timecards/{id}
+ * Timecard migration: Move legacy timecards/{id} -> jobs/{jobId}/timecards/{id}
  * @returns Count of migrated timecards
  */
 export async function migrateLegacyTimecards(): Promise<number> {
@@ -80,7 +80,7 @@ export async function migrateLegacyTimecards(): Promise<number> {
 }
 
 /**
- * Daily logs migration: Move legacy dailyLogs/{id} → jobs/{jobId}/dailyLogs/{id}
+ * Daily logs migration: Move legacy dailyLogs/{id} -> jobs/{jobId}/dailyLogs/{id}
  * @returns Count of migrated logs
  */
 export async function migrateLegacyDailyLogs(): Promise<number> {
@@ -218,7 +218,7 @@ export async function createJobRostersFromTimecards(): Promise<number> {
 }
 
 /**
- * Run full migration: timecards → dailyLogs → rosters
+ * Run full migration: timecards -> dailyLogs -> rosters
  * @returns Summary of migration results
  */
 export async function runFullDataMigration() {
@@ -321,17 +321,17 @@ export async function verifyMigration(): Promise<boolean> {
       if (!snap.empty) {
         foundMigrated = true
         console.log(
-          `[Migration] ✓ Found migrated timecards in job ${jobDoc.id}`
+          `[Migration] OK Found migrated timecards in job ${jobDoc.id}`
         )
         break
       }
     }
 
     if (foundMigrated) {
-      console.log('[Migration] ✓ Verification passed')
+      console.log('[Migration] OK Verification passed')
       return true
     } else {
-      console.warn('[Migration] ⚠ No migrated data found - check migration results')
+      console.warn('[Migration] WARN No migrated data found - check migration results')
       return false
     }
   } catch (error) {

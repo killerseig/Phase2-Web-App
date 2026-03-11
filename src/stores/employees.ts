@@ -15,40 +15,37 @@ import { normalizeError } from '@/services/serviceUtils'
 
 export const useEmployeesStore = defineStore('employees', () => {
   const employees = ref<Employee[]>([])
-  const employeesByJob = ref<Map<string, Employee[]>>(new Map())
+  const employeesByJob = ref<Record<string, Employee[]>>({})
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const unsubscribeAllEmployees = ref<(() => void) | null>(null)
-  const employeesByJobSubscriptions = ref<Map<string, () => void>>(new Map())
+  let unsubscribeAllEmployees: (() => void) | null = null
+  const employeesByJobSubscriptions = new Map<string, () => void>()
 
   // Computed
-  const allEmployees = computed(() => employees.value)
   const activeEmployees = computed(() => employees.value.filter(e => e.active !== false))
-  const isLoading = computed(() => loading.value)
-  const hasError = computed(() => error.value !== null)
 
   const setStoreError = (err: unknown, fallback: string) => {
     error.value = normalizeError(err, fallback)
   }
 
   const stopAllEmployeesSubscription = () => {
-    if (!unsubscribeAllEmployees.value) return
-    unsubscribeAllEmployees.value()
-    unsubscribeAllEmployees.value = null
+    if (!unsubscribeAllEmployees) return
+    unsubscribeAllEmployees()
+    unsubscribeAllEmployees = null
   }
 
   const stopEmployeesByJobSubscription = (jobId?: string) => {
     if (jobId) {
-      const unsubscribe = employeesByJobSubscriptions.value.get(jobId)
+      const unsubscribe = employeesByJobSubscriptions.get(jobId)
       if (unsubscribe) {
         unsubscribe()
-        employeesByJobSubscriptions.value.delete(jobId)
+        employeesByJobSubscriptions.delete(jobId)
       }
       return
     }
 
-    employeesByJobSubscriptions.value.forEach((unsubscribe) => unsubscribe())
-    employeesByJobSubscriptions.value.clear()
+    employeesByJobSubscriptions.forEach((unsubscribe) => unsubscribe())
+    employeesByJobSubscriptions.clear()
   }
 
   // Actions
@@ -70,7 +67,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     loading.value = true
     error.value = null
 
-    unsubscribeAllEmployees.value = subscribeAllEmployeesService(
+    unsubscribeAllEmployees = subscribeAllEmployeesService(
       (nextEmployees) => {
         employees.value = nextEmployees
         loading.value = false
@@ -88,7 +85,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     error.value = null
     try {
       const jobEmployees = await listEmployeesByJobService(jobId)
-      employeesByJob.value.set(jobId, jobEmployees)
+      employeesByJob.value[jobId] = jobEmployees
       return jobEmployees
     } catch (err) {
       setStoreError(err, 'Failed to load employees for job')
@@ -100,7 +97,7 @@ export const useEmployeesStore = defineStore('employees', () => {
   }
 
   function getEmployeesByJob(jobId: string): Employee[] {
-    return employeesByJob.value.get(jobId) ?? []
+    return employeesByJob.value[jobId] ?? []
   }
 
   async function createEmployee(jobId: string | null, input: Omit<EmployeeInput, 'jobId'>) {
@@ -134,7 +131,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     const unsubscribe = subscribeEmployeesByJobService(
       jobId,
       (jobEmployees) => {
-        employeesByJob.value.set(jobId, jobEmployees)
+        employeesByJob.value[jobId] = jobEmployees
         loading.value = false
       },
       (err) => {
@@ -144,7 +141,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       }
     )
 
-    employeesByJobSubscriptions.value.set(jobId, unsubscribe)
+    employeesByJobSubscriptions.set(jobId, unsubscribe)
   }
 
   async function updateEmployee(employeeId: string, updates: Partial<Omit<EmployeeInput, 'jobId'>>) {
@@ -178,8 +175,8 @@ export const useEmployeesStore = defineStore('employees', () => {
       
       // Remove from job-specific list
       if (emp?.jobId) {
-        const jobList = employeesByJob.value.get(emp.jobId) ?? []
-        employeesByJob.value.set(emp.jobId, jobList.filter(e => e.id !== employeeId))
+        const jobList = employeesByJob.value[emp.jobId] ?? []
+        employeesByJob.value[emp.jobId] = jobList.filter(e => e.id !== employeeId)
       }
     } catch (err) {
       setStoreError(err, 'Failed to delete employee')
@@ -192,11 +189,11 @@ export const useEmployeesStore = defineStore('employees', () => {
     error.value = null
   }
 
-  function resetStore() {
+  function $reset() {
     stopAllEmployeesSubscription()
     stopEmployeesByJobSubscription()
     employees.value = []
-    employeesByJob.value.clear()
+    employeesByJob.value = {}
     loading.value = false
     error.value = null
   }
@@ -209,10 +206,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     error,
 
     // Computed
-    allEmployees,
     activeEmployees,
-    isLoading,
-    hasError,
 
     // Actions
     fetchAllEmployees,
@@ -226,7 +220,7 @@ export const useEmployeesStore = defineStore('employees', () => {
     stopAllEmployeesSubscription,
     stopEmployeesByJobSubscription,
     clearError,
-    resetStore,
+    $reset,
   }
 })
 

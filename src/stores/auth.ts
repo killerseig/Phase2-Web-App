@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { ref } from 'vue'
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -24,233 +25,186 @@ const normalizeRoleValue = (value: unknown): Role => {
   return ROLES.NONE
 }
 
-type AuthState = {
-  user: User | null
-  role: Role | null
-  active: boolean
-  assignedJobIds: string[]
-  ready: boolean
-  _initPromise: Promise<void> | null
-  _unsubscribeAuth: (() => void) | null
-  _unsubscribeProfile: (() => void) | null
+const normalizeAssignedJobIds = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+  return value.filter((id): id is string => typeof id === 'string')
 }
 
-export const useAuthStore = defineStore('auth', {
-  state: (): AuthState => ({
-    user: null,
-    role: null,
-    active: true,
-    assignedJobIds: [],
-    ready: false,
-    _initPromise: null,
-    _unsubscribeAuth: null,
-    _unsubscribeProfile: null,
-  }),
+let authInitPromise: Promise<void> | null = null
+let unsubscribeAuth: (() => void) | null = null
+let unsubscribeProfile: (() => void) | null = null
 
-  actions: {
-    async waitForProfileHydration(uid: string, timeoutMs = 5000) {
-      const startedAt = Date.now()
-      while (Date.now() - startedAt < timeoutMs) {
-        // Auth user changed during wait; stop waiting for previous uid.
-        if (this.user?.uid !== uid) return
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const role = ref<Role | null>(null)
+  const active = ref(true)
+  const assignedJobIds = ref<string[]>([])
+  const ready = ref(false)
 
-        // role === null means profile has not hydrated yet.
-        if (this.role !== null) return
+  const applyProfileState = (data: Record<string, unknown>) => {
+    role.value = normalizeRoleValue(data.role)
+    active.value = data.active === true
+    assignedJobIds.value = normalizeAssignedJobIds(data.assignedJobIds)
+  }
 
-        await new Promise((resolve) => setTimeout(resolve, 25))
+  const hydrateProfile = async (uid: string, authUser: User | null) => {
+    const profileRef = doc(db, 'users', uid)
+    const snap = await getDoc(profileRef)
+    if (snap.exists()) {
+      applyProfileState(snap.data())
+      return
+    }
+
+    // Create user document if it doesn't exist (for imported/external users)
+    await setDoc(profileRef, {
+      email: authUser?.email ?? null,
+      displayName: authUser?.displayName || null,
+      firstName: null,
+      lastName: null,
+      role: ROLES.NONE,
+      active: true,
+      assignedJobIds: [],
+      createdAt: new Date(),
+    })
+    role.value = ROLES.NONE
+    active.value = true
+    assignedJobIds.value = []
+  }
+
+  /**
+   * Set up a real-time listener on the user's profile document.
+   * Updates role and active status immediately when changed.
+   */
+  const setupProfileListener = (uid: string) => {
+    if (unsubscribeProfile) {
+      unsubscribeProfile()
+    }
+
+    const profileRef = doc(db, 'users', uid)
+    unsubscribeProfile = onSnapshot(profileRef, (snap) => {
+      if (!snap.exists()) {
+        // User document was deleted - sign out immediately.
+        void signOut()
+        return
       }
-    },
 
-    /**
-     * Set up a real-time listener on the user's profile document
-     * Updates role and active status immediately when changed
-     * Logs out if user is deleted or deactivated
-     */
-    setupProfileListener(uid: string) {
-      // Clean up any existing listener
-      if (this._unsubscribeProfile) {
-        this._unsubscribeProfile()
+      applyProfileState(snap.data())
+
+      // If deactivated or role is removed, revoke access immediately.
+      if (!active.value || role.value === ROLES.NONE) {
+        void signOut()
+      }
+    })
+  }
+
+  const clearProfileListener = () => {
+    if (!unsubscribeProfile) return
+    unsubscribeProfile()
+    unsubscribeProfile = null
+  }
+
+  const init = () => {
+    if (authInitPromise) return authInitPromise
+
+    authInitPromise = new Promise<void>((resolve) => {
+      let hasResolvedInit = false
+      const resolveInit = () => {
+        if (hasResolvedInit) return
+        hasResolvedInit = true
+        ready.value = true
+        resolve()
       }
 
-      const profileRef = doc(db, 'users', uid)
-      
-      return new Promise<void>((resolve) => {
-        let firstSnapshot = true
-        this._unsubscribeProfile = onSnapshot(
-          profileRef,
-          (snap) => {
-            if (!snap.exists()) {
-              // User document was deleted - sign out immediately
-              void this.signOut()
-              resolve()
-              return
-            }
+      if (unsubscribeAuth) {
+        resolveInit()
+        return
+      }
 
-            const data = snap.data()
-            const newRole = normalizeRoleValue(data.role)
-            const newActive = data.active === true
-            const newAssignedJobIds = (data.assignedJobIds ?? []) as string[]
+      unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
+        user.value = nextUser
 
-            // Update role if changed
-            if (this.role !== newRole) {
-              this.role = newRole
-            }
-
-            // Update active status if changed
-            if (this.active !== newActive) {
-              this.active = newActive
-
-              // If deactivated, sign out immediately
-              if (!newActive) {
-                void this.signOut()
-              }
-            }
-
-            // Update assigned job IDs if changed
-            if (JSON.stringify(this.assignedJobIds) !== JSON.stringify(newAssignedJobIds)) {
-              this.assignedJobIds = newAssignedJobIds
-            }
-
-            // If role is removed, revoke access immediately.
-            if (newRole === ROLES.NONE) {
-              void this.signOut()
-            }
-            
-            // Resolve on first snapshot to signal that listener is active
-            if (firstSnapshot) {
-              firstSnapshot = false
-              resolve()
-            }
-          },
-          () => {
-            resolve() // Resolve even on error to not block
-          }
-        )
-      })
-    },
-
-    init() {
-      if (this._initPromise) return this._initPromise
-
-      this._initPromise = new Promise<void>((resolve) => {
-        let hasResolvedInit = false
-        const resolveInit = () => {
-          if (hasResolvedInit) return
-          hasResolvedInit = true
-          this.ready = true
-          resolve()
-        }
-
-        if (this._unsubscribeAuth) {
+        if (!nextUser) {
+          role.value = null
+          active.value = true
+          assignedJobIds.value = []
+          clearProfileListener()
           resolveInit()
           return
         }
 
-        this._unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
-          this.user = u
+        try {
+          await hydrateProfile(nextUser.uid, nextUser)
+          setupProfileListener(nextUser.uid)
+        } catch {
+          role.value = null
+        }
 
-          if (!u) {
-            this.role = null
-            this.active = true
-            this.assignedJobIds = []
-            // Clean up listener if signing out
-            if (this._unsubscribeProfile) {
-              this._unsubscribeProfile()
-              this._unsubscribeProfile = null
-            }
-            resolveInit()
-            return
-          }
-
-          // Role loading (adjust collection/key to match your schema)
-          // Common pattern: users/{uid}.role
-          try {
-            const snap = await getDoc(doc(db, 'users', u.uid))
-            if (snap.exists()) {
-              const data = snap.data()
-              this.role = normalizeRoleValue(data.role)
-              this.active = data.active === true
-              this.assignedJobIds = (data.assignedJobIds ?? []) as string[]
-            } else {
-              // Create user document if it doesn't exist (for imported/external users)
-              await setDoc(doc(db, 'users', u.uid), {
-                email: u.email,
-                displayName: u.displayName || null,
-                firstName: null,
-                lastName: null,
-                role: ROLES.NONE,
-                active: true,
-                assignedJobIds: [],
-                createdAt: new Date(),
-              })
-              this.role = ROLES.NONE
-              this.active = true
-              this.assignedJobIds = []
-            }
-
-            // Set up real-time listener for future changes
-            await this.setupProfileListener(u.uid)
-          } catch {
-            this.role = null
-          }
-
-          resolveInit()
-        })
+        resolveInit()
       })
+    })
 
-      return this._initPromise
-    },
+    return authInitPromise
+  }
 
-    // --- What Login.vue expects ---
-    async login(email: string, password: string) {
-      const cred = await signInWithEmailAndPassword(auth, email, password)
-      this.user = cred.user
-      if (!this.ready || !this._unsubscribeAuth) {
-        await this.init()
-      }
-      await this.waitForProfileHydration(cred.user.uid)
-      return cred
-    },
+  // Expected by Login.vue
+  const login = async (email: string, password: string) => {
+    const cred = await signInWithEmailAndPassword(auth, email, password)
+    user.value = cred.user
+    if (!ready.value || !unsubscribeAuth) {
+      await init()
+    }
+    await hydrateProfile(cred.user.uid, cred.user)
+    setupProfileListener(cred.user.uid)
+    return cred
+  }
 
-    async register(email: string, password: string) {
-      const cred = await createUserWithEmailAndPassword(auth, email, password)
-      this.user = cred.user
-      
-      // Create the Firestore user profile document with default role 'none'
-      // SignUp component will add firstName and lastName
-      if (cred.user) {
-        await setDoc(doc(db, 'users', cred.user.uid), {
-          email: cred.user.email,
-          active: true,
-          role: ROLES.NONE,
-          createdAt: new Date(),
-        })
-      }
-      
-      if (!this.ready) await this.init()
-      return cred
-    },
+  const register = async (email: string, password: string) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password)
+    user.value = cred.user
 
-    async signOut() {
-      // Clean up listener
-      if (this._unsubscribeProfile) {
-        this._unsubscribeProfile()
-        this._unsubscribeProfile = null
-      }
-      
-      await fbSignOut(auth)
-      this.user = null
-      this.role = null
-      this.active = true
-      this.assignedJobIds = []
-    },
+    // Create the Firestore user profile document with default role 'none'.
+    // SignUp component will add firstName and lastName.
+    if (cred.user) {
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        email: cred.user.email,
+        active: true,
+        role: ROLES.NONE,
+        createdAt: new Date(),
+      })
+    }
 
-    // Backwards-compatible aliases (if any files use these)
-    async logout() {
-      return this.signOut()
-    },
-    async signout() {
-      return this.signOut()
-    },
-  },
+    if (!ready.value) await init()
+    return cred
+  }
+
+  const signOut = async () => {
+    clearProfileListener()
+    await fbSignOut(auth)
+    user.value = null
+    role.value = null
+    active.value = true
+    assignedJobIds.value = []
+  }
+
+  const $reset = () => {
+    clearProfileListener()
+    user.value = null
+    role.value = null
+    active.value = true
+    assignedJobIds.value = []
+    ready.value = false
+  }
+
+  return {
+    user,
+    role,
+    active,
+    assignedJobIds,
+    ready,
+    init,
+    login,
+    register,
+    signOut,
+    $reset,
+  }
 })

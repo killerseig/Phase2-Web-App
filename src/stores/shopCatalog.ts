@@ -15,13 +15,10 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
   const items = ref<ShopCatalogItem[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const unsubscribeCatalog = ref<(() => void) | null>(null)
+  let unsubscribeCatalog: (() => void) | null = null
 
   // Computed
-  const allItems = computed(() => items.value)
   const availableItems = computed(() => items.value.filter(i => i.active !== false))
-  const isLoading = computed(() => loading.value)
-  const hasError = computed(() => error.value !== null)
 
   const setStoreError = (err: unknown, fallback: string) => {
     error.value = normalizeError(err, fallback)
@@ -33,9 +30,9 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
   }
 
   const stopCatalogSubscription = () => {
-    if (!unsubscribeCatalog.value) return
-    unsubscribeCatalog.value()
-    unsubscribeCatalog.value = null
+    if (!unsubscribeCatalog) return
+    unsubscribeCatalog()
+    unsubscribeCatalog = null
   }
 
   // Actions
@@ -57,7 +54,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     loading.value = true
     error.value = null
 
-    unsubscribeCatalog.value = subscribeCatalogService(
+    unsubscribeCatalog = subscribeCatalogService(
       activeOnly,
       (nextItems) => {
         items.value = nextItems
@@ -142,7 +139,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     error.value = null
   }
 
-  function resetStore() {
+  function $reset() {
     stopCatalogSubscription()
     items.value = []
     loading.value = false
@@ -156,10 +153,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     error,
 
     // Computed
-    allItems,
     availableItems,
-    isLoading,
-    hasError,
 
     // Actions
     fetchCatalog,
@@ -170,7 +164,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     deleteItem,
     stopCatalogSubscription,
     clearError,
-    resetStore,
+    $reset,
   }
 })
 

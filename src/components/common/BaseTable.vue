@@ -152,7 +152,7 @@ function cellValue(row: TableRow, key: string) {
               :row-index="rowIndex"
             />
             <template v-else>
-              {{ cellValue(row, col.key) ?? '—' }}
+              {{ cellValue(row, col.key) ?? '--' }}
             </template>
           </td>
         </tr>

@@ -127,7 +127,7 @@ function formatSubmittedAt(value: unknown): string {
               <span v-if="creatingDraft" class="spinner-border spinner-border-sm me-2"></span>
               New draft for today
             </button>
-            <span v-if="saving" class="text-muted small d-flex align-items-center gap-1"><i class="bi bi-hourglass-split"></i>Saving…</span>
+            <span v-if="saving" class="text-muted small d-flex align-items-center gap-1"><i class="bi bi-hourglass-split"></i>Saving...</span>
           </div>
         </div>
       </div>
@@ -235,7 +235,7 @@ function formatSubmittedAt(value: unknown): string {
                 />
               </div>
               <div class="col-md-2">
-                <label class="form-label">High (°F)</label>
+                <label class="form-label">High (degF)</label>
                 <input
                   type="text"
                   class="form-control"
@@ -246,7 +246,7 @@ function formatSubmittedAt(value: unknown): string {
                 />
               </div>
               <div class="col-md-2">
-                <label class="form-label">Low (°F)</label>
+                <label class="form-label">Low (degF)</label>
                 <input
                   type="text"
                   class="form-control"
