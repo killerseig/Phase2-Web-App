@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import Toast from '@/components/Toast.vue'
 import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -24,6 +24,7 @@ import {
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 import { normalizeError } from '@/services/serviceUtils'
 import { validateRequired } from '@/utils/validation'
+import { ROLES } from '@/constants/app'
 import {
   getTimecardDisplayName,
   getTimecardFirstName,
@@ -47,18 +48,17 @@ type FlatpickrRefHandle = {
 
 const props = defineProps<{ jobId?: string }>()
 
-const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const jobsStore = useJobsStore()
 const permissions = usePermissions()
 const { confirm } = useConfirmDialog()
-const isAdmin = computed(() => auth.role === 'admin')
+const isAdmin = computed(() => auth.role === ROLES.ADMIN)
 
 const toastRef = ref<ToastInstance | null>(null)
 const datePickerRef = ref<FlatpickrRefHandle | null>(null)
 
-const jobId = computed(() => String(props.jobId ?? route.params.jobId))
+const jobId = computed(() => String(props.jobId ?? ''))
 const jobName = computed(() => jobsStore.currentJob?.name ?? 'Timecards')
 const selectedDate = ref<string>('')
 const weekStartDate = computed(() => snapToSunday(selectedDate.value || new Date()))
@@ -290,7 +290,9 @@ function handleTimecardToggle(id: string, open: boolean) {
 }
 
 function onDateChange(_dates: Date[], dateStr: string) {
-  if (dateStr) refreshWeek(dateStr)
+  if (dateStr) {
+    void refreshWeek(dateStr)
+  }
 }
 
 function onDateInputFocus() {

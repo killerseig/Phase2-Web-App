@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import ShopCatalogTreeNode from '../components/admin/ShopCatalogTreeNode.vue'
 import { useAuthStore } from '../stores/auth'
@@ -11,11 +11,11 @@ import { useShopCategoriesStore } from '../stores/shopCategories'
 import {
   createShopOrder,
   deleteShopOrder,
+  sendShopOrderEmail,
   subscribeEmailSettings,
   subscribeShopOrders,
   updateShopOrderItems,
   updateShopOrderStatus,
-  useShopService,
   type ShopOrder,
   type ShopOrderStatus,
 } from '@/services'
@@ -25,9 +25,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { normalizeError } from '@/services/serviceUtils'
 import { formatDateTime, toMillis } from '@/utils/datetime'
 
-defineProps<{ jobId?: string }>()
-
-const route = useRoute()
+const props = defineProps<{ jobId?: string }>()
 const router = useRouter()
 const auth = useAuthStore()
 const jobs = useJobsStore()
@@ -35,7 +33,6 @@ const shopCatalogStore = useShopCatalogStore()
 const shopCategoriesStore = useShopCategoriesStore()
 const { items: catalog } = storeToRefs(shopCatalogStore)
 const { categories: shopCategories, fullTree: shopCategoriesTree } = storeToRefs(shopCategoriesStore)
-const shopService = useShopService()
 const jobAccess = useJobAccess()
 const { confirm } = useConfirmDialog()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
@@ -49,7 +46,7 @@ type CatalogSelectable = {
   quantity?: number
 }
 
-const jobId = computed(() => String(route.params.jobId))
+const jobId = computed(() => String(props.jobId ?? ''))
 const job = computed(() => jobs.currentJob)
 const jobName = computed(() => job.value?.name ?? 'Shop Orders')
 const jobCode = computed(() => job.value?.code ?? '')
@@ -218,6 +215,7 @@ const loadOrders = () => {
 }
 
 const init = async () => {
+  if (!jobId.value) return
   loading.value = true
   err.value = ''
   try {
@@ -417,11 +415,7 @@ const sendOrderEmail = async () => {
 
   sendingEmail.value = true
   try {
-    await shopService.sendShopOrderEmail({
-      jobId: jobId.value,
-      shopOrderId: selected.value.id,
-      recipients: finalRecipients,
-    })
+    await sendShopOrderEmail(jobId.value, selected.value.id, finalRecipients)
     // Treat email as submit: move status to 'order'
     await updateShopOrderStatus(jobId.value, selected.value.id, 'order')
     toastRef.value?.show('Order emailed successfully', 'success')
@@ -432,7 +426,9 @@ const sendOrderEmail = async () => {
   }
 }
 
-onMounted(init)
+onMounted(() => {
+  void init()
+})
 watch(
   () => jobId.value,
   (next, prev) => {
@@ -555,7 +551,7 @@ onUnmounted(() => {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, idx) in selected.items" :key="idx">
+                    <tr v-for="(item, idx) in selected.items" :key="item.catalogItemId ?? `${item.description}-${idx}`">
                       <td class="p-2">
                         <template v-if="canEditOrder(selected)">
                           <input 

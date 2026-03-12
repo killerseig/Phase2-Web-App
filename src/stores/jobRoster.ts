@@ -4,7 +4,7 @@
  * Replaces the global employees store
  */
 
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
   addRosterEmployee,
@@ -288,4 +288,8 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
     $reset,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useJobRosterStore, import.meta.hot))
+}
 

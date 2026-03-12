@@ -5,6 +5,7 @@
 
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { ROLES, type Role } from '@/constants/app'
 
 export interface AccessLevel {
   canManageUsers: boolean
@@ -25,11 +26,11 @@ export function usePermissions() {
   const authStore = useAuthStore()
 
   // Basic role checks
-  const isAdmin = computed(() => authStore.role === 'admin')
-  const isEmployee = computed(() => authStore.role === 'employee')
-  const isShop = computed(() => authStore.role === 'shop')
-  const isForeman = computed(() => authStore.role === 'foreman')
-  const isNone = computed(() => authStore.role === 'none')
+  const isAdmin = computed(() => authStore.role === ROLES.ADMIN)
+  const isEmployee = computed(() => authStore.role === ROLES.EMPLOYEE)
+  const isShop = computed(() => authStore.role === ROLES.SHOP)
+  const isForeman = computed(() => authStore.role === ROLES.FOREMAN)
+  const isNone = computed(() => authStore.role === ROLES.NONE)
 
   // Feature access checks
   const isManager = computed(() => isAdmin.value)
@@ -67,12 +68,12 @@ export function usePermissions() {
   /**
    * Check if user has a specific role
    */
-  const hasRole = (role: string): boolean => authStore.role === role
+  const hasRole = (role: Role): boolean => authStore.role === role
 
   /**
    * Check if user has any of the specified roles
    */
-  const hasAnyRole = (roles: string[]): boolean => roles.includes(authStore.role || 'none')
+  const hasAnyRole = (roles: Role[]): boolean => roles.includes(authStore.role || ROLES.NONE)
 
   /**
    * Get complete access level object

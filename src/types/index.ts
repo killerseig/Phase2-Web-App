@@ -3,6 +3,8 @@
  * All shared interfaces and types used across the application
  */
 
+import type { Role } from '@/constants/app'
+
 // Re-export centralized document types
 export type {
   AuditMetadata,
@@ -21,7 +23,7 @@ export { successResponse, errorResponse, ErrorCodes } from './api'
 // AUTH & USERS
 // ============================================================================
 
-export type UserRole = 'admin' | 'employee' | 'shop' | 'none'
+export type UserRole = Role
 
 export interface UserProfile {
   id: string

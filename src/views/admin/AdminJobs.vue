@@ -15,6 +15,7 @@ import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/mo
 import { listSubmittedTimecards, listTimecardsByJobAndWeek } from '@/services/Timecards'
 import { downloadCsv } from '@/utils/plexisIntegration'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { ROLES } from '@/constants/app'
 
 type Align = 'start' | 'center' | 'end'
 type Column = { key: string; label: string; sortable?: boolean; width?: string; align?: Align; slot?: string }
@@ -121,7 +122,7 @@ const editingJobType = ref<'general' | 'subcontractor'>('general')
 const editingJobSaving = ref(false)
 
 // Computed foreman users
-const foremanUsers = computed(() => allUsers.value.filter(u => u.role === 'foreman' && u.active))
+const foremanUsers = computed(() => allUsers.value.filter(u => u.role === ROLES.FOREMAN && u.active))
 
 const foremanDisplayName = (user: UserProfile) => `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || ''
 
@@ -372,7 +373,7 @@ async function submitJobForm() {
       accountNumber: '',
       type: 'general',
     }
-    await loadJobs()
+    loadJobs()
   } catch (e) {
     toastRef.value?.show(formatErr(e), 'error')
   } finally {
@@ -414,7 +415,7 @@ async function handleDeleteJob(job: Job) {
   try {
     await jobsStore.deleteJob(job.id)
     toastRef.value?.show('Job deleted', 'success')
-    await loadJobs()
+    loadJobs()
   } catch (e) {
     toastRef.value?.show('Failed to delete job', 'error')
   }
@@ -425,7 +426,7 @@ async function toggleArchive(job: Job, active: boolean) {
   try {
     await jobsStore.setJobActive(job.id, active)
     toastRef.value?.show(active ? 'Job restored' : 'Job archived', 'success')
-    await loadJobs()
+    loadJobs()
   } catch (e) {
     toastRef.value?.show(formatErr(e), 'error')
   } finally {
@@ -438,7 +439,7 @@ function handleJobSort({ sortKey, sortDir }: { sortKey: string; sortDir: SortDir
   jobSortDir.value = sortDir
 }
 
-onMounted(async () => {
+onMounted(() => {
   loadJobs()
   usersStore.subscribeAllUsers()
 })

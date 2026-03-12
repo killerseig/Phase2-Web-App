@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Toast from '../../components/Toast.vue'
 import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
 import StatusBadge from '../../components/admin/StatusBadge.vue'
@@ -10,7 +10,7 @@ import BaseTable from '../../components/common/BaseTable.vue'
 import { useUsersStore } from '../../stores/users'
 import { useEmployeesStore } from '../../stores/employees'
 import { type Employee, type UserProfile } from '@/services'
-import { type Role } from '@/constants/app'
+import { ROLES, type Role } from '@/constants/app'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { normalizeError } from '@/services/serviceUtils'
 import { getFirstValidationMessage, validateCreateUserForm } from '@/utils/validation'
@@ -22,6 +22,7 @@ type SortDir = 'asc' | 'desc'
 type UserSortKey = 'email' | 'firstName' | 'lastName' | 'role'
 
 const route = useRoute()
+const router = useRouter()
 const usersStore = useUsersStore()
 const employeesStore = useEmployeesStore()
 const { confirm } = useConfirmDialog()
@@ -29,7 +30,40 @@ const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const { users, loading: loadingUsers, error: usersError } = storeToRefs(usersStore)
 const { employees, loading: loadingEmployees } = storeToRefs(employeesStore)
 
-const activeTab = ref<'users' | 'employees'>(route.query.tab === 'employees' ? 'employees' : 'users')
+type AdminTab = 'users' | 'employees'
+
+const parseAdminTab = (value: unknown): AdminTab => {
+  if (typeof value === 'string') return value === 'employees' ? 'employees' : 'users'
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0] === 'employees' ? 'employees' : 'users'
+  }
+  return 'users'
+}
+
+const activeTab = ref<AdminTab>(parseAdminTab(route.query.tab))
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    const nextTab = parseAdminTab(tab)
+    if (activeTab.value !== nextTab) {
+      activeTab.value = nextTab
+    }
+  }
+)
+
+watch(activeTab, (tab) => {
+  const currentTab = parseAdminTab(route.query.tab)
+  if (currentTab === tab) return
+
+  const nextQuery = { ...route.query }
+  if (tab === 'employees') {
+    nextQuery.tab = 'employees'
+  } else {
+    delete nextQuery.tab
+  }
+  void router.replace({ query: nextQuery })
+})
 
 // User form
 const showUserForm = ref(false)
@@ -37,7 +71,7 @@ const userForm = ref({
   email: '',
   firstName: '',
   lastName: '',
-  role: 'none' as Role,
+  role: ROLES.NONE as Role,
 })
 const creatingUser = ref(false)
 
@@ -47,13 +81,13 @@ const editUserForm = ref({
   email: '',
   firstName: '',
   lastName: '',
-  role: 'none' as Role,
+  role: ROLES.NONE as Role,
 })
 const editUserFormOriginal = ref({
   email: '',
   firstName: '',
   lastName: '',
-  role: 'none' as Role,
+  role: ROLES.NONE as Role,
 })
 const savingUserEdit = ref(false)
 const activeUserActionsId = ref('')
@@ -183,7 +217,7 @@ async function submitUserForm() {
     toastRef.value?.show(`User created successfully. Welcome email sent to ${userForm.value.email}`, 'success')
     showUserForm.value = false
     resetUserForm()
-    await loadUsers()
+    loadUsers()
   } catch (e) {
     const msg = normalizeError(e, 'Failed to create user')
     toastRef.value?.show(friendlyError(msg), 'error')
@@ -210,12 +244,12 @@ async function handleEditUser(user: UserProfile) {
 
 function clearUserEdit() {
   editingUserId.value = null
-  editUserForm.value = { email: '', firstName: '', lastName: '', role: 'none' }
-  editUserFormOriginal.value = { email: '', firstName: '', lastName: '', role: 'none' }
+  editUserForm.value = { email: '', firstName: '', lastName: '', role: ROLES.NONE }
+  editUserFormOriginal.value = { email: '', firstName: '', lastName: '', role: ROLES.NONE }
 }
 
 function resetUserForm() {
-  userForm.value = { email: '', firstName: '', lastName: '', role: 'none' }
+  userForm.value = { email: '', firstName: '', lastName: '', role: ROLES.NONE }
 }
 
 function cancelUserForm() {
@@ -321,7 +355,7 @@ async function submitEmployeeForm() {
     toastRef.value?.show('Employee created', 'success')
     showEmployeeForm.value = false
     resetEmployeeForm()
-    await loadEmployees()
+    loadEmployees()
   } catch (e) {
     toastRef.value?.show('Failed to create employee', 'error')
   } finally {
@@ -523,11 +557,11 @@ onUnmounted(() => {
           <div class="col-md-4">
             <label class="form-label small">Role</label>
             <select v-model="userForm.role" class="form-select" required>
-              <option value="none">None (No Access)</option>
-              <option value="employee">Employee</option>
-              <option value="shop">Shop</option>
-              <option value="foreman">Foreman</option>
-              <option value="admin">Admin</option>
+              <option :value="ROLES.NONE">None (No Access)</option>
+              <option :value="ROLES.EMPLOYEE">Employee</option>
+              <option :value="ROLES.SHOP">Shop</option>
+              <option :value="ROLES.FOREMAN">Foreman</option>
+              <option :value="ROLES.ADMIN">Admin</option>
             </select>
           </div>
           <div class="col-12 d-flex gap-2 justify-content-end pt-2">
@@ -610,22 +644,22 @@ onUnmounted(() => {
                   @keydown.enter="saveUserEdit(row, true)"
                   @keydown.esc="cancelUserEdit"
                 >
-                  <option value="none">None</option>
-                  <option value="employee">Employee</option>
-                  <option value="shop">Shop</option>
-                  <option value="foreman">Foreman</option>
-                  <option value="admin">Admin</option>
+                  <option :value="ROLES.NONE">None</option>
+                  <option :value="ROLES.EMPLOYEE">Employee</option>
+                  <option :value="ROLES.SHOP">Shop</option>
+                  <option :value="ROLES.FOREMAN">Foreman</option>
+                  <option :value="ROLES.ADMIN">Admin</option>
                 </select>
               </template>
               <span
                 v-else
                 class="badge"
                 :class="{
-                  'bg-secondary': row.role === 'none',
-                  'bg-info': row.role === 'employee',
-                  'bg-success': row.role === 'shop',
-                  'bg-warning': row.role === 'foreman',
-                  'bg-danger': row.role === 'admin',
+                  'bg-secondary': row.role === ROLES.NONE,
+                  'bg-info': row.role === ROLES.EMPLOYEE,
+                  'bg-success': row.role === ROLES.SHOP,
+                  'bg-warning': row.role === ROLES.FOREMAN,
+                  'bg-danger': row.role === ROLES.ADMIN,
                 }"
               >
                 {{ row.role }}

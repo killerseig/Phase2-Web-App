@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useJobsStore } from '../stores/jobs'
 import { useJobRosterStore } from '../stores/jobRoster'
 import { useAppStore } from '@/stores/app'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
+import { ROLES } from '@/constants/app'
 
-defineProps<{
+const props = defineProps<{
   jobId?: string
 }>()
 
-const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const jobs = useJobsStore()
@@ -20,7 +20,7 @@ const roster = useJobRosterStore()
 const app = useAppStore()
 const jobAccess = useJobAccess()
 
-const jobId = computed(() => String(route.params.jobId))
+const jobId = computed(() => String(props.jobId ?? ''))
 
 const job = computed(() => jobs.currentJob)
 const jobName = computed(() => job.value?.name ?? 'Job')
@@ -33,7 +33,7 @@ const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.val
 const currentWeekLabel = computed(() => formatWeekRange(currentWeekStart.value, currentWeekEnd.value))
 
 const currentUser = computed(() => auth.user)
-const isAdmin = computed(() => auth.role === 'admin')
+const isAdmin = computed(() => auth.role === ROLES.ADMIN)
 
 // Check if current user is foreman of this job (either assigned via auth store OR has roster entry)
 const isForemanAssigned = computed(() => auth.assignedJobIds.includes(jobId.value))
@@ -54,6 +54,7 @@ const canShopOrders = computed(() => isAdmin.value || isForeman.value || current
 const canManageRoster = computed(() => isAdmin.value || isForeman.value)
 
 async function boot() {
+  if (!jobId.value) return
   if (!auth.ready) await auth.init()
 
   if (!jobAccess.canAccessJob(jobId.value)) {
@@ -66,7 +67,7 @@ async function boot() {
     jobs.subscribeJob(jobId.value)
     app.setCurrentJob(jobId.value, jobs.currentJob?.name ?? null)
 
-    await roster.setCurrentJob(jobId.value)
+    roster.setCurrentJob(jobId.value)
     roster.stopJobRosterSubscription()
     roster.subscribeJobRoster(jobId.value)
   } catch (e) {
@@ -75,12 +76,15 @@ async function boot() {
   }
 }
 
-onMounted(boot)
+onMounted(() => {
+  void boot()
+})
 
 watch(
-  () => route.params.jobId,
-  async () => {
-    await boot()
+  () => jobId.value,
+  (next, prev) => {
+    if (!next || next === prev) return
+    void boot()
   }
 )
 

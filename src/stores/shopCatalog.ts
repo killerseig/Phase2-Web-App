@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
   createCatalogItem as createCatalogItemService,
@@ -167,4 +167,8 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     $reset,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useShopCatalogStore, import.meta.hot))
+}
 

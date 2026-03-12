@@ -17,9 +17,8 @@
         <router-link
           v-if="jobId"
           :to="{ name: 'job-home', params: { jobId } }"
-          class="btn btn-outline-secondary btn-sm"
+          class="btn btn-outline-secondary btn-sm topnav-btn"
           title="Go to Job Home"
-          :class="'topnav-btn'"
         >
           <i class="bi bi-briefcase me-1" />
           <span class="d-none d-sm-inline">{{ jobName || 'Job Home' }}</span>
@@ -54,34 +53,46 @@ const auth = useAuthStore()
 const app = useAppStore()
 const jobs = useJobsStore()
 
-const jobId = computed(() => app.currentJobId || (route.params.jobId as string | undefined) || jobs.currentJob?.id || null)
+const routeJobId = computed(() => {
+  const jobParam = route.params.jobId
+  if (typeof jobParam === 'string') return jobParam
+  if (Array.isArray(jobParam) && typeof jobParam[0] === 'string') return jobParam[0]
+  return undefined
+})
+
+const jobId = computed(() => app.currentJobId || routeJobId.value || jobs.currentJob?.id || null)
 const jobName = computed(() => app.currentJobName || jobs.currentJob?.name || '')
+const routeName = computed(() => String(route.name ?? ''))
+const isJobRoute = computed(() => routeName.value.startsWith('job-'))
+const isAdminRoute = computed(() => routeName.value.startsWith('admin-'))
+const isDashboardRoute = computed(() => routeName.value === 'dashboard')
+const isAuthRoute = computed(() => routeName.value === 'login' || routeName.value === 'set-password')
 
 const title = computed(() => {
-  const metaTitle = route.meta.title as string | undefined
+  const metaTitle = typeof route.meta.title === 'string' ? route.meta.title : undefined
   if (metaTitle) return metaTitle
-  const byName = crumbByRouteName[route.name as string]
+  const byName = crumbByRouteName[routeName.value]
   if (byName) return byName
-  if (route.path.startsWith('/job/')) return jobName.value || 'Job'
+  if (isJobRoute.value) return jobName.value || 'Job'
   return 'Phase 2'
 })
 
 const crumb = computed(() => {
-  if (route.path.startsWith('/job/')) {
+  if (isJobRoute.value) {
     return jobName.value || 'Job'
   }
-  const byName = crumbByRouteName[route.name as string]
+  const byName = crumbByRouteName[routeName.value]
   if (byName) return byName
-  if (route.path.startsWith('/admin')) return 'Admin'
-  if (route.path.startsWith('/dashboard')) return 'Dashboard'
-  if (route.path.startsWith('/login')) return 'Auth'
+  if (isAdminRoute.value) return 'Admin'
+  if (isDashboardRoute.value) return 'Dashboard'
+  if (isAuthRoute.value) return 'Auth'
   return 'App'
 })
 
 async function onSignOut() {
   await auth.signOut()
   app.clearJob()
-  router.push('/login')
+  await router.push({ name: 'login' })
 }
 </script>
 

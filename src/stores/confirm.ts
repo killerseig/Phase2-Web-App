@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export type ConfirmVariant = 'primary' | 'danger' | 'warning'
@@ -80,3 +80,7 @@ export const useConfirmStore = defineStore('confirm', () => {
     $reset,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useConfirmStore, import.meta.hot))
+}

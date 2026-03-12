@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
   onAuthStateChanged,
@@ -7,7 +7,7 @@ import {
   signOut as fbSignOut,
   type User,
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 
 // Use relative imports to avoid alias/tsconfig fights
 import { auth, db } from '../firebase'
@@ -64,7 +64,7 @@ export const useAuthStore = defineStore('auth', () => {
       role: ROLES.NONE,
       active: true,
       assignedJobIds: [],
-      createdAt: new Date(),
+      createdAt: serverTimestamp(),
     })
     role.value = ROLES.NONE
     active.value = true
@@ -169,7 +169,7 @@ export const useAuthStore = defineStore('auth', () => {
         email: cred.user.email,
         active: true,
         role: ROLES.NONE,
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       })
     }
 
@@ -208,3 +208,7 @@ export const useAuthStore = defineStore('auth', () => {
     $reset,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useAuthStore, import.meta.hot))
+}

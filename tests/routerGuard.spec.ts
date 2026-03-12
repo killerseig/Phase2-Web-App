@@ -2,16 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ROLES } from '@/constants/app'
 
 let mockAuth: any
-let mockJobAccess: any
 let runNavigationGuard: any
 let getRouteAccessRedirect: any
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => mockAuth,
-}))
-
-vi.mock('@/composables/useJobAccess', () => ({
-  useJobAccess: () => mockJobAccess,
 }))
 
 const loadGuards = async () => {
@@ -33,10 +28,6 @@ describe('router navigation guard', () => {
       role: ROLES.ADMIN,
       assignedJobIds: ['job-1'],
       signOut: vi.fn().mockResolvedValue(undefined),
-    }
-
-    mockJobAccess = {
-      canAccessJob: vi.fn().mockReturnValue(true),
     }
 
     const guards = await loadGuards()
@@ -91,14 +82,13 @@ describe('router navigation guard', () => {
 
   it('blocks foremen from jobs they are not assigned to', async () => {
     mockAuth.role = ROLES.FOREMAN
-    mockJobAccess.canAccessJob.mockReturnValue(false)
+    mockAuth.assignedJobIds = ['job-1']
 
     const result = await runNavigationGuard({
       meta: {},
       params: { jobId: 'job-2' },
     })
 
-    expect(mockJobAccess.canAccessJob).toHaveBeenCalledWith('job-2')
     expect(result).toEqual({ name: 'unauthorized' })
   })
 
@@ -114,7 +104,7 @@ describe('router navigation guard', () => {
         active: true,
         role: ROLES.NONE,
       },
-      mockJobAccess.canAccessJob
+      () => true
     )
 
     expect(result).toEqual({ name: 'unauthorized' })

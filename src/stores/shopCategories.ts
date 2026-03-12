@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export interface ShopCategory {
@@ -310,4 +310,8 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     $reset,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useShopCategoriesStore, import.meta.hot))
+}
 

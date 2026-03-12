@@ -1,6 +1,7 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useJobsStore } from '@/stores/jobs'
+import { ROLES, type Role } from '@/constants/app'
 import {
   assignJobToForeman as assignJobToForemanService,
   createUserByAdmin as createUserByAdminService,
@@ -31,8 +32,8 @@ export const useUsersStore = defineStore('users', () => {
 
   // Computed
   const activeUsers = computed(() => users.value.filter(u => u.active !== false))
-  const adminUsers = computed(() => users.value.filter(u => u.role === 'admin'))
-  const foremanUsers = computed(() => users.value.filter(u => u.role === 'foreman'))
+  const adminUsers = computed(() => users.value.filter(u => u.role === ROLES.ADMIN))
+  const foremanUsers = computed(() => users.value.filter(u => u.role === ROLES.FOREMAN))
 
   const setStoreError = (err: unknown, fallback: string) => {
     error.value = normalizeError(err, fallback)
@@ -158,11 +159,11 @@ export const useUsersStore = defineStore('users', () => {
     return updateUserProfile(userId, { active: true })
   }
 
-  async function changeUserRole(userId: string, newRole: 'admin' | 'employee' | 'shop' | 'foreman' | 'none') {
+  async function changeUserRole(userId: string, newRole: Role) {
     return updateUserProfile(userId, { role: newRole })
   }
 
-  async function createUser(email: string, firstName: string, lastName: string, role: 'admin' | 'employee' | 'shop' | 'foreman' | 'none' = 'none') {
+  async function createUser(email: string, firstName: string, lastName: string, role: Role = ROLES.NONE) {
     error.value = null
     try {
       const result = await createUserByAdminService(email, firstName, lastName, role)
@@ -284,4 +285,8 @@ export const useUsersStore = defineStore('users', () => {
     $reset,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useUsersStore, import.meta.hot))
+}
 

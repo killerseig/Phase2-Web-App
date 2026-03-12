@@ -25,13 +25,13 @@ async function init() {
   }
 }
 
-async function openJob(jobId: string) {
+function openJob(jobId: string) {
   // Simply navigate to job home - JobHome.vue will load job details
-  router.push({ name: 'job-home', params: { jobId } })
+  void router.push({ name: 'job-home', params: { jobId } })
 }
 
-onMounted(async () => {
-  await init()
+onMounted(() => {
+  void init()
 })
 
 onUnmounted(() => {

@@ -11,12 +11,12 @@ import {
   subscribeDailyLogsForDate,
   subscribeToDailyLog,
   submitDailyLog,
+  sendDailyLogEmail,
   subscribeEmailSettings,
   toMillis,
   updateDailyLog,
   updateDailyLogRecipients,
   uploadAttachment as uploadPhotoToStorage,
-  useJobService,
   type DailyLog,
   type DailyLogDraftInput,
 } from '@/services'
@@ -38,7 +38,6 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   const auth = useAuthStore()
   const jobs = useJobsStore()
   const { confirm } = useConfirmDialog()
-  const jobService = useJobService()
   const toastRef = opts?.toastRef
 
   const job = computed(() => jobs.currentJob)
@@ -95,7 +94,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   let unsubscribeLogsForDate: (() => void) | null = null
   let unsubscribeJobRecipients: (() => void) | null = null
   let unsubscribeGlobalRecipients: (() => void) | null = null
-  let autoSaveTimeout: ReturnType<typeof setTimeout>
+  let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null
   const creatingDraft = ref(false)
 
   const resetForm = () => {
@@ -129,6 +128,12 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       unsubscribeGlobalRecipients()
       unsubscribeGlobalRecipients = null
     }
+  }
+
+  const clearAutoSaveTimer = () => {
+    if (!autoSaveTimeout) return
+    clearTimeout(autoSaveTimeout)
+    autoSaveTimeout = null
   }
 
   const setError = (errorValue: unknown, fallback: string) => {
@@ -233,6 +238,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   }
 
   const loadLogById = async (logId: string) => {
+    clearAutoSaveTimer()
     err.value = ''
     resetForm()
 
@@ -255,6 +261,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   }
 
   const loadForDate = async (dateStr: string) => {
+    clearAutoSaveTimer()
     err.value = ''
     currentId.value = null
     currentStatus.value = 'draft'
@@ -341,6 +348,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   }
 
   const init = async () => {
+    clearAutoSaveTimer()
     loading.value = true
     err.value = ''
     try {
@@ -384,7 +392,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
 
   const autoSave = async () => {
     if (!currentId.value || !canEditDraft.value) return
-    clearTimeout(autoSaveTimeout)
+    clearAutoSaveTimer()
     autoSaveTimeout = setTimeout(async () => {
       try {
         saving.value = true
@@ -393,6 +401,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         console.error('Auto-save failed:', e)
       } finally {
         saving.value = false
+        autoSaveTimeout = null
       }
     }, 1000)
   }
@@ -431,7 +440,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
 
       if (combinedRecipients.length > 0) {
         try {
-          await jobService.sendDailyLogEmail({ jobId: jobId.value, dailyLogId: currentId.value, recipients: combinedRecipients })
+          await sendDailyLogEmail(jobId.value, currentId.value, combinedRecipients)
           toastRef?.value?.show('Daily log submitted and emailed successfully!', 'success')
         } catch {
           toastRef?.value?.show('Daily log submitted, but email failed to send', 'warning')
@@ -603,11 +612,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
 
     saving.value = true
     try {
-      await jobService.sendDailyLogEmail({
-        jobId: jobId.value,
-        dailyLogId: currentId.value,
-        recipients: combinedRecipients,
-      })
+      await sendDailyLogEmail(jobId.value, currentId.value, combinedRecipients)
       toastRef?.value?.show(`Email sent to ${combinedRecipients.length} recipient(s)`, 'success')
     } catch (e) {
       setError(e, 'Failed to send email')
@@ -703,6 +708,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     }
   )
   onUnmounted(() => {
+    clearAutoSaveTimer()
     stopLiveLog()
     stopLogsForDate()
     stopRecipientSubscriptions()

@@ -23,7 +23,7 @@ const auth = useAuthStore()
 
 const isAuthReady = computed(() => auth.ready)
 
-const isPublicRoute = computed(() => ((route.meta?.requiresAuth as boolean | undefined) ?? true) === false)
+const isPublicRoute = computed(() => route.meta.requiresAuth === false)
 </script>
 
 <style scoped lang="scss">

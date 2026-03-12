@@ -46,7 +46,7 @@
             <div v-if="migrationResults.errors?.length > 0" class="alert alert-danger mt-2 mb-0">
               <strong>Errors:</strong>
               <ul class="mb-0">
-                <li v-for="(err, idx) in migrationResults.errors" :key="idx">
+                <li v-for="(err, idx) in migrationResults.errors" :key="`migration-error-${idx}-${err}`">
                   {{ err }}
                 </li>
               </ul>
@@ -166,7 +166,7 @@
         <div v-if="csvHasErrors" class="alert alert-danger">
           <strong>CSV Validation Errors:</strong>
           <ul class="mb-0 mt-2">
-            <li v-for="(err, idx) in csvErrors" :key="idx">
+            <li v-for="(err, idx) in csvErrors" :key="`csv-error-${idx}-${err}`">
               {{ err }}
             </li>
           </ul>
@@ -175,7 +175,7 @@
         <div v-if="csvWarnings.length > 0" class="alert alert-warning">
           <strong>CSV Warnings:</strong>
           <ul class="mb-0">
-            <li v-for="(warn, idx) in csvWarnings" :key="idx">
+            <li v-for="(warn, idx) in csvWarnings" :key="`csv-warning-${idx}-${warn}`">
               {{ warn }}
             </li>
           </ul>
@@ -408,8 +408,16 @@ async function importFromPlexis() {
   }
 }
 
-onMounted(async () => {
-  await jobsStore.fetchAllJobs(true)
+async function init() {
+  try {
+    await jobsStore.fetchAllJobs(true)
+  } catch (error) {
+    toastRef.value?.show(normalizeError(error, 'Failed to load jobs'), 'error')
+  }
+}
+
+onMounted(() => {
+  void init()
 })
 </script>
 

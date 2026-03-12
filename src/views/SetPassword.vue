@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import { useAuthStore } from '@/stores/auth'
 import { setPasswordFromSetupLink, verifySetupToken } from '@/services'
+import { ROLES } from '@/constants/app'
 
 const router = useRouter()
 const route = useRoute()
@@ -27,10 +28,15 @@ const getErrorMessage = (error: unknown): string => {
   return ''
 }
 
-onMounted(async () => {
-  // Get parameters from URL
-  const token = route.query.setupToken as string
-  const userId = route.query.uid as string
+const readQueryParam = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value) && typeof value[0] === 'string') return value[0]
+  return ''
+}
+
+async function verifySetupLink() {
+  const token = readQueryParam(route.query.setupToken)
+  const userId = readQueryParam(route.query.uid)
 
   if (!token || !userId) {
     err.value = 'Invalid setup link. Please request a new password creation link.'
@@ -62,6 +68,10 @@ onMounted(async () => {
     verifying.value = false
     toastRef.value?.show(errorMsg, 'error')
   }
+}
+
+onMounted(() => {
+  void verifySetupLink()
 })
 
 const submit = async () => {
@@ -88,10 +98,10 @@ const submit = async () => {
     await setPasswordFromSetupLink(uid.value, password.value, setupToken.value)
     await authStore.login(email.value, password.value)
     toastRef.value?.show('Password set successfully! Logging you in...', 'success')
-    if (authStore.role === 'none') {
-      await router.push('/unauthorized')
+    if (authStore.role === ROLES.NONE) {
+      await router.push({ name: 'unauthorized' })
     } else {
-      await router.push('/dashboard')
+      await router.push({ name: 'dashboard' })
     }
   } catch (e) {
     let errorMsg = 'Failed to set password. Please try again.'
@@ -140,7 +150,7 @@ const toggleConfirmPasswordVisibility = () => {
           </div>
           <h5 class="card-title">Link Invalid or Expired</h5>
           <p class="text-muted mb-4">{{ err }}</p>
-          <router-link to="/login" class="btn btn-primary btn-sm">Back to Login</router-link>
+          <router-link :to="{ name: 'login' }" class="btn btn-primary btn-sm">Back to Login</router-link>
         </div>
 
         <!-- Form state -->
@@ -219,9 +229,9 @@ const toggleConfirmPasswordVisibility = () => {
           <hr class="my-4" />
 
           <div class="text-center">
-            <small class="text-muted"
+              <small class="text-muted"
               >Already have an account?
-              <router-link to="/login" class="text-decoration-none">Sign in here</router-link>
+              <router-link :to="{ name: 'login' }" class="text-decoration-none">Sign in here</router-link>
             </small>
           </div>
         </div>

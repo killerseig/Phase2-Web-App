@@ -5,6 +5,7 @@ import App from './App.vue'
 import { getRouteAccessRedirect, router } from './router'
 import { useAuthStore } from './stores/auth'
 import { ROLES } from './constants/app'
+import { canAccessJobForSnapshot } from './utils/accessControl'
 import 'bootstrap'
 import 'bootstrap-icons/font/bootstrap-icons.css'
 import './styles/main.scss'
@@ -18,14 +19,16 @@ app.use(router)
 const auth = useAuthStore(pinia)
 void auth.init()
 
-const canAccessJob = (jobId: string): boolean => {
-  if (!jobId) return false
-  if (!auth.user || auth.active === false || !auth.role || auth.role === ROLES.NONE) return false
-  if (auth.role === ROLES.FOREMAN) {
-    return (auth.assignedJobIds ?? []).includes(jobId)
-  }
-  return true
-}
+const canAccessJob = (jobId: string): boolean =>
+  canAccessJobForSnapshot(
+    {
+      user: auth.user,
+      active: auth.active,
+      role: auth.role,
+      assignedJobIds: auth.assignedJobIds,
+    },
+    jobId
+  )
 
 let enforcingRouteAccess = false
 let lastAuthSignature = ''
@@ -86,4 +89,9 @@ watch(
   { immediate: true }
 )
 
-app.mount('#app')
+const bootstrap = async () => {
+  await router.isReady()
+  app.mount('#app')
+}
+
+void bootstrap()

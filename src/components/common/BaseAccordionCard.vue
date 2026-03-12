@@ -2,11 +2,16 @@
 import { computed } from 'vue'
 import { useCollapseMeasure } from '@/composables/useCollapseMeasure'
 
-const props = defineProps({
-  open: { type: Boolean, required: true },
-  title: { type: String, required: true },
-  subtitle: { type: String, default: '' },
-  bodyClass: { type: String, default: 'p-3' },
+interface Props {
+  open: boolean
+  title: string
+  subtitle?: string
+  bodyClass?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  subtitle: '',
+  bodyClass: 'p-3',
 })
 
 const emit = defineEmits<{
@@ -21,6 +26,12 @@ function toggle() {
   emit('toggle', !props.open)
   if (!props.open) measure()
 }
+
+function onHeaderKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  toggle()
+}
 </script>
 
 <template>
@@ -28,7 +39,9 @@ function toggle() {
     <div
       class="card-header d-flex align-items-center justify-content-between cursor-pointer"
       role="button"
+      tabindex="0"
       @click="toggle"
+      @keydown="onHeaderKeydown"
       :aria-expanded="open"
     >
       <div class="flex-fill">

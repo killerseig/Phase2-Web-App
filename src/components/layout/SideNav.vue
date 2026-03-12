@@ -31,9 +31,8 @@
     <nav class="nav flex-column flex-grow-1">
       <!-- Dashboard -->
       <router-link
-        to="/dashboard"
+        :to="{ name: 'dashboard' }"
         class="nav-link py-2 px-3 d-flex align-items-center gap-3"
-        :class="{ active: $route.path === '/dashboard' }"
         :title="isSidebarCollapsed ? 'Dashboard' : ''"
       >
         <i class="bi bi-grid-1x2 flex-shrink-0"></i>
@@ -107,7 +106,14 @@ const sidebarRef = ref<HTMLElement | null>(null)
 
 const role = computed(() => auth.role)
 
-const jobId = computed(() => app.currentJobId || (route.params.jobId as string | undefined) || jobs.currentJob?.id || null)
+const routeJobId = computed(() => {
+  const jobParam = route.params.jobId
+  if (typeof jobParam === 'string') return jobParam
+  if (Array.isArray(jobParam) && typeof jobParam[0] === 'string') return jobParam[0]
+  return undefined
+})
+
+const jobId = computed(() => app.currentJobId || routeJobId.value || jobs.currentJob?.id || null)
 const jobName = computed(() => app.currentJobName || jobs.currentJob?.name || null)
 
 const canSee = (itemRoles?: string[]) => {

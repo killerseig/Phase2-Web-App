@@ -47,9 +47,6 @@ const tableClasses = computed(() => [
   props.striped !== false ? 'table-striped' : '',
   props.hover !== false ? 'table-hover' : '',
   props.small !== false ? 'table-sm' : '',
-  'table-striped',
-  'table-hover',
-  'table-sm',
   'table-dark',
   ...normalizeClasses(props.tableClass),
 ].filter(Boolean).join(' '))

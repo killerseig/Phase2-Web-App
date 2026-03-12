@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
   createEmployee as createEmployeeService,
@@ -223,4 +223,8 @@ export const useEmployeesStore = defineStore('employees', () => {
     $reset,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useEmployeesStore, import.meta.hot))
+}
 

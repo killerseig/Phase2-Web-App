@@ -8,8 +8,8 @@ import {
   type RouteRecordRaw,
 } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { useJobAccess } from '@/composables/useJobAccess'
 import { ROUTES, ROLES, type Role } from '@/constants/app'
+import { canAccessJobForSnapshot } from '@/utils/accessControl'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -249,7 +249,6 @@ export const getRouteAccessRedirect = (
 
 export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to: RouteLocationNormalized) => {
   const auth = useAuthStore()
-  const jobAccess = useJobAccess()
 
   // Ensure auth state is resolved (no polling loop)
   if (!auth.ready) await auth.init()
@@ -257,7 +256,16 @@ export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to:
   const redirect = getRouteAccessRedirect(
     to,
     { user: auth.user, active: auth.active, role: auth.role },
-    jobAccess.canAccessJob
+    (jobId: string) =>
+      canAccessJobForSnapshot(
+        {
+          user: auth.user,
+          active: auth.active,
+          role: auth.role,
+          assignedJobIds: auth.assignedJobIds,
+        },
+        jobId
+      )
   )
 
   // Keep existing behavior: inactive users are actively signed out.
@@ -272,7 +280,7 @@ router.beforeEach(runNavigationGuard)
 
 // Update document title after navigation completes
 router.afterEach((to) => {
-  const pageTitle = to.meta.title as string | undefined
+  const pageTitle = typeof to.meta.title === 'string' ? to.meta.title : undefined
   document.title = pageTitle ? `${pageTitle} - ${BASE_TITLE}` : BASE_TITLE
 })
 

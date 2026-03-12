@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
-import { useRoute } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import DailyLogAttachments from '../components/dailyLogs/DailyLogAttachments.vue'
 import DailyLogList from '../components/dailyLogs/DailyLogList.vue'
@@ -12,12 +11,10 @@ import DailyLogTextField from '../components/dailyLogs/DailyLogTextField.vue'
 import { useDailyLog } from '../composables/useDailyLog'
 import { formatDateTime } from '@/utils/datetime'
 
-defineProps<{ jobId?: string }>()
-
-const route = useRoute()
+const props = defineProps<{ jobId?: string }>()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
-const jobId = computed(() => String(route.params.jobId))
+const jobId = computed(() => String(props.jobId ?? ''))
 
 const {
   auth,
@@ -67,7 +64,7 @@ const {
 function onDateChange(_dates: Date[], dateStr: string) {
   if (!dateStr) return
   logDate.value = dateStr
-  loadForDate(dateStr)
+  void loadForDate(dateStr)
 }
 
 function formatSubmittedAt(value: unknown): string {

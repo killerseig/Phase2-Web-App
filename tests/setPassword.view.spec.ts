@@ -75,7 +75,7 @@ describe('SetPassword view', () => {
     expect(mockVerifySetupToken).toHaveBeenCalledWith('user-1', 'token-1')
     expect(mockSetPasswordFromSetupLink).toHaveBeenCalledWith('user-1', 'secure-pass', 'token-1')
     expect(mockAuthStore.login).toHaveBeenCalledWith('worker@example.com', 'secure-pass')
-    expect(mockPush).toHaveBeenCalledWith('/dashboard')
+    expect(mockPush).toHaveBeenCalledWith({ name: 'dashboard' })
   })
 
   it('redirects to unauthorized when role is none after login', async () => {
@@ -89,6 +89,6 @@ describe('SetPassword view', () => {
     await wrapper.get('button.btn.btn-primary.w-100').trigger('click')
     await flushPromises()
 
-    expect(mockPush).toHaveBeenCalledWith('/unauthorized')
+    expect(mockPush).toHaveBeenCalledWith({ name: 'unauthorized' })
   })
 })
