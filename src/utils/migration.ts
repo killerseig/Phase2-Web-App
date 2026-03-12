@@ -7,7 +7,7 @@
  * - employees: {} -> jobs/{jobId}/roster/{} (with Plexis integration)
  */
 
-import { db } from '../firebase'
+import { db } from '@/firebase'
 import {
   collection,
   getDocs,
@@ -15,13 +15,14 @@ import {
   writeBatch,
   type DocumentData,
 } from 'firebase/firestore'
+import { logError, logInfo, logWarn } from '@/utils'
 
 /**
  * Timecard migration: Move legacy timecards/{id} -> jobs/{jobId}/timecards/{id}
  * @returns Count of migrated timecards
  */
 export async function migrateLegacyTimecards(): Promise<number> {
-  console.log('[Migration] Starting legacy timecard migration...')
+  logInfo('Migration', 'Starting legacy timecard migration...')
 
   try {
     // Get all legacy timecards
@@ -29,7 +30,7 @@ export async function migrateLegacyTimecards(): Promise<number> {
     const legacySnap = await getDocs(legacyRef)
 
     if (legacySnap.empty) {
-      console.log('[Migration] No legacy timecards found')
+      logInfo('Migration', 'No legacy timecards found')
       return 0
     }
 
@@ -42,7 +43,7 @@ export async function migrateLegacyTimecards(): Promise<number> {
       const jobId = data.jobId
 
       if (!jobId) {
-        console.warn(`[Migration] Timecard ${legacyDoc.id} missing jobId, skipping`)
+        logWarn('Migration', `Timecard ${legacyDoc.id} missing jobId, skipping`)
         continue
       }
 
@@ -69,12 +70,12 @@ export async function migrateLegacyTimecards(): Promise<number> {
 
     if (migratedCount > 0) {
       await batch.commit()
-      console.log(`[Migration] Successfully migrated ${migratedCount} timecards`)
+      logInfo('Migration', `Successfully migrated ${migratedCount} timecards`)
     }
 
     return migratedCount
   } catch (error) {
-    console.error('[Migration] Timecard migration failed:', error)
+    logError('Migration', 'Timecard migration failed', error)
     throw error
   }
 }
@@ -84,7 +85,7 @@ export async function migrateLegacyTimecards(): Promise<number> {
  * @returns Count of migrated logs
  */
 export async function migrateLegacyDailyLogs(): Promise<number> {
-  console.log('[Migration] Starting legacy daily logs migration...')
+  logInfo('Migration', 'Starting legacy daily logs migration...')
 
   try {
     // Get all legacy daily logs
@@ -92,7 +93,7 @@ export async function migrateLegacyDailyLogs(): Promise<number> {
     const legacySnap = await getDocs(legacyRef)
 
     if (legacySnap.empty) {
-      console.log('[Migration] No legacy daily logs found')
+      logInfo('Migration', 'No legacy daily logs found')
       return 0
     }
 
@@ -105,7 +106,7 @@ export async function migrateLegacyDailyLogs(): Promise<number> {
       const jobId = data.jobId
 
       if (!jobId) {
-        console.warn(`[Migration] Daily log ${legacyDoc.id} missing jobId, skipping`)
+        logWarn('Migration', `Daily log ${legacyDoc.id} missing jobId, skipping`)
         continue
       }
 
@@ -129,12 +130,12 @@ export async function migrateLegacyDailyLogs(): Promise<number> {
 
     if (migratedCount > 0) {
       await batch.commit()
-      console.log(`[Migration] Successfully migrated ${migratedCount} daily logs`)
+      logInfo('Migration', `Successfully migrated ${migratedCount} daily logs`)
     }
 
     return migratedCount
   } catch (error) {
-    console.error('[Migration] Daily logs migration failed:', error)
+    logError('Migration', 'Daily logs migration failed', error)
     throw error
   }
 }
@@ -145,7 +146,7 @@ export async function migrateLegacyDailyLogs(): Promise<number> {
  * @returns Count of created roster entries
  */
 export async function createJobRostersFromTimecards(): Promise<number> {
-  console.log('[Migration] Creating job rosters from timecard references...')
+  logInfo('Migration', 'Creating job rosters from timecard references...')
 
   try {
     const jobsRef = collection(db, 'jobs')
@@ -203,16 +204,14 @@ export async function createJobRostersFromTimecards(): Promise<number> {
 
       if (seenEmployees.size > 0) {
         await batch.commit()
-        console.log(
-          `[Migration] Created ${seenEmployees.size} roster entries for job ${jobId}`
-        )
+        logInfo('Migration', `Created ${seenEmployees.size} roster entries for job ${jobId}`)
       }
     }
 
-    console.log(`[Migration] Total roster entries created: ${rosterCount}`)
+    logInfo('Migration', `Total roster entries created: ${rosterCount}`)
     return rosterCount
   } catch (error) {
-    console.error('[Migration] Roster creation failed:', error)
+    logError('Migration', 'Roster creation failed', error)
     throw error
   }
 }
@@ -222,8 +221,8 @@ export async function createJobRostersFromTimecards(): Promise<number> {
  * @returns Summary of migration results
  */
 export async function runFullDataMigration() {
-  console.log('[Migration] Starting full data migration...')
-  console.log('=============================================================')
+  logInfo('Migration', 'Starting full data migration...')
+  logInfo('Migration', '=============================================================')
 
   const results = {
     timecardsMigrated: 0,
@@ -240,7 +239,7 @@ export async function runFullDataMigration() {
       results.timecardsMigrated = await migrateLegacyTimecards()
     } catch (error) {
       const msg = `Timecard migration failed: ${error}`
-      console.error(msg)
+      logError('Migration', msg)
       results.errors.push(msg)
     }
 
@@ -249,7 +248,7 @@ export async function runFullDataMigration() {
       results.dailyLogsMigrated = await migrateLegacyDailyLogs()
     } catch (error) {
       const msg = `Daily logs migration failed: ${error}`
-      console.error(msg)
+      logError('Migration', msg)
       results.errors.push(msg)
     }
 
@@ -258,28 +257,28 @@ export async function runFullDataMigration() {
       results.rostersCreated = await createJobRostersFromTimecards()
     } catch (error) {
       const msg = `Roster creation failed: ${error}`
-      console.error(msg)
+      logError('Migration', msg)
       results.errors.push(msg)
     }
 
     results.endTime = new Date()
 
     // Print summary
-    console.log('=============================================================')
-    console.log('[Migration] Migration Complete!')
-    console.log(`  Timecards migrated: ${results.timecardsMigrated}`)
-    console.log(`  Daily logs migrated: ${results.dailyLogsMigrated}`)
-    console.log(`  Rosters created: ${results.rostersCreated}`)
-    console.log(`  Duration: ${((results.endTime.getTime() - results.startTime.getTime()) / 1000).toFixed(2)}s`)
+    logInfo('Migration', '=============================================================')
+    logInfo('Migration', 'Migration Complete!')
+    logInfo('Migration', `Timecards migrated: ${results.timecardsMigrated}`)
+    logInfo('Migration', `Daily logs migrated: ${results.dailyLogsMigrated}`)
+    logInfo('Migration', `Rosters created: ${results.rostersCreated}`)
+    logInfo('Migration', `Duration: ${((results.endTime.getTime() - results.startTime.getTime()) / 1000).toFixed(2)}s`)
     
     if (results.errors.length > 0) {
-      console.warn(`  Errors encountered: ${results.errors.length}`)
-      results.errors.forEach((err) => console.warn(`    - ${err}`))
+      logWarn('Migration', `Errors encountered: ${results.errors.length}`)
+      results.errors.forEach((err) => logWarn('Migration', err))
     }
 
     return results
   } catch (error) {
-    console.error('[Migration] Unexpected error during migration:', error)
+    logError('Migration', 'Unexpected error during migration', error)
     throw error
   }
 }
@@ -289,25 +288,21 @@ export async function runFullDataMigration() {
  * Checks that legacy data matches new structure
  */
 export async function verifyMigration(): Promise<boolean> {
-  console.log('[Migration] Verifying migration...')
+  logInfo('Migration', 'Verifying migration...')
 
   try {
     // Check for orphaned legacy timecards
     const legacyTimecards = await getDocs(collection(db, 'timecards'))
     if (!legacyTimecards.empty) {
-      console.warn(
-        `[Migration] Warning: ${legacyTimecards.size} legacy timecards still exist`
-      )
-      console.log('[Migration] These can be safely deleted after verification')
+      logWarn('Migration', `Warning: ${legacyTimecards.size} legacy timecards still exist`)
+      logInfo('Migration', 'These can be safely deleted after verification')
     }
 
     // Check for orphaned legacy daily logs
     const legacyLogs = await getDocs(collection(db, 'dailyLogs'))
     if (!legacyLogs.empty) {
-      console.warn(
-        `[Migration] Warning: ${legacyLogs.size} legacy daily logs still exist`
-      )
-      console.log('[Migration] These can be safely deleted after verification')
+      logWarn('Migration', `Warning: ${legacyLogs.size} legacy daily logs still exist`)
+      logInfo('Migration', 'These can be safely deleted after verification')
     }
 
     // Spot-check: verify first timecard was migrated
@@ -320,22 +315,20 @@ export async function verifyMigration(): Promise<boolean> {
       const snap = await getDocs(timecardRef)
       if (!snap.empty) {
         foundMigrated = true
-        console.log(
-          `[Migration] OK Found migrated timecards in job ${jobDoc.id}`
-        )
+        logInfo('Migration', `OK Found migrated timecards in job ${jobDoc.id}`)
         break
       }
     }
 
     if (foundMigrated) {
-      console.log('[Migration] OK Verification passed')
+      logInfo('Migration', 'OK Verification passed')
       return true
     } else {
-      console.warn('[Migration] WARN No migrated data found - check migration results')
+      logWarn('Migration', 'WARN No migrated data found - check migration results')
       return false
     }
   } catch (error) {
-    console.error('[Migration] Verification failed:', error)
+    logError('Migration', 'Verification failed', error)
     return false
   }
 }

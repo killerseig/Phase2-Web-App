@@ -1,9 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ROLES } from '@/constants/app'
+import { ROLES, ROUTE_NAMES, type Role, type RouteName } from '@/constants/app'
 
-let mockAuth: any
-let runNavigationGuard: any
-let getRouteAccessRedirect: any
+type RouteTarget = {
+  meta?: Record<string, unknown>
+  name?: RouteName | string
+  params?: Record<string, unknown>
+}
+
+type AuthStoreStub = {
+  ready: boolean
+  init: ReturnType<typeof vi.fn>
+  user: { uid: string } | null
+  active: boolean
+  role: Role | null
+  assignedJobIds: string[]
+  signOut: ReturnType<typeof vi.fn>
+}
+
+type GuardFn = (to: RouteTarget) => Promise<unknown>
+type AccessRedirectFn = (
+  to: RouteTarget,
+  auth: { user: unknown; active: boolean; role: Role | null },
+  canAccessJob: (jobId: string) => boolean
+) => unknown
+
+let mockAuth: AuthStoreStub
+let runNavigationGuard: GuardFn
+let getRouteAccessRedirect: AccessRedirectFn
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => mockAuth,
@@ -13,8 +36,8 @@ const loadGuards = async () => {
   vi.resetModules()
   const mod = await import('@/router')
   return {
-    runNavigationGuard: mod.runNavigationGuard,
-    getRouteAccessRedirect: mod.getRouteAccessRedirect,
+    runNavigationGuard: mod.runNavigationGuard as unknown as GuardFn,
+    getRouteAccessRedirect: mod.getRouteAccessRedirect as AccessRedirectFn,
   }
 }
 
@@ -38,18 +61,18 @@ describe('router navigation guard', () => {
   it('redirects authenticated users away from login', async () => {
     const result = await runNavigationGuard({
       meta: { requiresAuth: false },
-      name: 'login',
+      name: ROUTE_NAMES.LOGIN,
       params: {},
     })
 
-    expect(result).toEqual({ name: 'dashboard' })
+    expect(result).toEqual({ name: ROUTE_NAMES.DASHBOARD })
   })
 
   it('allows unauthenticated users to access public not-found route', async () => {
     mockAuth.user = null
     const result = await runNavigationGuard({
       meta: { requiresAuth: false },
-      name: 'not-found',
+      name: ROUTE_NAMES.NOT_FOUND,
       params: { pathMatch: ['missing-page'] },
     })
 
@@ -59,7 +82,7 @@ describe('router navigation guard', () => {
   it('forces login when unauthenticated', async () => {
     mockAuth.user = null
     const result = await runNavigationGuard({ meta: {}, params: {} })
-    expect(result).toEqual({ name: 'login' })
+    expect(result).toEqual({ name: ROUTE_NAMES.LOGIN })
   })
 
   it('signs out inactive users', async () => {
@@ -67,7 +90,7 @@ describe('router navigation guard', () => {
     const result = await runNavigationGuard({ meta: {}, params: {} })
 
     expect(mockAuth.signOut).toHaveBeenCalled()
-    expect(result).toEqual({ name: 'login' })
+    expect(result).toEqual({ name: ROUTE_NAMES.LOGIN })
   })
 
   it('blocks roles not in the allowed list', async () => {
@@ -77,7 +100,7 @@ describe('router navigation guard', () => {
       params: {},
     })
 
-    expect(result).toEqual({ name: 'unauthorized' })
+    expect(result).toEqual({ name: ROUTE_NAMES.UNAUTHORIZED })
   })
 
   it('blocks foremen from jobs they are not assigned to', async () => {
@@ -89,14 +112,14 @@ describe('router navigation guard', () => {
       params: { jobId: 'job-2' },
     })
 
-    expect(result).toEqual({ name: 'unauthorized' })
+    expect(result).toEqual({ name: ROUTE_NAMES.UNAUTHORIZED })
   })
 
   it('returns unauthorized when a user loses required role on current route', () => {
     const result = getRouteAccessRedirect(
       {
         meta: { roles: [ROLES.ADMIN] },
-        name: 'admin-users',
+        name: ROUTE_NAMES.ADMIN_USERS,
         params: {},
       },
       {
@@ -107,14 +130,14 @@ describe('router navigation guard', () => {
       () => true
     )
 
-    expect(result).toEqual({ name: 'unauthorized' })
+    expect(result).toEqual({ name: ROUTE_NAMES.UNAUTHORIZED })
   })
 
   it('returns unauthorized when a foreman loses assignment for the open job route', () => {
     const result = getRouteAccessRedirect(
       {
         meta: {},
-        name: 'job-home',
+        name: ROUTE_NAMES.JOB_HOME,
         params: { jobId: 'job-99' },
       },
       {
@@ -125,6 +148,6 @@ describe('router navigation guard', () => {
       () => false
     )
 
-    expect(result).toEqual({ name: 'unauthorized' })
+    expect(result).toEqual({ name: ROUTE_NAMES.UNAUTHORIZED })
   })
 })

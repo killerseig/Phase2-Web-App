@@ -31,7 +31,7 @@
     <nav class="nav flex-column flex-grow-1">
       <!-- Dashboard -->
       <router-link
-        :to="{ name: 'dashboard' }"
+        :to="{ name: ROUTE_NAMES.DASHBOARD }"
         class="nav-link py-2 px-3 d-flex align-items-center gap-3"
         :title="isSidebarCollapsed ? 'Dashboard' : ''"
       >
@@ -96,7 +96,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useJobsStore } from '@/stores/jobs'
 import { navItems, type NavItem } from '@/config/nav'
-import { ROLES } from '@/constants/app'
+import { ROLES, ROUTE_NAMES } from '@/constants/app'
 
 const auth = useAuthStore()
 const app = useAppStore()

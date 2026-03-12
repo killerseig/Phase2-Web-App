@@ -16,6 +16,7 @@ import {
   updateUser as updateUserService,
 } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
+import { logError } from '@/utils'
 import type { UserProfile } from '@/types/models'
 
 type UserProfileUpdates = Partial<
@@ -65,7 +66,7 @@ export const useUsersStore = defineStore('users', () => {
       users.value = await listUsersService()
     } catch (err) {
       setStoreError(err, 'Failed to load users')
-      console.error('[Users Store] Error loading users:', err)
+      logError('Users Store', 'Error loading users', err)
     } finally {
       loading.value = false
     }
@@ -84,7 +85,7 @@ export const useUsersStore = defineStore('users', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to users')
         loading.value = false
-        console.error('[Users Store] Error subscribing to users:', err)
+        logError('Users Store', 'Error subscribing to users', err)
       }
     )
   }
@@ -97,7 +98,7 @@ export const useUsersStore = defineStore('users', () => {
       return currentUserProfile.value
     } catch (err) {
       setStoreError(err, 'Failed to load user profile')
-      console.error('[Users Store] Error loading profile:', err)
+      logError('Users Store', 'Error loading profile', err)
       return null
     } finally {
       loading.value = false
@@ -118,7 +119,7 @@ export const useUsersStore = defineStore('users', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to user profile')
         loading.value = false
-        console.error('[Users Store] Error subscribing to profile:', err)
+        logError('Users Store', 'Error subscribing to profile', err)
       }
     )
   }
@@ -130,7 +131,7 @@ export const useUsersStore = defineStore('users', () => {
       updateCachedUser(userId, (user) => Object.assign(user, updates))
     } catch (err) {
       setStoreError(err, 'Failed to update user profile')
-      console.error('[Users Store] Error updating profile:', err)
+      logError('Users Store', 'Error updating profile', err)
       throw err
     }
   }
@@ -146,7 +147,7 @@ export const useUsersStore = defineStore('users', () => {
       return result
     } catch (err) {
       setStoreError(err, 'Failed to delete user')
-      console.error('[Users Store] Error deleting user:', err)
+      logError('Users Store', 'Error deleting user', err)
       throw err
     }
   }
@@ -172,7 +173,7 @@ export const useUsersStore = defineStore('users', () => {
       return result
     } catch (err) {
       setStoreError(err, 'Failed to create user')
-      console.error('[Users Store] Error creating user:', err)
+      logError('Users Store', 'Error creating user', err)
       throw err
     }
   }
@@ -190,7 +191,7 @@ export const useUsersStore = defineStore('users', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to assign job to foreman')
-      console.error('[Users Store] Error assigning job:', err)
+      logError('Users Store', 'Error assigning job', err)
       throw err
     }
   }
@@ -206,7 +207,7 @@ export const useUsersStore = defineStore('users', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to remove job from foreman')
-      console.error('[Users Store] Error removing job:', err)
+      logError('Users Store', 'Error removing job', err)
       throw err
     }
   }
@@ -220,7 +221,7 @@ export const useUsersStore = defineStore('users', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to set foreman jobs')
-      console.error('[Users Store] Error setting foreman jobs:', err)
+      logError('Users Store', 'Error setting foreman jobs', err)
       throw err
     }
   }
@@ -234,7 +235,7 @@ export const useUsersStore = defineStore('users', () => {
       await Promise.all([fetchAllUsers(), jobsStore.fetchJob(jobId)])
     } catch (err) {
       setStoreError(err, 'Failed to sync foreman assignments')
-      console.error('[Users Store] Error syncing foreman assignments:', err)
+      logError('Users Store', 'Error syncing foreman assignments', err)
       throw err
     }
   }

@@ -4,6 +4,7 @@
  */
 
 import { ErrorCodes } from '@/types/api'
+import { logError } from '@/utils/logger'
 
 export interface ServiceError {
   code: string
@@ -147,7 +148,7 @@ function getAuthErrorMessage(code: string): string {
  * Format error for console logging
  */
 export function logServiceError(error: ServiceError, context: string = 'Service'): void {
-  console.error(`[${context}] ${error.code}:`, error.message, error.cause)
+  logError(context, `${error.code}: ${error.message}`, error.cause)
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   type EmployeeInput,
 } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
+import { logError } from '@/utils'
 
 export const useEmployeesStore = defineStore('employees', () => {
   const employees = ref<Employee[]>([])
@@ -56,7 +57,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       employees.value = await listAllEmployeesService()
     } catch (err) {
       setStoreError(err, 'Failed to load employees')
-      console.error('[Employees Store] Error loading employees:', err)
+      logError('Employees Store', 'Error loading employees', err)
     } finally {
       loading.value = false
     }
@@ -75,7 +76,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to employees')
         loading.value = false
-        console.error('[Employees Store] Error subscribing to employees:', err)
+        logError('Employees Store', 'Error subscribing to employees', err)
       }
     )
   }
@@ -89,7 +90,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       return jobEmployees
     } catch (err) {
       setStoreError(err, 'Failed to load employees for job')
-      console.error('[Employees Store] Error loading employees by job:', err)
+      logError('Employees Store', 'Error loading employees by job', err)
       return []
     } finally {
       loading.value = false
@@ -116,7 +117,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       return newEmployee
     } catch (err) {
       setStoreError(err, 'Failed to create employee')
-      console.error('[Employees Store] Error creating employee:', err)
+      logError('Employees Store', 'Error creating employee', err)
       throw err
     } finally {
       loading.value = false
@@ -137,7 +138,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to employees for job')
         loading.value = false
-        console.error('[Employees Store] Error subscribing to employees by job:', err)
+        logError('Employees Store', 'Error subscribing to employees by job', err)
       }
     )
 
@@ -157,7 +158,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       }
     } catch (err) {
       setStoreError(err, 'Failed to update employee')
-      console.error('[Employees Store] Error updating employee:', err)
+      logError('Employees Store', 'Error updating employee', err)
       throw err
     }
   }
@@ -180,7 +181,7 @@ export const useEmployeesStore = defineStore('employees', () => {
       }
     } catch (err) {
       setStoreError(err, 'Failed to delete employee')
-      console.error('[Employees Store] Error deleting employee:', err)
+      logError('Employees Store', 'Error deleting employee', err)
       throw err
     }
   }

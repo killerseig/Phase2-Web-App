@@ -3,7 +3,7 @@
  * Validation rules for account numbers, employee numbers, timecards, and job data
  */
 
-import { ACCOUNT_VALIDATION, DAY_NAMES_SHORT } from '@/config/constants'
+import { ACCOUNT_VALIDATION, DAY_NAMES_SHORT } from '@/constants/app'
 import type { Job, Timecard, TimecardDay } from '@/types/models'
 
 // ============================================================================

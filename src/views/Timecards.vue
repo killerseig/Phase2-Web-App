@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { usePermissions } from '@/composables/usePermissions'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
 import { markTimecardsSent } from '@/services/Jobs'
 import { sendTimecardEmail, subscribeEmailSettings } from '@/services/Email'
 import {
@@ -24,7 +25,8 @@ import {
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 import { normalizeError } from '@/services/serviceUtils'
 import { validateRequired } from '@/utils/validation'
-import { ROLES } from '@/constants/app'
+import { logError, logWarn } from '@/utils'
+import { ROLES, ROUTE_NAMES } from '@/constants/app'
 import {
   getTimecardDisplayName,
   getTimecardFirstName,
@@ -118,8 +120,7 @@ const summaryRows = computed(() => allTimecards.value.map(tc => ({
 const draftCount = computed(() => allTimecards.value.filter(tc => tc.status === 'draft').length)
 const submittedCount = computed(() => allTimecards.value.filter(tc => tc.status === 'submitted').length)
 const timecardRecipients = ref<string[]>([])
-let unsubscribeTimecards: (() => void) | null = null
-let unsubscribeEmailSettings: (() => void) | null = null
+const subscriptions = useSubscriptionRegistry()
 
 type TimecardIdentityInput = {
   firstName: string
@@ -191,7 +192,7 @@ async function ensureAccess(): Promise<boolean> {
   try {
     if (!auth.ready) await auth.init()
     if (!permissions.canAccessJob.value) {
-      await router.push({ name: 'unauthorized' })
+      await router.push({ name: ROUTE_NAMES.UNAUTHORIZED })
       return false
     }
     jobsStore.subscribeJob(jobId.value)
@@ -202,18 +203,12 @@ async function ensureAccess(): Promise<boolean> {
   }
 }
 
-function stopTimecardSubscription() {
-  if (!unsubscribeTimecards) return
-  unsubscribeTimecards()
-  unsubscribeTimecards = null
-}
-
 async function loadTimecards() {
-  stopTimecardSubscription()
+  subscriptions.clear('timecards')
   loading.value = true
   err.value = ''
   try {
-    unsubscribeTimecards = watchTimecardsByWeek(
+    subscriptions.replace('timecards', watchTimecardsByWeek(
       jobId.value,
       weekEndingDate.value,
       (snapshotTimecards) => {
@@ -224,7 +219,7 @@ async function loadTimecards() {
         setError(listenerError, 'Failed to subscribe to timecards')
         loading.value = false
       }
-    )
+    ))
   } catch (e) {
     setError(e, 'Failed to load timecards')
     loading.value = false
@@ -239,19 +234,15 @@ async function init() {
     selectedDate.value = today
     if (!await ensureAccess()) return
 
-    if (unsubscribeEmailSettings) {
-      unsubscribeEmailSettings()
-      unsubscribeEmailSettings = null
-    }
-    unsubscribeEmailSettings = subscribeEmailSettings(
+    subscriptions.replace('email-settings', subscribeEmailSettings(
       (settings) => {
         timecardRecipients.value = settings.timecardSubmitRecipients ?? []
       },
       (recipientErr) => {
-        console.warn('Failed to subscribe to timecard email recipients', recipientErr)
+        logWarn('Timecards', 'Failed to subscribe to timecard email recipients', recipientErr)
         timecardRecipients.value = []
       }
-    )
+    ))
 
     await loadTimecards()
   } catch (e) {
@@ -269,7 +260,7 @@ async function refreshWeek(dateStr: string) {
       try {
         await saveTimecard(draft, false)
       } catch (e) {
-        console.error('Failed to save draft before switching weeks', e)
+        logError('Timecards', 'Failed to save draft before switching weeks', e)
       }
     }
   }
@@ -458,7 +449,7 @@ async function submitAllTimecards() {
           toastRef.value?.show('No submitted timecards to email', 'info')
         }
       } catch (emailErr) {
-        console.error('Failed to send timecard email', emailErr)
+        logError('Timecards', 'Failed to send timecard email', emailErr)
         toastRef.value?.show('Timecards submitted, but email failed to send', 'warning')
       }
     }
@@ -582,11 +573,7 @@ watch(
   }
 )
 onUnmounted(() => {
-  stopTimecardSubscription()
-  if (unsubscribeEmailSettings) {
-    unsubscribeEmailSettings()
-    unsubscribeEmailSettings = null
-  }
+  subscriptions.clearAll()
   jobsStore.stopCurrentJobSubscription()
   autoSaveTimers.value.forEach(timer => clearTimeout(timer))
   autoSaveTimers.value.clear()
@@ -1536,25 +1523,4 @@ textarea.form-control {
   background-color: transparent;
 }
 </style>
-
-<style lang="scss">
-/* Summary modal print isolation (global) */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  #timecard-summary, #timecard-summary * {
-    visibility: visible;
-  }
-  #timecard-summary {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    background: white;
-  }
-}
-</style>
-
-
 

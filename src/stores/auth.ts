@@ -9,9 +9,10 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 
-// Use relative imports to avoid alias/tsconfig fights
-import { auth, db } from '../firebase'
+import { auth, db } from '@/firebase'
 import { ROLES, type Role } from '@/constants/app'
+import { logError } from '@/utils'
+import { resetNonAuthStores } from '@/stores/reset'
 
 const CANONICAL_ROLES = Object.values(ROLES) as Role[]
 
@@ -81,20 +82,28 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     const profileRef = doc(db, 'users', uid)
-    unsubscribeProfile = onSnapshot(profileRef, (snap) => {
-      if (!snap.exists()) {
-        // User document was deleted - sign out immediately.
-        void signOut()
-        return
-      }
+    unsubscribeProfile = onSnapshot(
+      profileRef,
+      (snap) => {
+        if (!snap.exists()) {
+          // User document was deleted - sign out immediately.
+          void signOut()
+          return
+        }
 
-      applyProfileState(snap.data())
+        applyProfileState(snap.data())
 
-      // If deactivated or role is removed, revoke access immediately.
-      if (!active.value || role.value === ROLES.NONE) {
+        // If deactivated or role is removed, revoke access immediately.
+        if (!active.value || role.value === ROLES.NONE) {
+          void signOut()
+        }
+      },
+      (listenerError) => {
+        // Treat profile-listener failures as access loss (permissions revoked, doc inaccessible, etc).
+        logError('Auth Store', 'Profile listener failed; signing out', listenerError)
         void signOut()
       }
-    })
+    )
   }
 
   const clearProfileListener = () => {
@@ -135,8 +144,9 @@ export const useAuthStore = defineStore('auth', () => {
         try {
           await hydrateProfile(nextUser.uid, nextUser)
           setupProfileListener(nextUser.uid)
-        } catch {
-          role.value = null
+        } catch (error) {
+          logError('Auth Store', 'Failed to hydrate profile during init; signing out', error)
+          await signOut()
         }
 
         resolveInit()
@@ -179,11 +189,15 @@ export const useAuthStore = defineStore('auth', () => {
 
   const signOut = async () => {
     clearProfileListener()
-    await fbSignOut(auth)
-    user.value = null
-    role.value = null
-    active.value = true
-    assignedJobIds.value = []
+    try {
+      await fbSignOut(auth)
+    } finally {
+      user.value = null
+      role.value = null
+      active.value = true
+      assignedJobIds.value = []
+      resetNonAuthStores()
+    }
   }
 
   const $reset = () => {

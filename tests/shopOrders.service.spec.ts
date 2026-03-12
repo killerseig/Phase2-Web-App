@@ -17,34 +17,12 @@ import {
   where,
 } from 'firebase/firestore'
 import { requireUser } from '@/services/serviceGuards'
+import { makeQuerySnapshot } from './helpers/firestoreMocks'
+
 
 vi.mock('@/firebase', () => ({ db: {} }))
 
-vi.mock('firebase/firestore', () => {
-  const addDoc = vi.fn()
-  const getDocs = vi.fn()
-  const updateDoc = vi.fn()
-  const orderBy = vi.fn((field: string, dir?: any) => ({ field, dir }))
-  const where = vi.fn((field: string, op: any, value: any) => ({ field, op, value }))
-  const collection = vi.fn((_db: any, path: string, jobId?: string, coll?: string) => ({ path, jobId, coll }))
-  const doc = vi.fn((_db: any, path: string, jobId?: string, coll?: string, id?: string) => ({ path, jobId, coll, id }))
-  const query = vi.fn((col: any, ...constraints: any[]) => ({ col, constraints }))
-  const limit = vi.fn((n: number) => ({ limit: n }))
-  const serverTimestamp = vi.fn(() => 'ts')
-
-  return {
-    addDoc,
-    getDocs,
-    updateDoc,
-    orderBy,
-    where,
-    collection,
-    doc,
-    query,
-    limit,
-    serverTimestamp,
-  }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 vi.mock('@/services/serviceGuards', () => ({
   assertJobAccess: vi.fn(),
@@ -57,10 +35,6 @@ const getDocsMock = getDocs as unknown as MockFn
 const updateDocMock = updateDoc as unknown as MockFn
 const requireUserMock = requireUser as unknown as MockFn
 
-const snap = (docs: Array<{ id: string; data: any }>) => ({
-  docs: docs.map((d) => ({ id: d.id, data: () => d.data })),
-})
-
 describe('ShopOrders service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -70,12 +44,12 @@ describe('ShopOrders service', () => {
   it('merges orders across scopes and sorts by orderDate desc', async () => {
     getDocsMock
       .mockResolvedValueOnce(
-        snap([
+        makeQuerySnapshot([
           { id: 'draft', data: { uid: 'scope:employee', orderDate: { toMillis: () => 100 } } },
         ])
       )
       .mockResolvedValueOnce(
-        snap([
+        makeQuerySnapshot([
           { id: 'admin', data: { uid: 'scope:admin', orderDate: { toMillis: () => 200 } } },
         ])
       )
@@ -127,3 +101,5 @@ describe('ShopOrders service', () => {
     expect(payload).toMatchObject({ status: 'order', updatedAt: 'ts' })
   })
 })
+
+

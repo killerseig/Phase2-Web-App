@@ -12,27 +12,15 @@ import {
   serverTimestamp,
   where,
 } from 'firebase/firestore'
+import { makeQuerySnapshot } from './helpers/firestoreMocks'
+
 
 vi.mock('@/firebase', () => ({ db: {} }))
 
-vi.mock('firebase/firestore', () => {
-  const addDoc = vi.fn()
-  const getDocs = vi.fn()
-  const orderBy = vi.fn((field: string, dir?: any) => ({ field, dir }))
-  const where = vi.fn((field: string, op: any, value: any) => ({ field, op, value }))
-  const collection = vi.fn((_db: any, path: string) => ({ path }))
-  const query = vi.fn((col: any, ...constraints: any[]) => ({ col, constraints }))
-  const serverTimestamp = vi.fn(() => 'ts')
-
-  return { addDoc, getDocs, orderBy, where, collection, query, serverTimestamp }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 const addDocMock = addDoc as unknown as ReturnType<typeof vi.fn>
 const getDocsMock = getDocs as unknown as ReturnType<typeof vi.fn>
-
-const snap = (docs: Array<{ id: string; data: any }>) => ({
-  docs: docs.map((d) => ({ id: d.id, data: () => d.data })),
-})
 
 describe('Employees service', () => {
   beforeEach(() => {
@@ -43,7 +31,7 @@ describe('Employees service', () => {
     getDocsMock
       .mockRejectedValueOnce(Object.assign(new Error('no index'), { code: 'failed-precondition' }))
       .mockResolvedValueOnce(
-        snap([
+        makeQuerySnapshot([
           { id: '1', data: { lastName: 'Z', firstName: 'B' } },
           { id: '2', data: { lastName: 'A', firstName: 'A' } },
         ])
@@ -73,3 +61,5 @@ describe('Employees service', () => {
     expect(serverTimestamp).toHaveBeenCalled()
   })
 })
+
+

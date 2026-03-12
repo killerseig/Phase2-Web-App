@@ -1,7 +1,7 @@
 import { updatePassword, updateProfile, type User } from 'firebase/auth'
 import { doc, updateDoc } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { auth, db, functions } from '../firebase'
+import { auth, db, functions } from '@/firebase'
 import { normalizeError } from './serviceUtils'
 
 const assertInvitePayload = (data: InviteUserRequest) => {

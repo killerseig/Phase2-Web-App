@@ -24,6 +24,18 @@ const handleFocus = (e: FocusEvent, line: ManpowerLine) => {
   const input = e.target as HTMLInputElement
   if (!line.count || line.count === 0) input.select()
 }
+
+const lineKeys = new WeakMap<ManpowerLine, string>()
+let lineKeyCounter = 0
+
+const getLineKey = (line: ManpowerLine, idx: number): string => {
+  const existing = lineKeys.get(line)
+  if (existing) return existing
+  lineKeyCounter += 1
+  const generated = `manpower-line-${lineKeyCounter}-${idx}`
+  lineKeys.set(line, generated)
+  return generated
+}
 </script>
 
 <template>
@@ -44,7 +56,7 @@ const handleFocus = (e: FocusEvent, line: ManpowerLine) => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(ln, idx) in lines" :key="idx">
+                <tr v-for="(ln, idx) in lines" :key="getLineKey(ln, idx)">
                   <td class="p-2">
                     <input
                       type="text"

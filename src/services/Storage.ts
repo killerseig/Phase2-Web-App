@@ -1,4 +1,4 @@
-import { storage } from '../firebase'
+import { storage } from '@/firebase'
 import { ref, uploadBytes, deleteObject, getDownloadURL, listAll } from 'firebase/storage'
 import { requireUser } from './serviceGuards'
 import type { Attachment, AttachmentType } from '@/types/documents'

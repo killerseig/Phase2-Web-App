@@ -10,7 +10,7 @@ vi.mock('@/services/serviceGuards', () => ({
 }))
 
 vi.mock('firebase/storage', () => {
-  const ref = vi.fn((_storage: any, path: string) => ({ fullPath: path }))
+  const ref = vi.fn((_storage: unknown, path: string) => ({ fullPath: path }))
   const uploadBytes = vi.fn()
   const deleteObject = vi.fn()
   const getDownloadURL = vi.fn()

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import Toast from '../components/Toast.vue'
-import { useAuthStore } from '../stores/auth'
+import Toast from '@/components/Toast.vue'
+import { useAuthStore } from '@/stores/auth'
 import { sendPasswordResetEmail } from '@/services'
+import { ROUTE_NAMES } from '@/constants/app'
 import { normalizeError } from '@/services/serviceUtils'
 import { getFirstValidationMessage, validateEmail, validateLoginForm } from '@/utils/validation'
 
@@ -35,7 +36,7 @@ const submit = async () => {
   loading.value = true
   try {
     await authStore.login(email.value.trim(), password.value)
-    await router.replace({ name: 'dashboard' })
+    await router.replace({ name: ROUTE_NAMES.DASHBOARD })
   } catch (e) {
     err.value = normalizeError(e, 'Auth failed')
     toastRef.value?.show(err.value, 'error')

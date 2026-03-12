@@ -23,6 +23,7 @@ import {
 import { normalizeError } from '@/services/serviceUtils'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
+import { logError, logWarn } from '@/utils/logger'
 import { useConfirmDialog } from './useConfirmDialog'
 import { createEmptyDailyLogDraft } from './dailyLog/defaults'
 
@@ -222,7 +223,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
           }
         },
         (e) => {
-          console.error('Failed to subscribe logs for date:', e)
+          logError('DailyLogs', 'Failed to subscribe logs for date', e)
           selectedLogs.value = []
           if (!resolved) {
             resolved = true
@@ -357,7 +358,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       try {
         await cleanupDeletedLogs(jobId.value)
       } catch (cleanupError) {
-        console.warn('Cleanup deleted logs failed', cleanupError)
+        logWarn('DailyLogs', 'Cleanup deleted logs failed', cleanupError)
       }
 
       stopRecipientSubscriptions()
@@ -367,7 +368,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
           jobEmailRecipients.value = recipients
         },
         (recipientError) => {
-          console.warn('Failed to subscribe to daily log recipients', recipientError)
+          logWarn('DailyLogs', 'Failed to subscribe to daily log recipients', recipientError)
           jobEmailRecipients.value = []
         }
       )
@@ -376,7 +377,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
           globalDailyLogRecipients.value = settings.dailyLogSubmitRecipients ?? []
         },
         (globalRecipientError) => {
-          console.warn('Failed to subscribe to global daily log recipients', globalRecipientError)
+          logWarn('DailyLogs', 'Failed to subscribe to global daily log recipients', globalRecipientError)
           globalDailyLogRecipients.value = []
         }
       )
@@ -398,7 +399,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         saving.value = true
         await updateDailyLog(jobId.value, currentId.value!, { ...form.value })
       } catch (e) {
-        console.error('Auto-save failed:', e)
+        logError('DailyLogs', 'Auto-save failed', e)
       } finally {
         saving.value = false
         autoSaveTimeout = null
@@ -575,7 +576,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         toastRef?.value?.show(`${type === 'ptp' ? 'PTP Photo' : 'Photo'} uploaded: ${file.name}`, 'success')
       }
     } catch (e) {
-      console.error('[uploadAttachment] Error:', e)
+      logError('DailyLogs', 'Upload attachment failed', e)
       const errorMsg = normalizeError(e, 'Failed to upload file')
       err.value = errorMsg
       toastRef?.value?.show(`Upload failed: ${errorMsg}`, 'error')
@@ -617,7 +618,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     } catch (e) {
       setError(e, 'Failed to send email')
       toastRef?.value?.show('Failed to send email', 'error')
-      console.error('[sendEmail] Error:', e)
+      logError('DailyLogs', 'Send email failed', e)
     } finally {
       saving.value = false
     }

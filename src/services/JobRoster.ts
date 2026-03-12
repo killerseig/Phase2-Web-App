@@ -4,7 +4,7 @@
  * Location: jobs/{jobId}/roster/{employeeId}
  */
 
-import { db } from '../firebase'
+import { db } from '@/firebase'
 import {
   addDoc,
   collection,

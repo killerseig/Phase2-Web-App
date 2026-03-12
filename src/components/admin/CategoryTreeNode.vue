@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useShopCategoriesStore } from '../../stores/shopCategories'
+import { useShopCategoriesStore } from '@/stores/shopCategories'
 import type { ShopCategory } from '@/services'
 
 interface Props {

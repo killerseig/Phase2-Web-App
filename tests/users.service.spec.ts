@@ -11,14 +11,10 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 
+
 vi.mock('@/firebase', () => ({ db: {}, functions: {} }))
 
-vi.mock('firebase/firestore', () => {
-  const getDoc = vi.fn()
-  const updateDoc = vi.fn()
-  const doc = vi.fn((_db: any, path: string, id?: string) => ({ path, id }))
-  return { getDoc, updateDoc, doc }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 vi.mock('firebase/functions', () => ({
   httpsCallable: vi.fn(),
@@ -72,3 +68,5 @@ describe('Users service', () => {
     expect(result.uid).toBe('u1')
   })
 })
+
+

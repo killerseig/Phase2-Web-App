@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import Toast from '../components/Toast.vue'
+import Toast from '@/components/Toast.vue'
 import { useAuthStore } from '@/stores/auth'
 import { setPasswordFromSetupLink, verifySetupToken } from '@/services'
-import { ROLES } from '@/constants/app'
+import { ROLES, ROUTE_NAMES } from '@/constants/app'
+import { logError } from '@/utils/logger'
 
 const router = useRouter()
 const route = useRoute()
@@ -55,7 +56,7 @@ async function verifySetupLink() {
   } catch (e) {
     let errorMsg = 'Invalid or expired password setup link.'
     const message = getErrorMessage(e)
-    console.error('[SetPassword] Error during verification:', message)
+    logError('SetPassword', 'Error during verification', message)
     
     if (message.includes('Token expired')) {
       errorMsg = 'This link has expired. Please request a new password setup link.'
@@ -99,9 +100,9 @@ const submit = async () => {
     await authStore.login(email.value, password.value)
     toastRef.value?.show('Password set successfully! Logging you in...', 'success')
     if (authStore.role === ROLES.NONE) {
-      await router.push({ name: 'unauthorized' })
+      await router.push({ name: ROUTE_NAMES.UNAUTHORIZED })
     } else {
-      await router.push({ name: 'dashboard' })
+      await router.push({ name: ROUTE_NAMES.DASHBOARD })
     }
   } catch (e) {
     let errorMsg = 'Failed to set password. Please try again.'
@@ -150,7 +151,7 @@ const toggleConfirmPasswordVisibility = () => {
           </div>
           <h5 class="card-title">Link Invalid or Expired</h5>
           <p class="text-muted mb-4">{{ err }}</p>
-          <router-link :to="{ name: 'login' }" class="btn btn-primary btn-sm">Back to Login</router-link>
+          <router-link :to="{ name: ROUTE_NAMES.LOGIN }" class="btn btn-primary btn-sm">Back to Login</router-link>
         </div>
 
         <!-- Form state -->
@@ -231,7 +232,7 @@ const toggleConfirmPasswordVisibility = () => {
           <div class="text-center">
               <small class="text-muted"
               >Already have an account?
-              <router-link :to="{ name: 'login' }" class="text-decoration-none">Sign in here</router-link>
+              <router-link :to="{ name: ROUTE_NAMES.LOGIN }" class="text-decoration-none">Sign in here</router-link>
             </small>
           </div>
         </div>

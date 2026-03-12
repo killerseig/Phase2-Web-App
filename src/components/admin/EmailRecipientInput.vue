@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { isValidEmail } from '../../utils/emailValidation'
+import { isValidEmail } from '@/utils/emailValidation'
 
 interface Props {
   emails: string[]

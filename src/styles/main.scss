@@ -67,6 +67,25 @@ select:-webkit-autofill:focus {
 	border-color: vars.$primary;
 }
 
+/* Timecard summary modal print isolation */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #timecard-summary,
+  #timecard-summary * {
+    visibility: visible;
+  }
+
+  #timecard-summary {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: var(--bs-white, #fff);
+  }
+}
 
 
 

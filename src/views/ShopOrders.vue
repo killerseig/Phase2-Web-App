@@ -2,12 +2,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
-import Toast from '../components/Toast.vue'
-import ShopCatalogTreeNode from '../components/admin/ShopCatalogTreeNode.vue'
-import { useAuthStore } from '../stores/auth'
-import { useJobsStore } from '../stores/jobs'
-import { useShopCatalogStore } from '../stores/shopCatalog'
-import { useShopCategoriesStore } from '../stores/shopCategories'
+import Toast from '@/components/Toast.vue'
+import ShopCatalogTreeNode from '@/components/admin/ShopCatalogTreeNode.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useJobsStore } from '@/stores/jobs'
+import { useShopCatalogStore } from '@/stores/shopCatalog'
+import { useShopCategoriesStore } from '@/stores/shopCategories'
 import {
   createShopOrder,
   deleteShopOrder,
@@ -22,8 +22,11 @@ import {
 import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
+import { ROUTE_NAMES } from '@/constants/app'
 import { normalizeError } from '@/services/serviceUtils'
 import { formatDateTime, toMillis } from '@/utils/datetime'
+import { logError, logWarn } from '@/utils/logger'
 
 const props = defineProps<{ jobId?: string }>()
 const router = useRouter()
@@ -35,6 +38,7 @@ const { items: catalog } = storeToRefs(shopCatalogStore)
 const { categories: shopCategories, fullTree: shopCategoriesTree } = storeToRefs(shopCategoriesStore)
 const jobAccess = useJobAccess()
 const { confirm } = useConfirmDialog()
+const subscriptions = useSubscriptionRegistry()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 type CatalogSelectable = {
@@ -167,12 +171,8 @@ const expandAncestors = (nodeId: string, set: Set<string>, depth: number = 0) =>
   expandAncestors(parentNodeId, set, depth + 1)
 }
 
-let unsubs: Array<() => void> = []
-let unsubscribeEmailSettings: (() => void) | null = null
-
 const clearSubscriptions = () => {
-  unsubs.forEach(u => u())
-  unsubs = []
+  subscriptions.clearAll()
 }
 
 const replaceMerged = (map: Map<string, ShopOrder>) => {
@@ -186,11 +186,11 @@ const replaceMerged = (map: Map<string, ShopOrder>) => {
 }
 
 const loadOrders = () => {
-  clearSubscriptions()
+  subscriptions.clear('shop-orders')
   loading.value = true
   const mergedMap = new Map<string, ShopOrder>()
   try {
-    const unsubscribe = subscribeShopOrders(jobId.value, {
+    subscriptions.replace('shop-orders', subscribeShopOrders(jobId.value, {
       onUpdate(snapshotOrders) {
         mergedMap.clear()
         snapshotOrders.forEach((order) => {
@@ -204,8 +204,7 @@ const loadOrders = () => {
         toastRef.value?.show('Failed to load orders: ' + (error.message ?? 'Unknown error'), 'error')
         loading.value = false
       },
-    })
-    unsubs.push(unsubscribe)
+    }))
   } catch (error) {
     const message = normalizeError(error, 'Failed to load orders')
     err.value = message
@@ -221,31 +220,27 @@ const init = async () => {
   try {
     if (!auth.ready) await auth.init()
     if (!jobAccess.canAccessJob(jobId.value)) {
-      await router.push({ name: 'unauthorized' })
+      await router.push({ name: ROUTE_NAMES.UNAUTHORIZED })
       loading.value = false
       return
     }
 
     jobs.subscribeJob(jobId.value)
-    if (unsubscribeEmailSettings) {
-      unsubscribeEmailSettings()
-      unsubscribeEmailSettings = null
-    }
-    unsubscribeEmailSettings = subscribeEmailSettings(
+    subscriptions.replace('email-settings', subscribeEmailSettings(
       (settings) => {
         shopOrderRecipients.value = settings.shopOrderSubmitRecipients ?? []
       },
       (settingsError) => {
-        console.warn('[ShopOrders] Failed to subscribe to email settings, using defaults', settingsError)
+        logWarn('ShopOrders', 'Failed to subscribe to email settings, using defaults', settingsError)
         shopOrderRecipients.value = []
       }
-    )
+    ))
 
     shopCatalogStore.subscribeCatalog()
     shopCategoriesStore.subscribeAllCategories()
     loadOrders()
   } catch (e) {
-    console.error('Init error:', e)
+    logError('ShopOrders', 'Init error', e)
     err.value = normalizeError(e, 'Failed to initialize')
     loading.value = false
   }
@@ -276,7 +271,7 @@ const addItem = async () => {
     selectedCatalogItem.value = null
     toastRef.value?.show('Item added successfully', 'success')
   } catch (e) {
-    console.error('Add item error:', e)
+    logError('ShopOrders', 'Add item error', e)
     toastRef.value?.show(`Failed to add item: ${normalizeError(e, 'Unknown error')}`, 'error')
   }
 }
@@ -336,7 +331,7 @@ const persistItems = async () => {
     }))
     await updateShopOrderItems(jobId.value, selected.value.id, sanitized)
   } catch (e) {
-    console.error('Failed to persist items', e)
+    logError('ShopOrders', 'Failed to persist items', e)
   }
 }
 
@@ -346,7 +341,7 @@ const createDraft = async () => {
     selectedId.value = orderId
     toastRef.value?.show('New order created', 'success')
   } catch (e) {
-    console.error('Failed to create order:', e)
+    logError('ShopOrders', 'Failed to create order', e)
     toastRef.value?.show(`Failed to create order: ${normalizeError(e, 'Unknown error')}`, 'error')
   }
 }
@@ -438,10 +433,6 @@ watch(
 )
 onUnmounted(() => {
   clearSubscriptions()
-  if (unsubscribeEmailSettings) {
-    unsubscribeEmailSettings()
-    unsubscribeEmailSettings = null
-  }
   jobs.stopCurrentJobSubscription()
   shopCatalogStore.stopCatalogSubscription()
   shopCategoriesStore.stopCategoriesSubscription()

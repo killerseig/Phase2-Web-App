@@ -15,6 +15,7 @@ import {
   updateTimecardStatus as updateTimecardStatusService,
 } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
+import { logError } from '@/utils'
 import type { Job } from '@/types/models'
 
 export const useJobsStore = defineStore('jobs', () => {
@@ -59,7 +60,7 @@ export const useJobsStore = defineStore('jobs', () => {
       jobs.value = await listAllJobsService(includeArchived, options)
     } catch (err) {
       setStoreError(err, 'Failed to load jobs')
-      console.error('[Jobs Store] Error loading jobs:', err)
+      logError('Jobs Store', 'Error loading jobs', err)
     } finally {
       loading.value = false
     }
@@ -80,7 +81,7 @@ export const useJobsStore = defineStore('jobs', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to jobs')
         loading.value = false
-        console.error('[Jobs Store] Error subscribing to jobs:', err)
+        logError('Jobs Store', 'Error subscribing to jobs', err)
       }
     )
   }
@@ -100,7 +101,7 @@ export const useJobsStore = defineStore('jobs', () => {
       }
     } catch (err) {
       setStoreError(err, 'Failed to load job')
-      console.error('[Jobs Store] Error loading job:', err)
+      logError('Jobs Store', 'Error loading job', err)
     } finally {
       loading.value = false
     }
@@ -131,7 +132,7 @@ export const useJobsStore = defineStore('jobs', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to job')
         loading.value = false
-        console.error('[Jobs Store] Error subscribing to job:', err)
+        logError('Jobs Store', 'Error subscribing to job', err)
       }
     )
   }
@@ -166,7 +167,7 @@ export const useJobsStore = defineStore('jobs', () => {
       throw new Error('Failed to retrieve created job')
     } catch (err) {
       setStoreError(err, 'Failed to create job')
-      console.error('[Jobs Store] Error creating job:', err)
+      logError('Jobs Store', 'Error creating job', err)
       throw err
     }
   }
@@ -197,7 +198,7 @@ export const useJobsStore = defineStore('jobs', () => {
       updateCachedJob(jobId, (job) => Object.assign(job, updates))
     } catch (err) {
       setStoreError(err, 'Failed to update job')
-      console.error('[Jobs Store] Error updating job:', err)
+      logError('Jobs Store', 'Error updating job', err)
       throw err
     }
   }
@@ -211,7 +212,7 @@ export const useJobsStore = defineStore('jobs', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to update job status')
-      console.error('[Jobs Store] Error updating job status:', err)
+      logError('Jobs Store', 'Error updating job status', err)
       throw err
     }
   }
@@ -229,7 +230,7 @@ export const useJobsStore = defineStore('jobs', () => {
       }
     } catch (err) {
       setStoreError(err, 'Failed to delete job')
-      console.error('[Jobs Store] Error deleting job:', err)
+      logError('Jobs Store', 'Error deleting job', err)
       throw err
     }
   }
@@ -247,7 +248,7 @@ export const useJobsStore = defineStore('jobs', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to assign foreman')
-      console.error('[Jobs Store] Error assigning foreman:', err)
+      logError('Jobs Store', 'Error assigning foreman', err)
       throw err
     }
   }
@@ -263,7 +264,7 @@ export const useJobsStore = defineStore('jobs', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to remove foreman')
-      console.error('[Jobs Store] Error removing foreman:', err)
+      logError('Jobs Store', 'Error removing foreman', err)
       throw err
     }
   }
@@ -278,7 +279,7 @@ export const useJobsStore = defineStore('jobs', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to update timecard status')
-      console.error('[Jobs Store] Error updating timecard status:', err)
+      logError('Jobs Store', 'Error updating timecard status', err)
       throw err
     }
   }
@@ -292,7 +293,7 @@ export const useJobsStore = defineStore('jobs', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to update timecard period end date')
-      console.error('[Jobs Store] Error updating timecard period end date:', err)
+      logError('Jobs Store', 'Error updating timecard period end date', err)
       throw err
     }
   }

@@ -17,36 +17,12 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { makeQuerySnapshot } from './helpers/firestoreMocks'
+
 
 vi.mock('@/firebase', () => ({ db: {} }))
 
-vi.mock('firebase/firestore', () => {
-  const addDoc = vi.fn()
-  const getDoc = vi.fn()
-  const getDocs = vi.fn()
-  const updateDoc = vi.fn()
-  const deleteDoc = vi.fn()
-  const orderBy = vi.fn((field: string, dir?: any) => ({ field, dir }))
-  const where = vi.fn((field: string, op: any, value: any) => ({ field, op, value }))
-  const collection = vi.fn((_db: any, path: string) => ({ path }))
-  const doc = vi.fn((_db: any, path: string, id?: string) => ({ path, id }))
-  const query = vi.fn((col: any, ...constraints: any[]) => ({ col, constraints }))
-  const serverTimestamp = vi.fn(() => 'ts')
-
-  return {
-    addDoc,
-    getDoc,
-    getDocs,
-    updateDoc,
-    deleteDoc,
-    orderBy,
-    where,
-    collection,
-    doc,
-    query,
-    serverTimestamp,
-  }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 vi.mock('@/services/serviceGuards', () => ({
   assertJobAccess: vi.fn(),
@@ -57,10 +33,6 @@ const addDocMock = addDoc as unknown as MockFn
 const getDocMock = getDoc as unknown as MockFn
 const getDocsMock = getDocs as unknown as MockFn
 const updateDocMock = updateDoc as unknown as MockFn
-
-const snap = (docs: Array<{ id: string; data: any }>) => ({
-  docs: docs.map((d) => ({ id: d.id, data: () => d.data })),
-})
 
 describe('Jobs service', () => {
   beforeEach(() => {
@@ -88,7 +60,7 @@ describe('Jobs service', () => {
 
   it('filters archived jobs when includeArchived is false', async () => {
     getDocsMock.mockResolvedValue(
-      snap([
+      makeQuerySnapshot([
         { id: 'a', data: { name: 'A', active: true } },
         { id: 'b', data: { name: 'B', active: false } },
       ])
@@ -116,3 +88,5 @@ describe('Jobs service', () => {
     expect(updateDocMock).toHaveBeenCalledWith(expect.anything(), { dailyLogRecipients: ['a@example.com'] })
   })
 })
+
+

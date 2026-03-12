@@ -2,19 +2,40 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { watch } from 'vue'
 import App from './App.vue'
-import { getRouteAccessRedirect, router } from './router'
-import { useAuthStore } from './stores/auth'
-import { ROLES } from './constants/app'
-import { canAccessJobForSnapshot } from './utils/accessControl'
+import { getRouteAccessRedirect, router } from '@/router'
+import { useAuthStore } from '@/stores/auth'
+import { ROLES, ROUTE_NAMES } from '@/constants/app'
+import { logError } from '@/utils'
+import { canAccessJobForSnapshot } from '@/utils/accessControl'
 import 'bootstrap'
 import 'bootstrap-icons/font/bootstrap-icons.css'
 import './styles/main.scss'
 
+declare global {
+  interface Window {
+    __phase2ErrorHandlersInstalled?: boolean
+  }
+}
 
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
+app.config.errorHandler = (error, _instance, info) => {
+  logError('Vue', `Unhandled component error (${info})`, error)
+}
+
+if (typeof window !== 'undefined' && !window.__phase2ErrorHandlersInstalled) {
+  window.addEventListener('error', (event: ErrorEvent) => {
+    logError('Window', 'Unhandled error event', event.error ?? event.message)
+  })
+
+  window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    logError('Window', 'Unhandled promise rejection', event.reason)
+  })
+
+  window.__phase2ErrorHandlersInstalled = true
+}
 
 const auth = useAuthStore(pinia)
 void auth.init()
@@ -53,7 +74,7 @@ watch(
     // If permissions are restored while on unauthorized, recover automatically.
     if (
       authChanged &&
-      currentRoute.name === 'unauthorized' &&
+      currentRoute.name === ROUTE_NAMES.UNAUTHORIZED &&
       auth.user &&
       auth.active &&
       auth.role &&
@@ -61,7 +82,7 @@ watch(
     ) {
       enforcingRouteAccess = true
       try {
-        await router.replace({ name: 'dashboard' })
+        await router.replace({ name: ROUTE_NAMES.DASHBOARD })
       } finally {
         enforcingRouteAccess = false
       }

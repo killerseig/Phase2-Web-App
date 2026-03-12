@@ -1,6 +1,6 @@
 /**
  * Frontend Constants
- * Centralized configuration for roles, routes, UI text, etc.
+ * Centralized configuration for roles, routes, and shared validation constants.
  */
 
 // User Roles
@@ -14,13 +14,10 @@ export const ROLES = {
 
 export type Role = typeof ROLES[keyof typeof ROLES]
 
-// Valid roles array for validation (derived from ROLES to avoid drift)
-export const VALID_ROLES = Object.values(ROLES) as Role[]
-
 // Route Paths
 export const ROUTES = {
   LOGIN: '/login',
-  SIGNUP: '/signup',
+  SET_PASSWORD: '/set-password',
   DASHBOARD: '/dashboard',
   DAILY_LOGS: '/daily-logs',
   TIMECARDS: '/timecards',
@@ -34,42 +31,35 @@ export const ROUTES = {
   UNAUTHORIZED: '/unauthorized',
 } as const
 
-// Navigation Labels
-export const NAV_LABELS = {
-  DASHBOARD: 'Dashboard',
-  DAILY_LOGS: 'Daily Logs',
-  TIMECARDS: 'Timecards',
-  SHOP_ORDERS: 'Shop Orders',
-  ADMIN: 'Admin',
-  USERS: 'Users',
-  JOBS: 'Jobs',
-  SHOP: 'Shop Catalog',
-  EMPLOYEES: 'Employees',
-  LOGOUT: 'Logout',
-  LOGIN: 'Login',
-  SETTINGS: 'Settings',
+// Route Names
+export const ROUTE_NAMES = {
+  LOGIN: 'login',
+  SET_PASSWORD: 'set-password',
+  DASHBOARD: 'dashboard',
+  JOB_HOME: 'job-home',
+  JOB_DAILY_LOGS: 'job-daily-logs',
+  JOB_TIMECARDS: 'job-timecards',
+  JOB_SHOP_ORDERS: 'job-shop-orders',
+  ADMIN_USERS: 'admin-users',
+  ADMIN_JOBS: 'admin-jobs',
+  ADMIN_SHOP_CATALOG: 'admin-shop-catalog',
+  ADMIN_EMAIL_SETTINGS: 'admin-email-settings',
+  ADMIN_DATA_MIGRATION: 'admin-data-migration',
+  UNAUTHORIZED: 'unauthorized',
+  NOT_FOUND: 'not-found',
 } as const
 
-// Messages
-export const MESSAGES = {
-  UNAUTHORIZED: 'You do not have permission to access this page.',
-  LOADING: 'Loading...',
-  ERROR: 'An error occurred. Please try again.',
-  SUCCESS: 'Operation completed successfully.',
-  CONFIRM_DELETE: 'Are you sure you want to delete this?',
-  CONFIRM_LOGOUT: 'Are you sure you want to logout?',
+export type RouteName = typeof ROUTE_NAMES[keyof typeof ROUTE_NAMES]
+
+// Timecard validation and display constants
+export const ACCOUNT_VALIDATION = {
+  ACCOUNT_NUMBER_PATTERN: /^\d{4}$/, // Exactly 4 digits
+  ACCOUNT_NUMBER_LENGTH: 4,
+  GL_CODE_LENGTH: 3, // 3-digit GL code makes account number optional
+  EMPLOYEE_NUMBER_PATTERN: /^\d{4,5}$/, // 4-5 digits
+  EMPLOYEE_NUMBER_MIN: 4,
+  EMPLOYEE_NUMBER_MAX: 5,
 } as const
 
-// UI
-export const UI = {
-  BUTTON_SIZE: 'sm' as const,
-  TOAST_DURATION: 3000,
-  MODAL_ANIMATION: 'fade',
-} as const
-
-// Feature Flags
-export const FEATURES = {
-  ENABLE_SHOP: true,
-  ENABLE_TIMECARDS: true,
-  ENABLE_DAILY_LOGS: true,
-} as const
+// Day names for display (index 0=Sunday)
+export const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const

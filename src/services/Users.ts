@@ -1,4 +1,4 @@
-import { db } from '../firebase'
+import { db } from '@/firebase'
 import {
   collection,
   doc,
@@ -12,7 +12,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '../firebase'
+import { functions } from '@/firebase'
 import type { UserProfile as UserProfileModel, Role } from '@/types/models'
 import { ROLES } from '@/constants/app'
 import { requireUser } from './serviceGuards'

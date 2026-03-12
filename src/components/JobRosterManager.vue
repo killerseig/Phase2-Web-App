@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useJobRosterStore } from '../stores/jobRoster'
+import { useJobRosterStore } from '@/stores/jobRoster'
 
 interface Props {
   jobId: string

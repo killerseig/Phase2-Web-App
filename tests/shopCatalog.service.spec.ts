@@ -16,42 +16,16 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { makeQuerySnapshot } from './helpers/firestoreMocks'
+
 
 vi.mock('@/firebase', () => ({ db: {} }))
 
-vi.mock('firebase/firestore', () => {
-  const addDoc = vi.fn()
-  const getDocs = vi.fn()
-  const updateDoc = vi.fn()
-  const deleteDoc = vi.fn()
-  const orderBy = vi.fn((field: string, dir?: any) => ({ field, dir }))
-  const where = vi.fn((field: string, op: any, value: any) => ({ field, op, value }))
-  const collection = vi.fn((_db: any, path: string) => ({ path }))
-  const doc = vi.fn((_db: any, path: string, id?: string) => ({ path, id }))
-  const query = vi.fn((col: any, ...constraints: any[]) => ({ col, constraints }))
-  const serverTimestamp = vi.fn(() => 'ts')
-
-  return {
-    addDoc,
-    getDocs,
-    updateDoc,
-    deleteDoc,
-    orderBy,
-    where,
-    collection,
-    doc,
-    query,
-    serverTimestamp,
-  }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 const addDocMock = addDoc as unknown as ReturnType<typeof vi.fn>
 const getDocsMock = getDocs as unknown as ReturnType<typeof vi.fn>
 const updateDocMock = updateDoc as unknown as ReturnType<typeof vi.fn>
-
-const snap = (docs: Array<{ id: string; data: any }>) => ({
-  docs: docs.map((d) => ({ id: d.id, data: () => d.data })),
-})
 
 describe('ShopCatalog service', () => {
   beforeEach(() => {
@@ -60,7 +34,7 @@ describe('ShopCatalog service', () => {
 
   it('lists catalog with active-only filter', async () => {
     getDocsMock.mockResolvedValue(
-      snap([
+      makeQuerySnapshot([
         { id: '1', data: { description: 'A', active: true } },
       ])
     )
@@ -68,8 +42,9 @@ describe('ShopCatalog service', () => {
     const items = await listCatalog(true)
 
     expect(getDocsMock).toHaveBeenCalledTimes(1)
-    const constraints = (query as any).mock.calls[0].slice(1)
-    expect(constraints.some((c: any) => c.field === 'active')).toBe(true)
+    const queryMock = query as unknown as ReturnType<typeof vi.fn>
+    const constraints = (queryMock.mock.calls[0] ?? []).slice(1) as Array<{ field?: string }>
+    expect(constraints.some((c) => c.field === 'active')).toBe(true)
     expect(items).toHaveLength(1)
     expect(items[0]?.id).toBe('1')
   })
@@ -108,3 +83,5 @@ describe('ShopCatalog service', () => {
     expect(payload).toMatchObject({ active: false, updatedAt: 'ts' })
   })
 })
+
+

@@ -1,9 +1,10 @@
-import { functions } from '../firebase'
+import { functions } from '@/firebase'
 import { httpsCallable } from 'firebase/functions'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from './serviceUtils'
 import { db } from '@/firebase'
 import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
+import { logWarn } from '@/utils'
 
 const assertActiveUser = () => {
   const auth = useAuthStore()
@@ -70,7 +71,7 @@ export async function getEmailSettings(): Promise<EmailSettings> {
     if (!snap.exists()) return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [], dailyLogSubmitRecipients: [] }
     return normalizeEmailSettings(snap.data())
   } catch (e) {
-    console.warn('[getEmailSettings] Falling back to defaults due to error:', e)
+    logWarn('Email Service', 'Falling back to default email settings due to read error', e)
     return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [], dailyLogSubmitRecipients: [] }
   }
 }

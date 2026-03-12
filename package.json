@@ -12,7 +12,7 @@
     "lint": "npm run typecheck",
     "lint:vue": "eslint \"src/**/*.{ts,vue}\"",
     "lint:ci": "eslint \"src/**/*.{ts,vue}\" --max-warnings 0",
-    "lint:all": "npm run lint && npm run lint:vue",
+    "lint:all": "npm run lint && npm run lint:ci",
     "check": "npm run lint:all && npm run test -- --run && npm run build"
   },
   "engines": {

@@ -2,15 +2,15 @@
 
 // Extended text colors
 .text-muted {
-  color: #9fb0c8 !important;
+  color: var(--text-muted, vars.$text-muted) !important;
 }
 
 .text-muted-2 {
-  color: #9fb0c8 !important;
+  color: var(--text-muted-2, vars.$text-muted-2) !important;
 }
 
 .text-muted-3 {
-  color: #6c7a93 !important;
+  color: var(--text-muted-3, vars.$text-muted-3) !important;
 }
 
 // Background utilities
@@ -28,15 +28,15 @@
 
 // Border utilities
 .border-soft {
-  border-color: rgba(230, 237, 247, 0.10) !important;
+  border-color: rgba(vars.$body-color, 0.10) !important;
 }
 
 .border-top-soft {
-  border-top-color: rgba(230, 237, 247, 0.10) !important;
+  border-top-color: rgba(vars.$body-color, 0.10) !important;
 }
 
 .border-bottom-soft {
-  border-bottom-color: rgba(230, 237, 247, 0.10) !important;
+  border-bottom-color: rgba(vars.$body-color, 0.10) !important;
 }
 
 // Icon pill (great for service cards)
@@ -69,7 +69,7 @@
 }
 
 .divider-soft {
-  background: rgba(230, 237, 247, 0.08);
+  background: rgba(vars.$body-color, 0.08);
 }
 
 // Spacing helpers (clamp for responsive padding)

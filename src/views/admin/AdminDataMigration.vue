@@ -224,21 +224,22 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
-import Toast from '../../components/Toast.vue'
-import { useJobsStore } from '../../stores/jobs'
+import Toast from '@/components/Toast.vue'
+import { useJobsStore } from '@/stores/jobs'
 import {
   runFullDataMigration,
   verifyMigration as verifyMigrationData,
-} from '../../utils/migration'
+} from '@/utils/migration'
 import {
   exportTimecardsToCsv,
   importEmployeesFromCsv,
   downloadCsv,
   validatePlexisCsv,
-} from '../../utils/plexisIntegration'
+} from '@/utils/plexisIntegration'
 import { addRosterEmployee, listTimecardsByJobAndWeek } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
-import type { JobRosterEmployee } from '../../types/models'
+import { logWarn } from '@/utils/logger'
+import type { JobRosterEmployee } from '@/types/models'
 
 type MigrationResults = {
   timecardsMigrated: number
@@ -361,7 +362,12 @@ function onFileSelected(event: Event) {
 
   const reader = new FileReader()
   reader.onload = (e) => {
-    const content = e.target?.result as string
+    const content = e.target?.result
+    if (typeof content !== 'string') {
+      csvValidation.value = null
+      importedEmployees.value = []
+      return
+    }
     csvValidation.value = validatePlexisCsv(content)
 
     if (csvValidation.value?.valid) {
@@ -388,7 +394,7 @@ async function importFromPlexis() {
         await addRosterEmployee(selectedJobIdForImport.value, employeeWithJob)
         imported++
       } catch (err) {
-        console.warn(`Failed to import employee ${employee.employeeNumber}:`, err)
+        logWarn('AdminDataMigration', `Failed to import employee ${employee.employeeNumber}`, err)
       }
     }
 
@@ -421,7 +427,9 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as vars;
+
 .admin-data-migration {
   padding: 20px;
 }
@@ -431,7 +439,7 @@ onMounted(() => {
 }
 
 .section h2 {
-  color: #333;
+  color: var(--text-body, vars.$body-color);
   margin-bottom: 5px;
 }
 

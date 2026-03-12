@@ -10,6 +10,7 @@ import {
   type ShopCatalogItem,
 } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
+import { logError } from '@/utils'
 
 export const useShopCatalogStore = defineStore('shopCatalog', () => {
   const items = ref<ShopCatalogItem[]>([])
@@ -43,7 +44,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       items.value = await listCatalogService(activeOnly)
     } catch (err) {
       setStoreError(err, 'Failed to load catalog')
-      console.error('[Shop Catalog Store] Error loading catalog:', err)
+      logError('Shop Catalog Store', 'Error loading catalog', err)
     } finally {
       loading.value = false
     }
@@ -63,7 +64,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to catalog')
         loading.value = false
-        console.error('[Shop Catalog Store] Error subscribing to catalog:', err)
+        logError('Shop Catalog Store', 'Error subscribing to catalog', err)
       }
     )
   }
@@ -83,7 +84,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       throw new Error('Failed to retrieve created item')
     } catch (err) {
       setStoreError(err, 'Failed to create item')
-      console.error('[Shop Catalog Store] Error creating item:', err)
+      logError('Shop Catalog Store', 'Error creating item', err)
       throw err
     } finally {
       loading.value = false
@@ -104,7 +105,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to update item')
-      console.error('[Shop Catalog Store] Error updating item:', err)
+      logError('Shop Catalog Store', 'Error updating item', err)
       throw err
     }
   }
@@ -118,7 +119,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       })
     } catch (err) {
       setStoreError(err, 'Failed to update item status')
-      console.error('[Shop Catalog Store] Error updating item status:', err)
+      logError('Shop Catalog Store', 'Error updating item status', err)
       throw err
     }
   }
@@ -130,7 +131,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       items.value = items.value.filter(i => i.id !== itemId)
     } catch (err) {
       setStoreError(err, 'Failed to delete item')
-      console.error('[Shop Catalog Store] Error deleting item:', err)
+      logError('Shop Catalog Store', 'Error deleting item', err)
       throw err
     }
   }

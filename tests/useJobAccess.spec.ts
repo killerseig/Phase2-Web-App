@@ -1,9 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useJobAccess } from '@/composables/useJobAccess'
-import { ROLES } from '@/constants/app'
+import { ROLES, type Role } from '@/constants/app'
 
-let mockAuth: any
-let mockJobsStore: any
+type MockAuthStore = {
+  role: Role
+  assignedJobIds: string[]
+  user: { uid: string } | null
+}
+
+type JobStub = {
+  id: string
+  name: string
+}
+
+type MockJobsStore = {
+  activeJobs: JobStub[]
+  archivedJobs: JobStub[]
+  fetchAllJobs: ReturnType<typeof vi.fn>
+}
+
+let mockAuth: MockAuthStore
+let mockJobsStore: MockJobsStore
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => mockAuth,
@@ -31,7 +48,7 @@ describe('useJobAccess', () => {
     }
   })
 
-  it('allows admins to see all jobs and access any job', () => {
+  it('allows admins to see all jobs and access each job', () => {
     const { visibleActiveJobs, visibleArchivedJobs, canAccessJob } = useJobAccess()
 
     expect(visibleActiveJobs.value.map((j) => j.id)).toEqual(['job-1', 'job-2'])

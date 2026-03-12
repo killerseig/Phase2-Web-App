@@ -7,8 +7,8 @@ import {
   type RouteMeta,
   type RouteRecordRaw,
 } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
-import { ROUTES, ROLES, type Role } from '@/constants/app'
+import { useAuthStore } from '@/stores/auth'
+import { ROUTES, ROUTE_NAMES, ROLES, type Role, type RouteName } from '@/constants/app'
 import { canAccessJobForSnapshot } from '@/utils/accessControl'
 
 declare module 'vue-router' {
@@ -24,7 +24,7 @@ type LazyView = () => Promise<RouteComponent>
 // Route configurations
 interface RouteConfig {
   path: string
-  name?: string
+  name?: RouteName
   component?: LazyView
   roles?: Role[]
   requiresAuth?: boolean
@@ -42,36 +42,28 @@ const toMeta = (config: RouteConfig): RouteMeta => ({
 
 const routeConfigs: RouteConfig[] = [
   // Root
-  { path: '/', redirect: '/dashboard' },
+  { path: '/', redirect: ROUTES.DASHBOARD },
 
   // Authentication
   {
     path: ROUTES.LOGIN,
-    name: 'login',
+    name: ROUTE_NAMES.LOGIN,
     component: () => import('../views/Login.vue'),
     requiresAuth: false,
     title: 'Login',
   },
   {
-    path: '/set-password',
-    name: 'set-password',
+    path: ROUTES.SET_PASSWORD,
+    name: ROUTE_NAMES.SET_PASSWORD,
     component: () => import('../views/SetPassword.vue'),
     requiresAuth: false,
     title: 'Set Your Password',
   },
-  // Signup disabled - accounts created by admin only
-  // {
-  //   path: ROUTES.SIGNUP,
-  //   name: 'signup',
-  //   component: () => import('../views/SignUp.vue'),
-  //   requiresAuth: false,
-  //   title: 'Sign Up',
-  // },
 
   // User dashboard (job selector)
   {
     path: ROUTES.DASHBOARD,
-    name: 'dashboard',
+    name: ROUTE_NAMES.DASHBOARD,
     component: () => import('../views/Dashboard.vue'),
     roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
     title: 'Dashboard',
@@ -80,7 +72,7 @@ const routeConfigs: RouteConfig[] = [
   // Job home (module selector)
   {
     path: `${ROUTES.JOB}/:jobId`,
-    name: 'job-home',
+    name: ROUTE_NAMES.JOB_HOME,
     component: () => import('../views/JobHome.vue'),
     roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
     title: 'Job Home',
@@ -89,21 +81,21 @@ const routeConfigs: RouteConfig[] = [
   // Job-scoped modules
   {
     path: `${ROUTES.JOB}/:jobId/daily-logs`,
-    name: 'job-daily-logs',
+    name: ROUTE_NAMES.JOB_DAILY_LOGS,
     component: () => import('../views/DailyLogs.vue'),
     roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN],
     title: 'Daily Logs',
   },
   {
     path: `${ROUTES.JOB}/:jobId/timecards`,
-    name: 'job-timecards',
+    name: ROUTE_NAMES.JOB_TIMECARDS,
     component: () => import('../views/Timecards.vue'),
     roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN],
     title: 'Timecards',
   },
   {
     path: `${ROUTES.JOB}/:jobId/shop-orders`,
-    name: 'job-shop-orders',
+    name: ROUTE_NAMES.JOB_SHOP_ORDERS,
     component: () => import('../views/ShopOrders.vue'),
     roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
     title: 'Shop Orders',
@@ -112,35 +104,35 @@ const routeConfigs: RouteConfig[] = [
   // Admin section
   {
     path: ROUTES.ADMIN_USERS,
-    name: 'admin-users',
+    name: ROUTE_NAMES.ADMIN_USERS,
     component: () => import('../views/admin/AdminUsers.vue'),
     roles: [ROLES.ADMIN],
     title: 'Admin - Users',
   },
   {
     path: ROUTES.ADMIN_JOBS,
-    name: 'admin-jobs',
+    name: ROUTE_NAMES.ADMIN_JOBS,
     component: () => import('../views/admin/AdminJobs.vue'),
     roles: [ROLES.ADMIN],
     title: 'Admin - Jobs',
   },
   {
     path: ROUTES.ADMIN_CATALOG,
-    name: 'admin-shop-catalog',
+    name: ROUTE_NAMES.ADMIN_SHOP_CATALOG,
     component: () => import('../views/admin/AdminShopCatalog.vue'),
     roles: [ROLES.ADMIN],
     title: 'Admin - Shop Catalog',
   },
   {
     path: ROUTES.ADMIN_EMAIL_SETTINGS,
-    name: 'admin-email-settings',
+    name: ROUTE_NAMES.ADMIN_EMAIL_SETTINGS,
     component: () => import('../views/admin/AdminEmailSettings.vue'),
     roles: [ROLES.ADMIN],
     title: 'Admin - Email Settings',
   },
   {
     path: ROUTES.ADMIN_DATA_MIGRATION,
-    name: 'admin-data-migration',
+    name: ROUTE_NAMES.ADMIN_DATA_MIGRATION,
     component: () => import('../views/admin/AdminDataMigration.vue'),
     roles: [ROLES.ADMIN],
     title: 'Admin - Data Migration',
@@ -149,7 +141,7 @@ const routeConfigs: RouteConfig[] = [
   // Access denied
   {
     path: ROUTES.UNAUTHORIZED,
-    name: 'unauthorized',
+    name: ROUTE_NAMES.UNAUTHORIZED,
     component: () => import('../views/Unauthorized.vue'),
     requiresAuth: false,
     title: 'Unauthorized',
@@ -158,7 +150,7 @@ const routeConfigs: RouteConfig[] = [
   // Catch-all
   {
     path: '/:pathMatch(.*)*',
-    name: 'not-found',
+    name: ROUTE_NAMES.NOT_FOUND,
     component: () => import('../views/NotFound.vue'),
     requiresAuth: false,
     title: 'Not Found',
@@ -201,7 +193,10 @@ export const router = createRouter({
   },
 })
 
-type RouteRedirectName = 'dashboard' | 'login' | 'unauthorized'
+type RouteRedirectName =
+  | typeof ROUTE_NAMES.DASHBOARD
+  | typeof ROUTE_NAMES.LOGIN
+  | typeof ROUTE_NAMES.UNAUTHORIZED
 type RouteAccessRedirect = true | { name: RouteRedirectName }
 
 type AccessSnapshot = {
@@ -222,17 +217,17 @@ export const getRouteAccessRedirect = (
   const allowedRoles = Array.isArray(meta.roles) ? meta.roles : []
 
   if (!requiresAuth) {
-    if (auth.user && to.name === 'login') return { name: 'dashboard' }
+    if (auth.user && to.name === ROUTE_NAMES.LOGIN) return { name: ROUTE_NAMES.DASHBOARD }
     return true
   }
 
-  if (!auth.user) return { name: 'login' }
-  if (!auth.active) return { name: 'login' }
+  if (!auth.user) return { name: ROUTE_NAMES.LOGIN }
+  if (!auth.active) return { name: ROUTE_NAMES.LOGIN }
 
   if (allowedRoles.length > 0) {
     const userRole = (auth.role ?? ROLES.NONE) as Role
     if (!allowedRoles.includes(userRole)) {
-      return { name: 'unauthorized' }
+      return { name: ROUTE_NAMES.UNAUTHORIZED }
     }
   }
 
@@ -240,7 +235,7 @@ export const getRouteAccessRedirect = (
     const jobIdParam = Array.isArray(to.params.jobId) ? to.params.jobId[0] : to.params.jobId
     const jobId = String(jobIdParam)
     if (!canAccessJob(jobId)) {
-      return { name: 'unauthorized' }
+      return { name: ROUTE_NAMES.UNAUTHORIZED }
     }
   }
 
@@ -269,7 +264,7 @@ export const runNavigationGuard: NavigationGuardWithThis<undefined> = async (to:
   )
 
   // Keep existing behavior: inactive users are actively signed out.
-  if (redirect !== true && redirect.name === 'login' && auth.user && !auth.active) {
+  if (redirect !== true && redirect.name === ROUTE_NAMES.LOGIN && auth.user && !auth.active) {
     await auth.signOut()
   }
 

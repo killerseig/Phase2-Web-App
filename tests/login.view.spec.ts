@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import Login from '@/views/Login.vue'
+import { ROUTE_NAMES } from '@/constants/app'
 
 let mockPush: ReturnType<typeof vi.fn>
 let mockReplace: ReturnType<typeof vi.fn>
@@ -56,7 +57,7 @@ describe('Login view', () => {
     await flushPromises()
 
     expect(mockLogin).toHaveBeenCalledWith('user@example.com', 'secret123')
-    expect(mockReplace).toHaveBeenCalledWith({ name: 'dashboard' })
+    expect(mockReplace).toHaveBeenCalledWith({ name: ROUTE_NAMES.DASHBOARD })
     expect(mockPush).not.toHaveBeenCalled()
   })
 

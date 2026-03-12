@@ -1,4 +1,4 @@
-import { ROLES } from '@/constants/app'
+import { ROLES, ROUTES, ROUTE_NAMES, type RouteName } from '@/constants/app'
 import type { RouteLocationRaw } from 'vue-router'
 
 export type NavRole = typeof ROLES[keyof typeof ROLES]
@@ -13,30 +13,30 @@ export interface NavItem {
 }
 
 export const navItems: NavItem[] = [
-  { label: 'Dashboard', icon: 'bi-grid-1x2', to: '/dashboard', section: 'dashboard' },
-  { label: 'Job Home', icon: 'bi-briefcase', to: { name: 'job-home' }, section: 'job', jobScoped: true },
-  { label: 'Daily Logs', icon: 'bi-journal-text', to: { name: 'job-daily-logs' }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN] },
-  { label: 'Timecards', icon: 'bi-clock-history', to: { name: 'job-timecards' }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN] },
-  { label: 'Shop Orders', icon: 'bi-receipt', to: { name: 'job-shop-orders' }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN] },
-  { label: 'Users', icon: 'bi-people', to: '/admin/users', section: 'admin', roles: [ROLES.ADMIN] },
-  { label: 'Jobs', icon: 'bi-building', to: '/admin/jobs', section: 'admin', roles: [ROLES.ADMIN] },
-  { label: 'Shop Catalog', icon: 'bi-box-seam', to: '/admin/shop-catalog', section: 'admin', roles: [ROLES.ADMIN] },
-  { label: 'Email Settings', icon: 'bi-envelope', to: '/admin/email-settings', section: 'admin', roles: [ROLES.ADMIN] },
+  { label: 'Dashboard', icon: 'bi-grid-1x2', to: ROUTES.DASHBOARD, section: 'dashboard' },
+  { label: 'Job Home', icon: 'bi-briefcase', to: { name: ROUTE_NAMES.JOB_HOME }, section: 'job', jobScoped: true },
+  { label: 'Daily Logs', icon: 'bi-journal-text', to: { name: ROUTE_NAMES.JOB_DAILY_LOGS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN] },
+  { label: 'Timecards', icon: 'bi-clock-history', to: { name: ROUTE_NAMES.JOB_TIMECARDS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN] },
+  { label: 'Shop Orders', icon: 'bi-receipt', to: { name: ROUTE_NAMES.JOB_SHOP_ORDERS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN] },
+  { label: 'Users', icon: 'bi-people', to: ROUTES.ADMIN_USERS, section: 'admin', roles: [ROLES.ADMIN] },
+  { label: 'Jobs', icon: 'bi-building', to: ROUTES.ADMIN_JOBS, section: 'admin', roles: [ROLES.ADMIN] },
+  { label: 'Shop Catalog', icon: 'bi-box-seam', to: ROUTES.ADMIN_CATALOG, section: 'admin', roles: [ROLES.ADMIN] },
+  { label: 'Email Settings', icon: 'bi-envelope', to: ROUTES.ADMIN_EMAIL_SETTINGS, section: 'admin', roles: [ROLES.ADMIN] },
 ]
 
-export const crumbByRouteName: Record<string, string> = {
-  dashboard: 'Dashboard',
-  'job-home': 'Job',
-  'job-daily-logs': 'Daily Logs',
-  'job-timecards': 'Timecards',
-  'job-shop-orders': 'Shop Orders',
-  'admin-users': 'Admin - Users',
-  'admin-jobs': 'Admin - Jobs',
-  'admin-shop-catalog': 'Admin - Shop Catalog',
-  'admin-email-settings': 'Admin - Email Settings',
-  'admin-data-migration': 'Admin - Data Migration',
-  unauthorized: 'Unauthorized',
-  login: 'Auth',
-  'set-password': 'Auth',
+export const crumbByRouteName: Partial<Record<RouteName, string>> = {
+  [ROUTE_NAMES.DASHBOARD]: 'Dashboard',
+  [ROUTE_NAMES.JOB_HOME]: 'Job',
+  [ROUTE_NAMES.JOB_DAILY_LOGS]: 'Daily Logs',
+  [ROUTE_NAMES.JOB_TIMECARDS]: 'Timecards',
+  [ROUTE_NAMES.JOB_SHOP_ORDERS]: 'Shop Orders',
+  [ROUTE_NAMES.ADMIN_USERS]: 'Admin - Users',
+  [ROUTE_NAMES.ADMIN_JOBS]: 'Admin - Jobs',
+  [ROUTE_NAMES.ADMIN_SHOP_CATALOG]: 'Admin - Shop Catalog',
+  [ROUTE_NAMES.ADMIN_EMAIL_SETTINGS]: 'Admin - Email Settings',
+  [ROUTE_NAMES.ADMIN_DATA_MIGRATION]: 'Admin - Data Migration',
+  [ROUTE_NAMES.UNAUTHORIZED]: 'Unauthorized',
+  [ROUTE_NAMES.LOGIN]: 'Auth',
+  [ROUTE_NAMES.SET_PASSWORD]: 'Auth',
 }
 

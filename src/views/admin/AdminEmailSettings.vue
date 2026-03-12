@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import Toast from '../../components/Toast.vue'
-import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
-import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
-import EmailRecipientInput from '../../components/admin/EmailRecipientInput.vue'
+import { onMounted, ref } from 'vue'
+import Toast from '@/components/Toast.vue'
+import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
+import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
+import EmailRecipientInput from '@/components/admin/EmailRecipientInput.vue'
 import {
   updateDailyLogRecipients,
   subscribeAllJobs,
@@ -16,6 +16,8 @@ import {
 } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
 import { isValidEmail } from '@/utils/emailValidation'
+import { logWarn } from '@/utils'
+import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
@@ -34,18 +36,10 @@ const shopOrderSubmitRecipients = ref<string[]>([])
 // Job-specific recipients
 const jobRecipients = ref<Map<string, string[]>>(new Map())
 const openJobId = ref<string | null>(null)
-let unsubscribeJobs: (() => void) | null = null
-let unsubscribeSettings: (() => void) | null = null
+const subscriptions = useSubscriptionRegistry()
 
 function stopRealtime() {
-  if (unsubscribeJobs) {
-    unsubscribeJobs()
-    unsubscribeJobs = null
-  }
-  if (unsubscribeSettings) {
-    unsubscribeSettings()
-    unsubscribeSettings = null
-  }
+  subscriptions.clearAll()
 }
 
 function loadJobs() {
@@ -53,21 +47,21 @@ function loadJobs() {
   loading.value = true
   err.value = ''
   try {    
-    unsubscribeSettings = subscribeEmailSettings(
+    subscriptions.replace('email-settings', subscribeEmailSettings(
       (settings) => {
         timecardSubmitRecipients.value = settings.timecardSubmitRecipients ?? []
         shopOrderSubmitRecipients.value = settings.shopOrderSubmitRecipients ?? []
         globalDefaultRecipients.value = settings.dailyLogSubmitRecipients ?? []
       },
       (settingsError) => {
-        console.warn('[AdminEmailSettings] Failed to subscribe global email settings, using defaults', settingsError)
+        logWarn('AdminEmailSettings', 'Failed to subscribe global email settings, using defaults', settingsError)
         timecardSubmitRecipients.value = []
         shopOrderSubmitRecipients.value = []
         globalDefaultRecipients.value = []
       }
-    )
+    ))
 
-    unsubscribeJobs = subscribeAllJobs(
+    subscriptions.replace('jobs', subscribeAllJobs(
       true,
       undefined,
       (nextJobs) => {
@@ -84,7 +78,7 @@ function loadJobs() {
         toastRef.value?.show('Failed to load jobs', 'error')
         loading.value = false
       }
-    )
+    ))
   } catch (e) {
     err.value = normalizeError(e, 'Failed to load jobs')
     toastRef.value?.show('Failed to load jobs', 'error')
@@ -232,7 +226,6 @@ async function removeEmailEverywhere() {
 }
 
 onMounted(loadJobs)
-onUnmounted(stopRealtime)
 </script>
 
 <template>

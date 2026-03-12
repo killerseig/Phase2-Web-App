@@ -2,13 +2,13 @@
 import { computed, ref } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
-import Toast from '../components/Toast.vue'
-import DailyLogAttachments from '../components/dailyLogs/DailyLogAttachments.vue'
-import DailyLogList from '../components/dailyLogs/DailyLogList.vue'
-import DailyLogManpower from '../components/dailyLogs/DailyLogManpower.vue'
-import DailyLogRecipients from '../components/dailyLogs/DailyLogRecipients.vue'
-import DailyLogTextField from '../components/dailyLogs/DailyLogTextField.vue'
-import { useDailyLog } from '../composables/useDailyLog'
+import Toast from '@/components/Toast.vue'
+import DailyLogAttachments from '@/components/dailyLogs/DailyLogAttachments.vue'
+import DailyLogList from '@/components/dailyLogs/DailyLogList.vue'
+import DailyLogManpower from '@/components/dailyLogs/DailyLogManpower.vue'
+import DailyLogRecipients from '@/components/dailyLogs/DailyLogRecipients.vue'
+import DailyLogTextField from '@/components/dailyLogs/DailyLogTextField.vue'
+import { useDailyLog } from '@/composables/useDailyLog'
 import { formatDateTime } from '@/utils/datetime'
 
 const props = defineProps<{ jobId?: string }>()
@@ -69,6 +69,20 @@ function onDateChange(_dates: Date[], dateStr: string) {
 
 function formatSubmittedAt(value: unknown): string {
   return formatDateTime(value)
+}
+
+const indoorClimateKeys = new WeakMap<Record<string, unknown>, string>()
+let indoorClimateKeyCounter = 0
+
+function indoorClimateKey(reading: unknown, idx: number): string {
+  if (!reading || typeof reading !== 'object') return `indoor-climate-${idx}`
+  const record = reading as Record<string, unknown>
+  const existing = indoorClimateKeys.get(record)
+  if (existing) return existing
+  indoorClimateKeyCounter += 1
+  const generated = `indoor-climate-${indoorClimateKeyCounter}-${idx}`
+  indoorClimateKeys.set(record, generated)
+  return generated
 }
 </script>
 
@@ -217,7 +231,7 @@ function formatSubmittedAt(value: unknown): string {
           <div class="card-body">
             <div
               v-for="(reading, idx) in form.indoorClimateReadings"
-              :key="`indoor-climate-${idx}`"
+              :key="indoorClimateKey(reading, idx)"
               class="row g-2 align-items-end mb-2"
             >
               <div class="col-md-4">
@@ -487,24 +501,6 @@ input[type='file'].form-control:focus::file-selector-button {
   font-weight: 500;
 }
 
-.manpower-table td {
-  vertical-align: middle;
-}
-
-.count-input {
-  min-width: 90px;
-}
-
-@media (max-width: 768px) {
-  .count-input {
-    min-width: 80px;
-    font-size: 0.95rem;
-  }
-  .manpower-table td {
-    padding: 0.35rem;
-  }
-}
-
 .header-hero {
   background: linear-gradient(140deg, rgba($primary, 0.24) 0%, rgba($primary-200, 0.8) 55%, $surface-2 100%);
   border: 1px solid rgba(230, 237, 247, 0.12);
@@ -544,17 +540,6 @@ input[type='file'].form-control:focus::file-selector-button {
 .col-count { width: 20%; }
 .col-areas { width: 35%; }
 .col-actions { width: 5%; }
-
-.badge-admin {
-  white-space: nowrap;
-  font-size: 0.75rem;
-  padding: 4px 6px;
-}
-
-.thumb-image {
-  height: 150px;
-  object-fit: cover;
-}
 
 :deep(.manpower-table td) {
   vertical-align: middle;

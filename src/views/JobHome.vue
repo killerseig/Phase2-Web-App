@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
-import { useJobsStore } from '../stores/jobs'
-import { useJobRosterStore } from '../stores/jobRoster'
+import { useAuthStore } from '@/stores/auth'
+import { useJobsStore } from '@/stores/jobs'
+import { useJobRosterStore } from '@/stores/jobRoster'
 import { useAppStore } from '@/stores/app'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
-import { ROLES } from '@/constants/app'
+import { ROLES, ROUTE_NAMES } from '@/constants/app'
+import { logError } from '@/utils/logger'
 
 const props = defineProps<{
   jobId?: string
@@ -59,7 +60,7 @@ async function boot() {
 
   if (!jobAccess.canAccessJob(jobId.value)) {
     app.clearJob()
-    await router.push({ name: 'unauthorized' })
+    await router.push({ name: ROUTE_NAMES.UNAUTHORIZED })
     return
   }
 
@@ -72,7 +73,7 @@ async function boot() {
     roster.subscribeJobRoster(jobId.value)
   } catch (e) {
     app.clearJob()
-    console.error('Failed to load job:', e)
+    logError('JobHome', 'Failed to load job', e)
   }
 }
 
@@ -138,7 +139,7 @@ onUnmounted(() => {
               <i class="bi bi-journal-text text-primary me-2"></i>Daily Logs
             </h5>
             <p class="text-muted small mb-3">Enter and review daily notes for this job.</p>
-            <router-link class="btn btn-primary btn-sm" :to="{ name: 'job-daily-logs', params: { jobId } }">
+            <router-link class="btn btn-primary btn-sm" :to="{ name: ROUTE_NAMES.JOB_DAILY_LOGS, params: { jobId } }">
               <i class="bi bi-arrow-right me-1"></i>Open
             </router-link>
           </div>
@@ -153,7 +154,7 @@ onUnmounted(() => {
               <i class="bi bi-clock-history text-info me-2"></i>Timecards
             </h5>
             <p class="text-muted small mb-3">Track hours and production for this job.</p>
-            <router-link class="btn btn-primary btn-sm" :to="{ name: 'job-timecards', params: { jobId } }">
+            <router-link class="btn btn-primary btn-sm" :to="{ name: ROUTE_NAMES.JOB_TIMECARDS, params: { jobId } }">
               <i class="bi bi-arrow-right me-1"></i>Open
             </router-link>
           </div>
@@ -168,7 +169,7 @@ onUnmounted(() => {
               <i class="bi bi-receipt text-success me-2"></i>Shop Orders
             </h5>
             <p class="text-muted small mb-3">Create and manage purchase requests for this job.</p>
-            <router-link class="btn btn-primary btn-sm" :to="{ name: 'job-shop-orders', params: { jobId } }">
+            <router-link class="btn btn-primary btn-sm" :to="{ name: ROUTE_NAMES.JOB_SHOP_ORDERS, params: { jobId } }">
               <i class="bi bi-arrow-right me-1"></i>Open
             </router-link>
           </div>

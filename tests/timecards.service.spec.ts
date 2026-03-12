@@ -6,6 +6,7 @@ import {
   submitAllWeekTimecards,
   updateTimecard,
 } from '@/services/Timecards'
+import type { Timecard } from '@/types/models'
 import {
   addDoc,
   collection,
@@ -16,36 +17,12 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 import { requireUser } from '@/services/serviceGuards'
+import { makeQuerySnapshot } from './helpers/firestoreMocks'
+
 
 vi.mock('@/firebase', () => ({ db: {} }))
 
-vi.mock('firebase/firestore', () => {
-  const addDoc = vi.fn()
-  const getDoc = vi.fn()
-  const getDocs = vi.fn()
-  const updateDoc = vi.fn()
-  const deleteDoc = vi.fn()
-  const orderBy = vi.fn((field: string, dir?: any) => ({ field, dir }))
-  const where = vi.fn((field: string, op: any, value: any) => ({ field, op, value }))
-  const collection = vi.fn((_db: any, path: string) => ({ path }))
-  const doc = vi.fn((_db: any, path: string, id?: string) => ({ path, id }))
-  const query = vi.fn((col: any, ...constraints: any[]) => ({ col, constraints }))
-  const serverTimestamp = vi.fn(() => 'ts')
-
-  return {
-    addDoc,
-    getDoc,
-    getDocs,
-    updateDoc,
-    deleteDoc,
-    orderBy,
-    where,
-    collection,
-    doc,
-    query,
-    serverTimestamp,
-  }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 vi.mock('@/utils/modelValidation', () => ({
   calculateWeekStartDate: vi.fn(() => '2024-01-01'),
@@ -61,10 +38,6 @@ const getDocMock = getDoc as unknown as ReturnType<typeof vi.fn>
 const getDocsMock = getDocs as unknown as ReturnType<typeof vi.fn>
 const updateDocMock = updateDoc as unknown as ReturnType<typeof vi.fn>
 const requireUserMock = requireUser as unknown as ReturnType<typeof vi.fn>
-
-const snap = (docs: Array<{ id: string; data: any }>) => ({
-  docs: docs.map((d) => ({ id: d.id, data: () => d.data })),
-})
 
 describe('Timecards service', () => {
   beforeEach(() => {
@@ -147,7 +120,7 @@ describe('Timecards service', () => {
   it('submits only draft timecards for a week', async () => {
     // listTimecardsByJobAndWeek relies on getDocs; return one draft and one submitted
     getDocsMock.mockResolvedValueOnce(
-      snap([
+      makeQuerySnapshot([
         { id: 'd1', data: { status: 'draft' } },
         { id: 's1', data: { status: 'submitted' } },
       ])
@@ -166,7 +139,7 @@ describe('Timecards service', () => {
   it('copies previous week metadata and resets day values', async () => {
     addDocMock.mockResolvedValue({ id: 'tc-copy-1' })
 
-    const source = {
+    const source: Timecard = {
       id: 'old-1',
       jobId: 'job-1',
       weekStartDate: '2024-02-04',
@@ -209,7 +182,7 @@ describe('Timecards service', () => {
       totals: { hours: Array(7).fill(8), production: Array(7).fill(10), hoursTotal: 56, productionTotal: 70, lineTotal: 560 },
       notes: 'old note',
       archived: false,
-    } as any
+    }
 
     const id = await createTimecardFromCopy('job-1', source, '2024-02-17')
     expect(id).toBe('tc-copy-1')
@@ -249,3 +222,5 @@ describe('Timecards service', () => {
     })
   })
 })
+
+

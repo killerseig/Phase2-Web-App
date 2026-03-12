@@ -1,4 +1,4 @@
-import { db } from '../firebase'
+import { db } from '@/firebase'
 import {
   addDoc,
   collection,
@@ -16,6 +16,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { assertJobAccess, requireUser } from './serviceGuards'
+import { jobCollectionPath, jobDocumentPath } from './servicePaths'
 import { normalizeError } from './serviceUtils'
 import { toMillis } from '@/utils/datetime'
 
@@ -79,7 +80,7 @@ export async function listShopOrders(
 
     for (const scope of scopes) {
       const q = query(
-        collection(db, 'jobs', jobId, 'shop_orders'),
+        collection(db, ...jobCollectionPath(jobId, 'shop_orders')),
         where('uid', '==', scope),
         orderBy('orderDate', 'desc'),
         limit(max)
@@ -112,7 +113,7 @@ export async function createShopOrder(jobId: string, scopeKey = 'scope:employee'
 
     // Firebase's addDoc automatically generates a unique document ID
     // No redundancy checking needed - Firestore ensures uniqueness at the database level
-    const ref = await addDoc(collection(db, 'jobs', jobId, 'shop_orders'), {
+    const ref = await addDoc(collection(db, ...jobCollectionPath(jobId, 'shop_orders')), {
       jobId,
       uid: scopeKey, // visibility scope
       ownerUid: u.uid, // real creator
@@ -136,7 +137,7 @@ export function subscribeShopOrders(
   assertJobAccess(jobId)
   requireUser()
 
-  const q = query(collection(db, 'jobs', jobId, 'shop_orders'), orderBy('orderDate', 'desc'))
+  const q = query(collection(db, ...jobCollectionPath(jobId, 'shop_orders')), orderBy('orderDate', 'desc'))
   return onSnapshot(
     q,
     (snap) => {
@@ -160,7 +161,7 @@ export async function updateShopOrderItems(
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'shop_orders', orderId))
 
     await updateDoc(ref, {
       items,
@@ -182,7 +183,7 @@ export async function updateShopOrderStatus(
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'shop_orders', orderId))
 
     await updateDoc(ref, {
       status,
@@ -204,7 +205,7 @@ export async function updateShopOrderScope(
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'shop_orders', orderId))
 
     await updateDoc(ref, {
       uid: scopeKey,
@@ -219,7 +220,7 @@ export async function deleteShopOrder(jobId: string, orderId: string) {
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, 'jobs', jobId, 'shop_orders', orderId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'shop_orders', orderId))
     await deleteDoc(ref)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to delete shop order'))

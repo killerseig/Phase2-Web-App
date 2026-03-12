@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import Toast from '../components/Toast.vue'
+import Toast from '@/components/Toast.vue'
 import { useJobAccess } from '@/composables/useJobAccess'
+import { ROUTE_NAMES } from '@/constants/app'
 import { normalizeError } from '@/services/serviceUtils'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
@@ -27,7 +28,7 @@ async function init() {
 
 function openJob(jobId: string) {
   // Simply navigate to job home - JobHome.vue will load job details
-  void router.push({ name: 'job-home', params: { jobId } })
+  void router.push({ name: ROUTE_NAMES.JOB_HOME, params: { jobId } })
 }
 
 onMounted(() => {

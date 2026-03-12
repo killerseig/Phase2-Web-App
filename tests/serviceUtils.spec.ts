@@ -15,6 +15,6 @@ describe('serviceUtils', () => {
   it('returns fallback when not an object', () => {
     expect(normalizeError(null, 'fallback')).toBe('fallback')
     expect(normalizeError(undefined, 'fallback')).toBe('fallback')
-    expect(normalizeError(42 as any, 'fallback')).toBe('fallback')
+    expect(normalizeError(42 as unknown, 'fallback')).toBe('fallback')
   })
 })

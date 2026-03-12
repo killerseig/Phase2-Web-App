@@ -3,13 +3,13 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
-import Toast from '../../components/Toast.vue'
-import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
-import StatusBadge from '../../components/admin/StatusBadge.vue'
-import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
-import BaseTable from '../../components/common/BaseTable.vue'
-import { useJobsStore } from '../../stores/jobs'
-import { useUsersStore } from '../../stores/users'
+import Toast from '@/components/Toast.vue'
+import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
+import StatusBadge from '@/components/admin/StatusBadge.vue'
+import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
+import BaseTable from '@/components/common/BaseTable.vue'
+import { useJobsStore } from '@/stores/jobs'
+import { useUsersStore } from '@/stores/users'
 import type { Job, UserProfile } from '@/services'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 import { listSubmittedTimecards, listTimecardsByJobAndWeek } from '@/services/Timecards'
@@ -22,6 +22,39 @@ type Column = { key: string; label: string; sortable?: boolean; width?: string; 
 
 type SortDir = 'asc' | 'desc'
 type JobSortKey = 'code' | 'name' | 'projectManager' | 'foreman' | 'gc' | 'jobAddress' | 'startDate' | 'finishDate' | 'status' | 'taxExempt' | 'certified' | 'cip' | 'kjic'
+type JobFormInput = {
+  name: string
+  code: string
+  projectManager: string
+  foreman: string
+  gc: string
+  jobAddress: string
+  startDate: string
+  finishDate: string
+  taxExempt: string
+  certified: string
+  cip: string
+  kjic: string
+  accountNumber: string
+  type: 'general' | 'subcontractor'
+}
+
+const createJobForm = (): JobFormInput => ({
+  name: '',
+  code: '',
+  projectManager: '',
+  foreman: '',
+  gc: '',
+  jobAddress: '',
+  startDate: '',
+  finishDate: '',
+  taxExempt: '',
+  certified: '',
+  cip: '',
+  kjic: '',
+  accountNumber: '',
+  type: 'general',
+})
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
@@ -86,22 +119,7 @@ const sortedJobs = computed(() => {
 
 // Job form
 const showJobForm = ref(false)
-const jobForm = ref({
-  name: '',
-  code: '',
-  projectManager: '',
-  foreman: '',
-  gc: '',
-  jobAddress: '',
-  startDate: '',
-  finishDate: '',
-  taxExempt: '',
-  certified: '',
-  cip: '',
-  kjic: '',
-  accountNumber: '',
-  type: 'general' as 'general' | 'subcontractor',
-})
+const jobForm = ref(createJobForm())
 const creatingJob = ref(false)
 const togglingJobId = ref('')
 const editingJobId = ref('')
@@ -150,39 +168,40 @@ function normalizeWeekEnding(input?: string | Date | null): string | undefined {
 }
 
 function toCsv(headers: string[], rows: (string | number)[][]): string {
-  const escape = (v: string | number) => {
-    const s = String(v ?? '')
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  const escape = (value: string | number) => {
+    const text = String(value ?? '')
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
   }
-  return [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n')
+  return [headers.map(escape).join(','), ...rows.map((row) => row.map(escape).join(','))].join('\n')
 }
 
 async function exportAllSubmittedAllJobs(weekEndingInput?: string | Date | null) {
   try {
     const weekEnding = normalizeWeekEnding(weekEndingInput ?? exportWeekEnding.value)
-    const jobList = jobs.value
     const rows: (string | number)[][] = []
-    for (const job of jobList) {
-      const tcs = weekEnding
-        ? (await listTimecardsByJobAndWeek(job.id, weekEnding)).filter(t => t.status === 'submitted')
+
+    for (const job of jobs.value) {
+      const timecards = weekEnding
+        ? (await listTimecardsByJobAndWeek(job.id, weekEnding)).filter((card) => card.status === 'submitted')
         : await listSubmittedTimecards(job.id)
-      for (const tc of tcs) {
+
+      for (const card of timecards) {
         rows.push([
           job.name,
           job.code || '',
-          tc.weekEndingDate,
-          tc.employeeNumber,
-          tc.employeeName,
-          tc.occupation,
-          tc.days[0]?.hours ?? '',
-          tc.days[1]?.hours ?? '',
-          tc.days[2]?.hours ?? '',
-          tc.days[3]?.hours ?? '',
-          tc.days[4]?.hours ?? '',
-          tc.days[5]?.hours ?? '',
-          tc.days[6]?.hours ?? '',
-          tc.totals.hoursTotal ?? '',
-          tc.totals.productionTotal ?? '',
+          card.weekEndingDate,
+          card.employeeNumber,
+          card.employeeName,
+          card.occupation,
+          card.days[0]?.hours ?? '',
+          card.days[1]?.hours ?? '',
+          card.days[2]?.hours ?? '',
+          card.days[3]?.hours ?? '',
+          card.days[4]?.hours ?? '',
+          card.days[5]?.hours ?? '',
+          card.days[6]?.hours ?? '',
+          card.totals.hoursTotal ?? '',
+          card.totals.productionTotal ?? '',
         ])
       }
     }
@@ -215,7 +234,7 @@ async function exportAllSubmittedAllJobs(weekEndingInput?: string | Date | null)
       : 'timecards-submitted-all-jobs.csv'
 
     downloadCsv(toCsv(headers, rows), filename)
-    toastRef.value?.show('Exported submitted timecards', 'success')
+    toastRef.value?.show(`Exported ${rows.length} submitted timecard row(s)`, 'success')
   } catch (e) {
     toastRef.value?.show(formatErr(e), 'error')
   }
@@ -357,22 +376,7 @@ async function submitJobForm() {
     })
     toastRef.value?.show('Job created successfully', 'success')
     showJobForm.value = false
-    jobForm.value = {
-      name: '',
-      code: '',
-      projectManager: '',
-      foreman: '',
-      gc: '',
-      jobAddress: '',
-      startDate: '',
-      finishDate: '',
-      taxExempt: '',
-      certified: '',
-      cip: '',
-      kjic: '',
-      accountNumber: '',
-      type: 'general',
-    }
+    jobForm.value = createJobForm()
     loadJobs()
   } catch (e) {
     toastRef.value?.show(formatErr(e), 'error')
@@ -382,22 +386,7 @@ async function submitJobForm() {
 }
 
 function cancelJobForm() {
-  jobForm.value = {
-    name: '',
-    code: '',
-    projectManager: '',
-    foreman: '',
-    gc: '',
-    jobAddress: '',
-    startDate: '',
-    finishDate: '',
-    taxExempt: '',
-    certified: '',
-    cip: '',
-    kjic: '',
-    accountNumber: '',
-    type: 'general',
-  }
+  jobForm.value = createJobForm()
   showJobForm.value = false
 }
 

@@ -4,7 +4,7 @@
  * Location: jobs/{jobId}/timecards/{timecardId}
  */
 
-import { db } from '../firebase'
+import { db } from '@/firebase'
 import {
   addDoc,
   collection,
@@ -25,6 +25,7 @@ import {
 import type { Timecard, TimecardInput, TimecardDay, TimecardTotals } from '@/types/models'
 import { calculateWeekStartDate } from '@/utils/modelValidation'
 import { assertJobAccess, requireUser } from './serviceGuards'
+import { jobCollectionPath, jobDocumentPath } from './servicePaths'
 import { normalizeError } from './serviceUtils'
 
 /**
@@ -114,7 +115,7 @@ export async function listTimecardsByJobAndWeek(
   try {
     assertJobAccess(jobId)
     const q = query(
-      collection(db, `jobs/${jobId}/timecards`),
+      collection(db, ...jobCollectionPath(jobId, 'timecards')),
       where('weekEndingDate', '==', weekEndingDate),
       where('archived', '==', false),
       orderBy('employeeNumber', 'asc')
@@ -133,7 +134,7 @@ export async function listTimecardsByJobAndWeek(
 export async function getTimecard(jobId: string, timecardId: string): Promise<Timecard | null> {
   try {
     assertJobAccess(jobId)
-    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'timecards', timecardId))
     const snap = await getDoc(ref)
     if (!snap.exists()) return null
     return normalize(snap.id, snap.data())
@@ -155,7 +156,7 @@ export async function listJobTimecards(
     const maxResults = options?.max ?? 50
 
     let q = query(
-      collection(db, `jobs/${jobId}/timecards`),
+      collection(db, ...jobCollectionPath(jobId, 'timecards')),
       orderBy('weekEndingDate', 'desc'),
       limit(maxResults)
     )
@@ -163,7 +164,7 @@ export async function listJobTimecards(
     // If not including archived, add where clause
     if (!includeArchived) {
       q = query(
-        collection(db, `jobs/${jobId}/timecards`),
+        collection(db, ...jobCollectionPath(jobId, 'timecards')),
         where('archived', '==', false),
         orderBy('weekEndingDate', 'desc'),
         limit(maxResults)
@@ -184,7 +185,7 @@ export async function listSubmittedTimecards(jobId: string): Promise<Timecard[]>
   try {
     assertJobAccess(jobId)
     const q = query(
-      collection(db, `jobs/${jobId}/timecards`),
+      collection(db, ...jobCollectionPath(jobId, 'timecards')),
       where('status', '==', 'submitted'),
       where('archived', '==', false),
       orderBy('weekEndingDate', 'desc')
@@ -208,7 +209,7 @@ export function watchTimecardsByWeek(
 ): Unsubscribe {
   assertJobAccess(jobId)
   const q = query(
-    collection(db, `jobs/${jobId}/timecards`),
+    collection(db, ...jobCollectionPath(jobId, 'timecards')),
     where('weekEndingDate', '==', weekEndingDate),
     where('archived', '==', false),
     orderBy('employeeNumber', 'asc')
@@ -244,7 +245,7 @@ export async function createTimecard(jobId: string, input: TimecardInput): Promi
     // Calculate week start from week end
     const weekStartDate = calculateWeekStartDate(input.weekEndingDate)
 
-    const ref = await addDoc(collection(db, `jobs/${jobId}/timecards`), {
+    const ref = await addDoc(collection(db, ...jobCollectionPath(jobId, 'timecards')), {
       jobId,
 
       // Weekly tracking
@@ -302,7 +303,7 @@ export async function updateTimecard(
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'timecards', timecardId))
 
     const payload: Record<string, unknown> = {}
 
@@ -341,7 +342,7 @@ export async function updateTimecardDays(
   try {
     assertJobAccess(jobId)
     const u = requireUser()
-    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'timecards', timecardId))
 
     const totals = calculateTotals(days)
 
@@ -542,7 +543,7 @@ export async function submitTimecard(jobId: string, timecardId: string): Promise
   try {
     assertJobAccess(jobId)
     const u = requireUser()
-    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'timecards', timecardId))
 
     await updateDoc(ref, {
       uid: u.uid,
@@ -562,7 +563,7 @@ export async function archiveTimecard(jobId: string, timecardId: string): Promis
   try {
     assertJobAccess(jobId)
     const u = requireUser()
-    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'timecards', timecardId))
 
     await updateDoc(ref, {
       uid: u.uid,
@@ -582,7 +583,7 @@ export async function unarchiveTimecard(jobId: string, timecardId: string): Prom
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'timecards', timecardId))
 
     await updateDoc(ref, {
       archived: false,
@@ -601,7 +602,7 @@ export async function deleteTimecard(jobId: string, timecardId: string): Promise
   try {
     assertJobAccess(jobId)
     const u = requireUser()
-    const ref = doc(db, `jobs/${jobId}/timecards`, timecardId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'timecards', timecardId))
     const snap = await getDoc(ref)
 
     if (!snap.exists()) throw new Error('Timecard not found')
@@ -768,3 +769,4 @@ export async function getWeeklyStats(
     throw new Error(normalizeError(err, 'Failed to load weekly timecard stats'))
   }
 }
+

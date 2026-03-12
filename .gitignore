@@ -14,6 +14,8 @@ dist-ssr
 
 # Sensitive local data
 users.json
+.firebase/*.cache
+.firebase/hosting.*.cache
 
 # Editor directories and files
 .vscode/*

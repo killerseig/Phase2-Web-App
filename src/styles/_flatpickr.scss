@@ -65,7 +65,7 @@
 .flatpickr-day.endRange:hover {
   background: vars.$primary;
   border-color: vars.$primary;
-  color: #fff;
+  color: var(--bs-white, #fff);
 }
 
 .flatpickr-day.disabled,
@@ -114,5 +114,5 @@
 .flatpickr-day.selected {
   background: vars.$primary;
   border-color: vars.$primary;
-  color: #fff;
+  color: var(--bs-white, #fff);
 }

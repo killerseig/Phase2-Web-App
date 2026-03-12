@@ -8,6 +8,7 @@
  */
 
 import type { Timecard, JobRosterEmployee } from '@/types/models'
+import { logWarn } from '@/utils'
 
 /**
  * Plexis CSV export format for timecards
@@ -172,7 +173,7 @@ export function importEmployeesFromCsv(csvContent: string): JobRosterEmployee[] 
     const status = row['status']?.trim()?.toLowerCase() ?? 'active'
 
     if (!empId) {
-      console.warn(`[Plexis] Skipping row with missing EmployeeID`)
+      logWarn('Plexis', 'Skipping row with missing EmployeeID')
       continue
     }
 

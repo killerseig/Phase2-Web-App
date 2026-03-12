@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import { mount, RouterLinkStub } from '@vue/test-utils'
 import SideNav from '@/components/layout/SideNav.vue'
+import { ROUTES } from '@/constants/app'
 
 let mockRole = 'shop'
 const mockRoute = reactive({
   params: {} as Record<string, string>,
-  path: '/dashboard',
+  path: ROUTES.DASHBOARD,
 })
 const mockAppStore = reactive({
   currentJobId: null as string | null,
@@ -51,7 +52,7 @@ const mountSideNav = () =>
 describe('SideNav component', () => {
   beforeEach(() => {
     mockRole = 'shop'
-    mockRoute.path = '/dashboard'
+    mockRoute.path = ROUTES.DASHBOARD
     mockRoute.params = {}
     mockAppStore.currentJobId = null
     mockAppStore.currentJobName = null

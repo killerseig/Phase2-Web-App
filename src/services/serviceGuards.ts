@@ -1,4 +1,4 @@
-import { auth } from '../firebase'
+import { auth } from '@/firebase'
 import { useAuthStore } from '@/stores/auth'
 import { canAccessJobForSnapshot } from '@/utils/accessControl'
 

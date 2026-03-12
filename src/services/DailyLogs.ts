@@ -1,4 +1,4 @@
-import { db } from '../firebase'
+import { db } from '@/firebase'
 import {
   addDoc,
   collection,
@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore'
 import type { Attachment, IndoorClimateReading, ManpowerLine } from '@/types/documents'
 import { assertJobAccess, requireUser } from './serviceGuards'
+import { jobCollectionPath, jobDocumentPath } from './servicePaths'
 import { normalizeError } from './serviceUtils'
 import { formatDateTime, toMillis as toMillisFromUnknown } from '@/utils/datetime'
 
@@ -126,7 +127,7 @@ export async function listMyDailyLogs(jobId: string, max = 25): Promise<DailyLog
     const u = requireUser()
 
     const q = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('uid', '==', u.uid),
       orderBy('logDate', 'desc'),
       limit(max)
@@ -146,13 +147,13 @@ export async function listAllDailyLogs(jobId: string, max = 25): Promise<DailyLo
 
     // Get all submitted logs (visible to everyone)
     const submittedQuery = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('status', '==', 'submitted')
     )
 
     // Get user's own draft logs
     const myDraftsQuery = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('uid', '==', u.uid),
       where('status', '==', 'draft')
     )
@@ -181,13 +182,13 @@ export async function listDailyLogsForDate(jobId: string, logDate: string): Prom
     const u = requireUser()
 
     const submittedQuery = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('logDate', '==', logDate),
       where('status', '==', 'submitted')
     )
 
     const myDraftsQuery = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('logDate', '==', logDate),
       where('status', '==', 'draft'),
       where('uid', '==', u.uid)
@@ -225,13 +226,13 @@ export function subscribeDailyLogsForDate(
   const u = requireUser()
 
   const submittedQuery = query(
-    collection(db, `jobs/${jobId}/dailyLogs`),
+    collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
     where('logDate', '==', logDate),
     where('status', '==', 'submitted')
   )
 
   const myDraftsQuery = query(
-    collection(db, `jobs/${jobId}/dailyLogs`),
+    collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
     where('logDate', '==', logDate),
     where('status', '==', 'draft'),
     where('uid', '==', u.uid)
@@ -302,7 +303,7 @@ export async function getMyDailyLogByDate(jobId: string, logDate: string): Promi
 
     // Prefer draft for that date (most recent)
     const draftQuery = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('uid', '==', u.uid),
       where('logDate', '==', logDate),
       where('status', '==', 'draft')
@@ -326,7 +327,7 @@ export async function getMyDailyLogByDate(jobId: string, logDate: string): Promi
 
     // Otherwise fall back to latest submitted for that date
     const submittedQuery = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('uid', '==', u.uid),
       where('logDate', '==', logDate),
       where('status', '==', 'submitted')
@@ -356,7 +357,7 @@ export async function createDailyLog(jobId: string, logDate: string, input: Dail
     assertJobAccess(jobId)
     const u = requireUser()
 
-    const ref = await addDoc(collection(db, `jobs/${jobId}/dailyLogs`), {
+    const ref = await addDoc(collection(db, ...jobCollectionPath(jobId, 'dailyLogs')), {
       jobId,
       uid: u.uid,
       status: 'draft',
@@ -378,7 +379,7 @@ export async function updateDailyLog(jobId: string, dailyLogId: string, updates:
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
     await updateDoc(ref, {
       ...updates,
       updatedAt: serverTimestamp(),
@@ -392,7 +393,7 @@ export async function submitDailyLog(jobId: string, dailyLogId: string) {
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
 
     const snap = await getDoc(ref)
     if (!snap.exists()) throw new Error('Daily log not found')
@@ -414,7 +415,7 @@ export async function deleteDailyLog(jobId: string, dailyLogId: string) {
   try {
     assertJobAccess(jobId)
     requireUser()
-    const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
     await deleteDoc(ref)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to delete daily log'))
@@ -427,7 +428,7 @@ export async function cleanupDeletedLogs(jobId: string) {
     requireUser()
     
     const q = query(
-      collection(db, `jobs/${jobId}/dailyLogs`),
+      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
       where('status', '==', 'deleted')
     )
     
@@ -446,7 +447,7 @@ export async function getDailyLogById(jobId: string, dailyLogId: string): Promis
   try {
     assertJobAccess(jobId)
     const u = requireUser()
-    const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
+    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
     const snap = await getDoc(ref)
     if (!snap.exists()) return null
     
@@ -474,7 +475,7 @@ export function subscribeToDailyLog(
 ) {
   assertJobAccess(jobId)
   const u = requireUser()
-  const ref = doc(db, `jobs/${jobId}/dailyLogs`, dailyLogId)
+  const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
   return onSnapshot(
     ref,
     (snap) => {
@@ -492,3 +493,5 @@ export function subscribeToDailyLog(
     onError
   )
 }
+
+

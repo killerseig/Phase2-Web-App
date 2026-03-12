@@ -2,13 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import SetPassword from '@/views/SetPassword.vue'
+import { ROLES, ROUTE_NAMES, type Role } from '@/constants/app'
 
 let mockPush: ReturnType<typeof vi.fn>
 let mockVerifySetupToken: ReturnType<typeof vi.fn>
 let mockSetPasswordFromSetupLink: ReturnType<typeof vi.fn>
-const mockAuthStore = {
+const mockAuthStore: {
+  login: ReturnType<typeof vi.fn>
+  role: Role
+} = {
   login: vi.fn(),
-  role: 'admin',
+  role: ROLES.ADMIN,
 }
 let mockRoute: { query: Record<string, string> }
 
@@ -50,7 +54,7 @@ describe('SetPassword view', () => {
     mockVerifySetupToken = vi.fn().mockResolvedValue('worker@example.com')
     mockSetPasswordFromSetupLink = vi.fn().mockResolvedValue(undefined)
     mockAuthStore.login = vi.fn().mockResolvedValue(undefined)
-    mockAuthStore.role = 'admin'
+    mockAuthStore.role = ROLES.ADMIN
     mockRoute = { query: {} }
   })
 
@@ -75,12 +79,12 @@ describe('SetPassword view', () => {
     expect(mockVerifySetupToken).toHaveBeenCalledWith('user-1', 'token-1')
     expect(mockSetPasswordFromSetupLink).toHaveBeenCalledWith('user-1', 'secure-pass', 'token-1')
     expect(mockAuthStore.login).toHaveBeenCalledWith('worker@example.com', 'secure-pass')
-    expect(mockPush).toHaveBeenCalledWith({ name: 'dashboard' })
+    expect(mockPush).toHaveBeenCalledWith({ name: ROUTE_NAMES.DASHBOARD })
   })
 
   it('redirects to unauthorized when role is none after login', async () => {
     mockRoute = { query: { setupToken: 'token-2', uid: 'user-2' } }
-    mockAuthStore.role = 'none'
+    mockAuthStore.role = ROLES.NONE
     const wrapper = mountSetPassword()
     await flushPromises()
 
@@ -89,6 +93,6 @@ describe('SetPassword view', () => {
     await wrapper.get('button.btn.btn-primary.w-100').trigger('click')
     await flushPromises()
 
-    expect(mockPush).toHaveBeenCalledWith({ name: 'unauthorized' })
+    expect(mockPush).toHaveBeenCalledWith({ name: ROUTE_NAMES.UNAUTHORIZED })
   })
 })

@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import Toast from '../../components/Toast.vue'
-import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
-import ShopCatalogTreeNode from '../../components/admin/ShopCatalogTreeNode.vue'
-import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
-import { useShopCategoriesStore } from '../../stores/shopCategories'
-import { useShopCatalogStore } from '../../stores/shopCatalog'
+import Toast from '@/components/Toast.vue'
+import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
+import ShopCatalogTreeNode from '@/components/admin/ShopCatalogTreeNode.vue'
+import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
+import { useShopCategoriesStore } from '@/stores/shopCategories'
+import { useShopCatalogStore } from '@/stores/shopCatalog'
 import type { ShopCatalogItem } from '@/services'
 import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { normalizeError } from '@/services/serviceUtils'
+import { logError } from '@/utils'
 
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const categoriesStore = useShopCategoriesStore()
@@ -240,7 +241,7 @@ async function reactivateCategory(categoryId: string) {
     await reactivateRecursive(categoryId)
     toastRef.value?.show(`Reactivated "${cat.name}"`, 'success')
   } catch (e) {
-    console.error('[AdminShopCatalog] Error reactivating category:', e)
+    logError('AdminShopCatalog', 'Error reactivating category', e)
     toastRef.value?.show('Failed to reactivate category', 'error')
   } finally {
     saving.value = false
@@ -317,7 +318,7 @@ async function saveItemFromTree(
     toastRef.value?.show('Item updated', 'success')
     editingItemId.value = null
   } catch (err) {
-    console.error('Failed to update item:', err)
+    logError('AdminShopCatalog', 'Failed to update item', err)
     toastRef.value?.show(`Failed to update item: ${normalizeError(err, 'Unknown error')}`, 'error')
   } finally {
     saving.value = false
@@ -584,7 +585,7 @@ async function downloadCatalog() {
     link.click()
     URL.revokeObjectURL(url)
   } catch (e) {
-    console.error('[AdminShopCatalog] Failed to download catalog', e)
+    logError('AdminShopCatalog', 'Failed to download catalog', e)
     toastRef.value?.show('Failed to download catalog', 'error')
   } finally {
     downloading.value = false

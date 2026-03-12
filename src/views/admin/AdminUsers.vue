@@ -2,13 +2,13 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
-import Toast from '../../components/Toast.vue'
-import AdminCardWrapper from '../../components/admin/AdminCardWrapper.vue'
-import StatusBadge from '../../components/admin/StatusBadge.vue'
-import BaseAccordionCard from '../../components/common/BaseAccordionCard.vue'
-import BaseTable from '../../components/common/BaseTable.vue'
-import { useUsersStore } from '../../stores/users'
-import { useEmployeesStore } from '../../stores/employees'
+import Toast from '@/components/Toast.vue'
+import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
+import StatusBadge from '@/components/admin/StatusBadge.vue'
+import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
+import BaseTable from '@/components/common/BaseTable.vue'
+import { useUsersStore } from '@/stores/users'
+import { useEmployeesStore } from '@/stores/employees'
 import { type Employee, type UserProfile } from '@/services'
 import { ROLES, type Role } from '@/constants/app'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
@@ -40,6 +40,34 @@ const parseAdminTab = (value: unknown): AdminTab => {
   return 'users'
 }
 
+const createUserForm = () => ({
+  email: '',
+  firstName: '',
+  lastName: '',
+  role: ROLES.NONE as Role,
+})
+
+const createUserEditForm = (user?: UserProfile) => ({
+  email: user?.email || '',
+  firstName: user?.firstName || '',
+  lastName: user?.lastName || '',
+  role: (user?.role || ROLES.NONE) as Role,
+})
+
+const createEmployeeForm = () => ({
+  firstName: '',
+  lastName: '',
+  employeeNumber: '',
+  occupation: '',
+})
+
+const createEmployeeEditForm = (employee?: Employee) => ({
+  firstName: employee?.firstName || '',
+  lastName: employee?.lastName || '',
+  employeeNumber: employee?.employeeNumber || '',
+  occupation: employee?.occupation || '',
+})
+
 const activeTab = ref<AdminTab>(parseAdminTab(route.query.tab))
 
 watch(
@@ -67,55 +95,25 @@ watch(activeTab, (tab) => {
 
 // User form
 const showUserForm = ref(false)
-const userForm = ref({
-  email: '',
-  firstName: '',
-  lastName: '',
-  role: ROLES.NONE as Role,
-})
+const userForm = ref(createUserForm())
 const creatingUser = ref(false)
 
 // Edit user
 const editingUserId = ref<string | null>(null)
-const editUserForm = ref({
-  email: '',
-  firstName: '',
-  lastName: '',
-  role: ROLES.NONE as Role,
-})
-const editUserFormOriginal = ref({
-  email: '',
-  firstName: '',
-  lastName: '',
-  role: ROLES.NONE as Role,
-})
+const editUserForm = ref(createUserEditForm())
+const editUserFormOriginal = ref(createUserEditForm())
 const savingUserEdit = ref(false)
 const activeUserActionsId = ref('')
 
 // Employee form
 const showEmployeeForm = ref(false)
-const employeeForm = ref({
-  firstName: '',
-  lastName: '',
-  employeeNumber: '',
-  occupation: '',
-})
+const employeeForm = ref(createEmployeeForm())
 const creatingEmployee = ref(false)
 
 // Edit employee
 const editingEmployeeId = ref<string | null>(null)
-const editForm = ref({
-  firstName: '',
-  lastName: '',
-  employeeNumber: '',
-  occupation: '',
-})
-const editFormOriginal = ref({
-  firstName: '',
-  lastName: '',
-  employeeNumber: '',
-  occupation: '',
-})
+const editForm = ref(createEmployeeEditForm())
+const editFormOriginal = ref(createEmployeeEditForm())
 const savingEmployeeEdit = ref(false)
 const activeEmployeeActionsId = ref('')
 
@@ -228,28 +226,18 @@ async function submitUserForm() {
 
 async function handleEditUser(user: UserProfile) {
   editingUserId.value = user.id
-  editUserForm.value = {
-    email: user.email || '',
-    firstName: user.firstName || '',
-    lastName: user.lastName || '',
-    role: user.role,
-  }
-  editUserFormOriginal.value = {
-    email: user.email || '',
-    firstName: user.firstName || '',
-    lastName: user.lastName || '',
-    role: user.role,
-  }
+  editUserForm.value = createUserEditForm(user)
+  editUserFormOriginal.value = createUserEditForm(user)
 }
 
 function clearUserEdit() {
   editingUserId.value = null
-  editUserForm.value = { email: '', firstName: '', lastName: '', role: ROLES.NONE }
-  editUserFormOriginal.value = { email: '', firstName: '', lastName: '', role: ROLES.NONE }
+  editUserForm.value = createUserEditForm()
+  editUserFormOriginal.value = createUserEditForm()
 }
 
 function resetUserForm() {
-  userForm.value = { email: '', firstName: '', lastName: '', role: ROLES.NONE }
+  userForm.value = createUserForm()
 }
 
 function cancelUserForm() {
@@ -364,7 +352,7 @@ async function submitEmployeeForm() {
 }
 
 function resetEmployeeForm() {
-  employeeForm.value = { firstName: '', lastName: '', employeeNumber: '', occupation: '' }
+  employeeForm.value = createEmployeeForm()
 }
 
 function cancelEmployeeForm() {
@@ -374,18 +362,8 @@ function cancelEmployeeForm() {
 
 async function handleEditEmployee(emp: Employee) {
   editingEmployeeId.value = emp.id
-  editForm.value = {
-    firstName: emp.firstName,
-    lastName: emp.lastName,
-    employeeNumber: emp.employeeNumber || '',
-    occupation: emp.occupation,
-  }
-  editFormOriginal.value = {
-    firstName: emp.firstName,
-    lastName: emp.lastName,
-    employeeNumber: emp.employeeNumber || '',
-    occupation: emp.occupation,
-  }
+  editForm.value = createEmployeeEditForm(emp)
+  editFormOriginal.value = createEmployeeEditForm(emp)
 }
 
 async function saveEmployeeEdit(emp: Employee, closeActions = false) {
@@ -422,8 +400,8 @@ async function saveEmployeeEdit(emp: Employee, closeActions = false) {
 
 function cancelEmployeeEdit() {
   editingEmployeeId.value = null
-  editForm.value = { firstName: '', lastName: '', employeeNumber: '', occupation: '' }
-  editFormOriginal.value = { firstName: '', lastName: '', employeeNumber: '', occupation: '' }
+  editForm.value = createEmployeeEditForm()
+  editFormOriginal.value = createEmployeeEditForm()
   activeEmployeeActionsId.value = ''
 }
 

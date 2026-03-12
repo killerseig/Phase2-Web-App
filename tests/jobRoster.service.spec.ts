@@ -11,20 +11,12 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import * as JobRoster from '@/services/JobRoster'
+import { makeQuerySnapshot } from './helpers/firestoreMocks'
+
 
 vi.mock('@/firebase', () => ({ db: {} }))
 
-vi.mock('firebase/firestore', () => {
-  const getDocs = vi.fn()
-  const updateDoc = vi.fn()
-  const deleteDoc = vi.fn()
-  const orderBy = vi.fn((field: string, dir?: any) => ({ field, dir }))
-  const collection = vi.fn((_db: any, path: string) => ({ path }))
-  const doc = vi.fn((_db: any, path: string, id?: string) => ({ path, id }))
-  const query = vi.fn((col: any, ...constraints: any[]) => ({ col, constraints }))
-  const serverTimestamp = vi.fn(() => 'ts')
-  return { getDocs, updateDoc, deleteDoc, orderBy, collection, doc, query, serverTimestamp }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 vi.mock('@/services/serviceGuards', () => ({
   assertJobAccess: vi.fn(),
@@ -35,10 +27,6 @@ type MockFn = ReturnType<typeof vi.fn>
 const getDocsMock = getDocs as unknown as MockFn
 const updateDocMock = updateDoc as unknown as MockFn
 
-const snap = (docs: Array<{ id: string; data: any }>) => ({
-  docs: docs.map((d) => ({ id: d.id, data: () => d.data })),
-})
-
 describe('JobRoster service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -48,7 +36,7 @@ describe('JobRoster service', () => {
     getDocsMock
       .mockRejectedValueOnce(Object.assign(new Error('missing index'), { code: 'failed-precondition' }))
       .mockResolvedValueOnce(
-        snap([
+        makeQuerySnapshot([
           { id: '1', data: { firstName: 'B', lastName: 'Z' } },
           { id: '2', data: { firstName: 'A', lastName: 'A' } },
         ])
@@ -61,7 +49,7 @@ describe('JobRoster service', () => {
 
   it('prevents duplicate employeeNumber on update', async () => {
     getDocsMock.mockResolvedValue(
-      snap([
+      makeQuerySnapshot([
         { id: 'existing', data: { employeeNumber: '123', lastName: 'Z', firstName: 'B' } },
         { id: 'target', data: { employeeNumber: '999', lastName: 'A', firstName: 'A' } },
       ])
@@ -74,7 +62,17 @@ describe('JobRoster service', () => {
 
   it('updates roster employee and stamps updatedAt', async () => {
     const listSpy = vi.spyOn(JobRoster, 'listRosterEmployees')
-    listSpy.mockResolvedValue([{ id: 'target', employeeNumber: '999' } as any])
+    listSpy.mockResolvedValue([
+      {
+        id: 'target',
+        jobId: 'job-1',
+        employeeNumber: '999',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        occupation: 'Foreman',
+        active: true,
+      },
+    ])
     updateDocMock.mockResolvedValue(undefined)
 
     await updateRosterEmployee('job-1', 'target', { firstName: 'Jane' })
@@ -85,3 +83,5 @@ describe('JobRoster service', () => {
     expect(payload).toMatchObject({ firstName: 'Jane', updatedAt: 'ts' })
   })
 })
+
+

@@ -14,6 +14,7 @@ import {
   updateRosterEmployee,
 } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
+import { logError } from '@/utils'
 import type { JobRosterEmployee, JobRosterEmployeeInput } from '@/types/models'
 
 export const useJobRosterStore = defineStore('jobRoster', () => {
@@ -79,7 +80,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       return employees
     } catch (err) {
       setStoreError(err, 'Failed to load roster')
-      console.error(`[JobRoster Store] Error loading roster for job ${jobId}:`, err)
+      logError('JobRoster Store', `Error loading roster for job ${jobId}`, err)
       throw err
     } finally {
       loading.value = false
@@ -103,7 +104,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       (err) => {
         setStoreError(err, 'Failed to subscribe to roster')
         loading.value = false
-        console.error(`[JobRoster Store] Error subscribing to roster for job ${jobId}:`, err)
+        logError('JobRoster Store', `Error subscribing to roster for job ${jobId}`, err)
       }
     )
 
@@ -146,7 +147,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       return employeeId
     } catch (err) {
       setStoreError(err, 'Failed to add employee')
-      console.error('[JobRoster Store] Error adding employee:', err)
+      logError('JobRoster Store', 'Error adding employee', err)
       throw err
     }
   }
@@ -169,7 +170,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       }
     } catch (err) {
       setStoreError(err, 'Failed to update employee')
-      console.error('[JobRoster Store] Error updating employee:', err)
+      logError('JobRoster Store', 'Error updating employee', err)
       throw err
     }
   }
@@ -188,7 +189,7 @@ export const useJobRosterStore = defineStore('jobRoster', () => {
       rosterByJob.value[jobId] = filtered
     } catch (err) {
       setStoreError(err, 'Failed to remove employee')
-      console.error('[JobRoster Store] Error removing employee:', err)
+      logError('JobRoster Store', 'Error removing employee', err)
       throw err
     }
   }

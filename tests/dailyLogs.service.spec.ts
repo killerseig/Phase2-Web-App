@@ -16,41 +16,12 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { requireUser } from '@/services/serviceGuards'
+import { makeQuerySnapshot } from './helpers/firestoreMocks'
+
 
 vi.mock('@/firebase', () => ({ db: {} }))
 
-// Lightweight Firestore mocks so we can assert call payloads
-vi.mock('firebase/firestore', () => {
-  const addDoc = vi.fn()
-  const getDocs = vi.fn()
-  const getDoc = vi.fn()
-  const updateDoc = vi.fn()
-  const deleteDoc = vi.fn()
-  const onSnapshot = vi.fn()
-  const where = (field: string, op: any, value: any) => ({ field, op, value })
-  const orderBy = (field: string, dir?: any) => ({ field, dir })
-  const limit = (n: number) => ({ limit: n })
-  const collection = (_db: any, path: string) => ({ path })
-  const doc = (_db: any, path: string, id?: string) => ({ path, id })
-  const query = (col: any, ...constraints: any[]) => ({ col, constraints })
-  const serverTimestamp = vi.fn(() => 'ts')
-
-  return {
-    addDoc,
-    getDocs,
-    getDoc,
-    updateDoc,
-    deleteDoc,
-    onSnapshot,
-    where,
-    orderBy,
-    limit,
-    collection,
-    doc,
-    query,
-    serverTimestamp,
-  }
-})
+vi.mock('firebase/firestore', async () => (await import('./helpers/firestoreMocks')).createFirestoreMocks())
 
 vi.mock('@/services/serviceGuards', () => ({
   assertJobAccess: vi.fn(),
@@ -63,11 +34,6 @@ const getDocsMock = getDocs as unknown as MockFn
 const getDocMock = getDoc as unknown as MockFn
 const updateDocMock = updateDoc as unknown as MockFn
 const requireUserMock = requireUser as unknown as MockFn
-
-const snap = (docs: Array<{ id: string; data: any }>) => ({
-  docs: docs.map((d) => ({ id: d.id, data: () => d.data })),
-  empty: docs.length === 0,
-})
 
 const baseDraft: DailyLogDraftInput = {
   jobSiteNumbers: '',
@@ -100,7 +66,7 @@ describe('DailyLogs service', () => {
   it('merges submitted and draft logs for a date with correct ordering', async () => {
     getDocsMock
       .mockResolvedValueOnce(
-        snap([
+        makeQuerySnapshot([
           {
             id: 'submitted-1',
             data: {
@@ -115,7 +81,7 @@ describe('DailyLogs service', () => {
         ])
       )
       .mockResolvedValueOnce(
-        snap([
+        makeQuerySnapshot([
           {
             id: 'draft-1',
             data: {
@@ -180,3 +146,5 @@ describe('DailyLogs service', () => {
     expect(updates).toMatchObject({ status: 'submitted', submittedAt: 'ts', updatedAt: 'ts' })
   })
 })
+
+
