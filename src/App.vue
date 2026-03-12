@@ -14,9 +14,9 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
-import AppShell from './components/layout/AppShell.vue'
-import GlobalConfirmModal from './components/common/GlobalConfirmModal.vue'
-import { useAuthStore } from './stores/auth'
+import AppShell from '@/components/layout/AppShell.vue'
+import GlobalConfirmModal from '@/components/common/GlobalConfirmModal.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const auth = useAuthStore()

@@ -33,6 +33,34 @@ export async function sendTimecardEmail(jobId: string, timecardIds: string[], we
   }
 }
 
+export type DownloadTimecardsForWeekFormat = 'csv' | 'pdf'
+
+export type DownloadTimecardsForWeekResult = {
+  success: boolean
+  format: DownloadTimecardsForWeekFormat
+  fileName: string
+  contentType: string
+  contentBase64: string
+  weekStart: string
+  weekEnding: string
+  timecardCount: number
+}
+
+export async function downloadTimecardsForWeek(
+  weekStart: string,
+  format: DownloadTimecardsForWeekFormat,
+  jobId?: string
+): Promise<DownloadTimecardsForWeekResult> {
+  assertActiveUser()
+  const callable = httpsCallable(functions, 'downloadTimecardsForWeek')
+  try {
+    const result = await callable({ weekStart, format, jobId })
+    return result.data as DownloadTimecardsForWeekResult
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to download timecards'))
+  }
+}
+
 export async function sendShopOrderEmail(jobId: string, shopOrderId: string, recipients: string[]): Promise<void> {
   assertActiveUser()
   const callable = httpsCallable(functions, 'sendShopOrderEmail')

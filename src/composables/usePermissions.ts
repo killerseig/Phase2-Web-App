@@ -27,6 +27,7 @@ export function usePermissions() {
 
   // Basic role checks
   const isAdmin = computed(() => authStore.role === ROLES.ADMIN)
+  const isController = computed(() => authStore.role === ROLES.CONTROLLER)
   const isEmployee = computed(() => authStore.role === ROLES.EMPLOYEE)
   const isShop = computed(() => authStore.role === ROLES.SHOP)
   const isForeman = computed(() => authStore.role === ROLES.FOREMAN)
@@ -91,6 +92,7 @@ export function usePermissions() {
   return {
     // Role checks
     isAdmin,
+    isController,
     isEmployee,
     isForeman,
     isShop,

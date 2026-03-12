@@ -36,11 +36,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.sendTimecardEmail = exports.sendDailyLogEmail = exports.sendPasswordResetEmail = void 0;
+exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.sendTimecardEmail = exports.sendDailyLogEmail = exports.sendPasswordResetEmail = void 0;
 const admin = __importStar(require("firebase-admin"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const https_1 = require("firebase-functions/v2/https");
 const https_2 = require("firebase-functions/v2/https");
+const https_3 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const params_1 = require("firebase-functions/params");
@@ -58,6 +59,7 @@ const storageBucket = admin.storage().bucket();
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024;
 const MAX_ATTACHMENT_COUNT = 10;
+const TIMECARD_BURDEN_RATE = 0.32;
 function normalizeRecipients(...groups) {
     const merged = groups.flatMap(group => (Array.isArray(group) ? group : []));
     const cleaned = merged
@@ -80,6 +82,250 @@ function formatEmailDate(value) {
     }
     catch {
         return 'N/A';
+    }
+}
+function toNumber(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || Number.isNaN(n))
+        return 0;
+    return n;
+}
+function calculateUnitCostForExport(employeeWage, hours, production, burdenRate = TIMECARD_BURDEN_RATE) {
+    const wageValue = Math.max(0, toNumber(employeeWage));
+    const hourValue = Math.max(0, toNumber(hours));
+    const productionValue = Math.max(0, toNumber(production));
+    const burdenValue = Math.max(0, toNumber(burdenRate));
+    if (wageValue <= 0 || hourValue <= 0 || productionValue <= 0 || burdenValue <= 0) {
+        return 0;
+    }
+    return (wageValue / hourValue / productionValue) * burdenValue;
+}
+function formatPlexxisDate(dateString) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString || '').trim());
+    if (!match)
+        return String(dateString || '');
+    const [, year, month, day] = match;
+    return `${Number(month)}/${Number(day)}/${year}`;
+}
+function formatPlexxisNumber(value, blankWhenZero = false) {
+    const numeric = toNumber(value);
+    if (blankWhenZero && numeric === 0)
+        return '';
+    return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+}
+function escapeCsvValue(value) {
+    const str = String(value ?? '');
+    if (!str.length)
+        return '';
+    if (/[",\n\r]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+}
+function getWeekEndingFromWeekStart(weekStart) {
+    const parsed = new Date(`${String(weekStart || '').trim()}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime()))
+        return String(weekStart || '');
+    parsed.setUTCDate(parsed.getUTCDate() + 6);
+    const yyyy = parsed.getUTCFullYear();
+    const mm = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(parsed.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+function formatPlexxisEmployeeName(timecard) {
+    const firstNameRaw = String(timecard?.firstName || '').trim();
+    const lastNameRaw = String(timecard?.lastName || '').trim();
+    if (lastNameRaw && firstNameRaw)
+        return `${lastNameRaw}, ${firstNameRaw}`;
+    if (lastNameRaw)
+        return lastNameRaw;
+    if (firstNameRaw)
+        return firstNameRaw;
+    const employeeName = String(timecard?.employeeName || '').trim();
+    if (!employeeName)
+        return '';
+    if (employeeName.includes(','))
+        return employeeName;
+    const parts = employeeName.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        const first = parts[0];
+        const last = parts.slice(1).join(' ');
+        return `${last}, ${first}`;
+    }
+    return employeeName;
+}
+function getLineDaySum(line, key, dayKey) {
+    if (key === 'hours')
+        return toNumber(line?.[dayKey]);
+    return toNumber(line?.production?.[dayKey]);
+}
+function getLineTotalHours(line) {
+    const fromTotals = toNumber(line?.totals?.hours);
+    if (fromTotals > 0)
+        return fromTotals;
+    return DAY_KEYS.reduce((sum, key) => sum + getLineDaySum(line, 'hours', key), 0);
+}
+function getLineTotalProduction(line) {
+    const fromTotals = toNumber(line?.totals?.production);
+    if (fromTotals > 0)
+        return fromTotals;
+    return DAY_KEYS.reduce((sum, key) => sum + getLineDaySum(line, 'production', key), 0);
+}
+function pickFirstNonEmptyValue(source, keys) {
+    for (const key of keys) {
+        if (!key)
+            continue;
+        const value = source?.[key];
+        if (value === null || value === undefined)
+            continue;
+        const text = String(value).trim();
+        if (text)
+            return text;
+    }
+    return '';
+}
+function getLineSubSection(line) {
+    return pickFirstNonEmptyValue(line, [
+        'subsectionArea',
+        'subSection',
+        'subsection',
+        'sub_section',
+        'area',
+        'section',
+        'subSectionCode',
+    ]);
+}
+function getLineActivityCode(line) {
+    return pickFirstNonEmptyValue(line, [
+        'account',
+        'acct',
+        'activityCode',
+        'activity',
+        'detailCode',
+        'detail',
+        'accountCode',
+    ]);
+}
+function getLineCostCode(line) {
+    return pickFirstNonEmptyValue(line, [
+        'costCode',
+        'cost_code',
+        'cost',
+        'costcode',
+    ]);
+}
+function sanitizeLeakedCodeValue(value, disallowedValues) {
+    const raw = String(value || '').trim();
+    if (!raw)
+        return '';
+    const disallowed = new Set((Array.isArray(disallowedValues) ? disallowedValues : [])
+        .map((v) => String(v || '').trim().toLowerCase())
+        .filter(Boolean));
+    if (disallowed.has(raw.toLowerCase()))
+        return '';
+    return raw;
+}
+function sanitizeActivityCode(value, line, disallowedValues) {
+    const raw = sanitizeLeakedCodeValue(value, disallowedValues);
+    if (!raw)
+        return '';
+    const difValues = [line?.difH, line?.difP, line?.difC]
+        .map((v) => String(v || '').trim().toLowerCase())
+        .filter(Boolean);
+    if (difValues.includes(raw.toLowerCase()))
+        return '';
+    // Reject short numeric fragments that are commonly leaked from non-activity fields.
+    if (/^\d{1,3}$/.test(raw))
+        return '';
+    return raw;
+}
+function getLineOffHours(line) {
+    return toNumber(line?.offHours ?? line?.off?.hours ?? line?.off);
+}
+function getLineOffProduction(line) {
+    return toNumber(line?.offProduction ?? line?.off?.production);
+}
+function getLineOffCost(line) {
+    return toNumber(line?.offCost ?? line?.off?.cost ?? line?.off?.amount);
+}
+function parseOptionalHoursOverride(value) {
+    if (value === null || value === undefined)
+        return null;
+    if (typeof value === 'string' && !value.trim())
+        return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0)
+        return null;
+    return parsed;
+}
+function getLineMonSatHours(line) {
+    return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line?.[key]), 0);
+}
+function getLineMonSatProduction(line) {
+    return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line?.production?.[key]), 0);
+}
+function getLineMonSatCost(line) {
+    return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line?.unitCost?.[key]), 0);
+}
+function getLineTotalHoursForForm(line) {
+    // Form TOTAL for H row is based on MON-SAT hours.
+    return getLineMonSatHours(line);
+}
+function getLineTotalProductionForForm(line) {
+    // Form TOTAL for P row is based on MON-SAT production.
+    return getLineMonSatProduction(line);
+}
+function getLineTotalCostForForm(line) {
+    const fromTotals = toNumber(line?.totals?.lineTotal);
+    if (fromTotals > 0)
+        return fromTotals;
+    return getLineMonSatCost(line);
+}
+function hasMeaningfulLineDataForPdf(line) {
+    const totalHours = getLineTotalHoursForForm(line);
+    const totalProduction = getLineTotalProductionForForm(line);
+    const totalCost = getLineTotalCostForForm(line);
+    const offHours = getLineOffHours(line);
+    const offProduction = getLineOffProduction(line);
+    const offCost = getLineOffCost(line);
+    return totalHours > 0 || totalProduction > 0 || totalCost > 0 || offHours > 0 || offProduction > 0 || offCost > 0;
+}
+function hasMeaningfulLineDataForCsv(line) {
+    const totalHours = getLineTotalHoursForForm(line);
+    const totalProduction = getLineTotalProductionForForm(line);
+    const subSection = getLineSubSection(line);
+    const activityCode = sanitizeActivityCode(getLineActivityCode(line), line, []);
+    const costCode = getLineCostCode(line);
+    return totalHours > 0 || totalProduction > 0 || !!subSection || !!activityCode || !!costCode;
+}
+function hasMeaningfulTimecard(tc) {
+    const lines = Array.isArray(tc?.lines) ? tc.lines : [];
+    if (lines.some((line) => hasMeaningfulLineDataForCsv(line) || hasMeaningfulLineDataForPdf(line)))
+        return true;
+    const hoursTotal = toNumber(tc?.totals?.hoursTotal);
+    const productionTotal = toNumber(tc?.totals?.productionTotal);
+    return hoursTotal > 0 || productionTotal > 0;
+}
+function roundToHundredths(value) {
+    return Math.round(toNumber(value) * 100) / 100;
+}
+function validatePdfCsvHourParity(timecards) {
+    const mismatches = [];
+    for (const tc of Array.isArray(timecards) ? timecards : []) {
+        const lines = Array.isArray(tc?.lines) ? tc.lines : [];
+        const pdfHours = lines
+            .filter((line) => hasMeaningfulLineDataForPdf(line))
+            .reduce((sum, line) => sum + getLineTotalHoursForForm(line), 0);
+        const csvHours = lines
+            .filter((line) => hasMeaningfulLineDataForCsv(line))
+            .reduce((sum, line) => sum + getLineTotalHoursForForm(line), 0);
+        if (Math.abs(roundToHundredths(pdfHours) - roundToHundredths(csvHours)) > 0.001) {
+            const employeeName = String(tc?.employeeName || tc?.employeeCode || tc?.employeeNumber || 'Unknown employee').trim();
+            mismatches.push(`${employeeName}: PDF ${roundToHundredths(pdfHours)} vs CSV ${roundToHundredths(csvHours)}`);
+        }
+    }
+    if (mismatches.length) {
+        throw new https_2.HttpsError('internal', `Hour parity validation failed: ${mismatches.slice(0, 8).join('; ')}`);
     }
 }
 async function loadDailyLogAttachments(log) {
@@ -126,10 +372,13 @@ async function loadDailyLogAttachments(log) {
     return attachments;
 }
 function normalizeTimecardForEmail(tc) {
-    if (Array.isArray(tc?.lines) && tc.lines.length)
-        return tc;
-    const jobs = Array.isArray(tc?.jobs) ? tc.jobs : [];
-    const lines = jobs.map((job) => {
+    const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage);
+    const sourceLines = Array.isArray(tc?.lines) && tc.lines.length
+        ? tc.lines
+        : Array.isArray(tc?.jobs)
+            ? tc.jobs
+            : [];
+    const lines = sourceLines.map((source) => {
         const hoursByDay = {
             sun: 0,
             mon: 0,
@@ -157,7 +406,7 @@ function normalizeTimecardForEmail(tc) {
             fri: 0,
             sat: 0,
         };
-        const days = Array.isArray(job?.days) ? job.days : [];
+        const days = Array.isArray(source?.days) ? source.days : [];
         for (const day of days) {
             const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
                 ? day.dayOfWeek
@@ -169,29 +418,74 @@ function normalizeTimecardForEmail(tc) {
             productionByDay[key] = Number(day?.production) || 0;
             unitCostByDay[key] = Number(day?.unitCost) || 0;
         }
+        DAY_KEYS.forEach((key) => {
+            const lineHours = toNumber(source?.[key]);
+            const lineProduction = toNumber(source?.production?.[key]);
+            const lineUnitCost = toNumber(source?.unitCost?.[key]);
+            if (lineHours > 0 || hoursByDay[key] === 0) {
+                hoursByDay[key] = lineHours || hoursByDay[key];
+            }
+            if (lineProduction > 0 || productionByDay[key] === 0) {
+                productionByDay[key] = lineProduction || productionByDay[key];
+            }
+            const computedUnitCost = calculateUnitCostForExport(employeeWage, hoursByDay[key], productionByDay[key]);
+            unitCostByDay[key] = lineUnitCost || unitCostByDay[key] || computedUnitCost;
+        });
+        const lineSubSection = getLineSubSection(source);
+        const lineCostCode = getLineCostCode(source);
+        const lineJobCode = String(source?.jobNumber || tc?.jobCode || tc?.__jobCode || '').trim();
+        const employeeCode = String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim();
+        const rawActivityCode = getLineActivityCode(source);
+        const sanitizedActivityCode = sanitizeActivityCode(rawActivityCode, source, [
+            lineJobCode,
+            tc?.jobCode,
+            tc?.__jobCode,
+            employeeCode,
+            tc?.employeeNumber,
+        ]);
         const line = {
-            jobNumber: job?.jobNumber || '',
-            area: job?.area || '',
-            account: job?.acct || job?.account || '',
-            costCode: job?.costCode || job?.difC || '',
-            difH: job?.difH || '',
-            difP: job?.difP || '',
-            difC: job?.difC || '',
+            jobNumber: lineJobCode,
+            subsectionArea: lineSubSection,
+            area: lineSubSection,
+            account: sanitizedActivityCode,
+            acct: sanitizedActivityCode,
+            activityCode: sanitizedActivityCode,
+            costCode: lineCostCode,
+            difH: source?.difH || '',
+            difP: source?.difP || '',
+            difC: source?.difC || '',
+            offHours: toNumber(source?.offHours ?? source?.off?.hours ?? source?.off),
+            offProduction: toNumber(source?.offProduction ?? source?.off?.production),
+            offCost: toNumber(source?.offCost ?? source?.off?.cost ?? source?.off?.amount),
             production: productionByDay,
             unitCost: unitCostByDay,
         };
         DAY_KEYS.forEach(k => {
             line[k] = hoursByDay[k];
         });
-        const totalHours = Object.values(hoursByDay).reduce((s, v) => s + v, 0);
-        const totalProduction = Object.values(productionByDay).reduce((s, v) => s + v, 0);
+        const totalHours = DAY_KEYS.reduce((sum, key) => sum + toNumber(hoursByDay[key]), 0);
+        const totalProduction = DAY_KEYS.reduce((sum, key) => sum + toNumber(productionByDay[key]), 0);
+        const hasRealActivity = !!sanitizedActivityCode;
+        const hasRealCostCode = !!String(line?.costCode || '').trim();
+        // Guard against legacy rows where hours were stored under production without a real activity/cost identity.
+        if (totalHours === 0 && totalProduction > 0 && !hasRealActivity && !hasRealCostCode) {
+            DAY_KEYS.forEach((k) => {
+                line[k] = toNumber(productionByDay[k]);
+                productionByDay[k] = 0;
+                unitCostByDay[k] = 0;
+            });
+            line.production = productionByDay;
+            line.unitCost = unitCostByDay;
+        }
+        const finalTotalHours = DAY_KEYS.reduce((sum, key) => sum + toNumber(line[key]), 0);
+        const finalTotalProduction = DAY_KEYS.reduce((sum, key) => sum + toNumber(productionByDay[key]), 0);
         let totalLine = 0;
         DAY_KEYS.forEach(k => {
             totalLine += (productionByDay[k] || 0) * (unitCostByDay[k] || 0);
         });
         line.totals = {
-            hours: totalHours,
-            production: totalProduction,
+            hours: finalTotalHours,
+            production: finalTotalProduction,
             lineTotal: totalLine,
         };
         return line;
@@ -205,14 +499,16 @@ function normalizeTimecardForEmail(tc) {
     return {
         ...tc,
         lines,
-        totals: tc?.totals || totals,
+        jobCode: String(tc?.jobCode || tc?.__jobCode || '').trim(),
+        employeeWage: tc?.employeeWage ?? tc?.wage ?? null,
+        totals,
     };
 }
 /**
  * Send password reset email using Firebase Admin SDK
  * Works without authentication via HTTP callable
  */
-exports.sendPasswordResetEmail = (0, https_2.onRequest)(async (req, res) => {
+exports.sendPasswordResetEmail = (0, https_3.onRequest)(async (req, res) => {
     // Enable CORS
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -357,7 +653,7 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
             weekStart,
             timecards: normalizedTimecards,
         });
-        const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart);
+        const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart, job?.number);
         const csvFileName = buildTimecardCsvFilename(weekStart, job?.number);
         const pdfFileName = buildTimecardPdfFilename(weekStart, job?.number);
         const pdfBuffer = await buildTimecardPdfBuffer({
@@ -394,69 +690,213 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
         throw new Error(error.message);
     }
 });
-function buildTimecardCsv(timecards, weekStart) {
+async function listSubmittedTimecardsForJobWeek(jobId, weekStart) {
+    const weekEnding = getWeekEndingFromWeekStart(weekStart);
+    const directSnap = await db
+        .collection(constants_1.COLLECTIONS.JOBS)
+        .doc(jobId)
+        .collection(constants_1.COLLECTIONS.TIMECARDS)
+        .where('status', '==', 'submitted')
+        .get();
+    const direct = directSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((tc) => {
+        if (tc?.archived === true)
+            return false;
+        const matchesWeekStart = String(tc?.weekStartDate || '').trim() === weekStart;
+        const matchesWeekEnding = String(tc?.weekEndingDate || '').trim() === weekEnding;
+        return matchesWeekStart || matchesWeekEnding;
+    });
+    const legacySnap = await db
+        .collection(constants_1.COLLECTIONS.JOBS)
+        .doc(jobId)
+        .collection(constants_1.COLLECTIONS.WEEKS)
+        .doc(weekStart)
+        .collection(constants_1.COLLECTIONS.TIMECARDS)
+        .get();
+    const legacy = legacySnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data(), weekStartDate: doc.data()?.weekStartDate || weekStart }))
+        .filter((tc) => tc?.status === 'submitted' && tc?.archived !== true);
+    const mergedById = new Map();
+    for (const tc of direct)
+        mergedById.set(tc.id, tc);
+    for (const tc of legacy) {
+        if (!mergedById.has(tc.id))
+            mergedById.set(tc.id, tc);
+    }
+    return Array.from(mergedById.values());
+}
+/**
+ * Download submitted timecards for a selected week as CSV or PDF
+ * Access: admin and controller roles
+ */
+exports.downloadTimecardsForWeek = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
+    if (!user) {
+        throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.USER_PROFILE_NOT_FOUND);
+    }
+    if (user.role !== 'admin' && user.role !== 'controller') {
+        throw new https_2.HttpsError('permission-denied', 'Only admins or controllers can perform this action');
+    }
+    const weekStart = String(request.data?.weekStart || '').trim();
+    const format = String(request.data?.format || '').trim().toLowerCase();
+    const jobId = typeof request.data?.jobId === 'string' ? String(request.data.jobId).trim() : '';
+    if (!weekStart) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.WEEK_START_REQUIRED);
+    }
+    if (format !== 'csv' && format !== 'pdf') {
+        throw new https_2.HttpsError('invalid-argument', 'format must be either "csv" or "pdf"');
+    }
+    const parsedWeekStart = new Date(`${weekStart}T00:00:00Z`);
+    if (Number.isNaN(parsedWeekStart.getTime())) {
+        throw new https_2.HttpsError('invalid-argument', 'weekStart must use YYYY-MM-DD format');
+    }
+    try {
+        let targetJobs = [];
+        let jobName = 'All Jobs';
+        let jobCode = '';
+        if (jobId) {
+            const jobSnap = await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).get();
+            if (!jobSnap.exists)
+                throw new https_2.HttpsError('not-found', 'Job not found');
+            const data = jobSnap.data() || {};
+            const resolvedCode = String(data.number || data.code || '').trim();
+            targetJobs = [{ id: jobId, name: String(data.name || 'Unknown Job'), code: resolvedCode }];
+            jobName = String(data.name || 'Unknown Job');
+            jobCode = resolvedCode;
+        }
+        else {
+            const jobsSnap = await db.collection(constants_1.COLLECTIONS.JOBS).get();
+            targetJobs = jobsSnap.docs.map((doc) => {
+                const data = doc.data() || {};
+                return {
+                    id: doc.id,
+                    name: String(data.name || 'Unknown Job'),
+                    code: String(data.number || data.code || '').trim(),
+                };
+            });
+        }
+        if (!targetJobs.length) {
+            throw new https_2.HttpsError('not-found', 'No jobs found');
+        }
+        const timecardsByJob = await Promise.all(targetJobs.map(async (job) => {
+            const jobCards = await listSubmittedTimecardsForJobWeek(job.id, weekStart);
+            return jobCards.map((tc) => ({
+                ...tc,
+                __jobCode: job.code,
+                __jobName: job.name,
+            }));
+        }));
+        const submittedTimecards = timecardsByJob.flat();
+        if (!submittedTimecards.length) {
+            throw new https_2.HttpsError('not-found', `No submitted timecards found for week ${weekStart}`);
+        }
+        const normalizedTimecards = submittedTimecards
+            .map(normalizeTimecardForEmail)
+            .filter((tc) => hasMeaningfulTimecard(tc))
+            .sort((a, b) => {
+            const nameA = String(a?.employeeName || '').toLowerCase();
+            const nameB = String(b?.employeeName || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+        if (!normalizedTimecards.length) {
+            throw new https_2.HttpsError('not-found', `No submitted timecards with export data found for week ${weekStart}`);
+        }
+        validatePdfCsvHourParity(normalizedTimecards);
+        const weekEndDate = new Date(parsedWeekStart);
+        weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+        const weekEnding = [
+            weekEndDate.getUTCFullYear(),
+            String(weekEndDate.getUTCMonth() + 1).padStart(2, '0'),
+            String(weekEndDate.getUTCDate()).padStart(2, '0'),
+        ].join('-');
+        if (format === 'csv') {
+            const csv = buildTimecardCsv(normalizedTimecards, weekStart, jobCode || undefined);
+            return {
+                success: true,
+                format: 'csv',
+                fileName: buildTimecardCsvFilename(weekStart, jobCode || undefined),
+                contentType: 'text/csv',
+                contentBase64: Buffer.from(csv, 'utf-8').toString('base64'),
+                weekStart,
+                weekEnding,
+                timecardCount: normalizedTimecards.length,
+            };
+        }
+        const submittedBy = await (0, firestoreService_1.getUserDisplayName)(request.auth.uid, request.auth.token.email);
+        const pdfBuffer = await buildTimecardPdfBuffer({
+            jobName,
+            jobNumber: jobCode,
+            submittedBy,
+            weekStart,
+            timecards: normalizedTimecards,
+        });
+        return {
+            success: true,
+            format: 'pdf',
+            fileName: buildTimecardPdfFilename(weekStart, jobCode || undefined),
+            contentType: 'application/pdf',
+            contentBase64: pdfBuffer.toString('base64'),
+            weekStart,
+            weekEnding,
+            timecardCount: normalizedTimecards.length,
+        };
+    }
+    catch (error) {
+        console.error('[downloadTimecardsForWeek] Error', { weekStart, format, jobId, error });
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to download timecards');
+    }
+});
+function buildTimecardCsv(timecards, weekStart, defaultJobCode) {
     const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', ''];
-    const rows = [headers, Array(headers.length).fill('')];
-    if (!timecards || timecards.length === 0) {
-        return rows.map(r => r.join(',')).join('\n');
-    }
-    const start = new Date(weekStart);
-    if (isNaN(start.getTime())) {
-        console.warn('[buildTimecardCsv] Invalid weekStart; using raw value for dates');
-    }
-    const dayOffsets = [
-        { key: 'sun', label: 'Sun', index: 0 },
-        { key: 'mon', label: 'Mon', index: 1 },
-        { key: 'tue', label: 'Tue', index: 2 },
-        { key: 'wed', label: 'Wed', index: 3 },
-        { key: 'thu', label: 'Thu', index: 4 },
-        { key: 'fri', label: 'Fri', index: 5 },
-        { key: 'sat', label: 'Sat', index: 6 },
-    ];
-    const formatDate = (offset) => {
-        if (isNaN(start.getTime()))
-            return weekStart;
-        const d = new Date(start);
-        d.setDate(d.getDate() + offset);
-        const month = d.getMonth() + 1;
-        const day = d.getDate();
-        const year = d.getFullYear();
-        return `${month}/${day}/${year}`;
-    };
-    const escapeCsv = (value) => {
-        const str = String(value ?? '');
-        if (!str.length)
-            return '';
-        if (/[",\n\r]/.test(str)) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    };
-    for (const tc of timecards) {
-        const lines = Array.isArray(tc?.lines) ? tc.lines : [];
+    const fixedDataRowCount = 108;
+    const blankRow = Array(headers.length).fill('');
+    const rows = [headers, [...blankRow]];
+    const fallbackWeekEnding = getWeekEndingFromWeekStart(weekStart);
+    for (const tc of Array.isArray(timecards) ? timecards : []) {
+        const lines = Array.isArray(tc?.lines) && tc.lines.length ? tc.lines : [];
+        const detailDate = formatPlexxisDate(String(tc?.weekEndingDate || fallbackWeekEnding || weekStart || ''));
+        const employeeName = formatPlexxisEmployeeName(tc);
+        const employeeCode = String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim();
         for (const line of lines) {
-            for (const offset of dayOffsets) {
-                const hoursVal = Number(line?.[offset.key]) || 0;
-                const productionVal = Number(line?.production?.[offset.key]) || 0;
-                if (hoursVal === 0 && productionVal === 0)
-                    continue;
-                rows.push([
-                    escapeCsv(tc?.employeeName || ''),
-                    escapeCsv(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || ''),
-                    escapeCsv(line?.jobNumber || ''),
-                    escapeCsv(formatDate(offset.index)),
-                    escapeCsv(line?.area || line?.subsectionArea || ''),
-                    escapeCsv(line?.account || line?.acct || ''),
-                    escapeCsv(line?.costCode || line?.difC || ''),
-                    escapeCsv(hoursVal ? String(hoursVal) : ''),
-                    escapeCsv(productionVal ? String(productionVal) : ''),
-                    '',
-                    '',
-                ]);
-            }
+            const lineHours = getLineTotalHoursForForm(line);
+            const lineProduction = getLineTotalProductionForForm(line);
+            const subSection = getLineSubSection(line);
+            const activityCode = sanitizeActivityCode(getLineActivityCode(line), line, [
+                String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim(),
+                String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim(),
+            ]);
+            const costCode = getLineCostCode(line);
+            const rowJobCode = String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim();
+            const hasData = lineHours > 0 || lineProduction > 0 || !!subSection || !!activityCode || !!costCode;
+            if (!hasData)
+                continue;
+            rows.push([
+                employeeName,
+                employeeCode,
+                rowJobCode,
+                detailDate,
+                subSection,
+                activityCode,
+                costCode,
+                formatPlexxisNumber(lineHours, true),
+                formatPlexxisNumber(lineProduction, true),
+                '',
+                '',
+            ]);
         }
     }
-    return rows.map(r => r.join(',')).join('\n');
+    while (rows.length < fixedDataRowCount + 1) {
+        rows.push([...blankRow]);
+    }
+    return rows
+        .map((row) => row.map((value) => escapeCsvValue(value)).join(','))
+        .join('\r\n');
 }
 function buildTimecardCsvFilename(weekStart, jobCode) {
     const weekDate = new Date(weekStart);
@@ -487,91 +927,300 @@ function buildTimecardPdfFilename(weekStart, jobCode) {
     return normalizedJobCode ? `${normalizedWeekStart} ${normalizedJobCode}.pdf` : `${normalizedWeekStart}.pdf`;
 }
 async function buildTimecardPdfBuffer(payload) {
-    const doc = new pdfkit_1.default({ margin: 36, size: 'LETTER' });
+    const doc = new pdfkit_1.default({ margin: 24, size: 'LETTER' });
     const chunks = [];
-    const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const monSatKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
     const safeText = (value) => String(value ?? '').trim() || '-';
-    const fmt = (value) => {
-        const n = Number(value) || 0;
-        return Number.isInteger(n) ? String(n) : n.toFixed(2);
+    const fmt = (value, blankWhenZero = false) => {
+        const numeric = toNumber(value);
+        if (blankWhenZero && numeric === 0)
+            return '';
+        return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
     };
-    const weekStartDate = payload.weekStart ? new Date(payload.weekStart) : null;
+    const fmtMoney = (value, blankWhenZero = false) => {
+        const numeric = toNumber(value);
+        if (blankWhenZero && numeric === 0)
+            return '';
+        return `$${numeric.toFixed(2)}`;
+    };
+    const percentWidths = (total, weights) => {
+        const sum = weights.reduce((s, w) => s + w, 0) || 1;
+        const widths = weights.map((w) => (total * w) / sum);
+        const used = widths.slice(0, -1).reduce((s, v) => s + v, 0);
+        widths[widths.length - 1] = Math.max(total - used, 0);
+        return widths;
+    };
+    const weekStartDate = payload.weekStart ? new Date(`${payload.weekStart}T00:00:00Z`) : null;
     const weekEndDate = weekStartDate && !Number.isNaN(weekStartDate.getTime()) ? new Date(weekStartDate) : null;
     if (weekEndDate)
-        weekEndDate.setDate(weekEndDate.getDate() + 6);
-    const weekLabel = weekStartDate && weekEndDate
-        ? `${weekStartDate.toLocaleDateString()} - ${weekEndDate.toLocaleDateString()}`
+        weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+    const weekEndingLabel = weekEndDate
+        ? `${weekEndDate.getUTCMonth() + 1}/${weekEndDate.getUTCDate()}/${weekEndDate.getUTCFullYear()}`
         : safeText(payload.weekStart);
-    const ensureSpace = (y, needed = 24) => {
-        const bottomLimit = doc.page.height - doc.page.margins.bottom;
-        if (y + needed > bottomLimit) {
-            doc.addPage();
-            return doc.page.margins.top;
-        }
-        return y;
-    };
     await new Promise((resolve, reject) => {
         doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
         doc.on('end', () => resolve());
         doc.on('error', (err) => reject(err));
-        let y = doc.page.margins.top;
-        doc.font('Helvetica-Bold').fontSize(14).text('Timecards This Week', doc.page.margins.left, y);
-        y += 20;
-        doc.font('Helvetica').fontSize(10);
-        doc.text(`Job: ${safeText(payload.jobName)}${payload.jobNumber ? ` (#${payload.jobNumber})` : ''}`, doc.page.margins.left, y);
-        y += 14;
-        doc.text(`Week: ${weekLabel}`, doc.page.margins.left, y);
-        y += 14;
-        doc.text(`Submitted By: ${safeText(payload.submittedBy)}`, doc.page.margins.left, y);
-        y += 18;
-        const timecards = Array.isArray(payload.timecards) ? payload.timecards : [];
+        const drawGridRow = (x, y, colWidths, rowHeight, cells, options) => {
+            let cx = x;
+            const aligns = options?.align || [];
+            doc.lineWidth(0.5).strokeColor('#111111');
+            for (let i = 0; i < colWidths.length; i++) {
+                const cellWidth = colWidths[i] || 0;
+                const text = cells[i] ?? '';
+                const align = aligns[i] || 'center';
+                doc.rect(cx, y, cellWidth, rowHeight).stroke();
+                doc
+                    .font(options?.bold ? 'Helvetica-Bold' : 'Helvetica')
+                    .fontSize(options?.fontSize ?? 6.0)
+                    .fillColor('#111111')
+                    .text(text, cx + 1.2, y + 1.2, {
+                    width: Math.max(cellWidth - 3, 0),
+                    height: Math.max(rowHeight - 3, 0),
+                    align,
+                    ellipsis: true,
+                });
+                cx += cellWidth;
+            }
+        };
+        const drawHeaderFieldRow = (x, y, width, rowHeight, leftText, rightText) => {
+            const leftWidth = Math.round(width * 0.62 * 1000) / 1000;
+            doc.rect(x, y, width, rowHeight).stroke();
+            doc.moveTo(x + leftWidth, y).lineTo(x + leftWidth, y + rowHeight).stroke();
+            doc.font('Helvetica').fontSize(6.8).text(leftText, x + 2, y + 2, {
+                width: leftWidth - 4,
+                height: rowHeight - 4,
+                align: 'left',
+                ellipsis: true,
+            });
+            doc.font('Helvetica').fontSize(6.8).text(rightText, x + leftWidth + 2, y + 2, {
+                width: width - leftWidth - 4,
+                height: rowHeight - 4,
+                align: 'left',
+                ellipsis: true,
+            });
+        };
+        const drawTimecardCard = (tc, x, y, width, height, renderBlankTemplate = false) => {
+            const pad = 6;
+            const innerX = x + pad;
+            const innerY = y + pad;
+            const innerWidth = width - pad * 2;
+            const innerHeight = height - pad * 2;
+            const bottom = y + height - pad;
+            doc.lineWidth(1).strokeColor('#111111').rect(x, y, width, height).stroke();
+            let cursorY = innerY;
+            doc
+                .font('Helvetica-Bold')
+                .fontSize(10)
+                .fillColor('#111111')
+                .text('PHASE 2 COMPANY', innerX, cursorY, { width: innerWidth, align: 'center' });
+            cursorY += 14.5;
+            const employeeName = renderBlankTemplate ? '' : String(tc?.employeeName || '').trim();
+            const employeeCode = renderBlankTemplate ? '' : String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim();
+            const occupation = renderBlankTemplate ? '' : String(tc?.occupation || '').trim();
+            const wageNumeric = toNumber(tc?.employeeWage ?? tc?.wage);
+            const wageSource = tc?.employeeWage ?? tc?.wage ?? '';
+            const wageLabel = renderBlankTemplate ? '' : (wageNumeric > 0 ? `$${wageNumeric.toFixed(2)}` : String(wageSource).trim());
+            const weekEnding = renderBlankTemplate ? '' : weekEndingLabel;
+            const fieldRowHeight = 11.5;
+            drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, `EMP. NAME: ${employeeName}`, `EMPLOYEE# ${employeeCode}`);
+            cursorY += fieldRowHeight;
+            drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, `OCCUPATION: ${occupation}`, `Wage ${wageLabel}`);
+            cursorY += fieldRowHeight;
+            drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, '', `WEEK ENDING ${weekEnding}`);
+            cursorY += fieldRowHeight + 2;
+            const footerHeight = 98;
+            const gridTop = cursorY;
+            const gridBottom = Math.max(gridTop + 30, innerY + innerHeight - footerHeight);
+            const gridHeight = Math.max(gridBottom - gridTop, 30);
+            const tableHeaderHeight = 11;
+            const maxLineGroups = 13;
+            const rowHeight = Math.max(5.5, (gridHeight - tableHeaderHeight) / (maxLineGroups * 3));
+            const lineGroupHeight = rowHeight * 3;
+            const columnWidths = percentWidths(innerWidth, [16, 4, 4, 10, 6, 7, 7, 7, 7, 7, 7, 8, 8, 6]);
+            const detailFontSize = rowHeight >= 6.25 ? 5.8 : 4.9;
+            const costFontSize = rowHeight >= 6.25 ? 5.5 : 4.6;
+            drawGridRow(innerX, gridTop, columnWidths, tableHeaderHeight, ['JOB #', '1', '', 'ACCT', 'DIF', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'TOTAL', 'PROD', 'OFF'], {
+                bold: true,
+                fontSize: rowHeight >= 6.25 ? 5.9 : 5.1,
+                align: ['left', 'center', 'center', 'left', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center'],
+            });
+            let cursorDataY = gridTop + tableHeaderHeight;
+            const lines = renderBlankTemplate ? [] : (Array.isArray(tc?.lines) ? tc.lines.filter((line) => hasMeaningfulLineDataForPdf(line)) : []);
+            for (let lineIndex = 0; lineIndex < maxLineGroups; lineIndex++) {
+                const line = lines[lineIndex];
+                const hasLine = !!line;
+                const jobCode = hasLine ? String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || '').trim() : '';
+                const account = hasLine
+                    ? sanitizeActivityCode(getLineActivityCode(line), line, [
+                        jobCode,
+                        String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim(),
+                    ])
+                    : '';
+                const lineHoursTotal = hasLine ? getLineTotalHoursForForm(line) : 0;
+                const lineProdTotal = hasLine ? getLineTotalProductionForForm(line) : 0;
+                const lineCostTotal = hasLine ? getLineTotalCostForForm(line) : 0;
+                const offHours = hasLine ? getLineOffHours(line) : 0;
+                const offProduction = hasLine ? getLineOffProduction(line) : 0;
+                const offCost = hasLine ? getLineOffCost(line) : 0;
+                const hRow = [
+                    jobCode,
+                    hasLine ? '1' : '',
+                    hasLine ? 'H' : '',
+                    account,
+                    hasLine ? String(line?.difH || '').trim() : '',
+                    ...monSatKeys.map((k) => fmt(line?.[k], true)),
+                    hasLine ? fmt(lineHoursTotal, true) : '',
+                    '',
+                    hasLine ? fmt(offHours, true) : '',
+                ];
+                const pRow = [
+                    '',
+                    hasLine ? '1' : '',
+                    hasLine ? 'P' : '',
+                    '',
+                    hasLine ? String(line?.difP || '').trim() : '',
+                    ...monSatKeys.map((k) => fmt(line?.production?.[k], true)),
+                    hasLine ? fmt(lineProdTotal, true) : '',
+                    '',
+                    hasLine ? fmt(offProduction, true) : '',
+                ];
+                const cRow = [
+                    '',
+                    hasLine ? '1' : '',
+                    hasLine ? 'C' : '',
+                    '',
+                    hasLine ? String(line?.difC || '').trim() : '',
+                    ...monSatKeys.map((k) => fmtMoney(line?.unitCost?.[k], true)),
+                    hasLine ? fmtMoney(lineCostTotal, true) : '',
+                    '',
+                    hasLine ? fmtMoney(offCost, true) : '',
+                ];
+                drawGridRow(innerX, cursorDataY, columnWidths, rowHeight, hRow, {
+                    fontSize: detailFontSize,
+                    align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+                });
+                cursorDataY += rowHeight;
+                drawGridRow(innerX, cursorDataY, columnWidths, rowHeight, pRow, {
+                    fontSize: detailFontSize,
+                    align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+                });
+                cursorDataY += rowHeight;
+                drawGridRow(innerX, cursorDataY, columnWidths, rowHeight, cRow, {
+                    fontSize: costFontSize,
+                    align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+                });
+                cursorDataY += rowHeight;
+            }
+            const footerTop = gridTop + tableHeaderHeight + (maxLineGroups * lineGroupHeight);
+            const mondayHours = lines.reduce((sum, line) => sum + toNumber(line?.mon), 0);
+            const tuesdayHours = lines.reduce((sum, line) => sum + toNumber(line?.tue), 0);
+            const wednesdayHours = lines.reduce((sum, line) => sum + toNumber(line?.wed), 0);
+            const thursdayHours = lines.reduce((sum, line) => sum + toNumber(line?.thu), 0);
+            const fridayHours = lines.reduce((sum, line) => sum + toNumber(line?.fri), 0);
+            const saturdayHours = lines.reduce((sum, line) => sum + toNumber(line?.sat), 0);
+            const offHoursTotal = lines.reduce((sum, line) => sum + getLineOffHours(line), 0);
+            const weekTotalHours = mondayHours + tuesdayHours + wednesdayHours + thursdayHours + fridayHours + saturdayHours;
+            drawGridRow(innerX, footerTop, columnWidths, 11, ['TOTAL HOURS', '', '', '', '', fmt(mondayHours, true), fmt(tuesdayHours, true), fmt(wednesdayHours, true), fmt(thursdayHours, true), fmt(fridayHours, true), fmt(saturdayHours, true), fmt(weekTotalHours, true), '', fmt(offHoursTotal, true)], {
+                bold: true,
+                fontSize: 5.8,
+                align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+            });
+            const smallBoxY = footerTop + 11;
+            const boxWidth = innerWidth / 4;
+            const boxLabels = ['JOB or GL', 'ACCT', 'OFFICE', 'AMT'];
+            for (let idx = 0; idx < 4; idx++) {
+                const bx = innerX + (idx * boxWidth);
+                doc.rect(bx, smallBoxY, boxWidth, 14).stroke();
+                doc.font('Helvetica').fontSize(6.2).text(boxLabels[idx] || '', bx + 2, smallBoxY + 2, {
+                    width: boxWidth - 4,
+                    align: 'center',
+                    ellipsis: true,
+                });
+            }
+            const totalHoursForFooter = Math.max(0, toNumber(weekTotalHours));
+            let otHours = '';
+            let regHours = '';
+            if (!renderBlankTemplate) {
+                if (totalHoursForFooter <= 40) {
+                    regHours = totalHoursForFooter > 0 ? fmt(totalHoursForFooter) : '';
+                }
+                else {
+                    regHours = fmt(40);
+                    otHours = fmt(totalHoursForFooter - 40, true);
+                }
+            }
+            const otY = smallBoxY + 14 + 2;
+            doc.rect(innerX, otY, 24, 11).stroke();
+            doc.rect(innerX + 24, otY, innerWidth - 24, 11).stroke();
+            doc.font('Helvetica-Bold').fontSize(6.6).text('OT', innerX + 2, otY + 2, { width: 20, align: 'left' });
+            doc.font('Helvetica').fontSize(6.6).text(otHours, innerX + 26, otY + 2, {
+                width: innerWidth - 28,
+                align: 'left',
+            });
+            const regY = otY + 11;
+            doc.rect(innerX, regY, 24, 11).stroke();
+            doc.rect(innerX + 24, regY, innerWidth - 24, 11).stroke();
+            doc.font('Helvetica-Bold').fontSize(6.6).text('REG', innerX + 2, regY + 2, { width: 20, align: 'left' });
+            doc.font('Helvetica').fontSize(6.6).text(regHours, innerX + 26, regY + 2, {
+                width: innerWidth - 28,
+                align: 'left',
+            });
+            const notesY = regY + 11;
+            const notesHeight = Math.max(bottom - notesY, 12);
+            doc.rect(innerX, notesY, 34, notesHeight).stroke();
+            doc.rect(innerX + 34, notesY, innerWidth - 34, notesHeight).stroke();
+            doc.font('Helvetica-Bold').fontSize(6.6).text('NOTES:', innerX + 2, notesY + 2, { width: 30, align: 'left' });
+            doc.font('Helvetica').fontSize(6.2).text(renderBlankTemplate ? '' : String(tc?.notes || '').trim(), innerX + 36, notesY + 2, {
+                width: innerWidth - 38,
+                height: notesHeight - 4,
+                align: 'left',
+                ellipsis: true,
+            });
+        };
+        const timecards = (Array.isArray(payload.timecards) ? payload.timecards : []).filter((tc) => hasMeaningfulTimecard(tc));
+        const pageWidth = doc.page.width;
+        const pageHeight = doc.page.height;
+        const marginLeft = doc.page.margins.left || 24;
+        const marginTop = doc.page.margins.top || 24;
+        const marginRight = doc.page.margins.right || 24;
+        const marginBottom = doc.page.margins.bottom || 24;
+        const landscapeWidth = pageHeight;
+        const landscapeHeight = pageWidth;
+        const contentLeft = marginLeft;
+        const contentTop = marginTop;
+        const contentWidth = landscapeWidth - marginLeft - marginRight;
+        const contentHeight = landscapeHeight - marginTop - marginBottom;
+        const columnGap = 10;
+        const cardWidth = (contentWidth - columnGap) / 2;
         if (!timecards.length) {
-            doc.font('Helvetica').fontSize(10).text('No submitted timecards found.', doc.page.margins.left, y);
+            doc.save();
+            doc.translate(pageWidth, 0);
+            doc.rotate(90);
+            doc
+                .font('Helvetica')
+                .fontSize(10)
+                .fillColor('#111111')
+                .text('No submitted timecards found.', contentLeft, contentTop);
+            doc.restore();
             doc.end();
             return;
         }
-        for (const tc of timecards) {
-            y = ensureSpace(y, 48);
-            doc.font('Helvetica-Bold').fontSize(11).text(`Employee: ${safeText(tc?.employeeName)}`, doc.page.margins.left, y);
-            y += 14;
-            doc.font('Helvetica').fontSize(9);
-            doc.text(`Employee Code: ${safeText(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber)}`, doc.page.margins.left, y);
-            y += 12;
-            const header = ['Job', 'Area', 'Acct', 'Cost', ...dayLabels, 'Tot Hrs', 'Tot Prod', 'Line $'].join(' | ');
-            y = ensureSpace(y, 24);
-            doc.font('Helvetica-Bold').fontSize(8).text(header, doc.page.margins.left, y, {
-                width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-            });
-            y += 12;
-            doc.font('Helvetica').fontSize(8);
-            const lines = Array.isArray(tc?.lines) ? tc.lines : [];
-            for (const line of lines) {
-                y = ensureSpace(y, 14);
-                const dayHours = dayKeys.map((k) => fmt(line?.[k]));
-                const row = [
-                    safeText(line?.jobNumber),
-                    safeText(line?.area || line?.subsectionArea),
-                    safeText(line?.account || line?.acct),
-                    safeText(line?.costCode || line?.difC),
-                    ...dayHours,
-                    fmt(line?.totals?.hours),
-                    fmt(line?.totals?.production),
-                    fmt(line?.totals?.lineTotal),
-                ].join(' | ');
-                doc.text(row, doc.page.margins.left, y, {
-                    width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-                    ellipsis: true,
-                });
-                y += 11;
+        const cardTop = contentTop;
+        const cardHeight = contentHeight;
+        for (let idx = 0; idx < timecards.length; idx += 2) {
+            if (idx > 0)
+                doc.addPage();
+            const leftX = contentLeft;
+            const rightX = contentLeft + cardWidth + columnGap;
+            doc.save();
+            doc.translate(pageWidth, 0);
+            doc.rotate(90);
+            drawTimecardCard(timecards[idx], leftX, cardTop, cardWidth, cardHeight, false);
+            if (idx + 1 < timecards.length) {
+                drawTimecardCard(timecards[idx + 1], rightX, cardTop, cardWidth, cardHeight, false);
             }
-            y = ensureSpace(y, 18);
-            doc.font('Helvetica-Bold').fontSize(9);
-            doc.text(`Totals - Hours: ${fmt(tc?.totals?.hoursTotal)} | Production: ${fmt(tc?.totals?.productionTotal)} | Line Total: ${fmt(tc?.totals?.lineTotal)}`, doc.page.margins.left, y, { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
-            y += 18;
-            doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.width - doc.page.margins.right, y).strokeColor('#AAAAAA').stroke();
-            y += 12;
-            doc.font('Helvetica').fillColor('black');
+            doc.restore();
         }
         doc.end();
     });

@@ -69,7 +69,7 @@ const handleSelect = (id: string) => {
 }
 
 .log-list-meta {
-  color: $text-muted-2;
+  color: $text-muted;
 }
 
 .list-group-item.log-list-item-active {
@@ -86,7 +86,7 @@ const handleSelect = (id: string) => {
 }
 
 .list-group-item.log-list-item-active .log-list-meta {
-  color: lighten($text-muted-2, 12%);
+  color: lighten($text-muted, 12%);
 }
 
 .log-list-item:active {

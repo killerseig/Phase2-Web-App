@@ -164,6 +164,9 @@ export interface Timecard {
   occupation: string                // Denormalized
   employeeWage?: number | null      // Hourly wage
   subcontractedEmployee?: boolean   // Is subcontracted employee
+  regularHoursOverride?: number | null  // Admin override for regular hours
+  overtimeHoursOverride?: number | null // Admin override for overtime hours
+  mileage?: number | null           // Drive mileage reimbursement amount/units
   
   // Job entries (multiple jobs per timecard)
   jobs?: TimecardJobEntry[]         // Can have multiple jobs with H/P/C tracking
@@ -214,7 +217,7 @@ export interface Attachment {
   name: string
   url: string
   path: string
-  type?: 'photo' | 'ptp' | 'other'
+  type?: 'photo' | 'ptp' | 'qc' | 'other'
   createdAt?: Timestamp
 }
 
@@ -249,7 +252,11 @@ export interface DailyLog {
   deliveriesReceived: string
   deliveriesNeeded: string
   newWorkAuthorizations: string
-  qcInspection: string
+  qcInspection?: string             // Legacy QC notes (kept for backwards compatibility)
+  qcAssignedTo?: string
+  qcAreasInspected?: string
+  qcIssuesIdentified?: string
+  qcIssuesResolved?: string
   
   // Notes
   notesCorrespondence: string

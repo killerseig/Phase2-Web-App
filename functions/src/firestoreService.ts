@@ -49,7 +49,7 @@ export async function getJobDetails(jobId: string): Promise<JobDetails | null> {
   return {
     id: jobSnap.id,
     name: data?.name || DEFAULTS.JOB_NAME,
-    number: data?.number || '',
+    number: data?.number || data?.code || '',
   }
 }
 

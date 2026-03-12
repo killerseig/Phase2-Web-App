@@ -54,6 +54,9 @@ function normalize(id: string, data: DocumentData): Timecard {
     occupation: data.occupation ?? '',
     employeeWage: data.employeeWage ?? null,
     subcontractedEmployee: data.subcontractedEmployee ?? false,
+    regularHoursOverride: data.regularHoursOverride ?? null,
+    overtimeHoursOverride: data.overtimeHoursOverride ?? null,
+    mileage: data.mileage ?? null,
     
     // Job entries
     jobs: Array.isArray(data.jobs) ? data.jobs : [],
@@ -267,6 +270,9 @@ export async function createTimecard(jobId: string, input: TimecardInput): Promi
       occupation: input.occupation,
       employeeWage: input.employeeWage ?? null,
       subcontractedEmployee: input.subcontractedEmployee ?? false,
+      regularHoursOverride: input.regularHoursOverride ?? null,
+      overtimeHoursOverride: input.overtimeHoursOverride ?? null,
+      mileage: input.mileage ?? null,
 
       // Job entries
       jobs: input.jobs ?? [],
@@ -322,6 +328,9 @@ export async function updateTimecard(
     if ('occupation' in updates) payload.occupation = updates.occupation
     if ('employeeWage' in updates) payload.employeeWage = updates.employeeWage ?? null
     if ('subcontractedEmployee' in updates) payload.subcontractedEmployee = updates.subcontractedEmployee ?? false
+    if ('regularHoursOverride' in updates) payload.regularHoursOverride = updates.regularHoursOverride ?? null
+    if ('overtimeHoursOverride' in updates) payload.overtimeHoursOverride = updates.overtimeHoursOverride ?? null
+    if ('mileage' in updates) payload.mileage = updates.mileage ?? null
 
     payload.updatedAt = serverTimestamp()
 
@@ -460,6 +469,9 @@ export async function createTimecardFromCopy(
       occupation: sourceTimecard.occupation,
       employeeWage: sourceTimecard.employeeWage ?? null,
       subcontractedEmployee: sourceTimecard.subcontractedEmployee ?? false,
+      regularHoursOverride: null,
+      overtimeHoursOverride: null,
+      mileage: null,
       jobs: copiedJobs,
       days: newDays,
       notes: '', // Don't copy notes, start fresh

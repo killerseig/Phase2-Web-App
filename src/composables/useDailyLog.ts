@@ -25,6 +25,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { logError, logWarn } from '@/utils/logger'
 import { useConfirmDialog } from './useConfirmDialog'
+import { useSubscriptionRegistry } from './useSubscriptionRegistry'
 import { createEmptyDailyLogDraft } from './dailyLog/defaults'
 
 export type ToastHandle = {
@@ -39,6 +40,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   const auth = useAuthStore()
   const jobs = useJobsStore()
   const { confirm } = useConfirmDialog()
+  const subscriptions = useSubscriptionRegistry()
   const toastRef = opts?.toastRef
 
   const job = computed(() => jobs.currentJob)
@@ -88,13 +90,10 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
 
   const photoFileName = ref('No file selected')
   const ptpFileName = ref('No file selected')
+  const qcFileName = ref('No file selected')
 
   const form = ref<DailyLogDraftInput>(createEmptyDailyLogDraft(jobName.value))
 
-  let unsubscribeLiveLog: (() => void) | null = null
-  let unsubscribeLogsForDate: (() => void) | null = null
-  let unsubscribeJobRecipients: (() => void) | null = null
-  let unsubscribeGlobalRecipients: (() => void) | null = null
   let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null
   const creatingDraft = ref(false)
 
@@ -104,31 +103,20 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     currentSubmittedAt.value = null
     photoFileName.value = 'No file selected'
     ptpFileName.value = 'No file selected'
+    qcFileName.value = 'No file selected'
   }
 
   const stopLiveLog = () => {
-    if (unsubscribeLiveLog) {
-      unsubscribeLiveLog()
-      unsubscribeLiveLog = null
-    }
+    subscriptions.clear('liveLog')
   }
 
   const stopLogsForDate = () => {
-    if (unsubscribeLogsForDate) {
-      unsubscribeLogsForDate()
-      unsubscribeLogsForDate = null
-    }
+    subscriptions.clear('logsForDate')
   }
 
   const stopRecipientSubscriptions = () => {
-    if (unsubscribeJobRecipients) {
-      unsubscribeJobRecipients()
-      unsubscribeJobRecipients = null
-    }
-    if (unsubscribeGlobalRecipients) {
-      unsubscribeGlobalRecipients()
-      unsubscribeGlobalRecipients = null
-    }
+    subscriptions.clear('jobRecipients')
+    subscriptions.clear('globalRecipients')
   }
 
   const clearAutoSaveTimer = () => {
@@ -164,6 +152,10 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       deliveriesNeeded: log.deliveriesNeeded,
       newWorkAuthorizations: log.newWorkAuthorizations,
       qcInspection: log.qcInspection,
+      qcAssignedTo: log.qcAssignedTo ?? '',
+      qcAreasInspected: log.qcAreasInspected ?? '',
+      qcIssuesIdentified: log.qcIssuesIdentified ?? '',
+      qcIssuesResolved: log.qcIssuesResolved ?? '',
       notesCorrespondence: log.notesCorrespondence,
       actionItems: log.actionItems,
       attachments: log.attachments || [],
@@ -172,12 +164,12 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
 
   const startLiveLog = (dailyLogId: string) => {
     stopLiveLog()
-    unsubscribeLiveLog = subscribeToDailyLog(jobId.value, dailyLogId, (log) => {
+    subscriptions.replace('liveLog', subscribeToDailyLog(jobId.value, dailyLogId, (log) => {
       if (log.id === currentId.value) {
         currentStatus.value = log.status
         applyDailyLogToForm(log)
       }
-    }, () => {})
+    }, () => {}))
   }
 
   const getMineFromLogs = (logs: DailyLog[], dateStr: string): DailyLog | null => {
@@ -199,7 +191,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
 
     return new Promise((resolve) => {
       let resolved = false
-      unsubscribeLogsForDate = subscribeDailyLogsForDate(
+      subscriptions.replace('logsForDate', subscribeDailyLogsForDate(
         jobId.value,
         dateStr,
         (logs) => {
@@ -230,7 +222,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
             resolve([])
           }
         }
-      )
+      ))
     })
   }
 
@@ -329,20 +321,22 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     }
   }
 
-  const handleFileChange = async (e: Event, type: 'photo' | 'ptp') => {
+  const handleFileChange = async (e: Event, type: 'photo' | 'ptp' | 'qc') => {
     const input = e.target as HTMLInputElement
     const files = Array.from(input.files || [])
 
     if (!files.length) {
       if (type === 'photo') photoFileName.value = 'No file selected'
-      else ptpFileName.value = 'No file selected'
+      else if (type === 'ptp') ptpFileName.value = 'No file selected'
+      else qcFileName.value = 'No file selected'
       return
     }
 
     const firstFile = files[0]
     const label = files.length === 1 && firstFile ? firstFile.name : `${files.length} files selected`
     if (type === 'photo') photoFileName.value = label
-    else ptpFileName.value = label
+    else if (type === 'ptp') ptpFileName.value = label
+    else qcFileName.value = label
 
     await uploadAttachment(files, type)
     input.value = ''
@@ -362,7 +356,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
       }
 
       stopRecipientSubscriptions()
-      unsubscribeJobRecipients = subscribeDailyLogRecipients(
+      subscriptions.replace('jobRecipients', subscribeDailyLogRecipients(
         jobId.value,
         (recipients) => {
           jobEmailRecipients.value = recipients
@@ -371,8 +365,8 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
           logWarn('DailyLogs', 'Failed to subscribe to daily log recipients', recipientError)
           jobEmailRecipients.value = []
         }
-      )
-      unsubscribeGlobalRecipients = subscribeEmailSettings(
+      ))
+      subscriptions.replace('globalRecipients', subscribeEmailSettings(
         (settings) => {
           globalDailyLogRecipients.value = settings.dailyLogSubmitRecipients ?? []
         },
@@ -380,7 +374,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
           logWarn('DailyLogs', 'Failed to subscribe to global daily log recipients', globalRecipientError)
           globalDailyLogRecipients.value = []
         }
-      )
+      ))
 
       await loadForDate(logDate.value)
     } catch (e) {
@@ -548,7 +542,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     }
   }
 
-  const uploadAttachment = async (files: File[], type: 'photo' | 'ptp' | 'other') => {
+  const uploadAttachment = async (files: File[], type: 'photo' | 'ptp' | 'qc' | 'other') => {
     if (!files.length || !currentId.value) {
       if (!files.length) toastRef?.value?.show('Please select a file', 'error')
       if (!currentId.value) toastRef?.value?.show('Please save the daily log first', 'error')
@@ -573,7 +567,8 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         if (!form.value.attachments) form.value.attachments = []
         form.value.attachments.push(att)
         await updateDailyLog(jobId.value, currentId.value, { ...form.value })
-        toastRef?.value?.show(`${type === 'ptp' ? 'PTP Photo' : 'Photo'} uploaded: ${file.name}`, 'success')
+        const uploadLabel = type === 'ptp' ? 'PTP Photo' : type === 'qc' ? 'QC Photo' : 'Photo'
+        toastRef?.value?.show(`${uploadLabel} uploaded: ${file.name}`, 'success')
       }
     } catch (e) {
       logError('DailyLogs', 'Upload attachment failed', e)
@@ -710,9 +705,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
   )
   onUnmounted(() => {
     clearAutoSaveTimer()
-    stopLiveLog()
-    stopLogsForDate()
-    stopRecipientSubscriptions()
+    subscriptions.clearAll()
     jobs.stopCurrentJobSubscription()
   })
 
@@ -736,11 +729,13 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
     currentOwnerId,
     currentSubmittedAt,
     jobEmailRecipients,
+    globalDailyLogRecipients,
     newEmailRecipient,
     savingRecipients,
     canEditDraft,
     photoFileName,
     ptpFileName,
+    qcFileName,
     form,
     creatingDraft,
     // methods

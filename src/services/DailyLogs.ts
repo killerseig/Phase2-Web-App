@@ -60,7 +60,11 @@ export type DailyLog = {
   deliveriesReceived: string
   deliveriesNeeded: string
   newWorkAuthorizations: string
-  qcInspection: string
+  qcInspection?: string // Legacy field retained for backward compatibility
+  qcAssignedTo?: string
+  qcAreasInspected?: string
+  qcIssuesIdentified?: string
+  qcIssuesResolved?: string
 
   notesCorrespondence: string
   actionItems: string
@@ -108,6 +112,10 @@ function normalize(id: string, data: DocumentData): DailyLog {
     deliveriesNeeded: data.deliveriesNeeded ?? '',
     newWorkAuthorizations: data.newWorkAuthorizations ?? '',
     qcInspection: data.qcInspection ?? '',
+    qcAssignedTo: data.qcAssignedTo ?? '',
+    qcAreasInspected: data.qcAreasInspected ?? '',
+    qcIssuesIdentified: data.qcIssuesIdentified ?? '',
+    qcIssuesResolved: data.qcIssuesResolved ?? '',
 
     notesCorrespondence: data.notesCorrespondence ?? '',
     actionItems: data.actionItems ?? '',

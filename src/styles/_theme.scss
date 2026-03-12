@@ -15,7 +15,6 @@
   --surface-3: #{vars.$surface-3};
   --text-body: #{vars.$body-color};
   --text-muted: #{vars.$text-muted};
-  --text-muted-2: #{vars.$text-muted-2};
   --text-muted-3: #{vars.$text-muted-3};
   --border: #{vars.$border-color};
   --bs-border-color: #{vars.$border-color};
@@ -23,6 +22,7 @@
   --bs-table-border-color: #{vars.$border-color};
   --bs-list-group-border-color: #{vars.$border-color};
   --bs-card-border-color: #{vars.$border-color};
+  --bs-secondary-color: #{vars.$text-muted};
 
   --radius: #{vars.$border-radius};
   --radius-sm: #{vars.$border-radius-sm};

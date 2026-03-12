@@ -103,6 +103,28 @@ describe('router navigation guard', () => {
     expect(result).toEqual({ name: ROUTE_NAMES.UNAUTHORIZED })
   })
 
+  it('allows controller users on the controller route', async () => {
+    mockAuth.role = ROLES.CONTROLLER
+    const result = await runNavigationGuard({
+      meta: { roles: [ROLES.ADMIN, ROLES.CONTROLLER] },
+      name: ROUTE_NAMES.CONTROLLER,
+      params: {},
+    })
+
+    expect(result).toBe(true)
+  })
+
+  it('blocks controller users from admin-only routes', async () => {
+    mockAuth.role = ROLES.CONTROLLER
+    const result = await runNavigationGuard({
+      meta: { roles: [ROLES.ADMIN] },
+      name: ROUTE_NAMES.ADMIN_USERS,
+      params: {},
+    })
+
+    expect(result).toEqual({ name: ROUTE_NAMES.UNAUTHORIZED })
+  })
+
   it('blocks foremen from jobs they are not assigned to', async () => {
     mockAuth.role = ROLES.FOREMAN
     mockAuth.assignedJobIds = ['job-1']

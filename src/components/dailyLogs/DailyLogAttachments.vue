@@ -30,7 +30,7 @@ const emit = defineEmits<{
   (e: 'delete', path: string): void
 }>()
 
-const photos = computed(() => ((props.attachments || []) as AttachmentWithPath[]).filter((a) => a.type !== 'ptp'))
+const photos = computed(() => ((props.attachments || []) as AttachmentWithPath[]).filter((a) => a.type !== 'ptp' && a.type !== 'qc'))
 const ptpPhotos = computed(() => ((props.attachments || []) as AttachmentWithPath[]).filter((a) => a.type === 'ptp'))
 
 const handleChange = (type: 'photo' | 'ptp', event: Event) => {

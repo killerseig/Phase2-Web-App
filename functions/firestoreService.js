@@ -66,7 +66,7 @@ async function getJobDetails(jobId) {
     return {
         id: jobSnap.id,
         name: data?.name || constants_1.DEFAULTS.JOB_NAME,
-        number: data?.number || '',
+        number: data?.number || data?.code || '',
     };
 }
 /**

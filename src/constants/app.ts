@@ -6,6 +6,7 @@
 // User Roles
 export const ROLES = {
   ADMIN: 'admin',
+  CONTROLLER: 'controller',
   EMPLOYEE: 'employee',
   SHOP: 'shop',
   FOREMAN: 'foreman',
@@ -23,11 +24,11 @@ export const ROUTES = {
   TIMECARDS: '/timecards',
   SHOP_ORDERS: '/shop-orders',
   JOB: '/job',
+  CONTROLLER: '/controller',
   ADMIN_USERS: '/admin/users',
   ADMIN_JOBS: '/admin/jobs',
   ADMIN_CATALOG: '/admin/shop-catalog',
   ADMIN_EMAIL_SETTINGS: '/admin/email-settings',
-  ADMIN_DATA_MIGRATION: '/admin/data-migration',
   UNAUTHORIZED: '/unauthorized',
 } as const
 
@@ -40,11 +41,11 @@ export const ROUTE_NAMES = {
   JOB_DAILY_LOGS: 'job-daily-logs',
   JOB_TIMECARDS: 'job-timecards',
   JOB_SHOP_ORDERS: 'job-shop-orders',
+  CONTROLLER: 'controller',
   ADMIN_USERS: 'admin-users',
   ADMIN_JOBS: 'admin-jobs',
   ADMIN_SHOP_CATALOG: 'admin-shop-catalog',
   ADMIN_EMAIL_SETTINGS: 'admin-email-settings',
-  ADMIN_DATA_MIGRATION: 'admin-data-migration',
   UNAUTHORIZED: 'unauthorized',
   NOT_FOUND: 'not-found',
 } as const

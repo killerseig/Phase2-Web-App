@@ -539,6 +539,7 @@ onUnmounted(() => {
               <option :value="ROLES.EMPLOYEE">Employee</option>
               <option :value="ROLES.SHOP">Shop</option>
               <option :value="ROLES.FOREMAN">Foreman</option>
+              <option :value="ROLES.CONTROLLER">Controller</option>
               <option :value="ROLES.ADMIN">Admin</option>
             </select>
           </div>
@@ -626,6 +627,7 @@ onUnmounted(() => {
                   <option :value="ROLES.EMPLOYEE">Employee</option>
                   <option :value="ROLES.SHOP">Shop</option>
                   <option :value="ROLES.FOREMAN">Foreman</option>
+                  <option :value="ROLES.CONTROLLER">Controller</option>
                   <option :value="ROLES.ADMIN">Admin</option>
                 </select>
               </template>
@@ -637,6 +639,7 @@ onUnmounted(() => {
                   'bg-info': row.role === ROLES.EMPLOYEE,
                   'bg-success': row.role === ROLES.SHOP,
                   'bg-warning': row.role === ROLES.FOREMAN,
+                  'bg-primary': row.role === ROLES.CONTROLLER,
                   'bg-danger': row.role === ROLES.ADMIN,
                 }"
               >

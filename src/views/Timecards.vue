@@ -26,12 +26,15 @@ import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/mo
 import { normalizeError } from '@/services/serviceUtils'
 import { validateRequired } from '@/utils/validation'
 import { logError, logWarn } from '@/utils'
+import { downloadCsv } from '@/utils/plexisIntegration'
 import { ROLES, ROUTE_NAMES } from '@/constants/app'
 import {
+  calculateRegularAndOvertimeHours,
   getTimecardDisplayName,
   getTimecardFirstName,
   getTimecardLastName,
   makeDaysArray,
+  parseHoursOverride,
   parseSubcontractedEmployee,
   parseWage,
   recalcTotalsForTimecard,
@@ -62,6 +65,7 @@ const datePickerRef = ref<FlatpickrRefHandle | null>(null)
 
 const jobId = computed(() => String(props.jobId ?? ''))
 const jobName = computed(() => jobsStore.currentJob?.name ?? 'Timecards')
+const jobCode = computed(() => jobsStore.currentJob?.code?.trim() ?? '')
 const selectedDate = ref<string>('')
 const weekStartDate = computed(() => snapToSunday(selectedDate.value || new Date()))
 const weekEndingDate = computed(() => getSaturdayFromSunday(weekStartDate.value))
@@ -72,7 +76,11 @@ const draftTimecards = ref<Map<string, TimecardModel>>(new Map())
 const autoSaveTimers = ref<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
 const showSummaryModal = ref(false)
+const printMode = ref<'summary' | 'timecards'>('summary')
 const printing = ref(false)
+const exportingPlexxis = ref(false)
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 
 const loading = ref(true)
 const saving = ref(false)
@@ -156,6 +164,9 @@ function createDraft(): TimecardModel {
     lastName,
     employeeWage: parseWage(newTimecardForm.value.employeeWage),
     subcontractedEmployee: parseSubcontractedEmployee(newTimecardForm.value.subcontractedEmployee),
+    regularHoursOverride: null,
+    overtimeHoursOverride: null,
+    mileage: null,
     occupation: newTimecardForm.value.occupation,
     jobs: [
       {
@@ -212,7 +223,11 @@ async function loadTimecards() {
       jobId.value,
       weekEndingDate.value,
       (snapshotTimecards) => {
-        timecards.value = snapshotTimecards as TimecardModel[]
+        const normalized = (snapshotTimecards as TimecardModel[]).map((timecard) => {
+          recalcTotals(timecard)
+          return timecard
+        })
+        timecards.value = normalized
         loading.value = false
       },
       (listenerError) => {
@@ -347,6 +362,9 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
         employeeName: timecard.employeeName,
         employeeWage: timecard.employeeWage,
         subcontractedEmployee: timecard.subcontractedEmployee ?? false,
+        regularHoursOverride: timecard.regularHoursOverride ?? null,
+        overtimeHoursOverride: timecard.overtimeHoursOverride ?? null,
+        mileage: timecard.mileage ?? null,
         occupation: timecard.occupation,
         jobs: timecard.jobs || [],
         days: timecard.days,
@@ -370,6 +388,9 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
         employeeNumber: timecard.employeeNumber,
         employeeWage: timecard.employeeWage,
         subcontractedEmployee: timecard.subcontractedEmployee ?? false,
+        regularHoursOverride: timecard.regularHoursOverride ?? null,
+        overtimeHoursOverride: timecard.overtimeHoursOverride ?? null,
+        mileage: timecard.mileage ?? null,
         occupation: timecard.occupation,
       })
       if (showToast) toastRef.value?.show(`Updated timecard for ${timecard.employeeName}`, 'success')
@@ -383,6 +404,9 @@ async function saveTimecard(timecard: TimecardModel, showToast = true) {
         employeeName: timecard.employeeName,
         employeeWage: timecard.employeeWage,
         subcontractedEmployee: timecard.subcontractedEmployee ?? false,
+        regularHoursOverride: timecard.regularHoursOverride ?? null,
+        overtimeHoursOverride: timecard.overtimeHoursOverride ?? null,
+        mileage: timecard.mileage ?? null,
         occupation: timecard.occupation,
         jobs: timecard.jobs || [],
         days: timecard.days,
@@ -473,14 +497,26 @@ function closeSummary() {
   showSummaryModal.value = false
 }
 
-function printSummary() {
+function startPrint(mode: 'summary' | 'timecards') {
   if (printing.value) return
+  printMode.value = mode
   printing.value = true
-  // Use a timeout to allow modal render before print
   requestAnimationFrame(() => {
     window.print()
-    printing.value = false
   })
+}
+
+function printSummary() {
+  startPrint('summary')
+}
+
+function printTimecardsTwoPerPage() {
+  showSummaryModal.value = false
+  startPrint('timecards')
+}
+
+function onAfterPrint() {
+  printing.value = false
 }
 
 async function generateFromPreviousWeek() {
@@ -497,6 +533,183 @@ async function generateFromPreviousWeek() {
     setError(e, 'Failed to generate timecards')
   } finally {
     autoGenerating.value = false
+  }
+}
+
+function getHoursBreakdown(timecard: TimecardModel): { regularHours: number; overtimeHours: number } {
+  return calculateRegularAndOvertimeHours(
+    timecard.totals?.hoursTotal ?? 0,
+    timecard.regularHoursOverride ?? null,
+    timecard.overtimeHoursOverride ?? null
+  )
+}
+
+function formatHours(value: number | null | undefined): string {
+  const numeric = Number(value ?? 0)
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) return '0.00'
+  return numeric.toFixed(2)
+}
+
+function getOverrideInputValue(value: number | null | undefined): string {
+  return value == null ? '' : String(value)
+}
+
+function getMileageInputValue(value: number | null | undefined): string {
+  return value == null ? '' : String(value)
+}
+
+function parseMileageInput(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) return null
+  return parsed
+}
+
+function updateHourOverride(timecard: TimecardModel, field: 'regular' | 'overtime', rawValue: string) {
+  const parsed = parseHoursOverride(rawValue)
+  if (field === 'regular') {
+    timecard.regularHoursOverride = parsed
+  } else {
+    timecard.overtimeHoursOverride = parsed
+  }
+  autoSave(timecard)
+}
+
+function clearHourOverrides(timecard: TimecardModel) {
+  timecard.regularHoursOverride = null
+  timecard.overtimeHoursOverride = null
+  autoSave(timecard)
+}
+
+function updateMileage(timecard: TimecardModel, rawValue: string) {
+  timecard.mileage = parseMileageInput(rawValue)
+  autoSave(timecard)
+}
+
+function formatPlexxisDate(dateString: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateString || '').trim())
+  if (!match) return dateString
+  const [, year, month, day] = match
+  return `${Number(month)}/${Number(day)}/${year}`
+}
+
+function formatPlexxisEmployeeName(timecard: TimecardModel): string {
+  const firstName = getTimecardFirstName(timecard).trim()
+  const lastName = getTimecardLastName(timecard).trim()
+
+  if (lastName && firstName) return `${lastName}, ${firstName}`
+  if (lastName) return lastName
+  if (firstName) return firstName
+
+  const displayName = (timecard.employeeName || '').trim()
+  return displayName
+}
+
+function formatPlexxisNumber(value: number | null | undefined, blankWhenZero = false): string {
+  const numeric = Number(value ?? 0)
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) return ''
+  if (blankWhenZero && numeric === 0) return ''
+  return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+}
+
+function shouldCopyActivityToCostCode(activityCode: string): boolean {
+  return /[A-Za-z-]/.test(activityCode)
+}
+
+function formatCsvValue(value: string | number | null | undefined): string {
+  const text = String(value ?? '')
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`
+  }
+  return text
+}
+
+function toCsv(headers: string[], rows: Array<Array<string | number | null | undefined>>): string {
+  const header = headers.map(formatCsvValue).join(',')
+  const body = rows.map((row) => row.map(formatCsvValue).join(','))
+  return [header, ...body].join('\r\n')
+}
+
+function sumJobDayMetric(timecard: TimecardModel, jobIndex: number, field: 'hours' | 'production' | 'lineTotal'): number {
+  const job = timecard.jobs?.[jobIndex]
+  if (!job?.days?.length) return 0
+  return job.days.reduce((sum, day) => sum + Number(day?.[field] ?? 0), 0)
+}
+
+function buildPlexxisRows(timecard: TimecardModel): string[][] {
+  const jobRows = timecard.jobs?.length ? timecard.jobs : [null]
+
+  return jobRows
+    .map((job) => {
+      const totalHours = job
+        ? job.days?.reduce((sum, day) => sum + Number(day?.hours ?? 0), 0) ?? 0
+        : Number(timecard.totals?.hoursTotal ?? 0)
+      const totalProduction = job
+        ? job.days?.reduce((sum, day) => sum + Number(day?.production ?? 0), 0) ?? 0
+        : Number(timecard.totals?.productionTotal ?? 0)
+      const subSection = (job?.subsectionArea ?? job?.area ?? job?.jobNumber ?? '').trim()
+      const activityCode = (job?.account ?? job?.acct ?? '').trim()
+      const hasData = totalHours > 0 || totalProduction > 0 || !!subSection || !!activityCode
+
+      if (!hasData) return null
+
+      const costCode = shouldCopyActivityToCostCode(activityCode) ? activityCode : ''
+      const rowJobCode = (jobCode.value || job?.jobNumber || '').trim()
+
+      return [
+        formatPlexxisEmployeeName(timecard),
+        (timecard.employeeNumber || '').trim(),
+        rowJobCode,
+        formatPlexxisDate(timecard.weekEndingDate),
+        subSection,
+        activityCode,
+        costCode,
+        formatPlexxisNumber(totalHours, true),
+        formatPlexxisNumber(totalProduction, true),
+        '',
+        '',
+      ]
+    })
+    .filter((row): row is string[] => row !== null)
+}
+
+async function exportPlexxisCsv() {
+  if (exportingPlexxis.value) return
+  exportingPlexxis.value = true
+  err.value = ''
+  try {
+    const weekTimecards = (await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)) as TimecardModel[]
+    const submitted = weekTimecards.filter(tc => tc.status === 'submitted')
+
+    if (!submitted.length) {
+      toastRef.value?.show('No submitted timecards to export for this week', 'info')
+      return
+    }
+
+    const headers = [
+      'Employee Name',
+      'Employee Code',
+      'Job Code',
+      'DETAIL_DATE',
+      'Sub-Section',
+      'Activity Code',
+      'Cost Code',
+      'H_Hours',
+      'P_HOURS',
+      '',
+      '',
+    ]
+
+    const rows = submitted.flatMap(buildPlexxisRows)
+    const filename = `plexxis-timecards-${jobId.value}-${weekEndingDate.value}.csv`
+    const spacerRow = Array(headers.length).fill('')
+    downloadCsv(toCsv(headers, [spacerRow, ...rows]), filename)
+    toastRef.value?.show(`Exported ${rows.length} Plexxis row(s)`, 'success')
+  } catch (e) {
+    setError(e, 'Failed to export Plexxis CSV')
+  } finally {
+    exportingPlexxis.value = false
   }
 }
 
@@ -537,6 +750,7 @@ function confirmEditingEmployee(timecard: TimecardModel) {
   timecard.employeeWage = parseWage(editForm.value.employeeWage)
   timecard.subcontractedEmployee = parseSubcontractedEmployee(editForm.value.subcontractedEmployee)
   timecard.occupation = editForm.value.occupation.trim()
+  recalcTotals(timecard)
   autoSave(timecard)
   editingTimecardId.value = null
 }
@@ -557,14 +771,16 @@ const {
   getDayMetric,
   handleHoursInput,
   handleProductionInput,
-  handleUnitCostInput,
 } = useTimecardJobEditing({
   getWeekStartDate: () => weekStartDate.value,
   recalcTotals,
   autoSave,
 })
 
-onMounted(() => init())
+onMounted(() => {
+  window.addEventListener('afterprint', onAfterPrint)
+  void init()
+})
 watch(
   () => jobId.value,
   (next, prev) => {
@@ -573,6 +789,7 @@ watch(
   }
 )
 onUnmounted(() => {
+  window.removeEventListener('afterprint', onAfterPrint)
   subscriptions.clearAll()
   jobsStore.stopCurrentJobSubscription()
   autoSaveTimers.value.forEach(timer => clearTimeout(timer))
@@ -581,7 +798,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="timecards-page">
+  <div :class="['timecards-page', `print-mode-${printMode}`]">
     <Toast ref="toastRef" />
 
     <div class="container-fluid py-4 wide-container-1200">
@@ -656,7 +873,23 @@ onUnmounted(() => {
                   @click="openSummary"
                 >
                   <i class="bi bi-clipboard-data me-1"></i>
-                  Summary / Print
+                  Summary
+                </button>
+                <button
+                  class="btn btn-outline-primary btn-sm"
+                  :disabled="loading || allTimecards.length === 0 || printing"
+                  @click="printTimecardsTwoPerPage"
+                >
+                  <i class="bi bi-printer me-1"></i>
+                  Print Timecards (2/Page)
+                </button>
+                <button
+                  class="btn btn-outline-success btn-sm"
+                  :disabled="loading || exportingPlexxis"
+                  @click="exportPlexxisCsv"
+                >
+                  <i class="bi bi-download me-1"></i>
+                  {{ exportingPlexxis ? 'Exporting...' : 'Plexxis CSV' }}
                 </button>
                 <span class="small text-muted">
                   <span class="badge bg-warning text-dark">{{ draftCount }} Draft</span>
@@ -820,7 +1053,7 @@ onUnmounted(() => {
                       class="btn btn-sm btn-outline-secondary"
                       @click.stop="toggleEditingEmployee(timecard)"
                       :aria-pressed="editingTimecardId === timecard.id"
-                      :disabled="timecard.status === 'submitted'"
+                      :disabled="timecard.status === 'submitted' && !isAdmin"
                       title="Toggle edit mode"
                       :aria-label="editingTimecardId === timecard.id ? 'Save employee details' : 'Edit employee details'"
                     >
@@ -910,7 +1143,7 @@ onUnmounted(() => {
                             :disabled="timecard.status === 'submitted'"
                             class="form-control form-control-sm text-center w-100 day-input hours-input"
                             placeholder="0"
-                            :aria-label="`Job ${jobIdx + 1} ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIdx - 1]} hours`"
+                            :aria-label="`Job ${jobIdx + 1} ${DAY_NAMES[dayIdx - 1]} hours`"
                             @input="(e) => handleHoursInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
                             @focus="($event.target as HTMLInputElement).select()"
                             @click.stop
@@ -957,7 +1190,7 @@ onUnmounted(() => {
                             class="form-control form-control-sm text-center w-100 day-input"
                             title="Production units"
                             placeholder="0"
-                            :aria-label="`Job ${jobIdx + 1} ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIdx - 1]} production`"
+                            :aria-label="`Job ${jobIdx + 1} ${DAY_NAMES[dayIdx - 1]} production`"
                             @input="(e) => handleProductionInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
                             @focus="($event.target as HTMLInputElement).select()"
                             @click.stop
@@ -983,19 +1216,13 @@ onUnmounted(() => {
                       <td v-for="dayIdx in 7" :key="`c-${jobIdx}-${dayIdx}`" class="text-center px-2 py-0 day-cell">
                         <template v-if="getJobDay(job, dayIdx - 1)">
                           <input
-                            :value="getDayMetric(job, dayIdx - 1, 'unitCost')"
-                            type="number"
-                            inputmode="decimal"
-                            min="0"
-                            step="0.01"
-                            :disabled="timecard.status === 'submitted'"
-                            class="form-control form-control-sm text-center text-xs day-input"
-                            title="Cost per unit"
-                            placeholder="0"
-                            :aria-label="`Job ${jobIdx + 1} ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIdx - 1]} unit cost`"
-                            @input="(e) => handleUnitCostInput(timecard, jobIdx, dayIdx - 1, Number((e.target as HTMLInputElement).value))"
-                            @focus="($event.target as HTMLInputElement).select()"
-                            @click.stop
+                            :value="formatHours(getDayMetric(job, dayIdx - 1, 'unitCost'))"
+                            type="text"
+                            class="form-control form-control-sm text-center text-xs day-input day-input-readonly"
+                            title="Cost per unit auto-calculated from wage, hours, production, and burden"
+                            :aria-label="`Job ${jobIdx + 1} ${DAY_NAMES[dayIdx - 1]} auto-calculated unit cost`"
+                            readonly
+                            disabled
                           />
                         </template>
                       </td>
@@ -1026,10 +1253,21 @@ onUnmounted(() => {
                 <div class="col-md-2">
                   <label class="form-label small text-muted">Overtime</label>
                   <input
+                    v-if="isAdmin"
                     type="number"
                     min="0"
                     step="0.25"
-                    :value="Math.max((timecard.totals.hoursTotal ?? 0) - 40, 0).toFixed(2)"
+                    :value="getOverrideInputValue(timecard.overtimeHoursOverride)"
+                    :placeholder="formatHours(getHoursBreakdown(timecard).overtimeHours)"
+                    class="form-control form-control-sm"
+                    @change="(e) => updateHourOverride(timecard, 'overtime', (e.target as HTMLInputElement).value)"
+                  />
+                  <input
+                    v-else
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    :value="formatHours(getHoursBreakdown(timecard).overtimeHours)"
                     class="form-control form-control-sm"
                     :disabled="true"
                     aria-readonly="true"
@@ -1038,16 +1276,49 @@ onUnmounted(() => {
                 <div class="col-md-2">
                   <label class="form-label small text-muted">Regular</label>
                   <input
+                    v-if="isAdmin"
                     type="number"
                     min="0"
                     step="0.25"
-                    :value="Math.min((timecard.totals.hoursTotal ?? 0), 40).toFixed(2)"
+                    :value="getOverrideInputValue(timecard.regularHoursOverride)"
+                    :placeholder="formatHours(getHoursBreakdown(timecard).regularHours)"
+                    class="form-control form-control-sm"
+                    @change="(e) => updateHourOverride(timecard, 'regular', (e.target as HTMLInputElement).value)"
+                  />
+                  <input
+                    v-else
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    :value="formatHours(getHoursBreakdown(timecard).regularHours)"
                     class="form-control form-control-sm"
                     :disabled="true"
                     aria-readonly="true"
                   />
                 </div>
-                <div class="col-md-8">
+                <div class="col-md-2">
+                  <label class="form-label small text-muted">Mileage</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    :value="getMileageInputValue(timecard.mileage)"
+                    class="form-control form-control-sm"
+                    :disabled="timecard.status === 'submitted' && !isAdmin"
+                    placeholder="0"
+                    @change="(e) => updateMileage(timecard, (e.target as HTMLInputElement).value)"
+                  />
+                </div>
+                <div v-if="isAdmin" class="col-md-2 d-flex align-items-end">
+                  <button
+                    class="btn btn-outline-secondary btn-sm w-100"
+                    :disabled="timecard.regularHoursOverride == null && timecard.overtimeHoursOverride == null"
+                    @click="clearHourOverrides(timecard)"
+                  >
+                    Use Auto
+                  </button>
+                </div>
+                <div :class="isAdmin ? 'col-md-4' : 'col-md-6'">
                   <label class="form-label small text-muted">Notes</label>
                   <textarea
                     :value="timecard.notes"
@@ -1128,6 +1399,102 @@ onUnmounted(() => {
         </form>
       </div>
     </div>
+
+    <section class="print-output print-output--summary" aria-hidden="true">
+      <h2 class="print-title">{{ jobName }} - Timecard Summary</h2>
+      <div class="print-subtitle">Week Ending {{ weekEndingDate }}</div>
+      <table class="print-summary-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Employee #</th>
+            <th>Status</th>
+            <th class="text-end">Hours</th>
+            <th class="text-end">Production</th>
+            <th class="text-end">Line Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in summaryRows" :key="`print-summary-${row.id}`">
+            <td>{{ row.employeeName }}</td>
+            <td>{{ row.employeeNumber }}</td>
+            <td>{{ row.status }}</td>
+            <td class="text-end">{{ formatHours(row.hours) }}</td>
+            <td class="text-end">{{ formatHours(row.production) }}</td>
+            <td class="text-end">${{ formatHours(row.lineTotal) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="print-output print-output--timecards" aria-hidden="true">
+      <article v-for="timecard in allTimecards" :key="`print-card-${timecard.id}`" class="print-timecard-card">
+        <header class="print-card-header">
+          <h3>{{ getTimecardDisplayName(timecard) }}</h3>
+          <div class="print-card-meta">
+            <span>Employee #: {{ timecard.employeeNumber || '-' }}</span>
+            <span>Week Ending: {{ timecard.weekEndingDate }}</span>
+          </div>
+          <div class="print-card-meta">
+            <span>Occupation: {{ timecard.occupation || '-' }}</span>
+            <span>Wage: ${{ formatHours(timecard.employeeWage ?? 0) }}</span>
+          </div>
+        </header>
+
+        <table class="print-day-table">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th class="text-end">Hours</th>
+              <th class="text-end">Production</th>
+              <th class="text-end">Unit Cost</th>
+              <th class="text-end">Line Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(dayName, dayIdx) in DAY_NAMES" :key="`print-day-${timecard.id}-${dayIdx}`">
+              <td>{{ dayName }}</td>
+              <td class="text-end">{{ formatHours(timecard.days?.[dayIdx]?.hours ?? 0) }}</td>
+              <td class="text-end">{{ formatHours(timecard.days?.[dayIdx]?.production ?? 0) }}</td>
+              <td class="text-end">${{ formatHours(timecard.days?.[dayIdx]?.unitCost ?? 0) }}</td>
+              <td class="text-end">${{ formatHours(timecard.days?.[dayIdx]?.lineTotal ?? 0) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table v-if="timecard.jobs?.length" class="print-job-table">
+          <thead>
+            <tr>
+              <th>Job #</th>
+              <th>Subsection/Area</th>
+              <th>Account</th>
+              <th class="text-end">Hours</th>
+              <th class="text-end">Production</th>
+              <th class="text-end">Line Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(job, jobIdx) in timecard.jobs" :key="`print-job-${timecard.id}-${jobIdx}`">
+              <td>{{ job.jobNumber || '-' }}</td>
+              <td>{{ job.subsectionArea || job.area || '-' }}</td>
+              <td>{{ job.account || job.acct || '-' }}</td>
+              <td class="text-end">{{ formatHours(sumJobDayMetric(timecard, jobIdx, 'hours')) }}</td>
+              <td class="text-end">{{ formatHours(sumJobDayMetric(timecard, jobIdx, 'production')) }}</td>
+              <td class="text-end">${{ formatHours(sumJobDayMetric(timecard, jobIdx, 'lineTotal')) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="print-card-footer">
+          <div>Total Hours: {{ formatHours(timecard.totals.hoursTotal ?? 0) }}</div>
+          <div>Regular: {{ formatHours(getHoursBreakdown(timecard).regularHours) }}</div>
+          <div>OT: {{ formatHours(getHoursBreakdown(timecard).overtimeHours) }}</div>
+          <div>Mileage: {{ formatHours(timecard.mileage ?? 0) }}</div>
+          <div>Total Production: {{ formatHours(timecard.totals.productionTotal ?? 0) }}</div>
+          <div>Line Total: ${{ formatHours(timecard.totals.lineTotal ?? 0) }}</div>
+        </div>
+      </article>
+    </section>
   </div>
 
   <!-- Timecard Summary Modal (Printable) -->
@@ -1432,6 +1799,11 @@ textarea.form-control {
   font-size: 0.84rem;
 }
 
+.day-input-readonly:disabled {
+  opacity: 1;
+  color: $body-color;
+}
+
 .hours-input {
   max-width: 4.6ch;
   margin: 0 auto;
@@ -1470,6 +1842,10 @@ textarea.form-control {
 .tc-sub-check {
   min-height: 31px;
   white-space: nowrap;
+}
+
+.print-output {
+  display: none;
 }
 
 @media (max-width: 768px) {
@@ -1521,6 +1897,113 @@ textarea.form-control {
 .timecard-job-row td,
 .timecard-job-row td.tc-soft {
   background-color: transparent;
+}
+
+@media print {
+  @page {
+    margin: 0.35in;
+  }
+
+  .timecards-page {
+    background: #fff;
+    min-height: auto;
+    padding: 0;
+  }
+
+  .timecards-page > .container-fluid,
+  .timecards-page > .modal,
+  .timecards-page > .position-fixed {
+    display: none !important;
+  }
+
+  .print-output {
+    display: none !important;
+    color: #000;
+  }
+
+  .print-mode-summary .print-output--summary {
+    display: block !important;
+    font-size: 11px;
+  }
+
+  .print-mode-timecards .print-output--timecards {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 0.2in;
+    align-content: flex-start;
+  }
+
+  .print-title {
+    font-size: 16px;
+    margin: 0 0 0.05in;
+  }
+
+  .print-subtitle {
+    font-size: 11px;
+    margin-bottom: 0.15in;
+  }
+
+  .print-summary-table,
+  .print-day-table,
+  .print-job-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .print-summary-table th,
+  .print-summary-table td,
+  .print-day-table th,
+  .print-day-table td,
+  .print-job-table th,
+  .print-job-table td {
+    border: 1px solid #000;
+    padding: 3px 4px;
+    vertical-align: middle;
+  }
+
+  .print-timecard-card {
+    width: calc(50% - 0.1in);
+    border: 1px solid #000;
+    padding: 0.12in;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 10px;
+  }
+
+  .print-timecard-card:nth-child(2n) {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .print-timecard-card:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .print-card-header h3 {
+    font-size: 12px;
+    margin: 0 0 0.03in;
+  }
+
+  .print-card-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    margin-bottom: 0.03in;
+    gap: 0.08in;
+  }
+
+  .print-job-table {
+    margin-top: 0.08in;
+  }
+
+  .print-card-footer {
+    margin-top: 0.08in;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 8px;
+    font-size: 10px;
+  }
 }
 </style>
 

@@ -58,6 +58,24 @@
       </template>
 
       <!-- Admin Section -->
+      <template v-if="controllerNav.length > 0">
+        <div class="px-3 mt-4 mb-2 sidebar-section-label">
+          <small class="text-uppercase text-muted fw-semibold">Controller</small>
+        </div>
+
+        <router-link
+          v-for="item in controllerNav"
+          :key="item.label"
+          :to="item.to"
+          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+          :title="isSidebarCollapsed ? item.label : ''"
+        >
+          <i :class="['bi', item.icon, 'flex-shrink-0']"></i>
+          <span class="text-nowrap sidebar-link-text">{{ item.label }}</span>
+        </router-link>
+      </template>
+
+      <!-- Admin Section -->
       <template v-if="adminNav.length > 0">
         <div class="px-3 mt-4 mb-2 sidebar-section-label">
           <small class="text-uppercase text-muted fw-semibold">Admin</small>
@@ -122,6 +140,7 @@ const canSee = (itemRoles?: string[]) => {
 }
 
 const jobNav = computed(() => navItems.filter((n) => n.section === 'job' && canSee(n.roles)))
+const controllerNav = computed(() => navItems.filter((n) => n.section === 'controller' && canSee(n.roles)))
 const adminNav = computed(() => navItems.filter((n) => n.section === 'admin' && canSee(n.roles)))
 const isSidebarCollapsed = computed(() => app.sidebarCollapsed && !app.sidebarOpenMobile)
 

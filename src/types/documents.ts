@@ -31,7 +31,7 @@ export interface UserTrackedDocument extends AuditMetadata {
 }
 
 // Attachments (used by daily logs and other modules)
-export type AttachmentType = 'photo' | 'ptp' | 'other'
+export type AttachmentType = 'photo' | 'ptp' | 'qc' | 'other'
 
 export interface Attachment {
   name: string

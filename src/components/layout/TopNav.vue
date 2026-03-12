@@ -61,11 +61,11 @@ const jobRouteNames = new Set<RouteName>([
   ROUTE_NAMES.JOB_SHOP_ORDERS,
 ])
 const adminRouteNames = new Set<RouteName>([
+  ROUTE_NAMES.CONTROLLER,
   ROUTE_NAMES.ADMIN_USERS,
   ROUTE_NAMES.ADMIN_JOBS,
   ROUTE_NAMES.ADMIN_SHOP_CATALOG,
   ROUTE_NAMES.ADMIN_EMAIL_SETTINGS,
-  ROUTE_NAMES.ADMIN_DATA_MIGRATION,
 ])
 
 const routeJobId = computed(() => {

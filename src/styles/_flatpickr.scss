@@ -54,6 +54,10 @@
 .flatpickr-day.selected,
 .flatpickr-day.startRange,
 .flatpickr-day.endRange,
+.flatpickr-day.inRange,
+.flatpickr-day.nextMonthDay.inRange,
+.flatpickr-day.prevMonthDay.inRange,
+.flatpickr-day.today.inRange,
 .flatpickr-day.selected.inRange,
 .flatpickr-day.startRange.inRange,
 .flatpickr-day.endRange.inRange,
@@ -102,17 +106,4 @@
 .flatpickr-months .flatpickr-next-month:hover {
   color: vars.$primary !important;
   fill: vars.$primary !important;
-}
-
-.flatpickr-day.inRange,
-.flatpickr-day.nextMonthDay.inRange,
-.flatpickr-day.prevMonthDay.inRange,
-.flatpickr-day.today.inRange,
-.flatpickr-day.selected.inRange,
-.flatpickr-day.startRange,
-.flatpickr-day.endRange,
-.flatpickr-day.selected {
-  background: vars.$primary;
-  border-color: vars.$primary;
-  color: var(--bs-white, #fff);
 }

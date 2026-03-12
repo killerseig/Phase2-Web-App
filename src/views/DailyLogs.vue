@@ -31,11 +31,13 @@ const {
   currentStatus,
   currentSubmittedAt,
   jobEmailRecipients,
+  globalDailyLogRecipients,
   newEmailRecipient,
   savingRecipients,
   canEditDraft,
   photoFileName,
   ptpFileName,
+  qcFileName,
   form,
   creatingDraft,
   formatTimestamp,
@@ -61,10 +63,19 @@ const {
   autoSave,
 } = useDailyLog(jobId, { toastRef })
 
+const qcAttachments = computed(() => (form.value.attachments || []).filter((attachment) => attachment.type === 'qc'))
+const hasEmailRecipients = computed(() =>
+  Array.from(new Set([...globalDailyLogRecipients.value, ...jobEmailRecipients.value].filter(Boolean))).length > 0
+)
+
 function onDateChange(_dates: Date[], dateStr: string) {
   if (!dateStr) return
   logDate.value = dateStr
   void loadForDate(dateStr)
+}
+
+function onQcFileChange(event: Event) {
+  void handleFileChange(event, 'qc')
 }
 
 function formatSubmittedAt(value: unknown): string {
@@ -380,14 +391,79 @@ function indoorClimateKey(reading: unknown, idx: number): string {
                   @update:model-value="(val) => { form.newWorkAuthorizations = val; autoSave(); }"
                 />
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quality Control -->
+        <div class="card mb-4">
+          <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Quality Control</h5></div>
+          <div class="card-body">
+            <div class="row g-3">
               <div class="col-12">
                 <DailyLogTextField
-                  label="QC Inspection"
-                  :rows="3"
-                  :model-value="form.qcInspection"
+                  label="Who is assigned to do QC?"
+                  :rows="2"
+                  :model-value="form.qcAssignedTo ?? ''"
                   :disabled="!canEditDraft"
-                  @update:model-value="(val) => { form.qcInspection = val; autoSave(); }"
+                  @update:model-value="(val) => { form.qcAssignedTo = val; autoSave(); }"
                 />
+              </div>
+              <div class="col-12">
+                <DailyLogTextField
+                  label="What areas were inspected?"
+                  :rows="3"
+                  :model-value="form.qcAreasInspected ?? ''"
+                  :disabled="!canEditDraft"
+                  @update:model-value="(val) => { form.qcAreasInspected = val; autoSave(); }"
+                />
+              </div>
+              <div class="col-12">
+                <DailyLogTextField
+                  label="What issues were identified?"
+                  :rows="3"
+                  :model-value="form.qcIssuesIdentified ?? ''"
+                  :disabled="!canEditDraft"
+                  @update:model-value="(val) => { form.qcIssuesIdentified = val; autoSave(); }"
+                />
+              </div>
+              <div class="col-12">
+                <DailyLogTextField
+                  label="What was done to fix the issues?"
+                  :rows="3"
+                  :model-value="form.qcIssuesResolved ?? ''"
+                  :disabled="!canEditDraft"
+                  @update:model-value="(val) => { form.qcIssuesResolved = val; autoSave(); }"
+                />
+              </div>
+              <div class="col-12">
+                <label class="form-label d-flex align-items-center gap-2">
+                  <i class="bi bi-camera"></i>
+                  <span>QC Photos</span>
+                </label>
+                <input
+                  class="form-control form-control-sm"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  :disabled="!canEditDraft || uploading"
+                  @change="onQcFileChange"
+                />
+                <div class="form-text">{{ qcFileName }}</div>
+
+                <div v-if="qcAttachments.length" class="thumb-grid mt-2">
+                  <div v-for="att in qcAttachments" :key="att.path ?? att.url" class="thumb-card">
+                    <img :src="att.url" class="thumb-image" />
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary w-100"
+                      :disabled="uploading"
+                      @click="deleteAttachment(att.path)"
+                    >
+                      <i class="bi bi-trash me-1"></i>Remove
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -428,7 +504,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
           <button v-if="currentStatus === 'draft'" @click="submit" :disabled="saving" class="btn btn-success"><i class="bi bi-send me-2"></i>Submit</button>
           <button v-if="currentStatus === 'draft'" @click="deleteDraft" :disabled="saving" class="btn btn-outline-danger"><i class="bi bi-trash me-2"></i>Delete Draft</button>
           <div v-if="currentStatus !== 'draft' && logsForSelectedDate.some(r => r.logDate === today && r.status === 'submitted')" class="alert alert-info mb-0"><small><i class="bi bi-info-circle me-1"></i>Daily log already submitted for today</small></div>
-          <button v-if="currentStatus === 'submitted' && jobEmailRecipients.length" @click="sendEmail" :disabled="saving" class="btn btn-info"><i class="bi bi-envelope me-2"></i>Send Email</button>
+          <button v-if="currentStatus === 'submitted' && hasEmailRecipients" @click="sendEmail" :disabled="saving" class="btn btn-info"><i class="bi bi-envelope me-2"></i>Send Email</button>
         </div>
       </div>
 
@@ -445,6 +521,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
 
         <DailyLogRecipients
           :recipients="jobEmailRecipients"
+          :global-recipients="globalDailyLogRecipients"
           :new-email="newEmailRecipient"
           :saving="savingRecipients"
           @add="addEmailRecipient"
@@ -466,7 +543,7 @@ textarea[readonly],
 input:disabled,
 input[readonly] {
   background-color: $surface-3;
-  color: $text-muted-2;
+  color: $text-muted;
   border-color: $border-color;
   cursor: not-allowed;
   opacity: 1;
@@ -568,5 +645,32 @@ input[type='file'].form-control:focus::file-selector-button {
 :deep(.thumb-image) {
   height: 150px;
   object-fit: cover;
+}
+
+.thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.6rem;
+}
+
+.thumb-card {
+  border: 1px solid $border-color;
+  border-radius: 8px;
+  overflow: hidden;
+  background: $surface-2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.thumb-image {
+  max-width: 300px;
+  max-height: 200px;
+  object-fit: contain;
+  display: block;
+  background: $surface-3;
+  padding: 8px;
+  flex-grow: 1;
+  align-self: center;
 }
 </style>

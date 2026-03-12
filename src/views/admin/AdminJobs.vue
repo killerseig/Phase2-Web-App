@@ -12,7 +12,7 @@ import { useJobsStore } from '@/stores/jobs'
 import { useUsersStore } from '@/stores/users'
 import type { Job, UserProfile } from '@/services'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
-import { listSubmittedTimecards, listTimecardsByJobAndWeek } from '@/services/Timecards'
+import { listTimecardsByJobAndWeek } from '@/services/Timecards'
 import { downloadCsv } from '@/utils/plexisIntegration'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { ROLES } from '@/constants/app'
@@ -147,7 +147,19 @@ const foremanDisplayName = (user: UserProfile) => `${user.firstName || ''} ${use
 const currentWeekStart = computed(() => snapToSunday(new Date()))
 const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.value))
 const currentWeekLabel = computed(() => formatWeekRange(currentWeekStart.value, currentWeekEnd.value))
-const exportWeekEnding = ref<string>(currentWeekEnd.value)
+const exportDateInWeek = ref<string>(currentWeekEnd.value)
+const exportWeekStart = computed(() => {
+  if (!isValidDateValue(exportDateInWeek.value)) return ''
+  return snapToSunday(exportDateInWeek.value)
+})
+const exportWeekEnding = computed(() => {
+  if (!exportWeekStart.value) return ''
+  return getSaturdayFromSunday(exportWeekStart.value)
+})
+const exportWeekLabel = computed(() => {
+  if (!exportWeekStart.value || !exportWeekEnding.value) return 'Invalid date'
+  return formatWeekRange(exportWeekStart.value, exportWeekEnding.value)
+})
 const activeJobActionsId = ref('')
 
 const exportDateConfig = computed(() => ({
@@ -167,6 +179,26 @@ function normalizeWeekEnding(input?: string | Date | null): string | undefined {
   return `${year}-${month}-${day}`
 }
 
+function formatDateValue(value: Date): string {
+  const year = value.getUTCFullYear()
+  const month = String(value.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(value.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function isValidDateValue(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) return false
+  return formatDateValue(parsed) === value
+}
+
+function onExportDateChange(selectedDates: Date[]) {
+  const selected = Array.isArray(selectedDates) && selectedDates.length ? selectedDates[0] : null
+  if (!selected) return
+  exportDateInWeek.value = formatDateValue(selected)
+}
+
 function toCsv(headers: string[], rows: (string | number)[][]): string {
   const escape = (value: string | number) => {
     const text = String(value ?? '')
@@ -175,15 +207,17 @@ function toCsv(headers: string[], rows: (string | number)[][]): string {
   return [headers.map(escape).join(','), ...rows.map((row) => row.map(escape).join(','))].join('\n')
 }
 
-async function exportAllSubmittedAllJobs(weekEndingInput?: string | Date | null) {
+async function exportAllSubmittedAllJobs() {
   try {
-    const weekEnding = normalizeWeekEnding(weekEndingInput ?? exportWeekEnding.value)
+    const weekEnding = normalizeWeekEnding(exportWeekEnding.value)
+    if (!weekEnding) {
+      toastRef.value?.show('Please select a valid date.', 'error')
+      return
+    }
     const rows: (string | number)[][] = []
 
     for (const job of jobs.value) {
-      const timecards = weekEnding
-        ? (await listTimecardsByJobAndWeek(job.id, weekEnding)).filter((card) => card.status === 'submitted')
-        : await listSubmittedTimecards(job.id)
+      const timecards = (await listTimecardsByJobAndWeek(job.id, weekEnding)).filter((card) => card.status === 'submitted')
 
       for (const card of timecards) {
         rows.push([
@@ -229,9 +263,7 @@ async function exportAllSubmittedAllJobs(weekEndingInput?: string | Date | null)
       'Total Production',
     ]
 
-    const filename = weekEnding
-      ? `timecards-submitted-all-jobs-${weekEnding}.csv`
-      : 'timecards-submitted-all-jobs.csv'
+    const filename = `timecards-submitted-all-jobs-${weekEnding}.csv`
 
     downloadCsv(toCsv(headers, rows), filename)
     toastRef.value?.show(`Exported ${rows.length} submitted timecard row(s)`, 'success')
@@ -526,20 +558,22 @@ onUnmounted(() => {
       <div class="card-body d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
         <div>
           <h5 class="mb-1">Office Export</h5>
-          <div class="text-muted small">Choose a week (Saturday) to export all submitted timecards across all jobs.</div>
+          <div class="text-muted small">Select any date in the week to export submitted timecards across all jobs.</div>
         </div>
         <div class="ms-md-auto d-flex flex-wrap gap-2 align-items-center">
           <div class="d-flex align-items-center gap-2 flex-wrap">
-            <label class="small text-muted mb-0">Week ending (Saturday)</label>
+            <label class="small text-muted mb-0">Select date in week</label>
             <flat-pickr
-              v-model="exportWeekEnding"
+              v-model="exportDateInWeek"
               :config="exportDateConfig"
+              @on-change="onExportDateChange"
               class="form-control form-control-sm"
-              placeholder="Select Saturday"
+              placeholder="Select any date"
               aria-label="Week ending date"
             />
           </div>
-          <button class="btn btn-outline-success btn-sm" @click="exportAllSubmittedAllJobs(exportWeekEnding)">
+          <div class="small text-muted">Week range: {{ exportWeekLabel }} | Week ending Saturday: {{ exportWeekEnding }}</div>
+          <button class="btn btn-outline-success btn-sm" @click="exportAllSubmittedAllJobs">
             <i class="bi bi-download me-1"></i>Export Submitted (all jobs)
           </button>
         </div>

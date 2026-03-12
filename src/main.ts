@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { watch } from 'vue'
-import App from './App.vue'
+import App from '@/App.vue'
 import { getRouteAccessRedirect, router } from '@/router'
 import { useAuthStore } from '@/stores/auth'
 import { ROLES, ROUTE_NAMES } from '@/constants/app'
@@ -51,6 +51,8 @@ const canAccessJob = (jobId: string): boolean =>
     jobId
   )
 
+const getAssignedJobsSignature = () => [...auth.assignedJobIds].sort().join('|')
+
 let enforcingRouteAccess = false
 let lastAuthSignature = ''
 watch(
@@ -59,11 +61,11 @@ watch(
     () => auth.user?.uid ?? null,
     () => auth.active,
     () => auth.role,
-    () => auth.assignedJobIds.join('|'),
+    getAssignedJobsSignature,
     () => router.currentRoute.value.fullPath,
   ],
   async () => {
-    const authSignature = `${auth.user?.uid ?? ''}|${auth.active}|${auth.role ?? ''}|${auth.assignedJobIds.join('|')}`
+    const authSignature = `${auth.user?.uid ?? ''}|${auth.active}|${auth.role ?? ''}|${getAssignedJobsSignature()}`
     const authChanged = authSignature !== lastAuthSignature
     lastAuthSignature = authSignature
 

@@ -204,7 +204,7 @@ export interface ShopOrder {
 // ATTACHMENTS & STORAGE
 // ============================================================================
 
-export type AttachmentType = 'photo' | 'ptp' | 'other'
+export type AttachmentType = 'photo' | 'ptp' | 'qc' | 'other'
 
 export interface Attachment {
   name: string

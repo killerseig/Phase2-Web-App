@@ -214,7 +214,13 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
   `).join('');
     const attachments = (dailyLog?.attachments || [])
         .map((att) => {
-        const label = att?.type === 'ptp' ? 'PTP Photo' : att?.type === 'photo' ? 'Photo' : 'Attachment';
+        const label = att?.type === 'ptp'
+            ? 'PTP Photo'
+            : att?.type === 'photo'
+                ? 'Photo'
+                : att?.type === 'qc'
+                    ? 'QC Photo'
+                    : 'Attachment';
         const name = att?.name || att?.path || 'Attachment';
         const url = att?.url || '#';
         const hasImagePreview = typeof url === 'string' && /^https?:\/\//i.test(url);
@@ -286,7 +292,6 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
         <p><strong>AHA Reviewed:</strong> ${displayValue(dailyLog?.ahaReviewed)}</p>
         <p><strong>Schedule Concerns:</strong> ${displayValue(dailyLog?.scheduleConcerns)}</p>
         <p><strong>Budget Concerns:</strong> ${displayValue(dailyLog?.budgetConcerns)}</p>
-        <p><strong>Comments About Ship:</strong> ${displayValue(dailyLog?.commentsAboutShip)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
@@ -294,7 +299,14 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog) {
         <p><strong>Deliveries Received:</strong> ${displayValue(dailyLog?.deliveriesReceived)}</p>
         <p><strong>Deliveries Needed:</strong> ${displayValue(dailyLog?.deliveriesNeeded)}</p>
         <p><strong>New Work Authorizations:</strong> ${displayValue(dailyLog?.newWorkAuthorizations)}</p>
-        <p><strong>QC Inspection:</strong> ${displayValue(dailyLog?.qcInspection)}</p>
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
+
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Quality Control</h3>
+        <p><strong>Who is assigned to do QC?</strong> ${displayValue(dailyLog?.qcAssignedTo)}</p>
+        <p><strong>What areas were inspected?</strong> ${displayValue(dailyLog?.qcAreasInspected ?? dailyLog?.qcInspection)}</p>
+        <p><strong>What issues were identified?</strong> ${displayValue(dailyLog?.qcIssuesIdentified)}</p>
+        <p><strong>What was done to fix the issues?</strong> ${displayValue(dailyLog?.qcIssuesResolved)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 

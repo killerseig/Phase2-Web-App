@@ -18,6 +18,20 @@ export declare const sendTimecardEmail: import("firebase-functions/v2/https").Ca
     message: string;
 }>, unknown>;
 /**
+ * Download submitted timecards for a selected week as CSV or PDF
+ * Access: admin and controller roles
+ */
+export declare const downloadTimecardsForWeek: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    success: boolean;
+    format: string;
+    fileName: string;
+    contentType: string;
+    contentBase64: string;
+    weekStart: string;
+    weekEnding: string;
+    timecardCount: number;
+}>, unknown>;
+/**
  * Send Shop Order via email
  */
 export declare const sendShopOrderEmail: import("firebase-functions/v2/https").CallableFunction<any, Promise<{

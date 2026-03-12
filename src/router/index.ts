@@ -65,8 +65,17 @@ const routeConfigs: RouteConfig[] = [
     path: ROUTES.DASHBOARD,
     name: ROUTE_NAMES.DASHBOARD,
     component: () => import('../views/Dashboard.vue'),
-    roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
+    roles: [ROLES.ADMIN, ROLES.CONTROLLER, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
     title: 'Dashboard',
+  },
+
+  // Controller page (admin/controller only)
+  {
+    path: ROUTES.CONTROLLER,
+    name: ROUTE_NAMES.CONTROLLER,
+    component: () => import('../views/Controller.vue'),
+    roles: [ROLES.ADMIN, ROLES.CONTROLLER],
+    title: 'Controller',
   },
 
   // Job home (module selector)
@@ -129,13 +138,6 @@ const routeConfigs: RouteConfig[] = [
     component: () => import('../views/admin/AdminEmailSettings.vue'),
     roles: [ROLES.ADMIN],
     title: 'Admin - Email Settings',
-  },
-  {
-    path: ROUTES.ADMIN_DATA_MIGRATION,
-    name: ROUTE_NAMES.ADMIN_DATA_MIGRATION,
-    component: () => import('../views/admin/AdminDataMigration.vue'),
-    roles: [ROLES.ADMIN],
-    title: 'Admin - Data Migration',
   },
 
   // Access denied

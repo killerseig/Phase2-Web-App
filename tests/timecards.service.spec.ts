@@ -78,6 +78,9 @@ describe('Timecards service', () => {
       uid: 'u1',
       createdByUid: 'u1',
     })
+    expect(payload.regularHoursOverride).toBeNull()
+    expect(payload.overtimeHoursOverride).toBeNull()
+    expect(payload.mileage).toBeNull()
     expect(payload.totals.hoursTotal).toBe(3)
     expect(serverTimestamp).toHaveBeenCalled()
   })
@@ -96,12 +99,18 @@ describe('Timecards service', () => {
         { dayOfWeek: 6, hours: 0, production: 0, lineTotal: 0, date: 'z', unitCost: 0 },
       ],
       notes: 'updated',
+      regularHoursOverride: 4.5,
+      overtimeHoursOverride: 0.5,
+      mileage: 18.2,
     })
 
     const updateCall = updateDocMock.mock.calls[0]
     expect(updateCall).toBeDefined()
     const [, payload] = updateCall!
     expect(payload.notes).toBe('updated')
+    expect(payload.regularHoursOverride).toBe(4.5)
+    expect(payload.overtimeHoursOverride).toBe(0.5)
+    expect(payload.mileage).toBe(18.2)
     expect(payload.totals).toMatchObject({ hoursTotal: 5, productionTotal: 7, lineTotal: 9 })
     expect(payload.updatedAt).toBe('ts')
   })
@@ -197,6 +206,9 @@ describe('Timecards service', () => {
       lastName: 'Doe',
       employeeWage: 42.5,
       subcontractedEmployee: true,
+      regularHoursOverride: null,
+      overtimeHoursOverride: null,
+      mileage: null,
       notes: '',
     })
 
