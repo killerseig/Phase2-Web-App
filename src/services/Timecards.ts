@@ -21,7 +21,10 @@ import {
   onSnapshot,
   type Unsubscribe,
   type DocumentData,
+  type QueryConstraint,
 } from 'firebase/firestore'
+import { ROLES } from '@/constants/app'
+import { useAuthStore } from '@/stores/auth'
 import type { Timecard, TimecardInput, TimecardDay, TimecardTotals } from '@/types/models'
 import { calculateWeekStartDate } from '@/utils/modelValidation'
 import { assertJobAccess, requireUser } from './serviceGuards'
@@ -117,15 +120,25 @@ export async function listTimecardsByJobAndWeek(
 ): Promise<Timecard[]> {
   try {
     assertJobAccess(jobId)
-    const q = query(
-      collection(db, ...jobCollectionPath(jobId, 'timecards')),
+    const constraints: QueryConstraint[] = [
       where('weekEndingDate', '==', weekEndingDate),
       where('archived', '==', false),
-      orderBy('employeeNumber', 'asc')
+    ]
+    const visibleCreatorUid = getForemanVisibleCreatorUid()
+    if (visibleCreatorUid) {
+      constraints.push(where('createdByUid', '==', visibleCreatorUid))
+    } else {
+      constraints.push(orderBy('employeeNumber', 'asc'))
+    }
+
+    const q = query(
+      collection(db, ...jobCollectionPath(jobId, 'timecards')),
+      ...constraints,
     )
 
     const snap = await getDocs(q)
-    return snap.docs.map(d => normalize(d.id, d.data()))
+    const timecards = snap.docs.map(d => normalize(d.id, d.data()))
+    return visibleCreatorUid ? sortByEmployeeNumber(timecards) : timecards
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load timecards for week'))
   }
@@ -157,25 +170,29 @@ export async function listJobTimecards(
     assertJobAccess(jobId)
     const includeArchived = options?.includeArchived ?? false
     const maxResults = options?.max ?? 50
+    const visibleCreatorUid = getForemanVisibleCreatorUid()
 
-    let q = query(
-      collection(db, ...jobCollectionPath(jobId, 'timecards')),
-      orderBy('weekEndingDate', 'desc'),
-      limit(maxResults)
-    )
-
-    // If not including archived, add where clause
+    const constraints: QueryConstraint[] = []
     if (!includeArchived) {
-      q = query(
-        collection(db, ...jobCollectionPath(jobId, 'timecards')),
-        where('archived', '==', false),
-        orderBy('weekEndingDate', 'desc'),
-        limit(maxResults)
-      )
+      constraints.push(where('archived', '==', false))
+    }
+    if (visibleCreatorUid) {
+      constraints.push(where('createdByUid', '==', visibleCreatorUid))
+    } else {
+      constraints.push(orderBy('weekEndingDate', 'desc'))
+      constraints.push(limit(maxResults))
     }
 
+    const q = query(
+      collection(db, ...jobCollectionPath(jobId, 'timecards')),
+      ...constraints,
+    )
+
     const snap = await getDocs(q)
-    return snap.docs.map(d => normalize(d.id, d.data()))
+    const timecards = snap.docs.map(d => normalize(d.id, d.data()))
+    return visibleCreatorUid
+      ? sortByWeekEndingDesc(timecards).slice(0, maxResults)
+      : timecards
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load timecards'))
   }
@@ -187,15 +204,25 @@ export async function listJobTimecards(
 export async function listSubmittedTimecards(jobId: string): Promise<Timecard[]> {
   try {
     assertJobAccess(jobId)
-    const q = query(
-      collection(db, ...jobCollectionPath(jobId, 'timecards')),
+    const constraints: QueryConstraint[] = [
       where('status', '==', 'submitted'),
       where('archived', '==', false),
-      orderBy('weekEndingDate', 'desc')
+    ]
+    const visibleCreatorUid = getForemanVisibleCreatorUid()
+    if (visibleCreatorUid) {
+      constraints.push(where('createdByUid', '==', visibleCreatorUid))
+    } else {
+      constraints.push(orderBy('weekEndingDate', 'desc'))
+    }
+
+    const q = query(
+      collection(db, ...jobCollectionPath(jobId, 'timecards')),
+      ...constraints,
     )
 
     const snap = await getDocs(q)
-    return snap.docs.map(d => normalize(d.id, d.data()))
+    const timecards = snap.docs.map(d => normalize(d.id, d.data()))
+    return visibleCreatorUid ? sortByWeekEndingDesc(timecards) : timecards
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load submitted timecards'))
   }
@@ -211,18 +238,27 @@ export function watchTimecardsByWeek(
   onError?: (error: unknown) => void
 ): Unsubscribe {
   assertJobAccess(jobId)
-  const q = query(
-    collection(db, ...jobCollectionPath(jobId, 'timecards')),
+  const constraints: QueryConstraint[] = [
     where('weekEndingDate', '==', weekEndingDate),
     where('archived', '==', false),
-    orderBy('employeeNumber', 'asc')
+  ]
+  const visibleCreatorUid = getForemanVisibleCreatorUid()
+  if (visibleCreatorUid) {
+    constraints.push(where('createdByUid', '==', visibleCreatorUid))
+  } else {
+    constraints.push(orderBy('employeeNumber', 'asc'))
+  }
+
+  const q = query(
+    collection(db, ...jobCollectionPath(jobId, 'timecards')),
+    ...constraints,
   )
 
   return onSnapshot(
     q,
     (snap) => {
       const timecards = snap.docs.map((d) => normalize(d.id, d.data()))
-      onUpdate(timecards)
+      onUpdate(visibleCreatorUid ? sortByEmployeeNumber(timecards) : timecards)
     },
     (err) => {
       onError?.(new Error(normalizeError(err, 'Failed to subscribe to timecards')))
@@ -780,5 +816,26 @@ export async function getWeeklyStats(
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load weekly timecard stats'))
   }
+}
+
+function getForemanVisibleCreatorUid(): string | null {
+  const authStore = useAuthStore()
+  if (authStore.role !== ROLES.FOREMAN) return null
+  return requireUser().uid
+}
+
+function sortByEmployeeNumber(timecards: Timecard[]): Timecard[] {
+  return timecards.slice().sort((left, right) => (
+    String(left.employeeNumber || '').localeCompare(String(right.employeeNumber || ''))
+    || String(left.employeeName || '').localeCompare(String(right.employeeName || ''))
+  ))
+}
+
+function sortByWeekEndingDesc(timecards: Timecard[]): Timecard[] {
+  return timecards.slice().sort((left, right) => (
+    String(right.weekEndingDate || '').localeCompare(String(left.weekEndingDate || ''))
+    || String(left.employeeNumber || '').localeCompare(String(right.employeeNumber || ''))
+    || String(left.employeeName || '').localeCompare(String(right.employeeName || ''))
+  ))
 }
 

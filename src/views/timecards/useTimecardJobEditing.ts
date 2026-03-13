@@ -4,7 +4,7 @@ type DiffField = 'difH' | 'difP' | 'difC'
 type MetricField = 'hours' | 'production' | 'unitCost'
 
 type UseTimecardJobEditingOptions = {
-  getWeekStartDate: () => string
+  getWeekStartDate: (timecard: TimecardModel) => string
   recalcTotals: (timecard: TimecardModel) => void
   autoSave: (timecard: TimecardModel) => void
 }
@@ -42,7 +42,7 @@ export function useTimecardJobEditing(options: UseTimecardJobEditingOptions) {
       difH: '',
       difP: '',
       difC: '',
-      days: makeDaysArray(getWeekStartDate()),
+      days: makeDaysArray(getWeekStartDate(timecard)),
     })
     recalcTotals(timecard)
     autoSave(timecard)

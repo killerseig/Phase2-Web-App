@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTimecard,
   createTimecardFromCopy,
+  listTimecardsByJobAndWeek,
   submitTimecard,
   submitAllWeekTimecards,
   updateTimecard,
@@ -13,11 +14,15 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   updateDoc,
   serverTimestamp,
+  where,
 } from 'firebase/firestore'
+import { ROLES } from '@/constants/app'
 import { requireUser } from '@/services/serviceGuards'
 import { makeQuerySnapshot } from './helpers/firestoreMocks'
+import { useAuthStore } from '@/stores/auth'
 
 
 vi.mock('@/firebase', () => ({ db: {} }))
@@ -33,16 +38,24 @@ vi.mock('@/services/serviceGuards', () => ({
   requireUser: vi.fn(),
 }))
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: vi.fn(),
+}))
+
 const addDocMock = addDoc as unknown as ReturnType<typeof vi.fn>
 const getDocMock = getDoc as unknown as ReturnType<typeof vi.fn>
 const getDocsMock = getDocs as unknown as ReturnType<typeof vi.fn>
+const queryMock = query as unknown as ReturnType<typeof vi.fn>
 const updateDocMock = updateDoc as unknown as ReturnType<typeof vi.fn>
+const whereMock = where as unknown as ReturnType<typeof vi.fn>
 const requireUserMock = requireUser as unknown as ReturnType<typeof vi.fn>
+const useAuthStoreMock = useAuthStore as unknown as ReturnType<typeof vi.fn>
 
 describe('Timecards service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requireUserMock.mockReturnValue({ uid: 'u1' })
+    useAuthStoreMock.mockReturnValue({ role: ROLES.ADMIN })
   })
 
   it('creates timecard with totals, weekStartDate, and timestamps', async () => {
@@ -143,6 +156,25 @@ describe('Timecards service', () => {
     expect(updateCall).toBeDefined()
     const [, payload] = updateCall!
     expect(payload.status).toBe('submitted')
+  })
+
+  it('limits weekly timecard queries to the current foreman creator id', async () => {
+    useAuthStoreMock.mockReturnValue({ role: ROLES.FOREMAN })
+    getDocsMock.mockResolvedValueOnce(
+      makeQuerySnapshot([
+        { id: 'd1', data: { employeeNumber: '123', employeeName: 'Jane Doe', createdByUid: 'u1', status: 'draft', archived: false } },
+      ]),
+    )
+
+    await listTimecardsByJobAndWeek('job-1', '2024-02-10')
+
+    expect(queryMock).toHaveBeenCalledTimes(1)
+    const queryCall = queryMock.mock.calls[0]
+    expect(queryCall).toBeDefined()
+    const constraints = queryCall?.slice(1) ?? []
+    expect(constraints).toContainEqual(whereMock('weekEndingDate', '==', '2024-02-10'))
+    expect(constraints).toContainEqual(whereMock('archived', '==', false))
+    expect(constraints).toContainEqual(whereMock('createdByUid', '==', 'u1'))
   })
 
   it('copies previous week metadata and resets day values', async () => {

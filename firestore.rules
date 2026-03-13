@@ -28,7 +28,7 @@ service cloud.firestore {
     }
 
     function roleCanUseApp() {
-      return userRole() in ['admin', 'employee', 'shop', 'foreman'];
+      return userRole() in ['admin', 'controller', 'employee', 'shop', 'foreman'];
     }
 
     function activeAppUser() {
@@ -43,6 +43,16 @@ service cloud.firestore {
 
     function isAdmin() {
       return activeAppUser() && userRole() == 'admin';
+    }
+
+    function isController() {
+      return activeAppUser() && userRole() == 'controller';
+    }
+
+    function isForemanAssigned(jobId) {
+      return activeAppUser() &&
+             userRole() == 'foreman' &&
+             userAssignedJobs().hasAny([jobId]);
     }
 
     function hasJobReadAccess(jobId) {
@@ -95,7 +105,7 @@ service cloud.firestore {
 
     /* ---------------- jobs ---------------- */
     match /jobs/{jobId} {
-      allow read: if hasJobReadAccess(jobId);
+      allow read: if hasJobReadAccess(jobId) || isController();
       allow create, update, delete: if isAdmin();
 
       /* -------- job roster (employees) -------- */
@@ -141,22 +151,37 @@ service cloud.firestore {
         function fieldsUnchanged() {
           return request.resource.data.jobId == resource.data.jobId &&
                  request.resource.data.employeeRosterId == resource.data.employeeRosterId &&
+                 request.resource.data.createdByUid == resource.data.createdByUid &&
                  request.resource.data.uid == resource.data.uid;
         }
 
-        allow read: if hasJobReadAccess(jobId);
+        allow read: if (hasJobReadAccess(jobId) && userRole() != 'foreman') ||
+                     isController() ||
+                     (isForemanAssigned(jobId) && resource.data.createdByUid == request.auth.uid);
         allow create: if isAdmin() ||
+                      (isController() &&
+                       request.resource.data.status == 'draft' &&
+                       request.resource.data.jobId == jobId) ||
                       (hasJobWriteAccess(jobId) &&
                        request.resource.data.uid == request.auth.uid &&
+                       request.resource.data.createdByUid == request.auth.uid &&
                        request.resource.data.status == 'draft' &&
                        request.resource.data.jobId == jobId);
         allow update: if isAdmin() ||
+                      (isController() &&
+                       resource.data.status == 'draft' &&
+                       fieldsUnchanged() &&
+                       (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted')) ||
                       (hasJobWriteAccess(jobId) &&
                        isOwnerOfDoc() &&
                        resource.data.status == 'draft' &&
                        fieldsUnchanged() &&
                        (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
-        allow delete: if isAdmin();
+        allow delete: if isAdmin() ||
+                      (isForemanAssigned(jobId) &&
+                       resource.data.createdByUid == request.auth.uid &&
+                       resource.data.status == 'draft') ||
+                      (isController() && resource.data.status == 'draft');
       }
     }
 

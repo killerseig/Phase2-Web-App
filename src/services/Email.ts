@@ -34,8 +34,21 @@ export async function sendTimecardEmail(jobId: string, timecardIds: string[], we
 }
 
 export type DownloadTimecardsForWeekFormat = 'csv' | 'pdf'
+export type ControllerTimecardStatusFilter = 'all' | 'submitted' | 'draft'
+export type ControllerSubcontractedFilter = 'all' | 'subcontracted' | 'direct'
 
-export type DownloadTimecardsForWeekResult = {
+export type ControllerTimecardFilters = {
+  startWeek: string
+  endWeek?: string
+  jobId?: string
+  trade?: string
+  firstName?: string
+  lastName?: string
+  subcontracted?: ControllerSubcontractedFilter
+  status?: ControllerTimecardStatusFilter
+}
+
+export type DownloadTimecardsResult = {
   success: boolean
   format: DownloadTimecardsForWeekFormat
   fileName: string
@@ -43,21 +56,83 @@ export type DownloadTimecardsForWeekResult = {
   contentBase64: string
   weekStart: string
   weekEnding: string
+  startWeek: string
+  endWeek: string
+  startWeekEnding: string
+  endWeekEnding: string
   timecardCount: number
 }
 
+export type ControllerTimecardWeekItem = {
+  id: string
+  timecardId: string
+  jobId: string
+  jobName: string
+  jobCode: string
+  createdByUid: string
+  createdByName: string
+  employeeNumber: string
+  employeeName: string
+  firstName: string
+  lastName: string
+  occupation: string
+  status: 'draft' | 'submitted'
+  weekStart: string
+  weekEnding: string
+  totalHours: number
+  totalProduction: number
+  totalLine: number
+  mileage: number
+  subcontractedEmployee: boolean
+  submittedAt: string | null
+  submittedAtMs: number | null
+}
+
+export type ListTimecardsResult = {
+  success: boolean
+  startWeek: string
+  endWeek: string
+  startWeekEnding: string
+  endWeekEnding: string
+  filters: {
+    jobId: string
+    trade: string
+    firstName: string
+    lastName: string
+    subcontracted: ControllerSubcontractedFilter
+    status: ControllerTimecardStatusFilter
+  }
+  totalCount: number
+  submittedCount: number
+  draftCount: number
+  totalHours: number
+  totalProduction: number
+  totalLine: number
+  timecards: ControllerTimecardWeekItem[]
+}
+
 export async function downloadTimecardsForWeek(
-  weekStart: string,
+  filters: ControllerTimecardFilters,
   format: DownloadTimecardsForWeekFormat,
-  jobId?: string
-): Promise<DownloadTimecardsForWeekResult> {
+): Promise<DownloadTimecardsResult> {
   assertActiveUser()
   const callable = httpsCallable(functions, 'downloadTimecardsForWeek')
   try {
-    const result = await callable({ weekStart, format, jobId })
-    return result.data as DownloadTimecardsForWeekResult
+    const result = await callable({ ...filters, format })
+    return result.data as DownloadTimecardsResult
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to download timecards'))
+  }
+}
+
+export async function listTimecardsForWeek(filters: ControllerTimecardFilters): Promise<ListTimecardsResult> {
+  assertActiveUser()
+  const callable = httpsCallable(functions, 'listTimecardsForWeek')
+  try {
+    const result = await callable(filters)
+    return result.data as ListTimecardsResult
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load timecards'))
   }
 }
 

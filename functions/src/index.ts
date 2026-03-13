@@ -136,6 +136,78 @@ function getWeekEndingFromWeekStart(weekStart: string): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
+function getWeekStartFromWeekEnding(weekEnding: string): string {
+  const parsed = new Date(`${String(weekEnding || '').trim()}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) return ''
+  parsed.setUTCDate(parsed.getUTCDate() - 6)
+  const yyyy = parsed.getUTCFullYear()
+  const mm = String(parsed.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(parsed.getUTCDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+function formatDateOnly(value: Date): string {
+  const yyyy = value.getUTCFullYear()
+  const mm = String(value.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(value.getUTCDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+function parseDateOnly(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim())) return null
+  const parsed = new Date(`${String(value || '').trim()}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) return null
+  return formatDateOnly(parsed) === String(value || '').trim() ? parsed : null
+}
+
+function formatWeekEndingLabel(value: string): string {
+  const normalized = String(value || '').trim()
+  if (!normalized) return ''
+  return formatPlexxisDate(normalized)
+}
+
+function deriveEmployeeNameParts(timecard: any): { firstName: string; lastName: string; employeeName: string } {
+  const firstName = String(timecard?.firstName || '').trim()
+  const lastName = String(timecard?.lastName || '').trim()
+
+  if (firstName || lastName) {
+    return {
+      firstName,
+      lastName,
+      employeeName: `${firstName} ${lastName}`.trim() || String(timecard?.employeeName || '').trim() || 'Unnamed Employee',
+    }
+  }
+
+  const employeeName = String(timecard?.employeeName || '').trim()
+  if (!employeeName) {
+    return { firstName: '', lastName: '', employeeName: 'Unnamed Employee' }
+  }
+
+  if (employeeName.includes(',')) {
+    const [rawLastName, rawFirstName] = employeeName.split(',', 2)
+    return {
+      firstName: String(rawFirstName || '').trim(),
+      lastName: String(rawLastName || '').trim(),
+      employeeName,
+    }
+  }
+
+  const parts = employeeName.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return {
+      firstName: parts[0] || '',
+      lastName: parts.slice(1).join(' '),
+      employeeName,
+    }
+  }
+
+  return {
+    firstName: employeeName,
+    lastName: '',
+    employeeName,
+  }
+}
+
 function formatPlexxisEmployeeName(timecard: any): string {
   const firstNameRaw = String(timecard?.firstName || '').trim()
   const lastNameRaw = String(timecard?.lastName || '').trim()
@@ -728,8 +800,8 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
     })
 
       const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart, job?.number)
-      const csvFileName = buildTimecardCsvFilename(weekStart, job?.number)
-      const pdfFileName = buildTimecardPdfFilename(weekStart, job?.number)
+      const csvFileName = buildTimecardCsvFilename(weekStart, undefined, job?.number)
+      const pdfFileName = buildTimecardPdfFilename(weekStart, undefined, job?.number)
       const pdfBuffer = await buildTimecardPdfBuffer({
         jobName: job?.name,
         jobNumber: job?.number,
@@ -807,8 +879,381 @@ async function listSubmittedTimecardsForJobWeek(jobId: string, weekStart: string
   return Array.from(mergedById.values())
 }
 
+async function listAllTimecardsForJobWeek(jobId: string, weekStart: string): Promise<any[]> {
+  const weekEnding = getWeekEndingFromWeekStart(weekStart)
+  const jobRef = db.collection(COLLECTIONS.JOBS).doc(jobId)
+
+  const [directByEndingSnap, directByStartSnap, legacySnap] = await Promise.all([
+    jobRef.collection(COLLECTIONS.TIMECARDS).where('weekEndingDate', '==', weekEnding).get(),
+    jobRef.collection(COLLECTIONS.TIMECARDS).where('weekStartDate', '==', weekStart).get(),
+    jobRef.collection(COLLECTIONS.WEEKS).doc(weekStart).collection(COLLECTIONS.TIMECARDS).get(),
+  ])
+
+  const mergedById = new Map<string, any>()
+
+  const mergeTimecards = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) => {
+    for (const doc of docs) {
+      const timecard: any = { id: doc.id, ...doc.data() }
+      if (timecard?.archived === true) continue
+      mergedById.set(doc.id, timecard)
+    }
+  }
+
+  mergeTimecards(directByEndingSnap.docs)
+  mergeTimecards(directByStartSnap.docs)
+  mergeTimecards(legacySnap.docs)
+
+  return Array.from(mergedById.values())
+}
+
+async function listAllTimecardsForJobRange(jobId: string, startWeek: string, endWeek: string): Promise<any[]> {
+  if (startWeek === endWeek) {
+    return listAllTimecardsForJobWeek(jobId, startWeek)
+  }
+
+  const startWeekEnding = getWeekEndingFromWeekStart(startWeek)
+  const endWeekEnding = getWeekEndingFromWeekStart(endWeek)
+  const jobRef = db.collection(COLLECTIONS.JOBS).doc(jobId)
+
+  const [directByStartSnap, directByEndingSnap, legacyWeeksSnap] = await Promise.all([
+    jobRef.collection(COLLECTIONS.TIMECARDS).where('weekStartDate', '>=', startWeek).where('weekStartDate', '<=', endWeek).get(),
+    jobRef.collection(COLLECTIONS.TIMECARDS).where('weekEndingDate', '>=', startWeekEnding).where('weekEndingDate', '<=', endWeekEnding).get(),
+    jobRef
+      .collection(COLLECTIONS.WEEKS)
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .where(admin.firestore.FieldPath.documentId(), '>=', startWeek)
+      .where(admin.firestore.FieldPath.documentId(), '<=', endWeek)
+      .get(),
+  ])
+
+  const mergedById = new Map<string, any>()
+
+  const mergeTimecards = (docs: Array<FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot>, legacyWeekStart?: string) => {
+    for (const doc of docs) {
+      if (!doc.exists) continue
+      const timecard: any = { id: doc.id, ...doc.data() }
+      if (legacyWeekStart && !timecard?.weekStartDate) {
+        timecard.weekStartDate = legacyWeekStart
+      }
+      if (timecard?.archived === true) continue
+      mergedById.set(doc.id, timecard)
+    }
+  }
+
+  mergeTimecards(directByStartSnap.docs)
+  mergeTimecards(directByEndingSnap.docs)
+
+  const legacyWeekTimecards = await Promise.all(
+    legacyWeeksSnap.docs.map(async (weekDoc) => {
+      const snap = await weekDoc.ref.collection(COLLECTIONS.TIMECARDS).get()
+      return { weekStart: weekDoc.id, docs: snap.docs }
+    })
+  )
+
+  for (const week of legacyWeekTimecards) {
+    mergeTimecards(week.docs, week.weekStart)
+  }
+
+  return Array.from(mergedById.values())
+}
+
+function toIsoString(value: any): string | null {
+  if (!value) return null
+  const asDate =
+    typeof value?.toDate === 'function'
+      ? value.toDate()
+      : value instanceof Date
+        ? value
+        : new Date(value)
+
+  if (Number.isNaN(asDate.getTime())) return null
+  return asDate.toISOString()
+}
+
+function formatUserDisplayNameFromData(data: any, fallback?: string): string {
+  const firstName = String(data?.firstName || '').trim()
+  const lastName = String(data?.lastName || '').trim()
+  if (firstName && lastName) return `${firstName} ${lastName}`
+
+  const displayName = String(data?.displayName || '').trim()
+  if (displayName) return displayName
+
+  const email = String(data?.email || '').trim()
+  if (email) return email
+
+  return String(fallback || '').trim() || 'Unknown Creator'
+}
+
+async function resolveCreatorNames(timecards: any[]): Promise<Record<string, string>> {
+  const uniqueUids = Array.from(new Set(
+    (Array.isArray(timecards) ? timecards : [])
+      .map((tc) => String(tc?.createdByUid || '').trim())
+      .filter(Boolean),
+  ))
+
+  if (!uniqueUids.length) return {}
+
+  const snapshots = await Promise.all(
+    uniqueUids.map(async (uid) => {
+      const snap = await db.collection(COLLECTIONS.USERS).doc(uid).get()
+      return { uid, snap }
+    }),
+  )
+
+  const names: Record<string, string> = {}
+  for (const { uid, snap } of snapshots) {
+    names[uid] = snap.exists
+      ? formatUserDisplayNameFromData(snap.data(), uid)
+      : uid
+  }
+
+  return names
+}
+
+function toControllerTimecardRow(
+  tc: any,
+  fallbackWeekStart: string,
+  fallbackWeekEnding: string,
+  creatorNames: Record<string, string>,
+) {
+  const submittedAtIso = toIsoString(tc?.submittedAt)
+  const nameParts = deriveEmployeeNameParts(tc)
+  const weekStart = String(tc?.weekStartDate || '').trim() || getWeekStartFromWeekEnding(String(tc?.weekEndingDate || '').trim()) || fallbackWeekStart
+  const weekEnding = String(tc?.weekEndingDate || '').trim() || getWeekEndingFromWeekStart(weekStart || fallbackWeekStart) || fallbackWeekEnding
+  const createdByUid = String(tc?.createdByUid || '').trim()
+
+  return {
+    id: `${String(tc?.jobId || tc?.__jobId || '').trim()}:${String(tc?.id || '').trim()}`,
+    timecardId: String(tc?.id || '').trim(),
+    jobId: String(tc?.jobId || tc?.__jobId || '').trim(),
+    jobName: String(tc?.__jobName || '').trim() || 'Unknown Job',
+    jobCode: String(tc?.__jobCode || '').trim(),
+    createdByUid,
+    createdByName: creatorNames[createdByUid] || createdByUid || 'Unknown Creator',
+    employeeNumber: String(tc?.employeeNumber || '').trim(),
+    employeeName: nameParts.employeeName,
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
+    occupation: String(tc?.occupation || '').trim(),
+    status: String(tc?.status || '').trim() === 'submitted' ? 'submitted' : 'draft',
+    weekStart,
+    weekEnding,
+    totalHours: Math.round(toNumber(tc?.totals?.hoursTotal) * 100) / 100,
+    totalProduction: Math.round(toNumber(tc?.totals?.productionTotal) * 100) / 100,
+    totalLine: Math.round(toNumber(tc?.totals?.lineTotal) * 100) / 100,
+    mileage: Math.round(toNumber(tc?.mileage) * 100) / 100,
+    subcontractedEmployee: Boolean(tc?.subcontractedEmployee),
+    submittedAt: submittedAtIso,
+    submittedAtMs: submittedAtIso ? Date.parse(submittedAtIso) : null,
+  }
+}
+
+function parseControllerTimecardFilters(data: any) {
+  const startWeek = String(data?.startWeek || data?.weekStart || '').trim()
+  const endWeek = String(data?.endWeek || startWeek).trim() || startWeek
+  const startDate = parseDateOnly(startWeek)
+  const endDate = parseDateOnly(endWeek)
+
+  if (!startWeek) {
+    throw new HttpsError('invalid-argument', ERROR_MESSAGES.WEEK_START_REQUIRED)
+  }
+  if (!startDate) {
+    throw new HttpsError('invalid-argument', 'startWeek must use YYYY-MM-DD format')
+  }
+  if (!endDate) {
+    throw new HttpsError('invalid-argument', 'endWeek must use YYYY-MM-DD format')
+  }
+  if (endDate.getTime() < startDate.getTime()) {
+    throw new HttpsError('invalid-argument', 'endWeek must be on or after startWeek')
+  }
+
+  const subcontracted = String(data?.subcontracted || 'all').trim().toLowerCase()
+  if (!['all', 'subcontracted', 'direct'].includes(subcontracted)) {
+    throw new HttpsError('invalid-argument', 'subcontracted must be "all", "subcontracted", or "direct"')
+  }
+
+  const status = String(data?.status || 'all').trim().toLowerCase()
+  if (!['all', 'submitted', 'draft'].includes(status)) {
+    throw new HttpsError('invalid-argument', 'status must be "all", "submitted", or "draft"')
+  }
+
+  return {
+    startWeek: formatDateOnly(startDate),
+    endWeek: formatDateOnly(endDate),
+    startWeekEnding: getWeekEndingFromWeekStart(formatDateOnly(startDate)),
+    endWeekEnding: getWeekEndingFromWeekStart(formatDateOnly(endDate)),
+    jobId: String(data?.jobId || '').trim(),
+    trade: String(data?.trade || '').trim(),
+    firstName: String(data?.firstName || '').trim(),
+    lastName: String(data?.lastName || '').trim(),
+    subcontracted: subcontracted as 'all' | 'subcontracted' | 'direct',
+    status: status as 'all' | 'submitted' | 'draft',
+  }
+}
+
+function rowMatchesControllerFilters(row: any, filters: ReturnType<typeof parseControllerTimecardFilters>) {
+  const tradeNeedle = filters.trade.toLowerCase()
+  const firstNameNeedle = filters.firstName.toLowerCase()
+  const lastNameNeedle = filters.lastName.toLowerCase()
+
+  if (filters.jobId && row.jobId !== filters.jobId) return false
+  if (filters.status !== 'all' && row.status !== filters.status) return false
+  if (filters.subcontracted === 'subcontracted' && !row.subcontractedEmployee) return false
+  if (filters.subcontracted === 'direct' && row.subcontractedEmployee) return false
+  if (tradeNeedle && !String(row.occupation || '').toLowerCase().includes(tradeNeedle)) return false
+  if (firstNameNeedle && !String(row.firstName || '').toLowerCase().includes(firstNameNeedle)) return false
+  if (lastNameNeedle && !String(row.lastName || '').toLowerCase().includes(lastNameNeedle)) return false
+  return true
+}
+
+function sortControllerTimecardRows(a: any, b: any) {
+  const weekCompare = String(a.weekStart || '').localeCompare(String(b.weekStart || ''))
+  if (weekCompare !== 0) return weekCompare
+  const jobCompare = String(a.jobName || '').localeCompare(String(b.jobName || ''))
+  if (jobCompare !== 0) return jobCompare
+  const employeeCompare = String(a.employeeName || '').localeCompare(String(b.employeeName || ''))
+  if (employeeCompare !== 0) return employeeCompare
+  return String(a.employeeNumber || '').localeCompare(String(b.employeeNumber || ''))
+}
+
+async function resolveControllerTargetJobs(jobId: string): Promise<Array<{ id: string; name: string; code: string }>> {
+  if (jobId) {
+    const jobSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).get()
+    if (!jobSnap.exists) {
+      throw new HttpsError('not-found', 'Job not found')
+    }
+    const data = jobSnap.data() || {}
+    return [{
+      id: jobId,
+      name: String(data.name || 'Unknown Job').trim() || 'Unknown Job',
+      code: String(data.number || data.code || '').trim(),
+    }]
+  }
+
+  const jobsSnap = await db.collection(COLLECTIONS.JOBS).get()
+  return jobsSnap.docs.map((doc) => {
+    const data = doc.data() || {}
+    return {
+      id: doc.id,
+      name: String(data.name || 'Unknown Job').trim() || 'Unknown Job',
+      code: String(data.number || data.code || '').trim(),
+    }
+  })
+}
+
+async function queryControllerTimecards(filters: ReturnType<typeof parseControllerTimecardFilters>) {
+  const targetJobs = await resolveControllerTargetJobs(filters.jobId)
+
+  if (!targetJobs.length) {
+    return {
+      ...filters,
+      jobName: 'All Jobs',
+      jobCode: '',
+      rows: [],
+      exportTimecards: [],
+    }
+  }
+
+  const timecardsByJob = await Promise.all(
+    targetJobs.map(async (job) => {
+      const jobCards = await listAllTimecardsForJobRange(job.id, filters.startWeek, filters.endWeek)
+      return jobCards.map((tc: any) => ({
+        ...tc,
+        __jobId: job.id,
+        __jobCode: job.code,
+        __jobName: job.name,
+      }))
+    })
+  )
+
+  const creatorNames = await resolveCreatorNames(timecardsByJob.flat())
+
+  const matchingEntries = timecardsByJob
+    .flat()
+    .map((tc) => ({
+      source: tc,
+      row: toControllerTimecardRow(tc, filters.startWeek, filters.endWeekEnding, creatorNames),
+    }))
+    .filter((entry) => rowMatchesControllerFilters(entry.row, filters))
+    .sort((left, right) => sortControllerTimecardRows(left.row, right.row))
+
+  const resolvedJob = filters.jobId ? targetJobs[0] : null
+
+  return {
+    ...filters,
+    jobName: resolvedJob?.name || 'All Jobs',
+    jobCode: resolvedJob?.code || '',
+    rows: matchingEntries.map((entry) => entry.row),
+    exportTimecards: matchingEntries.map((entry) => ({
+      ...entry.source,
+      weekStartDate: entry.row.weekStart,
+      weekEndingDate: entry.row.weekEnding,
+      firstName: entry.row.firstName,
+      lastName: entry.row.lastName,
+      employeeName: entry.row.employeeName,
+      occupation: entry.row.occupation,
+      subcontractedEmployee: entry.row.subcontractedEmployee,
+      __jobCode: entry.row.jobCode,
+      __jobName: entry.row.jobName,
+      __jobId: entry.row.jobId,
+    })),
+  }
+}
+
 /**
- * Download submitted timecards for a selected week as CSV or PDF
+ * List filtered weekly timecards across jobs for controller review.
+ * Access: admin and controller roles
+ */
+export const listTimecardsForWeek = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', ERROR_MESSAGES.NOT_SIGNED_IN)
+  }
+
+  const user = await getUserProfile(request.auth.uid)
+  if (!user) {
+    throw new HttpsError('failed-precondition', ERROR_MESSAGES.USER_PROFILE_NOT_FOUND)
+  }
+  if (user.role !== 'admin' && user.role !== 'controller') {
+    throw new HttpsError('permission-denied', 'Only admins or controllers can perform this action')
+  }
+
+  const filters = parseControllerTimecardFilters(request.data)
+
+  try {
+    const result = await queryControllerTimecards(filters)
+    const rows = result.rows
+
+    return {
+      success: true,
+      startWeek: result.startWeek,
+      endWeek: result.endWeek,
+      startWeekEnding: result.startWeekEnding,
+      endWeekEnding: result.endWeekEnding,
+      filters: {
+        jobId: result.jobId,
+        trade: result.trade,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        subcontracted: result.subcontracted,
+        status: result.status,
+      },
+      totalCount: rows.length,
+      submittedCount: rows.filter((row) => row.status === 'submitted').length,
+      draftCount: rows.filter((row) => row.status === 'draft').length,
+      totalHours: Math.round(rows.reduce((sum, row) => sum + toNumber(row.totalHours), 0) * 100) / 100,
+      totalProduction: Math.round(rows.reduce((sum, row) => sum + toNumber(row.totalProduction), 0) * 100) / 100,
+      totalLine: Math.round(rows.reduce((sum, row) => sum + toNumber(row.totalLine), 0) * 100) / 100,
+      timecards: rows,
+    }
+  } catch (error: any) {
+    console.error('[listTimecardsForWeek] Error', { filters, error })
+    if (error instanceof HttpsError) throw error
+    throw new HttpsError('internal', error?.message || 'Failed to load timecards')
+  }
+})
+
+/**
+ * Download filtered timecards as CSV or PDF.
  * Access: admin and controller roles
  */
 export const downloadTimecardsForWeek = onCall(async (request) => {
@@ -824,125 +1269,80 @@ export const downloadTimecardsForWeek = onCall(async (request) => {
     throw new HttpsError('permission-denied', 'Only admins or controllers can perform this action')
   }
 
-  const weekStart = String(request.data?.weekStart || '').trim()
+  const filters = parseControllerTimecardFilters(request.data)
   const format = String(request.data?.format || '').trim().toLowerCase()
-  const jobId = typeof request.data?.jobId === 'string' ? String(request.data.jobId).trim() : ''
-
-  if (!weekStart) {
-    throw new HttpsError('invalid-argument', ERROR_MESSAGES.WEEK_START_REQUIRED)
-  }
   if (format !== 'csv' && format !== 'pdf') {
     throw new HttpsError('invalid-argument', 'format must be either "csv" or "pdf"')
   }
 
-  const parsedWeekStart = new Date(`${weekStart}T00:00:00Z`)
-  if (Number.isNaN(parsedWeekStart.getTime())) {
-    throw new HttpsError('invalid-argument', 'weekStart must use YYYY-MM-DD format')
-  }
-
   try {
-    let targetJobs: Array<{ id: string; name: string; code: string }> = []
-    let jobName = 'All Jobs'
-    let jobCode = ''
-
-    if (jobId) {
-      const jobSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).get()
-      if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found')
-      const data = jobSnap.data() || {}
-      const resolvedCode = String(data.number || data.code || '').trim()
-      targetJobs = [{ id: jobId, name: String(data.name || 'Unknown Job'), code: resolvedCode }]
-      jobName = String(data.name || 'Unknown Job')
-      jobCode = resolvedCode
-    } else {
-      const jobsSnap = await db.collection(COLLECTIONS.JOBS).get()
-      targetJobs = jobsSnap.docs.map((doc) => {
-        const data = doc.data() || {}
-        return {
-          id: doc.id,
-          name: String(data.name || 'Unknown Job'),
-          code: String(data.number || data.code || '').trim(),
-        }
-      })
+    const result = await queryControllerTimecards(filters)
+    if (!result.exportTimecards.length) {
+      throw new HttpsError('not-found', 'No timecards found for the selected filters')
     }
 
-    if (!targetJobs.length) {
-      throw new HttpsError('not-found', 'No jobs found')
-    }
-
-    const timecardsByJob = await Promise.all(
-      targetJobs.map(async (job) => {
-        const jobCards = await listSubmittedTimecardsForJobWeek(job.id, weekStart)
-        return jobCards.map((tc: any) => ({
-          ...tc,
-          __jobCode: job.code,
-          __jobName: job.name,
-        }))
-      })
-    )
-
-    const submittedTimecards = timecardsByJob.flat()
-    if (!submittedTimecards.length) {
-      throw new HttpsError('not-found', `No submitted timecards found for week ${weekStart}`)
-    }
-
-    const normalizedTimecards = submittedTimecards
+    const normalizedTimecards = result.exportTimecards
       .map(normalizeTimecardForEmail)
       .filter((tc: any) => hasMeaningfulTimecard(tc))
       .sort((a: any, b: any) => {
+        const weekCompare = String(a?.weekStartDate || '').localeCompare(String(b?.weekStartDate || ''))
+        if (weekCompare !== 0) return weekCompare
+        const jobCompare = String(a?.__jobName || '').localeCompare(String(b?.__jobName || ''))
+        if (jobCompare !== 0) return jobCompare
         const nameA = String(a?.employeeName || '').toLowerCase()
         const nameB = String(b?.employeeName || '').toLowerCase()
         return nameA.localeCompare(nameB)
       })
 
     if (!normalizedTimecards.length) {
-      throw new HttpsError('not-found', `No submitted timecards with export data found for week ${weekStart}`)
+      throw new HttpsError('not-found', 'No timecards with export data found for the selected filters')
     }
 
     validatePdfCsvHourParity(normalizedTimecards)
 
-    const weekEndDate = new Date(parsedWeekStart)
-    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6)
-    const weekEnding = [
-      weekEndDate.getUTCFullYear(),
-      String(weekEndDate.getUTCMonth() + 1).padStart(2, '0'),
-      String(weekEndDate.getUTCDate()).padStart(2, '0'),
-    ].join('-')
-
     if (format === 'csv') {
-      const csv = buildTimecardCsv(normalizedTimecards, weekStart, jobCode || undefined)
+      const csv = buildTimecardCsv(normalizedTimecards, result.startWeek, result.jobCode || undefined)
       return {
         success: true,
         format: 'csv',
-        fileName: buildTimecardCsvFilename(weekStart, jobCode || undefined),
+        fileName: buildTimecardCsvFilename(result.startWeek, result.endWeek, result.jobCode || undefined),
         contentType: 'text/csv',
         contentBase64: Buffer.from(csv, 'utf-8').toString('base64'),
-        weekStart,
-        weekEnding,
+        weekStart: result.startWeek,
+        weekEnding: result.endWeekEnding,
+        startWeek: result.startWeek,
+        endWeek: result.endWeek,
+        startWeekEnding: result.startWeekEnding,
+        endWeekEnding: result.endWeekEnding,
         timecardCount: normalizedTimecards.length,
       }
     }
 
     const submittedBy = await getUserDisplayName(request.auth.uid, request.auth.token.email)
     const pdfBuffer = await buildTimecardPdfBuffer({
-      jobName,
-      jobNumber: jobCode,
+      jobName: result.jobName,
+      jobNumber: result.jobCode,
       submittedBy,
-      weekStart,
+      weekStart: result.startWeek,
       timecards: normalizedTimecards,
     })
 
     return {
       success: true,
       format: 'pdf',
-      fileName: buildTimecardPdfFilename(weekStart, jobCode || undefined),
+      fileName: buildTimecardPdfFilename(result.startWeek, result.endWeek, result.jobCode || undefined),
       contentType: 'application/pdf',
       contentBase64: pdfBuffer.toString('base64'),
-      weekStart,
-      weekEnding,
+      weekStart: result.startWeek,
+      weekEnding: result.endWeekEnding,
+      startWeek: result.startWeek,
+      endWeek: result.endWeek,
+      startWeekEnding: result.startWeekEnding,
+      endWeekEnding: result.endWeekEnding,
       timecardCount: normalizedTimecards.length,
     }
   } catch (error: any) {
-    console.error('[downloadTimecardsForWeek] Error', { weekStart, format, jobId, error })
+    console.error('[downloadTimecardsForWeek] Error', { filters, format, error })
     if (error instanceof HttpsError) throw error
     throw new HttpsError('internal', error?.message || 'Failed to download timecards')
   }
@@ -1000,36 +1400,35 @@ function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: 
     .join('\r\n')
 }
 
-function buildTimecardCsvFilename(weekStart: string, jobCode?: string): string {
-  const weekDate = new Date(weekStart)
-  if (!Number.isNaN(weekDate.getTime())) {
-    weekDate.setDate(weekDate.getDate() + 6)
-    const yyyy = weekDate.getFullYear()
-    const mm = String(weekDate.getMonth() + 1).padStart(2, '0')
-    const dd = String(weekDate.getDate()).padStart(2, '0')
-    const normalizedJobCode = String(jobCode || '').trim()
-    return normalizedJobCode ? `${yyyy}-${mm}-${dd} ${normalizedJobCode}.csv` : `${yyyy}-${mm}-${dd}.csv`
+function buildTimecardExportPeriodLabel(startWeek: string, endWeek?: string): string {
+  const normalizedStartWeek = String(startWeek || '').trim()
+  const normalizedEndWeek = String(endWeek || startWeek || '').trim() || normalizedStartWeek
+  const startLabel = getWeekEndingFromWeekStart(normalizedStartWeek)
+  const endLabel = getWeekEndingFromWeekStart(normalizedEndWeek)
+
+  if (normalizedStartWeek && normalizedStartWeek === normalizedEndWeek) {
+    return startLabel || normalizedStartWeek
   }
 
-  const normalizedWeekStart = String(weekStart || '').trim() || 'timecards'
-  const normalizedJobCode = String(jobCode || '').trim()
-  return normalizedJobCode ? `${normalizedWeekStart} ${normalizedJobCode}.csv` : `${normalizedWeekStart}.csv`
+  if (startLabel && endLabel) {
+    return `${startLabel}_to_${endLabel}`
+  }
+
+  return normalizedStartWeek === normalizedEndWeek
+    ? normalizedStartWeek || 'timecards'
+    : `${normalizedStartWeek || 'start'}_to_${normalizedEndWeek || 'end'}`
 }
 
-function buildTimecardPdfFilename(weekStart: string, jobCode?: string): string {
-  const weekDate = new Date(weekStart)
-  if (!Number.isNaN(weekDate.getTime())) {
-    weekDate.setDate(weekDate.getDate() + 6)
-    const yyyy = weekDate.getFullYear()
-    const mm = String(weekDate.getMonth() + 1).padStart(2, '0')
-    const dd = String(weekDate.getDate()).padStart(2, '0')
-    const normalizedJobCode = String(jobCode || '').trim()
-    return normalizedJobCode ? `${yyyy}-${mm}-${dd} ${normalizedJobCode}.pdf` : `${yyyy}-${mm}-${dd}.pdf`
-  }
-
-  const normalizedWeekStart = String(weekStart || '').trim() || 'timecards'
+function buildTimecardCsvFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
+  const periodLabel = buildTimecardExportPeriodLabel(startWeek, endWeek)
   const normalizedJobCode = String(jobCode || '').trim()
-  return normalizedJobCode ? `${normalizedWeekStart} ${normalizedJobCode}.pdf` : `${normalizedWeekStart}.pdf`
+  return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.csv` : `${periodLabel}.csv`
+}
+
+function buildTimecardPdfFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
+  const periodLabel = buildTimecardExportPeriodLabel(startWeek, endWeek)
+  const normalizedJobCode = String(jobCode || '').trim()
+  return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.pdf` : `${periodLabel}.pdf`
 }
 
 async function buildTimecardPdfBuffer(payload: {
@@ -1067,7 +1466,7 @@ async function buildTimecardPdfBuffer(payload: {
   const weekEndDate = weekStartDate && !Number.isNaN(weekStartDate.getTime()) ? new Date(weekStartDate) : null
   if (weekEndDate) weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6)
   const weekEndingLabel = weekEndDate
-    ? `${weekEndDate.getUTCMonth() + 1}/${weekEndDate.getUTCDate()}/${weekEndDate.getUTCFullYear()}`
+    ? formatWeekEndingLabel(formatDateOnly(weekEndDate))
     : safeText(payload.weekStart)
 
   await new Promise<void>((resolve, reject) => {
@@ -1154,7 +1553,9 @@ async function buildTimecardPdfBuffer(payload: {
       const wageNumeric = toNumber(tc?.employeeWage ?? tc?.wage)
       const wageSource = tc?.employeeWage ?? tc?.wage ?? ''
       const wageLabel = renderBlankTemplate ? '' : (wageNumeric > 0 ? `$${wageNumeric.toFixed(2)}` : String(wageSource).trim())
-      const weekEnding = renderBlankTemplate ? '' : weekEndingLabel
+      const cardWeekEnding = String(tc?.weekEndingDate || '').trim()
+        || getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim())
+      const weekEnding = renderBlankTemplate ? '' : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel
 
       const fieldRowHeight = 11.5
       drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, `EMP. NAME: ${employeeName}`, `EMPLOYEE# ${employeeCode}`)

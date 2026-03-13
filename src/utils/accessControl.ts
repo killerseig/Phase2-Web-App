@@ -18,8 +18,5 @@ export const canAccessJobForSnapshot = (
   if (snapshot.role === ROLES.FOREMAN) {
     return (snapshot.assignedJobIds ?? []).includes(jobId)
   }
-  if (snapshot.role === ROLES.CONTROLLER) {
-    return false
-  }
   return true
 }

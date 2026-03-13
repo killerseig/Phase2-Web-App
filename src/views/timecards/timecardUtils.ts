@@ -7,6 +7,15 @@ export interface TimecardModel extends Timecard {
   totals: TimecardTotals
 }
 
+export type TimecardEmployeeEditorForm = {
+  employeeNumber: string
+  firstName: string
+  lastName: string
+  occupation: string
+  employeeWage: string
+  subcontractedEmployee: boolean
+}
+
 export const TIMECARD_BURDEN_RATE = 0.32
 export const DEFAULT_REGULAR_HOURS_CAP = 40
 
@@ -61,6 +70,17 @@ export function parseHoursOverride(value: string): number | null {
   return parsed
 }
 
+export function createEmptyTimecardEmployeeEditorForm(): TimecardEmployeeEditorForm {
+  return {
+    employeeNumber: '',
+    firstName: '',
+    lastName: '',
+    occupation: '',
+    employeeWage: '',
+    subcontractedEmployee: false,
+  }
+}
+
 export function calculateUnitCost(
   employeeWage: number | null | undefined,
   hours: number | null | undefined,
@@ -113,6 +133,17 @@ export function getTimecardDisplayName(timecard: TimecardModel): string {
   const first = getTimecardFirstName(timecard)
   const last = getTimecardLastName(timecard)
   return `${first} ${last}`.trim() || timecard.employeeName || 'Unnamed Employee'
+}
+
+export function buildTimecardEmployeeEditorForm(timecard: TimecardModel): TimecardEmployeeEditorForm {
+  return {
+    employeeNumber: timecard.employeeNumber,
+    firstName: getTimecardFirstName(timecard),
+    lastName: getTimecardLastName(timecard),
+    occupation: timecard.occupation,
+    employeeWage: timecard.employeeWage != null ? String(timecard.employeeWage) : '',
+    subcontractedEmployee: !!timecard.subcontractedEmployee,
+  }
 }
 
 export function recalcTotalsForTimecard(timecard: TimecardModel, weekStartDate: string): void {

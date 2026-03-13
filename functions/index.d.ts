@@ -18,7 +18,56 @@ export declare const sendTimecardEmail: import("firebase-functions/v2/https").Ca
     message: string;
 }>, unknown>;
 /**
- * Download submitted timecards for a selected week as CSV or PDF
+ * List filtered weekly timecards across jobs for controller review.
+ * Access: admin and controller roles
+ */
+export declare const listTimecardsForWeek: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    success: boolean;
+    startWeek: string;
+    endWeek: string;
+    startWeekEnding: string;
+    endWeekEnding: string;
+    filters: {
+        jobId: string;
+        trade: string;
+        firstName: string;
+        lastName: string;
+        subcontracted: "all" | "subcontracted" | "direct";
+        status: "draft" | "submitted" | "all";
+    };
+    totalCount: number;
+    submittedCount: number;
+    draftCount: number;
+    totalHours: number;
+    totalProduction: number;
+    totalLine: number;
+    timecards: {
+        id: string;
+        timecardId: string;
+        jobId: string;
+        jobName: string;
+        jobCode: string;
+        createdByUid: string;
+        createdByName: string;
+        employeeNumber: string;
+        employeeName: string;
+        firstName: string;
+        lastName: string;
+        occupation: string;
+        status: string;
+        weekStart: string;
+        weekEnding: string;
+        totalHours: number;
+        totalProduction: number;
+        totalLine: number;
+        mileage: number;
+        subcontractedEmployee: boolean;
+        submittedAt: string | null;
+        submittedAtMs: number | null;
+    }[];
+}>, unknown>;
+/**
+ * Download filtered timecards as CSV or PDF.
  * Access: admin and controller roles
  */
 export declare const downloadTimecardsForWeek: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
@@ -29,6 +78,10 @@ export declare const downloadTimecardsForWeek: import("firebase-functions/v2/htt
     contentBase64: string;
     weekStart: string;
     weekEnding: string;
+    startWeek: string;
+    endWeek: string;
+    startWeekEnding: string;
+    endWeekEnding: string;
     timecardCount: number;
 }>, unknown>;
 /**

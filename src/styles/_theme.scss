@@ -1,6 +1,8 @@
 @use '@/styles/_variables.scss' as vars;
 
 :root {
+  color-scheme: dark;
+
   --color-primary: #{vars.$primary};
   --color-secondary: #{vars.$secondary};
   --color-success: #{vars.$success};
@@ -17,12 +19,20 @@
   --text-muted: #{vars.$text-muted};
   --text-muted-3: #{vars.$text-muted-3};
   --border: #{vars.$border-color};
+  --bs-body-bg: #{vars.$body-bg};
+  --bs-body-color: #{vars.$body-color};
+  --bs-secondary-bg: #{vars.$surface-2};
+  --bs-secondary-color: #{vars.$text-muted};
+  --bs-tertiary-bg: #{vars.$surface-3};
+  --bs-tertiary-color: #{vars.$text-muted-3};
+  --bs-emphasis-color: #{vars.$body-color};
+  --bs-link-color: #{vars.$primary};
+  --bs-link-hover-color: #{vars.$primary};
   --bs-border-color: #{vars.$border-color};
   --bs-border-color-translucent: rgba(230, 237, 247, 0.10);
   --bs-table-border-color: #{vars.$border-color};
   --bs-list-group-border-color: #{vars.$border-color};
   --bs-card-border-color: #{vars.$border-color};
-  --bs-secondary-color: #{vars.$text-muted};
 
   --radius: #{vars.$border-radius};
   --radius-sm: #{vars.$border-radius-sm};

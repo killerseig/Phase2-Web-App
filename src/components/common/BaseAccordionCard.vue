@@ -35,9 +35,9 @@ function onHeaderKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="card mb-4">
+  <div :class="['card mb-4 accordion-card', { 'accordion-card--open': open }]">
     <div
-      class="card-header d-flex align-items-center justify-content-between cursor-pointer"
+      class="card-header accordion-card__header d-flex align-items-center justify-content-between cursor-pointer"
       role="button"
       tabindex="0"
       @click="toggle"
@@ -56,15 +56,36 @@ function onHeaderKeydown(event: KeyboardEvent) {
         <i class="bi bi-chevron-down chevron" :class="{ open }" aria-hidden="true"></i>
       </div>
     </div>
-    <div class="card-body border-top inline-collapse" :style="collapseStyle" :ref="setContentRef">
-      <div class="collapse-inner" :class="bodyClass">
+    <div class="card-body accordion-card__body inline-collapse" :style="collapseStyle" :ref="setContentRef">
+      <div class="collapse-inner accordion-card__inner" :class="bodyClass">
         <slot />
       </div>
     </div>
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/_variables.scss' as *;
+
+$accordion-border-color: $border-color;
+
+.accordion-card {
+  background: $surface;
+  border-color: $accordion-border-color;
+  color: $body-color;
+}
+
+.accordion-card__header {
+  background: $surface-2;
+  border-bottom: 0;
+  color: $body-color;
+}
+
+.accordion-card__body {
+  background: $surface;
+  border-top: 1px solid $accordion-border-color;
+}
+
 .cursor-pointer {
   cursor: pointer;
 }
@@ -85,7 +106,7 @@ function onHeaderKeydown(event: KeyboardEvent) {
   transition: max-height 0.3s ease, opacity 0.2s ease;
 }
 
-.collapse-inner {
+.accordion-card__inner {
   padding: 1rem 1.25rem;
 }
 </style>
