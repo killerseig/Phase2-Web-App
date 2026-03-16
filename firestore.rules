@@ -282,12 +282,6 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    /* ---------------- employees ---------------- */
-    match /employees/{employeeId} {
-      allow read: if activeAppUser();
-      allow create, update, delete: if isAdmin();
-    }
-
     /* ---------------- default deny ---------------- */
     match /{document=**} {
       allow read, write: if false;

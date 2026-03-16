@@ -143,6 +143,20 @@
   overflow: hidden;
 }
 
+.panel-muted {
+  background: vars.$surface;
+  border: 1px solid rgba(230, 237, 247, 0.12);
+}
+
+.panel-muted .list-group-item {
+  border-color: rgba(230, 237, 247, 0.08);
+}
+
+.app-empty-state-card {
+  background: vars.$surface-2;
+  border: 1px dashed vars.$border-color;
+}
+
 .app-module-card {
   background: linear-gradient(180deg, rgba(vars.$primary, 0.1) 0%, vars.$surface-2 100%);
   border: 1px solid rgba(vars.$primary, 0.16);

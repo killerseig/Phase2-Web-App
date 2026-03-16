@@ -2,6 +2,13 @@
 import { computed, ref } from 'vue'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import type { ShopCatalogItem } from '@/services'
+import type {
+  CatalogTreeChildNodeMap,
+  CatalogTreeChildCountMap,
+  CatalogTreeDirectMatchStrengthMap,
+  CatalogTreeItemNodeMap,
+  CatalogTreeVisibleIdSet,
+} from '@/composables/useCatalogTreeSearch'
 
 defineOptions({ name: 'ShopCatalogTreeNode' })
 
@@ -12,6 +19,14 @@ interface Props {
   orderMode?: boolean
   catalogItemQtys?: Record<string, number>
   itemFilter?: (item: ShopCatalogItem) => boolean
+  nodeChildIds?: CatalogTreeChildNodeMap
+  itemNodesById?: CatalogTreeItemNodeMap
+  searchMode?: boolean
+  searchVisibleIds?: CatalogTreeVisibleIdSet
+  searchCategoryDirectMatchIds?: Set<string>
+  searchDirectMatchStrengths?: CatalogTreeDirectMatchStrengthMap
+  searchVisibleChildCounts?: CatalogTreeChildCountMap
+  bypassSearchFilter?: boolean
   editingItemId?: string | null
   editingCategoryId?: string | null
   editCategoryName?: string
@@ -63,15 +78,25 @@ const category = computed(() => (categoryId.value ? categoriesStore.getCategoryB
 const categorySafeId = computed(() => category.value?.id ?? '')
 const categorySafeName = computed(() => category.value?.name ?? '')
 const item = computed(() => {
-  if (!itemId.value || !props.items) return null
+  if (!itemId.value) return null
+  if (props.itemNodesById) {
+    return props.itemNodesById.get(props.nodeId) ?? null
+  }
+  if (!props.items) return null
   return props.items.find(i => i.id === itemId.value) ?? null
 })
 
 const isEditing = computed(() => props.editingItemId === itemId.value)
 const itemArchived = computed(() => !!item.value && item.value.active === false)
 const isExpanded = computed(() => props.expanded.has(props.nodeId))
+const isSearchVisible = computed(() => props.searchVisibleIds?.has(props.nodeId) ?? true)
+const isDirectCategoryMatch = computed(() => props.searchCategoryDirectMatchIds?.has(props.nodeId) ?? false)
 
-const children = computed(() => {
+const allChildren = computed(() => {
+  if (props.nodeChildIds) {
+    return props.nodeChildIds.get(props.nodeId) ?? []
+  }
+
   if (categoryId.value) {
     const categoryChildren = categoriesStore.getChildren(categoryId.value).map(child => child.id)
     let itemChildren = (props.items?.filter(i => i.categoryId === categoryId.value) ?? []).map(i => `${ITEM_PREFIX}${i.id}`)
@@ -94,8 +119,41 @@ const children = computed(() => {
   return []
 })
 
-const hasChildren = computed(() => children.value.length > 0)
+const children = computed(() => {
+  if (!props.searchMode || props.bypassSearchFilter) return allChildren.value
+  if (!isSearchVisible.value) return []
+
+  if (isDirectCategoryMatch.value) {
+    return isExpanded.value ? allChildren.value : []
+  }
+
+  return allChildren.value.filter((childId) => props.searchVisibleIds?.has(childId))
+})
+
+const hasChildren = computed(() => allChildren.value.length > 0)
 const isArchived = computed(() => !!category.value && !category.value.active)
+const animateExpansion = computed(() => !props.searchMode)
+const childBypassSearchFilter = computed(() =>
+  !!props.bypassSearchFilter || (!!props.searchMode && isDirectCategoryMatch.value && isExpanded.value)
+)
+
+const nodeQtyKey = (nodeId: string) => (nodeId.startsWith(ITEM_PREFIX) ? nodeId.slice(ITEM_PREFIX.length) : nodeId)
+
+const memoDeps = (nodeId: string) => {
+  return [
+    nodeId,
+    props.searchMode ?? false,
+    props.bypassSearchFilter ?? false,
+    props.expanded.has(nodeId),
+    props.searchVisibleIds?.has(nodeId) ?? !(props.searchMode ?? false),
+    props.searchCategoryDirectMatchIds?.has(nodeId) ?? false,
+    props.searchDirectMatchStrengths?.get(nodeId) ?? 'none',
+    props.searchVisibleChildCounts?.get(nodeId) ?? -1,
+    props.catalogItemQtys?.[nodeQtyKey(nodeId)] ?? 1,
+    props.editingItemId === (nodeId.startsWith(ITEM_PREFIX) ? nodeId.slice(ITEM_PREFIX.length) : null),
+    props.editingCategoryId === nodeId,
+  ]
+}
 
 function toggleSelf() {
   if (!hasChildren.value) return
@@ -256,7 +314,7 @@ function runAccordionLeave(el: Element) {
 
 <template>
   <!-- Category nodes -->
-  <div v-if="category" class="tree-node accordion-item">
+  <div v-if="category && (!searchMode || bypassSearchFilter || isSearchVisible)" class="tree-node accordion-item">
     <div v-if="props.editingCategoryId !== props.nodeId" class="node-header" @click="handleNodeHeaderClick">
       <button
         :id="`btn-${props.nodeId}`"
@@ -273,7 +331,8 @@ function runAccordionLeave(el: Element) {
         </span>
       </button>
 
-      <div v-if="orderMode && catalogItemQtys && categorySafeId" class="btn-group btn-group-sm node-actions" role="group">
+      <!-- Leaf categories are orderable in order mode (data stored as category but acts as item) -->
+      <div v-if="orderMode && !hasChildren && catalogItemQtys" class="btn-group btn-group-sm node-actions" role="group">
         <input
           type="number"
           inputmode="numeric"
@@ -341,6 +400,7 @@ function runAccordionLeave(el: Element) {
     </div>
 
     <Transition
+      v-if="animateExpansion"
       name="accordion"
       @before-enter="setAccordionEnter"
       @enter="runAccordionEnter"
@@ -354,12 +414,21 @@ function runAccordionLeave(el: Element) {
           <div class="accordion">
             <div v-for="childId of children" :key="childId">
               <ShopCatalogTreeNode
+                v-memo="memoDeps(childId)"
                 :node-id="childId"
                 :expanded="expanded"
                 :items="items"
                 :order-mode="orderMode"
                 :catalog-item-qtys="catalogItemQtys"
                 :item-filter="itemFilter"
+                :node-child-ids="nodeChildIds"
+                :item-nodes-by-id="itemNodesById"
+                :search-mode="searchMode"
+                :search-visible-ids="searchVisibleIds"
+                :search-category-direct-match-ids="searchCategoryDirectMatchIds"
+                :search-direct-match-strengths="searchDirectMatchStrengths"
+                :search-visible-child-counts="searchVisibleChildCounts"
+                :bypass-search-filter="childBypassSearchFilter"
                 :editing-item-id="editingItemId"
                 :editing-category-id="editingCategoryId"
                 :edit-category-name="editCategoryName"
@@ -387,10 +456,56 @@ function runAccordionLeave(el: Element) {
         </div>
       </div>
     </Transition>
+    <div v-else-if="hasChildren && isExpanded" :id="`collapse-${props.nodeId}`" class="accordion-collapse" role="region" :aria-labelledby="`btn-${props.nodeId}`">
+      <div class="accordion-body p-0">
+        <div class="accordion">
+          <div v-for="childId of children" :key="childId">
+            <ShopCatalogTreeNode
+              v-memo="memoDeps(childId)"
+              :node-id="childId"
+              :expanded="expanded"
+              :items="items"
+              :order-mode="orderMode"
+              :catalog-item-qtys="catalogItemQtys"
+              :item-filter="itemFilter"
+              :node-child-ids="nodeChildIds"
+              :item-nodes-by-id="itemNodesById"
+              :search-mode="searchMode"
+              :search-visible-ids="searchVisibleIds"
+              :search-category-direct-match-ids="searchCategoryDirectMatchIds"
+              :search-direct-match-strengths="searchDirectMatchStrengths"
+              :search-visible-child-counts="searchVisibleChildCounts"
+              :bypass-search-filter="childBypassSearchFilter"
+              :editing-item-id="editingItemId"
+              :editing-category-id="editingCategoryId"
+              :edit-category-name="editCategoryName"
+              :saving-category-edit="savingCategoryEdit"
+              @toggle-expand="forwardToggle"
+              @add-child="(id) => emit('add-child', id)"
+              @add-item="(id) => emit('add-item', id)"
+              @edit-item="(child) => emit('edit-item', child)"
+              @save-item="(itemId, updates) => emit('save-item', itemId, updates)"
+              @delete-item="(child) => emit('delete-item', child)"
+              @edit-category="(id) => emit('edit-category', id)"
+              @save-category="(id, name) => emit('save-category', id, name)"
+              @cancel-category-edit="() => emit('cancel-category-edit')"
+              @archive="(id) => emit('archive', id)"
+              @reactivate="(id) => emit('reactivate', id)"
+              @archive-item="(child) => emit('archive-item', child)"
+              @reactivate-item="(child) => emit('reactivate-item', child)"
+              @delete-category="(id) => emit('delete-category', id)"
+              @select-for-order="(child) => emit('select-for-order', child)"
+              @update:catalogItemQty="(payload) => emit('update:catalogItemQty', payload)"
+              @update:editCategoryName="(name) => emit('update:editCategoryName', name)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Item nodes -->
-  <div v-else-if="item" class="tree-node accordion-item">
+  <div v-else-if="item && (!searchMode || bypassSearchFilter || isSearchVisible)" class="tree-node accordion-item">
     <div class="node-header" @click="handleNodeHeaderClick">
       <button
         :id="`btn-${props.nodeId}`"
@@ -401,7 +516,7 @@ function runAccordionLeave(el: Element) {
         :aria-controls="hasChildren ? `collapse-${props.nodeId}` : undefined"
         :class="{ collapsed: !isExpanded && hasChildren, 'has-children': hasChildren, 'not-expandable': !hasChildren }"
       >
-        <i class="bi bi-file-text me-2 node-item-icon"></i>
+        <i class="bi me-2 node-item-icon" :class="hasChildren ? 'bi-folder2' : 'bi-file-text'"></i>
         <template v-if="isEditing">
           <div class="item-edit-fields w-100">
             <input
@@ -439,8 +554,26 @@ function runAccordionLeave(el: Element) {
         </span>
       </button>
 
+      <div v-if="orderMode && !hasChildren && catalogItemQtys && itemId" class="btn-group btn-group-sm node-actions" role="group">
+        <input
+          type="number"
+          inputmode="numeric"
+          min="1"
+          step="1"
+          :value="catalogItemQtys?.[itemId] || 1"
+          @input="(e) => handleCatalogQtyInput(itemId, e)"
+          class="form-control form-control-sm qty-input"
+        />
+        <button
+          class="btn btn-sm btn-success"
+          @click.stop="() => { if (item) emit('select-for-order', { id: item.id, description: item.description, quantity: catalogItemQtys?.[itemId] || 1 }) }"
+          title="Add to order"
+        >
+          <i class="bi bi-plus-circle"></i>
+        </button>
+      </div>
       <div
-        v-if="!orderMode"
+        v-else-if="!orderMode"
         class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions"
         @click.stop
       >
@@ -465,6 +598,7 @@ function runAccordionLeave(el: Element) {
     </div>
 
     <Transition
+      v-if="animateExpansion"
       name="accordion"
       @before-enter="setAccordionEnter"
       @enter="runAccordionEnter"
@@ -478,12 +612,21 @@ function runAccordionLeave(el: Element) {
           <div class="accordion">
             <div v-for="childId of children" :key="childId">
               <ShopCatalogTreeNode
+                v-memo="memoDeps(childId)"
                 :node-id="childId"
                 :expanded="expanded"
                 :items="items"
                 :order-mode="orderMode"
                 :catalog-item-qtys="catalogItemQtys"
                 :item-filter="itemFilter"
+                :node-child-ids="nodeChildIds"
+                :item-nodes-by-id="itemNodesById"
+                :search-mode="searchMode"
+                :search-visible-ids="searchVisibleIds"
+                :search-category-direct-match-ids="searchCategoryDirectMatchIds"
+                :search-direct-match-strengths="searchDirectMatchStrengths"
+                :search-visible-child-counts="searchVisibleChildCounts"
+                :bypass-search-filter="childBypassSearchFilter"
                 :editing-item-id="editingItemId"
                 :editing-category-id="editingCategoryId"
                 :edit-category-name="editCategoryName"
@@ -511,6 +654,52 @@ function runAccordionLeave(el: Element) {
         </div>
       </div>
     </Transition>
+    <div v-else-if="hasChildren && isExpanded" :id="`collapse-${props.nodeId}`" class="accordion-collapse" role="region" :aria-labelledby="`btn-${props.nodeId}`">
+      <div class="accordion-body p-0">
+        <div class="accordion">
+          <div v-for="childId of children" :key="childId">
+            <ShopCatalogTreeNode
+              v-memo="memoDeps(childId)"
+              :node-id="childId"
+              :expanded="expanded"
+              :items="items"
+              :order-mode="orderMode"
+              :catalog-item-qtys="catalogItemQtys"
+              :item-filter="itemFilter"
+              :node-child-ids="nodeChildIds"
+              :item-nodes-by-id="itemNodesById"
+              :search-mode="searchMode"
+              :search-visible-ids="searchVisibleIds"
+              :search-category-direct-match-ids="searchCategoryDirectMatchIds"
+              :search-direct-match-strengths="searchDirectMatchStrengths"
+              :search-visible-child-counts="searchVisibleChildCounts"
+              :bypass-search-filter="childBypassSearchFilter"
+              :editing-item-id="editingItemId"
+              :editing-category-id="editingCategoryId"
+              :edit-category-name="editCategoryName"
+              :saving-category-edit="savingCategoryEdit"
+              @toggle-expand="forwardToggle"
+              @add-child="(id) => emit('add-child', id)"
+              @add-item="(id) => emit('add-item', id)"
+              @edit-item="(child) => emit('edit-item', child)"
+              @save-item="(itemId, updates) => emit('save-item', itemId, updates)"
+              @delete-item="(child) => emit('delete-item', child)"
+              @edit-category="(id) => emit('edit-category', id)"
+              @save-category="(id, name) => emit('save-category', id, name)"
+              @cancel-category-edit="() => emit('cancel-category-edit')"
+              @archive="(id) => emit('archive', id)"
+              @reactivate="(id) => emit('reactivate', id)"
+              @archive-item="(child) => emit('archive-item', child)"
+              @reactivate-item="(child) => emit('reactivate-item', child)"
+              @delete-category="(id) => emit('delete-category', id)"
+              @select-for-order="(child) => emit('select-for-order', child)"
+              @update:catalogItemQty="(payload) => emit('update:catalogItemQty', payload)"
+              @update:editCategoryName="(name) => emit('update:editCategoryName', name)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 

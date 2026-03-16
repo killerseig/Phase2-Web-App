@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRoute, useRouter } from 'vue-router'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
@@ -9,8 +8,7 @@ import StatusBadge from '@/components/admin/StatusBadge.vue'
 import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
 import BaseTable from '@/components/common/BaseTable.vue'
 import { useUsersStore } from '@/stores/users'
-import { useEmployeesStore } from '@/stores/employees'
-import { type Employee, type UserProfile } from '@/services'
+import { type UserProfile } from '@/services'
 import { ROLES, type Role } from '@/constants/app'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { normalizeError } from '@/services/serviceUtils'
@@ -22,24 +20,10 @@ type Column = { key: string; label: string; sortable?: boolean; width?: string; 
 type SortDir = 'asc' | 'desc'
 type UserSortKey = 'email' | 'firstName' | 'lastName' | 'role'
 
-const route = useRoute()
-const router = useRouter()
 const usersStore = useUsersStore()
-const employeesStore = useEmployeesStore()
 const { confirm } = useConfirmDialog()
 const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const { users, loading: loadingUsers, error: usersError } = storeToRefs(usersStore)
-const { employees, loading: loadingEmployees } = storeToRefs(employeesStore)
-
-type AdminTab = 'users' | 'employees'
-
-const parseAdminTab = (value: unknown): AdminTab => {
-  if (typeof value === 'string') return value === 'employees' ? 'employees' : 'users'
-  if (Array.isArray(value) && typeof value[0] === 'string') {
-    return value[0] === 'employees' ? 'employees' : 'users'
-  }
-  return 'users'
-}
 
 const createUserForm = () => ({
   email: '',
@@ -55,70 +39,15 @@ const createUserEditForm = (user?: UserProfile) => ({
   role: (user?.role || ROLES.NONE) as Role,
 })
 
-const createEmployeeForm = () => ({
-  firstName: '',
-  lastName: '',
-  employeeNumber: '',
-  occupation: '',
-})
-
-const createEmployeeEditForm = (employee?: Employee) => ({
-  firstName: employee?.firstName || '',
-  lastName: employee?.lastName || '',
-  employeeNumber: employee?.employeeNumber || '',
-  occupation: employee?.occupation || '',
-})
-
-const activeTab = ref<AdminTab>(parseAdminTab(route.query.tab))
-
-watch(
-  () => route.query.tab,
-  (tab) => {
-    const nextTab = parseAdminTab(tab)
-    if (activeTab.value !== nextTab) {
-      activeTab.value = nextTab
-    }
-  }
-)
-
-watch(activeTab, (tab) => {
-  const currentTab = parseAdminTab(route.query.tab)
-  if (currentTab === tab) return
-
-  const nextQuery = { ...route.query }
-  if (tab === 'employees') {
-    nextQuery.tab = 'employees'
-  } else {
-    delete nextQuery.tab
-  }
-  void router.replace({ query: nextQuery })
-})
-
-// User form
 const showUserForm = ref(false)
 const userForm = ref(createUserForm())
 const creatingUser = ref(false)
-
-// Edit user
 const editingUserId = ref<string | null>(null)
 const editUserForm = ref(createUserEditForm())
 const editUserFormOriginal = ref(createUserEditForm())
 const savingUserEdit = ref(false)
 const activeUserActionsId = ref('')
 
-// Employee form
-const showEmployeeForm = ref(false)
-const employeeForm = ref(createEmployeeForm())
-const creatingEmployee = ref(false)
-
-// Edit employee
-const editingEmployeeId = ref<string | null>(null)
-const editForm = ref(createEmployeeEditForm())
-const editFormOriginal = ref(createEmployeeEditForm())
-const savingEmployeeEdit = ref(false)
-const activeEmployeeActionsId = ref('')
-
-// Computed properties from stores
 const err = computed(() => usersError.value || '')
 
 const userColumns: Column[] = [
@@ -141,36 +70,8 @@ const sortedUsers = computed(() => {
     if (typeof val === 'string') return val.toLowerCase()
     return String(val).toLowerCase()
   }
+
   return [...users.value].sort((a, b) => {
-    const aVal = normalize(a[key])
-    const bVal = normalize(b[key])
-    if (aVal === bVal) return 0
-    return aVal > bVal ? dir : -dir
-  })
-})
-
-const employeeColumns: Column[] = [
-  { key: 'firstName', label: 'First Name', sortable: true, width: '26%', slot: 'firstName' },
-  { key: 'lastName', label: 'Last Name', sortable: true, width: '24%', slot: 'lastName' },
-  { key: 'employeeNumber', label: 'Employee #', sortable: true, width: '18%', slot: 'employeeNumber' },
-  { key: 'occupation', label: 'Occupation', sortable: true, width: '22%', slot: 'occupation' },
-  { key: 'actions', label: 'Actions', width: '10%', align: 'end', slot: 'emp-actions' },
-]
-
-type EmployeeSortKey = 'firstName' | 'lastName' | 'employeeNumber' | 'occupation'
-
-const employeeSortKey = ref<EmployeeSortKey>('firstName')
-const employeeSortDir = ref<SortDir>('asc')
-
-const sortedEmployees = computed(() => {
-  const key = employeeSortKey.value
-  const dir = employeeSortDir.value === 'asc' ? 1 : -1
-  const normalize = (val: unknown) => {
-    if (val === undefined || val === null) return ''
-    if (typeof val === 'string') return val.toLowerCase()
-    return String(val).toLowerCase()
-  }
-  return [...employees.value].sort((a, b) => {
     const aVal = normalize(a[key])
     const bVal = normalize(b[key])
     if (aVal === bVal) return 0
@@ -187,10 +88,6 @@ function friendlyError(message: string) {
 
 function loadUsers() {
   usersStore.subscribeAllUsers()
-}
-
-function loadEmployees() {
-  employeesStore.subscribeAllEmployees()
 }
 
 async function submitUserForm() {
@@ -225,7 +122,7 @@ async function submitUserForm() {
   }
 }
 
-async function handleEditUser(user: UserProfile) {
+function handleEditUser(user: UserProfile) {
   editingUserId.value = user.id
   editUserForm.value = createUserEditForm(user)
   editUserFormOriginal.value = createUserEditForm(user)
@@ -272,7 +169,7 @@ async function saveUserEdit(user: UserProfile, closeActions = false) {
     clearUserEdit()
     if (closeActions) activeUserActionsId.value = ''
     return true
-  } catch (e) {
+  } catch {
     toastRef.value?.show('Failed to update user', 'error')
     return false
   } finally {
@@ -308,7 +205,7 @@ async function handleDeleteUser(user: UserProfile) {
     if (activeUserActionsId.value === user.id) {
       cancelUserEdit()
     }
-  } catch (e) {
+  } catch {
     toastRef.value?.show('Failed to delete user', 'error')
   }
 }
@@ -331,135 +228,19 @@ async function toggleUserActions(user: UserProfile) {
   activeUserActionsId.value = user.id
 }
 
-async function submitEmployeeForm() {
-  creatingEmployee.value = true
-  try {
-    await employeesStore.createEmployee(null, {
-      firstName: employeeForm.value.firstName,
-      lastName: employeeForm.value.lastName,
-      employeeNumber: employeeForm.value.employeeNumber,
-      occupation: employeeForm.value.occupation,
-      active: true,
-    })
-    toastRef.value?.show('Employee created', 'success')
-    showEmployeeForm.value = false
-    resetEmployeeForm()
-    loadEmployees()
-  } catch (e) {
-    toastRef.value?.show('Failed to create employee', 'error')
-  } finally {
-    creatingEmployee.value = false
-  }
-}
-
-function resetEmployeeForm() {
-  employeeForm.value = createEmployeeForm()
-}
-
-function cancelEmployeeForm() {
-  resetEmployeeForm()
-  showEmployeeForm.value = false
-}
-
-async function handleEditEmployee(emp: Employee) {
-  editingEmployeeId.value = emp.id
-  editForm.value = createEmployeeEditForm(emp)
-  editFormOriginal.value = createEmployeeEditForm(emp)
-}
-
-async function saveEmployeeEdit(emp: Employee, closeActions = false) {
-  if (editingEmployeeId.value !== emp.id) return true
-  savingEmployeeEdit.value = true
-  try {
-    const updates: Partial<Pick<Employee, 'firstName' | 'lastName' | 'employeeNumber' | 'occupation'>> = {}
-    if (editForm.value.firstName !== editFormOriginal.value.firstName) {
-      updates.firstName = editForm.value.firstName
-    }
-    if (editForm.value.lastName !== editFormOriginal.value.lastName) {
-      updates.lastName = editForm.value.lastName
-    }
-    if (editForm.value.employeeNumber !== editFormOriginal.value.employeeNumber) {
-      updates.employeeNumber = editForm.value.employeeNumber.trim()
-    }
-    if (editForm.value.occupation !== editFormOriginal.value.occupation) {
-      updates.occupation = editForm.value.occupation
-    }
-    if (Object.keys(updates).length > 0) {
-      await employeesStore.updateEmployee(emp.id, updates)
-      toastRef.value?.show('Employee updated', 'success')
-    }
-    editingEmployeeId.value = null
-    if (closeActions) activeEmployeeActionsId.value = ''
-    return true
-  } catch (e) {
-    toastRef.value?.show('Failed to update employee', 'error')
-    return false
-  } finally {
-    savingEmployeeEdit.value = false
-  }
-}
-
-function cancelEmployeeEdit() {
-  editingEmployeeId.value = null
-  editForm.value = createEmployeeEditForm()
-  editFormOriginal.value = createEmployeeEditForm()
-  activeEmployeeActionsId.value = ''
-}
-
-async function handleDeleteEmployee(emp: Employee) {
-  const name = `${emp.firstName} ${emp.lastName}`
-  const confirmed = await confirm(`Delete "${name}"? This cannot be undone.`, {
-    title: 'Delete Employee',
-    confirmText: 'Delete',
-    variant: 'danger',
-  })
-  if (!confirmed) return
-
-  try {
-    await employeesStore.deleteEmployee(emp.id)
-    toastRef.value?.show('Employee deleted', 'success')
-    if (activeEmployeeActionsId.value === emp.id) {
-      cancelEmployeeEdit()
-    }
-  } catch (e) {
-    toastRef.value?.show('Failed to delete employee', 'error')
-  }
-}
-
-function handleEmployeeSort({ sortKey, sortDir }: { sortKey: string; sortDir: SortDir }) {
-  employeeSortKey.value = sortKey as EmployeeSortKey
-  employeeSortDir.value = sortDir
-}
-
-async function toggleEmployeeActions(emp: Employee) {
-  const isOpen = activeEmployeeActionsId.value === emp.id
-  if (isOpen) {
-    const saved = await saveEmployeeEdit(emp, true)
-    if (!saved) return
-    return
-  }
-
-  cancelEmployeeEdit()
-  handleEditEmployee(emp)
-  activeEmployeeActionsId.value = emp.id
-}
-
 onMounted(() => {
   loadUsers()
-  loadEmployees()
 })
 
 onUnmounted(() => {
   usersStore.stopUsersSubscription()
-  employeesStore.stopAllEmployeesSubscription()
 })
 </script>
 
 <template>
   <Toast ref="toastRef" />
   <div class="app-page">
-    <!-- Header -->
-    <AppPageHeader eyebrow="Admin Panel" title="User Management" subtitle="Manage user profiles, permissions, and employee records." />
+    <AppPageHeader eyebrow="Admin Panel" title="User Management" subtitle="Manage user profiles and permissions." />
 
     <div class="alert app-note small d-flex align-items-start gap-2" role="alert">
       <i class="bi bi-info-circle mt-1"></i>
@@ -468,377 +249,178 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Tab Navigation -->
-    <ul class="nav nav-tabs app-tab-nav mb-4" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button
-          class="nav-link"
-          :class="{ active: activeTab === 'users' }"
-          @click="activeTab = 'users'"
-          role="tab"
-        >
-          <i class="bi bi-person-circle me-2"></i>Users
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button
-          class="nav-link"
-          :class="{ active: activeTab === 'employees' }"
-          @click="activeTab = 'employees'"
-          role="tab"
-        >
-          <i class="bi bi-person-badge me-2"></i>Employees
-        </button>
-      </li>
-    </ul>
-
-    <!-- Users Tab -->
-    <template v-if="activeTab === 'users'">
-      <BaseAccordionCard
-        v-model:open="showUserForm"
-        title="Create User"
-        subtitle="Add a new user account and set their role"
-      >
-        <form class="row g-3" @submit.prevent="submitUserForm">
-          <div class="col-md-4">
-            <label class="form-label small">Email</label>
-            <input
-              v-model="userForm.email"
-              type="email"
-              class="form-control"
-              placeholder="user@example.com"
-              required
-            />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">First Name</label>
-            <input
-              v-model="userForm.firstName"
-              type="text"
-              class="form-control"
-              placeholder="John"
-              required
-            />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">Last Name</label>
-            <input
-              v-model="userForm.lastName"
-              type="text"
-              class="form-control"
-              placeholder="Doe"
-              required
-            />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">Role</label>
-            <select v-model="userForm.role" class="form-select" required>
-              <option :value="ROLES.NONE">None (No Access)</option>
-              <option :value="ROLES.FOREMAN">Foreman</option>
-              <option :value="ROLES.CONTROLLER">Controller</option>
-              <option :value="ROLES.ADMIN">Admin</option>
-            </select>
-          </div>
-          <div class="col-12 d-flex gap-2 justify-content-end pt-2">
-            <button type="button" class="btn btn-outline-secondary" @click.stop="cancelUserForm" :disabled="creatingUser">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="creatingUser">
-              <span v-if="creatingUser" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Create User
-            </button>
-          </div>
-        </form>
-      </BaseAccordionCard>
-
-      <!-- Users List -->
-      <AdminCardWrapper
-        title="User Profiles"
-        icon="person-circle"
-        :loading="loadingUsers"
-        :error="err"
-      >
-        <div v-if="loadingUsers" class="text-center py-5">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-          </div>
+    <BaseAccordionCard
+      v-model:open="showUserForm"
+      title="Create User"
+      subtitle="Add a new user account and set their role"
+    >
+      <form class="row g-3" @submit.prevent="submitUserForm">
+        <div class="col-md-4">
+          <label class="form-label small">Email</label>
+          <input
+            v-model="userForm.email"
+            type="email"
+            class="form-control"
+            placeholder="user@example.com"
+            required
+          />
         </div>
-
-        <div v-else-if="users.length === 0" class="alert alert-info text-center mb-0">
-          No users yet. Create your first user above.
+        <div class="col-md-4">
+          <label class="form-label small">First Name</label>
+          <input
+            v-model="userForm.firstName"
+            type="text"
+            class="form-control"
+            placeholder="John"
+            required
+          />
         </div>
+        <div class="col-md-4">
+          <label class="form-label small">Last Name</label>
+          <input
+            v-model="userForm.lastName"
+            type="text"
+            class="form-control"
+            placeholder="Doe"
+            required
+          />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Role</label>
+          <select v-model="userForm.role" class="form-select" required>
+            <option :value="ROLES.NONE">None (No Access)</option>
+            <option :value="ROLES.FOREMAN">Foreman</option>
+            <option :value="ROLES.CONTROLLER">Controller</option>
+            <option :value="ROLES.ADMIN">Admin</option>
+          </select>
+        </div>
+        <div class="col-12 d-flex gap-2 justify-content-end pt-2">
+          <button type="button" class="btn btn-outline-secondary" @click.stop="cancelUserForm" :disabled="creatingUser">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" :disabled="creatingUser">
+            <span v-if="creatingUser" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Create User
+          </button>
+        </div>
+      </form>
+    </BaseAccordionCard>
 
-        <div v-else>
-          <BaseTable
-            :rows="sortedUsers"
-            :columns="userColumns"
-            row-key="id"
-            :sort-key="userSortKey"
-            :sort-dir="userSortDir"
-            @sort-change="handleUserSort"
-          >
-            <template #cell-email="{ row }">
-              <template v-if="editingUserId === row.id">
-                <input v-model="editUserForm.email" class="form-control form-control-sm" type="email" disabled />
-              </template>
-              <span v-else class="small">{{ row.email }}</span>
+    <AdminCardWrapper
+      title="User Profiles"
+      icon="person-circle"
+      :loading="loadingUsers"
+      :error="err"
+    >
+      <div v-if="loadingUsers" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+
+      <div v-else-if="users.length === 0" class="alert alert-info text-center mb-0">
+        No users yet. Create your first user above.
+      </div>
+
+      <div v-else>
+        <BaseTable
+          :rows="sortedUsers"
+          :columns="userColumns"
+          row-key="id"
+          :sort-key="userSortKey"
+          :sort-dir="userSortDir"
+          @sort-change="handleUserSort"
+        >
+          <template #cell-email="{ row }">
+            <template v-if="editingUserId === row.id">
+              <input v-model="editUserForm.email" class="form-control form-control-sm" type="email" disabled />
             </template>
+            <span v-else class="small">{{ row.email }}</span>
+          </template>
 
-            <template #cell-firstName="{ row }">
-              <template v-if="editingUserId === row.id">
-                <input
-                  v-model="editUserForm.firstName"
-                  class="form-control form-control-sm"
-                  placeholder="First name"
-                  @keydown.enter="saveUserEdit(row, true)"
-                  @keydown.esc="cancelUserEdit"
-                />
-              </template>
-              <span v-else>{{ row.firstName }}</span>
+          <template #cell-firstName="{ row }">
+            <template v-if="editingUserId === row.id">
+              <input
+                v-model="editUserForm.firstName"
+                class="form-control form-control-sm"
+                placeholder="First name"
+                @keydown.enter="saveUserEdit(row, true)"
+                @keydown.esc="cancelUserEdit"
+              />
             </template>
+            <span v-else>{{ row.firstName }}</span>
+          </template>
 
-            <template #cell-lastName="{ row }">
-              <template v-if="editingUserId === row.id">
-                <input
-                  v-model="editUserForm.lastName"
-                  class="form-control form-control-sm"
-                  placeholder="Last name"
-                  @keydown.enter="saveUserEdit(row, true)"
-                  @keydown.esc="cancelUserEdit"
-                />
-              </template>
-              <span v-else>{{ row.lastName }}</span>
+          <template #cell-lastName="{ row }">
+            <template v-if="editingUserId === row.id">
+              <input
+                v-model="editUserForm.lastName"
+                class="form-control form-control-sm"
+                placeholder="Last name"
+                @keydown.enter="saveUserEdit(row, true)"
+                @keydown.esc="cancelUserEdit"
+              />
             </template>
+            <span v-else>{{ row.lastName }}</span>
+          </template>
 
-            <template #role="{ row }">
-              <template v-if="editingUserId === row.id">
-                <select
-                  v-model="editUserForm.role"
-                  class="form-select form-select-sm"
-                  @keydown.enter="saveUserEdit(row, true)"
-                  @keydown.esc="cancelUserEdit"
-                >
-                  <option :value="ROLES.NONE">None</option>
-                  <option :value="ROLES.FOREMAN">Foreman</option>
-                  <option :value="ROLES.CONTROLLER">Controller</option>
-                  <option :value="ROLES.ADMIN">Admin</option>
-                </select>
-              </template>
-              <span
-                v-else
-                class="badge app-badge-pill app-badge-pill--sm"
-                :class="{
-                  'bg-secondary': row.role === ROLES.NONE,
-                  'bg-warning': row.role === ROLES.FOREMAN,
-                  'bg-primary': row.role === ROLES.CONTROLLER,
-                  'bg-danger': row.role === ROLES.ADMIN,
-                }"
+          <template #role="{ row }">
+            <template v-if="editingUserId === row.id">
+              <select
+                v-model="editUserForm.role"
+                class="form-select form-select-sm"
+                @keydown.enter="saveUserEdit(row, true)"
+                @keydown.esc="cancelUserEdit"
               >
-                {{ row.role }}
-              </span>
+                <option :value="ROLES.NONE">None</option>
+                <option :value="ROLES.FOREMAN">Foreman</option>
+                <option :value="ROLES.CONTROLLER">Controller</option>
+                <option :value="ROLES.ADMIN">Admin</option>
+              </select>
             </template>
+            <span
+              v-else
+              class="badge app-badge-pill app-badge-pill--sm"
+              :class="{
+                'bg-secondary': row.role === ROLES.NONE,
+                'bg-warning': row.role === ROLES.FOREMAN,
+                'bg-primary': row.role === ROLES.CONTROLLER,
+                'bg-danger': row.role === ROLES.ADMIN,
+              }"
+            >
+              {{ row.role }}
+            </span>
+          </template>
 
-            <template #status="{ row }">
-              <StatusBadge :status="row.active ? 'active' : 'inactive'" />
-            </template>
+          <template #status="{ row }">
+            <StatusBadge :status="row.active ? 'active' : 'inactive'" />
+          </template>
 
-            <template #actions="{ row }">
-              <div class="d-flex align-items-center justify-content-end gap-2 flex-nowrap">
-                <div v-if="activeUserActionsId === row.id" class="btn-group btn-group-sm flex-nowrap" role="group">
-                  <button
-                    @click.stop="handleDeleteUser(row)"
-                    class="btn btn-outline-danger"
-                    title="Delete user"
-                  >
-                    <i class="bi bi-trash text-danger"></i>
-                  </button>
-                </div>
-
+          <template #actions="{ row }">
+            <div class="d-flex align-items-center justify-content-end gap-2 flex-nowrap">
+              <div v-if="activeUserActionsId === row.id" class="btn-group btn-group-sm flex-nowrap" role="group">
                 <button
-                  class="btn btn-sm btn-outline-secondary"
-                  @click.stop="toggleUserActions(row)"
-                  :aria-pressed="activeUserActionsId === row.id"
-                  :disabled="savingUserEdit && editingUserId === row.id"
-                  title="Toggle edit mode"
+                  @click.stop="handleDeleteUser(row)"
+                  class="btn btn-outline-danger"
+                  title="Delete user"
                 >
-                  <i class="bi bi-pencil"></i>
+                  <i class="bi bi-trash text-danger"></i>
                 </button>
               </div>
-            </template>
-          </BaseTable>
-        </div>
-      </AdminCardWrapper>
-    </template>
 
-    <!-- Employees Tab -->
-    <template v-if="activeTab === 'employees'">
-      <BaseAccordionCard
-        v-model:open="showEmployeeForm"
-        title="Add Employee"
-        subtitle="Create an employee profile for job rosters"
-      >
-        <form class="row g-3" @submit.prevent="submitEmployeeForm">
-          <div class="col-md-4">
-            <label class="form-label small">First Name</label>
-            <input
-              v-model="employeeForm.firstName"
-              type="text"
-              class="form-control"
-              placeholder="John"
-              required
-            />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">Last Name</label>
-            <input
-              v-model="employeeForm.lastName"
-              type="text"
-              class="form-control"
-              placeholder="Doe"
-              required
-            />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">Employee Number</label>
-            <input
-              v-model="employeeForm.employeeNumber"
-              type="text"
-              class="form-control"
-              placeholder="EMP-001"
-            />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small">Occupation</label>
-            <input
-              v-model="employeeForm.occupation"
-              type="text"
-              class="form-control"
-              placeholder="Carpenter"
-              required
-            />
-          </div>
-          <div class="col-12 d-flex gap-2 justify-content-end pt-2">
-            <button type="button" class="btn btn-outline-secondary" @click.stop="cancelEmployeeForm" :disabled="creatingEmployee">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="creatingEmployee">
-              <span v-if="creatingEmployee" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Add Employee
-            </button>
-          </div>
-        </form>
-      </BaseAccordionCard>
-
-      <!-- Employees List -->
-      <AdminCardWrapper
-        title="Employees"
-        icon="person-badge"
-        :loading="loadingEmployees"
-      >
-        <div v-if="loadingEmployees" class="text-center py-5">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-          </div>
-        </div>
-
-        <div v-else-if="employees.length === 0" class="alert alert-info text-center mb-0">
-          No employees yet. Create your first employee above.
-        </div>
-
-        <div v-else>
-          <BaseTable
-            :rows="sortedEmployees"
-            :columns="employeeColumns"
-            row-key="id"
-            :sort-key="employeeSortKey"
-            :sort-dir="employeeSortDir"
-            @sort-change="handleEmployeeSort"
-          >
-            <template #firstName="{ row }">
-              <template v-if="editingEmployeeId === row.id">
-                <input
-                  v-model="editForm.firstName"
-                  class="form-control form-control-sm"
-                  placeholder="First name"
-                  @keydown.enter="saveEmployeeEdit(row, true)"
-                  @keydown.esc="cancelEmployeeEdit"
-                />
-              </template>
-              <span v-else class="fw-semibold">{{ row.firstName }}</span>
-            </template>
-
-            <template #lastName="{ row }">
-              <template v-if="editingEmployeeId === row.id">
-                <input
-                  v-model="editForm.lastName"
-                  class="form-control form-control-sm"
-                  placeholder="Last name"
-                  @keydown.enter="saveEmployeeEdit(row, true)"
-                  @keydown.esc="cancelEmployeeEdit"
-                />
-              </template>
-              <span v-else class="fw-semibold">{{ row.lastName }}</span>
-            </template>
-
-            <template #employeeNumber="{ row }">
-              <template v-if="editingEmployeeId === row.id">
-                <input
-                  v-model="editForm.employeeNumber"
-                  class="form-control form-control-sm"
-                  placeholder="EMP-001"
-                  @keydown.enter="saveEmployeeEdit(row, true)"
-                  @keydown.esc="cancelEmployeeEdit"
-                />
-              </template>
-              <span v-else class="small">{{ row.employeeNumber || '--' }}</span>
-            </template>
-
-            <template #occupation="{ row }">
-              <template v-if="editingEmployeeId === row.id">
-                <input
-                  v-model="editForm.occupation"
-                  class="form-control form-control-sm"
-                  placeholder="Occupation"
-                  @keydown.enter="saveEmployeeEdit(row, true)"
-                  @keydown.esc="cancelEmployeeEdit"
-                />
-              </template>
-              <span v-else class="text-muted">{{ row.occupation }}</span>
-            </template>
-
-            <template #emp-actions="{ row }">
-              <div class="d-flex align-items-center justify-content-end gap-1 flex-nowrap employee-actions-cell">
-                <div v-if="activeEmployeeActionsId === row.id" class="btn-group btn-group-sm flex-nowrap" role="group">
-                  <button
-                    @click.stop="handleDeleteEmployee(row)"
-                    class="btn btn-outline-danger"
-                    title="Delete employee"
-                  >
-                    <i class="bi bi-trash text-danger"></i>
-                  </button>
-                </div>
-
-                <button
-                  class="btn btn-sm btn-outline-secondary"
-                  @click.stop="toggleEmployeeActions(row)"
-                  :aria-pressed="activeEmployeeActionsId === row.id"
-                  :disabled="savingEmployeeEdit && editingEmployeeId === row.id"
-                  title="Toggle edit mode"
-                >
-                  <i class="bi bi-pencil"></i>
-                </button>
-              </div>
-            </template>
-          </BaseTable>
-        </div>
-      </AdminCardWrapper>
-    </template>
+              <button
+                class="btn btn-sm btn-outline-secondary"
+                @click.stop="toggleUserActions(row)"
+                :aria-pressed="activeUserActionsId === row.id"
+                :disabled="savingUserEdit && editingUserId === row.id"
+                title="Toggle edit mode"
+              >
+                <i class="bi bi-pencil"></i>
+              </button>
+            </div>
+          </template>
+        </BaseTable>
+      </div>
+    </AdminCardWrapper>
   </div>
 </template>
-
-<style scoped lang="scss">
-.employee-actions-cell {
-  min-width: 200px;
-}
-</style>
-

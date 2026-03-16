@@ -4,23 +4,20 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
-  limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
-  where,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { jobCollectionPath, jobDocumentPath } from './servicePaths'
 import { normalizeError } from './serviceUtils'
-import { toMillis } from '@/utils/datetime'
 
 export type ShopOrderStatus = 'draft' | 'order' | 'receive'
+const LEGACY_FOREMAN_SCOPE_KEY = 'scope:employee'
 
 export type ShopOrderItem = {
   description: string
@@ -32,7 +29,7 @@ export type ShopOrderItem = {
 export type ShopOrder = {
   id: string
   jobId: string
-  uid: string // scope key: 'scope:employee', 'scope:shop', 'scope:admin'
+  uid: string // Legacy scope marker kept for existing documents and indexes.
   ownerUid: string // real creator
   status: ShopOrderStatus
   orderDate?: unknown
@@ -61,52 +58,10 @@ function normalize(id: string, data: DocumentData): ShopOrder {
 }
 
 /**
- * List all shop orders for a job that the user has access to
- * Requires indexes for each scope:
- * - jobId + uid ('scope:employee') + orderDate DESC
- * - jobId + uid ('scope:shop') + orderDate DESC
- * - jobId + uid ('scope:admin') + orderDate DESC
+ * Create a new draft shop order.
+ * The legacy uid field is still written for compatibility with existing data.
  */
-export async function listShopOrders(
-  jobId: string,
-  scopes: string[] = ['scope:employee'],
-  max = 25
-): Promise<ShopOrder[]> {
-  try {
-    assertJobAccess(jobId)
-    requireUser()
-
-    const docMap = new Map<string, ShopOrder>()
-
-    for (const scope of scopes) {
-      const q = query(
-        collection(db, ...jobCollectionPath(jobId, 'shop_orders')),
-        where('uid', '==', scope),
-        orderBy('orderDate', 'desc'),
-        limit(max)
-      )
-
-      const snap = await getDocs(q)
-      for (const d of snap.docs) {
-        const order = normalize(d.id, d.data())
-        docMap.set(d.id, order)
-      }
-    }
-
-    return Array.from(docMap.values()).sort((a, b) => {
-      const ta = toMillis(a.orderDate)
-      const tb = toMillis(b.orderDate)
-      return tb - ta
-    })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load shop orders'))
-  }
-}
-
-/**
- * Create a new draft shop order with a scope key (uid)
- */
-export async function createShopOrder(jobId: string, scopeKey = 'scope:employee') {
+export async function createShopOrder(jobId: string) {
   try {
     assertJobAccess(jobId)
     const u = requireUser()
@@ -115,7 +70,7 @@ export async function createShopOrder(jobId: string, scopeKey = 'scope:employee'
     // No redundancy checking needed - Firestore ensures uniqueness at the database level
     const ref = await addDoc(collection(db, ...jobCollectionPath(jobId, 'shop_orders')), {
       jobId,
-      uid: scopeKey, // visibility scope
+      uid: LEGACY_FOREMAN_SCOPE_KEY,
       ownerUid: u.uid, // real creator
       status: 'draft',
       items: [],
@@ -191,28 +146,6 @@ export async function updateShopOrderStatus(
     })
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to update shop order status'))
-  }
-}
-
-/**
- * Update shop order scope (uid)
- */
-export async function updateShopOrderScope(
-  jobId: string,
-  orderId: string,
-  scopeKey: string
-) {
-  try {
-    assertJobAccess(jobId)
-    requireUser()
-    const ref = doc(db, ...jobDocumentPath(jobId, 'shop_orders', orderId))
-
-    await updateDoc(ref, {
-      uid: scopeKey,
-      updatedAt: serverTimestamp(),
-    })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update shop order scope'))
   }
 }
 

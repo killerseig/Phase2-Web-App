@@ -46,7 +46,7 @@ const {
   loadForDate,
   startNewDraftForToday,
   submit,
-  deleteDraft,
+  deleteLogById,
   handleFileChange,
   addEmailRecipient,
   removeEmailRecipient,
@@ -162,7 +162,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
       <!-- Main Form -->
       <div class="col-lg-8">
         <!-- Site Information -->
-        <div class="card mb-4">
+        <div class="card mb-4 app-section-card">
           <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-briefcase me-2"></i>Site Information</h5></div>
           <div class="card-body">
             <div class="row g-3">
@@ -197,7 +197,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
           @update-field="updateManpowerField"
           @update-count="updateManpowerCount"
         />
-        <div class="card mb-4">
+        <div class="card mb-4 app-section-card">
           <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-calendar-event me-2"></i>Schedule & Assessment</h5></div>
           <div class="card-body">
             <div class="row g-3">
@@ -224,7 +224,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         </div>
 
         <!-- Indoor Climate -->
-        <div class="card mb-4">
+        <div class="card mb-4 app-section-card">
           <div class="card-header panel-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-thermometer-half me-2"></i>Indoor Temperature Readings</h5>
             <button
@@ -301,7 +301,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         </div>
 
         <!-- Safety & Concerns -->
-        <div class="card mb-4">
+        <div class="card mb-4 app-section-card">
           <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Safety & Concerns</h5></div>
           <div class="card-body">
             <div class="row g-3">
@@ -357,7 +357,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         />
 
         <!-- Deliveries -->
-        <div class="card mb-4">
+        <div class="card mb-4 app-section-card">
           <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Deliveries & Materials</h5></div>
           <div class="card-body">
             <div class="row g-3">
@@ -393,7 +393,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         </div>
 
         <!-- Quality Control -->
-        <div class="card mb-4">
+        <div class="card mb-4 app-section-card">
           <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Quality Control</h5></div>
           <div class="card-body">
             <div class="row g-3">
@@ -467,7 +467,7 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         </div>
 
         <!-- Notes -->
-        <div class="card mb-4">
+        <div class="card mb-4 app-section-card">
           <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>Notes & Action Items</h5></div>
           <div class="card-body">
             <div class="row g-3">
@@ -499,7 +499,6 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         <!-- Action Buttons -->
         <div class="d-grid gap-2">
           <button v-if="currentStatus === 'draft'" @click="submit" :disabled="saving" class="btn btn-success"><i class="bi bi-send me-2"></i>Submit</button>
-          <button v-if="currentStatus === 'draft'" @click="deleteDraft" :disabled="saving" class="btn btn-outline-danger"><i class="bi bi-trash me-2"></i>Delete Draft</button>
           <div v-if="currentStatus !== 'draft' && logsForSelectedDate.some(r => r.logDate === today && r.status === 'submitted')" class="alert alert-info mb-0"><small><i class="bi bi-info-circle me-1"></i>Daily log already submitted for today</small></div>
           <button v-if="currentStatus === 'submitted' && hasEmailRecipients" @click="sendEmail" :disabled="saving" class="btn btn-info"><i class="bi bi-envelope me-2"></i>Send Email</button>
         </div>
@@ -513,7 +512,9 @@ function indoorClimateKey(reading: unknown, idx: number): string {
           :current-user-id="auth.user?.uid || null"
           :format-timestamp="formatTimestamp"
           :selected-id="currentId"
+          :deleting="saving"
           @select="loadLogById"
+          @delete="deleteLogById"
         />
 
         <DailyLogRecipients
@@ -573,24 +574,6 @@ input[type='file'].form-control:focus::file-selector-button {
   content: attr(data-filename);
   color: $success;
   font-weight: 500;
-}
-
-.panel-muted {
-  border: 1px solid rgba(230, 237, 247, 0.12);
-  background: $surface;
-}
-
-.panel-muted .list-group-item {
-  border-color: rgba(230, 237, 247, 0.08);
-}
-
-:deep(.panel-muted) {
-  border: 1px solid rgba(230, 237, 247, 0.12);
-  background: $surface;
-}
-
-:deep(.panel-muted .list-group-item) {
-  border-color: rgba(230, 237, 247, 0.08);
 }
 
 .col-trade { width: 40%; }

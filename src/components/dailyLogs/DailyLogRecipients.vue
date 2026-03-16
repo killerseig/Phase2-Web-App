@@ -20,7 +20,7 @@ const uniqueGlobalRecipients = computed(() =>
 </script>
 
 <template>
-  <div class="card mb-4">
+  <div class="card mb-4 panel-muted app-section-card">
     <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-envelope me-2"></i>Email Recipients</h5></div>
     <div class="card-body">
       <p class="text-muted small mb-2">Job-specific recipients</p>

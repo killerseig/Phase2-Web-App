@@ -1,6 +1,5 @@
 export * from './Auth'
 export * from './DailyLogs'
-export * from './Employees'
 export * from './JobRoster'
 export * from './Jobs'
 export * from './ShopCatalog'

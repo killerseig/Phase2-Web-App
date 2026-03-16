@@ -50,22 +50,6 @@ export interface Job {
 }
 
 // ============================================================================
-// EMPLOYEES
-// ============================================================================
-
-export interface Employee {
-  id: string
-  firstName: string
-  lastName: string
-  employeeNumber?: string
-  occupation: string
-  createdAt: unknown
-  updatedAt: unknown
-}
-
-export type EmployeeInput = Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>
-
-// ============================================================================
 // DAILY LOGS
 // ============================================================================
 

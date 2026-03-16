@@ -1,23 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createShopOrder,
-  listShopOrders,
   updateShopOrderItems,
   updateShopOrderStatus,
 } from '@/services/ShopOrders'
 import {
   addDoc,
-  collection,
-  doc,
-  getDocs,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from 'firebase/firestore'
 import { requireUser } from '@/services/serviceGuards'
-import { makeQuerySnapshot } from './helpers/firestoreMocks'
 
 
 vi.mock('@/firebase', () => ({ db: {} }))
@@ -31,7 +23,6 @@ vi.mock('@/services/serviceGuards', () => ({
 
 type MockFn = ReturnType<typeof vi.fn>
 const addDocMock = addDoc as unknown as MockFn
-const getDocsMock = getDocs as unknown as MockFn
 const updateDocMock = updateDoc as unknown as MockFn
 const requireUserMock = requireUser as unknown as MockFn
 
@@ -41,29 +32,10 @@ describe('ShopOrders service', () => {
     requireUserMock.mockReturnValue({ uid: 'user-1' })
   })
 
-  it('merges orders across scopes and sorts by orderDate desc', async () => {
-    getDocsMock
-      .mockResolvedValueOnce(
-        makeQuerySnapshot([
-          { id: 'draft', data: { uid: 'scope:employee', orderDate: { toMillis: () => 100 } } },
-        ])
-      )
-      .mockResolvedValueOnce(
-        makeQuerySnapshot([
-          { id: 'admin', data: { uid: 'scope:admin', orderDate: { toMillis: () => 200 } } },
-        ])
-      )
-
-    const result = await listShopOrders('job-1', ['scope:employee', 'scope:admin'])
-
-    expect(result.map((o) => o.id)).toEqual(['admin', 'draft'])
-    expect(getDocsMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('creates a shop order with scope and owner', async () => {
+  it('creates a shop order with the legacy scope marker and owner', async () => {
     addDocMock.mockResolvedValue({ id: 'order-1' })
 
-    const id = await createShopOrder('job-1', 'scope:shop')
+    const id = await createShopOrder('job-1')
 
     expect(id).toBe('order-1')
     const addDocCall = addDocMock.mock.calls[0]
@@ -71,7 +43,7 @@ describe('ShopOrders service', () => {
     const [, payload] = addDocCall!
     expect(payload).toMatchObject({
       jobId: 'job-1',
-      uid: 'scope:shop',
+      uid: 'scope:employee',
       ownerUid: 'user-1',
       status: 'draft',
     })

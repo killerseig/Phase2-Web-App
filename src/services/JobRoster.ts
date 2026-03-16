@@ -1,6 +1,6 @@
 /**
  * Job Roster Service
- * Manages job-scoped employee rosters (replaces global employees)
+ * Manages job-scoped employee rosters
  * Location: jobs/{jobId}/roster/{employeeId}
  */
 

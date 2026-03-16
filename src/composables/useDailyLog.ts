@@ -7,6 +7,7 @@ import {
   deleteDailyLog,
   formatTimestamp,
   getDailyLogById,
+  getMyDailyLogByDate,
   subscribeDailyLogRecipients,
   subscribeDailyLogsForDate,
   subscribeToDailyLog,
@@ -272,6 +273,16 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
         logDate.value = existingLog.logDate
         applyDailyLogToForm(existingLog)
         startLiveLog(existingLog.id)
+        return
+      }
+
+      const existingOwnedLog = await getMyDailyLogByDate(jobId.value, dateStr)
+      if (existingOwnedLog) {
+        currentId.value = existingOwnedLog.id
+        currentStatus.value = existingOwnedLog.status
+        logDate.value = existingOwnedLog.logDate
+        applyDailyLogToForm(existingOwnedLog)
+        startLiveLog(existingOwnedLog.id)
         return
       }
 

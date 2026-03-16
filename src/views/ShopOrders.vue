@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
-import ShopCatalogTreeNode from '@/components/admin/ShopCatalogTreeNode.vue'
+import ShopOrderCatalogBrowser from '@/components/shopOrders/ShopOrderCatalogBrowser.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { useShopCatalogStore } from '@/stores/shopCatalog'
@@ -20,7 +20,6 @@ import {
   type ShopOrder,
   type ShopOrderStatus,
 } from '@/services'
-import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
@@ -62,31 +61,14 @@ const orders = ref<ShopOrder[]>([])
 const selectedId = ref<string | null>(null)
 const search = ref('')
 const statusFilter = ref<'all' | ShopOrderStatus>('all')
-const catalogSearch = ref('')
 const newItemDescription = ref('')
 const newItemCatalogId = ref<string | null>(null)
 const newItemQty = ref<string>('')
 const newItemNote = ref('')
 const selectedCatalogItem = ref<CatalogSelectable | null>(null)
 const catalogItemQtys = ref<Record<string, number>>({})
-const expandedNodes = ref<Set<string>>(new Set())
 const shopOrderRecipients = ref<string[]>([])
 const sendingEmail = ref(false)
-
-const {
-  itemMatchesSearch,
-  filteredCategoryTree: categoryTree,
-  filteredUncategorizedItemNodeIds: uncategorizedItems,
-  buildExpandedNodesForSearch,
-} = useCatalogTreeSearch({
-  searchQuery: catalogSearch,
-  categories: shopCategories,
-  allItems: catalog,
-  fullTree: shopCategoriesTree,
-  getCategoryById: (id) => shopCategoriesStore.getCategoryById(id),
-  getChildren: (parentId) => shopCategoriesStore.getChildren(parentId),
-  includeItem: (item) => item.active,
-})
 
 const statusBadgeClass = (st: ShopOrderStatus) => {
   const map: Record<ShopOrderStatus, string> = { draft: 'text-bg-secondary', order: 'text-bg-primary', receive: 'text-bg-success' }
@@ -105,7 +87,7 @@ const filtered = computed(() => {
   return orders.value.filter(o => {
     if (statusFilter.value !== 'all' && o.status !== statusFilter.value) return false
     if (!s) return true
-    const haystack = [o.id, o.status, o.uid, ...(o.items || []).map(i => i.description)].join(' ').toLowerCase()
+    const haystack = [o.id, o.status, ...(o.items || []).map(i => i.description)].join(' ').toLowerCase()
     return haystack.includes(s)
   })
 })
@@ -114,62 +96,12 @@ const canEditOrder = (o: ShopOrder) => o.status === 'draft'
 const canSubmit = (o: ShopOrder) => o.status === 'draft' && o.items.length > 0
 const canOrder = (o: ShopOrder) => o.status === 'order'
 const canReceive = (o: ShopOrder) => o.status === 'order'
-watch(
-  () => catalogSearch.value,
-  () => {
-    if (!catalogSearch.value.trim()) return
-    expandedNodes.value = buildExpandedNodesForSearch()
-  },
-  { immediate: false }
-)
 
 const pickFirstIfNeeded = () => {
   if (!selectedId.value && orders.value.length > 0) {
     const firstOrder = orders.value[0]
     if (firstOrder) selectedId.value = firstOrder.id
   }
-}
-
-const toggleExpand = (nodeId: string) => {
-  const next = new Set(expandedNodes.value)
-  if (next.has(nodeId)) {
-    next.delete(nodeId)
-  } else {
-    next.add(nodeId)
-    // When expanding, also expand all ancestor nodes
-    expandAncestors(nodeId, next)
-  }
-  expandedNodes.value = next
-}
-
-const normalizeItemNodeId = (id: string) => (id.startsWith('item-') ? id : `item-${id}`)
-const resolveParentNodeId = (parentId: string) => {
-  if (parentId.startsWith('item-')) return parentId
-  return catalog.value.some(i => i.id === parentId) ? normalizeItemNodeId(parentId) : parentId
-}
-
-// Helper to expand all ancestor nodes of a category or item
-const expandAncestors = (nodeId: string, set: Set<string>, depth: number = 0) => {
-  if (depth > 50) return
-
-  if (nodeId.startsWith('item-')) {
-    const itemId = nodeId.slice(5)
-    const item = catalog.value.find(i => i.id === itemId)
-    if (item?.categoryId) {
-      set.add(item.categoryId)
-      expandAncestors(item.categoryId, set, depth + 1)
-    }
-    return
-  }
-
-  const category = shopCategories.value.find(c => c.id === nodeId)
-  if (!category?.parentId) {
-    return
-  }
-
-  const parentNodeId = resolveParentNodeId(category.parentId)
-  set.add(parentNodeId)
-  expandAncestors(parentNodeId, set, depth + 1)
 }
 
 const clearSubscriptions = () => {
@@ -338,7 +270,7 @@ const persistItems = async () => {
 
 const createDraft = async () => {
   try {
-    const orderId = await createShopOrder(jobId.value, 'scope:employee')
+    const orderId = await createShopOrder(jobId.value)
     selectedId.value = orderId
     toastRef.value?.show('New order created', 'success')
   } catch (e) {
@@ -347,20 +279,40 @@ const createDraft = async () => {
   }
 }
 
-const deleteOrder = async () => {
-  if (!selected.value) return
-  const confirmed = await confirm('Delete this order?', {
+const deletingOrderId = ref<string | null>(null)
+
+const deleteOrderById = async (orderId: string) => {
+  const confirmed = await confirm('Delete this draft order?', {
     title: 'Delete Order',
     confirmText: 'Delete',
     variant: 'danger',
   })
   if (!confirmed) return
+
+  deletingOrderId.value = orderId
   try {
-    await deleteShopOrder(jobId.value, selected.value.id)
+    await deleteShopOrder(jobId.value, orderId)
     toastRef.value?.show('Order deleted', 'success')
   } catch (e) {
     toastRef.value?.show('Failed to delete order', 'error')
+  } finally {
+    deletingOrderId.value = null
   }
+}
+
+const handleOrderSelect = (orderId: string) => {
+  selectedId.value = orderId
+}
+
+const handleOrderKeySelect = (event: KeyboardEvent, orderId: string) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleOrderSelect(orderId)
+}
+
+const handleDeleteOrderClick = async (event: MouseEvent, orderId: string) => {
+  event.stopPropagation()
+  await deleteOrderById(orderId)
 }
 
 const submitOrder = async () => {
@@ -478,43 +430,17 @@ onUnmounted(() => {
 
     <!-- Main Content -->
     <div class="row g-4">
-      <!-- Orders List -->
-      <div class="col-lg-4">
-        <div class="card order-panel">
-          <div class="card-header panel-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Orders</h5>
-            <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">{{ filtered.length }}</span>
-          </div>
-          <div v-if="loading" class="card-body text-center py-5"><div class="spinner-border spinner-border-sm"></div></div>
-          <div v-else-if="!filtered.length" class="card-body text-center text-muted py-5">
-            <i class="bi bi-inbox mb-2 d-block fs-4"></i>
-            <div>No orders yet</div>
-            <div class="small text-muted">Create one to get started</div>
-          </div>
-          <div v-else class="list-group list-group-flush">
-            <button v-for="order in filtered" :key="order.id" type="button" class="list-group-item list-group-item-action text-start order-list-item" :class="{ active: selectedId === order.id }" @click="selectedId = order.id">
-              <div class="d-flex justify-content-between align-items-start">
-                <div>
-                  <div class="small fw-semibold">{{ fmtDate(order.orderDate) }}</div>
-                  <small class="order-meta">{{ order.id.slice(0, 8) }}</small>
-                </div>
-                <span :class="`badge app-badge-pill app-badge-pill--sm ${statusBadgeClass(order.status)}`">{{ statusLabel(order.status) }}</span>
-              </div>
-              <div class="small mt-1 order-meta">{{ order.items.length }} item(s)</div>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- Order Details -->
       <div class="col-lg-8">
-          <div v-if="!selected" class="card text-center text-muted py-5 order-empty">
+        <div v-if="!selected" class="card app-section-card app-empty-state-card">
+          <div class="card-body text-center text-muted py-5">
             <i class="bi bi-hand-index-thumb fs-3"></i>
             <p class="mb-0 mt-2">Select an order to view details</p>
           </div>
+        </div>
         <div v-else>
           <!-- Order Header -->
-          <div class="card mb-3 order-card">
+          <div class="card mb-4 order-card app-section-card">
             <div class="card-header panel-header">
               <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -612,58 +538,16 @@ onUnmounted(() => {
           </div>
 
           <!-- Catalog Browser (when editing) -->
-          <div v-if="canEditOrder(selected)" class="card">
-            <div class="card-header panel-header">
-              <h5 class="mb-3">Add Items from Catalog</h5>
-              <input 
-                v-model="catalogSearch" 
-                type="text" 
-                class="form-control form-control-sm" 
-                placeholder="Search by description or SKU..."
-              />
-            </div>
-            <div class="card-body">
-              <div v-if="catalog.length === 0" class="alert alert-info">
-                No items in catalog. Please add items to the catalog first in Admin > Shop Catalog.
-              </div>
-              <div v-else-if="!uncategorizedItems.length && !categoryTree.length" class="alert alert-info">
-                No items match your search.
-              </div>
-              <div v-else class="app-catalog-tree">
-                <!-- Uncategorized Items (if any) -->
-                <div v-for="itemId of uncategorizedItems" :key="itemId" class="mb-0">
-                  <ShopCatalogTreeNode
-                    :node-id="itemId"
-                    :expanded="expandedNodes"
-                    :items="catalog"
-                    :order-mode="true"
-                    :catalog-item-qtys="catalogItemQtys"
-                    :item-filter="itemMatchesSearch"
-                    @toggle-expand="toggleExpand"
-                    @update:catalog-item-qty="updateCatalogItemQty"
-                    @select-for-order="selectCatalogItem"
-                  />
-                </div>
-                
-                <!-- Categories and their items -->
-                <div v-for="cat of categoryTree" :key="cat.id">
-                  <ShopCatalogTreeNode
-                    :node-id="cat.id"
-                    :expanded="expandedNodes"
-                    :items="catalog"
-                    :order-mode="true"
-                    :catalog-item-qtys="catalogItemQtys"
-                    :item-filter="itemMatchesSearch"
-                    @toggle-expand="toggleExpand"
-                    @update:catalog-item-qty="updateCatalogItemQty"
-                    @select-for-order="selectCatalogItem"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- Manual Entry (Secondary) -->
-            <div class="card-footer panel-footer">
+          <ShopOrderCatalogBrowser
+            v-if="canEditOrder(selected)"
+            :items="catalog"
+            :categories="shopCategories"
+            :full-tree="shopCategoriesTree"
+            :catalog-item-qtys="catalogItemQtys"
+            @update:catalog-item-qty="updateCatalogItemQty"
+            @select-for-order="selectCatalogItem"
+          >
+            <template #footer>
               <h6 class="mb-2">Or add a custom item</h6>
               <div class="row g-2 mb-2">
                 <div class="col-7"><input v-model="newItemDescription" type="text" class="form-control form-control-sm" placeholder="Description" /></div>
@@ -682,13 +566,53 @@ onUnmounted(() => {
                 <div class="col-3"><input v-model="newItemNote" type="text" class="form-control form-control-sm" placeholder="Note" /></div>
               </div>
               <button @click="addItem" class="btn btn-primary btn-sm"><i class="bi bi-plus me-1"></i>Add Custom Item</button>
-            </div>
-          </div>
+            </template>
+          </ShopOrderCatalogBrowser>
 
-          <!-- Delete Draft (when editing) -->
-          <div v-if="canEditOrder(selected)" class="card">
-            <div class="card-body">
-              <button @click="deleteOrder" class="btn btn-danger btn-sm"><i class="bi bi-trash me-1"></i>Delete Draft</button>
+        </div>
+      </div>
+
+      <!-- Orders List -->
+      <div class="col-lg-4">
+        <div class="card panel-muted app-list-card">
+          <div class="card-header panel-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-bag me-2"></i>Orders</h5>
+            <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">{{ filtered.length }}</span>
+          </div>
+          <div v-if="loading" class="card-body text-center py-5"><div class="spinner-border spinner-border-sm"></div></div>
+          <div v-else-if="!filtered.length" class="card-body text-center text-muted py-5">
+            <i class="bi bi-inbox mb-2 d-block fs-4"></i>
+            <div>No orders yet</div>
+            <div class="small text-muted">Create one to get started</div>
+          </div>
+          <div v-else class="list-group list-group-flush">
+            <div
+              v-for="order in filtered"
+              :key="order.id"
+              role="button"
+              tabindex="0"
+              class="list-group-item list-group-item-action text-start order-list-item d-flex justify-content-between align-items-start gap-3"
+              :class="{ active: selectedId === order.id }"
+              @click="handleOrderSelect(order.id)"
+              @keydown="handleOrderKeySelect($event, order.id)"
+            >
+              <div class="me-2">
+                <div class="fw-semibold">{{ fmtDate(order.orderDate) }}</div>
+                <div class="order-meta small">{{ order.id.slice(0, 8) }}</div>
+                <div class="small mt-1 order-meta">{{ order.items.length }} item(s)</div>
+              </div>
+              <div class="d-flex flex-column align-items-end gap-2">
+                <span :class="`badge app-badge-pill app-badge-pill--sm ${statusBadgeClass(order.status)}`">{{ statusLabel(order.status) }}</span>
+                <button
+                  v-if="canEditOrder(order)"
+                  type="button"
+                  class="btn btn-sm btn-outline-danger order-delete-btn"
+                  :disabled="deletingOrderId === order.id"
+                  @click="handleDeleteOrderClick($event, order.id)"
+                >
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -700,16 +624,15 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as *;
-.order-panel .list-group-item {
+.order-list-item {
   background: $surface;
   color: $body-color;
-  border-color: $border-color;
-  border-left: 3px solid transparent;
-}
+  border-color: rgba($border-color, 0.6);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 
-.order-panel .panel-header {
-  border-bottom: 1px solid $border-color;
-  color: $body-color;
+  &:hover {
+    background-color: mix($primary, $surface, 12%);
+  }
 }
 
 .order-meta {
@@ -717,14 +640,28 @@ onUnmounted(() => {
 }
 
 .order-list-item.active {
-  background: rgba($primary, 0.22);
+  background: linear-gradient(135deg, mix($primary, $surface, 20%), mix($primary, $surface, 28%));
+  border-color: mix($primary, $border-color, 55%);
   color: $body-color;
-  border-left-color: $primary;
-  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: 0 0 0 1px rgba($primary, 0.35);
+}
+
+.order-list-item:focus-visible {
+  outline: 2px solid $primary;
+  outline-offset: -4px;
 }
 
 .order-list-item.active .order-meta {
   color: rgba($body-color, 0.9);
+}
+
+.order-list-item:active {
+  background-color: mix($primary, $surface, 16%);
+}
+
+.order-delete-btn {
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
 }
 
 .order-card .card-header {
@@ -738,13 +675,8 @@ onUnmounted(() => {
 
 .order-table {
   border: 1px solid $border-color;
-  border-radius: 6px;
+  border-radius: $border-radius;
   background: $surface;
-}
-
-.order-empty {
-  border: 1px dashed $border-color;
-  background: $surface-2;
 }
 </style>
 

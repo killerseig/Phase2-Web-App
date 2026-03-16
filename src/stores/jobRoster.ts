@@ -1,7 +1,6 @@
 /**
  * Job Roster Store (Phase 3)
  * Manages job-scoped employee rosters
- * Replaces the global employees store
  */
 
 import { acceptHMRUpdate, defineStore } from 'pinia'

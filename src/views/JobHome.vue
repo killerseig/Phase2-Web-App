@@ -47,13 +47,8 @@ const currentUserRosterEntry = computed(() => {
 
 const isForeman = computed(() => isForemanAssigned.value || (currentUserRosterEntry.value?.isPrimaryForeman ?? false))
 
-// Employees can access: Daily Logs, Timecards, Shop Orders
-// Foremen can access: everything + roster management
-// Admins can access: everything + admin panel
-
 const canEmployeeModules = computed(() => isAdmin.value || isForeman.value || currentUserRosterEntry.value?.active)
 const canShopOrders = computed(() => isAdmin.value || isForeman.value || currentUserRosterEntry.value?.active)
-const canManageRoster = computed(() => isAdmin.value || isForeman.value)
 
 async function boot() {
   if (!jobId.value) return
@@ -179,7 +174,7 @@ onUnmounted(() => {
       </div>
 
       <!-- No Modules Alert -->
-      <div v-if="!canEmployeeModules && !canShopOrders && !canManageRoster && !isAdmin" class="col-12">
+      <div v-if="!canEmployeeModules && !canShopOrders && !isAdmin" class="col-12">
         <div class="alert alert-secondary mb-0">
           <i class="bi bi-info-circle me-2"></i>
           You have access to this job, but no modules are available for your current role.
