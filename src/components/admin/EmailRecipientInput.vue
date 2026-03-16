@@ -63,7 +63,7 @@ function removeEmail(email: string) {
       <span
         v-for="email in emails"
         :key="email"
-        class="badge text-bg-primary d-flex align-items-center gap-1"
+        class="badge app-badge-pill app-badge-pill--sm text-bg-primary d-flex align-items-center gap-1"
       >
         {{ email }}
         <button

@@ -1,7 +1,23 @@
-@use '@/styles/_variables.scss' as vars;
-
 .badge {
   font-weight: 600;
   letter-spacing: 0.3px;
   padding: 0.5rem 0.75rem;
+}
+
+.app-badge-pill.badge,
+.app-page-chip.badge {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 0.35rem;
+  line-height: 1.1;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.95rem;
+  white-space: nowrap;
+}
+
+.app-badge-pill--sm.badge {
+  font-size: 0.82rem;
+  min-height: 1.85rem;
+  padding: 0.35rem 0.75rem;
 }

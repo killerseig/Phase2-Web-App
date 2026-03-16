@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { useJobRosterStore } from '@/stores/jobRoster'
@@ -106,23 +107,24 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="container-fluid py-4 wide-container-1200">
-    <div class="mb-4">
-      <h2 class="h3 mb-1">{{ jobName }}</h2>
-      <div class="text-muted small d-flex align-items-center gap-2 flex-wrap">
+  <div class="app-page">
+    <AppPageHeader eyebrow="Job Workspace" :title="jobName">
+      <template #meta>
         <span v-if="jobCode"><i class="bi bi-briefcase"></i>Job: {{ jobCode }}</span>
-        <span v-if="isForeman" class="badge bg-success"><i class="bi bi-person-badge me-1"></i>You are Foreman</span>
-        <span v-else-if="isAdmin" class="badge bg-primary"><i class="bi bi-shield-check me-1"></i>Admin</span>
-        <span v-else-if="currentUserRosterEntry?.active" class="badge bg-info"><i class="bi bi-person me-1"></i>On Roster</span>
+      </template>
+      <template #badges>
+        <span v-if="isForeman" class="badge bg-success app-page-chip"><i class="bi bi-person-badge me-1"></i>You are Foreman</span>
+        <span v-else-if="isAdmin" class="badge bg-primary app-page-chip"><i class="bi bi-shield-check me-1"></i>Admin</span>
+        <span v-else-if="currentUserRosterEntry?.active" class="badge bg-info app-page-chip"><i class="bi bi-person me-1"></i>On Roster</span>
         <span
-          class="badge"
+          class="badge app-page-chip"
           :class="timecardStatus === 'submitted' && timecardPeriodEnd === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger'"
           :title="`Timecards for week ${currentWeekLabel}: ${timecardStatus === 'submitted' && timecardPeriodEnd === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
         >
           {{ timecardStatus === 'submitted' && timecardPeriodEnd === currentWeekEnd ? 'Timecards submitted this week' : 'Timecards not submitted this week' }}
         </span>
-      </div>
-    </div>
+      </template>
+    </AppPageHeader>
 
     <!-- No Access Alert -->
     <div v-if="!isAdmin && !canEmployeeModules && !canShopOrders" class="alert alert-warning mb-4">
@@ -133,7 +135,7 @@ onUnmounted(() => {
     <div v-else class="row g-3">
       <!-- Daily Logs -->
       <div v-if="canEmployeeModules" class="col-12 col-md-6">
-        <div class="card h-100 shadow-sm">
+        <div class="card h-100 app-module-card">
           <div class="card-body">
             <h5 class="card-title mb-2">
               <i class="bi bi-journal-text text-primary me-2"></i>Daily Logs
@@ -148,7 +150,7 @@ onUnmounted(() => {
 
       <!-- Timecards -->
       <div v-if="canEmployeeModules" class="col-12 col-md-6">
-        <div class="card h-100 shadow-sm">
+        <div class="card h-100 app-module-card">
           <div class="card-body">
             <h5 class="card-title mb-2">
               <i class="bi bi-clock-history text-info me-2"></i>Timecards
@@ -163,7 +165,7 @@ onUnmounted(() => {
 
       <!-- Shop Orders -->
       <div v-if="canShopOrders" class="col-12 col-md-6">
-        <div class="card h-100 shadow-sm">
+        <div class="card h-100 app-module-card">
           <div class="card-body">
             <h5 class="card-title mb-2">
               <i class="bi bi-receipt text-success me-2"></i>Shop Orders
@@ -186,11 +188,3 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.wide-container-1200 {
-  max-width: 1200px;
-}
-</style>

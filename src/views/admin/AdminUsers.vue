@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
 import StatusBadge from '@/components/admin/StatusBadge.vue'
@@ -456,14 +457,11 @@ onUnmounted(() => {
 
 <template>
   <Toast ref="toastRef" />
-  <div class="container-fluid py-4 wide-container-1200">
+  <div class="app-page">
     <!-- Header -->
-    <div class="mb-4">
-      <h2 class="h3 mb-1">User Management</h2>
-      <p class="text-muted small mb-0">Manage user profiles and employees</p>
-    </div>
+    <AppPageHeader eyebrow="Admin Panel" title="User Management" subtitle="Manage user profiles, permissions, and employee records." />
 
-    <div class="alert access-note small d-flex align-items-start gap-2" role="alert">
+    <div class="alert app-note small d-flex align-items-start gap-2" role="alert">
       <i class="bi bi-info-circle mt-1"></i>
       <div>
         Setting a user to <strong>None</strong> role or <strong>Inactive</strong> automatically removes their email from all recipient lists.
@@ -471,7 +469,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Tab Navigation -->
-    <ul class="nav nav-tabs mb-4" role="tablist">
+    <ul class="nav nav-tabs app-tab-nav mb-4" role="tablist">
       <li class="nav-item" role="presentation">
         <button
           class="nav-link"
@@ -536,8 +534,6 @@ onUnmounted(() => {
             <label class="form-label small">Role</label>
             <select v-model="userForm.role" class="form-select" required>
               <option :value="ROLES.NONE">None (No Access)</option>
-              <option :value="ROLES.EMPLOYEE">Employee</option>
-              <option :value="ROLES.SHOP">Shop</option>
               <option :value="ROLES.FOREMAN">Foreman</option>
               <option :value="ROLES.CONTROLLER">Controller</option>
               <option :value="ROLES.ADMIN">Admin</option>
@@ -579,7 +575,6 @@ onUnmounted(() => {
             row-key="id"
             :sort-key="userSortKey"
             :sort-dir="userSortDir"
-            table-class="table-dark"
             @sort-change="handleUserSort"
           >
             <template #cell-email="{ row }">
@@ -624,8 +619,6 @@ onUnmounted(() => {
                   @keydown.esc="cancelUserEdit"
                 >
                   <option :value="ROLES.NONE">None</option>
-                  <option :value="ROLES.EMPLOYEE">Employee</option>
-                  <option :value="ROLES.SHOP">Shop</option>
                   <option :value="ROLES.FOREMAN">Foreman</option>
                   <option :value="ROLES.CONTROLLER">Controller</option>
                   <option :value="ROLES.ADMIN">Admin</option>
@@ -633,11 +626,9 @@ onUnmounted(() => {
               </template>
               <span
                 v-else
-                class="badge"
+                class="badge app-badge-pill app-badge-pill--sm"
                 :class="{
                   'bg-secondary': row.role === ROLES.NONE,
-                  'bg-info': row.role === ROLES.EMPLOYEE,
-                  'bg-success': row.role === ROLES.SHOP,
                   'bg-warning': row.role === ROLES.FOREMAN,
                   'bg-primary': row.role === ROLES.CONTROLLER,
                   'bg-danger': row.role === ROLES.ADMIN,
@@ -761,7 +752,6 @@ onUnmounted(() => {
             row-key="id"
             :sort-key="employeeSortKey"
             :sort-dir="employeeSortDir"
-            table-class="table-dark"
             @sort-change="handleEmployeeSort"
           >
             <template #firstName="{ row }">
@@ -847,19 +837,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.access-note {
-  background: $surface-2;
-  border: 1px solid $border-color;
-  color: $body-color;
-  box-shadow: $box-shadow-sm;
-}
-
-.access-note .bi-info-circle {
-  color: $primary;
-}
-
 .employee-actions-cell {
   min-width: 200px;
 }

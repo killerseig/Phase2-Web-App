@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
 import ShopCatalogTreeNode from '@/components/admin/ShopCatalogTreeNode.vue'
@@ -605,28 +606,26 @@ onUnmounted(() => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4 wide-container-1200">
+  <div class="app-page">
     <!-- Header -->
-    <div class="d-flex align-items-start justify-content-between mb-2 flex-wrap gap-2">
-      <div>
-        <h2 class="h3 mb-1">Shop Catalog</h2>
-        <p class="text-muted small mb-0">Manage product categories and items in a unified tree view</p>
-      </div>
-      <button
-        class="btn btn-outline-primary align-self-start"
-        type="button"
-        @click="downloadCatalog"
-        :disabled="loading || !allItems.length || downloading"
-      >
-        <span
-          v-if="downloading"
-          class="spinner-border spinner-border-sm me-2"
-          role="status"
-          aria-hidden="true"
-        ></span>
-        Download catalog
-      </button>
-    </div>
+    <AppPageHeader eyebrow="Admin Panel" title="Shop Catalog" subtitle="Manage product categories and items in a unified tree view.">
+      <template #actions>
+        <button
+          class="btn btn-outline-primary"
+          type="button"
+          @click="downloadCatalog"
+          :disabled="loading || !allItems.length || downloading"
+        >
+          <span
+            v-if="downloading"
+            class="spinner-border spinner-border-sm me-2"
+            role="status"
+            aria-hidden="true"
+          ></span>
+          Download catalog
+        </button>
+      </template>
+    </AppPageHeader>
 
     <BaseAccordionCard
       v-model:open="showAddItemForm"
@@ -676,12 +675,12 @@ onUnmounted(() => {
     </BaseAccordionCard>
 
     <!-- Search Bar -->
-    <div class="row mb-4">
-      <div class="col">
+    <div class="card app-toolbar-card mb-4">
+      <div class="card-body">
         <input
           v-model="searchQuery"
           type="text"
-          class="form-control form-control-sm"
+          class="form-control"
           placeholder="Search by description, SKU, or price..."
         />
       </div>
@@ -703,7 +702,7 @@ onUnmounted(() => {
     <!-- Catalog Tree -->
     <div v-else>
       <AdminCardWrapper title="Catalog" class="table-responsive">
-        <div v-if="filteredCategoryTree.length > 0 || filteredUncategorizedItems.length > 0" class="catalog-tree">
+        <div v-if="filteredCategoryTree.length > 0 || filteredUncategorizedItems.length > 0" class="app-catalog-tree">
           <!-- Uncategorized Items (if any) -->
           <div v-for="itemId of filteredUncategorizedItems" :key="itemId" class="mb-0">
             <ShopCatalogTreeNode
@@ -830,31 +829,6 @@ $select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);
 
 .empty-catalog-icon {
   font-size: 2rem;
-}
-
-.catalog-tree {
-  border: 1px solid $border-color;
-  border-radius: 4px;
-  overflow-y: auto;
-  max-height: 600px;
-  background: $surface;
-}
-
-.catalog-tree::-webkit-scrollbar {
-  width: 8px;
-}
-
-.catalog-tree::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.catalog-tree::-webkit-scrollbar-thumb {
-  background: rgba($primary, 0.35);
-  border-radius: 4px;
-}
-
-.catalog-tree::-webkit-scrollbar-thumb:hover {
-  background: rgba($primary, 0.5);
 }
 
 .table-responsive {

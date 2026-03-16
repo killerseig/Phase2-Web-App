@@ -18,6 +18,7 @@ const asStorageLikeError = (error: unknown): StorageLikeError | null => {
  */
 export async function uploadAttachment(
   file: File,
+  jobId: string,
   logId: string,
   type: AttachmentType = 'photo'
 ): Promise<Attachment> {
@@ -34,6 +35,7 @@ export async function uploadAttachment(
     // Upload with metadata
     const metadata = {
       customMetadata: {
+        jobId,
         type,
         uploadedBy: u.uid,
         uploadedAt: new Date().toISOString(),

@@ -20,7 +20,7 @@ const handleSelect = (id: string) => {
   <div class="card mb-4 panel-muted">
     <div class="card-header panel-header d-flex align-items-center justify-content-between">
       <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>{{ title || 'Logs' }}</h5>
-      <span class="badge text-bg-secondary">{{ logs.length }}</span>
+      <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">{{ logs.length }}</span>
     </div>
     <div class="card-body p-0">
       <div v-if="logs.length" class="list-group list-group-flush">
@@ -39,7 +39,7 @@ const handleSelect = (id: string) => {
             <div class="log-list-meta small">{{ formatTimestamp(log.submittedAt || log.updatedAt || log.createdAt) || 'Time not available' }}</div>
           </div>
           <div class="d-flex flex-column align-items-end">
-            <span :class="['badge', log.status === 'submitted' ? 'text-bg-success' : 'text-bg-warning']">{{ log.status }}</span>
+            <span :class="['badge', 'app-badge-pill', 'app-badge-pill--sm', log.status === 'submitted' ? 'text-bg-success' : 'text-bg-warning']">{{ log.status }}</span>
             <span v-if="log.uid === currentUserId" class="log-list-meta small mt-1">You</span>
           </div>
         </button>

@@ -4,6 +4,7 @@ import type { ComponentPublicInstance } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
 import { useRouter } from 'vue-router'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import TimecardEditorCard from '@/components/timecards/TimecardEditorCard.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -26,15 +27,10 @@ import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/mo
 import { normalizeError } from '@/services/serviceUtils'
 import { validateRequired } from '@/utils/validation'
 import { logError, logWarn } from '@/utils'
-import { downloadCsv } from '@/utils/plexisIntegration'
 import { ROLES, ROUTE_NAMES } from '@/constants/app'
 import {
   buildTimecardEmployeeEditorForm,
-  calculateRegularAndOvertimeHours,
   createEmptyTimecardEmployeeEditorForm,
-  getTimecardDisplayName,
-  getTimecardFirstName,
-  getTimecardLastName,
   makeDaysArray,
   parseSubcontractedEmployee,
   parseWage,
@@ -67,7 +63,6 @@ const datePickerRef = ref<FlatpickrRefHandle | null>(null)
 
 const jobId = computed(() => String(props.jobId ?? ''))
 const jobName = computed(() => jobsStore.currentJob?.name ?? 'Timecards')
-const jobCode = computed(() => jobsStore.currentJob?.code?.trim() ?? '')
 const selectedDate = ref<string>('')
 const weekStartDate = computed(() => snapToSunday(selectedDate.value || new Date()))
 const weekEndingDate = computed(() => getSaturdayFromSunday(weekStartDate.value))
@@ -78,11 +73,6 @@ const draftTimecards = ref<Map<string, TimecardModel>>(new Map())
 const autoSaveTimers = ref<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
 const showSummaryModal = ref(false)
-const printMode = ref<'summary' | 'timecards'>('summary')
-const printing = ref(false)
-const exportingPlexxis = ref(false)
-
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 
 const loading = ref(true)
 const saving = ref(false)
@@ -464,6 +454,13 @@ async function submitAllTimecards() {
     }
     const count = await submitAllWeekTimecards(jobId.value, weekEndingDate.value)
     toastRef.value?.show(`Submitted ${count} timecard(s)`, 'success')
+    try {
+      await markTimecardsSent(jobId.value, weekEndingDate.value)
+    } catch (statusErr) {
+      logWarn('Timecards', 'Failed to update job-level timecard status', statusErr)
+      toastRef.value?.show('Timecards submitted, but the job status badge did not update', 'warning')
+    }
+
     if (timecardRecipients.value.length) {
       try {
         const submitted = await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)
@@ -479,9 +476,6 @@ async function submitAllTimecards() {
         toastRef.value?.show('Timecards submitted, but email failed to send', 'warning')
       }
     }
-    if (isAdmin.value) {
-      await markTimecardsSent(jobId.value, weekEndingDate.value)
-    }
     draftTimecards.value.clear()
   } catch (e) {
     setError(e, 'Failed to submit timecards')
@@ -495,30 +489,7 @@ function openSummary() {
 }
 
 function closeSummary() {
-  if (printing.value) return
   showSummaryModal.value = false
-}
-
-function startPrint(mode: 'summary' | 'timecards') {
-  if (printing.value) return
-  printMode.value = mode
-  printing.value = true
-  requestAnimationFrame(() => {
-    window.print()
-  })
-}
-
-function printSummary() {
-  startPrint('summary')
-}
-
-function printTimecardsTwoPerPage() {
-  showSummaryModal.value = false
-  startPrint('timecards')
-}
-
-function onAfterPrint() {
-  printing.value = false
 }
 
 async function generateFromPreviousWeek() {
@@ -538,20 +509,6 @@ async function generateFromPreviousWeek() {
   }
 }
 
-function getHoursBreakdown(timecard: TimecardModel): { regularHours: number; overtimeHours: number } {
-  return calculateRegularAndOvertimeHours(
-    timecard.totals?.hoursTotal ?? 0,
-    null,
-    null
-  )
-}
-
-function formatHours(value: number | null | undefined): string {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) return '0.00'
-  return numeric.toFixed(2)
-}
-
 function parseMileageInput(value: string): number | null {
   const trimmed = value.trim()
   if (!trimmed) return null
@@ -563,132 +520,6 @@ function parseMileageInput(value: string): number | null {
 function updateMileage(timecard: TimecardModel, rawValue: string) {
   timecard.mileage = parseMileageInput(rawValue)
   autoSave(timecard)
-}
-
-function formatPlexxisDate(dateString: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateString || '').trim())
-  if (!match) return dateString
-  const [, year, month, day] = match
-  return `${Number(month)}/${Number(day)}/${year}`
-}
-
-function formatPlexxisEmployeeName(timecard: TimecardModel): string {
-  const firstName = getTimecardFirstName(timecard).trim()
-  const lastName = getTimecardLastName(timecard).trim()
-
-  if (lastName && firstName) return `${lastName}, ${firstName}`
-  if (lastName) return lastName
-  if (firstName) return firstName
-
-  const displayName = (timecard.employeeName || '').trim()
-  return displayName
-}
-
-function formatPlexxisNumber(value: number | null | undefined, blankWhenZero = false): string {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) return ''
-  if (blankWhenZero && numeric === 0) return ''
-  return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
-}
-
-function shouldCopyActivityToCostCode(activityCode: string): boolean {
-  return /[A-Za-z-]/.test(activityCode)
-}
-
-function formatCsvValue(value: string | number | null | undefined): string {
-  const text = String(value ?? '')
-  if (/[",\r\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`
-  }
-  return text
-}
-
-function toCsv(headers: string[], rows: Array<Array<string | number | null | undefined>>): string {
-  const header = headers.map(formatCsvValue).join(',')
-  const body = rows.map((row) => row.map(formatCsvValue).join(','))
-  return [header, ...body].join('\r\n')
-}
-
-function sumJobDayMetric(timecard: TimecardModel, jobIndex: number, field: 'hours' | 'production' | 'lineTotal'): number {
-  const job = timecard.jobs?.[jobIndex]
-  if (!job?.days?.length) return 0
-  return job.days.reduce((sum, day) => sum + Number(day?.[field] ?? 0), 0)
-}
-
-function buildPlexxisRows(timecard: TimecardModel): string[][] {
-  const jobRows = timecard.jobs?.length ? timecard.jobs : [null]
-
-  return jobRows
-    .map((job) => {
-      const totalHours = job
-        ? job.days?.reduce((sum, day) => sum + Number(day?.hours ?? 0), 0) ?? 0
-        : Number(timecard.totals?.hoursTotal ?? 0)
-      const totalProduction = job
-        ? job.days?.reduce((sum, day) => sum + Number(day?.production ?? 0), 0) ?? 0
-        : Number(timecard.totals?.productionTotal ?? 0)
-      const subSection = (job?.subsectionArea ?? job?.area ?? job?.jobNumber ?? '').trim()
-      const activityCode = (job?.account ?? job?.acct ?? '').trim()
-      const hasData = totalHours > 0 || totalProduction > 0 || !!subSection || !!activityCode
-
-      if (!hasData) return null
-
-      const costCode = shouldCopyActivityToCostCode(activityCode) ? activityCode : ''
-      const rowJobCode = (jobCode.value || job?.jobNumber || '').trim()
-
-      return [
-        formatPlexxisEmployeeName(timecard),
-        (timecard.employeeNumber || '').trim(),
-        rowJobCode,
-        formatPlexxisDate(timecard.weekEndingDate),
-        subSection,
-        activityCode,
-        costCode,
-        formatPlexxisNumber(totalHours, true),
-        formatPlexxisNumber(totalProduction, true),
-        '',
-        '',
-      ]
-    })
-    .filter((row): row is string[] => row !== null)
-}
-
-async function exportPlexxisCsv() {
-  if (exportingPlexxis.value) return
-  exportingPlexxis.value = true
-  err.value = ''
-  try {
-    const weekTimecards = (await listTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)) as TimecardModel[]
-    const submitted = weekTimecards.filter(tc => tc.status === 'submitted')
-
-    if (!submitted.length) {
-      toastRef.value?.show('No submitted timecards to export for this week', 'info')
-      return
-    }
-
-    const headers = [
-      'Employee Name',
-      'Employee Code',
-      'Job Code',
-      'DETAIL_DATE',
-      'Sub-Section',
-      'Activity Code',
-      'Cost Code',
-      'H_Hours',
-      'P_HOURS',
-      '',
-      '',
-    ]
-
-    const rows = submitted.flatMap(buildPlexxisRows)
-    const filename = `plexxis-timecards-${jobId.value}-${weekEndingDate.value}.csv`
-    const spacerRow = Array(headers.length).fill('')
-    downloadCsv(toCsv(headers, [spacerRow, ...rows]), filename)
-    toastRef.value?.show(`Exported ${rows.length} Plexxis row(s)`, 'success')
-  } catch (e) {
-    setError(e, 'Failed to export Plexxis CSV')
-  } finally {
-    exportingPlexxis.value = false
-  }
 }
 
 function startEditingEmployee(timecard: TimecardModel) {
@@ -747,7 +578,6 @@ const {
 })
 
 onMounted(() => {
-  window.addEventListener('afterprint', onAfterPrint)
   void init()
 })
 watch(
@@ -758,7 +588,6 @@ watch(
   }
 )
 onUnmounted(() => {
-  window.removeEventListener('afterprint', onAfterPrint)
   subscriptions.clearAll()
   jobsStore.stopCurrentJobSubscription()
   autoSaveTimers.value.forEach(timer => clearTimeout(timer))
@@ -767,16 +596,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="['timecards-page', `print-mode-${printMode}`]">
+  <div class="timecards-page">
     <Toast ref="toastRef" />
 
-    <div class="container-fluid py-4 wide-container-1200">
-      <div class="mb-4 d-flex justify-content-between align-items-center">
-        <div>
-          <h2 class="h4 mb-1">{{ jobName }}</h2>
-          <small class="text-muted">{{ weekRange }}</small>
-        </div>
-        <div class="d-flex gap-2">
+    <div class="app-page">
+      <AppPageHeader eyebrow="Job Timecards" :title="jobName">
+        <template #meta>
+          <span>{{ weekRange }}</span>
+          <span>Week ending Saturday: {{ weekEndingDate }}</span>
+        </template>
+        <template #actions>
           <button
             class="btn btn-outline-secondary btn-sm"
             title="Copy timecards from previous week"
@@ -786,8 +615,8 @@ onUnmounted(() => {
             <i class="bi bi-arrow-repeat me-1"></i>
             {{ autoGenerating ? 'Generating...' : 'Previous Week' }}
           </button>
-        </div>
-      </div>
+        </template>
+      </AppPageHeader>
 
       <div v-if="err" class="alert alert-danger alert-dismissible fade show mb-4">
         <strong>Error:</strong> {{ err }}
@@ -802,8 +631,8 @@ onUnmounted(() => {
       </div>
 
       <div v-else>
-        <div class="timecards-toolbar mb-3">
-          <div class="container-fluid wide-container-1200">
+        <div class="card app-toolbar-card timecards-toolbar mb-3">
+          <div class="card-body">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-primary btn-sm" :disabled="loading || showCreateForm" @click="startCreateTimecard">
@@ -831,7 +660,7 @@ onUnmounted(() => {
                   </button>
                 </div>
                 <div class="text-muted small ms-1 align-self-center">
-                  Week ending Saturday: {{ weekEndingDate }}
+                  Select any date in the week to load or edit timecards.
                 </div>
               </div>
 
@@ -844,25 +673,9 @@ onUnmounted(() => {
                   <i class="bi bi-clipboard-data me-1"></i>
                   Summary
                 </button>
-                <button
-                  class="btn btn-outline-primary btn-sm"
-                  :disabled="loading || allTimecards.length === 0 || printing"
-                  @click="printTimecardsTwoPerPage"
-                >
-                  <i class="bi bi-printer me-1"></i>
-                  Print Timecards (2/Page)
-                </button>
-                <button
-                  class="btn btn-outline-success btn-sm"
-                  :disabled="loading || exportingPlexxis"
-                  @click="exportPlexxisCsv"
-                >
-                  <i class="bi bi-download me-1"></i>
-                  {{ exportingPlexxis ? 'Exporting...' : 'Plexxis CSV' }}
-                </button>
                 <span class="small text-muted">
-                  <span class="badge bg-warning text-dark">{{ draftCount }} Draft</span>
-                  <span class="badge bg-success ms-2">{{ submittedCount }} Submitted</span>
+                  <span class="badge app-badge-pill app-badge-pill--sm bg-warning text-dark">{{ draftCount }} Draft</span>
+                  <span class="badge app-badge-pill app-badge-pill--sm bg-success ms-2">{{ submittedCount }} Submitted</span>
                 </span>
                 <button
                   class="btn btn-success btn-sm"
@@ -972,105 +785,9 @@ onUnmounted(() => {
         </form>
       </div>
     </div>
-
-    <section class="print-output print-output--summary" aria-hidden="true">
-      <h2 class="print-title">{{ jobName }} - Timecard Summary</h2>
-      <div class="print-subtitle">Week Ending {{ weekEndingDate }}</div>
-      <table class="print-summary-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Employee #</th>
-            <th>Status</th>
-            <th class="text-end">Hours</th>
-            <th class="text-end">Production</th>
-            <th class="text-end">Line Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in summaryRows" :key="`print-summary-${row.id}`">
-            <td>{{ row.employeeName }}</td>
-            <td>{{ row.employeeNumber }}</td>
-            <td>{{ row.status }}</td>
-            <td class="text-end">{{ formatHours(row.hours) }}</td>
-            <td class="text-end">{{ formatHours(row.production) }}</td>
-            <td class="text-end">${{ formatHours(row.lineTotal) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="print-output print-output--timecards" aria-hidden="true">
-      <article v-for="timecard in allTimecards" :key="`print-card-${timecard.id}`" class="print-timecard-card">
-        <header class="print-card-header">
-          <h3>{{ getTimecardDisplayName(timecard) }}</h3>
-          <div class="print-card-meta">
-            <span>Employee #: {{ timecard.employeeNumber || '-' }}</span>
-            <span>Week Ending: {{ timecard.weekEndingDate }}</span>
-          </div>
-          <div class="print-card-meta">
-            <span>Occupation: {{ timecard.occupation || '-' }}</span>
-            <span>Wage: ${{ formatHours(timecard.employeeWage ?? 0) }}</span>
-          </div>
-        </header>
-
-        <table class="print-day-table">
-          <thead>
-            <tr>
-              <th>Day</th>
-              <th class="text-end">Hours</th>
-              <th class="text-end">Production</th>
-              <th class="text-end">Unit Cost</th>
-              <th class="text-end">Line Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(dayName, dayIdx) in DAY_NAMES" :key="`print-day-${timecard.id}-${dayIdx}`">
-              <td>{{ dayName }}</td>
-              <td class="text-end">{{ formatHours(timecard.days?.[dayIdx]?.hours ?? 0) }}</td>
-              <td class="text-end">{{ formatHours(timecard.days?.[dayIdx]?.production ?? 0) }}</td>
-              <td class="text-end">${{ formatHours(timecard.days?.[dayIdx]?.unitCost ?? 0) }}</td>
-              <td class="text-end">${{ formatHours(timecard.days?.[dayIdx]?.lineTotal ?? 0) }}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <table v-if="timecard.jobs?.length" class="print-job-table">
-          <thead>
-            <tr>
-              <th>Job #</th>
-              <th>Subsection/Area</th>
-              <th>Account</th>
-              <th class="text-end">Hours</th>
-              <th class="text-end">Production</th>
-              <th class="text-end">Line Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(job, jobIdx) in timecard.jobs" :key="`print-job-${timecard.id}-${jobIdx}`">
-              <td>{{ job.jobNumber || '-' }}</td>
-              <td>{{ job.subsectionArea || job.area || '-' }}</td>
-              <td>{{ job.account || job.acct || '-' }}</td>
-              <td class="text-end">{{ formatHours(sumJobDayMetric(timecard, jobIdx, 'hours')) }}</td>
-              <td class="text-end">{{ formatHours(sumJobDayMetric(timecard, jobIdx, 'production')) }}</td>
-              <td class="text-end">${{ formatHours(sumJobDayMetric(timecard, jobIdx, 'lineTotal')) }}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="print-card-footer">
-          <div>Total Hours: {{ formatHours(timecard.totals.hoursTotal ?? 0) }}</div>
-          <div>Regular: {{ formatHours(getHoursBreakdown(timecard).regularHours) }}</div>
-          <div>OT: {{ formatHours(getHoursBreakdown(timecard).overtimeHours) }}</div>
-          <div>Mileage: {{ formatHours(timecard.mileage ?? 0) }}</div>
-          <div>Total Production: {{ formatHours(timecard.totals.productionTotal ?? 0) }}</div>
-          <div>Line Total: ${{ formatHours(timecard.totals.lineTotal ?? 0) }}</div>
-        </div>
-      </article>
-    </section>
   </div>
 
-  <!-- Timecard Summary Modal (Printable) -->
+  <!-- Timecard Summary Modal -->
   <div
     v-if="showSummaryModal"
     class="modal d-block bg-dark bg-opacity-50"
@@ -1084,15 +801,10 @@ onUnmounted(() => {
       <div class="modal-content" id="timecard-summary">
         <div class="modal-header">
           <h5 id="timecard-summary-title" class="modal-title">Timecard Summary - Week ending {{ weekEndingDate }}</h5>
-          <button type="button" class="btn-close" aria-label="Close summary" @click="closeSummary" :disabled="printing"></button>
+          <button type="button" class="btn-close" aria-label="Close summary" @click="closeSummary"></button>
         </div>
         <div class="modal-body">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="text-muted small">{{ weekRange }}</div>
-            <button class="btn btn-outline-primary btn-sm" @click="printSummary" :disabled="printing">
-              <i class="bi bi-printer me-1"></i>Print
-            </button>
-          </div>
+          <div class="text-muted small mb-3">{{ weekRange }}</div>
           <div class="table-responsive">
             <table class="table table-sm table-striped align-middle summary-table">
               <thead>
@@ -1110,7 +822,7 @@ onUnmounted(() => {
                   <td>{{ row.employeeName }}</td>
                   <td class="text-muted">{{ row.employeeNumber }}</td>
                   <td class="text-center">
-                    <span :class="['badge', row.status === 'submitted' ? 'text-bg-success' : 'text-bg-warning text-dark']">
+                    <span :class="['badge', 'app-badge-pill', 'app-badge-pill--sm', row.status === 'submitted' ? 'text-bg-success' : 'text-bg-warning text-dark']">
                       {{ row.status }}
                     </span>
                   </td>
@@ -1131,10 +843,7 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="closeSummary" :disabled="printing">Close</button>
-          <button type="button" class="btn btn-primary" @click="printSummary" :disabled="printing">
-            <i class="bi bi-printer me-1"></i>Print
-          </button>
+          <button type="button" class="btn btn-secondary" @click="closeSummary">Close</button>
         </div>
       </div>
     </div>
@@ -1167,35 +876,18 @@ input[type='number']::-webkit-inner-spin-button {
   appearance: none;
 }
 
-.form-control {
-  border-radius: 0;
-  padding: 0.25rem 0.5rem;
-}
-
-.form-control:focus {
-  border-radius: 0;
-}
-
-textarea.form-control {
-  border-radius: 0;
-}
-
 .summary-table th,
 .summary-table td {
   padding: 0.5rem 0.55rem;
 }
 
 .timecards-toolbar {
-  background: $surface;
-  border: 1px solid $border-color;
-  padding: 0.75rem 0.5rem;
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow-sm;
 }
 
 .timecards-page {
   background: $body-bg;
-  min-height: 100vh;
-  padding-bottom: 1.5rem;
+  min-height: 100%;
 }
 
 .timecards-accordion :deep(.timecard-editor-card) {
@@ -1217,10 +909,6 @@ textarea.form-control {
   max-width: 210px;
 }
 
-.print-output {
-  display: none;
-}
-
 @media (max-width: 768px) {
   .timecards-accordion :deep(.timecard-editor-card) {
     border-radius: 0;
@@ -1231,113 +919,6 @@ textarea.form-control {
   max-width: 500px;
   width: 100%;
   margin: 0 20px;
-}
-
-@media print {
-  @page {
-    margin: 0.35in;
-  }
-
-  .timecards-page {
-    background: #fff;
-    min-height: auto;
-    padding: 0;
-  }
-
-  .timecards-page > .container-fluid,
-  .timecards-page > .modal,
-  .timecards-page > .position-fixed {
-    display: none !important;
-  }
-
-  .print-output {
-    display: none !important;
-    color: #000;
-  }
-
-  .print-mode-summary .print-output--summary {
-    display: block !important;
-    font-size: 11px;
-  }
-
-  .print-mode-timecards .print-output--timecards {
-    display: flex !important;
-    flex-wrap: wrap;
-    gap: 0.2in;
-    align-content: flex-start;
-  }
-
-  .print-title {
-    font-size: 16px;
-    margin: 0 0 0.05in;
-  }
-
-  .print-subtitle {
-    font-size: 11px;
-    margin-bottom: 0.15in;
-  }
-
-  .print-summary-table,
-  .print-day-table,
-  .print-job-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .print-summary-table th,
-  .print-summary-table td,
-  .print-day-table th,
-  .print-day-table td,
-  .print-job-table th,
-  .print-job-table td {
-    border: 1px solid #000;
-    padding: 3px 4px;
-    vertical-align: middle;
-  }
-
-  .print-timecard-card {
-    width: calc(50% - 0.1in);
-    border: 1px solid #000;
-    padding: 0.12in;
-    break-inside: avoid;
-    page-break-inside: avoid;
-    font-size: 10px;
-  }
-
-  .print-timecard-card:nth-child(2n) {
-    break-after: page;
-    page-break-after: always;
-  }
-
-  .print-timecard-card:last-child {
-    break-after: auto;
-    page-break-after: auto;
-  }
-
-  .print-card-header h3 {
-    font-size: 12px;
-    margin: 0 0 0.03in;
-  }
-
-  .print-card-meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-    margin-bottom: 0.03in;
-    gap: 0.08in;
-  }
-
-  .print-job-table {
-    margin-top: 0.08in;
-  }
-
-  .print-card-footer {
-    margin-top: 0.08in;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2px 8px;
-    font-size: 10px;
-  }
 }
 </style>
 

@@ -20,6 +20,7 @@ export interface UserProfile {
     displayName?: string;
     role: string;
     active: boolean;
+    assignedJobIds?: string[];
 }
 /**
  * Get job details by ID

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { ROUTE_NAMES } from '@/constants/app'
@@ -43,11 +44,8 @@ onUnmounted(() => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4 wide-container-1200">
-    <div class="mb-4">
-      <h2 class="h3 mb-1">Dashboard</h2>
-      <div class="text-muted small">Pick a job to continue</div>
-    </div>
+  <div class="app-page">
+    <AppPageHeader eyebrow="Workspace" title="Dashboard" subtitle="Pick a job to continue." />
 
     <div v-if="activeJobs.length === 0 && archivedJobs.length === 0" class="alert alert-secondary">
       No jobs found.
@@ -55,9 +53,12 @@ onUnmounted(() => {
 
     <div v-else>
       <!-- Active Jobs Section -->
-      <div v-if="activeJobs.length > 0">
-        <h5 class="mb-3">{{ isAdmin ? 'Active Jobs' : 'Your Jobs' }}</h5>
-        <div class="list-group mb-4 job-list">
+      <div v-if="activeJobs.length > 0" class="card app-list-card mb-4">
+        <div class="card-header panel-header d-flex justify-content-between align-items-center gap-2">
+          <h3 class="h5 mb-0">{{ isAdmin ? 'Active Jobs' : 'Your Jobs' }}</h3>
+          <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">{{ activeJobs.length }}</span>
+        </div>
+        <div class="list-group list-group-flush job-list">
           <button
             v-for="j in activeJobs"
             :key="j.id"
@@ -78,8 +79,11 @@ onUnmounted(() => {
       </div>
 
       <!-- Archived Jobs Section (Admins Only) -->
-      <div v-if="isAdmin && archivedJobs.length > 0">
-        <h5 class="mb-3 text-muted">Archived Jobs</h5>
+      <div v-if="isAdmin && archivedJobs.length > 0" class="card app-list-card">
+        <div class="card-header panel-header d-flex justify-content-between align-items-center gap-2">
+          <h3 class="h5 mb-0">Archived Jobs</h3>
+          <span class="badge app-badge-pill app-badge-pill--sm text-bg-warning">{{ archivedJobs.length }}</span>
+        </div>
         <div class="list-group job-list">
           <button
             v-for="j in archivedJobs"
@@ -92,7 +96,7 @@ onUnmounted(() => {
               <div class="fw-semibold text-muted job-name">{{ j.name }}</div>
               <div class="text-muted small">
                 <span v-if="j.code">Job Number: {{ j.code }}</span>
-                <span class="ms-2 badge text-bg-warning">Archived</span>
+                <span class="ms-2 badge app-badge-pill app-badge-pill--sm text-bg-warning">Archived</span>
               </div>
             </div>
 
@@ -106,10 +110,6 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as *;
-
-.wide-container-1200 {
-  max-width: 1200px;
-}
 
 .job-list .job-item {
   background: $surface-2;

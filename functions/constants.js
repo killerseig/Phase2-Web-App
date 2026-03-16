@@ -7,7 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EMAIL_STYLES_OBJECT = exports.EMAIL_STYLES = exports.DEFAULTS = exports.ERROR_MESSAGES = exports.EMAIL = exports.COLLECTIONS = exports.VALID_ROLES = void 0;
 // User Roles
 // Keep backend role validation aligned with frontend roles.
-exports.VALID_ROLES = ['admin', 'controller', 'employee', 'shop', 'foreman', 'none'];
+exports.VALID_ROLES = ['admin', 'controller', 'foreman', 'none'];
 // Firestore Collections
 exports.COLLECTIONS = {
     USERS: 'users',

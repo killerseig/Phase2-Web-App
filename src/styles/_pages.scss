@@ -1,0 +1,294 @@
+@use '@/styles/_variables.scss' as vars;
+
+.app-page {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.app-page--wide {
+  max-width: 1400px;
+}
+
+.app-page__header {
+  align-items: stretch;
+  background: linear-gradient(
+    140deg,
+    rgba(vars.$primary, 0.2) 0%,
+    rgba(vars.$primary-200, 0.74) 50%,
+    rgba(vars.$surface-2, 0.98) 100%
+  );
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  border-radius: vars.$border-radius-lg;
+  box-shadow: vars.$box-shadow-sm;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  min-height: 8.25rem;
+  padding: clamp(1rem, 2.4vw, 1.4rem) clamp(1rem, 2.8vw, 1.6rem);
+}
+
+.app-page__intro {
+  display: flex;
+  flex: 1 1 420px;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.app-page__eyebrow {
+  color: rgba(vars.$body-color, 0.72);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.45rem;
+  text-transform: uppercase;
+}
+
+.app-page__title {
+  color: vars.$body-color;
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  line-height: 1.1;
+  margin: 0;
+}
+
+.app-page__subtitle {
+  color: vars.$text-muted;
+  font-size: 0.95rem;
+  margin: 0.45rem 0 0;
+  max-width: 56rem;
+}
+
+.app-page__meta,
+.app-page__actions,
+.app-page__badges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+}
+
+.app-page__meta {
+  color: vars.$text-muted;
+  font-size: 0.84rem;
+  margin-top: 0.85rem;
+}
+
+.app-page__meta > span,
+.app-page__actions > span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.app-page__actions,
+.app-page__badges {
+  justify-content: flex-end;
+}
+
+.app-page__meta .badge,
+.app-page__badges .badge {
+  white-space: nowrap;
+}
+
+.app-catalog-tree {
+  background: vars.$surface;
+  border: 1px solid vars.$border-color;
+  border-radius: vars.$border-radius;
+  max-height: 600px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.app-catalog-tree::-webkit-scrollbar {
+  width: 8px;
+}
+
+.app-catalog-tree::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-catalog-tree::-webkit-scrollbar-thumb {
+  background: rgba(vars.$primary, 0.35);
+  border-radius: 999px;
+}
+
+.app-catalog-tree::-webkit-scrollbar-thumb:hover {
+  background: rgba(vars.$primary, 0.5);
+}
+
+.app-page__aside {
+  align-items: flex-end;
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: 0.75rem;
+  justify-content: center;
+  min-width: 0;
+}
+
+.app-toolbar-card {
+  background: linear-gradient(180deg, rgba(vars.$primary-50, 0.95) 0%, vars.$surface-2 100%);
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  box-shadow: vars.$box-shadow-sm;
+}
+
+.app-list-card,
+.app-section-card,
+.app-module-card {
+  overflow: hidden;
+}
+
+.app-module-card {
+  background: linear-gradient(180deg, rgba(vars.$primary, 0.1) 0%, vars.$surface-2 100%);
+  border: 1px solid rgba(vars.$primary, 0.16);
+}
+
+.app-module-card .card-body {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.app-note {
+  background: rgba(vars.$primary, 0.08);
+  border: 1px solid rgba(vars.$primary, 0.18);
+  color: vars.$body-color;
+  box-shadow: vars.$box-shadow-sm;
+}
+
+.app-note .bi-info-circle,
+.app-note .bi-exclamation-circle,
+.app-note .bi-exclamation-triangle {
+  color: vars.$primary;
+}
+
+.app-tab-nav {
+  border-bottom: 1px solid rgba(230, 237, 247, 0.08);
+  gap: 0.5rem;
+}
+
+.app-tab-nav .nav-link {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: vars.$border-radius-sm vars.$border-radius-sm 0 0;
+  color: vars.$text-muted;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.app-tab-nav .nav-link:hover,
+.app-tab-nav .nav-link:focus-visible {
+  background: rgba(vars.$primary, 0.08);
+  border-color: rgba(vars.$primary, 0.12);
+  color: vars.$body-color;
+}
+
+.app-tab-nav .nav-link.active {
+  background: rgba(vars.$primary, 0.16);
+  border-color: rgba(vars.$primary, 0.22);
+  color: vars.$body-color;
+}
+
+.auth-shell,
+.status-shell {
+  align-items: center;
+  background:
+    radial-gradient(circle at top, rgba(vars.$primary, 0.18), transparent 42%),
+    linear-gradient(180deg, vars.$body-bg 0%, mix(vars.$body-bg, vars.$dark, 86%) 100%);
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.auth-card,
+.status-card {
+  background: linear-gradient(180deg, rgba(vars.$primary, 0.1) 0%, vars.$surface-2 100%);
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  border-radius: vars.$border-radius-lg;
+  box-shadow: vars.$box-shadow;
+  color: vars.$body-color;
+}
+
+.auth-card {
+  max-width: 460px;
+  width: 100%;
+}
+
+.auth-card--narrow {
+  max-width: 420px;
+}
+
+.auth-card .card-body {
+  padding: 1.5rem 1.6rem;
+}
+
+.status-card {
+  max-width: 460px;
+  padding: 1.8rem 1.9rem;
+  text-align: center;
+  width: 100%;
+}
+
+.status-card__code,
+.status-card__eyebrow {
+  color: vars.$primary;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.status-card__code {
+  font-size: 2.4rem;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.status-card__title {
+  color: vars.$body-color;
+  font-size: 1.55rem;
+  margin: 0 0 0.55rem;
+}
+
+.status-card__text {
+  color: vars.$text-muted;
+  font-size: 0.98rem;
+  margin: 0 0 1.25rem;
+}
+
+@media (max-width: 767px) {
+  .app-page__header {
+    min-height: 0;
+    padding: 1rem 1.05rem;
+  }
+
+  .app-page__intro,
+  .app-page__aside {
+    justify-content: flex-start;
+  }
+
+  .app-page__aside {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .app-page__actions,
+  .app-page__badges {
+    justify-content: flex-start;
+  }
+
+  .auth-card .card-body,
+  .status-card {
+    padding-left: 1.2rem;
+    padding-right: 1.2rem;
+  }
+}

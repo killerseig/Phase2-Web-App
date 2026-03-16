@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
 import StatusBadge from '@/components/admin/StatusBadge.vue'
@@ -475,12 +476,9 @@ onUnmounted(() => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4 wide-container-1200">
+  <div class="app-page">
     <!-- Header -->
-    <div class="mb-4">
-      <h2 class="h3 mb-1">Jobs</h2>
-      <p class="text-muted small mb-0">Create and manage jobs</p>
-    </div>
+    <AppPageHeader eyebrow="Admin Panel" title="Jobs" subtitle="Create, edit, archive, and export job records." />
 
     <BaseAccordionCard
       v-model:open="showJobForm"
@@ -554,7 +552,7 @@ onUnmounted(() => {
     </BaseAccordionCard>
 
     <!-- Office Exports -->
-    <div class="card mb-4">
+    <div class="card mb-4 app-toolbar-card">
       <div class="card-body d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
         <div>
           <h5 class="mb-1">Office Export</h5>
@@ -817,7 +815,7 @@ onUnmounted(() => {
 
             <template #timecards="{ row }">
               <span
-                :class="['badge', row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger']"
+                :class="['badge', 'app-badge-pill', 'app-badge-pill--sm', row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger']"
                 :title="`Timecards for week ${currentWeekLabel}: ${row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
               >
                 {{ row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'Submitted this week' : 'Not submitted this week' }}
@@ -873,10 +871,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-.wide-container-1200 {
-  max-width: 1200px;
-}
-
 :deep(.jobs-sheet-table thead th) {
   white-space: nowrap;
   font-size: 0.75rem;

@@ -28,7 +28,7 @@ service cloud.firestore {
     }
 
     function roleCanUseApp() {
-      return userRole() in ['admin', 'controller', 'employee', 'shop', 'foreman'];
+      return userRole() in ['admin', 'controller', 'foreman'];
     }
 
     function activeAppUser() {
@@ -58,8 +58,6 @@ service cloud.firestore {
     function hasJobReadAccess(jobId) {
       return activeAppUser() && (
         isAdmin() ||
-        userRole() == 'employee' ||
-        userRole() == 'shop' ||
         (userRole() == 'foreman' && userAssignedJobs().hasAny([jobId]))
       );
     }
@@ -67,8 +65,6 @@ service cloud.firestore {
     function hasJobWriteAccess(jobId) {
       return activeAppUser() && (
         isAdmin() ||
-        userRole() == 'employee' ||
-        userRole() == 'shop' ||
         (userRole() == 'foreman' && userAssignedJobs().hasAny([jobId]))
       );
     }
@@ -78,6 +74,24 @@ service cloud.firestore {
              request.resource.data.role == resource.data.role &&
              request.resource.data.active == resource.data.active &&
              request.resource.data.assignedJobIds == resource.data.assignedJobIds;
+    }
+
+    function foremanCanMarkTimecardsSent(jobId) {
+      return isForemanAssigned(jobId) &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly([
+               'timecardStatus',
+               'timecardSubmittedAt',
+               'timecardPeriodEndDate',
+               'timecardLastSentWeekEnding'
+             ]) &&
+             request.resource.data.timecardStatus == 'submitted' &&
+             request.resource.data.timecardSubmittedAt != null &&
+             request.resource.data.timecardPeriodEndDate == request.resource.data.timecardLastSentWeekEnding;
+    }
+
+    function foremanCanUpdateDailyLogRecipients(jobId) {
+      return isForemanAssigned(jobId) &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly(['dailyLogRecipients']);
     }
 
     function isDraft() {
@@ -106,7 +120,10 @@ service cloud.firestore {
     /* ---------------- jobs ---------------- */
     match /jobs/{jobId} {
       allow read: if hasJobReadAccess(jobId) || isController();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+                    foremanCanMarkTimecardsSent(jobId) ||
+                    foremanCanUpdateDailyLogRecipients(jobId);
 
       /* -------- job roster (employees) -------- */
       match /roster/{employeeId} {
@@ -127,7 +144,7 @@ service cloud.firestore {
         }
 
         allow read: if hasJobReadAccess(jobId) &&
-                     (resource.data.status == 'submitted' || isOwnerOfDoc() || isAdmin());
+                     (isAdmin() || isOwnerOfDoc());
         allow create: if hasJobWriteAccess(jobId) &&
                       request.resource.data.uid == request.auth.uid &&
                       request.resource.data.status == 'draft' &&
@@ -139,7 +156,10 @@ service cloud.firestore {
                        request.resource.data.uid == resource.data.uid &&
                        request.resource.data.jobId == resource.data.jobId &&
                        (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
-        allow delete: if isAdmin();
+        allow delete: if isAdmin() ||
+                      (hasJobWriteAccess(jobId) &&
+                       isOwnerOfDoc() &&
+                       resource.data.status == 'draft');
       }
 
       /* -------- job timecards -------- */
@@ -169,9 +189,9 @@ service cloud.firestore {
                        request.resource.data.jobId == jobId);
         allow update: if isAdmin() ||
                       (isController() &&
-                       resource.data.status == 'draft' &&
                        fieldsUnchanged() &&
-                       (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted')) ||
+                       request.resource.data.status == resource.data.status &&
+                       request.resource.data.submittedAt == resource.data.submittedAt) ||
                       (hasJobWriteAccess(jobId) &&
                        isOwnerOfDoc() &&
                        resource.data.status == 'draft' &&

@@ -269,7 +269,7 @@ function runAccordionLeave(el: Element) {
       >
         <span class="category-label" :class="{ 'is-archived': isArchived }">
           {{ category.name }}
-          <span v-if="isArchived" class="badge bg-secondary bg-opacity-75 ms-2 archived-badge">archived</span>
+          <span v-if="isArchived" class="badge app-badge-pill app-badge-pill--sm bg-secondary bg-opacity-75 ms-2">archived</span>
         </span>
       </button>
 
@@ -433,9 +433,9 @@ function runAccordionLeave(el: Element) {
         </template>
         <span v-else class="item-label flex-grow-1" :class="{ 'is-archived': itemArchived }">
           {{ item.description }}
-          <span v-if="itemArchived" class="badge bg-secondary bg-opacity-75 ms-2 archived-badge">archived</span>
-          <span v-if="item.sku" class="badge bg-info bg-opacity-75 ms-2 item-meta-badge">{{ item.sku }}</span>
-          <span v-if="item.price" class="badge bg-success bg-opacity-75 ms-1 item-meta-badge">${{ item.price.toFixed(2) }}</span>
+          <span v-if="itemArchived" class="badge app-badge-pill app-badge-pill--sm bg-secondary bg-opacity-75 ms-2">archived</span>
+          <span v-if="item.sku" class="badge app-badge-pill app-badge-pill--sm bg-info bg-opacity-75 ms-2">{{ item.sku }}</span>
+          <span v-if="item.price" class="badge app-badge-pill app-badge-pill--sm bg-success bg-opacity-75 ms-1">${{ item.price.toFixed(2) }}</span>
         </span>
       </button>
 
@@ -630,14 +630,6 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
 .category-label.is-archived,
 .item-label.is-archived {
   opacity: 0.5;
-}
-
-.archived-badge {
-  font-size: 0.65rem;
-}
-
-.item-meta-badge {
-  font-size: 0.85rem;
 }
 
 .item-edit-fields {

@@ -4,7 +4,7 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import SideNav from '@/components/layout/SideNav.vue'
 import { ROUTES } from '@/constants/app'
 
-let mockRole = 'shop'
+let mockRole = 'foreman'
 const mockRoute = reactive({
   params: {} as Record<string, string>,
   path: ROUTES.DASHBOARD,
@@ -51,7 +51,7 @@ const mountSideNav = () =>
 
 describe('SideNav component', () => {
   beforeEach(() => {
-    mockRole = 'shop'
+    mockRole = 'foreman'
     mockRoute.path = ROUTES.DASHBOARD
     mockRoute.params = {}
     mockAppStore.currentJobId = null
@@ -69,7 +69,7 @@ describe('SideNav component', () => {
   })
 
   it('hides the admin section when the role has no admin nav entries', () => {
-    mockRole = 'shop'
+    mockRole = 'foreman'
     const wrapper = mountSideNav()
     expect(wrapper.text()).not.toContain('Admin')
   })

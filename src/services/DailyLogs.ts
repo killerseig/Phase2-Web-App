@@ -15,8 +15,12 @@ import {
   where,
   type Unsubscribe,
   type DocumentData,
+  type QueryConstraint,
 } from 'firebase/firestore'
+import { getActivePinia } from 'pinia'
+import { ROLES } from '@/constants/app'
 import type { Attachment, IndoorClimateReading, ManpowerLine } from '@/types/documents'
+import { useAuthStore } from '@/stores/auth'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { jobCollectionPath, jobDocumentPath } from './servicePaths'
 import { normalizeError } from './serviceUtils'
@@ -82,6 +86,31 @@ export type DailyLogDraftInput = Omit<
   DailyLog,
   'id' | 'uid' | 'jobId' | 'status' | 'logDate' | 'createdAt' | 'updatedAt' | 'submittedAt'
 >
+
+function isAdminViewer(): boolean {
+  const pinia = getActivePinia()
+  if (!pinia) return false
+  return useAuthStore(pinia).role === ROLES.ADMIN
+}
+
+function createDailyLogQuery(jobId: string, constraints: QueryConstraint[]) {
+  return query(collection(db, ...jobCollectionPath(jobId, 'dailyLogs')), ...constraints)
+}
+
+function getVisibleDailyLogQueries(jobId: string, uid: string, constraints: QueryConstraint[] = []) {
+  const submittedConstraints: QueryConstraint[] = [...constraints, where('status', '==', 'submitted')]
+  const draftConstraints: QueryConstraint[] = [...constraints, where('status', '==', 'draft')]
+
+  if (!isAdminViewer()) {
+    submittedConstraints.push(where('uid', '==', uid))
+    draftConstraints.push(where('uid', '==', uid))
+  }
+
+  return {
+    submittedQuery: createDailyLogQuery(jobId, submittedConstraints),
+    draftQuery: createDailyLogQuery(jobId, draftConstraints),
+  }
+}
 
 function normalize(id: string, data: DocumentData): DailyLog {
   return {
@@ -152,23 +181,11 @@ export async function listAllDailyLogs(jobId: string, max = 25): Promise<DailyLo
   try {
     assertJobAccess(jobId)
     const u = requireUser()
-
-    // Get all submitted logs (visible to everyone)
-    const submittedQuery = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-      where('status', '==', 'submitted')
-    )
-
-    // Get user's own draft logs
-    const myDraftsQuery = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-      where('uid', '==', u.uid),
-      where('status', '==', 'draft')
-    )
+    const { submittedQuery, draftQuery } = getVisibleDailyLogQueries(jobId, u.uid)
 
     const [submittedSnap, myDraftsSnap] = await Promise.all([
       getDocs(submittedQuery),
-      getDocs(myDraftsQuery)
+      getDocs(draftQuery)
     ])
 
     // Combine and deduplicate by ID, then sort by date descending
@@ -188,23 +205,13 @@ export async function listDailyLogsForDate(jobId: string, logDate: string): Prom
   try {
     assertJobAccess(jobId)
     const u = requireUser()
-
-    const submittedQuery = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
+    const { submittedQuery, draftQuery } = getVisibleDailyLogQueries(jobId, u.uid, [
       where('logDate', '==', logDate),
-      where('status', '==', 'submitted')
-    )
-
-    const myDraftsQuery = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-      where('logDate', '==', logDate),
-      where('status', '==', 'draft'),
-      where('uid', '==', u.uid)
-    )
+    ])
 
     const [submittedSnap, draftsSnap] = await Promise.all([
       getDocs(submittedQuery),
-      getDocs(myDraftsQuery)
+      getDocs(draftQuery)
     ])
 
     const logsMap = new Map<string, DailyLog>()
@@ -232,19 +239,9 @@ export function subscribeDailyLogsForDate(
 ): Unsubscribe {
   assertJobAccess(jobId)
   const u = requireUser()
-
-  const submittedQuery = query(
-    collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
+  const { submittedQuery, draftQuery } = getVisibleDailyLogQueries(jobId, u.uid, [
     where('logDate', '==', logDate),
-    where('status', '==', 'submitted')
-  )
-
-  const myDraftsQuery = query(
-    collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-    where('logDate', '==', logDate),
-    where('status', '==', 'draft'),
-    where('uid', '==', u.uid)
-  )
+  ])
 
   const rank = (status: DailyLog['status']) => (status === 'submitted' ? 0 : 1)
   const merged = new Map<string, DailyLog>()
@@ -286,7 +283,7 @@ export function subscribeDailyLogsForDate(
   )
 
   const unsubDrafts = onSnapshot(
-    myDraftsQuery,
+    draftQuery,
     (snap) => {
       syncFromSnapshot(
         snap.docs.map((d) => normalize(d.id, d.data())),
@@ -461,8 +458,8 @@ export async function getDailyLogById(jobId: string, dailyLogId: string): Promis
     
     const log = normalize(snap.id, snap.data())
     
-    // Draft logs are only accessible to their owner
-    if (log.status === 'draft' && log.uid !== u.uid) {
+    // Admins can inspect drafts, foremen can only see their own.
+    if (log.status === 'draft' && !isAdminViewer() && log.uid !== u.uid) {
       throw new Error('Access denied: This is a private draft')
     }
     
@@ -490,8 +487,8 @@ export function subscribeToDailyLog(
       if (!snap.exists()) return
       const log = normalize(snap.id, snap.data())
 
-      // Draft logs are only accessible to their owner
-      if (log.status === 'draft' && log.uid !== u.uid) {
+      // Admins can inspect drafts, foremen can only see their own.
+      if (log.status === 'draft' && !isAdminViewer() && log.uid !== u.uid) {
         onError?.(new Error('Access denied: This is a private draft'))
         return
       }

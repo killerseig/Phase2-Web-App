@@ -65,7 +65,7 @@ const routeConfigs: RouteConfig[] = [
     path: ROUTES.DASHBOARD,
     name: ROUTE_NAMES.DASHBOARD,
     component: () => import('../views/Dashboard.vue'),
-    roles: [ROLES.ADMIN, ROLES.CONTROLLER, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
+    roles: [ROLES.ADMIN, ROLES.CONTROLLER, ROLES.FOREMAN],
     title: 'Dashboard',
   },
 
@@ -83,7 +83,7 @@ const routeConfigs: RouteConfig[] = [
     path: `${ROUTES.JOB}/:jobId`,
     name: ROUTE_NAMES.JOB_HOME,
     component: () => import('../views/JobHome.vue'),
-    roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
+    roles: [ROLES.ADMIN, ROLES.FOREMAN],
     title: 'Job Home',
   },
 
@@ -92,21 +92,21 @@ const routeConfigs: RouteConfig[] = [
     path: `${ROUTES.JOB}/:jobId/daily-logs`,
     name: ROUTE_NAMES.JOB_DAILY_LOGS,
     component: () => import('../views/DailyLogs.vue'),
-    roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN],
+    roles: [ROLES.ADMIN, ROLES.FOREMAN],
     title: 'Daily Logs',
   },
   {
     path: `${ROUTES.JOB}/:jobId/timecards`,
     name: ROUTE_NAMES.JOB_TIMECARDS,
     component: () => import('../views/Timecards.vue'),
-    roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN],
+    roles: [ROLES.ADMIN, ROLES.FOREMAN],
     title: 'Timecards',
   },
   {
     path: `${ROUTES.JOB}/:jobId/shop-orders`,
     name: ROUTE_NAMES.JOB_SHOP_ORDERS,
     component: () => import('../views/ShopOrders.vue'),
-    roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN],
+    roles: [ROLES.ADMIN, ROLES.FOREMAN],
     title: 'Shop Orders',
   },
 

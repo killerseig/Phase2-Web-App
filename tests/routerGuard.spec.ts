@@ -94,7 +94,7 @@ describe('router navigation guard', () => {
   })
 
   it('blocks roles not in the allowed list', async () => {
-    mockAuth.role = ROLES.EMPLOYEE
+    mockAuth.role = ROLES.FOREMAN
     const result = await runNavigationGuard({
       meta: { roles: [ROLES.ADMIN] },
       params: {},

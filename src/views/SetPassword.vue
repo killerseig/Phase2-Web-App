@@ -133,8 +133,8 @@ const toggleConfirmPasswordVisibility = () => {
 <template>
   <Toast ref="toastRef" />
 
-  <div class="container d-flex align-items-center justify-content-center set-password-shell">
-    <div class="card w-100 set-password-card">
+  <div class="auth-shell">
+    <div class="card auth-card auth-card--narrow set-password-card">
       <div class="card-body">
         <!-- Loading state -->
         <div v-if="verifying" class="text-center py-5">
@@ -156,7 +156,8 @@ const toggleConfirmPasswordVisibility = () => {
 
         <!-- Form state -->
         <div v-else>
-          <h4 class="card-title mb-1">Set Your Password</h4>
+          <div class="app-page__eyebrow">Phase 2</div>
+          <h1 class="card-title h3 mb-1">Set Your Password</h1>
           <p class="text-muted small mb-4">Create a password for your new Phase 2 account</p>
 
           <div class="mb-3">
@@ -252,13 +253,8 @@ const toggleConfirmPasswordVisibility = () => {
   background-color: $surface-2;
 }
 
-.set-password-shell {
-  min-height: 100vh;
-  max-width: 420px;
-}
-
 .set-password-card {
-  margin-top: -100px;
+  width: 100%;
 }
 
 .invalid-link-icon {

@@ -67,6 +67,47 @@ function normalizeRecipients(...groups) {
         .filter(Boolean);
     return Array.from(new Set(cleaned));
 }
+function getAssignedJobIds(user) {
+    if (!Array.isArray(user?.assignedJobIds))
+        return [];
+    return user.assignedJobIds
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean);
+}
+function assertActiveRoleUser(user, allowedRoles, errorMessage) {
+    if (!user) {
+        throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.USER_PROFILE_NOT_FOUND);
+    }
+    const role = String(user?.role || 'none').trim().toLowerCase();
+    if (user?.active !== true) {
+        throw new https_2.HttpsError('permission-denied', 'Your account is inactive');
+    }
+    if (!allowedRoles.includes(role)) {
+        throw new https_2.HttpsError('permission-denied', errorMessage);
+    }
+    return {
+        ...user,
+        role,
+        assignedJobIds: getAssignedJobIds(user),
+    };
+}
+function assertAdminOrAssignedForeman(user, jobId, errorMessage) {
+    const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman'], errorMessage);
+    if (authorizedUser.role === 'admin')
+        return authorizedUser;
+    if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
+        throw new https_2.HttpsError('permission-denied', errorMessage);
+    }
+    return authorizedUser;
+}
+async function getJobDailyLogRecipients(jobId) {
+    const jobSnap = await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).get();
+    const data = jobSnap.data();
+    return Array.isArray(data?.dailyLogRecipients)
+        ? data.dailyLogRecipients.filter((value) => typeof value === 'string')
+        : [];
+}
 function formatEmailDate(value) {
     try {
         if (!value)
@@ -617,19 +658,17 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
-    const { jobId, dailyLogId, recipients: requestRecipients } = request.data;
+    const callerUid = request.auth.uid;
+    const { jobId, dailyLogId } = request.data;
     if (!jobId) {
         throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
     }
     if (!dailyLogId) {
         throw new Error(constants_1.ERROR_MESSAGES.DAILY_LOG_ID_REQUIRED);
     }
-    const settings = await (0, firestoreService_1.getEmailSettings)();
-    const recipients = normalizeRecipients(settings.dailyLogSubmitRecipients, requestRecipients);
-    if (!recipients || recipients.length === 0) {
-        throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
-    }
     try {
+        const user = await (0, firestoreService_1.getUserProfile)(callerUid);
+        const authorizedUser = assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can send daily log emails');
         if (!(0, emailService_1.isEmailEnabled)()) {
             console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.');
             return { success: true, message: 'Email sending disabled. Skipped.' };
@@ -637,6 +676,17 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
         const log = await (0, firestoreService_1.getDailyLog)(jobId, dailyLogId);
         if (!log) {
             throw new Error(constants_1.ERROR_MESSAGES.DAILY_LOG_NOT_FOUND);
+        }
+        if (String(log?.status || '').trim().toLowerCase() !== 'submitted') {
+            throw new https_2.HttpsError('failed-precondition', 'Only submitted daily logs can be emailed');
+        }
+        if (authorizedUser.role === 'foreman' && String(log?.uid || '').trim() !== callerUid) {
+            throw new https_2.HttpsError('permission-denied', 'Foremen can only email their own daily logs');
+        }
+        const settings = await (0, firestoreService_1.getEmailSettings)();
+        const recipients = normalizeRecipients(settings.dailyLogSubmitRecipients, await getJobDailyLogRecipients(jobId));
+        if (!recipients.length) {
+            throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
         const job = await (0, firestoreService_1.getJobDetails)(log?.jobId || '');
         const emailHtml = (0, emailService_1.buildDailyLogEmail)(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log);
@@ -652,7 +702,9 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     }
     catch (error) {
         console.error('Error sending daily log email:', error);
-        throw new Error(error.message);
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to send daily log email');
     }
 });
 /**
@@ -662,7 +714,8 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
-    const { jobId, timecardIds, weekStart, recipients: requestRecipients } = request.data;
+    const callerUid = request.auth.uid;
+    const { jobId, timecardIds, weekStart } = request.data;
     if (!jobId) {
         throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
     }
@@ -672,15 +725,17 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     if (!weekStart) {
         throw new Error(constants_1.ERROR_MESSAGES.WEEK_START_REQUIRED);
     }
-    const settings = await (0, firestoreService_1.getEmailSettings)();
-    const recipients = normalizeRecipients(settings.timecardSubmitRecipients, requestRecipients);
-    if (!recipients || recipients.length === 0) {
-        throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
-    }
     try {
+        const user = await (0, firestoreService_1.getUserProfile)(callerUid);
+        const authorizedUser = assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can send timecard emails');
         if (!(0, emailService_1.isEmailEnabled)()) {
             console.log('[sendTimecardEmail] Email sending disabled. Skipping send.');
             return { success: true, message: 'Email sending disabled. Skipped.' };
+        }
+        const settings = await (0, firestoreService_1.getEmailSettings)();
+        const recipients = normalizeRecipients(settings.timecardSubmitRecipients);
+        if (!recipients.length) {
+            throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
         // Fetch all timecards
         const timecards = [];
@@ -708,6 +763,16 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
                 availableSample: availableIds.slice(0, 25),
             });
             throw new Error(`${constants_1.ERROR_MESSAGES.TIMECARD_NOT_FOUND}: ${missingIds.join(', ') || 'none found'}`);
+        }
+        if (authorizedUser.role === 'foreman') {
+            const unauthorizedTimecard = timecards.find((timecard) => (String(timecard?.createdByUid || '').trim() !== callerUid));
+            if (unauthorizedTimecard) {
+                throw new https_2.HttpsError('permission-denied', 'Foremen can only email their own timecards');
+            }
+        }
+        const draftTimecard = timecards.find((timecard) => String(timecard?.status || '').trim().toLowerCase() !== 'submitted');
+        if (draftTimecard) {
+            throw new https_2.HttpsError('failed-precondition', 'Only submitted timecards can be emailed');
         }
         const normalizedTimecards = timecards.map(normalizeTimecardForEmail);
         const job = await (0, firestoreService_1.getJobDetails)(jobId);
@@ -753,7 +818,9 @@ exports.sendTimecardEmail = (0, https_1.onCall)({ secrets: [graphClientId, graph
     }
     catch (error) {
         console.error('Error sending timecard email:', error);
-        throw new Error(error.message);
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to send timecard email');
     }
 });
 async function listSubmittedTimecardsForJobWeek(jobId, weekStart) {
@@ -1082,12 +1149,7 @@ exports.listTimecardsForWeek = (0, https_1.onCall)(async (request) => {
         throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
     const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
-    if (!user) {
-        throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.USER_PROFILE_NOT_FOUND);
-    }
-    if (user.role !== 'admin' && user.role !== 'controller') {
-        throw new https_2.HttpsError('permission-denied', 'Only admins or controllers can perform this action');
-    }
+    assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action');
     const filters = parseControllerTimecardFilters(request.data);
     try {
         const result = await queryControllerTimecards(filters);
@@ -1131,12 +1193,7 @@ exports.downloadTimecardsForWeek = (0, https_1.onCall)(async (request) => {
         throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
     const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
-    if (!user) {
-        throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.USER_PROFILE_NOT_FOUND);
-    }
-    if (user.role !== 'admin' && user.role !== 'controller') {
-        throw new https_2.HttpsError('permission-denied', 'Only admins or controllers can perform this action');
-    }
+    assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action');
     const filters = parseControllerTimecardFilters(request.data);
     const format = String(request.data?.format || '').trim().toLowerCase();
     if (format !== 'csv' && format !== 'pdf') {
@@ -1592,22 +1649,24 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
-    const { jobId, shopOrderId, recipients: requestRecipients } = request.data;
+    const { jobId, shopOrderId } = request.data;
     if (!jobId) {
         throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
     }
     if (!shopOrderId) {
         throw new Error(constants_1.ERROR_MESSAGES.SHOP_ORDER_ID_REQUIRED);
     }
-    const settings = await (0, firestoreService_1.getEmailSettings)();
-    const recipients = normalizeRecipients(settings.shopOrderSubmitRecipients, requestRecipients);
-    if (!recipients || recipients.length === 0) {
-        throw new Error(constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
-    }
     try {
+        const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
+        assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can send shop order emails');
         if (!(0, emailService_1.isEmailEnabled)()) {
             console.log('[sendShopOrderEmail] Email sending disabled. Skipping send.');
             return { success: true, message: 'Email sending disabled. Skipped.' };
+        }
+        const settings = await (0, firestoreService_1.getEmailSettings)();
+        const recipients = normalizeRecipients(settings.shopOrderSubmitRecipients);
+        if (!recipients.length) {
+            throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
         let order = null;
         // Primary: job-scoped collection (jobs/{jobId}/shop_orders/{shopOrderId})
@@ -1622,7 +1681,11 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
         if (!order) {
             throw new Error(constants_1.ERROR_MESSAGES.SHOP_ORDER_NOT_FOUND);
         }
-        const job = await (0, firestoreService_1.getJobDetails)(order?.jobId || jobId);
+        const resolvedJobId = String(order?.jobId || jobId).trim();
+        if (resolvedJobId && resolvedJobId !== String(jobId).trim()) {
+            throw new https_2.HttpsError('permission-denied', 'Shop order does not belong to the requested job');
+        }
+        const job = await (0, firestoreService_1.getJobDetails)(resolvedJobId || jobId);
         const emailHtml = (0, emailService_1.buildShopOrderEmail)(order);
         const orderDateLabel = formatEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
         await (0, emailService_1.sendEmail)({
@@ -1635,7 +1698,9 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
     }
     catch (error) {
         console.error('Error sending shop order email:', error);
-        throw new Error(error.message);
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to send shop order email');
     }
 });
 /**

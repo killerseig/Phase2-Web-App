@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import ShopCatalogTreeNode from '@/components/admin/ShopCatalogTreeNode.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -442,21 +443,22 @@ onUnmounted(() => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4 wide-container-1200">
+  <div class="app-page">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <div>
-        <h2 class="h3 mb-1">{{ jobName }} - Shop Orders</h2>
-        <div class="text-muted small" v-if="jobCode">Job Number: {{ jobCode }}</div>
-      </div>
-      <button @click="createDraft" class="btn btn-primary"><i class="bi bi-plus me-2"></i>New Order</button>
-    </div>
+    <AppPageHeader eyebrow="Shop Orders" :title="jobName">
+      <template #meta>
+        <span v-if="jobCode">Job Number: {{ jobCode }}</span>
+      </template>
+      <template #actions>
+        <button @click="createDraft" class="btn btn-primary"><i class="bi bi-plus me-2"></i>New Order</button>
+      </template>
+    </AppPageHeader>
 
     <!-- Error Alert -->
     <div v-if="err" class="alert alert-danger alert-dismissible fade show"><strong>Error:</strong> {{ err }}<button type="button" class="btn-close" @click="err = ''"></button></div>
 
     <!-- Search & Filter -->
-    <div class="card mb-4">
+    <div class="card mb-4 app-toolbar-card">
       <div class="card-body">
         <div class="row g-3">
           <div class="col-md-6">
@@ -481,7 +483,7 @@ onUnmounted(() => {
         <div class="card order-panel">
           <div class="card-header panel-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Orders</h5>
-            <span class="badge rounded-pill text-bg-secondary">{{ filtered.length }}</span>
+            <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">{{ filtered.length }}</span>
           </div>
           <div v-if="loading" class="card-body text-center py-5"><div class="spinner-border spinner-border-sm"></div></div>
           <div v-else-if="!filtered.length" class="card-body text-center text-muted py-5">
@@ -496,7 +498,7 @@ onUnmounted(() => {
                   <div class="small fw-semibold">{{ fmtDate(order.orderDate) }}</div>
                   <small class="order-meta">{{ order.id.slice(0, 8) }}</small>
                 </div>
-                <span :class="`badge rounded-pill ${statusBadgeClass(order.status)}`">{{ statusLabel(order.status) }}</span>
+                <span :class="`badge app-badge-pill app-badge-pill--sm ${statusBadgeClass(order.status)}`">{{ statusLabel(order.status) }}</span>
               </div>
               <div class="small mt-1 order-meta">{{ order.items.length }} item(s)</div>
             </button>
@@ -524,7 +526,7 @@ onUnmounted(() => {
                     <span v-if="sendingEmail" class="spinner-border spinner-border-sm me-1" />
                     <i v-else class="bi bi-envelope me-1"></i>Submit & Email
                   </button>
-                  <span :class="`badge rounded-pill ${statusBadgeClass(selected.status)}`">{{ statusLabel(selected.status) }}</span>
+                  <span :class="`badge app-badge-pill app-badge-pill--sm ${statusBadgeClass(selected.status)}`">{{ statusLabel(selected.status) }}</span>
                 </div>
               </div>
             </div>
@@ -532,7 +534,7 @@ onUnmounted(() => {
               <!-- Items Table -->
               <div v-if="selected.items.length > 0" class="table-responsive mb-3 order-table">
                 <h6 class="mb-2">Order Items</h6>
-                <table class="table table-sm table-dark table-striped table-hover mb-0 align-middle">
+                <table class="table table-sm table-striped table-hover mb-0 align-middle">
                   <thead>
                     <tr>
                       <th class="small fw-semibold">Description</th>
@@ -627,7 +629,7 @@ onUnmounted(() => {
               <div v-else-if="!uncategorizedItems.length && !categoryTree.length" class="alert alert-info">
                 No items match your search.
               </div>
-              <div v-else class="catalog-tree">
+              <div v-else class="app-catalog-tree">
                 <!-- Uncategorized Items (if any) -->
                 <div v-for="itemId of uncategorizedItems" :key="itemId" class="mb-0">
                   <ShopCatalogTreeNode
@@ -698,31 +700,6 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as *;
-.catalog-tree {
-  border: 1px solid $border-color;
-  border-radius: 4px;
-  max-height: 600px;
-  overflow-y: auto;
-  background: $surface;
-}
-
-.catalog-tree::-webkit-scrollbar {
-  width: 8px;
-}
-
-.catalog-tree::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.catalog-tree::-webkit-scrollbar-thumb {
-  background: rgba($primary, 0.35);
-  border-radius: 4px;
-}
-
-.catalog-tree::-webkit-scrollbar-thumb:hover {
-  background: rgba($primary, 0.5);
-}
-
 .order-panel .list-group-item {
   background: $surface;
   color: $body-color;

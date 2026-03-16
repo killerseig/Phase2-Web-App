@@ -56,7 +56,9 @@ const hoursBreakdown = computed(() => calculateRegularAndOvertimeHours(
 
 const jobCount = computed(() => props.timecard.jobs?.length || 1)
 const statusBadgeClass = computed(() => (
-  props.timecard.status === 'submitted' ? 'badge bg-success' : 'badge bg-warning text-dark'
+  props.timecard.status === 'submitted'
+    ? 'badge app-badge-pill app-badge-pill--sm bg-success'
+    : 'badge app-badge-pill app-badge-pill--sm bg-warning text-dark'
 ))
 
 function updateEditField<K extends keyof TimecardEmployeeEditorForm>(
@@ -507,11 +509,6 @@ $timecard-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
 
 .timecard-editor-card :deep(.accordion-card__inner) {
   padding: 0;
-}
-
-.timecard-editor-card :deep(.form-control),
-.timecard-editor-card :deep(textarea.form-control) {
-  border-radius: 0;
 }
 
 .timecard-editor-card :deep(input[type='number']) {

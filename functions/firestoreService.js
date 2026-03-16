@@ -85,6 +85,7 @@ async function getUserProfile(uid) {
         displayName: data?.displayName,
         role: data?.role || 'none',
         active: data?.active ?? true,
+        assignedJobIds: Array.isArray(data?.assignedJobIds) ? data.assignedJobIds : [],
     };
 }
 /**
@@ -107,6 +108,9 @@ async function verifyAdminRole(uid) {
     const user = await getUserProfile(uid);
     if (!user) {
         throw new Error('Your user profile not found');
+    }
+    if (user.active !== true) {
+        throw new Error('Only active admins can perform this action');
     }
     if (user.role !== 'admin') {
         throw new Error('Only admins can perform this action');

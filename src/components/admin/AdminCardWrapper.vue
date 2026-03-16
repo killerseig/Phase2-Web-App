@@ -16,7 +16,7 @@ withDefaults(defineProps<Props>(), {
 </script>
 
 <template>
-  <div class="card">
+  <div class="card app-section-card">
     <!-- Header -->
     <div class="card-header panel-header">
       <h5 class="mb-0">
@@ -46,12 +46,3 @@ withDefaults(defineProps<Props>(), {
     </div>
   </div>
 </template>
-
-<style scoped>
-.card-header h5 {
-  font-style: italic;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-}
-</style>

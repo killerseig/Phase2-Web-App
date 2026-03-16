@@ -84,10 +84,12 @@ const sendReset = async () => {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container auth-container">
-    <div class="mt-5 card">
+  <div class="auth-shell">
+    <div class="card auth-card auth-card--narrow">
       <div class="card-body">
-        <h4 class="mb-3">Sign In</h4>
+        <div class="app-page__eyebrow">Phase 2</div>
+        <h1 class="h3 mb-2">Sign In</h1>
+        <p class="text-muted small mb-4">Access daily logs, timecards, shop orders, and admin tools.</p>
 
         <div class="mb-3">
           <label class="form-label" for="login-email">Email</label>
@@ -180,10 +182,6 @@ const sendReset = async () => {
 
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as vars;
-
-.auth-container {
-  max-width: 420px;
-}
 
 .btn-link {
   color: var(--color-primary, vars.$primary);

@@ -12,7 +12,7 @@
     <div class="p-2 sidebar-header">
       <div class="d-flex align-items-center gap-2 sidebar-header-text">
         <div class="fw-bold fs-5 sidebar-title">Phase 2</div>
-        <span v-if="role" class="badge text-bg-primary text-uppercase small sidebar-role">{{ role }}</span>
+        <span v-if="role" class="badge app-badge-pill app-badge-pill--sm text-bg-primary text-uppercase small sidebar-role">{{ role }}</span>
       </div>
       <div class="d-flex align-items-center gap-1">
         <button
@@ -33,6 +33,7 @@
       <router-link
         :to="{ name: ROUTE_NAMES.DASHBOARD }"
         class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+        active-class="active"
         :title="isSidebarCollapsed ? 'Dashboard' : ''"
       >
         <i class="bi bi-grid-1x2 flex-shrink-0"></i>
@@ -50,6 +51,7 @@
           :key="item.label"
           :to="resolveNavTarget(item)"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+          active-class="active"
           :title="isSidebarCollapsed ? item.label : ''"
         >
           <i :class="['bi', item.icon, 'flex-shrink-0']"></i>
@@ -68,6 +70,7 @@
           :key="item.label"
           :to="item.to"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+          active-class="active"
           :title="isSidebarCollapsed ? item.label : ''"
         >
           <i :class="['bi', item.icon, 'flex-shrink-0']"></i>
@@ -86,6 +89,7 @@
           :key="item.label"
           :to="item.to"
           class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+          active-class="active"
           :title="isSidebarCollapsed ? item.label : ''"
         >
           <i :class="['bi', item.icon, 'flex-shrink-0']"></i>

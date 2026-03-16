@@ -46,7 +46,7 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
         <div class="col-12">
           <label class="form-label">Manpower</label>
           <div class="table-responsive">
-            <table class="table table-sm table-dark table-striped table-hover mb-0 manpower-table">
+            <table class="table table-sm table-striped table-hover mb-0 manpower-table">
               <thead>
                 <tr>
                   <th class="small fw-semibold col-trade">Trade</th>
@@ -91,7 +91,7 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
                         :disabled="!canEdit"
                         @input="emit('update-field', { index: idx, field: 'areas', value: ($event.target as HTMLInputElement).value })"
                       />
-                      <span v-if="isAdminLine(ln)" class="badge bg-info flex-shrink-0 badge-admin">admin</span>
+                      <span v-if="isAdminLine(ln)" class="badge app-badge-pill app-badge-pill--sm bg-info flex-shrink-0">admin</span>
                     </div>
                   </td>
                   <td class="p-2 text-center">

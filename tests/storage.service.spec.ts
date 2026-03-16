@@ -41,7 +41,7 @@ describe('Storage service', () => {
     const file = { name: 'bad name @#$ .png' } as unknown as File
     getDownloadURLMock.mockResolvedValue('https://cdn/test.png')
 
-    const attachment = await uploadAttachment(file, 'log-1', 'photo')
+    const attachment = await uploadAttachment(file, 'job-1', 'log-1', 'photo')
 
     const expectedPath = 'daily-logs/log-1/1707523200000-bad_name_____.png'
     expect(refMock).toHaveBeenCalledWith(expect.anything(), expectedPath)
@@ -50,6 +50,7 @@ describe('Storage service', () => {
     expect(uploadCall).toBeDefined()
     const metadata = uploadCall![2]
     expect(metadata.customMetadata).toMatchObject({
+      jobId: 'job-1',
       type: 'photo',
       uploadedBy: 'u1',
       uploadedAt: new Date().toISOString(),

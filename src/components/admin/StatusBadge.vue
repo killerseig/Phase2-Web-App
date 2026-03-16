@@ -33,7 +33,7 @@ const statusInfo = computed(() => {
 </script>
 
 <template>
-  <span :class="`badge ${statusInfo.class}`">
+  <span :class="`badge app-badge-pill app-badge-pill--sm ${statusInfo.class}`">
     {{ statusInfo.label }}
   </span>
 </template>

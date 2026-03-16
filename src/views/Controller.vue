@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import TimecardEditorCard from '@/components/timecards/TimecardEditorCard.vue'
 import { ROLES } from '@/constants/app'
@@ -790,6 +791,10 @@ async function handleDownload(format: 'csv' | 'pdf') {
 }
 
 function isTimecardLocked(timecard: TimecardModel): boolean {
+  return timecard.status === 'submitted' && !isAdmin.value && auth.role !== ROLES.CONTROLLER
+}
+
+function isTimecardDeleteDisabled(timecard: TimecardModel): boolean {
   return timecard.status === 'submitted' && !isAdmin.value
 }
 
@@ -1013,14 +1018,10 @@ onBeforeUnmount(() => {
 <template>
   <Toast ref="toastRef" />
 
-  <div class="container-fluid py-4 wide-container">
-    <div class="controller-hero mb-4">
-      <div class="text-muted small mb-1">Controller Workspace</div>
-      <h2 class="h3 mb-1">Timecard Search, Review & Edits</h2>
-      <p class="mb-0 text-muted small">Signed in as {{ displayName }}</p>
-    </div>
+  <div class="app-page app-page--wide">
+    <AppPageHeader eyebrow="Controller Workspace" title="Timecard Search, Review & Edits" :subtitle="`Signed in as ${displayName}`" />
 
-    <div class="card controller-card controller-filter-card mb-4">
+    <div class="card controller-card controller-filter-card app-toolbar-card mb-4">
       <div class="card-header panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
           <div class="text-muted small mb-1">Search Filters</div>
@@ -1256,7 +1257,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="card controller-card">
+    <div class="card controller-card app-section-card">
       <div class="card-header panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
           <div class="text-muted small mb-1">Controller Review</div>
@@ -1325,8 +1326,8 @@ onBeforeUnmount(() => {
 
               <div class="controller-job-group__summary">
                 <div class="small text-muted">
-                  <span class="badge bg-warning text-dark">{{ group.draftCount }} Draft</span>
-                  <span class="badge bg-success ms-2">{{ group.submittedCount }} Submitted</span>
+                  <span class="badge app-badge-pill app-badge-pill--sm bg-warning text-dark">{{ group.draftCount }} Draft</span>
+                  <span class="badge app-badge-pill app-badge-pill--sm bg-success ms-2">{{ group.submittedCount }} Submitted</span>
                 </div>
                 <div class="small text-muted mt-2">
                   {{ formatMetric(group.totalHours) }} hrs | {{ formatMetric(group.totalProduction) }} prod | {{ formatCurrency(group.totalLine) }}
@@ -1345,8 +1346,8 @@ onBeforeUnmount(() => {
 
                     <div class="small text-muted text-end">
                       <div>
-                        <span class="badge bg-warning text-dark">{{ creatorGroup.draftCount }} Draft</span>
-                        <span class="badge bg-success ms-2">{{ creatorGroup.submittedCount }} Submitted</span>
+                        <span class="badge app-badge-pill app-badge-pill--sm bg-warning text-dark">{{ creatorGroup.draftCount }} Draft</span>
+                        <span class="badge app-badge-pill app-badge-pill--sm bg-success ms-2">{{ creatorGroup.submittedCount }} Submitted</span>
                       </div>
                       <div class="mt-1">
                         {{ creatorGroup.totalCount }} timecard{{ creatorGroup.totalCount === 1 ? '' : 's' }}
@@ -1366,7 +1367,7 @@ onBeforeUnmount(() => {
                     :job-fields-locked="isTimecardLocked(entry.timecard)"
                     :notes-locked="isTimecardLocked(entry.timecard)"
                     :edit-disabled="isTimecardLocked(entry.timecard)"
-                    :delete-disabled="isTimecardLocked(entry.timecard)"
+                    :delete-disabled="isTimecardDeleteDisabled(entry.timecard)"
                     :mileage-disabled="isTimecardLocked(entry.timecard)"
                     @update:open="(open) => handleTimecardToggle(entry.key, open)"
                     @toggle-edit="toggleEditingEmployee(entry)"
@@ -1383,7 +1384,7 @@ onBeforeUnmount(() => {
                     @update-notes="(value) => handleNotesInput(entry.timecard, value)"
                   >
                     <template #badges>
-                      <span class="badge text-bg-secondary controller-week-badge">{{ formatTimecardWeek(entry.timecard) }}</span>
+                      <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary controller-week-badge">{{ formatTimecardWeek(entry.timecard) }}</span>
                     </template>
                   </TimecardEditorCard>
                 </section>
@@ -1401,15 +1402,6 @@ onBeforeUnmount(() => {
 
 $controller-group-border: mix($surface-3, $primary, 82%);
 $controller-divider: rgba($primary, 0.18);
-
-.wide-container {
-  max-width: 1400px;
-}
-
-.controller-hero {
-  border-bottom: 1px solid $border-color;
-  padding-bottom: 0.75rem;
-}
 
 .controller-card {
   background: $surface-2;

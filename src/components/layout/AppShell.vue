@@ -18,7 +18,7 @@
     <!-- Main content area: account for fixed sidebar with dynamic margin -->
     <div class="flex-grow-1 d-flex flex-column main-pane">
       <TopNav />
-      <main class="container-fluid py-4 overflow-auto">
+      <main class="container-fluid py-4 app-shell__content">
         <slot />
       </main>
     </div>
@@ -65,7 +65,12 @@ const app = useAppStore()
 }
 
 .main-pane > main {
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .sidebar-backdrop {

@@ -563,7 +563,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toastRe
           continue
         }
 
-        const att = await uploadPhotoToStorage(file, currentId.value, type)
+        const att = await uploadPhotoToStorage(file, jobId.value, currentId.value, type)
         if (!form.value.attachments) form.value.attachments = []
         form.value.attachments.push(att)
         await updateDailyLog(jobId.value, currentId.value, { ...form.value })

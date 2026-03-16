@@ -65,6 +65,53 @@ function normalizeRecipients(...groups: any[]): string[] {
   return Array.from(new Set(cleaned))
 }
 
+function getAssignedJobIds(user: any): string[] {
+  if (!Array.isArray(user?.assignedJobIds)) return []
+  return user.assignedJobIds
+    .filter((value: unknown): value is string => typeof value === 'string')
+    .map((value: string) => value.trim())
+    .filter(Boolean)
+}
+
+function assertActiveRoleUser(user: any, allowedRoles: string[], errorMessage: string) {
+  if (!user) {
+    throw new HttpsError('failed-precondition', ERROR_MESSAGES.USER_PROFILE_NOT_FOUND)
+  }
+
+  const role = String(user?.role || 'none').trim().toLowerCase()
+  if (user?.active !== true) {
+    throw new HttpsError('permission-denied', 'Your account is inactive')
+  }
+  if (!allowedRoles.includes(role)) {
+    throw new HttpsError('permission-denied', errorMessage)
+  }
+
+  return {
+    ...user,
+    role,
+    assignedJobIds: getAssignedJobIds(user),
+  }
+}
+
+function assertAdminOrAssignedForeman(user: any, jobId: string, errorMessage: string) {
+  const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman'], errorMessage)
+  if (authorizedUser.role === 'admin') return authorizedUser
+
+  if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
+    throw new HttpsError('permission-denied', errorMessage)
+  }
+
+  return authorizedUser
+}
+
+async function getJobDailyLogRecipients(jobId: string): Promise<string[]> {
+  const jobSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).get()
+  const data = jobSnap.data()
+  return Array.isArray(data?.dailyLogRecipients)
+    ? data.dailyLogRecipients.filter((value: unknown): value is string => typeof value === 'string')
+    : []
+}
+
 function formatEmailDate(value: any): string {
   try {
     if (!value) return 'N/A'
@@ -678,8 +725,9 @@ export const sendDailyLogEmail = onCall({ secrets: [graphClientId, graphTenantId
   if (!request.auth) {
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
+  const callerUid = request.auth.uid
 
-  const { jobId, dailyLogId, recipients: requestRecipients } = request.data
+  const { jobId, dailyLogId } = request.data
 
   if (!jobId) {
     throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
@@ -689,14 +737,14 @@ export const sendDailyLogEmail = onCall({ secrets: [graphClientId, graphTenantId
     throw new Error(ERROR_MESSAGES.DAILY_LOG_ID_REQUIRED)
   }
 
-  const settings = await getEmailSettings()
-  const recipients = normalizeRecipients(settings.dailyLogSubmitRecipients, requestRecipients)
-
-  if (!recipients || recipients.length === 0) {
-    throw new Error(ERROR_MESSAGES.RECIPIENTS_REQUIRED)
-  }
-
   try {
+    const user = await getUserProfile(callerUid)
+    const authorizedUser = assertAdminOrAssignedForeman(
+      user,
+      jobId,
+      'Only admins or assigned foremen can send daily log emails'
+    )
+
     if (!isEmailEnabled()) {
       console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.')
       return { success: true, message: 'Email sending disabled. Skipped.' }
@@ -705,6 +753,22 @@ export const sendDailyLogEmail = onCall({ secrets: [graphClientId, graphTenantId
     const log = await getDailyLog(jobId, dailyLogId)
     if (!log) {
       throw new Error(ERROR_MESSAGES.DAILY_LOG_NOT_FOUND)
+    }
+    if (String(log?.status || '').trim().toLowerCase() !== 'submitted') {
+      throw new HttpsError('failed-precondition', 'Only submitted daily logs can be emailed')
+    }
+    if (authorizedUser.role === 'foreman' && String(log?.uid || '').trim() !== callerUid) {
+      throw new HttpsError('permission-denied', 'Foremen can only email their own daily logs')
+    }
+
+    const settings = await getEmailSettings()
+    const recipients = normalizeRecipients(
+      settings.dailyLogSubmitRecipients,
+      await getJobDailyLogRecipients(jobId)
+    )
+
+    if (!recipients.length) {
+      throw new HttpsError('failed-precondition', ERROR_MESSAGES.RECIPIENTS_REQUIRED)
     }
 
     const job = await getJobDetails(log?.jobId || '')
@@ -722,7 +786,8 @@ export const sendDailyLogEmail = onCall({ secrets: [graphClientId, graphTenantId
     return { success: true, message: 'Email sent successfully' }
   } catch (error: any) {
     console.error('Error sending daily log email:', error)
-    throw new Error(error.message)
+    if (error instanceof HttpsError) throw error
+    throw new HttpsError('internal', error?.message || 'Failed to send daily log email')
   }
 })
 
@@ -733,8 +798,9 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
   if (!request.auth) {
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
+  const callerUid = request.auth.uid
 
-  const { jobId, timecardIds, weekStart, recipients: requestRecipients } = request.data
+  const { jobId, timecardIds, weekStart } = request.data
 
   if (!jobId) {
     throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
@@ -745,17 +811,24 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
   if (!weekStart) {
     throw new Error(ERROR_MESSAGES.WEEK_START_REQUIRED)
   }
-  const settings = await getEmailSettings()
-  const recipients = normalizeRecipients(settings.timecardSubmitRecipients, requestRecipients)
-
-  if (!recipients || recipients.length === 0) {
-    throw new Error(ERROR_MESSAGES.RECIPIENTS_REQUIRED)
-  }
 
   try {
+    const user = await getUserProfile(callerUid)
+    const authorizedUser = assertAdminOrAssignedForeman(
+      user,
+      jobId,
+      'Only admins or assigned foremen can send timecard emails'
+    )
+
     if (!isEmailEnabled()) {
       console.log('[sendTimecardEmail] Email sending disabled. Skipping send.')
       return { success: true, message: 'Email sending disabled. Skipped.' }
+    }
+
+    const settings = await getEmailSettings()
+    const recipients = normalizeRecipients(settings.timecardSubmitRecipients)
+    if (!recipients.length) {
+      throw new HttpsError('failed-precondition', ERROR_MESSAGES.RECIPIENTS_REQUIRED)
     }
 
     // Fetch all timecards
@@ -784,6 +857,20 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
         availableSample: availableIds.slice(0, 25),
       })
       throw new Error(`${ERROR_MESSAGES.TIMECARD_NOT_FOUND}: ${missingIds.join(', ') || 'none found'}`)
+    }
+
+    if (authorizedUser.role === 'foreman') {
+      const unauthorizedTimecard = timecards.find((timecard: any) => (
+        String(timecard?.createdByUid || '').trim() !== callerUid
+      ))
+      if (unauthorizedTimecard) {
+        throw new HttpsError('permission-denied', 'Foremen can only email their own timecards')
+      }
+    }
+
+    const draftTimecard = timecards.find((timecard: any) => String(timecard?.status || '').trim().toLowerCase() !== 'submitted')
+    if (draftTimecard) {
+      throw new HttpsError('failed-precondition', 'Only submitted timecards can be emailed')
     }
 
     const normalizedTimecards = timecards.map(normalizeTimecardForEmail)
@@ -835,7 +922,8 @@ export const sendTimecardEmail = onCall({ secrets: [graphClientId, graphTenantId
     return { success: true, message: 'Email sent successfully' }
   } catch (error: any) {
     console.error('Error sending timecard email:', error)
-    throw new Error(error.message)
+    if (error instanceof HttpsError) throw error
+    throw new HttpsError('internal', error?.message || 'Failed to send timecard email')
   }
 })
 
@@ -1210,12 +1298,7 @@ export const listTimecardsForWeek = onCall(async (request) => {
   }
 
   const user = await getUserProfile(request.auth.uid)
-  if (!user) {
-    throw new HttpsError('failed-precondition', ERROR_MESSAGES.USER_PROFILE_NOT_FOUND)
-  }
-  if (user.role !== 'admin' && user.role !== 'controller') {
-    throw new HttpsError('permission-denied', 'Only admins or controllers can perform this action')
-  }
+  assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action')
 
   const filters = parseControllerTimecardFilters(request.data)
 
@@ -1262,12 +1345,7 @@ export const downloadTimecardsForWeek = onCall(async (request) => {
   }
 
   const user = await getUserProfile(request.auth.uid)
-  if (!user) {
-    throw new HttpsError('failed-precondition', ERROR_MESSAGES.USER_PROFILE_NOT_FOUND)
-  }
-  if (user.role !== 'admin' && user.role !== 'controller') {
-    throw new HttpsError('permission-denied', 'Only admins or controllers can perform this action')
-  }
+  assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action')
 
   const filters = parseControllerTimecardFilters(request.data)
   const format = String(request.data?.format || '').trim().toLowerCase()
@@ -1803,7 +1881,7 @@ export const sendShopOrderEmail = onCall({ secrets: [graphClientId, graphTenantI
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
 
-  const { jobId, shopOrderId, recipients: requestRecipients } = request.data
+  const { jobId, shopOrderId } = request.data
 
   if (!jobId) {
     throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
@@ -1811,17 +1889,24 @@ export const sendShopOrderEmail = onCall({ secrets: [graphClientId, graphTenantI
   if (!shopOrderId) {
     throw new Error(ERROR_MESSAGES.SHOP_ORDER_ID_REQUIRED)
   }
-  const settings = await getEmailSettings()
-  const recipients = normalizeRecipients(settings.shopOrderSubmitRecipients, requestRecipients)
-
-  if (!recipients || recipients.length === 0) {
-    throw new Error(ERROR_MESSAGES.RECIPIENTS_REQUIRED)
-  }
 
   try {
+    const user = await getUserProfile(request.auth.uid)
+    assertAdminOrAssignedForeman(
+      user,
+      jobId,
+      'Only admins or assigned foremen can send shop order emails'
+    )
+
     if (!isEmailEnabled()) {
       console.log('[sendShopOrderEmail] Email sending disabled. Skipping send.')
       return { success: true, message: 'Email sending disabled. Skipped.' }
+    }
+
+    const settings = await getEmailSettings()
+    const recipients = normalizeRecipients(settings.shopOrderSubmitRecipients)
+    if (!recipients.length) {
+      throw new HttpsError('failed-precondition', ERROR_MESSAGES.RECIPIENTS_REQUIRED)
     }
 
     let order: any = null
@@ -1838,8 +1923,12 @@ export const sendShopOrderEmail = onCall({ secrets: [graphClientId, graphTenantI
     if (!order) {
       throw new Error(ERROR_MESSAGES.SHOP_ORDER_NOT_FOUND)
     }
+    const resolvedJobId = String(order?.jobId || jobId).trim()
+    if (resolvedJobId && resolvedJobId !== String(jobId).trim()) {
+      throw new HttpsError('permission-denied', 'Shop order does not belong to the requested job')
+    }
 
-    const job = await getJobDetails(order?.jobId || jobId)
+    const job = await getJobDetails(resolvedJobId || jobId)
 
     const emailHtml = buildShopOrderEmail(order)
 
@@ -1855,7 +1944,8 @@ export const sendShopOrderEmail = onCall({ secrets: [graphClientId, graphTenantI
     return { success: true, message: 'Email sent successfully' }
   } catch (error: any) {
     console.error('Error sending shop order email:', error)
-    throw new Error(error.message)
+    if (error instanceof HttpsError) throw error
+    throw new HttpsError('internal', error?.message || 'Failed to send shop order email')
   }
 })
 

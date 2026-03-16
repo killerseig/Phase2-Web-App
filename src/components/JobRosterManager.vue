@@ -59,7 +59,7 @@ const primaryForeman = computed(() =>
     <!-- Primary Foreman Badge -->
     <div v-if="primaryForeman" class="mb-3">
       <small class="text-muted d-block mb-1">Primary Foreman:</small>
-      <div class="badge bg-success">
+      <div class="badge app-badge-pill app-badge-pill--sm bg-success">
         <i class="bi bi-person-badge me-1"></i>
         {{ primaryForeman.firstName }} {{ primaryForeman.lastName }}
       </div>
@@ -84,7 +84,7 @@ const primaryForeman = computed(() =>
             <div>
               <div class="fw-semibold">
                 {{ emp.firstName }} {{ emp.lastName }}
-                <span v-if="emp.isPrimaryForeman" class="badge bg-success ms-1">Foreman</span>
+                <span v-if="emp.isPrimaryForeman" class="badge app-badge-pill app-badge-pill--sm bg-success ms-1">Foreman</span>
               </div>
               <small class="text-muted d-block">
                 #{{ emp.employeeNumber }} - {{ emp.occupation || 'Unspecified' }}

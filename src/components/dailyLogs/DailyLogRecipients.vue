@@ -60,7 +60,7 @@ const uniqueGlobalRecipients = computed(() =>
             class="list-group-item d-flex justify-content-between align-items-center"
           >
             <small>{{ email }}</small>
-            <span class="badge text-bg-secondary">Global</span>
+            <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">Global</span>
           </div>
         </div>
       </div>

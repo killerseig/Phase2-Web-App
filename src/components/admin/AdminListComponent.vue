@@ -117,7 +117,7 @@ function getCellValue(item: ListItem, key: string) {
 
     <!-- Table -->
     <div v-else class="table-responsive">
-      <table class="table table-sm table-dark table-striped table-hover mb-0">
+      <table class="table table-sm table-striped table-hover mb-0">
         <thead>
           <tr>
             <th
@@ -168,18 +168,9 @@ function getCellValue(item: ListItem, key: string) {
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
 .cursor-pointer {
   cursor: pointer;
   user-select: none;
-}
-
-.table-responsive {
-  border: 1px solid $border-color;
-  border-radius: 8px;
-  background: $surface;
-  box-shadow: $box-shadow-sm;
 }
 
 .actions-col {

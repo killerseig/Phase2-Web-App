@@ -2,10 +2,79 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow authenticated users to upload and read their own daily log photos
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return signedIn()
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+        : null;
+    }
+
+    function userDocExists() {
+      return userDoc() != null && userDoc().data != null;
+    }
+
+    function userRole() {
+      return userDocExists() ? userDoc().data.role : null;
+    }
+
+    function userIsActive() {
+      return userDocExists() && userDoc().data.active == true;
+    }
+
+    function activeAppUser() {
+      return signedIn() &&
+             userDocExists() &&
+             userIsActive() &&
+             userRole() in ['admin', 'controller', 'foreman'];
+    }
+
+    function isAdmin() {
+      return activeAppUser() && userRole() == 'admin';
+    }
+
+    function dailyLogDoc(jobId, logId) {
+      return jobId != null
+        ? firestore.get(/databases/(default)/documents/jobs/$(jobId)/dailyLogs/$(logId))
+        : null;
+    }
+
+    function dailyLogExists(jobId, logId) {
+      return dailyLogDoc(jobId, logId) != null && dailyLogDoc(jobId, logId).data != null;
+    }
+
+    function canAccessDailyLog(jobId, logId) {
+      return activeAppUser() &&
+             dailyLogExists(jobId, logId) &&
+             (isAdmin() || dailyLogDoc(jobId, logId).data.uid == request.auth.uid);
+    }
+
+    function hasLegacyAttachmentAccess() {
+      return activeAppUser() &&
+             (isAdmin() || (resource != null && resource.metadata.uploadedBy == request.auth.uid));
+    }
+
+    function canReadAttachment(logId) {
+      return canAccessDailyLog(resource != null ? resource.metadata.jobId : null, logId) ||
+             hasLegacyAttachmentAccess();
+    }
+
+    function canCreateAttachment(logId) {
+      return request.resource != null &&
+             request.resource.metadata.uploadedBy == request.auth.uid &&
+             canAccessDailyLog(request.resource.metadata.jobId, logId);
+    }
+
+    function canDeleteAttachment(logId) {
+      return request.resource == null && canReadAttachment(logId);
+    }
+
     match /daily-logs/{logId}/{allPaths=**} {
-      // Only signed-in users can read/write
-      allow read, write: if request.auth != null;
+      allow read: if canReadAttachment(logId);
+      allow write: if (resource == null && canCreateAttachment(logId)) ||
+                   (resource != null && canDeleteAttachment(logId));
     }
 
     // Default deny

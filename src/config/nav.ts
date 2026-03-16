@@ -15,9 +15,9 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { label: 'Dashboard', icon: 'bi-grid-1x2', to: ROUTES.DASHBOARD, section: 'dashboard' },
   { label: 'Job Home', icon: 'bi-briefcase', to: { name: ROUTE_NAMES.JOB_HOME }, section: 'job', jobScoped: true },
-  { label: 'Daily Logs', icon: 'bi-journal-text', to: { name: ROUTE_NAMES.JOB_DAILY_LOGS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN] },
-  { label: 'Timecards', icon: 'bi-clock-history', to: { name: ROUTE_NAMES.JOB_TIMECARDS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.FOREMAN] },
-  { label: 'Shop Orders', icon: 'bi-receipt', to: { name: ROUTE_NAMES.JOB_SHOP_ORDERS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SHOP, ROLES.FOREMAN] },
+  { label: 'Daily Logs', icon: 'bi-journal-text', to: { name: ROUTE_NAMES.JOB_DAILY_LOGS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.FOREMAN] },
+  { label: 'Timecards', icon: 'bi-clock-history', to: { name: ROUTE_NAMES.JOB_TIMECARDS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.FOREMAN] },
+  { label: 'Shop Orders', icon: 'bi-receipt', to: { name: ROUTE_NAMES.JOB_SHOP_ORDERS }, section: 'job', jobScoped: true, roles: [ROLES.ADMIN, ROLES.FOREMAN] },
   { label: 'Controller', icon: 'bi-sliders', to: ROUTES.CONTROLLER, section: 'controller', roles: [ROLES.ADMIN, ROLES.CONTROLLER] },
   { label: 'Users', icon: 'bi-people', to: ROUTES.ADMIN_USERS, section: 'admin', roles: [ROLES.ADMIN] },
   { label: 'Jobs', icon: 'bi-building', to: ROUTES.ADMIN_JOBS, section: 'admin', roles: [ROLES.ADMIN] },

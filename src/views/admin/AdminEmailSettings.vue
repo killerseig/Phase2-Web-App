@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
 import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
@@ -231,12 +232,9 @@ onMounted(loadJobs)
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4 wide-container-1200">
+  <div class="app-page">
     <!-- Header -->
-    <div class="mb-4">
-      <h2 class="h3 mb-1">Email Settings</h2>
-      <p class="text-muted small mb-0">Configure recipients for daily logs (per job) and global recipients for timecards and shop orders.</p>
-    </div>
+    <AppPageHeader eyebrow="Admin Panel" title="Email Settings" subtitle="Configure recipients for daily logs, timecards, and shop orders." />
 
     <AdminCardWrapper
       title="Remove Recipient Everywhere"
@@ -328,7 +326,7 @@ onMounted(loadJobs)
       :error="err"
       class="mt-4"
     >
-      <div class="alert job-tip small mb-3" role="alert">
+      <div class="alert app-note small mb-3" role="alert">
         <div class="d-flex align-items-start gap-2">
           <i class="bi bi-info-circle flex-shrink-0"></i>
           <div>
@@ -368,23 +366,6 @@ onMounted(loadJobs)
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as *;
 
-.wide-container-1200 {
-  max-width: 1200px;
-}
-
-.job-tip {
-  background: $surface-2;
-  border: 1px solid $border-color;
-  color: $body-color;
-  box-shadow: $box-shadow-sm;
-}
-
-.job-tip .bi-info-circle {
-  color: $primary;
-  font-size: 1.1rem;
-  margin-top: 1px;
-}
-
 .section-label {
   font-size: 0.85rem;
   text-transform: uppercase;
@@ -393,8 +374,5 @@ onMounted(loadJobs)
   margin-bottom: 0.35rem;
 }
 
-.mt-4 {
-  margin-top: 1.5rem;
-}
 </style>
 

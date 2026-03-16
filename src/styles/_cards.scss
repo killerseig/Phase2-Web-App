@@ -5,7 +5,17 @@
   color: var(--text-body, vars.$body-color);
   border: 1px solid var(--border, vars.$border-color);
   box-shadow: var(--shadow-sm, vars.$box-shadow-sm);
+  border-radius: var(--radius, vars.$border-radius);
   transition: all 0.2s ease;
+}
+
+.card-header,
+.card-footer {
+  padding: 0.95rem 1.2rem;
+}
+
+.card-body {
+  padding: 1.1rem 1.2rem;
 }
 
 .card-hover:hover {
@@ -17,6 +27,7 @@
   background: var(--surface-2, vars.$surface-2);
   color: var(--text-body, vars.$body-color);
   border-bottom: 1px solid var(--border, vars.$border-color);
+  padding: 0.95rem 1.2rem;
 }
 
 .panel-header h1,
@@ -33,4 +44,5 @@
   background: var(--surface-2, vars.$surface-2);
   color: var(--text-body, vars.$body-color);
   border-top: 1px solid var(--border, vars.$border-color);
+  padding: 0.95rem 1.2rem;
 }

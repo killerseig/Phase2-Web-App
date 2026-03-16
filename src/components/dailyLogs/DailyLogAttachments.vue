@@ -195,7 +195,4 @@ const emitDelete = (path?: string) => {
   align-self: center;
 }
 
-.thumb-card .btn {
-  border-radius: 0;
-}
 </style>

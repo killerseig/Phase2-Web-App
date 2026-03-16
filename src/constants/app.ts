@@ -7,8 +7,6 @@
 export const ROLES = {
   ADMIN: 'admin',
   CONTROLLER: 'controller',
-  EMPLOYEE: 'employee',
-  SHOP: 'shop',
   FOREMAN: 'foreman',
   NONE: 'none',
 } as const

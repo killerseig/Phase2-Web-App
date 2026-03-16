@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import flatPickr from 'vue-flatpickr-component'
 import 'flatpickr/dist/flatpickr.css'
+import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import Toast from '@/components/Toast.vue'
 import DailyLogAttachments from '@/components/dailyLogs/DailyLogAttachments.vue'
 import DailyLogList from '@/components/dailyLogs/DailyLogList.vue'
@@ -100,25 +101,21 @@ function indoorClimateKey(reading: unknown, idx: number): string {
 <template>
   <Toast ref="toastRef" />
   
-  <div class="container-fluid py-4 wide-container-1200">
+  <div class="app-page">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4 header-hero">
-      <div>
-        <div class="text-muted small mb-1">Job Daily Log</div>
-        <h2 class="h3 mb-1">{{ jobName }}</h2>
-        <div class="text-muted small d-flex align-items-center gap-2">
-          <span v-if="jobCode">Job Number: {{ jobCode }}</span>
-        </div>
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge rounded-pill text-bg-secondary">{{ logsForSelectedDate.length }} for {{ logDate }}</span>
-        <span v-if="currentStatus === 'draft'" class="badge rounded-pill text-bg-warning">Draft</span>
-        <span v-else class="badge rounded-pill text-bg-success">Submitted</span>
-      </div>
-    </div>
+    <AppPageHeader eyebrow="Job Daily Log" :title="jobName">
+      <template #meta>
+        <span v-if="jobCode">Job Number: {{ jobCode }}</span>
+      </template>
+      <template #badges>
+        <span class="badge text-bg-secondary app-page-chip">{{ logsForSelectedDate.length }} for {{ logDate }}</span>
+        <span v-if="currentStatus === 'draft'" class="badge text-bg-warning app-page-chip">Draft</span>
+        <span v-else class="badge text-bg-success app-page-chip">Submitted</span>
+      </template>
+    </AppPageHeader>
 
     <!-- Date & Status Controls -->
-    <div class="card mb-4 status-card">
+    <div class="card mb-4 app-toolbar-card">
       <div class="card-body">
         <div class="row align-items-center g-3">
           <div class="col-md-4">
@@ -137,10 +134,10 @@ function indoorClimateKey(reading: unknown, idx: number): string {
           <div class="col-md-4 d-flex flex-column gap-1">
             <div class="text-muted small">Status</div>
             <div class="d-flex flex-wrap gap-2">
-              <span v-if="currentStatus === 'draft'" class="badge rounded-pill text-bg-warning">Draft (auto-saved)</span>
-              <span v-else class="badge rounded-pill text-bg-success">Submitted</span>
-              <span v-if="logDate !== today && currentStatus === 'draft'" class="badge rounded-pill text-bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ logDate > today ? 'Future' : 'Past' }} draft</span>
-              <span v-if="logDate !== today && currentStatus === 'submitted'" class="badge rounded-pill text-bg-info"><i class="bi bi-eye me-1"></i>View only</span>
+              <span v-if="currentStatus === 'draft'" class="badge app-badge-pill app-badge-pill--sm text-bg-warning">Draft (auto-saved)</span>
+              <span v-else class="badge app-badge-pill app-badge-pill--sm text-bg-success">Submitted</span>
+              <span v-if="logDate !== today && currentStatus === 'draft'" class="badge app-badge-pill app-badge-pill--sm text-bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ logDate > today ? 'Future' : 'Past' }} draft</span>
+              <span v-if="logDate !== today && currentStatus === 'submitted'" class="badge app-badge-pill app-badge-pill--sm text-bg-info"><i class="bi bi-eye me-1"></i>View only</span>
             </div>
             <div v-if="currentStatus === 'submitted' && currentSubmittedAt" class="text-muted small">Submitted: {{ formatSubmittedAt(currentSubmittedAt) }}</div>
           </div>
@@ -578,19 +575,6 @@ input[type='file'].form-control:focus::file-selector-button {
   font-weight: 500;
 }
 
-.header-hero {
-  background: linear-gradient(140deg, rgba($primary, 0.24) 0%, rgba($primary-200, 0.8) 55%, $surface-2 100%);
-  border: 1px solid rgba(230, 237, 247, 0.12);
-  border-radius: 12px;
-  padding: 16px 20px;
-}
-
-.status-card {
-  border: 1px solid rgba(230, 237, 247, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba($primary-50, 0.9) 0%, $surface-2 100%);
-}
-
 .panel-muted {
   border: 1px solid rgba(230, 237, 247, 0.12);
   background: $surface;
@@ -607,10 +591,6 @@ input[type='file'].form-control:focus::file-selector-button {
 
 :deep(.panel-muted .list-group-item) {
   border-color: rgba(230, 237, 247, 0.08);
-}
-
-.wide-container-1200 {
-  max-width: 1200px;
 }
 
 .col-trade { width: 40%; }
@@ -634,12 +614,6 @@ input[type='file'].form-control:focus::file-selector-button {
   :deep(.manpower-table td) {
     padding: 0.35rem;
   }
-}
-
-:deep(.badge-admin) {
-  white-space: nowrap;
-  font-size: 0.75rem;
-  padding: 4px 6px;
 }
 
 :deep(.thumb-image) {

@@ -36,6 +36,7 @@ export interface UserProfile {
   displayName?: string
   role: string
   active: boolean
+  assignedJobIds?: string[]
 }
 
 /**
@@ -69,6 +70,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     displayName: data?.displayName,
     role: data?.role || 'none',
     active: data?.active ?? true,
+    assignedJobIds: Array.isArray(data?.assignedJobIds) ? data.assignedJobIds : [],
   }
 }
 
@@ -93,6 +95,9 @@ export async function verifyAdminRole(uid: string): Promise<void> {
   const user = await getUserProfile(uid)
   if (!user) {
     throw new Error('Your user profile not found')
+  }
+  if (user.active !== true) {
+    throw new Error('Only active admins can perform this action')
   }
   if (user.role !== 'admin') {
     throw new Error('Only admins can perform this action')
