@@ -1,23 +1,28 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import AppAlert from '@/components/common/AppAlert.vue'
+import AdminAccordionFormCard from '@/components/admin/AdminAccordionFormCard.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppLoadingState from '@/components/common/AppLoadingState.vue'
+import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
-import ShopCatalogTreeNode from '@/components/admin/ShopCatalogTreeNode.vue'
-import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
+import BaseModal from '@/components/common/BaseModal.vue'
+import ShopCatalogTreeNode from '@/components/catalog/ShopCatalogTreeNode.vue'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import { useShopCatalogStore } from '@/stores/shopCatalog'
 import type { ShopCatalogItem } from '@/services'
 import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useToast } from '@/composables/useToast'
 import { normalizeError } from '@/services/serviceUtils'
 import { logError } from '@/utils'
 
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const categoriesStore = useShopCategoriesStore()
 const catalogStore = useShopCatalogStore()
 const { confirm } = useConfirmDialog()
+const toast = useToast()
 const {
   categories,
   fullTree,
@@ -141,15 +146,18 @@ async function createCategory() {
   saving.value = true
   try {
     await categoriesStore.createCategory(name, parentId.value)
-    toastRef.value?.show(`Category "${name}" created`, 'success')
+    toast.show(`Category "${name}" created`, 'success')
     showAddCategory.value = false
     
     // Auto-expand parent if creating subcategory
     if (parentId.value) {
-      expandedNodes.value.add(parentId.value)
+      const next = new Set(expandedNodes.value)
+      next.add(parentId.value)
+      expandAncestors(parentId.value, next)
+      expandedNodes.value = next
     }
   } catch (e) {
-    toastRef.value?.show('Failed to create category', 'error')
+    toast.show('Failed to create category', 'error')
   } finally {
     saving.value = false
   }
@@ -169,10 +177,10 @@ async function createItem() {
     newItemDesc.value = ''
     newItemSku.value = ''
     newItemPrice.value = ''
-    toastRef.value?.show('Item added', 'success')
+    toast.show('Item added', 'success')
     showAddItemForm.value = false
   } catch (e) {
-    toastRef.value?.show('Failed to add item', 'error')
+    toast.show('Failed to add item', 'error')
   } finally {
     saving.value = false
   }
@@ -193,9 +201,9 @@ async function archiveCategory(categoryId: string) {
   saving.value = true
   try {
     await categoriesStore.archiveCategory(categoryId)
-    toastRef.value?.show(`Archived "${cat.name}"`, 'success')
+    toast.show(`Archived "${cat.name}"`, 'success')
   } catch (e) {
-    toastRef.value?.show('Failed to archive category', 'error')
+    toast.show('Failed to archive category', 'error')
   } finally {
     saving.value = false
   }
@@ -240,10 +248,10 @@ async function reactivateCategory(categoryId: string) {
   saving.value = true
   try {
     await reactivateRecursive(categoryId)
-    toastRef.value?.show(`Reactivated "${cat.name}"`, 'success')
+    toast.show(`Reactivated "${cat.name}"`, 'success')
   } catch (e) {
     logError('AdminShopCatalog', 'Error reactivating category', e)
-    toastRef.value?.show('Failed to reactivate category', 'error')
+    toast.show('Failed to reactivate category', 'error')
   } finally {
     saving.value = false
   }
@@ -297,9 +305,9 @@ async function deleteCategory(categoryId: string) {
 
     // Delete selected category
     await categoriesStore.deleteCategory(categoryId)
-    toastRef.value?.show(`Deleted "${cat.name}"${totalDescendants ? ` with ${totalDescendants} descendants` : ''}`, 'success')
+    toast.show(`Deleted "${cat.name}"${totalDescendants ? ` with ${totalDescendants} descendants` : ''}`, 'success')
   } catch (e) {
-    toastRef.value?.show('Failed to delete category', 'error')
+    toast.show('Failed to delete category', 'error')
   } finally {
     saving.value = false
   }
@@ -316,11 +324,11 @@ async function saveItemFromTree(
   saving.value = true
   try {
     await catalogStore.updateItem(itemId, updates)
-    toastRef.value?.show('Item updated', 'success')
+    toast.show('Item updated', 'success')
     editingItemId.value = null
   } catch (err) {
     logError('AdminShopCatalog', 'Failed to update item', err)
-    toastRef.value?.show(`Failed to update item: ${normalizeError(err, 'Unknown error')}`, 'error')
+    toast.show(`Failed to update item: ${normalizeError(err, 'Unknown error')}`, 'error')
   } finally {
     saving.value = false
   }
@@ -337,7 +345,7 @@ async function editCategory(categoryId: string) {
 
 async function saveCategoryEdit(categoryId: string) {
   if (!editCategoryName.value.trim()) {
-    toastRef.value?.show('Category name is required', 'error')
+    toast.show('Category name is required', 'error')
     return
   }
 
@@ -349,9 +357,9 @@ async function saveCategoryEdit(categoryId: string) {
   savingCategoryEdit.value = true
   try {
     await categoriesStore.updateCategory(categoryId, { name: editCategoryName.value.trim() })
-    toastRef.value?.show('Category updated', 'success')
+    toast.show('Category updated', 'success')
   } catch (e) {
-    toastRef.value?.show('Failed to update category', 'error')
+    toast.show('Failed to update category', 'error')
   } finally {
     savingCategoryEdit.value = false
     editingCategoryId.value = null
@@ -418,9 +426,9 @@ async function deleteItem(item: ShopCatalogItem) {
 
     // Delete selected item
     await catalogStore.deleteItem(item.id)
-    toastRef.value?.show(cascadeCount > 0 ? `Item and ${cascadeCount} descendants deleted` : 'Item deleted', 'success')
+    toast.show(cascadeCount > 0 ? `Item and ${cascadeCount} descendants deleted` : 'Item deleted', 'success')
   } catch (e) {
-    toastRef.value?.show('Failed to delete item', 'error')
+    toast.show('Failed to delete item', 'error')
   } finally {
     saving.value = false
   }
@@ -440,9 +448,9 @@ async function archiveItem(item: ShopCatalogItem) {
       await categoriesStore.archiveCategory(catId)
     }
     
-    toastRef.value?.show(`Archived "${item.description}" and ${childCategories.length} subcategories`, 'success')
+    toast.show(`Archived "${item.description}" and ${childCategories.length} subcategories`, 'success')
   } catch (e) {
-    toastRef.value?.show('Failed to archive item', 'error')
+    toast.show('Failed to archive item', 'error')
   } finally {
     saving.value = false
   }
@@ -453,9 +461,9 @@ async function reactivateItem(item: ShopCatalogItem) {
   try {
     // Just reactivate the item - children stay archived
     await catalogStore.setItemActive(item.id, true)
-    toastRef.value?.show(`Reactivated "${item.description}"`, 'success')
+    toast.show(`Reactivated "${item.description}"`, 'success')
   } catch (e) {
-    toastRef.value?.show('Failed to reactivate item', 'error')
+    toast.show('Failed to reactivate item', 'error')
   } finally {
     saving.value = false
   }
@@ -587,7 +595,7 @@ async function downloadCatalog() {
     URL.revokeObjectURL(url)
   } catch (e) {
     logError('AdminShopCatalog', 'Failed to download catalog', e)
-    toastRef.value?.show('Failed to download catalog', 'error')
+    toast.show('Failed to download catalog', 'error')
   } finally {
     downloading.value = false
   }
@@ -604,7 +612,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Toast ref="toastRef" />
+  
   
   <div class="app-page">
     <!-- Header -->
@@ -627,12 +635,16 @@ onUnmounted(() => {
       </template>
     </AppPageHeader>
 
-    <BaseAccordionCard
+    <AdminAccordionFormCard
       v-model:open="showAddItemForm"
       title="Add Top-Level Item"
       subtitle="Create a root catalog item with optional SKU and price"
+      :loading="saving"
+      :submit-disabled="!newItemDesc.trim()"
+      submit-label="Add Item"
+      @submit="createItem"
+      @cancel="cancelAddItem"
     >
-      <form class="row g-3" @submit.prevent="createItem">
         <div class="col-md-6">
           <label class="form-label small">Description</label>
           <input
@@ -662,42 +674,23 @@ onUnmounted(() => {
             placeholder="0.00"
           />
         </div>
-        <div class="col-12 d-flex gap-2 justify-content-end pt-2">
-          <button type="button" class="btn btn-outline-secondary" @click.stop="cancelAddItem" :disabled="saving">
-            Cancel
-          </button>
-          <button type="submit" class="btn btn-primary" :disabled="saving || !newItemDesc.trim()">
-            <span v-if="saving" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Add Item
-          </button>
-        </div>
-      </form>
-    </BaseAccordionCard>
+    </AdminAccordionFormCard>
 
     <!-- Search Bar -->
-    <div class="card app-toolbar-card mb-4">
-      <div class="card-body">
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="form-control"
-          placeholder="Search by description, SKU, or price..."
-        />
-      </div>
-    </div>
+    <AppToolbarCard class="mb-4">
+      <input
+        v-model="searchQuery"
+        type="text"
+        class="form-control"
+        placeholder="Search by description, SKU, or price..."
+      />
+    </AppToolbarCard>
 
     <!-- Error Alert -->
-    <div v-if="err" class="alert alert-danger alert-dismissible fade show" role="alert">
-      {{ err }}
-      <button type="button" class="btn-close" @click="clearErrors" />
-    </div>
+    <AppAlert v-if="err" variant="danger" :message="err" dismissible @close="clearErrors" />
 
     <!-- Loading State -->
-    <div v-if="loading" class="text-center py-5">
-      <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
+    <AppLoadingState v-if="loading" message="" />
 
     <!-- Catalog Tree -->
     <div v-else>
@@ -760,59 +753,53 @@ onUnmounted(() => {
             />
           </div>
         </div>
-        <div v-else class="text-center py-5 text-muted">
-          <i class="bi bi-inbox empty-catalog-icon"></i>
-          <p class="mt-3 mb-0">No categories or items yet. Create one to get started.</p>
-        </div>
+        <AppEmptyState
+          v-else
+          icon="bi bi-inbox"
+          icon-class="fs-2"
+          message="No categories or items yet. Create one to get started."
+        />
       </AdminCardWrapper>
     </div>
 
     <!-- Add Category Modal -->
-    <div
-      v-if="showAddCategory"
-      class="modal d-block bg-dark bg-opacity-50 catalog-modal"
+    <BaseModal
+      :open="showAddCategory"
+      :title="parentId ? 'Add Subcategory' : 'Add Category'"
+      content-class="catalog-modal-content"
+      :close-disabled="saving"
+      :close-on-backdrop="!saving"
+      :close-on-escape="!saving"
+      @close="showAddCategory = false"
     >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              {{ parentId ? 'Add Subcategory' : 'Add Category' }}
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showAddCategory = false"
-            />
-          </div>
-          <div class="modal-body">
-            <input
-              v-model="newCategoryName"
-              type="text"
-              class="form-control"
-              placeholder="Category name"
-              @keyup.enter="createCategory"
-            />
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              @click="showAddCategory = false"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              @click="createCategory"
-              :disabled="saving || !newCategoryName.trim()"
-            >
-              {{ saving ? 'Creating...' : 'Create' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      <input
+        v-model="newCategoryName"
+        type="text"
+        class="form-control"
+        placeholder="Category name"
+        @keyup.enter="createCategory"
+        autofocus
+      />
+
+      <template #footer>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          @click="showAddCategory = false"
+          :disabled="saving"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          @click="createCategory"
+          :disabled="saving || !newCategoryName.trim()"
+        >
+          {{ saving ? 'Creating...' : 'Create' }}
+        </button>
+      </template>
+    </BaseModal>
 
   </div>
 </template>
@@ -821,34 +808,25 @@ onUnmounted(() => {
 @use '@/styles/_variables.scss' as *;
 $select-arrow-color: $body-color;
 $select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);
-.catalog-modal {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.empty-catalog-icon {
-  font-size: 2rem;
-}
 
 .table-responsive {
   overflow: visible;
 }
 
 /* Dark theme for modals and inputs/dropdowns */
-.modal-content {
+:deep(.catalog-modal-content) {
   background: $surface-2;
   color: $body-color;
   border-color: $border-color;
   box-shadow: $box-shadow;
 }
 
-.modal-header,
-.modal-footer {
+:deep(.catalog-modal-content .modal-header),
+:deep(.catalog-modal-content .modal-footer) {
   border-color: $border-color;
 }
 
-.btn-close {
+:deep(.catalog-modal-content .btn-close) {
   filter: invert(1) contrast(1.1);
 }
 

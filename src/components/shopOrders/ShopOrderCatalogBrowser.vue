@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue'
-import ShopCatalogTreeNode from '@/components/admin/ShopCatalogTreeNode.vue'
+import AppAlert from '@/components/common/AppAlert.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
+import ShopCatalogTreeNode from '@/components/catalog/ShopCatalogTreeNode.vue'
 import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
 import type { ShopCatalogItem } from '@/services'
 import type { CategoryNode, ShopCategory } from '@/stores/shopCategories'
@@ -106,21 +108,6 @@ const hasAnyNodes = computed(() =>
   rootCategoryNodeIds.value.length > 0 || uncategorizedItemNodeIds.value.length > 0
 )
 
-const nodeQtyKey = (nodeId: string) => (nodeId.startsWith('item-') ? nodeId.slice(5) : nodeId)
-
-const nodeMemoDeps = (nodeId: string) => {
-  return [
-    nodeId,
-    isSearching.value,
-    activeExpandedNodes.value.has(nodeId),
-    searchVisibleIds.value?.has(nodeId) ?? !isSearching.value,
-    searchCategoryDirectMatchIds.value?.has(nodeId) ?? false,
-    searchDirectMatchStrengths.value?.get(nodeId) ?? 'none',
-    searchVisibleChildCounts.value?.get(nodeId) ?? -1,
-    props.catalogItemQtys[nodeQtyKey(nodeId)] ?? 1,
-  ]
-}
-
 const toggleExpand = (nodeId: string) => {
   if (isSearching.value) {
     const next = new Set(searchExpandedNodes.value)
@@ -147,9 +134,7 @@ const toggleExpand = (nodeId: string) => {
               Search names, SKU, and visible catalog details without reloading the tree.
             </div>
           </div>
-          <span v-if="isSearching" class="badge app-badge-pill app-badge-pill--sm text-bg-info">
-            Search active
-          </span>
+          <AppBadge v-if="isSearching" label="Search active" variant-class="text-bg-info" />
         </div>
         <div class="input-group">
           <span class="input-group-text"><i class="bi bi-search"></i></span>
@@ -174,22 +159,19 @@ const toggleExpand = (nodeId: string) => {
     </div>
 
     <div class="card-body">
-      <div v-if="!items.length" class="alert alert-info">
-        No items in catalog. Please add items to the catalog first in Admin > Shop Catalog.
-      </div>
+      <AppAlert
+        v-if="!items.length"
+        variant="info"
+        message="No items in catalog. Please add items to the catalog first in Admin > Shop Catalog."
+      />
 
       <template v-else>
-        <div v-if="isSearching && !hasAnyNodes" class="alert alert-info">
-          No items match your search.
-        </div>
-        <div v-else-if="!hasAnyNodes" class="alert alert-info">
-          No items available.
-        </div>
+        <AppAlert v-if="isSearching && !hasAnyNodes" variant="info" message="No items match your search." />
+        <AppAlert v-else-if="!hasAnyNodes" variant="info" message="No items available." />
 
         <div v-show="hasAnyNodes" class="app-catalog-tree">
           <div v-for="itemNodeId of uncategorizedItemNodeIds" :key="itemNodeId" class="mb-0">
             <ShopCatalogTreeNode
-              v-memo="nodeMemoDeps(itemNodeId)"
               :node-id="itemNodeId"
               :expanded="activeExpandedNodes"
               :items="items"
@@ -211,7 +193,6 @@ const toggleExpand = (nodeId: string) => {
 
           <div v-for="catId of rootCategoryNodeIds" :key="catId">
             <ShopCatalogTreeNode
-              v-memo="nodeMemoDeps(catId)"
               :node-id="catId"
               :expanded="activeExpandedNodes"
               :items="items"

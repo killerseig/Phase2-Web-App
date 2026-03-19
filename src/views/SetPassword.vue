@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import Toast from '@/components/Toast.vue'
+import AppLoadingState from '@/components/common/AppLoadingState.vue'
+import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import { setPasswordFromSetupLink, verifySetupToken } from '@/services'
 import { ROLES, ROUTE_NAMES } from '@/constants/app'
@@ -9,7 +10,7 @@ import { logError } from '@/utils/logger'
 
 const router = useRouter()
 const route = useRoute()
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
+const toast = useToast()
 const authStore = useAuthStore()
 
 const setupToken = ref('')
@@ -42,7 +43,7 @@ async function verifySetupLink() {
   if (!token || !userId) {
     err.value = 'Invalid setup link. Please request a new password creation link.'
     verifying.value = false
-    toastRef.value?.show(err.value, 'error')
+    toast.show(err.value, 'error')
     return
   }
 
@@ -67,7 +68,7 @@ async function verifySetupLink() {
     }
     err.value = errorMsg
     verifying.value = false
-    toastRef.value?.show(errorMsg, 'error')
+    toast.show(errorMsg, 'error')
   }
 }
 
@@ -80,17 +81,17 @@ const submit = async () => {
 
   // Validation
   if (!password.value.trim()) {
-    toastRef.value?.show('Password is required', 'error')
+    toast.show('Password is required', 'error')
     return
   }
 
   if (password.value.length < 6) {
-    toastRef.value?.show('Password must be at least 6 characters', 'error')
+    toast.show('Password must be at least 6 characters', 'error')
     return
   }
 
   if (password.value !== confirmPassword.value) {
-    toastRef.value?.show('Passwords do not match', 'error')
+    toast.show('Passwords do not match', 'error')
     return
   }
 
@@ -98,7 +99,7 @@ const submit = async () => {
   try {
     await setPasswordFromSetupLink(uid.value, password.value, setupToken.value)
     await authStore.login(email.value, password.value)
-    toastRef.value?.show('Password set successfully! Logging you in...', 'success')
+    toast.show('Password set successfully! Logging you in...', 'success')
     if (authStore.role === ROLES.NONE) {
       await router.push({ name: ROUTE_NAMES.UNAUTHORIZED })
     } else {
@@ -115,7 +116,7 @@ const submit = async () => {
       errorMsg = message
     }
     err.value = errorMsg
-    toastRef.value?.show(errorMsg, 'error')
+    toast.show(errorMsg, 'error')
   } finally {
     loading.value = false
   }
@@ -131,18 +132,17 @@ const toggleConfirmPasswordVisibility = () => {
 </script>
 
 <template>
-  <Toast ref="toastRef" />
-
   <div class="auth-shell">
     <div class="card auth-card auth-card--narrow set-password-card">
       <div class="card-body">
         <!-- Loading state -->
-        <div v-if="verifying" class="text-center py-5">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Verifying link...</span>
-          </div>
-          <p class="mt-3 text-muted">Verifying your link...</p>
-        </div>
+        <AppLoadingState
+          v-if="verifying"
+          sr-label="Verifying link..."
+          message="Verifying your link..."
+          spinner-class=""
+          message-class="mt-3 text-muted mb-0"
+        />
 
         <!-- Error state -->
         <div v-else-if="err && !email" class="text-center py-5">

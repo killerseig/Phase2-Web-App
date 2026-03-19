@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import { isValidEmail } from '@/utils/emailValidation'
 
 interface Props {
@@ -10,6 +11,10 @@ interface Props {
   maxEmails?: number
   inputName?: string
   autocompleteSection?: string
+  readOnlyEmails?: string[]
+  readOnlyLabel?: string
+  readOnlyBadgeLabel?: string
+  emptyText?: string
 }
 
 const emit = defineEmits<{
@@ -24,9 +29,16 @@ const props = withDefaults(defineProps<Props>(), {
   maxEmails: undefined,
   inputName: '',
   autocompleteSection: '',
+  readOnlyEmails: () => [],
+  readOnlyLabel: '',
+  readOnlyBadgeLabel: 'Read only',
+  emptyText: 'No recipients added yet',
 })
 
 const newEmail = ref('')
+const uniqueReadOnlyEmails = computed(() =>
+  Array.from(new Set((props.readOnlyEmails ?? []).filter(Boolean)))
+)
 
 function addEmail() {
   const email = newEmail.value.trim()
@@ -60,10 +72,11 @@ function removeEmail(email: string) {
 
     <!-- Current Emails -->
     <div v-if="emails.length > 0" class="d-flex flex-wrap gap-2 mb-3">
-      <span
+      <AppBadge
         v-for="email in emails"
         :key="email"
-        class="badge app-badge-pill app-badge-pill--sm text-bg-primary d-flex align-items-center gap-1"
+        variant-class="text-bg-primary"
+        class="d-flex align-items-center gap-1"
       >
         {{ email }}
         <button
@@ -73,7 +86,7 @@ function removeEmail(email: string) {
           :disabled="disabled"
           aria-label="Remove"
         ></button>
-      </span>
+      </AppBadge>
     </div>
 
     <!-- Add New Email -->
@@ -104,13 +117,27 @@ function removeEmail(email: string) {
 
     <!-- Empty State -->
     <small v-if="emails.length === 0" class="text-muted d-block mt-2">
-      No recipients added yet
+      {{ emptyText }}
     </small>
 
     <!-- Max Emails Warning -->
     <small v-if="maxEmails && emails.length >= maxEmails" class="text-warning d-block mt-2">
       Maximum {{ maxEmails }} recipients reached
     </small>
+
+    <div v-if="uniqueReadOnlyEmails.length > 0" class="mt-3">
+      <p v-if="readOnlyLabel" class="text-muted small mb-2">{{ readOnlyLabel }}</p>
+      <div class="list-group">
+        <div
+          v-for="email in uniqueReadOnlyEmails"
+          :key="`readonly-${email}`"
+          class="list-group-item d-flex justify-content-between align-items-center"
+        >
+          <small>{{ email }}</small>
+          <AppBadge :label="readOnlyBadgeLabel" />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 

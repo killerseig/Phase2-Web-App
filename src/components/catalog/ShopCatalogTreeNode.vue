@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import ActionToggleGroup from '@/components/common/ActionToggleGroup.vue'
+import InlineField from '@/components/common/InlineField.vue'
+import CatalogMetadataBadges from '@/components/catalog/CatalogMetadataBadges.vue'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import type { ShopCatalogItem } from '@/services'
 import type {
@@ -72,11 +75,16 @@ const ITEM_PREFIX = 'item-'
 
 const isItem = computed(() => props.nodeId.startsWith(ITEM_PREFIX))
 const itemId = computed(() => (isItem.value ? props.nodeId.slice(ITEM_PREFIX.length) : null))
+const itemSafeId = computed(() => itemId.value ?? '')
 const categoryId = computed(() => (!isItem.value ? props.nodeId : null))
 
 const category = computed(() => (categoryId.value ? categoriesStore.getCategoryById(categoryId.value) : null))
 const categorySafeId = computed(() => category.value?.id ?? '')
 const categorySafeName = computed(() => category.value?.name ?? '')
+const editCategoryNameModel = computed({
+  get: () => props.editCategoryName ?? '',
+  set: (value: string | number | boolean) => emit('update:editCategoryName', String(value ?? '')),
+})
 const item = computed(() => {
   if (!itemId.value) return null
   if (props.itemNodesById) {
@@ -136,24 +144,6 @@ const animateExpansion = computed(() => !props.searchMode)
 const childBypassSearchFilter = computed(() =>
   !!props.bypassSearchFilter || (!!props.searchMode && isDirectCategoryMatch.value && isExpanded.value)
 )
-
-const nodeQtyKey = (nodeId: string) => (nodeId.startsWith(ITEM_PREFIX) ? nodeId.slice(ITEM_PREFIX.length) : nodeId)
-
-const memoDeps = (nodeId: string) => {
-  return [
-    nodeId,
-    props.searchMode ?? false,
-    props.bypassSearchFilter ?? false,
-    props.expanded.has(nodeId),
-    props.searchVisibleIds?.has(nodeId) ?? !(props.searchMode ?? false),
-    props.searchCategoryDirectMatchIds?.has(nodeId) ?? false,
-    props.searchDirectMatchStrengths?.get(nodeId) ?? 'none',
-    props.searchVisibleChildCounts?.get(nodeId) ?? -1,
-    props.catalogItemQtys?.[nodeQtyKey(nodeId)] ?? 1,
-    props.editingItemId === (nodeId.startsWith(ITEM_PREFIX) ? nodeId.slice(ITEM_PREFIX.length) : null),
-    props.editingCategoryId === nodeId,
-  ]
-}
 
 function toggleSelf() {
   if (!hasChildren.value) return
@@ -327,7 +317,7 @@ function runAccordionLeave(el: Element) {
       >
         <span class="category-label" :class="{ 'is-archived': isArchived }">
           {{ category.name }}
-          <span v-if="isArchived" class="badge app-badge-pill app-badge-pill--sm bg-secondary bg-opacity-75 ms-2">archived</span>
+          <CatalogMetadataBadges :archived="isArchived" />
         </span>
       </button>
 
@@ -354,7 +344,11 @@ function runAccordionLeave(el: Element) {
         v-else-if="!orderMode"
         class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions"
       >
-        <div v-if="showActions" class="btn-group btn-group-sm flex-nowrap" role="group">
+        <ActionToggleGroup
+          :open="showActions"
+          wrapper-class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions"
+          @toggle="toggleActions"
+        >
           <button class="btn btn-outline-danger" @click.stop="handleDeleteCategory" title="Delete">
             <i class="bi bi-trash text-danger"></i>
           </button>
@@ -370,25 +364,15 @@ function runAccordionLeave(el: Element) {
           <button v-else class="btn btn-outline-success" @click.stop="handleReactivateCategory" title="Reactivate">
             <i class="bi bi-arrow-counterclockwise text-success"></i>
           </button>
-        </div>
-
-        <button
-          class="btn btn-sm btn-outline-secondary"
-          @click.stop="toggleActions"
-          :aria-pressed="showActions"
-          title="Toggle edit actions"
-        >
-          <i class="bi bi-pencil"></i>
-        </button>
+        </ActionToggleGroup>
       </div>
     </div>
 
     <div v-else class="node-header editing-category-header">
-      <input
-        :value="props.editCategoryName"
-        @input="(e) => emit('update:editCategoryName', (e.target as HTMLInputElement).value)"
-        type="text"
-        class="form-control form-control-sm edit-category-input"
+      <InlineField
+        :editing="true"
+        v-model="editCategoryNameModel"
+        input-class="form-control form-control-sm edit-category-input"
         placeholder="Category name"
       />
       <button class="btn btn-sm btn-success" @click.stop="() => emit('save-category', props.nodeId, props.editCategoryName || '')" :disabled="props.savingCategoryEdit" title="Save">
@@ -414,7 +398,6 @@ function runAccordionLeave(el: Element) {
           <div class="accordion">
             <div v-for="childId of children" :key="childId">
               <ShopCatalogTreeNode
-                v-memo="memoDeps(childId)"
                 :node-id="childId"
                 :expanded="expanded"
                 :items="items"
@@ -461,7 +444,6 @@ function runAccordionLeave(el: Element) {
         <div class="accordion">
           <div v-for="childId of children" :key="childId">
             <ShopCatalogTreeNode
-              v-memo="memoDeps(childId)"
               :node-id="childId"
               :expanded="expanded"
               :items="items"
@@ -519,38 +501,32 @@ function runAccordionLeave(el: Element) {
         <i class="bi me-2 node-item-icon" :class="hasChildren ? 'bi-folder2' : 'bi-file-text'"></i>
         <template v-if="isEditing">
           <div class="item-edit-fields w-100">
-            <input
+            <InlineField
+              :editing="true"
               v-model="editDesc"
-              type="text"
-              class="form-control form-control-sm"
               placeholder="Description"
-              @click.stop
-              @mousedown.stop
             />
-            <input
+            <InlineField
+              :editing="true"
               v-model="editSku"
-              type="text"
-              class="form-control form-control-sm"
               placeholder="SKU"
-              @click.stop
-              @mousedown.stop
             />
-            <input
+            <InlineField
+              :editing="true"
               v-model="editPrice"
               type="number"
               step="0.01"
-              class="form-control form-control-sm"
               placeholder="Price"
-              @click.stop
-              @mousedown.stop
             />
           </div>
         </template>
         <span v-else class="item-label flex-grow-1" :class="{ 'is-archived': itemArchived }">
           {{ item.description }}
-          <span v-if="itemArchived" class="badge app-badge-pill app-badge-pill--sm bg-secondary bg-opacity-75 ms-2">archived</span>
-          <span v-if="item.sku" class="badge app-badge-pill app-badge-pill--sm bg-info bg-opacity-75 ms-2">{{ item.sku }}</span>
-          <span v-if="item.price" class="badge app-badge-pill app-badge-pill--sm bg-success bg-opacity-75 ms-1">${{ item.price.toFixed(2) }}</span>
+          <CatalogMetadataBadges
+            :archived="itemArchived"
+            :sku="item.sku"
+            :price="item.price"
+          />
         </span>
       </button>
 
@@ -560,13 +536,13 @@ function runAccordionLeave(el: Element) {
           inputmode="numeric"
           min="1"
           step="1"
-          :value="catalogItemQtys?.[itemId] || 1"
-          @input="(e) => handleCatalogQtyInput(itemId, e)"
+          :value="catalogItemQtys?.[itemSafeId] || 1"
+          @input="(e) => handleCatalogQtyInput(itemSafeId, e)"
           class="form-control form-control-sm qty-input"
         />
         <button
           class="btn btn-sm btn-success"
-          @click.stop="() => { if (item) emit('select-for-order', { id: item.id, description: item.description, quantity: catalogItemQtys?.[itemId] || 1 }) }"
+          @click.stop="() => { if (item) emit('select-for-order', { id: item.id, description: item.description, quantity: catalogItemQtys?.[itemSafeId] || 1 }) }"
           title="Add to order"
         >
           <i class="bi bi-plus-circle"></i>
@@ -577,23 +553,18 @@ function runAccordionLeave(el: Element) {
         class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions"
         @click.stop
       >
-        <div v-if="showActions" class="btn-group btn-group-sm flex-nowrap" role="group">
+        <ActionToggleGroup
+          :open="showActions"
+          wrapper-class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions"
+          @toggle="toggleActions"
+        >
           <button class="btn btn-outline-danger" @click.stop="handleDeleteItem" title="Delete">
             <i class="bi bi-trash text-danger"></i>
           </button>
           <button class="btn btn-outline-primary" @click.stop="handleAddChild" title="Add subcategory"><i class="bi bi-folder-plus text-primary"></i></button>
           <button v-if="item.active" class="btn btn-outline-warning" @click.stop="handleArchiveItem" title="Archive"><i class="bi bi-archive text-warning"></i></button>
           <button v-else class="btn btn-outline-success" @click.stop="handleReactivateItem" title="Reactivate"><i class="bi bi-arrow-counterclockwise text-success"></i></button>
-        </div>
-
-        <button
-          class="btn btn-sm btn-outline-secondary"
-          @click.stop="toggleActions"
-          :aria-pressed="showActions"
-          title="Toggle edit actions"
-        >
-          <i class="bi bi-pencil"></i>
-        </button>
+        </ActionToggleGroup>
       </div>
     </div>
 
@@ -612,7 +583,6 @@ function runAccordionLeave(el: Element) {
           <div class="accordion">
             <div v-for="childId of children" :key="childId">
               <ShopCatalogTreeNode
-                v-memo="memoDeps(childId)"
                 :node-id="childId"
                 :expanded="expanded"
                 :items="items"
@@ -659,7 +629,6 @@ function runAccordionLeave(el: Element) {
         <div class="accordion">
           <div v-for="childId of children" :key="childId">
             <ShopCatalogTreeNode
-              v-memo="memoDeps(childId)"
               :node-id="childId"
               :expanded="expanded"
               :items="items"

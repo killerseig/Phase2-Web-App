@@ -4,8 +4,6 @@ import type { CategoryNode, ShopCategory } from '@/stores/shopCategories'
 
 const ITEM_PREFIX = 'item-'
 const DEFAULT_DEBOUNCE_MS = 80
-const DEFAULT_AUTO_EXPAND_MIN_QUERY_LENGTH = 2
-const DEFAULT_AUTO_EXPAND_MAX_ITEM_MATCHES = 24
 
 type UseCatalogTreeSearchOptions = {
   searchQuery: Ref<string>

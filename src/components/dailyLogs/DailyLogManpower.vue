@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppBadge from '@/components/common/AppBadge.vue'
+
 type ManpowerLine = {
   trade?: string
   areas?: string
@@ -91,7 +93,7 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
                         :disabled="!canEdit"
                         @input="emit('update-field', { index: idx, field: 'areas', value: ($event.target as HTMLInputElement).value })"
                       />
-                      <span v-if="isAdminLine(ln)" class="badge app-badge-pill app-badge-pill--sm bg-info flex-shrink-0">admin</span>
+                      <AppBadge v-if="isAdminLine(ln)" label="admin" variant-class="bg-info" class="flex-shrink-0" />
                     </div>
                   </td>
                   <td class="p-2 text-center">

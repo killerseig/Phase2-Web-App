@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import Login from '@/views/Login.vue'
 import { ROUTE_NAMES } from '@/constants/app'
@@ -20,23 +19,7 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('@/services', () => ({
   sendPasswordResetEmail: (...args: unknown[]) => mockSendPasswordResetEmail(...args),
 }))
-
-const ToastStub = defineComponent({
-  name: 'ToastStub',
-  template: '<div />',
-  methods: {
-    show() {},
-  },
-})
-
-const mountLogin = () =>
-  mount(Login, {
-    global: {
-      stubs: {
-        Toast: ToastStub,
-      },
-    },
-  })
+const mountLogin = () => mount(Login)
 
 describe('Login view', () => {
   beforeEach(() => {

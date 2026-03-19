@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AppAlert from '@/components/common/AppAlert.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
 import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
-import EmailRecipientInput from '@/components/admin/EmailRecipientInput.vue'
+import EmailRecipientInput from '@/components/common/EmailRecipientInput.vue'
 import {
   updateDailyLogRecipients,
   subscribeAllJobs,
@@ -18,16 +19,16 @@ import {
 import { normalizeError } from '@/services/serviceUtils'
 import { isValidEmail } from '@/utils/emailValidation'
 import { logWarn } from '@/utils'
+import { useEmailRecipients } from '@/composables/useEmailRecipients'
 import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
-
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
+import { useToast } from '@/composables/useToast'
 
 const jobs = ref<Job[]>([])
 const loading = ref(true)
 const err = ref('')
-const saving = ref(false)
 const purgeEmail = ref('')
 const purging = ref(false)
+const toast = useToast()
 
 // Global default recipients
 const globalDefaultRecipients = ref<string[]>([])
@@ -38,6 +39,36 @@ const shopOrderSubmitRecipients = ref<string[]>([])
 const jobRecipients = ref<Map<string, string[]>>(new Map())
 const openJobId = ref<string | null>(null)
 const subscriptions = useSubscriptionRegistry()
+const recipientActions = useEmailRecipients({
+  toast,
+  onError: (message) => {
+    err.value = message
+  },
+})
+const saving = recipientActions.saving
+
+const setError = (errorValue: unknown, fallback: string) => {
+  err.value = normalizeError(errorValue, fallback)
+}
+
+const makeRecipientConfig = (
+  getRecipients: () => string[],
+  setRecipients: (emails: string[]) => void,
+  saveRecipients: (emails: string[]) => Promise<void>,
+  messages: {
+    saveSuccess: string
+    saveError: string
+    addSuccess?: string
+    addError?: string
+    removeSuccess?: string
+    removeError?: string
+  }
+) => ({
+  getRecipients,
+  setRecipients,
+  saveRecipients,
+  messages,
+})
 
 function stopRealtime() {
   subscriptions.clearAll()
@@ -75,135 +106,134 @@ function loadJobs() {
         loading.value = false
       },
       (jobsError) => {
-        err.value = normalizeError(jobsError, 'Failed to load jobs')
-        toastRef.value?.show('Failed to load jobs', 'error')
+        setError(jobsError, 'Failed to load jobs')
+        toast.show('Failed to load jobs', 'error')
         loading.value = false
       }
     ))
   } catch (e) {
-    err.value = normalizeError(e, 'Failed to load jobs')
-    toastRef.value?.show('Failed to load jobs', 'error')
+    setError(e, 'Failed to load jobs')
+    toast.show('Failed to load jobs', 'error')
     loading.value = false
   }
 }
 
-function addGlobalRecipient(email: string) {
-  if (globalDefaultRecipients.value.includes(email)) {
-    toastRef.value?.show('Email already in the list', 'warning')
-    return
-  }
-  globalDefaultRecipients.value.push(email)
-  saveGlobalDailyLogRecipients()
+async function addGlobalRecipient(email: string) {
+  await recipientActions.addRecipient(email, makeRecipientConfig(
+    () => globalDefaultRecipients.value,
+    (emails) => {
+      globalDefaultRecipients.value = emails
+    },
+    (emails) => updateDailyLogSubmitRecipientsGlobal(emails),
+    {
+      saveSuccess: 'Daily log global recipients updated',
+      saveError: 'Failed to save daily log global recipients',
+    }
+  ))
 }
 
-function removeGlobalRecipient(email: string) {
-  globalDefaultRecipients.value = globalDefaultRecipients.value.filter(e => e !== email)
-  saveGlobalDailyLogRecipients()
+async function removeGlobalRecipient(email: string) {
+  await recipientActions.removeRecipient(email, makeRecipientConfig(
+    () => globalDefaultRecipients.value,
+    (emails) => {
+      globalDefaultRecipients.value = emails
+    },
+    (emails) => updateDailyLogSubmitRecipientsGlobal(emails),
+    {
+      saveSuccess: 'Daily log global recipients updated',
+      saveError: 'Failed to save daily log global recipients',
+    }
+  ))
 }
 
-function addJobRecipient(jobId: string, email: string) {
-  const recipients = jobRecipients.value.get(jobId) ?? []
-  if (recipients.includes(email)) {
-    toastRef.value?.show('Email already in the list', 'warning')
-    return
-  }
-
-  recipients.push(email)
-  jobRecipients.value.set(jobId, [...recipients])
-  saveJobRecipients(jobId)
+async function addJobRecipient(jobId: string, email: string) {
+  await recipientActions.addRecipient(email, makeRecipientConfig(
+    () => jobRecipients.value.get(jobId) ?? [],
+    (emails) => {
+      jobRecipients.value.set(jobId, emails)
+    },
+    (emails) => updateDailyLogRecipients(jobId, emails),
+    {
+      saveSuccess: 'Email recipients updated',
+      saveError: 'Failed to save recipients',
+    }
+  ))
 }
 
-function removeJobRecipient(jobId: string, email: string) {
-  const recipients = jobRecipients.value.get(jobId) ?? []
-  jobRecipients.value.set(jobId, recipients.filter(e => e !== email))
-  saveJobRecipients(jobId)
+async function removeJobRecipient(jobId: string, email: string) {
+  await recipientActions.removeRecipient(email, makeRecipientConfig(
+    () => jobRecipients.value.get(jobId) ?? [],
+    (emails) => {
+      jobRecipients.value.set(jobId, emails)
+    },
+    (emails) => updateDailyLogRecipients(jobId, emails),
+    {
+      saveSuccess: 'Email recipients updated',
+      saveError: 'Failed to save recipients',
+    }
+  ))
 }
 
-function addTimecardRecipient(email: string) {
-  if (timecardSubmitRecipients.value.includes(email)) {
-    toastRef.value?.show('Email already in the list', 'warning')
-    return
-  }
-  timecardSubmitRecipients.value = [...timecardSubmitRecipients.value, email]
-  saveTimecardRecipients()
+async function addTimecardRecipient(email: string) {
+  await recipientActions.addRecipient(email, makeRecipientConfig(
+    () => timecardSubmitRecipients.value,
+    (emails) => {
+      timecardSubmitRecipients.value = emails
+    },
+    (emails) => updateTimecardSubmitRecipientsGlobal(emails),
+    {
+      saveSuccess: 'Timecard submit recipients updated',
+      saveError: 'Failed to save timecard recipients',
+    }
+  ))
 }
 
-function removeTimecardRecipient(email: string) {
-  timecardSubmitRecipients.value = timecardSubmitRecipients.value.filter(e => e !== email)
-  saveTimecardRecipients()
+async function removeTimecardRecipient(email: string) {
+  await recipientActions.removeRecipient(email, makeRecipientConfig(
+    () => timecardSubmitRecipients.value,
+    (emails) => {
+      timecardSubmitRecipients.value = emails
+    },
+    (emails) => updateTimecardSubmitRecipientsGlobal(emails),
+    {
+      saveSuccess: 'Timecard submit recipients updated',
+      saveError: 'Failed to save timecard recipients',
+    }
+  ))
 }
 
-function addShopOrderRecipient(email: string) {
-  if (shopOrderSubmitRecipients.value.includes(email)) {
-    toastRef.value?.show('Email already in the list', 'warning')
-    return
-  }
-  shopOrderSubmitRecipients.value = [...shopOrderSubmitRecipients.value, email]
-  saveShopOrderRecipients()
+async function addShopOrderRecipient(email: string) {
+  await recipientActions.addRecipient(email, makeRecipientConfig(
+    () => shopOrderSubmitRecipients.value,
+    (emails) => {
+      shopOrderSubmitRecipients.value = emails
+    },
+    (emails) => updateShopOrderSubmitRecipientsGlobal(emails),
+    {
+      saveSuccess: 'Shop order submit recipients updated',
+      saveError: 'Failed to save shop order recipients',
+    }
+  ))
 }
 
-function removeShopOrderRecipient(email: string) {
-  shopOrderSubmitRecipients.value = shopOrderSubmitRecipients.value.filter(e => e !== email)
-  saveShopOrderRecipients()
-}
-
-async function saveJobRecipients(jobId: string) {
-  saving.value = true
-  try {
-    const recipients = jobRecipients.value.get(jobId) ?? []
-    await updateDailyLogRecipients(jobId, recipients)
-    toastRef.value?.show('Email recipients updated', 'success')
-  } catch (e) {
-    err.value = normalizeError(e, 'Failed to save recipients')
-    toastRef.value?.show('Failed to save recipients', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function saveTimecardRecipients() {
-  saving.value = true
-  try {
-    await updateTimecardSubmitRecipientsGlobal(timecardSubmitRecipients.value)
-    toastRef.value?.show('Timecard submit recipients updated', 'success')
-  } catch (e) {
-    err.value = normalizeError(e, 'Failed to save timecard recipients')
-    toastRef.value?.show('Failed to save timecard recipients', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function saveShopOrderRecipients() {
-  saving.value = true
-  try {
-    await updateShopOrderSubmitRecipientsGlobal(shopOrderSubmitRecipients.value)
-    toastRef.value?.show('Shop order submit recipients updated', 'success')
-  } catch (e) {
-    err.value = normalizeError(e, 'Failed to save shop order recipients')
-    toastRef.value?.show('Failed to save shop order recipients', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function saveGlobalDailyLogRecipients() {
-  saving.value = true
-  try {
-    await updateDailyLogSubmitRecipientsGlobal(globalDefaultRecipients.value)
-    toastRef.value?.show('Daily log global recipients updated', 'success')
-  } catch (e) {
-    err.value = normalizeError(e, 'Failed to save daily log global recipients')
-    toastRef.value?.show('Failed to save daily log global recipients', 'error')
-  } finally {
-    saving.value = false
-  }
+async function removeShopOrderRecipient(email: string) {
+  await recipientActions.removeRecipient(email, makeRecipientConfig(
+    () => shopOrderSubmitRecipients.value,
+    (emails) => {
+      shopOrderSubmitRecipients.value = emails
+    },
+    (emails) => updateShopOrderSubmitRecipientsGlobal(emails),
+    {
+      saveSuccess: 'Shop order submit recipients updated',
+      saveError: 'Failed to save shop order recipients',
+    }
+  ))
 }
 
 async function removeEmailEverywhere() {
   const email = purgeEmail.value.trim()
   if (!email || !isValidEmail(email)) {
-    toastRef.value?.show('Enter a valid email address', 'error')
+    toast.show('Enter a valid email address', 'error')
     return
   }
 
@@ -212,15 +242,15 @@ async function removeEmailEverywhere() {
     const result = await removeEmailFromAllRecipientLists(email)
     const updatedJobs = Number(result?.updatedJobCount || 0)
     purgeEmail.value = ''
-    toastRef.value?.show(
+    toast.show(
       result?.removedFromRecipientLists
         ? `Removed from all recipient lists${updatedJobs > 0 ? ` (${updatedJobs} jobs updated)` : ''}`
         : 'Email was not found in recipient lists',
       'success'
     )
   } catch (e) {
-    err.value = normalizeError(e, 'Failed to remove email from recipient lists')
-    toastRef.value?.show('Failed to remove email from recipient lists', 'error')
+    setError(e, 'Failed to remove email from recipient lists')
+    toast.show('Failed to remove email from recipient lists', 'error')
   } finally {
     purging.value = false
   }
@@ -230,7 +260,7 @@ onMounted(loadJobs)
 </script>
 
 <template>
-  <Toast ref="toastRef" />
+  
   
   <div class="app-page">
     <!-- Header -->
@@ -326,18 +356,24 @@ onMounted(loadJobs)
       :error="err"
       class="mt-4"
     >
-      <div class="alert app-note small mb-3" role="alert">
-        <div class="d-flex align-items-start gap-2">
-          <i class="bi bi-info-circle flex-shrink-0"></i>
-          <div>
-            <strong>Tip:</strong> Department supervisors can be added as job-specific recipients. When a daily log is submitted for a job, the supervisor's email will automatically receive the report.
-          </div>
-        </div>
-      </div>
+      <AppAlert
+        class="app-note small mb-3"
+        icon="bi bi-info-circle"
+        icon-class="flex-shrink-0 mt-1"
+        title="Tip:"
+      >
+        Department supervisors can be added as job-specific recipients. When a daily log is submitted for a job, the supervisor's email will automatically receive the report.
+      </AppAlert>
 
-      <div v-if="jobs.length === 0" class="alert alert-info text-center mb-0">
-        No jobs found.
-      </div>
+      <AppEmptyState
+        v-if="jobs.length === 0"
+        compact
+        icon="bi bi-briefcase"
+        icon-class="fs-4"
+        title="No jobs found"
+        message="Job-specific recipient lists will appear here once jobs exist."
+        message-class="small mb-0"
+      />
 
       <div v-else>
         <BaseAccordionCard

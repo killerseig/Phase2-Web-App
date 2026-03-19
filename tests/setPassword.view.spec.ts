@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent } from 'vue'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import SetPassword from '@/views/SetPassword.vue'
 import { ROLES, ROUTE_NAMES, type Role } from '@/constants/app'
@@ -30,19 +29,10 @@ vi.mock('@/services', () => ({
   setPasswordFromSetupLink: (...args: unknown[]) => mockSetPasswordFromSetupLink(...args),
 }))
 
-const ToastStub = defineComponent({
-  name: 'ToastStub',
-  template: '<div />',
-  methods: {
-    show() {},
-  },
-})
-
 const mountSetPassword = () =>
   mount(SetPassword, {
     global: {
       stubs: {
-        Toast: ToastStub,
         RouterLink: RouterLinkStub,
       },
     },

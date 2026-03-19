@@ -12,7 +12,12 @@
     <div class="p-2 sidebar-header">
       <div class="d-flex align-items-center gap-2 sidebar-header-text">
         <div class="fw-bold fs-5 sidebar-title">Phase 2</div>
-        <span v-if="role" class="badge app-badge-pill app-badge-pill--sm text-bg-primary text-uppercase small sidebar-role">{{ role }}</span>
+        <RoleBadge
+          v-if="role"
+          :role="role"
+          uppercase
+          class="small sidebar-role"
+        />
       </div>
       <div class="d-flex align-items-center gap-1">
         <button
@@ -114,6 +119,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, type RouteLocationNamedRaw, type RouteLocationRaw } from 'vue-router'
+import RoleBadge from '@/components/common/RoleBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useJobsStore } from '@/stores/jobs'

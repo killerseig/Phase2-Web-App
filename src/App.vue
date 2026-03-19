@@ -8,6 +8,7 @@
     </AppShell>
     <router-view v-else />
     <GlobalConfirmModal />
+    <Toast />
   </template>
 </template>
 
@@ -15,6 +16,7 @@
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
+import Toast from '@/components/Toast.vue'
 import GlobalConfirmModal from '@/components/common/GlobalConfirmModal.vue'
 import { useAuthStore } from '@/stores/auth'
 

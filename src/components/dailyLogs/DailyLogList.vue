@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppBadge from '@/components/common/AppBadge.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import DailyLogStatusBadge from '@/components/dailyLogs/DailyLogStatusBadge.vue'
 import type { DailyLog } from '@/services'
 
 defineProps<{
@@ -35,7 +38,7 @@ const handleKeySelect = (event: KeyboardEvent, id: string) => {
   <div class="card mb-4 panel-muted app-list-card">
     <div class="card-header panel-header d-flex align-items-center justify-content-between">
       <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>{{ title || 'Logs' }}</h5>
-      <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">{{ logs.length }}</span>
+      <AppBadge :label="logs.length" />
     </div>
     <div class="card-body p-0">
       <div v-if="logs.length" class="list-group list-group-flush">
@@ -56,7 +59,7 @@ const handleKeySelect = (event: KeyboardEvent, id: string) => {
             <div class="log-list-meta small">{{ formatTimestamp(log.submittedAt || log.updatedAt || log.createdAt) || 'Time not available' }}</div>
           </div>
           <div class="d-flex flex-column align-items-end gap-2">
-            <span :class="['badge', 'app-badge-pill', 'app-badge-pill--sm', log.status === 'submitted' ? 'text-bg-success' : 'text-bg-warning']">{{ log.status }}</span>
+            <DailyLogStatusBadge :status="log.status" />
             <div class="d-flex align-items-center gap-2">
               <span v-if="log.uid === currentUserId" class="log-list-meta small">You</span>
               <button
@@ -72,7 +75,12 @@ const handleKeySelect = (event: KeyboardEvent, id: string) => {
           </div>
         </div>
       </div>
-      <div v-else class="text-muted small text-center py-3">No logs for this date yet</div>
+      <AppEmptyState
+        v-else
+        compact
+        message="No logs for this date yet"
+        message-class="small mb-0"
+      />
     </div>
   </div>
 </template>

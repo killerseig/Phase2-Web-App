@@ -1,21 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import flatPickr from 'vue-flatpickr-component'
-import 'flatpickr/dist/flatpickr.css'
+import AppAlert from '@/components/common/AppAlert.vue'
+import AdminAccordionFormCard from '@/components/admin/AdminAccordionFormCard.vue'
+import ActionToggleGroup from '@/components/common/ActionToggleGroup.vue'
+import DatePickerField from '@/components/common/DatePickerField.vue'
+import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
-import StatusBadge from '@/components/admin/StatusBadge.vue'
-import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
+import InlineField from '@/components/common/InlineField.vue'
+import StatusBadge from '@/components/common/StatusBadge.vue'
+import TimecardWeekStatusBadge from '@/components/common/TimecardWeekStatusBadge.vue'
 import BaseTable from '@/components/common/BaseTable.vue'
 import { useJobsStore } from '@/stores/jobs'
 import { useUsersStore } from '@/stores/users'
 import type { Job, UserProfile } from '@/services'
+import {
+  createDatePickerConfig,
+  getTodayDateInputValue,
+  isValidDateInputValue,
+  toDateInputValue,
+} from '@/utils/dateInputs'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 import { listTimecardsByJobAndWeek } from '@/services/Timecards'
 import { downloadCsv } from '@/utils/plexisIntegration'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useToast } from '@/composables/useToast'
 import { ROLES } from '@/constants/app'
 
 type Align = 'start' | 'center' | 'end'
@@ -57,10 +67,10 @@ const createJobForm = (): JobFormInput => ({
   type: 'general',
 })
 
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 const jobsStore = useJobsStore()
 const usersStore = useUsersStore()
 const { confirm } = useConfirmDialog()
+const toast = useToast()
 const { jobs, loading: loadingJobs, error: jobsError } = storeToRefs(jobsStore)
 const { users: allUsers } = storeToRefs(usersStore)
 
@@ -142,15 +152,22 @@ const editingJobSaving = ref(false)
 
 // Computed foreman users
 const foremanUsers = computed(() => allUsers.value.filter(u => u.role === ROLES.FOREMAN && u.active))
+const foremanOptions = computed(() => foremanUsers.value.map((foreman) => {
+  const label = foremanDisplayName(foreman)
+  return {
+    value: label,
+    label,
+  }
+}))
 
 const foremanDisplayName = (user: UserProfile) => `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || ''
 
-const currentWeekStart = computed(() => snapToSunday(new Date()))
+const currentWeekStart = computed(() => snapToSunday(getTodayDateInputValue()))
 const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.value))
 const currentWeekLabel = computed(() => formatWeekRange(currentWeekStart.value, currentWeekEnd.value))
 const exportDateInWeek = ref<string>(currentWeekEnd.value)
 const exportWeekStart = computed(() => {
-  if (!isValidDateValue(exportDateInWeek.value)) return ''
+  if (!isValidDateInputValue(exportDateInWeek.value)) return ''
   return snapToSunday(exportDateInWeek.value)
 })
 const exportWeekEnding = computed(() => {
@@ -163,42 +180,9 @@ const exportWeekLabel = computed(() => {
 })
 const activeJobActionsId = ref('')
 
-const exportDateConfig = computed(() => ({
-  dateFormat: 'Y-m-d',
-  disableMobile: true,
-  prevArrow: '<i class="bi bi-chevron-left"></i>',
-  nextArrow: '<i class="bi bi-chevron-right"></i>',
+const exportDateConfig = computed(() => createDatePickerConfig({
   maxDate: currentWeekEnd.value,
 }))
-
-function normalizeWeekEnding(input?: string | Date | null): string | undefined {
-  if (!input) return undefined
-  if (typeof input === 'string') return input
-  const year = input.getFullYear()
-  const month = String(input.getMonth() + 1).padStart(2, '0')
-  const day = String(input.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function formatDateValue(value: Date): string {
-  const year = value.getUTCFullYear()
-  const month = String(value.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(value.getUTCDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function isValidDateValue(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const parsed = new Date(`${value}T00:00:00Z`)
-  if (Number.isNaN(parsed.getTime())) return false
-  return formatDateValue(parsed) === value
-}
-
-function onExportDateChange(selectedDates: Date[]) {
-  const selected = Array.isArray(selectedDates) && selectedDates.length ? selectedDates[0] : null
-  if (!selected) return
-  exportDateInWeek.value = formatDateValue(selected)
-}
 
 function toCsv(headers: string[], rows: (string | number)[][]): string {
   const escape = (value: string | number) => {
@@ -210,9 +194,9 @@ function toCsv(headers: string[], rows: (string | number)[][]): string {
 
 async function exportAllSubmittedAllJobs() {
   try {
-    const weekEnding = normalizeWeekEnding(exportWeekEnding.value)
+    const weekEnding = toDateInputValue(exportWeekEnding.value)
     if (!weekEnding) {
-      toastRef.value?.show('Please select a valid date.', 'error')
+      toast.show('Please select a valid date.', 'error')
       return
     }
     const rows: (string | number)[][] = []
@@ -242,7 +226,7 @@ async function exportAllSubmittedAllJobs() {
     }
 
     if (rows.length === 0) {
-      toastRef.value?.show('No submitted timecards to export', 'info')
+      toast.show('No submitted timecards to export', 'info')
       return
     }
 
@@ -267,9 +251,9 @@ async function exportAllSubmittedAllJobs() {
     const filename = `timecards-submitted-all-jobs-${weekEnding}.csv`
 
     downloadCsv(toCsv(headers, rows), filename)
-    toastRef.value?.show(`Exported ${rows.length} submitted timecard row(s)`, 'success')
+    toast.show(`Exported ${rows.length} submitted timecard row(s)`, 'success')
   } catch (e) {
-    toastRef.value?.show(formatErr(e), 'error')
+    toast.show(formatErr(e), 'error')
   }
 }
 
@@ -367,9 +351,9 @@ async function saveInlineJob(job: Job) {
       accountNumber: trimmedAccountNumber || null,
       type: editingJobType.value,
     })
-    toastRef.value?.show('Job updated', 'success')
+    toast.show('Job updated', 'success')
   } catch (e) {
-    toastRef.value?.show(formatErr(e), 'error')
+    toast.show(formatErr(e), 'error')
   } finally {
     editingJobSaving.value = false
   }
@@ -407,12 +391,12 @@ async function submitJobForm() {
       accountNumber: jobForm.value.accountNumber,
       type: jobForm.value.type,
     })
-    toastRef.value?.show('Job created successfully', 'success')
+    toast.show('Job created successfully', 'success')
     showJobForm.value = false
     jobForm.value = createJobForm()
     loadJobs()
   } catch (e) {
-    toastRef.value?.show(formatErr(e), 'error')
+    toast.show(formatErr(e), 'error')
   } finally {
     creatingJob.value = false
   }
@@ -436,10 +420,10 @@ async function handleDeleteJob(job: Job) {
 
   try {
     await jobsStore.deleteJob(job.id)
-    toastRef.value?.show('Job deleted', 'success')
+    toast.show('Job deleted', 'success')
     loadJobs()
   } catch (e) {
-    toastRef.value?.show('Failed to delete job', 'error')
+    toast.show('Failed to delete job', 'error')
   }
 }
 
@@ -447,10 +431,10 @@ async function toggleArchive(job: Job, active: boolean) {
   togglingJobId.value = job.id
   try {
     await jobsStore.setJobActive(job.id, active)
-    toastRef.value?.show(active ? 'Job restored' : 'Job archived', 'success')
+    toast.show(active ? 'Job restored' : 'Job archived', 'success')
     loadJobs()
   } catch (e) {
-    toastRef.value?.show(formatErr(e), 'error')
+    toast.show(formatErr(e), 'error')
   } finally {
     togglingJobId.value = ''
   }
@@ -474,18 +458,22 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Toast ref="toastRef" />
+  
   
   <div class="app-page">
     <!-- Header -->
     <AppPageHeader eyebrow="Admin Panel" title="Jobs" subtitle="Create, edit, archive, and export job records." />
 
-    <BaseAccordionCard
+    <AdminAccordionFormCard
       v-model:open="showJobForm"
       title="Create Job"
       subtitle="Add a new job with code for tracking"
+      :loading="creatingJob"
+      :submit-disabled="!jobForm.name"
+      submit-label="Create Job"
+      @submit="submitJobForm"
+      @cancel="cancelJobForm"
     >
-      <form class="row g-3" @submit.prevent="submitJobForm">
         <div class="col-md-2">
           <label class="form-label small">Job #</label>
           <input v-model="jobForm.code" type="text" class="form-control" placeholder="4197" />
@@ -539,44 +527,34 @@ onUnmounted(() => {
           <label class="form-label small">KJIC</label>
           <input v-model="jobForm.kjic" type="text" class="form-control" placeholder="Yes/No" />
         </div>
-        <div class="col-12 d-flex gap-2 justify-content-end pt-2">
-          <button type="button" class="btn btn-outline-secondary" @click.stop="cancelJobForm" :disabled="creatingJob">
-            Cancel
-          </button>
-          <button type="submit" class="btn btn-primary" :disabled="creatingJob || !jobForm.name">
-            <span v-if="creatingJob" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Create Job
-          </button>
-        </div>
-      </form>
-    </BaseAccordionCard>
+    </AdminAccordionFormCard>
 
     <!-- Office Exports -->
-    <div class="card mb-4 app-toolbar-card">
-      <div class="card-body d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
-        <div>
-          <h5 class="mb-1">Office Export</h5>
-          <div class="text-muted small">Select any date in the week to export submitted timecards across all jobs.</div>
-        </div>
-        <div class="ms-md-auto d-flex flex-wrap gap-2 align-items-center">
-          <div class="d-flex align-items-center gap-2 flex-wrap">
-            <label class="small text-muted mb-0">Select date in week</label>
-            <flat-pickr
-              v-model="exportDateInWeek"
-              :config="exportDateConfig"
-              @on-change="onExportDateChange"
-              class="form-control form-control-sm"
-              placeholder="Select any date"
-              aria-label="Week ending date"
-            />
-          </div>
-          <div class="small text-muted">Week range: {{ exportWeekLabel }} | Week ending Saturday: {{ exportWeekEnding }}</div>
-          <button class="btn btn-outline-success btn-sm" @click="exportAllSubmittedAllJobs">
-            <i class="bi bi-download me-1"></i>Export Submitted (all jobs)
-          </button>
-        </div>
+    <AppToolbarCard
+      class="mb-4"
+      body-class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3"
+    >
+      <div>
+        <h5 class="mb-1">Office Export</h5>
+        <div class="text-muted small">Select any date in the week to export submitted timecards across all jobs.</div>
       </div>
-    </div>
+      <div class="ms-md-auto d-flex flex-wrap gap-2 align-items-center">
+        <DatePickerField
+          v-model="exportDateInWeek"
+          :config="exportDateConfig"
+          label="Select date in week"
+          label-class="small text-muted mb-0"
+          wrapper-class="d-flex align-items-center gap-2 flex-wrap"
+          size="sm"
+          placeholder="Select any date"
+          input-aria-label="Week ending date"
+        />
+        <div class="small text-muted">Week range: {{ exportWeekLabel }} | Week ending Saturday: {{ exportWeekEnding }}</div>
+        <button class="btn btn-outline-success btn-sm" @click="exportAllSubmittedAllJobs">
+          <i class="bi bi-download me-1"></i>Export Submitted (all jobs)
+        </button>
+      </div>
+    </AppToolbarCard>
     <!-- Jobs List -->
     <AdminCardWrapper
       title="Jobs"
@@ -585,15 +563,7 @@ onUnmounted(() => {
       :error="err"
     >
       <template #default>
-        <div v-if="loadingJobs" class="text-center py-5">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-          </div>
-        </div>
-
-        <div v-else-if="sortedJobs.length === 0" class="alert alert-info text-center mb-0">
-          No jobs found. Create your first job above.
-        </div>
+        <AppAlert v-if="sortedJobs.length === 0" variant="info" class="text-center mb-0" message="No jobs found. Create your first job above." />
 
         <div v-else>
           <BaseTable
@@ -606,139 +576,91 @@ onUnmounted(() => {
             @sort-change="handleJobSort"
           >
             <template #cell-name="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobName"
-                  type="text"
-                  class="form-control form-control-sm"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobName"
+                :disabled="editingJobSaving"
+              >
                 <span class="cell-ellipsis" :title="asText(row.name, '')">{{ asText(row.name) }}</span>
-              </template>
+              </InlineField>
             </template>
 
             <template #code="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobCode"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="Job #"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobCode"
+                placeholder="Job #"
+                :disabled="editingJobSaving"
+              >
                 {{ row.code || '--' }}
-              </template>
+              </InlineField>
             </template>
 
             <template #projectManager="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobProjectManager"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="Project Manager"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobProjectManager"
+                placeholder="Project Manager"
+                :disabled="editingJobSaving"
+              >
                 <span class="cell-ellipsis" :title="asText(row.projectManager)">{{ asText(row.projectManager) }}</span>
-              </template>
+              </InlineField>
             </template>
 
             <template #foreman="{ row }">
-              <template v-if="editingJobId === row.id">
-                <select
-                  v-model="editingJobForeman"
-                  class="form-control form-control-sm"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                >
-                  <option value="">-- Select Foreman --</option>
-                  <option v-for="foreman in foremanUsers" :key="foreman.id" :value="foremanDisplayName(foreman)">
-                    {{ foremanDisplayName(foreman) }}
-                  </option>
-                </select>
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobForeman"
+                type="select"
+                :options="[{ value: '', label: '-- Select Foreman --' }, ...foremanOptions]"
+                :disabled="editingJobSaving"
+              >
                 <span class="cell-ellipsis" :title="asText(row.foreman)">{{ asText(row.foreman) }}</span>
-              </template>
+              </InlineField>
             </template>
 
             <template #gc="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobGc"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="GC"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobGc"
+                placeholder="GC"
+                :disabled="editingJobSaving"
+              >
                 <span class="cell-ellipsis" :title="asText(row.gc)">{{ asText(row.gc) }}</span>
-              </template>
+              </InlineField>
             </template>
 
             <template #jobAddress="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobAddress"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="Job Address"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobAddress"
+                placeholder="Job Address"
+                :disabled="editingJobSaving"
+              >
                 <span class="cell-ellipsis" :title="asText(row.jobAddress)">{{ asText(row.jobAddress) }}</span>
-              </template>
+              </InlineField>
             </template>
 
             <template #startDate="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobStartDate"
-                  type="date"
-                  class="form-control form-control-sm"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobStartDate"
+                type="date"
+                :disabled="editingJobSaving"
+              >
                 <span class="cell-nowrap">{{ row.startDate || '--' }}</span>
-              </template>
+              </InlineField>
             </template>
 
             <template #finishDate="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobFinishDate"
-                  type="date"
-                  class="form-control form-control-sm"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobFinishDate"
+                type="date"
+                :disabled="editingJobSaving"
+              >
                 <span class="cell-nowrap">{{ row.finishDate || '--' }}</span>
-              </template>
+              </InlineField>
             </template>
 
             <template #status="{ row }">
@@ -746,85 +668,64 @@ onUnmounted(() => {
             </template>
 
             <template #taxExempt="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobTaxExempt"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="Tax Exempt"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobTaxExempt"
+                placeholder="Tax Exempt"
+                :disabled="editingJobSaving"
+              >
                 {{ row.taxExempt || '--' }}
-              </template>
+              </InlineField>
             </template>
 
             <template #certified="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobCertified"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="Certified"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobCertified"
+                placeholder="Certified"
+                :disabled="editingJobSaving"
+              >
                 {{ row.certified || '--' }}
-              </template>
+              </InlineField>
             </template>
 
             <template #cip="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobCip"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="CIP"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobCip"
+                placeholder="CIP"
+                :disabled="editingJobSaving"
+              >
                 {{ row.cip || '--' }}
-              </template>
+              </InlineField>
             </template>
 
             <template #kjic="{ row }">
-              <template v-if="editingJobId === row.id">
-                <input
-                  v-model="editingJobKjic"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="KJIC"
-                  @click.stop
-                  @mousedown.stop
-                  :disabled="editingJobSaving"
-                />
-              </template>
-              <template v-else>
+              <InlineField
+                :editing="editingJobId === row.id"
+                v-model="editingJobKjic"
+                placeholder="KJIC"
+                :disabled="editingJobSaving"
+              >
                 {{ row.kjic || '--' }}
-              </template>
+              </InlineField>
             </template>
 
             <template #timecards="{ row }">
-              <span
-                :class="['badge', 'app-badge-pill', 'app-badge-pill--sm', row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'text-bg-success' : 'text-bg-danger']"
-                :title="`Timecards for week ${currentWeekLabel}: ${row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'Submitted' : 'Not submitted'}`"
-              >
-                {{ row.timecardStatus === 'submitted' && row.timecardPeriodEndDate === currentWeekEnd ? 'Submitted this week' : 'Not submitted this week' }}
-              </span>
+              <TimecardWeekStatusBadge
+                :status="row.timecardStatus"
+                :period-end-date="row.timecardPeriodEndDate"
+                :current-week-end="currentWeekEnd"
+                :current-week-label="currentWeekLabel"
+              />
             </template>
 
             <template #actions="{ row }">
-              <div class="d-flex align-items-center justify-content-end gap-1 flex-nowrap">
-                <div v-if="activeJobActionsId === row.id" class="btn-group btn-group-sm flex-nowrap" role="group">
+              <ActionToggleGroup
+                :open="activeJobActionsId === row.id"
+                wrapper-class="d-flex align-items-center justify-content-end gap-1 flex-nowrap"
+                @toggle="toggleJobActions(row)"
+              >
                   <button
                     class="btn btn-outline-danger"
                     @click.stop="handleDeleteJob(row)"
@@ -850,17 +751,7 @@ onUnmounted(() => {
                   >
                     <i class="bi bi-arrow-counterclockwise text-success"></i>
                   </button>
-                </div>
-
-                <button
-                  class="btn btn-sm btn-outline-secondary"
-                  @click.stop="toggleJobActions(row)"
-                  :aria-pressed="activeJobActionsId === row.id"
-                  title="Toggle edit mode"
-                >
-                  <i class="bi bi-pencil"></i>
-                </button>
-              </div>
+              </ActionToggleGroup>
             </template>
           </BaseTable>
         </div>

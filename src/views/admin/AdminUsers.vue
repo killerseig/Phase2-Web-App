@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import AppAlert from '@/components/common/AppAlert.vue'
+import AdminAccordionFormCard from '@/components/admin/AdminAccordionFormCard.vue'
+import ActionToggleGroup from '@/components/common/ActionToggleGroup.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import Toast from '@/components/Toast.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
-import StatusBadge from '@/components/admin/StatusBadge.vue'
-import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
+import InlineField from '@/components/common/InlineField.vue'
+import RoleBadge from '@/components/common/RoleBadge.vue'
+import StatusBadge from '@/components/common/StatusBadge.vue'
 import BaseTable from '@/components/common/BaseTable.vue'
 import { useUsersStore } from '@/stores/users'
 import { type UserProfile } from '@/services'
 import { ROLES, type Role } from '@/constants/app'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useToast } from '@/composables/useToast'
 import { normalizeError } from '@/services/serviceUtils'
 import { getFirstValidationMessage, validateCreateUserForm } from '@/utils/validation'
 
@@ -22,7 +26,7 @@ type UserSortKey = 'email' | 'firstName' | 'lastName' | 'role'
 
 const usersStore = useUsersStore()
 const { confirm } = useConfirmDialog()
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
+const toast = useToast()
 const { users, loading: loadingUsers, error: usersError } = storeToRefs(usersStore)
 
 const createUserForm = () => ({
@@ -61,6 +65,12 @@ const userColumns: Column[] = [
 
 const userSortKey = ref<UserSortKey>('email')
 const userSortDir = ref<SortDir>('asc')
+const userRoleOptions = [
+  { value: ROLES.NONE, label: 'None (No Access)' },
+  { value: ROLES.FOREMAN, label: 'Foreman' },
+  { value: ROLES.CONTROLLER, label: 'Controller' },
+  { value: ROLES.ADMIN, label: 'Admin' },
+] as const
 
 const sortedUsers = computed(() => {
   const key = userSortKey.value
@@ -98,7 +108,7 @@ async function submitUserForm() {
   })
   const validationMessage = getFirstValidationMessage(validation)
   if (validationMessage) {
-    toastRef.value?.show(validationMessage, 'error')
+    toast.show(validationMessage, 'error')
     return
   }
 
@@ -110,13 +120,13 @@ async function submitUserForm() {
       userForm.value.lastName.trim(),
       userForm.value.role
     )
-    toastRef.value?.show(`User created successfully. Welcome email sent to ${userForm.value.email}`, 'success')
+    toast.show(`User created successfully. Welcome email sent to ${userForm.value.email}`, 'success')
     showUserForm.value = false
     resetUserForm()
     loadUsers()
   } catch (e) {
     const msg = normalizeError(e, 'Failed to create user')
-    toastRef.value?.show(friendlyError(msg), 'error')
+    toast.show(friendlyError(msg), 'error')
   } finally {
     creatingUser.value = false
   }
@@ -146,7 +156,7 @@ function cancelUserForm() {
 async function saveUserEdit(user: UserProfile, closeActions = false) {
   if (editingUserId.value !== user.id) return true
   if (!editUserForm.value.firstName.trim() || !editUserForm.value.lastName.trim()) {
-    toastRef.value?.show('First name and last name are required', 'error')
+    toast.show('First name and last name are required', 'error')
     return false
   }
 
@@ -164,13 +174,13 @@ async function saveUserEdit(user: UserProfile, closeActions = false) {
     }
     if (Object.keys(updates).length > 0) {
       await usersStore.updateUserProfile(user.id, updates)
-      toastRef.value?.show('User updated', 'success')
+      toast.show('User updated', 'success')
     }
     clearUserEdit()
     if (closeActions) activeUserActionsId.value = ''
     return true
   } catch {
-    toastRef.value?.show('Failed to update user', 'error')
+    toast.show('Failed to update user', 'error')
     return false
   } finally {
     savingUserEdit.value = false
@@ -201,12 +211,12 @@ async function handleDeleteUser(user: UserProfile) {
     const cleanupMessage = removed
       ? ` and removed from recipient lists${jobCount > 0 ? ` (${jobCount} job list${jobCount === 1 ? '' : 's'} updated)` : ''}`
       : ''
-    toastRef.value?.show(`User deleted${cleanupMessage}`, 'success')
+    toast.show(`User deleted${cleanupMessage}`, 'success')
     if (activeUserActionsId.value === user.id) {
       cancelUserEdit()
     }
   } catch {
-    toastRef.value?.show('Failed to delete user', 'error')
+    toast.show('Failed to delete user', 'error')
   }
 }
 
@@ -238,23 +248,27 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Toast ref="toastRef" />
+  
   <div class="app-page">
     <AppPageHeader eyebrow="Admin Panel" title="User Management" subtitle="Manage user profiles and permissions." />
 
-    <div class="alert app-note small d-flex align-items-start gap-2" role="alert">
-      <i class="bi bi-info-circle mt-1"></i>
-      <div>
-        Setting a user to <strong>None</strong> role or <strong>Inactive</strong> automatically removes their email from all recipient lists.
-      </div>
-    </div>
+    <AppAlert
+      class="app-note small"
+      icon="bi bi-info-circle"
+      icon-class="mt-1"
+    >
+      Setting a user to <strong>None</strong> role or <strong>Inactive</strong> automatically removes their email from all recipient lists.
+    </AppAlert>
 
-    <BaseAccordionCard
+    <AdminAccordionFormCard
       v-model:open="showUserForm"
       title="Create User"
       subtitle="Add a new user account and set their role"
+      :loading="creatingUser"
+      submit-label="Create User"
+      @submit="submitUserForm"
+      @cancel="cancelUserForm"
     >
-      <form class="row g-3" @submit.prevent="submitUserForm">
         <div class="col-md-4">
           <label class="form-label small">Email</label>
           <input
@@ -288,23 +302,12 @@ onUnmounted(() => {
         <div class="col-md-4">
           <label class="form-label small">Role</label>
           <select v-model="userForm.role" class="form-select" required>
-            <option :value="ROLES.NONE">None (No Access)</option>
-            <option :value="ROLES.FOREMAN">Foreman</option>
-            <option :value="ROLES.CONTROLLER">Controller</option>
-            <option :value="ROLES.ADMIN">Admin</option>
+            <option v-for="option in userRoleOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
           </select>
         </div>
-        <div class="col-12 d-flex gap-2 justify-content-end pt-2">
-          <button type="button" class="btn btn-outline-secondary" @click.stop="cancelUserForm" :disabled="creatingUser">
-            Cancel
-          </button>
-          <button type="submit" class="btn btn-primary" :disabled="creatingUser">
-            <span v-if="creatingUser" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Create User
-          </button>
-        </div>
-      </form>
-    </BaseAccordionCard>
+    </AdminAccordionFormCard>
 
     <AdminCardWrapper
       title="User Profiles"
@@ -312,15 +315,7 @@ onUnmounted(() => {
       :loading="loadingUsers"
       :error="err"
     >
-      <div v-if="loadingUsers" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-      </div>
-
-      <div v-else-if="users.length === 0" class="alert alert-info text-center mb-0">
-        No users yet. Create your first user above.
-      </div>
+      <AppAlert v-if="users.length === 0" variant="info" class="text-center mb-0" message="No users yet. Create your first user above." />
 
       <div v-else>
         <BaseTable
@@ -332,64 +327,51 @@ onUnmounted(() => {
           @sort-change="handleUserSort"
         >
           <template #cell-email="{ row }">
-            <template v-if="editingUserId === row.id">
-              <input v-model="editUserForm.email" class="form-control form-control-sm" type="email" disabled />
-            </template>
-            <span v-else class="small">{{ row.email }}</span>
+            <InlineField
+              :editing="editingUserId === row.id"
+              v-model="editUserForm.email"
+              type="email"
+              :disabled="true"
+            >
+              <span class="small">{{ row.email }}</span>
+            </InlineField>
           </template>
 
           <template #cell-firstName="{ row }">
-            <template v-if="editingUserId === row.id">
-              <input
-                v-model="editUserForm.firstName"
-                class="form-control form-control-sm"
-                placeholder="First name"
-                @keydown.enter="saveUserEdit(row, true)"
-                @keydown.esc="cancelUserEdit"
-              />
-            </template>
-            <span v-else>{{ row.firstName }}</span>
+            <InlineField
+              :editing="editingUserId === row.id"
+              v-model="editUserForm.firstName"
+              placeholder="First name"
+              @enter="saveUserEdit(row, true)"
+              @escape="cancelUserEdit"
+            >
+              <span>{{ row.firstName }}</span>
+            </InlineField>
           </template>
 
           <template #cell-lastName="{ row }">
-            <template v-if="editingUserId === row.id">
-              <input
-                v-model="editUserForm.lastName"
-                class="form-control form-control-sm"
-                placeholder="Last name"
-                @keydown.enter="saveUserEdit(row, true)"
-                @keydown.esc="cancelUserEdit"
-              />
-            </template>
-            <span v-else>{{ row.lastName }}</span>
+            <InlineField
+              :editing="editingUserId === row.id"
+              v-model="editUserForm.lastName"
+              placeholder="Last name"
+              @enter="saveUserEdit(row, true)"
+              @escape="cancelUserEdit"
+            >
+              <span>{{ row.lastName }}</span>
+            </InlineField>
           </template>
 
           <template #role="{ row }">
-            <template v-if="editingUserId === row.id">
-              <select
-                v-model="editUserForm.role"
-                class="form-select form-select-sm"
-                @keydown.enter="saveUserEdit(row, true)"
-                @keydown.esc="cancelUserEdit"
-              >
-                <option :value="ROLES.NONE">None</option>
-                <option :value="ROLES.FOREMAN">Foreman</option>
-                <option :value="ROLES.CONTROLLER">Controller</option>
-                <option :value="ROLES.ADMIN">Admin</option>
-              </select>
-            </template>
-            <span
-              v-else
-              class="badge app-badge-pill app-badge-pill--sm"
-              :class="{
-                'bg-secondary': row.role === ROLES.NONE,
-                'bg-warning': row.role === ROLES.FOREMAN,
-                'bg-primary': row.role === ROLES.CONTROLLER,
-                'bg-danger': row.role === ROLES.ADMIN,
-              }"
+            <InlineField
+              :editing="editingUserId === row.id"
+              v-model="editUserForm.role"
+              type="select"
+              :options="userRoleOptions"
+              @enter="saveUserEdit(row, true)"
+              @escape="cancelUserEdit"
             >
-              {{ row.role }}
-            </span>
+              <RoleBadge :role="row.role" />
+            </InlineField>
           </template>
 
           <template #status="{ row }">
@@ -397,8 +379,11 @@ onUnmounted(() => {
           </template>
 
           <template #actions="{ row }">
-            <div class="d-flex align-items-center justify-content-end gap-2 flex-nowrap">
-              <div v-if="activeUserActionsId === row.id" class="btn-group btn-group-sm flex-nowrap" role="group">
+            <ActionToggleGroup
+              :open="activeUserActionsId === row.id"
+              :toggle-disabled="savingUserEdit && editingUserId === row.id"
+              @toggle="toggleUserActions(row)"
+            >
                 <button
                   @click.stop="handleDeleteUser(row)"
                   class="btn btn-outline-danger"
@@ -406,18 +391,7 @@ onUnmounted(() => {
                 >
                   <i class="bi bi-trash text-danger"></i>
                 </button>
-              </div>
-
-              <button
-                class="btn btn-sm btn-outline-secondary"
-                @click.stop="toggleUserActions(row)"
-                :aria-pressed="activeUserActionsId === row.id"
-                :disabled="savingUserEdit && editingUserId === row.id"
-                title="Toggle edit mode"
-              >
-                <i class="bi bi-pencil"></i>
-              </button>
-            </div>
+            </ActionToggleGroup>
           </template>
         </BaseTable>
       </div>

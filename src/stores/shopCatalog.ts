@@ -25,6 +25,16 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
     error.value = normalizeError(err, fallback)
   }
 
+  const upsertCachedItem = (nextItem: ShopCatalogItem) => {
+    const existingIndex = items.value.findIndex((entry) => entry.id === nextItem.id)
+    if (existingIndex >= 0) {
+      items.value.splice(existingIndex, 1, nextItem)
+      return
+    }
+
+    items.value = [...items.value, nextItem].sort((a, b) => a.description.localeCompare(b.description))
+  }
+
   const updateCachedItem = (itemId: string, updater: (item: ShopCatalogItem) => void) => {
     const item = items.value.find((entry) => entry.id === itemId)
     if (item) updater(item)
@@ -78,7 +88,7 @@ export const useShopCatalogStore = defineStore('shopCatalog', () => {
       const catalog = await listCatalogService(false)
       const newItem = catalog.find(i => i.id === itemId)
       if (newItem) {
-        items.value.push(newItem)
+        upsertCachedItem(newItem)
         return newItem
       }
       throw new Error('Failed to retrieve created item')

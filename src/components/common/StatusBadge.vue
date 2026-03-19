@@ -1,7 +1,10 @@
-<script lang="ts">
-export default {
+<script setup lang="ts">
+import { computed } from 'vue'
+import AppBadge from '@/components/common/AppBadge.vue'
+
+defineOptions({
   name: 'StatusBadge',
-}
+})
 
 const defaultStatusMap: Record<string, { label: string; class: string }> = {
   draft: { label: 'Draft', class: 'text-bg-secondary' },
@@ -12,28 +15,20 @@ const defaultStatusMap: Record<string, { label: string; class: string }> = {
   inactive: { label: 'Inactive', class: 'text-bg-secondary' },
   archived: { label: 'Archived', class: 'text-bg-dark' },
 }
-</script>
-
-<script setup lang="ts">
-import { computed } from 'vue'
 
 interface Props {
   status: string
   statusMap?: Record<string, { label: string; class: string }>
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  statusMap: () => defaultStatusMap,
-})
+const props = defineProps<Props>()
 
 const statusInfo = computed(() => {
-  const map = props.statusMap
+  const map = props.statusMap ?? defaultStatusMap
   return map[props.status] || { label: props.status, class: 'text-bg-secondary' }
 })
 </script>
 
 <template>
-  <span :class="`badge app-badge-pill app-badge-pill--sm ${statusInfo.class}`">
-    {{ statusInfo.label }}
-  </span>
+  <AppBadge :label="statusInfo.label" :variant-class="statusInfo.class" />
 </template>

@@ -1,38 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { useToast, type ToastType } from '@/composables/useToast'
 
-export interface ToastMessage {
-  id: string
-  type: 'success' | 'error' | 'info' | 'warning'
-  message: string
-  duration?: number
-}
+const { toasts } = useToast()
 
-const toasts = ref<ToastMessage[]>([])
-let nextId = 0
-
-function show(message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info', duration = 5000) {
-  const id = `toast-${nextId++}`
-  const toast: ToastMessage = { id, message, type, duration }
-  toasts.value.push(toast)
-
-  if (duration > 0) {
-    setTimeout(() => {
-      remove(id)
-    }, duration)
-  }
-
-  return id
-}
-
-function remove(id: string) {
-  const idx = toasts.value.findIndex(t => t.id === id)
-  if (idx !== -1) {
-    toasts.value.splice(idx, 1)
-  }
-}
-
-function bgClass(type: string) {
+function bgClass(type: ToastType) {
   switch (type) {
     case 'success': return 'bg-success'
     case 'error': return 'bg-danger'
@@ -41,7 +12,10 @@ function bgClass(type: string) {
   }
 }
 
-defineExpose({ show, remove })
+function animationStyle(duration?: number) {
+  if (!duration || duration <= 0) return undefined
+  return { animationDuration: `${duration}ms` }
+}
 </script>
 
 <template>
@@ -51,6 +25,7 @@ defineExpose({ show, remove })
       :key="toast.id"
       class="toast show mb-2"
       :class="bgClass(toast.type)"
+      :style="animationStyle(toast.duration)"
     >
       <div class="toast-body text-white">
         {{ toast.message }}
@@ -65,7 +40,7 @@ defineExpose({ show, remove })
 }
 
 .toast {
-  animation: fadeInOut 3s ease-in-out forwards;
+  animation: fadeInOut 5s ease-in-out forwards;
   min-width: 300px;
 }
 

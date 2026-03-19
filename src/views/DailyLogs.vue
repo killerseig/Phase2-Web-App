@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import flatPickr from 'vue-flatpickr-component'
-import 'flatpickr/dist/flatpickr.css'
+import { computed } from 'vue'
+import AppAlert from '@/components/common/AppAlert.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
+import DatePickerField from '@/components/common/DatePickerField.vue'
+import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import Toast from '@/components/Toast.vue'
 import DailyLogAttachments from '@/components/dailyLogs/DailyLogAttachments.vue'
 import DailyLogList from '@/components/dailyLogs/DailyLogList.vue'
 import DailyLogManpower from '@/components/dailyLogs/DailyLogManpower.vue'
 import DailyLogRecipients from '@/components/dailyLogs/DailyLogRecipients.vue'
+import DailyLogStatusBadge from '@/components/dailyLogs/DailyLogStatusBadge.vue'
 import DailyLogTextField from '@/components/dailyLogs/DailyLogTextField.vue'
 import { useDailyLog } from '@/composables/useDailyLog'
 import { formatDateTime } from '@/utils/datetime'
 
 const props = defineProps<{ jobId?: string }>()
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
 
 const jobId = computed(() => String(props.jobId ?? ''))
 
@@ -33,7 +34,6 @@ const {
   currentSubmittedAt,
   jobEmailRecipients,
   globalDailyLogRecipients,
-  newEmailRecipient,
   savingRecipients,
   canEditDraft,
   photoFileName,
@@ -62,16 +62,19 @@ const {
   isAdminAddedLine,
   deleteAttachment,
   autoSave,
-} = useDailyLog(jobId, { toastRef })
+} = useDailyLog(jobId)
 
 const qcAttachments = computed(() => (form.value.attachments || []).filter((attachment) => attachment.type === 'qc'))
 const hasEmailRecipients = computed(() =>
   Array.from(new Set([...globalDailyLogRecipients.value, ...jobEmailRecipients.value].filter(Boolean))).length > 0
 )
+const isDatedDraft = computed(() => logDate.value !== today.value && currentStatus.value === 'draft')
+const isSubmittedViewOnly = computed(() => logDate.value !== today.value && currentStatus.value === 'submitted')
+const datedDraftLabel = computed(() => `${logDate.value > today.value ? 'Future' : 'Past'} draft`)
+const datedDraftMessageTense = computed(() => (logDate.value > today.value ? 'future' : 'previous'))
 
-function onDateChange(_dates: Date[], dateStr: string) {
+function handleLogDateChange(dateStr: string) {
   if (!dateStr) return
-  logDate.value = dateStr
   void loadForDate(dateStr)
 }
 
@@ -99,8 +102,6 @@ function indoorClimateKey(reading: unknown, idx: number): string {
 </script>
 
 <template>
-  <Toast ref="toastRef" />
-  
   <div class="app-page">
     <!-- Header -->
     <AppPageHeader eyebrow="Job Daily Log" :title="jobName">
@@ -108,54 +109,57 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         <span v-if="jobCode">Job Number: {{ jobCode }}</span>
       </template>
       <template #badges>
-        <span class="badge text-bg-secondary app-page-chip">{{ logsForSelectedDate.length }} for {{ logDate }}</span>
-        <span v-if="currentStatus === 'draft'" class="badge text-bg-warning app-page-chip">Draft</span>
-        <span v-else class="badge text-bg-success app-page-chip">Submitted</span>
+        <AppBadge :label="`${logsForSelectedDate.length} for ${logDate}`" variant-class="text-bg-secondary" class="app-page-chip" />
+        <DailyLogStatusBadge :status="currentStatus" class="app-page-chip" />
       </template>
     </AppPageHeader>
 
     <!-- Date & Status Controls -->
-    <div class="card mb-4 app-toolbar-card">
-      <div class="card-body">
-        <div class="row align-items-center g-3">
-          <div class="col-md-4">
-            <label class="form-label small text-muted mb-1">Date</label>
-            <div class="input-group input-group-sm">
-              <span class="input-group-text"><i class="bi bi-calendar-date"></i></span>
-              <flat-pickr
-                v-model="logDate"
-                :config="datePickerConfig"
-                @on-change="onDateChange"
-                class="form-control"
-                aria-label="Daily log date"
-              />
-            </div>
+    <AppToolbarCard class="mb-4">
+      <div class="row align-items-center g-3">
+        <div class="col-md-4">
+          <DatePickerField
+            v-model="logDate"
+            :config="datePickerConfig"
+            label="Date"
+            label-class="form-label small text-muted mb-1"
+            input-aria-label="Daily log date"
+            prepend-icon="bi bi-calendar-date"
+            size="sm"
+            show-open-button
+            open-on-focus
+            @change="handleLogDateChange"
+          />
+        </div>
+        <div class="col-md-4 d-flex flex-column gap-1">
+          <div class="text-muted small">Status</div>
+          <div class="d-flex flex-wrap gap-2">
+            <DailyLogStatusBadge :status="currentStatus" :auto-saved="currentStatus === 'draft'" />
+            <AppBadge v-if="isDatedDraft" variant-class="text-bg-danger">
+              <i class="bi bi-exclamation-triangle me-1"></i>{{ datedDraftLabel }}
+            </AppBadge>
+            <AppBadge v-if="isSubmittedViewOnly" variant-class="text-bg-info">
+              <i class="bi bi-eye me-1"></i>View only
+            </AppBadge>
           </div>
-          <div class="col-md-4 d-flex flex-column gap-1">
-            <div class="text-muted small">Status</div>
-            <div class="d-flex flex-wrap gap-2">
-              <span v-if="currentStatus === 'draft'" class="badge app-badge-pill app-badge-pill--sm text-bg-warning">Draft (auto-saved)</span>
-              <span v-else class="badge app-badge-pill app-badge-pill--sm text-bg-success">Submitted</span>
-              <span v-if="logDate !== today && currentStatus === 'draft'" class="badge app-badge-pill app-badge-pill--sm text-bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ logDate > today ? 'Future' : 'Past' }} draft</span>
-              <span v-if="logDate !== today && currentStatus === 'submitted'" class="badge app-badge-pill app-badge-pill--sm text-bg-info"><i class="bi bi-eye me-1"></i>View only</span>
-            </div>
-            <div v-if="currentStatus === 'submitted' && currentSubmittedAt" class="text-muted small">Submitted: {{ formatSubmittedAt(currentSubmittedAt) }}</div>
-          </div>
-          <div class="col-md-4 d-flex justify-content-md-end align-items-center gap-2">
-            <button v-if="logDate === today && currentStatus === 'submitted'" type="button" class="btn btn-outline-primary btn-sm" @click="startNewDraftForToday" :disabled="creatingDraft">
-              <span v-if="creatingDraft" class="spinner-border spinner-border-sm me-2"></span>
-              New draft for today
-            </button>
-            <span v-if="saving" class="text-muted small d-flex align-items-center gap-1"><i class="bi bi-hourglass-split"></i>Saving...</span>
-          </div>
+          <div v-if="currentStatus === 'submitted' && currentSubmittedAt" class="text-muted small">Submitted: {{ formatSubmittedAt(currentSubmittedAt) }}</div>
+        </div>
+        <div class="col-md-4 d-flex justify-content-md-end align-items-center gap-2">
+          <button v-if="logDate === today && currentStatus === 'submitted'" type="button" class="btn btn-outline-primary btn-sm" @click="startNewDraftForToday" :disabled="creatingDraft">
+            <span v-if="creatingDraft" class="spinner-border spinner-border-sm me-2"></span>
+            New draft for today
+          </button>
+          <span v-if="saving" class="text-muted small d-flex align-items-center gap-1"><i class="bi bi-hourglass-split"></i>Saving...</span>
         </div>
       </div>
-    </div>
+    </AppToolbarCard>
 
     <!-- Past/Future Draft Warning -->
-    <div v-if="logDate !== today && currentStatus === 'draft'" class="alert alert-warning">
-      <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>{{ logDate > today ? 'Future' : 'Past' }} Draft:</strong> This daily log is from a {{ logDate > today ? 'future' : 'previous' }} date and cannot be edited.
-    </div>
+    <AppAlert v-if="isDatedDraft" variant="warning">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>
+      <strong>{{ datedDraftLabel }}:</strong>
+      This daily log is from a {{ datedDraftMessageTense }} date and cannot be edited.
+    </AppAlert>
 
     <!-- Form Grid -->
     <div class="row g-4">
@@ -494,12 +498,19 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         </div>
 
         <!-- Error Alert -->
-        <div v-if="err" class="alert alert-danger"><strong>Error:</strong> {{ err }}</div>
+        <AppAlert v-if="err" variant="danger" title="Error:" :message="err" />
 
         <!-- Action Buttons -->
         <div class="d-grid gap-2">
           <button v-if="currentStatus === 'draft'" @click="submit" :disabled="saving" class="btn btn-success"><i class="bi bi-send me-2"></i>Submit</button>
-          <div v-if="currentStatus !== 'draft' && logsForSelectedDate.some(r => r.logDate === today && r.status === 'submitted')" class="alert alert-info mb-0"><small><i class="bi bi-info-circle me-1"></i>Daily log already submitted for today</small></div>
+          <AppAlert
+            v-if="currentStatus !== 'draft' && logsForSelectedDate.some(r => r.logDate === today && r.status === 'submitted')"
+            variant="info"
+            class="mb-0"
+            icon="bi bi-info-circle"
+            message="Daily log already submitted for today"
+            body-class="small"
+          />
           <button v-if="currentStatus === 'submitted' && hasEmailRecipients" @click="sendEmail" :disabled="saving" class="btn btn-info"><i class="bi bi-envelope me-2"></i>Send Email</button>
         </div>
       </div>
@@ -520,11 +531,9 @@ function indoorClimateKey(reading: unknown, idx: number): string {
         <DailyLogRecipients
           :recipients="jobEmailRecipients"
           :global-recipients="globalDailyLogRecipients"
-          :new-email="newEmailRecipient"
           :saving="savingRecipients"
           @add="addEmailRecipient"
           @remove="removeEmailRecipient"
-          @update:new-email="(val) => (newEmailRecipient = val)"
         />
       </div>
     </div>

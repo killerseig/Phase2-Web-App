@@ -37,6 +37,16 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     error.value = normalizeError(err, fallback)
   }
 
+  const upsertCategory = (nextCategory: ShopCategory) => {
+    const existingIndex = categories.value.findIndex((entry) => entry.id === nextCategory.id)
+    if (existingIndex >= 0) {
+      categories.value.splice(existingIndex, 1, nextCategory)
+      return
+    }
+
+    categories.value = [...categories.value, nextCategory].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   const stopCategoriesSubscription = () => {
     if (!unsubscribeCategories) return
     unsubscribeCategories()
@@ -179,7 +189,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
   async function createCategory(name: string, parentId: string | null = null): Promise<ShopCategory> {
     try {
       const newCat = await createCategoryService(name, parentId)
-      categories.value.push(newCat)
+      upsertCategory(newCat)
       return newCat
     } catch (err) {
       setStoreError(err, 'Failed to create category')

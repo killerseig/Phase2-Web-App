@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppAlert from '@/components/common/AppAlert.vue'
+import AppLoadingState from '@/components/common/AppLoadingState.vue'
+
 interface Props {
   title: string
   icon?: string
@@ -28,16 +31,10 @@ withDefaults(defineProps<Props>(), {
     <!-- Body -->
     <div class="card-body">
       <!-- Error Alert -->
-      <div v-if="error" class="alert alert-danger mb-3" role="alert">
-        {{ error }}
-      </div>
+      <AppAlert v-if="error" variant="danger" class="mb-3" :message="error" />
 
       <!-- Loading Spinner -->
-      <div v-if="loading" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-      </div>
+      <AppLoadingState v-if="loading" message="" />
 
       <!-- Content -->
       <div v-else>

@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import AppBadge from '@/components/common/AppBadge.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import Toast from '@/components/Toast.vue'
 import { useJobAccess } from '@/composables/useJobAccess'
+import { useToast } from '@/composables/useToast'
 import { ROUTE_NAMES } from '@/constants/app'
 import { normalizeError } from '@/services/serviceUtils'
 
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
-
 const router = useRouter()
 const { isAdmin, visibleActiveJobs, visibleArchivedJobs, loadJobsForCurrentUser, stopJobsForCurrentUser } = useJobAccess()
+const toast = useToast()
 
 const err = ref('')
 
@@ -23,7 +24,7 @@ async function init() {
     await loadJobsForCurrentUser()
   } catch (e) {
     err.value = normalizeError(e, 'Failed to load jobs')
-    toastRef.value?.show('Failed to load jobs', 'error')
+    toast.show('Failed to load jobs', 'error')
   }
 }
 
@@ -42,13 +43,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Toast ref="toastRef" />
-  
   <div class="app-page">
     <AppPageHeader eyebrow="Workspace" title="Dashboard" subtitle="Pick a job to continue." />
 
-    <div v-if="activeJobs.length === 0 && archivedJobs.length === 0" class="alert alert-secondary">
-      No jobs found.
+    <div v-if="activeJobs.length === 0 && archivedJobs.length === 0" class="card app-section-card">
+      <AppEmptyState
+        class="card-body"
+        icon="bi bi-briefcase"
+        title="No jobs found"
+        message="Jobs you can access will appear here."
+      />
     </div>
 
     <div v-else>
@@ -56,7 +60,7 @@ onUnmounted(() => {
       <div v-if="activeJobs.length > 0" class="card app-list-card mb-4">
         <div class="card-header panel-header d-flex justify-content-between align-items-center gap-2">
           <h3 class="h5 mb-0">{{ isAdmin ? 'Active Jobs' : 'Your Jobs' }}</h3>
-          <span class="badge app-badge-pill app-badge-pill--sm text-bg-secondary">{{ activeJobs.length }}</span>
+          <AppBadge :label="activeJobs.length" />
         </div>
         <div class="list-group list-group-flush job-list">
           <button
@@ -82,7 +86,7 @@ onUnmounted(() => {
       <div v-if="isAdmin && archivedJobs.length > 0" class="card app-list-card">
         <div class="card-header panel-header d-flex justify-content-between align-items-center gap-2">
           <h3 class="h5 mb-0">Archived Jobs</h3>
-          <span class="badge app-badge-pill app-badge-pill--sm text-bg-warning">{{ archivedJobs.length }}</span>
+          <AppBadge :label="archivedJobs.length" variant-class="text-bg-warning" />
         </div>
         <div class="list-group job-list">
           <button
@@ -96,7 +100,7 @@ onUnmounted(() => {
               <div class="fw-semibold text-muted job-name">{{ j.name }}</div>
               <div class="text-muted small">
                 <span v-if="j.code">Job Number: {{ j.code }}</span>
-                <span class="ms-2 badge app-badge-pill app-badge-pill--sm text-bg-warning">Archived</span>
+                <AppBadge label="Archived" variant-class="text-bg-warning" class="ms-2" />
               </div>
             </div>
 

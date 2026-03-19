@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import AdminFormActions from '@/components/admin/AdminFormActions.vue'
+import BaseModal from '@/components/common/BaseModal.vue'
 
 interface FormField {
   name: string
@@ -59,97 +61,74 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="modal fade show d-block bg-dark bg-opacity-50 d-flex align-items-center" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <!-- Header -->
-        <div class="modal-header">
-          <h5 class="modal-title">{{ title }}</h5>
-          <button
-            type="button"
-            class="btn-close"
-            @click="handleCancel"
-            :disabled="loading"
-            aria-label="Close"
-          ></button>
-        </div>
+  <BaseModal
+    :open="true"
+    :title="title"
+    :close-disabled="loading"
+    :close-on-backdrop="!loading"
+    :close-on-escape="!loading"
+    @close="handleCancel"
+  >
+    <form @submit.prevent="handleSubmit">
+      <div v-for="field in fields" :key="field.name" class="mb-3">
+        <label :for="field.name" class="form-label">
+          {{ field.label }}
+          <span v-if="field.required" class="text-danger">*</span>
+        </label>
 
-        <!-- Body -->
-        <div class="modal-body">
-          <form @submit.prevent="handleSubmit">
-            <div v-for="field in fields" :key="field.name" class="mb-3">
-              <label :for="field.name" class="form-label">
-                {{ field.label }}
-                <span v-if="field.required" class="text-danger">*</span>
-              </label>
+        <input
+          v-if="field.type === 'text' || field.type === 'email'"
+          :id="field.name"
+          :type="field.type"
+          class="form-control"
+          :placeholder="field.placeholder || ''"
+          v-model="formData[field.name]"
+          :required="field.required"
+          :disabled="loading"
+        />
 
-              <!-- Text/Email Input -->
-              <input
-                v-if="field.type === 'text' || field.type === 'email'"
-                :id="field.name"
-                :type="field.type"
-                class="form-control"
-                :placeholder="field.placeholder || ''"
-                v-model="formData[field.name]"
-                :required="field.required"
-                :disabled="loading"
-              />
+        <textarea
+          v-else-if="field.type === 'textarea'"
+          :id="field.name"
+          class="form-control"
+          :placeholder="field.placeholder || ''"
+          :rows="field.rows || 3"
+          v-model="formData[field.name]"
+          :required="field.required"
+          :disabled="loading"
+        ></textarea>
 
-              <!-- Textarea -->
-              <textarea
-                v-else-if="field.type === 'textarea'"
-                :id="field.name"
-                class="form-control"
-                :placeholder="field.placeholder || ''"
-                :rows="field.rows || 3"
-                v-model="formData[field.name]"
-                :required="field.required"
-                :disabled="loading"
-              ></textarea>
-
-              <!-- Select -->
-              <select
-                v-else-if="field.type === 'select'"
-                :id="field.name"
-                class="form-select"
-                v-model="formData[field.name]"
-                :required="field.required"
-                :disabled="loading"
-              >
-                <option value="">-- Select --</option>
-                <option
-                  v-for="option in field.options"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-          </form>
-        </div>
-
-        <!-- Footer -->
-        <div class="modal-footer">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            @click="handleCancel"
-            :disabled="loading"
+        <select
+          v-else-if="field.type === 'select'"
+          :id="field.name"
+          class="form-select"
+          v-model="formData[field.name]"
+          :required="field.required"
+          :disabled="loading"
+        >
+          <option value="">-- Select --</option>
+          <option
+            v-for="option in field.options"
+            :key="option.value"
+            :value="option.value"
           >
-            {{ cancelLabel }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            @click="handleSubmit"
-            :disabled="loading"
-          >
-            <span v-if="loading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            {{ submitLabel }}
-          </button>
-        </div>
+            {{ option.label }}
+          </option>
+        </select>
       </div>
-    </div>
-  </div>
+    </form>
+
+    <template #footer>
+      <AdminFormActions
+        wrapper-class="d-flex gap-2 justify-content-end w-100"
+        submit-type="button"
+        :loading="loading"
+        :submit-label="submitLabel"
+        :cancel-label="cancelLabel"
+        cancel-button-class="btn btn-secondary"
+        @cancel="handleCancel"
+        @submit="handleSubmit"
+      />
+    </template>
+  </BaseModal>
 </template>

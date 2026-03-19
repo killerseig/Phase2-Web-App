@@ -5,11 +5,13 @@ import { useJobsStore } from '@/stores/jobs'
 import { useShopCatalogStore } from '@/stores/shopCatalog'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import { useUsersStore } from '@/stores/users'
+import { useToast } from '@/composables/useToast'
 
 /**
  * Clears non-auth store state and active subscriptions on sign-out.
  */
 export function resetNonAuthStores(): void {
+  useToast().clear()
   useAppStore().$reset()
   useConfirmStore().$reset()
   useUsersStore().$reset()

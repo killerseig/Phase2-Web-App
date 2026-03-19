@@ -133,7 +133,7 @@ describe('useDailyLog', () => {
     const Harness = defineComponent({
       setup() {
         const jobId = ref('job-1')
-        state = useDailyLog(jobId, { toastRef: { value: null } })
+        state = useDailyLog(jobId, { toast: null })
         return {}
       },
       template: '<div />',

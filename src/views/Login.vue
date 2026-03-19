@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import Toast from '@/components/Toast.vue'
+import AppAlert from '@/components/common/AppAlert.vue'
+import BaseModal from '@/components/common/BaseModal.vue'
+import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import { sendPasswordResetEmail } from '@/services'
 import { ROUTE_NAMES } from '@/constants/app'
@@ -10,7 +12,7 @@ import { getFirstValidationMessage, validateEmail, validateLoginForm } from '@/u
 
 const authStore = useAuthStore()
 const router = useRouter()
-const toastRef = ref<InstanceType<typeof Toast> | null>(null)
+const toast = useToast()
 
 const email = ref('')
 const password = ref('')
@@ -29,7 +31,7 @@ const submit = async () => {
   const validationMessage = getFirstValidationMessage(validation)
   if (validationMessage) {
     err.value = validationMessage
-    toastRef.value?.show(validationMessage, 'error')
+    toast.show(validationMessage, 'error')
     return
   }
 
@@ -39,7 +41,7 @@ const submit = async () => {
     await router.replace({ name: ROUTE_NAMES.DASHBOARD })
   } catch (e) {
     err.value = normalizeError(e, 'Auth failed')
-    toastRef.value?.show(err.value, 'error')
+    toast.show(err.value, 'error')
   } finally {
     loading.value = false
   }
@@ -64,17 +66,17 @@ const sendReset = async () => {
   const emailErrors = validateEmail(resetEmail.value)
   const emailErrorMessage = emailErrors[0]?.message
   if (emailErrorMessage) {
-    toastRef.value?.show(emailErrorMessage, 'error')
+    toast.show(emailErrorMessage, 'error')
     return
   }
 
   resetLoading.value = true
   try {
     await sendPasswordResetEmail(resetEmail.value.trim())
-    toastRef.value?.show('Password reset email sent! Check your inbox.', 'success')
+    toast.show('Password reset email sent! Check your inbox.', 'success')
     closeResetModal()
   } catch (e) {
-    toastRef.value?.show(normalizeError(e, 'Failed to send reset email'), 'error')
+    toast.show(normalizeError(e, 'Failed to send reset email'), 'error')
   } finally {
     resetLoading.value = false
   }
@@ -82,8 +84,6 @@ const sendReset = async () => {
 </script>
 
 <template>
-  <Toast ref="toastRef" />
-  
   <div class="auth-shell">
     <div class="card auth-card auth-card--narrow">
       <div class="card-body">
@@ -121,9 +121,13 @@ const sendReset = async () => {
           <span v-if="loading" class="spinner-border spinner-border-sm me-2" />
           Sign In
         </button>
-        <div v-if="err" class="alert alert-danger mt-3 mb-0" role="alert" aria-live="assertive">
-          {{ err }}
-        </div>
+        <AppAlert
+          v-if="err"
+          variant="danger"
+          class="mt-3 mb-0"
+          :message="err"
+          aria-live="assertive"
+        />
 
         <div class="mt-3 text-center">
           <p class="mb-0">
@@ -136,48 +140,39 @@ const sendReset = async () => {
     </div>
   </div>
   <!-- Password Reset Modal -->
-  <div
-    v-if="showResetModal"
-    class="modal d-block bg-dark bg-opacity-50"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="reset-password-title"
-    tabindex="-1"
-    @keydown.esc="handleResetModalEscape"
+  <BaseModal
+    :open="showResetModal"
+    title="Reset Password"
+    :close-on-backdrop="!resetLoading"
+    :close-on-escape="!resetLoading"
+    :close-disabled="resetLoading"
+    @close="handleResetModalEscape"
   >
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 id="reset-password-title" class="modal-title">Reset Password</h5>
-          <button type="button" class="btn-close" aria-label="Close reset password dialog" @click="closeResetModal" :disabled="resetLoading"></button>
-        </div>
-        <div class="modal-body">
-          <p class="text-muted small mb-3">Enter your email address and we'll send you a link to reset your password.</p>
-          <div class="mb-3">
-            <label class="form-label" for="reset-email">Email Address</label>
-            <input
-              id="reset-email"
-              v-model="resetEmail"
-              class="form-control"
-              type="email"
-              placeholder="you@example.com"
-              @keyup.enter="sendReset"
-              :disabled="resetLoading"
-            />
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="closeResetModal" :disabled="resetLoading">
-            Cancel
-          </button>
-          <button type="button" class="btn btn-primary" @click="sendReset" :disabled="resetLoading">
-            <span v-if="resetLoading" class="spinner-border spinner-border-sm me-2" />
-            Send Reset Link
-          </button>
-        </div>
-      </div>
+    <p class="text-muted small mb-3">Enter your email address and we'll send you a link to reset your password.</p>
+    <div class="mb-0">
+      <label class="form-label" for="reset-email">Email Address</label>
+      <input
+        id="reset-email"
+        v-model="resetEmail"
+        class="form-control"
+        type="email"
+        placeholder="you@example.com"
+        @keyup.enter="sendReset"
+        :disabled="resetLoading"
+        autofocus
+      />
     </div>
-  </div>
+
+    <template #footer>
+      <button type="button" class="btn btn-secondary" @click="closeResetModal" :disabled="resetLoading">
+        Cancel
+      </button>
+      <button type="button" class="btn btn-primary" @click="sendReset" :disabled="resetLoading">
+        <span v-if="resetLoading" class="spinner-border spinner-border-sm me-2" />
+        Send Reset Link
+      </button>
+    </template>
+  </BaseModal>
 </template>
 
 <style scoped lang="scss">
