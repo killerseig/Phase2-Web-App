@@ -1,0 +1,94 @@
+@use '@/styles/_variables.scss' as *;
+
+$catalog-sku-column-width: 8rem;
+$catalog-price-column-width: 7rem;
+
+.catalog-column-header,
+.catalog-row-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) $catalog-sku-column-width $catalog-price-column-width;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.catalog-column-header {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid $border-color;
+  background-color: rgba($surface-3, 0.45);
+  color: $text-muted;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.catalog-column-header__cell,
+.catalog-row-columns__cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-column-header__cell--price,
+.catalog-row-columns__cell--price {
+  text-align: right;
+}
+
+.catalog-row-columns__name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.catalog-row-columns__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.catalog-row-columns__context {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: $text-muted;
+  font-size: 0.94em;
+}
+
+.catalog-row-columns__status {
+  flex-shrink: 0;
+  color: $text-muted;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.catalog-row-columns__cell--sku,
+.catalog-row-columns__cell--price {
+  color: rgba($body-color, 0.92);
+  font-variant-numeric: tabular-nums;
+}
+
+.catalog-row-columns__cell--empty {
+  color: $text-muted;
+}
+
+.catalog-row-columns.is-archived {
+  opacity: 0.62;
+}
+
+@media (max-width: 991.98px) {
+  .catalog-column-header,
+  .catalog-row-columns {
+    grid-template-columns: minmax(0, 1fr) 6.5rem 5.5rem;
+    gap: 0.75rem;
+  }
+}

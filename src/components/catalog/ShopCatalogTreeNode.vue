@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ActionToggleGroup from '@/components/common/ActionToggleGroup.vue'
 import InlineField from '@/components/common/InlineField.vue'
-import CatalogMetadataBadges from '@/components/catalog/CatalogMetadataBadges.vue'
+import CatalogRowColumns from '@/components/catalog/CatalogRowColumns.vue'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import type { ShopCatalogItem } from '@/services'
 import type {
@@ -50,7 +50,7 @@ const emit = defineEmits<{
   'save-item': [itemId: string, updates: { description?: string; sku?: string | null; price?: number | null }]
   'delete-item': [item: ShopCatalogItem]
   'edit-category': [id: string]
-  'save-category': [id: string, name: string]
+  'save-category': [id: string, updates: { name: string; sku?: string | null; price?: number | null }]
   'cancel-category-edit': []
   'cancel-item-edit': []
   'archive': [id: string]
@@ -72,6 +72,10 @@ const editPrice = ref('')
 const editDescOriginal = ref('')
 const editSkuOriginal = ref('')
 const editPriceOriginal = ref('')
+const editCategorySku = ref('')
+const editCategoryPrice = ref('')
+const editCategorySkuOriginal = ref('')
+const editCategoryPriceOriginal = ref('')
 const isSaving = ref(false)
 const showActions = ref(false)
 
@@ -154,7 +158,9 @@ const animateExpansion = computed(() => !props.searchMode)
 const childBypassSearchFilter = computed(() =>
   !!props.bypassSearchFilter || (!!props.searchMode && isDirectCategoryMatch.value && isExpanded.value)
 )
-
+const showItemPurchasingFields = computed(() => !hasChildren.value)
+const isEditingCategory = computed(() => props.editingCategoryId === props.nodeId)
+const showCategoryPurchasingFields = computed(() => !hasChildren.value)
 function toggleSelf() {
   if (!hasChildren.value) return
   emit('toggle-expand', props.nodeId)
@@ -164,25 +170,8 @@ function forwardToggle(id: string) {
   emit('toggle-expand', id)
 }
 
-function handleAddChild() {
-  emit('add-child', props.nodeId)
-}
-
 function toggleActions() {
-  if (isItem.value) {
-    if (!showActions.value) {
-      handleEditItem()
-      showActions.value = true
-    } else {
-      if (isEditing.value) {
-        handleSaveItem()
-        emit('cancel-item-edit')
-      }
-      showActions.value = false
-    }
-  } else {
-    showActions.value = !showActions.value
-  }
+  showActions.value = !showActions.value
 }
 
 function handleCatalogQtyInput(categoryItemId: string, event: Event) {
@@ -196,14 +185,19 @@ function handleSelectCategoryForOrder(categoryId: string, categoryName: string) 
   emit('select-for-order', { id: categoryId, description: categoryName, quantity: qty })
 }
 
+function syncItemEditFields() {
+  if (!item.value) return
+  editDesc.value = item.value.description
+  editSku.value = item.value.sku || ''
+  editPrice.value = item.value.price?.toString() || ''
+  editDescOriginal.value = editDesc.value
+  editSkuOriginal.value = editSku.value
+  editPriceOriginal.value = editPrice.value
+}
+
 function handleEditItem() {
   if (item.value) {
-    editDesc.value = item.value.description
-    editSku.value = item.value.sku || ''
-    editPrice.value = item.value.price?.toString() || ''
-    editDescOriginal.value = editDesc.value
-    editSkuOriginal.value = editSku.value
-    editPriceOriginal.value = editPrice.value
+    syncItemEditFields()
     emit('edit-item', item.value)
   }
 }
@@ -216,19 +210,23 @@ function handleSaveItem() {
     description: editDesc.value.trim(),
   }
 
-  const skuValue = editSku.value.trim()
-  if (skuValue !== editSkuOriginal.value.trim()) {
-    updates.sku = skuValue || null
-  }
+  if (showItemPurchasingFields.value) {
+    const skuValue = editSku.value.trim()
+    if (skuValue !== editSkuOriginal.value.trim()) {
+      updates.sku = skuValue || null
+    }
 
-  if (editPrice.value !== editPriceOriginal.value) {
-    updates.price = editPrice.value ? parseFloat(editPrice.value) : null
+    if (editPrice.value !== editPriceOriginal.value) {
+      updates.price = editPrice.value ? parseFloat(editPrice.value) : null
+    }
   }
 
   emit('save-item', item.value.id, updates)
-  setTimeout(() => {
-    isSaving.value = false
-  }, 500)
+}
+
+function handleCancelItemEdit() {
+  isSaving.value = false
+  emit('cancel-item-edit')
 }
 
 function handleNodeHeaderClick(event: MouseEvent) {
@@ -263,6 +261,33 @@ function handleDeleteCategory() {
 
 function handleEditCategory() {
   emit('edit-category', props.nodeId)
+}
+
+function handleSaveCategory() {
+  const updates: { name: string; sku?: string | null; price?: number | null } = {
+    name: (props.editCategoryName ?? '').trim(),
+  }
+
+  if (showCategoryPurchasingFields.value) {
+    const skuValue = editCategorySku.value.trim()
+    if (skuValue !== editCategorySkuOriginal.value.trim()) {
+      updates.sku = skuValue || null
+    }
+
+    if (editCategoryPrice.value !== editCategoryPriceOriginal.value) {
+      updates.price = editCategoryPrice.value ? parseFloat(editCategoryPrice.value) : null
+    }
+  }
+
+  emit('save-category', props.nodeId, updates)
+}
+
+function syncCategoryEditFields() {
+  if (!category.value) return
+  editCategorySku.value = category.value.sku || ''
+  editCategoryPrice.value = category.value.price?.toString() || ''
+  editCategorySkuOriginal.value = editCategorySku.value
+  editCategoryPriceOriginal.value = editCategoryPrice.value
 }
 
 function asHTMLElement(el: Element): HTMLElement | null {
@@ -310,6 +335,22 @@ function runAccordionLeave(el: Element) {
     node.style.maxHeight = '0px'
   })
 }
+
+watch(isEditing, (editing) => {
+  if (editing) {
+    syncItemEditFields()
+  }
+  if (!editing) {
+    isSaving.value = false
+    showActions.value = false
+  }
+}, { immediate: true })
+
+watch(isEditingCategory, (editing) => {
+  if (editing) {
+    syncCategoryEditFields()
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -325,10 +366,13 @@ function runAccordionLeave(el: Element) {
         :aria-controls="hasChildren ? `collapse-${props.nodeId}` : undefined"
         :class="{ collapsed: !isExpanded && hasChildren, 'has-children': hasChildren, 'not-expandable': !hasChildren }"
       >
-        <span class="category-label" :class="{ 'is-archived': isArchived }">
-          {{ category.name }}
-          <CatalogMetadataBadges :archived="isArchived" />
-        </span>
+        <CatalogRowColumns
+          class="catalog-row-content"
+          :label="category.name"
+          :archived="isArchived"
+          :sku="showCategoryPurchasingFields ? category.sku : undefined"
+          :price="showCategoryPurchasingFields ? category.price : undefined"
+        />
       </button>
 
       <!-- Leaf categories are orderable in order mode (data stored as category but acts as item) -->
@@ -362,8 +406,8 @@ function runAccordionLeave(el: Element) {
           <button class="btn btn-outline-danger" @click.stop="handleDeleteCategory" title="Delete">
             <i class="bi bi-trash text-danger"></i>
           </button>
-          <button v-if="!isArchived" class="btn btn-outline-primary" @click.stop="handleAddChild" title="Add subcategory">
-            <i class="bi bi-folder-plus text-primary"></i>
+          <button v-if="!isArchived" class="btn btn-outline-success" @click.stop="() => emit('add-item', categorySafeId)" title="Add item">
+            <i class="bi bi-file-earmark-plus text-success"></i>
           </button>
           <button class="btn btn-outline-secondary" @click.stop="handleEditCategory" title="Rename">
             <i class="bi bi-pencil"></i>
@@ -379,13 +423,34 @@ function runAccordionLeave(el: Element) {
     </div>
 
     <div v-else class="node-header editing-category-header">
-      <InlineField
-        :editing="true"
-        v-model="editCategoryNameModel"
-        input-class="form-control form-control-sm edit-category-input"
-        placeholder="Category name"
-      />
-      <button class="btn btn-sm btn-success" @click.stop="() => emit('save-category', props.nodeId, props.editCategoryName || '')" :disabled="props.savingCategoryEdit" title="Save">
+      <div class="category-edit-fields w-100">
+        <InlineField
+          :editing="true"
+          v-model="editCategoryNameModel"
+          input-class="form-control form-control-sm edit-category-input"
+          placeholder="Category name"
+          @enter="handleSaveCategory"
+        />
+        <InlineField
+          v-if="showCategoryPurchasingFields"
+          :editing="true"
+          v-model="editCategorySku"
+          input-class="form-control form-control-sm"
+          placeholder="SKU"
+          @enter="handleSaveCategory"
+        />
+        <InlineField
+          v-if="showCategoryPurchasingFields"
+          :editing="true"
+          v-model="editCategoryPrice"
+          input-class="form-control form-control-sm"
+          type="number"
+          step="0.01"
+          placeholder="Price"
+          @enter="handleSaveCategory"
+        />
+      </div>
+      <button class="btn btn-sm btn-success" @click.stop="handleSaveCategory" :disabled="props.savingCategoryEdit" title="Save">
         <i class="bi bi-check"></i>
       </button>
       <button class="btn btn-sm btn-outline-secondary" @click.stop="() => emit('cancel-category-edit')" :disabled="props.savingCategoryEdit" title="Cancel">
@@ -434,7 +499,7 @@ function runAccordionLeave(el: Element) {
                 @save-item="(itemId, updates) => emit('save-item', itemId, updates)"
                 @delete-item="(child) => emit('delete-item', child)"
                 @edit-category="(id) => emit('edit-category', id)"
-                @save-category="(id, name) => emit('save-category', id, name)"
+                @save-category="(id, updates) => emit('save-category', id, updates)"
                 @cancel-category-edit="() => emit('cancel-category-edit')"
                 @archive="(id) => emit('archive', id)"
                 @reactivate="(id) => emit('reactivate', id)"
@@ -481,7 +546,7 @@ function runAccordionLeave(el: Element) {
               @save-item="(itemId, updates) => emit('save-item', itemId, updates)"
               @delete-item="(child) => emit('delete-item', child)"
               @edit-category="(id) => emit('edit-category', id)"
-              @save-category="(id, name) => emit('save-category', id, name)"
+              @save-category="(id, updates) => emit('save-category', id, updates)"
               @cancel-category-edit="() => emit('cancel-category-edit')"
               @archive="(id) => emit('archive', id)"
               @reactivate="(id) => emit('reactivate', id)"
@@ -500,7 +565,7 @@ function runAccordionLeave(el: Element) {
 
   <!-- Item nodes -->
   <div v-else-if="item && (!searchMode || bypassSearchFilter || isSearchVisible)" class="tree-node accordion-item">
-    <div class="node-header" @click="handleNodeHeaderClick">
+    <div v-if="!isEditing" class="node-header" @click="handleNodeHeaderClick">
       <button
         :id="`btn-${props.nodeId}`"
         class="accordion-button"
@@ -511,35 +576,13 @@ function runAccordionLeave(el: Element) {
         :class="{ collapsed: !isExpanded && hasChildren, 'has-children': hasChildren, 'not-expandable': !hasChildren }"
       >
         <i class="bi me-2 node-item-icon" :class="hasChildren ? 'bi-folder2' : 'bi-file-text'"></i>
-        <template v-if="isEditing">
-          <div class="item-edit-fields w-100">
-            <InlineField
-              :editing="true"
-              v-model="editDesc"
-              placeholder="Description"
-            />
-            <InlineField
-              :editing="true"
-              v-model="editSku"
-              placeholder="SKU"
-            />
-            <InlineField
-              :editing="true"
-              v-model="editPrice"
-              type="number"
-              step="0.01"
-              placeholder="Price"
-            />
-          </div>
-        </template>
-        <span v-else class="item-label flex-grow-1" :class="{ 'is-archived': itemArchived }">
-          {{ item.description }}
-          <CatalogMetadataBadges
-            :archived="itemArchived"
-            :sku="item.sku"
-            :price="item.price"
-          />
-        </span>
+        <CatalogRowColumns
+          class="catalog-row-content"
+          :label="item.description"
+          :archived="itemArchived"
+          :sku="showItemPurchasingFields ? item.sku : undefined"
+          :price="showItemPurchasingFields ? item.price : undefined"
+        />
       </button>
 
       <div v-if="orderMode && !hasChildren && catalogItemQtys && itemId" class="btn-group btn-group-sm node-actions" role="group">
@@ -573,10 +616,52 @@ function runAccordionLeave(el: Element) {
           <button class="btn btn-outline-danger" @click.stop="handleDeleteItem" title="Delete">
             <i class="bi bi-trash text-danger"></i>
           </button>
-          <button class="btn btn-outline-primary" @click.stop="handleAddChild" title="Add subcategory"><i class="bi bi-folder-plus text-primary"></i></button>
+          <button class="btn btn-outline-secondary" @click.stop="handleEditItem" title="Edit">
+            <i class="bi bi-pencil"></i>
+          </button>
           <button v-if="item.active" class="btn btn-outline-warning" @click.stop="handleArchiveItem" title="Archive"><i class="bi bi-archive text-warning"></i></button>
           <button v-else class="btn btn-outline-success" @click.stop="handleReactivateItem" title="Reactivate"><i class="bi bi-arrow-counterclockwise text-success"></i></button>
         </ActionToggleGroup>
+      </div>
+    </div>
+    <div v-else class="node-header editing-item-header" @click.stop>
+      <div class="accordion-button not-expandable editing-item-fields">
+        <i class="bi me-2 node-item-icon" :class="hasChildren ? 'bi-folder2' : 'bi-file-text'"></i>
+        <div class="item-edit-fields w-100">
+          <InlineField
+            :editing="true"
+            v-model="editDesc"
+            placeholder="Description"
+            @enter="handleSaveItem"
+            @escape="handleCancelItemEdit"
+          />
+          <InlineField
+            v-if="showItemPurchasingFields"
+            :editing="true"
+            v-model="editSku"
+            placeholder="SKU"
+            @enter="handleSaveItem"
+            @escape="handleCancelItemEdit"
+          />
+          <InlineField
+            v-if="showItemPurchasingFields"
+            :editing="true"
+            v-model="editPrice"
+            type="number"
+            step="0.01"
+            placeholder="Price"
+            @enter="handleSaveItem"
+            @escape="handleCancelItemEdit"
+          />
+        </div>
+      </div>
+      <div class="d-flex align-items-center justify-content-end gap-1 flex-nowrap node-actions" @click.stop>
+        <button class="btn btn-sm btn-success" @click.stop="handleSaveItem" :disabled="isSaving" title="Save">
+          <i class="bi bi-check"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" @click.stop="handleCancelItemEdit" :disabled="isSaving" title="Cancel">
+          <i class="bi bi-x"></i>
+        </button>
       </div>
     </div>
 
@@ -621,7 +706,7 @@ function runAccordionLeave(el: Element) {
                 @save-item="(itemId, updates) => emit('save-item', itemId, updates)"
                 @delete-item="(child) => emit('delete-item', child)"
                 @edit-category="(id) => emit('edit-category', id)"
-                @save-category="(id, name) => emit('save-category', id, name)"
+                @save-category="(id, updates) => emit('save-category', id, updates)"
                 @cancel-category-edit="() => emit('cancel-category-edit')"
                 @archive="(id) => emit('archive', id)"
                 @reactivate="(id) => emit('reactivate', id)"
@@ -668,7 +753,7 @@ function runAccordionLeave(el: Element) {
               @save-item="(itemId, updates) => emit('save-item', itemId, updates)"
               @delete-item="(child) => emit('delete-item', child)"
               @edit-category="(id) => emit('edit-category', id)"
-              @save-category="(id, name) => emit('save-category', id, name)"
+              @save-category="(id, updates) => emit('save-category', id, updates)"
               @cancel-category-edit="() => emit('cancel-category-edit')"
               @archive="(id) => emit('archive', id)"
               @reactivate="(id) => emit('reactivate', id)"
@@ -792,27 +877,39 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
   background-color: transparent;
 }
 
-.category-label,
-.item-label {
-  cursor: pointer;
-  user-select: none;
-  color: $body-color;
-}
-
-.category-label.is-archived,
-.item-label.is-archived {
-  opacity: 0.5;
+.catalog-row-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .item-edit-fields {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem 7rem;
   gap: 0.5rem;
   align-items: center;
+}
+
+.category-edit-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem 7rem;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
 }
 
 .editing-category-header {
   gap: 0.5rem;
   padding: 0.5rem;
+}
+
+.editing-item-header {
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: default;
+}
+
+.editing-item-fields {
+  cursor: default;
 }
 
 .edit-category-input {
@@ -833,18 +930,6 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
 
 .item-edit-fields input {
   min-width: 0;
-}
-
-.item-edit-fields input:nth-child(1) {
-  flex: 1;
-}
-
-.item-edit-fields input:nth-child(2) {
-  width: 130px;
-}
-
-.item-edit-fields input:nth-child(3) {
-  width: 120px;
 }
 
 .btn-group {

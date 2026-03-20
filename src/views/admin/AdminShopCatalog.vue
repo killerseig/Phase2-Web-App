@@ -360,13 +360,27 @@ async function editCategory(categoryId: string) {
   editCategoryNameOriginal.value = cat.name
 }
 
-async function saveCategoryEdit(categoryId: string) {
-  if (!editCategoryName.value.trim()) {
+async function saveCategoryEdit(
+  categoryId: string,
+  updates: { name: string; sku?: string | null; price?: number | null }
+) {
+  const nextName = updates.name.trim()
+  if (!nextName) {
     toast.show('Category name is required', 'error')
     return
   }
 
-  if (editCategoryName.value === editCategoryNameOriginal.value) {
+  const currentCategory = categoriesStore.getCategoryById(categoryId)
+  const nextSku = updates.sku === undefined ? currentCategory?.sku ?? null : updates.sku
+  const nextPrice = updates.price === undefined ? currentCategory?.price ?? null : updates.price
+  const currentSku = currentCategory?.sku ?? null
+  const currentPrice = currentCategory?.price ?? null
+
+  if (
+    nextName === editCategoryNameOriginal.value &&
+    nextSku === currentSku &&
+    nextPrice === currentPrice
+  ) {
     editingCategoryId.value = null
     return
   }
@@ -374,7 +388,11 @@ async function saveCategoryEdit(categoryId: string) {
   editingCategoryId.value = null
   savingCategoryEdit.value = true
   try {
-    await categoriesStore.updateCategory(categoryId, { name: editCategoryName.value.trim() })
+    await categoriesStore.updateCategory(categoryId, {
+      name: nextName,
+      sku: nextSku,
+      price: nextPrice,
+    })
     toast.show('Category updated', 'success')
   } catch (e) {
     toast.show('Failed to update category', 'error')
@@ -865,6 +883,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/_catalogColumns.scss';
 @use '@/styles/_variables.scss' as *;
 $select-arrow-color: $body-color;
 $select-arrow-hex: str-slice(#{ $select-arrow-color }, 2);

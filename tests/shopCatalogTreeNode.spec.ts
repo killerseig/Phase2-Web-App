@@ -74,4 +74,274 @@ describe('ShopCatalogTreeNode', () => {
     expect(wrapper.text()).toContain('Bolts')
     expect(wrapper.text()).toContain('Anchor Kit')
   })
+
+  it('does not show sku or price metadata for parent category nodes', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+        { id: 'category-b', name: 'Bolts', parentId: 'category-a', active: true },
+      ],
+      items: [],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Anchor Kit')
+    expect(wrapper.text()).not.toContain('AK-1')
+    expect(wrapper.text()).not.toContain('$12.50')
+  })
+
+  it('renders parent category edit with only the name input', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+        { id: 'category-b', name: 'Bolts', parentId: 'category-a', active: true },
+      ],
+      items: [],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+        editingCategoryId: 'category-a',
+        editCategoryName: 'Anchor Kit',
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    const inputs = wrapper.findAll('input')
+    expect(inputs).toHaveLength(1)
+    expect((inputs[0]!.element as HTMLInputElement).value).toBe('Anchor Kit')
+  })
+
+  it('shows sku and price metadata for leaf category nodes', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+      ],
+      items: [],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Anchor Kit')
+    expect(wrapper.text()).toContain('AK-1')
+    expect(wrapper.text()).toContain('$12.50')
+  })
+
+  it('renders leaf category edit with name, sku, and price inputs', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+      ],
+      items: [],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+        editingCategoryId: 'category-a',
+        editCategoryName: 'Anchor Kit',
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    const inputs = wrapper.findAll('input')
+    expect(inputs).toHaveLength(3)
+    expect((inputs[0]!.element as HTMLInputElement).value).toBe('Anchor Kit')
+    expect((inputs[1]!.element as HTMLInputElement).value).toBe('AK-1')
+    expect((inputs[2]!.element as HTMLInputElement).value).toBe('12.5')
+  })
+
+  it('renders item edit inputs when the item is in edit mode', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [],
+      items: [
+        { id: 'item-a', description: 'Anchor Kit', sku: 'AK-1', price: 12.5, active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'item-item-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+        editingItemId: 'item-a',
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    const inputs = wrapper.findAll('input')
+    expect(inputs).toHaveLength(3)
+    expect((inputs[0]!.element as HTMLInputElement).value).toBe('Anchor Kit')
+    expect((inputs[1]!.element as HTMLInputElement).value).toBe('AK-1')
+    expect((inputs[2]!.element as HTMLInputElement).value).toBe('12.5')
+  })
+
+  it('hides sku and price for item nodes that act as parents', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'child-category', name: 'Fasteners', parentId: 'anchor-kit', active: true },
+      ],
+      items: [
+        { id: 'anchor-kit', description: 'Anchor Kit', sku: 'AK-1', price: 12.5, active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'item-anchor-kit',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Anchor Kit')
+    expect(wrapper.text()).not.toContain('AK-1')
+    expect(wrapper.text()).not.toContain('$12.50')
+  })
+
+  it('renders only the name edit input for item nodes that act as parents', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'child-category', name: 'Fasteners', parentId: 'anchor-kit', active: true },
+      ],
+      items: [
+        { id: 'anchor-kit', description: 'Anchor Kit', sku: 'AK-1', price: 12.5, active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'item-anchor-kit',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+        editingItemId: 'anchor-kit',
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    const inputs = wrapper.findAll('input')
+    expect(inputs).toHaveLength(1)
+    expect((inputs[0]!.element as HTMLInputElement).value).toBe('Anchor Kit')
+  })
+
+  it('does not offer add subcategory actions on item rows', async () => {
+    const index = buildCatalogTreeIndex({
+      categories: [],
+      items: [
+        { id: 'item-a', description: 'Anchor Kit', sku: 'AK-1', price: 12.5, active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'item-item-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await wrapper.get('button[title="Toggle edit mode"]').trigger('click')
+
+    expect(wrapper.find('button[title="Add subcategory"]').exists()).toBe(false)
+    expect(wrapper.find('button[title="Edit"]').exists()).toBe(true)
+  })
+
+  it('offers add item but not add subcategory on category rows', async () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchors', parentId: null, active: true },
+      ],
+      items: [],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await wrapper.get('button[title="Toggle edit mode"]').trigger('click')
+
+    expect(wrapper.find('button[title="Add item"]').exists()).toBe(true)
+    expect(wrapper.find('button[title="Add subcategory"]').exists()).toBe(false)
+  })
 })

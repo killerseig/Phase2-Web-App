@@ -190,6 +190,8 @@ export function useCatalogSearchResults(options: UseCatalogSearchResultsOptions)
         label: category.name,
         parentNodeId,
         active: category.active !== false,
+        sku: category.sku ?? undefined,
+        price: category.price ?? undefined,
         category,
       })
       ensureChildBucket(category.id)
@@ -292,8 +294,8 @@ export function useCatalogSearchResults(options: UseCatalogSearchResultsOptions)
         label: record.label,
         pathLabel,
         breadcrumbLabel,
-        sku: record.sku,
-        price: record.price,
+        sku: !hasChildren ? record.sku : undefined,
+        price: !hasChildren ? record.price : undefined,
         active: record.active,
         hasChildren,
         ancestorNodeIds: getAncestorNodeIds(nodeId),
@@ -301,9 +303,7 @@ export function useCatalogSearchResults(options: UseCatalogSearchResultsOptions)
         item: record.item,
         primaryText: normalizeSearchValue(record.label),
         secondaryText: normalizeSearchValue(
-          record.kind === 'item'
-            ? `${record.sku ?? ''} ${record.price ?? ''}`
-            : ''
+          !hasChildren ? `${record.sku ?? ''} ${record.price ?? ''}` : ''
         ),
         tertiaryText: normalizeSearchValue(pathLabel),
       })

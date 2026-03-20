@@ -5,7 +5,7 @@ import DailyLogStatusBadge from '@/components/dailyLogs/DailyLogStatusBadge.vue'
 import JobAccessBadge from '@/components/common/JobAccessBadge.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import CatalogMetadataBadges from '@/components/catalog/CatalogMetadataBadges.vue'
+import CatalogRowColumns from '@/components/catalog/CatalogRowColumns.vue'
 import TimecardWeekStatusBadge from '@/components/common/TimecardWeekStatusBadge.vue'
 import ShopOrderStatusBadge from '@/components/shopOrders/ShopOrderStatusBadge.vue'
 import TimecardStatusBadge from '@/components/timecards/TimecardStatusBadge.vue'
@@ -61,19 +61,21 @@ describe('badge components', () => {
     expect(wrapper.classes()).toContain('text-bg-warning')
   })
 
-  it('renders shared catalog metadata badges for archived, sku, and price', () => {
-    const wrapper = mount(CatalogMetadataBadges, {
+  it('renders shared catalog row columns for archived, sku, and price', () => {
+    const wrapper = mount(CatalogRowColumns, {
       props: {
+        label: 'Anchor Kit',
         archived: true,
         sku: 'SKU-100',
         price: 0,
       },
     })
 
-    expect(wrapper.text()).toContain('archived')
+    expect(wrapper.text()).toContain('Anchor Kit')
+    expect(wrapper.text()).toContain('Archived')
     expect(wrapper.text()).toContain('SKU-100')
     expect(wrapper.text()).toContain('$0.00')
-    expect(wrapper.findAll('.badge')).toHaveLength(3)
+    expect(wrapper.findAll('.catalog-row-columns__cell')).toHaveLength(2)
   })
 
   it('renders the weekly timecard status badge for the current week', () => {

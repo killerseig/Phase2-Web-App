@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import CatalogMetadataBadges from '@/components/catalog/CatalogMetadataBadges.vue'
+import CatalogRowColumns from '@/components/catalog/CatalogRowColumns.vue'
 import type { CatalogSearchResult } from '@/composables/useCatalogSearchResults'
 
 const props = defineProps<{
@@ -42,17 +42,14 @@ const summaryText = computed(() => {
             @click="emit('reveal', result)"
           >
             <i class="me-2 node-item-icon" :class="iconClass(result)"></i>
-            <span class="item-label result-label" :class="{ 'is-archived': !result.active }">
-              <span class="result-line">
-                {{ result.label }}
-                <CatalogMetadataBadges
-                  :archived="!result.active"
-                  :sku="result.kind === 'item' ? result.sku : undefined"
-                  :price="result.kind === 'item' ? result.price : undefined"
-                />
-                <span class="result-path">{{ pathText(result) }}</span>
-              </span>
-            </span>
+            <CatalogRowColumns
+              class="result-columns"
+              :label="result.label"
+              :archived="!result.active"
+              :sku="!result.hasChildren ? result.sku : undefined"
+              :price="!result.hasChildren ? result.price : undefined"
+              :context="pathText(result)"
+            />
           </button>
 
           <div class="node-actions">
@@ -75,7 +72,6 @@ const summaryText = computed(() => {
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
 @use '@/styles/_catalogTreeRows.scss';
 
 .catalog-search-results {
@@ -86,23 +82,9 @@ const summaryText = computed(() => {
   padding: 0.5rem 0.75rem;
 }
 
-.result-label {
+.result-columns {
+  flex: 1;
   min-width: 0;
-  user-select: none;
-}
-
-.result-line {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.result-path {
-  color: $text-muted;
-  font-size: 0.95em;
-  white-space: nowrap;
 }
 
 .result-main {

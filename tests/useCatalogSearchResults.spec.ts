@@ -7,7 +7,7 @@ import type { ShopCategory } from '@/stores/shopCategories'
 const categoriesFixture: ShopCategory[] = [
   { id: 'cat-fasteners', name: 'Fasteners', parentId: null, active: true },
   { id: 'cat-anchors', name: 'Anchors', parentId: 'cat-fasteners', active: true },
-  { id: 'cat-leaf', name: 'Legacy Leaf', parentId: null, active: true },
+  { id: 'cat-leaf', name: 'Legacy Leaf', parentId: null, sku: 'LEG-1', price: 9.5, active: true },
   { id: 'cat-kit-bits', name: 'Bits', parentId: 'item-item-kit', active: true },
 ]
 
@@ -88,6 +88,10 @@ describe('useCatalogSearchResults', () => {
 
     searchQuery.value = 'legacy'
     expect(search.results.value.map((result) => result.label)).toEqual(['Legacy Leaf'])
+    expect(search.results.value[0]).toMatchObject({
+      sku: 'LEG-1',
+      price: 9.5,
+    })
 
     scope.stop()
   })

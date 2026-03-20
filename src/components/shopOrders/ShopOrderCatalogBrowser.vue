@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, toRef } from 'vue'
+import { computed, nextTick, ref, toRef, useSlots } from 'vue'
 import AppAlert from '@/components/common/AppAlert.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import CatalogOrderSearchResults from '@/components/shopOrders/CatalogOrderSearchResults.vue'
 import ShopOrderBrowseTree from '@/components/shopOrders/ShopOrderBrowseTree.vue'
 import { useCatalogSearchResults, type CatalogSearchResult } from '@/composables/useCatalogSearchResults'
@@ -23,6 +24,7 @@ const props = defineProps<{
   categories: ShopCategory[]
   catalogItemQtys: Record<string, number>
 }>()
+const slots = useSlots()
 
 const emit = defineEmits<{
   (e: 'select-for-order', item: CatalogSelectable): void
@@ -114,93 +116,102 @@ async function revealSearchResult(result: CatalogSearchResult) {
 </script>
 
 <template>
-  <div class="card app-section-card">
-    <div class="card-header panel-header">
-      <div class="d-flex flex-column gap-3">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
-          <div>
-            <h5 class="mb-1">Add Items from Catalog</h5>
-            <div class="small text-muted">
-              Search names, SKU, and visible catalog details without reloading the tree.
-            </div>
+  <div class="shop-order-catalog-browser d-flex flex-column gap-4">
+    <AppToolbarCard body-class="d-flex flex-column gap-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+          <h5 class="mb-1">Add Items from Catalog</h5>
+          <div class="small text-muted">
+            Search names, SKU, and visible catalog details without reloading the tree.
           </div>
         </div>
-        <div class="input-group">
-          <span class="input-group-text"><i class="bi bi-search"></i></span>
-          <input
-            v-model="catalogSearch"
-            type="text"
-            class="form-control"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="Find an item or browse a category..."
-          />
-          <button
-            v-if="catalogSearch"
-            type="button"
-            class="btn btn-outline-secondary"
-            @click="catalogSearch = ''"
-          >
-            Clear
-          </button>
-        </div>
       </div>
-    </div>
-
-    <div class="card-body">
-      <AppAlert
-        v-if="showCatalogMissingState"
-        variant="info"
-        message="No items in catalog. Please add items to the catalog first in Admin > Shop Catalog."
-      />
-
-      <template v-else-if="showNoCatalogNodes">
-        <AppEmptyState
-          icon="bi bi-inbox"
-          icon-class="fs-2"
-          message="No items available."
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input
+          v-model="catalogSearch"
+          type="text"
+          class="form-control"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Find an item or browse a category..."
         />
-      </template>
+        <button
+          v-if="catalogSearch"
+          type="button"
+          class="btn btn-outline-secondary"
+          @click="catalogSearch = ''"
+        >
+          Clear
+        </button>
+      </div>
+    </AppToolbarCard>
 
-      <template v-else>
-        <CatalogOrderSearchResults
-          v-if="showSearchResults"
-          :results="searchResults"
-          :total-result-count="totalResultCount"
-          :has-more-results="hasMoreResults"
-          :catalog-item-qtys="catalogItemQtys"
-          :orderable-node-ids="orderableNodeIds"
-          @reveal="revealSearchResult"
-          @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
-          @select-for-order="(item) => emit('select-for-order', item)"
-        />
+    <div class="card app-section-card">
+      <div class="card-header panel-header">
+        <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Catalog</h5>
+      </div>
 
-        <AppEmptyState
-          v-else-if="showNoSearchResults"
-          icon="bi bi-search"
-          icon-class="fs-2"
-          message="No catalog items match your search."
+      <div class="card-body">
+        <AppAlert
+          v-if="showCatalogMissingState"
+          variant="info"
+          message="No items in catalog. Please add items to the catalog first in Admin > Shop Catalog."
         />
 
-        <div v-show="!isSearching && hasAnyNodes">
-          <ShopOrderBrowseTree
-            :root-category-node-ids="rootCategoryNodeIds"
-            :uncategorized-item-node-ids="uncategorizedItemNodeIds"
-            :node-child-ids="browseTreeIndex.childIds"
-            :item-nodes-by-id="browseTreeIndex.itemNodesById"
-            :category-nodes-by-id="browseTreeIndex.categoryNodesById"
+        <template v-else-if="showNoCatalogNodes">
+          <AppEmptyState
+            icon="bi bi-inbox"
+            icon-class="fs-2"
+            message="No items available."
+          />
+        </template>
+
+        <template v-else>
+          <CatalogOrderSearchResults
+            v-if="showSearchResults"
+            :results="searchResults"
+            :total-result-count="totalResultCount"
+            :has-more-results="hasMoreResults"
             :catalog-item-qtys="catalogItemQtys"
-            :expanded="activeExpandedNodes"
-            @toggle-expand="toggleExpand"
+            :orderable-node-ids="orderableNodeIds"
+            @reveal="revealSearchResult"
             @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
             @select-for-order="(item) => emit('select-for-order', item)"
           />
-        </div>
-      </template>
+
+          <AppEmptyState
+            v-else-if="showNoSearchResults"
+            icon="bi bi-search"
+            icon-class="fs-2"
+            message="No catalog items match your search."
+          />
+
+          <div v-show="!isSearching && hasAnyNodes">
+            <ShopOrderBrowseTree
+              :root-category-node-ids="rootCategoryNodeIds"
+              :uncategorized-item-node-ids="uncategorizedItemNodeIds"
+              :node-child-ids="browseTreeIndex.childIds"
+              :item-nodes-by-id="browseTreeIndex.itemNodesById"
+              :category-nodes-by-id="browseTreeIndex.categoryNodesById"
+              :catalog-item-qtys="catalogItemQtys"
+              :expanded="activeExpandedNodes"
+              @toggle-expand="toggleExpand"
+              @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
+              @select-for-order="(item) => emit('select-for-order', item)"
+            />
+          </div>
+        </template>
+      </div>
     </div>
 
-    <div class="card-footer panel-footer">
-      <slot name="footer" />
+    <div v-if="slots.footer" class="card app-section-card">
+      <div class="card-header panel-header">
+        <h5 class="mb-0">Or Add a Custom Item</h5>
+      </div>
+      <div class="card-body">
+        <slot name="footer" />
+      </div>
     </div>
   </div>
 </template>

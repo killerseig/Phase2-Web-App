@@ -521,7 +521,6 @@ onUnmounted(() => {
             @select-for-order="selectCatalogItem"
           >
             <template #footer>
-              <h6 class="mb-2">Or add a custom item</h6>
               <div class="row g-2 mb-2">
                 <div class="col-7"><input v-model="newItemDescription" type="text" class="form-control form-control-sm" placeholder="Description" /></div>
                 <div class="col-2">
