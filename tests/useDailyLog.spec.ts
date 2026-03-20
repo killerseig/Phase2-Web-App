@@ -5,6 +5,7 @@ import { useDailyLog } from '@/composables/useDailyLog'
 
 const mockCleanupDeletedLogs = vi.fn()
 const mockCreateDailyLog = vi.fn()
+const mockDeleteAttachmentFile = vi.fn()
 const mockGetMyDailyLogByDate = vi.fn()
 const mockSubscribeDailyLogsForDate = vi.fn()
 const mockSubscribeDailyLogRecipients = vi.fn()
@@ -12,6 +13,7 @@ const mockSubscribeToDailyLog = vi.fn()
 const mockSubscribeEmailSettings = vi.fn()
 const mockJobsSubscribeJob = vi.fn()
 const mockJobsStopCurrentJobSubscription = vi.fn()
+const mockUpdateDailyLog = vi.fn()
 
 const mockSubscriptions = {
   replace: vi.fn(),
@@ -22,7 +24,7 @@ const mockSubscriptions = {
 vi.mock('@/services', () => ({
   cleanupDeletedLogs: (...args: unknown[]) => mockCleanupDeletedLogs(...args),
   createDailyLog: (...args: unknown[]) => mockCreateDailyLog(...args),
-  deleteAttachmentFile: vi.fn(),
+  deleteAttachmentFile: (...args: unknown[]) => mockDeleteAttachmentFile(...args),
   deleteDailyLog: vi.fn(),
   formatTimestamp: vi.fn(),
   getDailyLogById: vi.fn(),
@@ -34,7 +36,7 @@ vi.mock('@/services', () => ({
   subscribeEmailSettings: (...args: unknown[]) => mockSubscribeEmailSettings(...args),
   subscribeToDailyLog: (...args: unknown[]) => mockSubscribeToDailyLog(...args),
   toMillis: (value: { toMillis?: () => number } | null | undefined) => value?.toMillis?.() ?? 0,
-  updateDailyLog: vi.fn(),
+  updateDailyLog: (...args: unknown[]) => mockUpdateDailyLog(...args),
   updateDailyLogRecipients: vi.fn(),
   uploadAttachment: vi.fn(),
 }))
@@ -71,7 +73,9 @@ describe('useDailyLog', () => {
 
     mockCleanupDeletedLogs.mockResolvedValue(undefined)
     mockCreateDailyLog.mockResolvedValue('new-draft')
+    mockDeleteAttachmentFile.mockResolvedValue(undefined)
     mockGetMyDailyLogByDate.mockResolvedValue(null)
+    mockUpdateDailyLog.mockResolvedValue(undefined)
     mockSubscribeDailyLogsForDate.mockImplementation((_jobId, _date, onData) => {
       onData([])
       return vi.fn()
@@ -148,5 +152,65 @@ describe('useDailyLog', () => {
     const dailyLogState = state!
     expect(dailyLogState.currentId.value).toBe('draft-1')
     expect(dailyLogState.currentStatus.value).toBe('draft')
+  })
+
+  it('does not delete attachments from a submitted daily log', async () => {
+    const existingSubmittedLog = {
+      id: 'submitted-1',
+      jobId: 'job-1',
+      uid: 'user-1',
+      status: 'submitted',
+      logDate: '2026-03-16',
+      jobSiteNumbers: '',
+      foremanOnSite: '',
+      siteForemanAssistant: '',
+      projectName: 'Job Alpha',
+      manpower: '',
+      weeklySchedule: '',
+      manpowerAssessment: '',
+      indoorClimateReadings: [],
+      manpowerLines: [],
+      safetyConcerns: '',
+      ahaReviewed: '',
+      scheduleConcerns: '',
+      budgetConcerns: '',
+      deliveriesReceived: '',
+      deliveriesNeeded: '',
+      newWorkAuthorizations: '',
+      qcInspection: '',
+      qcAssignedTo: '',
+      qcAreasInspected: '',
+      qcIssuesIdentified: '',
+      qcIssuesResolved: '',
+      notesCorrespondence: '',
+      actionItems: '',
+      attachments: [{ path: 'daily-logs/submitted-1/test.png', url: 'https://cdn/test.png' }],
+      createdAt: { toMillis: () => 1 },
+      updatedAt: { toMillis: () => 2 },
+      submittedAt: { toMillis: () => 3 },
+    }
+
+    mockGetMyDailyLogByDate.mockResolvedValue(existingSubmittedLog)
+
+    let state: ReturnType<typeof useDailyLog> | null = null
+    const toast = { show: vi.fn() }
+    const Harness = defineComponent({
+      setup() {
+        const jobId = ref('job-1')
+        state = useDailyLog(jobId, { toast })
+        return {}
+      },
+      template: '<div />',
+    })
+
+    mount(Harness)
+    await flushPromises()
+
+    expect(state).not.toBeNull()
+    await state!.deleteAttachment('daily-logs/submitted-1/test.png')
+
+    expect(mockDeleteAttachmentFile).not.toHaveBeenCalled()
+    expect(mockUpdateDailyLog).not.toHaveBeenCalled()
+    expect(toast.show).toHaveBeenCalledWith('Attachments can only be changed on your active draft for today', 'warning')
   })
 })

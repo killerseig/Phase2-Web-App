@@ -2,7 +2,6 @@ import * as admin from 'firebase-admin'
 import PDFDocument from 'pdfkit'
 import { onCall } from 'firebase-functions/v2/https'
 import { HttpsError } from 'firebase-functions/v2/https'
-import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import { defineSecret } from 'firebase-functions/params'
@@ -668,55 +667,6 @@ function normalizeTimecardForEmail(tc: any) {
     totals,
   }
 }
-
-/**
- * Send password reset email using Firebase Admin SDK
- * Works without authentication via HTTP callable
- */
-export const sendPasswordResetEmail = onRequest(
-  async (req, res) => {
-    // Enable CORS
-    res.set('Access-Control-Allow-Origin', '*')
-    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    res.set('Access-Control-Allow-Headers', 'Content-Type')
-
-    // Handle preflight
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('')
-      return
-    }
-
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method not allowed' })
-      return
-    }
-
-    const { email } = req.body
-
-    if (!email || !email.trim()) {
-      res.status(400).json({ error: 'Email is required' })
-      return
-    }
-
-    try {
-      console.log(`[sendPasswordResetEmail] Sending reset email to: ${email}`)
-
-      // Generate password reset link (this sends the email automatically)
-      await auth.generatePasswordResetLink(email)
-      console.log(`[sendPasswordResetEmail] Email sent successfully to: ${email}`)
-
-      res.json({
-        success: true,
-        message: `Password reset email sent to ${email}`,
-      })
-    } catch (error: any) {
-      console.error(`[sendPasswordResetEmail] Error:`, error.message)
-      res.status(500).json({
-        error: error?.message || 'Failed to send password reset email',
-      })
-    }
-  }
-)
 
 /**
  * Send Daily Log via email

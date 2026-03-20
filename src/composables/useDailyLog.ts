@@ -2,7 +2,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   cleanupDeletedLogs,
   createDailyLog,
-  deleteAttachmentFile,
   deleteDailyLog,
   formatTimestamp,
   getDailyLogById,
@@ -16,7 +15,6 @@ import {
   toMillis,
   updateDailyLog,
   updateDailyLogRecipients,
-  uploadAttachment as uploadPhotoToStorage,
   type DailyLog,
   type DailyLogDraftInput,
 } from '@/services'
@@ -28,6 +26,7 @@ import { createDatePickerConfig, getTodayDateInputValue } from '@/utils/dateInpu
 import { useEmailRecipients } from './useEmailRecipients'
 import { useConfirmDialog } from './useConfirmDialog'
 import { useSubscriptionRegistry } from './useSubscriptionRegistry'
+import { useDailyLogAttachments } from './dailyLog/useDailyLogAttachments'
 import { createEmptyDailyLogDraft } from './dailyLog/defaults'
 import { useToast, type ToastNotifier } from './useToast'
 
@@ -55,7 +54,6 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
 
   const loading = ref(true)
   const saving = ref(false)
-  const uploading = ref(false)
   const err = ref('')
   const logDate = ref(getTodayDateInputValue())
   const datePickerConfig = ref(createDatePickerConfig())
@@ -87,22 +85,35 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     )
   })
 
-  const photoFileName = ref('No file selected')
-  const ptpFileName = ref('No file selected')
-  const qcFileName = ref('No file selected')
-
   const form = ref<DailyLogDraftInput>(createEmptyDailyLogDraft(jobName.value))
 
   let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null
   const creatingDraft = ref(false)
 
+  const {
+    uploading,
+    photoFileName,
+    ptpFileName,
+    qcFileName,
+    resetFileNames,
+    handleFileChange,
+    deleteAttachment,
+  } = useDailyLogAttachments({
+    jobId,
+    currentId,
+    canEditDraft,
+    form,
+    toast,
+    setError: (message) => {
+      err.value = message
+    },
+  })
+
   const resetForm = () => {
     form.value = createEmptyDailyLogDraft(jobName.value)
     currentOwnerId.value = auth.user?.uid ?? null
     currentSubmittedAt.value = null
-    photoFileName.value = 'No file selected'
-    ptpFileName.value = 'No file selected'
-    qcFileName.value = 'No file selected'
+    resetFileNames()
   }
 
   const stopLiveLog = () => {
@@ -330,27 +341,6 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     }
   }
 
-  const handleFileChange = async (e: Event, type: 'photo' | 'ptp' | 'qc') => {
-    const input = e.target as HTMLInputElement
-    const files = Array.from(input.files || [])
-
-    if (!files.length) {
-      if (type === 'photo') photoFileName.value = 'No file selected'
-      else if (type === 'ptp') ptpFileName.value = 'No file selected'
-      else qcFileName.value = 'No file selected'
-      return
-    }
-
-    const firstFile = files[0]
-    const label = files.length === 1 && firstFile ? firstFile.name : `${files.length} files selected`
-    if (type === 'photo') photoFileName.value = label
-    else if (type === 'ptp') ptpFileName.value = label
-    else qcFileName.value = label
-
-    await uploadAttachment(files, type)
-    input.value = ''
-  }
-
   const init = async () => {
     clearAutoSaveTimer()
     loading.value = true
@@ -531,59 +521,6 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
       toast.show('Failed to delete daily log', 'error')
     } finally {
       saving.value = false
-    }
-  }
-
-  const uploadAttachment = async (files: File[], type: 'photo' | 'ptp' | 'qc' | 'other') => {
-    if (!files.length || !currentId.value) {
-      if (!files.length) toast.show('Please select a file', 'error')
-      if (!currentId.value) toast.show('Please save the daily log first', 'error')
-      return
-    }
-
-    const maxSize = 10 * 1024 * 1024
-
-    uploading.value = true
-    try {
-      for (const file of files) {
-        if (file.size > maxSize) {
-          toast.show('File size must be less than 10MB', 'error')
-          continue
-        }
-        if (!file.type.startsWith('image/')) {
-          toast.show('Please select an image file', 'error')
-          continue
-        }
-
-        const att = await uploadPhotoToStorage(file, jobId.value, currentId.value, type)
-        if (!form.value.attachments) form.value.attachments = []
-        form.value.attachments.push(att)
-        await updateDailyLog(jobId.value, currentId.value, { ...form.value })
-        const uploadLabel = type === 'ptp' ? 'PTP Photo' : type === 'qc' ? 'QC Photo' : 'Photo'
-        toast.show(`${uploadLabel} uploaded: ${file.name}`, 'success')
-      }
-    } catch (e) {
-      logError('DailyLogs', 'Upload attachment failed', e)
-      const errorMsg = normalizeError(e, 'Failed to upload file')
-      err.value = errorMsg
-      toast.show(`Upload failed: ${errorMsg}`, 'error')
-    } finally {
-      uploading.value = false
-    }
-  }
-
-  const deleteAttachment = async (path: string) => {
-    uploading.value = true
-    try {
-      await deleteAttachmentFile(path)
-      form.value.attachments = form.value.attachments?.filter((a) => a.path !== path) || []
-      if (currentId.value) await updateDailyLog(jobId.value, currentId.value, { ...form.value })
-      toast.show('Photo removed', 'success')
-    } catch (e) {
-      setError(e, 'Failed to delete photo')
-      toast.show('Failed to delete photo', 'error')
-    } finally {
-      uploading.value = false
     }
   }
 

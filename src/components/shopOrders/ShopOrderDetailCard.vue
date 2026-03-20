@@ -20,6 +20,7 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   updateItems: [items: ShopOrderItem[]]
+  deleteItem: [index: number]
   sendEmail: []
   submit: []
   placeOrder: []
@@ -42,7 +43,7 @@ function updateItemField(index: number, field: 'description' | 'quantity' | 'not
 }
 
 function deleteItem(index: number) {
-  emit('updateItems', props.order.items.filter((_, itemIndex) => itemIndex !== index))
+  emit('deleteItem', index)
 }
 </script>
 

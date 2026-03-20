@@ -22,6 +22,7 @@ import {
   updateShopOrderItems,
   updateShopOrderStatus,
   type ShopOrder,
+  type ShopOrderItem,
   type ShopOrderStatus,
 } from '@/services'
 import { useJobAccess } from '@/composables/useJobAccess'
@@ -40,7 +41,7 @@ const jobs = useJobsStore()
 const shopCatalogStore = useShopCatalogStore()
 const shopCategoriesStore = useShopCategoriesStore()
 const { items: catalog } = storeToRefs(shopCatalogStore)
-const { categories: shopCategories, fullTree: shopCategoriesTree } = storeToRefs(shopCategoriesStore)
+const { categories: shopCategories } = storeToRefs(shopCategoriesStore)
 const jobAccess = useJobAccess()
 const { confirm } = useConfirmDialog()
 const subscriptions = useSubscriptionRegistry()
@@ -75,6 +76,7 @@ const catalogItemQtys = ref<Record<string, number>>({})
 const shopOrderRecipients = ref<string[]>([])
 const sendingEmail = ref(false)
 const fmtDate = (ts: unknown) => formatDateTime(ts)
+let persistItemsChain: Promise<void> = Promise.resolve()
 
 const selected = computed(() => orders.value.find(o => o.id === selectedId.value) ?? null)
 
@@ -185,24 +187,36 @@ const addItem = async () => {
     toast.show('No order selected', 'error')
     return
   }
-  
-  try {
-    const description = newItemDescription.value.trim()
-    const quantity = Math.max(1, Math.floor(Number(newItemQty.value) || 1))
-    const note = newItemNote.value.trim() || undefined
-    const catalogItemId = newItemCatalogId.value ?? null
-    const updatedItems = [...(selected.value.items || []), { description, quantity, ...(note ? { note } : {}), catalogItemId }]
-    await updateShopOrderItems(jobId.value, selected.value.id, updatedItems)
-    newItemDescription.value = ''
-    newItemQty.value = ''
-    newItemNote.value = ''
-    newItemCatalogId.value = null
-    selectedCatalogItem.value = null
-    toast.show('Item added successfully', 'success')
-  } catch (e) {
-    logError('ShopOrders', 'Add item error', e)
-    toast.show(`Failed to add item: ${normalizeError(e, 'Unknown error')}`, 'error')
+
+  const description = newItemDescription.value.trim()
+  const quantity = Math.max(1, Math.floor(Number(newItemQty.value) || 1))
+  const note = newItemNote.value.trim() || undefined
+  const catalogItemId = newItemCatalogId.value ?? null
+  const draftSnapshot = {
+    description: newItemDescription.value,
+    quantity: newItemQty.value,
+    note: newItemNote.value,
+    catalogItemId: newItemCatalogId.value,
+    selectedCatalogItem: selectedCatalogItem.value,
   }
+
+  await addItemOptimistically(
+    { description, quantity, ...(note ? { note } : {}), catalogItemId },
+    () => {
+      newItemDescription.value = ''
+      newItemQty.value = ''
+      newItemNote.value = ''
+      newItemCatalogId.value = null
+      selectedCatalogItem.value = null
+    },
+    () => {
+      newItemDescription.value = draftSnapshot.description
+      newItemQty.value = draftSnapshot.quantity
+      newItemNote.value = draftSnapshot.note
+      newItemCatalogId.value = draftSnapshot.catalogItemId
+      selectedCatalogItem.value = draftSnapshot.selectedCatalogItem
+    }
+  )
 }
 
 const normalizeCatalogSelection = (item: CatalogSelectable) => {
@@ -239,25 +253,80 @@ const updateCatalogItemQty = ({ id, qty }: { id: string; qty: number }) => {
   catalogItemQtys.value[id] = qty
 }
 
-const persistItems = async (items = selected.value?.items || []) => {
+const cloneItems = (items: ShopOrderItem[] = []) => items.map((item) => ({ ...item }))
+
+const sanitizeItems = (items: ShopOrderItem[]) =>
+  items.map((item) => ({
+    description: (item.description || '').trim(),
+    quantity: Math.max(0, Math.floor(Number(item.quantity) || 0)),
+    ...(item.note ? { note: item.note } : {}),
+    catalogItemId: item.catalogItemId ?? null,
+  }))
+
+const setOrderItems = (orderId: string, items: ShopOrderItem[]) => {
+  const order = orders.value.find((entry) => entry.id === orderId)
+  if (!order) return
+  order.items = cloneItems(items)
+}
+
+const queuePersistItems = (task: () => Promise<void>) => {
+  const nextTask = persistItemsChain.then(task, task)
+  persistItemsChain = nextTask.catch(() => {})
+  return nextTask
+}
+
+const persistItems = (orderId: string, items: ShopOrderItem[]) =>
+  queuePersistItems(async () => {
+    await updateShopOrderItems(jobId.value, orderId, sanitizeItems(items))
+  })
+
+const addItemOptimistically = async (item: ShopOrderItem, resetDraft: () => void, restoreDraft: () => void) => {
   if (!selected.value) return
+
+  const orderId = selected.value.id
+  const previousItems = cloneItems(selected.value.items || [])
+  const nextItems = [...previousItems, { ...item }]
+
+  setOrderItems(orderId, nextItems)
+  resetDraft()
+
   try {
-    const sanitized = items.map(it => ({
-      description: (it.description || '').trim(),
-      quantity: Math.max(0, Math.floor(Number(it.quantity) || 0)),
-      ...(it.note ? { note: it.note } : {}),
-      catalogItemId: it.catalogItemId ?? null,
-    }))
-    await updateShopOrderItems(jobId.value, selected.value.id, sanitized)
+    await persistItems(orderId, nextItems)
+    toast.show('Item added successfully', 'success')
   } catch (e) {
-    logError('ShopOrders', 'Failed to persist items', e)
+    setOrderItems(orderId, previousItems)
+    restoreDraft()
+    logError('ShopOrders', 'Add item error', e)
+    toast.show(`Failed to add item: ${normalizeError(e, 'Unknown error')}`, 'error')
   }
 }
 
 const handleSelectedItemsUpdate = (items: ShopOrder['items']) => {
   if (!selected.value) return
-  selected.value.items = items
-  void persistItems(items)
+  const orderId = selected.value.id
+  setOrderItems(orderId, items)
+  void persistItems(orderId, items).catch((e) => {
+    logError('ShopOrders', 'Failed to persist items', e)
+    toast.show('Failed to save item changes', 'error')
+  })
+}
+
+const handleDeleteSelectedItem = async (index: number) => {
+  if (!selected.value) return
+
+  const orderId = selected.value.id
+  const previousItems = cloneItems(selected.value.items || [])
+  const nextItems = previousItems.filter((_, itemIndex) => itemIndex !== index)
+
+  setOrderItems(orderId, nextItems)
+
+  try {
+    await persistItems(orderId, nextItems)
+  } catch (e) {
+    setOrderItems(orderId, previousItems)
+    logError('ShopOrders', 'Delete item error', e)
+    toast.show(`Failed to delete item: ${normalizeError(e, 'Unknown error')}`, 'error')
+  }
 }
 
 const createDraft = async () => {
@@ -435,6 +504,7 @@ onUnmounted(() => {
             :can-order="canOrder(selected)"
             :can-receive="canReceive(selected)"
             @update-items="handleSelectedItemsUpdate"
+            @delete-item="handleDeleteSelectedItem"
             @send-email="sendOrderEmail"
             @submit="submitOrder"
             @place-order="orderOrder"
@@ -446,7 +516,6 @@ onUnmounted(() => {
             v-if="canEditOrder(selected)"
             :items="catalog"
             :categories="shopCategories"
-            :full-tree="shopCategoriesTree"
             :catalog-item-qtys="catalogItemQtys"
             @update:catalog-item-qty="updateCatalogItemQty"
             @select-for-order="selectCatalogItem"

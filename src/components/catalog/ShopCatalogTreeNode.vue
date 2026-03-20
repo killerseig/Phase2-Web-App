@@ -6,12 +6,15 @@ import CatalogMetadataBadges from '@/components/catalog/CatalogMetadataBadges.vu
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import type { ShopCatalogItem } from '@/services'
 import type {
-  CatalogTreeChildNodeMap,
   CatalogTreeChildCountMap,
   CatalogTreeDirectMatchStrengthMap,
-  CatalogTreeItemNodeMap,
   CatalogTreeVisibleIdSet,
 } from '@/composables/useCatalogTreeSearch'
+import type {
+  CatalogTreeCategoryNodeMap,
+  CatalogTreeChildNodeMap,
+  CatalogTreeItemNodeMap,
+} from '@/utils/catalogTree'
 
 defineOptions({ name: 'ShopCatalogTreeNode' })
 
@@ -24,6 +27,7 @@ interface Props {
   itemFilter?: (item: ShopCatalogItem) => boolean
   nodeChildIds?: CatalogTreeChildNodeMap
   itemNodesById?: CatalogTreeItemNodeMap
+  categoryNodesById?: CatalogTreeCategoryNodeMap
   searchMode?: boolean
   searchVisibleIds?: CatalogTreeVisibleIdSet
   searchCategoryDirectMatchIds?: Set<string>
@@ -78,7 +82,13 @@ const itemId = computed(() => (isItem.value ? props.nodeId.slice(ITEM_PREFIX.len
 const itemSafeId = computed(() => itemId.value ?? '')
 const categoryId = computed(() => (!isItem.value ? props.nodeId : null))
 
-const category = computed(() => (categoryId.value ? categoriesStore.getCategoryById(categoryId.value) : null))
+const category = computed(() => {
+  if (!categoryId.value) return null
+  if (props.categoryNodesById) {
+    return props.categoryNodesById.get(categoryId.value) ?? null
+  }
+  return categoriesStore.getCategoryById(categoryId.value) ?? null
+})
 const categorySafeId = computed(() => category.value?.id ?? '')
 const categorySafeName = computed(() => category.value?.name ?? '')
 const editCategoryNameModel = computed({
@@ -406,6 +416,7 @@ function runAccordionLeave(el: Element) {
                 :item-filter="itemFilter"
                 :node-child-ids="nodeChildIds"
                 :item-nodes-by-id="itemNodesById"
+                :category-nodes-by-id="categoryNodesById"
                 :search-mode="searchMode"
                 :search-visible-ids="searchVisibleIds"
                 :search-category-direct-match-ids="searchCategoryDirectMatchIds"
@@ -452,6 +463,7 @@ function runAccordionLeave(el: Element) {
               :item-filter="itemFilter"
               :node-child-ids="nodeChildIds"
               :item-nodes-by-id="itemNodesById"
+              :category-nodes-by-id="categoryNodesById"
               :search-mode="searchMode"
               :search-visible-ids="searchVisibleIds"
               :search-category-direct-match-ids="searchCategoryDirectMatchIds"
@@ -591,6 +603,7 @@ function runAccordionLeave(el: Element) {
                 :item-filter="itemFilter"
                 :node-child-ids="nodeChildIds"
                 :item-nodes-by-id="itemNodesById"
+                :category-nodes-by-id="categoryNodesById"
                 :search-mode="searchMode"
                 :search-visible-ids="searchVisibleIds"
                 :search-category-direct-match-ids="searchCategoryDirectMatchIds"
@@ -637,6 +650,7 @@ function runAccordionLeave(el: Element) {
               :item-filter="itemFilter"
               :node-child-ids="nodeChildIds"
               :item-nodes-by-id="itemNodesById"
+              :category-nodes-by-id="categoryNodesById"
               :search-mode="searchMode"
               :search-visible-ids="searchVisibleIds"
               :search-category-direct-match-ids="searchCategoryDirectMatchIds"

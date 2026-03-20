@@ -1,9 +1,4 @@
 /**
- * Send password reset email using Firebase Admin SDK
- * Works without authentication via HTTP callable
- */
-export declare const sendPasswordResetEmail: import("firebase-functions/v2/https").HttpsFunction;
-/**
  * Send Daily Log via email
  */
 export declare const sendDailyLogEmail: import("firebase-functions/v2/https").CallableFunction<any, Promise<{

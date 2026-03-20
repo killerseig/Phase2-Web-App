@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import ShopCatalogTreeNode from '@/components/catalog/ShopCatalogTreeNode.vue'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
+import { buildCatalogTreeIndex } from '@/utils/catalogTree'
 
 describe('ShopCatalogTreeNode', () => {
   beforeEach(() => {
@@ -42,5 +43,35 @@ describe('ShopCatalogTreeNode', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain('Self Tapping')
+  })
+
+  it('renders category and item children from indexed browse maps', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchors', parentId: null, active: true },
+        { id: 'category-b', name: 'Bolts', parentId: 'category-a', active: true },
+      ],
+      items: [
+        { id: 'item-a', description: 'Anchor Kit', categoryId: 'category-a', active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set(['category-a']),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Bolts')
+    expect(wrapper.text()).toContain('Anchor Kit')
   })
 })

@@ -1,6 +1,7 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
 import type { ShopCatalogItem } from '@/services'
 import type { CategoryNode, ShopCategory } from '@/stores/shopCategories'
+import type { CatalogTreeChildNodeMap, CatalogTreeItemNodeMap } from '@/utils/catalogTree'
 
 const ITEM_PREFIX = 'item-'
 const DEFAULT_DEBOUNCE_MS = 80
@@ -17,8 +18,6 @@ type UseCatalogTreeSearchOptions = {
 }
 
 export type CatalogTreeMatchStrength = 'none' | 'primary' | 'secondary' | 'tertiary'
-export type CatalogTreeChildNodeMap = Map<string, readonly string[]>
-export type CatalogTreeItemNodeMap = Map<string, ShopCatalogItem>
 export type CatalogTreeVisibleIdSet = Set<string>
 export type CatalogTreeDirectMatchStrengthMap = Map<string, CatalogTreeMatchStrength>
 export type CatalogTreeChildCountMap = Map<string, number>

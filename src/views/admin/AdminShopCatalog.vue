@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import AppAlert from '@/components/common/AppAlert.vue'
 import AdminAccordionFormCard from '@/components/admin/AdminAccordionFormCard.vue'
@@ -9,14 +9,20 @@ import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
+import AdminCatalogSearchResults from '@/components/catalog/AdminCatalogSearchResults.vue'
 import ShopCatalogTreeNode from '@/components/catalog/ShopCatalogTreeNode.vue'
+import { useCatalogSearchResults, type CatalogSearchResult } from '@/composables/useCatalogSearchResults'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import { useShopCatalogStore } from '@/stores/shopCatalog'
-import type { ShopCatalogItem } from '@/services'
-import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
+import {
+  deleteCatalogItem as deleteCatalogItemService,
+  deleteCategory as deleteCategoryService,
+  type ShopCatalogItem,
+} from '@/services'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
 import { normalizeError } from '@/services/serviceUtils'
+import { buildCatalogTreeIndex } from '@/utils/catalogTree'
 import { logError } from '@/utils'
 
 const categoriesStore = useShopCategoriesStore()
@@ -25,7 +31,6 @@ const { confirm } = useConfirmDialog()
 const toast = useToast()
 const {
   categories,
-  fullTree,
   isLoading: categoriesLoading,
   error: categoriesError,
 } = storeToRefs(categoriesStore)
@@ -48,6 +53,14 @@ const editCategoryName = ref('')
 const editCategoryNameOriginal = ref('')
 const savingCategoryEdit = ref(false)
 const searchQuery = ref('')
+const browseTreeIndex = computed(() =>
+  buildCatalogTreeIndex({
+    categories: categories.value,
+    items: allItems.value,
+  })
+)
+const rootCategoryNodeIds = computed(() => browseTreeIndex.value.rootCategoryNodeIds)
+const uncategorizedItemNodeIds = computed(() => browseTreeIndex.value.rootItemNodeIds)
 
 // Computed
 const loading = computed(() => categoriesLoading.value || catalogLoading.value)
@@ -57,17 +70,20 @@ const clearErrors = () => {
   catalogStore.clearError()
 }
 const {
-  filteredCategoryTree,
-  filteredUncategorizedItemNodeIds: filteredUncategorizedItems,
-  buildExpandedNodesForSearch,
-} = useCatalogTreeSearch({
+  isSearching,
+  results: searchResults,
+  totalResultCount,
+  hasMoreResults,
+} = useCatalogSearchResults({
   searchQuery,
   categories,
   allItems,
-  fullTree,
-  getCategoryById: (id) => categoriesStore.getCategoryById(id),
-  getChildren: (parentId) => categoriesStore.getChildren(parentId),
+  includeCategory: () => true,
+  includeItem: () => true,
+  debounceMs: 40,
+  maxResults: 250,
 })
+const hasSearchResults = computed(() => searchResults.value.length > 0)
 
 function loadAll() {
   categoriesStore.subscribeAllCategories()
@@ -116,15 +132,6 @@ function expandAncestors(nodeId: string, set: Set<string>, depth: number = 0) {
   expandAncestors(parentNodeId, set, depth + 1)
 }
 
-watch(
-  () => searchQuery.value,
-  () => {
-    if (!searchQuery.value.trim()) return
-    expandedNodes.value = buildExpandedNodesForSearch()
-  },
-  { immediate: false }
-)
-
 function openAddCategoryDialog(id: string | null = null) {
   parentId.value = id
   newCategoryName.value = ''
@@ -143,19 +150,21 @@ async function createCategory() {
   const name = newCategoryName.value.trim()
   if (!name) return
 
+  const nextParentId = parentId.value
+  newCategoryName.value = ''
+  showAddCategory.value = false
+
+  if (nextParentId) {
+    const next = new Set(expandedNodes.value)
+    next.add(nextParentId)
+    expandAncestors(nextParentId, next)
+    expandedNodes.value = next
+  }
+
   saving.value = true
   try {
-    await categoriesStore.createCategory(name, parentId.value)
+    await categoriesStore.createCategory(name, nextParentId)
     toast.show(`Category "${name}" created`, 'success')
-    showAddCategory.value = false
-    
-    // Auto-expand parent if creating subcategory
-    if (parentId.value) {
-      const next = new Set(expandedNodes.value)
-      next.add(parentId.value)
-      expandAncestors(parentId.value, next)
-      expandedNodes.value = next
-    }
   } catch (e) {
     toast.show('Failed to create category', 'error')
   } finally {
@@ -164,21 +173,22 @@ async function createCategory() {
 }
 
 async function createItem() {
-  if (!newItemDesc.value.trim()) return
+  const description = newItemDesc.value.trim()
+  if (!description) return
+
+  const categoryId = selectedCategoryForItem.value || undefined
+  const sku = newItemSku.value.trim() || undefined
+  const price = newItemPrice.value ? parseFloat(newItemPrice.value) : undefined
+  newItemDesc.value = ''
+  newItemSku.value = ''
+  newItemPrice.value = ''
+  selectedCategoryForItem.value = null
+  showAddItemForm.value = false
 
   saving.value = true
   try {
-    await catalogStore.createItem(
-      newItemDesc.value.trim(),
-      selectedCategoryForItem.value || undefined,
-      newItemSku.value.trim() || undefined,
-      newItemPrice.value ? parseFloat(newItemPrice.value) : undefined
-    )
-    newItemDesc.value = ''
-    newItemSku.value = ''
-    newItemPrice.value = ''
+    await catalogStore.createItem(description, categoryId, sku, price)
     toast.show('Item added', 'success')
-    showAddItemForm.value = false
   } catch (e) {
     toast.show('Failed to add item', 'error')
   } finally {
@@ -291,22 +301,29 @@ async function deleteCategory(categoryId: string) {
   })
   if (!confirmed) return
 
+  const categoryIdsToDelete = [...categoryIds, categoryId]
+  const rollbackItems = catalogStore.beginOptimisticDelete(itemIds)
+  const rollbackCategories = categoriesStore.beginOptimisticDelete(categoryIdsToDelete)
   saving.value = true
   try {
     // Delete descendant items first
     for (const itemId of itemIds) {
-      await catalogStore.deleteItem(itemId)
+      await deleteCatalogItemService(itemId)
     }
 
     // Delete descendant categories deepest-first
     for (const childCategoryId of categoryIds) {
-      await categoriesStore.deleteCategory(childCategoryId)
+      await deleteCategoryService(childCategoryId)
     }
 
     // Delete selected category
-    await categoriesStore.deleteCategory(categoryId)
+    await deleteCategoryService(categoryId)
+    rollbackItems.commit()
+    rollbackCategories.commit()
     toast.show(`Deleted "${cat.name}"${totalDescendants ? ` with ${totalDescendants} descendants` : ''}`, 'success')
   } catch (e) {
+    rollbackItems.rollback()
+    rollbackCategories.rollback()
     toast.show('Failed to delete category', 'error')
   } finally {
     saving.value = false
@@ -321,11 +338,11 @@ async function saveItemFromTree(
   itemId: string,
   updates: { description?: string; sku?: string | null; price?: number | null }
 ) {
+  editingItemId.value = null
   saving.value = true
   try {
     await catalogStore.updateItem(itemId, updates)
     toast.show('Item updated', 'success')
-    editingItemId.value = null
   } catch (err) {
     logError('AdminShopCatalog', 'Failed to update item', err)
     toast.show(`Failed to update item: ${normalizeError(err, 'Unknown error')}`, 'error')
@@ -354,6 +371,7 @@ async function saveCategoryEdit(categoryId: string) {
     return
   }
 
+  editingCategoryId.value = null
   savingCategoryEdit.value = true
   try {
     await categoriesStore.updateCategory(categoryId, { name: editCategoryName.value.trim() })
@@ -362,7 +380,6 @@ async function saveCategoryEdit(categoryId: string) {
     toast.show('Failed to update category', 'error')
   } finally {
     savingCategoryEdit.value = false
-    editingCategoryId.value = null
   }
 }
 
@@ -412,22 +429,29 @@ async function deleteItem(item: ShopCatalogItem) {
   })
   if (!confirmed) return
 
+  const itemIdsToDelete = [...descendantItemIds, item.id]
+  const rollbackItems = catalogStore.beginOptimisticDelete(itemIdsToDelete)
+  const rollbackCategories = categoriesStore.beginOptimisticDelete(allCascadeCategoryIds)
   saving.value = true
   try {
     // Delete descendant items first
     for (const childItemId of descendantItemIds) {
-      await catalogStore.deleteItem(childItemId)
+      await deleteCatalogItemService(childItemId)
     }
 
     // Delete descendant categories deepest-first
     for (const categoryId of allCascadeCategoryIds) {
-      await categoriesStore.deleteCategory(categoryId)
+      await deleteCategoryService(categoryId)
     }
 
     // Delete selected item
-    await catalogStore.deleteItem(item.id)
+    await deleteCatalogItemService(item.id)
+    rollbackItems.commit()
+    rollbackCategories.commit()
     toast.show(cascadeCount > 0 ? `Item and ${cascadeCount} descendants deleted` : 'Item deleted', 'success')
   } catch (e) {
+    rollbackItems.rollback()
+    rollbackCategories.rollback()
     toast.show('Failed to delete item', 'error')
   } finally {
     saving.value = false
@@ -437,17 +461,13 @@ async function deleteItem(item: ShopCatalogItem) {
 async function archiveItem(item: ShopCatalogItem) {
   saving.value = true
   try {
-    // Get all child categories of this item
-  const childCategories = categories.value.filter(c => c.parentId === `item-${item.id}`)
-    
-    // Archive the item
-    await catalogStore.setItemActive(item.id, false)
-    
-    // Archive all child categories
-    for (const catId of childCategories.map(c => c.id)) {
-      await categoriesStore.archiveCategory(catId)
-    }
-    
+    const childCategories = categories.value.filter(c => c.parentId === `item-${item.id}`)
+
+    await Promise.all([
+      catalogStore.setItemActive(item.id, false),
+      ...childCategories.map((category) => categoriesStore.archiveCategory(category.id)),
+    ])
+
     toast.show(`Archived "${item.description}" and ${childCategories.length} subcategories`, 'success')
   } catch (e) {
     toast.show('Failed to archive item', 'error')
@@ -601,6 +621,24 @@ async function downloadCatalog() {
   }
 }
 
+async function revealSearchResult(result: CatalogSearchResult) {
+  searchQuery.value = ''
+  const nextExpanded = new Set(expandedNodes.value)
+  result.ancestorNodeIds.forEach((nodeId) => nextExpanded.add(nodeId))
+  if (result.hasChildren) {
+    nextExpanded.add(result.nodeId)
+  }
+  expandedNodes.value = nextExpanded
+
+  await nextTick()
+  const target = document.getElementById(`btn-${result.nodeId}`)
+  if (!target) return
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (target instanceof HTMLElement) {
+    target.focus()
+  }
+}
+
 onMounted(() => {
   loadAll()
 })
@@ -695,13 +733,33 @@ onUnmounted(() => {
     <!-- Catalog Tree -->
     <div v-else>
       <AdminCardWrapper title="Catalog" class="table-responsive">
-        <div v-if="filteredCategoryTree.length > 0 || filteredUncategorizedItems.length > 0" class="app-catalog-tree">
+        <AdminCatalogSearchResults
+          v-if="isSearching && hasSearchResults"
+          :results="searchResults"
+          :total-result-count="totalResultCount"
+          :has-more-results="hasMoreResults"
+          @reveal="revealSearchResult"
+        />
+
+        <AppEmptyState
+          v-else-if="isSearching"
+          icon="bi bi-search"
+          icon-class="fs-2"
+          message="No catalog nodes match your search."
+        />
+
+        <div
+          v-show="!isSearching && (rootCategoryNodeIds.length > 0 || uncategorizedItemNodeIds.length > 0)"
+          class="app-catalog-tree"
+        >
           <!-- Uncategorized Items (if any) -->
-          <div v-for="itemId of filteredUncategorizedItems" :key="itemId" class="mb-0">
+          <div v-for="itemId of uncategorizedItemNodeIds" :key="itemId" class="mb-0">
             <ShopCatalogTreeNode
               :node-id="itemId"
               :expanded="expandedNodes"
-              :items="allItems"
+              :node-child-ids="browseTreeIndex.childIds"
+              :item-nodes-by-id="browseTreeIndex.itemNodesById"
+              :category-nodes-by-id="browseTreeIndex.categoryNodesById"
               :editing-item-id="editingItemId"
               :editing-category-id="editingCategoryId"
               :edit-category-name="editCategoryName"
@@ -725,11 +783,13 @@ onUnmounted(() => {
           </div>
           
           <!-- Categories and their items -->
-          <div v-for="cat of filteredCategoryTree" :key="cat.id">
+          <div v-for="catId of rootCategoryNodeIds" :key="catId">
             <ShopCatalogTreeNode
-              :node-id="cat.id"
+              :node-id="catId"
               :expanded="expandedNodes"
-              :items="allItems"
+              :node-child-ids="browseTreeIndex.childIds"
+              :item-nodes-by-id="browseTreeIndex.itemNodesById"
+              :category-nodes-by-id="browseTreeIndex.categoryNodesById"
               :editing-item-id="editingItemId"
               :editing-category-id="editingCategoryId"
               :edit-category-name="editCategoryName"
@@ -754,7 +814,7 @@ onUnmounted(() => {
           </div>
         </div>
         <AppEmptyState
-          v-else
+          v-if="!isSearching && rootCategoryNodeIds.length === 0 && uncategorizedItemNodeIds.length === 0"
           icon="bi bi-inbox"
           icon-class="fs-2"
           message="No categories or items yet. Create one to get started."

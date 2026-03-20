@@ -6,8 +6,10 @@ import DatePickerField from '@/components/common/DatePickerField.vue'
 import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import DailyLogAttachments from '@/components/dailyLogs/DailyLogAttachments.vue'
+import DailyLogIndoorClimateCard from '@/components/dailyLogs/DailyLogIndoorClimateCard.vue'
 import DailyLogList from '@/components/dailyLogs/DailyLogList.vue'
 import DailyLogManpower from '@/components/dailyLogs/DailyLogManpower.vue'
+import DailyLogQualityControlCard from '@/components/dailyLogs/DailyLogQualityControlCard.vue'
 import DailyLogRecipients from '@/components/dailyLogs/DailyLogRecipients.vue'
 import DailyLogStatusBadge from '@/components/dailyLogs/DailyLogStatusBadge.vue'
 import DailyLogTextField from '@/components/dailyLogs/DailyLogTextField.vue'
@@ -64,7 +66,6 @@ const {
   autoSave,
 } = useDailyLog(jobId)
 
-const qcAttachments = computed(() => (form.value.attachments || []).filter((attachment) => attachment.type === 'qc'))
 const hasEmailRecipients = computed(() =>
   Array.from(new Set([...globalDailyLogRecipients.value, ...jobEmailRecipients.value].filter(Boolean))).length > 0
 )
@@ -78,26 +79,8 @@ function handleLogDateChange(dateStr: string) {
   void loadForDate(dateStr)
 }
 
-function onQcFileChange(event: Event) {
-  void handleFileChange(event, 'qc')
-}
-
 function formatSubmittedAt(value: unknown): string {
   return formatDateTime(value)
-}
-
-const indoorClimateKeys = new WeakMap<Record<string, unknown>, string>()
-let indoorClimateKeyCounter = 0
-
-function indoorClimateKey(reading: unknown, idx: number): string {
-  if (!reading || typeof reading !== 'object') return `indoor-climate-${idx}`
-  const record = reading as Record<string, unknown>
-  const existing = indoorClimateKeys.get(record)
-  if (existing) return existing
-  indoorClimateKeyCounter += 1
-  const generated = `indoor-climate-${indoorClimateKeyCounter}-${idx}`
-  indoorClimateKeys.set(record, generated)
-  return generated
 }
 </script>
 
@@ -227,82 +210,13 @@ function indoorClimateKey(reading: unknown, idx: number): string {
           </div>
         </div>
 
-        <!-- Indoor Climate -->
-        <div class="card mb-4 app-section-card">
-          <div class="card-header panel-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-thermometer-half me-2"></i>Indoor Temperature Readings</h5>
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-primary"
-              :disabled="!canEditDraft"
-              @click="addIndoorClimateReading"
-            >
-              <i class="bi bi-plus-lg me-1"></i>Add Floor / Area
-            </button>
-          </div>
-          <div class="card-body">
-            <div
-              v-for="(reading, idx) in form.indoorClimateReadings"
-              :key="indoorClimateKey(reading, idx)"
-              class="row g-2 align-items-end mb-2"
-            >
-              <div class="col-md-4">
-                <label class="form-label">Floor / Area</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  :value="reading.area"
-                  :disabled="!canEditDraft"
-                  placeholder="e.g., Level 2"
-                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'area', value: (e.target as HTMLInputElement).value })"
-                />
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">High (degF)</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  :value="reading.high"
-                  :disabled="!canEditDraft"
-                  placeholder="High"
-                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'high', value: (e.target as HTMLInputElement).value })"
-                />
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">Low (degF)</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  :value="reading.low"
-                  :disabled="!canEditDraft"
-                  placeholder="Low"
-                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'low', value: (e.target as HTMLInputElement).value })"
-                />
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">Humidity (%)</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  :value="reading.humidity"
-                  :disabled="!canEditDraft"
-                  placeholder="Humidity"
-                  @input="(e) => updateIndoorClimateField({ index: idx, field: 'humidity', value: (e.target as HTMLInputElement).value })"
-                />
-              </div>
-              <div class="col-md-2 d-grid">
-                <button
-                  type="button"
-                  class="btn btn-outline-danger"
-                  :disabled="!canEditDraft"
-                  @click="removeIndoorClimateReading(idx)"
-                >
-                  <i class="bi bi-trash"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DailyLogIndoorClimateCard
+          :readings="form.indoorClimateReadings"
+          :can-edit="canEditDraft"
+          @add-reading="addIndoorClimateReading"
+          @remove-reading="removeIndoorClimateReading"
+          @update-field="updateIndoorClimateField"
+        />
 
         <!-- Safety & Concerns -->
         <div class="card mb-4 app-section-card">
@@ -396,79 +310,22 @@ function indoorClimateKey(reading: unknown, idx: number): string {
           </div>
         </div>
 
-        <!-- Quality Control -->
-        <div class="card mb-4 app-section-card">
-          <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Quality Control</h5></div>
-          <div class="card-body">
-            <div class="row g-3">
-              <div class="col-12">
-                <DailyLogTextField
-                  label="Who is assigned to do QC?"
-                  :rows="2"
-                  :model-value="form.qcAssignedTo ?? ''"
-                  :disabled="!canEditDraft"
-                  @update:model-value="(val) => { form.qcAssignedTo = val; autoSave(); }"
-                />
-              </div>
-              <div class="col-12">
-                <DailyLogTextField
-                  label="What areas were inspected?"
-                  :rows="3"
-                  :model-value="form.qcAreasInspected ?? ''"
-                  :disabled="!canEditDraft"
-                  @update:model-value="(val) => { form.qcAreasInspected = val; autoSave(); }"
-                />
-              </div>
-              <div class="col-12">
-                <DailyLogTextField
-                  label="What issues were identified?"
-                  :rows="3"
-                  :model-value="form.qcIssuesIdentified ?? ''"
-                  :disabled="!canEditDraft"
-                  @update:model-value="(val) => { form.qcIssuesIdentified = val; autoSave(); }"
-                />
-              </div>
-              <div class="col-12">
-                <DailyLogTextField
-                  label="What was done to fix the issues?"
-                  :rows="3"
-                  :model-value="form.qcIssuesResolved ?? ''"
-                  :disabled="!canEditDraft"
-                  @update:model-value="(val) => { form.qcIssuesResolved = val; autoSave(); }"
-                />
-              </div>
-              <div class="col-12">
-                <label class="form-label d-flex align-items-center gap-2">
-                  <i class="bi bi-camera"></i>
-                  <span>QC Photos</span>
-                </label>
-                <input
-                  class="form-control form-control-sm"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  :disabled="!canEditDraft || uploading"
-                  @change="onQcFileChange"
-                />
-                <div class="form-text">{{ qcFileName }}</div>
-
-                <div v-if="qcAttachments.length" class="thumb-grid mt-2">
-                  <div v-for="att in qcAttachments" :key="att.path ?? att.url" class="thumb-card">
-                    <img :src="att.url" class="thumb-image" />
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-outline-secondary w-100"
-                      :disabled="uploading"
-                      @click="deleteAttachment(att.path)"
-                    >
-                      <i class="bi bi-trash me-1"></i>Remove
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DailyLogQualityControlCard
+          :attachments="form.attachments"
+          :can-edit="canEditDraft"
+          :uploading="uploading"
+          :file-name="qcFileName"
+          :qc-assigned-to="form.qcAssignedTo ?? ''"
+          :qc-areas-inspected="form.qcAreasInspected ?? ''"
+          :qc-issues-identified="form.qcIssuesIdentified ?? ''"
+          :qc-issues-resolved="form.qcIssuesResolved ?? ''"
+          @update:qc-assigned-to="(val) => { form.qcAssignedTo = val; autoSave(); }"
+          @update:qc-areas-inspected="(val) => { form.qcAreasInspected = val; autoSave(); }"
+          @update:qc-issues-identified="(val) => { form.qcIssuesIdentified = val; autoSave(); }"
+          @update:qc-issues-resolved="(val) => { form.qcIssuesResolved = val; autoSave(); }"
+          @upload="(event) => handleFileChange(event, 'qc')"
+          @delete-attachment="deleteAttachment"
+        />
 
         <!-- Notes -->
         <div class="card mb-4 app-section-card">
@@ -560,31 +417,6 @@ input[readonly] {
   opacity: 0.5;
 }
 
-/* Dark theme for file pickers */
-input[type='file'].form-control {
-  background-color: $surface-2;
-  color: $body-color;
-  border-color: $border-color;
-}
-
-input[type='file'].form-control::file-selector-button {
-  background-color: $surface-3;
-  color: $body-color;
-  border-color: $border-color;
-}
-
-input[type='file'].form-control:hover::file-selector-button,
-input[type='file'].form-control:focus::file-selector-button {
-  background-color: lighten($surface-3, 4%);
-}
-
-/* File input feedback */
-[data-filename]::after {
-  content: attr(data-filename);
-  color: $success;
-  font-weight: 500;
-}
-
 .col-trade { width: 40%; }
 .col-count { width: 20%; }
 .col-areas { width: 35%; }
@@ -606,37 +438,5 @@ input[type='file'].form-control:focus::file-selector-button {
   :deep(.manpower-table td) {
     padding: 0.35rem;
   }
-}
-
-:deep(.thumb-image) {
-  height: 150px;
-  object-fit: cover;
-}
-
-.thumb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.6rem;
-}
-
-.thumb-card {
-  border: 1px solid $border-color;
-  border-radius: 8px;
-  overflow: hidden;
-  background: $surface-2;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  display: flex;
-  flex-direction: column;
-}
-
-.thumb-image {
-  max-width: 300px;
-  max-height: 200px;
-  object-fit: contain;
-  display: block;
-  background: $surface-3;
-  padding: 8px;
-  flex-grow: 1;
-  align-self: center;
 }
 </style>

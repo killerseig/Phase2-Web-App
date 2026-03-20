@@ -69,11 +69,48 @@ service cloud.firestore {
       );
     }
 
+    function isOptionalStringOrNull(value) {
+      return value == null || value is string;
+    }
+
+    function selfCreateHasValidProfileShape() {
+      return request.resource.data.keys().hasOnly([
+               'email',
+               'displayName',
+               'firstName',
+               'lastName',
+               'role',
+               'active',
+               'assignedJobIds',
+               'createdAt'
+             ]) &&
+             request.resource.data.role == 'none' &&
+             request.resource.data.active == true &&
+             request.resource.data.createdAt == request.time &&
+             (!('email' in request.resource.data) ||
+              isOptionalStringOrNull(request.resource.data.email)) &&
+             (!('displayName' in request.resource.data) ||
+              isOptionalStringOrNull(request.resource.data.displayName)) &&
+             (!('firstName' in request.resource.data) ||
+              isOptionalStringOrNull(request.resource.data.firstName)) &&
+             (!('lastName' in request.resource.data) ||
+              isOptionalStringOrNull(request.resource.data.lastName)) &&
+             (!('assignedJobIds' in request.resource.data) ||
+              (request.resource.data.assignedJobIds is list &&
+               request.resource.data.assignedJobIds.size() == 0));
+    }
+
     function selfUpdateKeepsPrivileges(uid) {
       return isSelf(uid) &&
              request.resource.data.role == resource.data.role &&
              request.resource.data.active == resource.data.active &&
-             request.resource.data.assignedJobIds == resource.data.assignedJobIds;
+             request.resource.data.assignedJobIds == resource.data.assignedJobIds &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly([
+               'firstName',
+               'lastName'
+             ]) &&
+             isOptionalStringOrNull(request.resource.data.firstName) &&
+             isOptionalStringOrNull(request.resource.data.lastName);
     }
 
     function foremanCanMarkTimecardsSent(jobId) {
@@ -104,10 +141,10 @@ service cloud.firestore {
       allow get: if signedIn() && (isSelf(uid) || isAdmin());
       allow list: if isAdmin();
 
-      // Self-create is only allowed as a locked-down role.
-      allow create: if isSelf(uid) && request.resource.data.role == 'none';
+      // Self-create is only allowed for the locked-down bootstrap profile shape.
+      allow create: if isSelf(uid) && selfCreateHasValidProfileShape();
 
-      // Admins can manage users. Users can update only non-privileged fields on themselves.
+      // Admins can manage users. Users can only update their own name fields.
       allow update: if isAdmin() || selfUpdateKeepsPrivileges(uid);
       allow delete: if isAdmin();
 

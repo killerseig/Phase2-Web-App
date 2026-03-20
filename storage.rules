@@ -51,6 +51,18 @@ service firebase.storage {
              (isAdmin() || dailyLogDoc(jobId, logId).data.uid == request.auth.uid);
     }
 
+    function canMutateDailyLogAttachment(jobId, logId) {
+      return activeAppUser() &&
+             dailyLogExists(jobId, logId) &&
+             (
+               isAdmin() ||
+               (
+                 dailyLogDoc(jobId, logId).data.uid == request.auth.uid &&
+                 dailyLogDoc(jobId, logId).data.status == 'draft'
+               )
+             );
+    }
+
     function hasLegacyAttachmentAccess() {
       return activeAppUser() &&
              (isAdmin() || (resource != null && resource.metadata.uploadedBy == request.auth.uid));
@@ -64,11 +76,12 @@ service firebase.storage {
     function canCreateAttachment(logId) {
       return request.resource != null &&
              request.resource.metadata.uploadedBy == request.auth.uid &&
-             canAccessDailyLog(request.resource.metadata.jobId, logId);
+             canMutateDailyLogAttachment(request.resource.metadata.jobId, logId);
     }
 
     function canDeleteAttachment(logId) {
-      return request.resource == null && canReadAttachment(logId);
+      return request.resource == null &&
+             canMutateDailyLogAttachment(resource != null ? resource.metadata.jobId : null, logId);
     }
 
     match /daily-logs/{logId}/{allPaths=**} {

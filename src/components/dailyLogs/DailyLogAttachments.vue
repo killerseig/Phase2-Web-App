@@ -84,7 +84,7 @@ const emitDelete = (path?: string) => {
               type="button"
               class="btn btn-sm btn-outline-secondary w-100"
               @click="emitDelete(att.path)"
-              :disabled="uploading"
+              :disabled="!canEdit || uploading"
             >
               <i class="bi bi-trash me-1"></i>Remove
             </button>
@@ -114,7 +114,7 @@ const emitDelete = (path?: string) => {
               type="button"
               class="btn btn-sm btn-outline-secondary w-100"
               @click="emitDelete(att.path)"
-              :disabled="uploading"
+              :disabled="!canEdit || uploading"
             >
               <i class="bi bi-trash me-1"></i>Remove
             </button>

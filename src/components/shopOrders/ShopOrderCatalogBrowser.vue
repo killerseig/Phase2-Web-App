@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, toRef } from 'vue'
 import AppAlert from '@/components/common/AppAlert.vue'
-import AppBadge from '@/components/common/AppBadge.vue'
-import ShopCatalogTreeNode from '@/components/catalog/ShopCatalogTreeNode.vue'
-import { useCatalogTreeSearch } from '@/composables/useCatalogTreeSearch'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import CatalogOrderSearchResults from '@/components/shopOrders/CatalogOrderSearchResults.vue'
+import ShopOrderBrowseTree from '@/components/shopOrders/ShopOrderBrowseTree.vue'
+import { useCatalogSearchResults, type CatalogSearchResult } from '@/composables/useCatalogSearchResults'
 import type { ShopCatalogItem } from '@/services'
-import type { CategoryNode, ShopCategory } from '@/stores/shopCategories'
+import type { ShopCategory } from '@/stores/shopCategories'
+import { buildCatalogTreeIndex } from '@/utils/catalogTree'
 
 type CatalogSelectable = {
   id?: string
@@ -19,7 +21,6 @@ type CatalogSelectable = {
 const props = defineProps<{
   items: ShopCatalogItem[]
   categories: ShopCategory[]
-  fullTree: CategoryNode[]
   catalogItemQtys: Record<string, number>
 }>()
 
@@ -30,95 +31,84 @@ const emit = defineEmits<{
 
 const catalogSearch = ref('')
 const browseExpandedNodes = ref<Set<string>>(new Set())
-const searchExpandedNodes = ref<Set<string>>(new Set())
 
-const itemsSource = shallowRef(props.items)
-const categoriesSource = shallowRef(props.categories)
-const fullTreeSource = shallowRef(props.fullTree)
-
-watch(() => props.items, (items) => { itemsSource.value = items }, { immediate: true })
-watch(() => props.categories, (categories) => { categoriesSource.value = categories }, { immediate: true })
-watch(() => props.fullTree, (tree) => { fullTreeSource.value = tree }, { immediate: true })
-
-const includeCatalogItem = (item: { active: boolean }) => item.active
+const itemsSource = toRef(props, 'items')
+const categoriesSource = toRef(props, 'categories')
 
 const {
   isSearching,
-  buildExpandedNodesForSearch,
-  nodeChildIds,
-  itemNodesById,
-  searchVisibleIds,
-  searchCategoryDirectMatchIds,
-  searchDirectMatchStrengths,
-  searchVisibleChildCounts,
-  visibleRootCategoryNodeIds,
-  visibleUncategorizedItemNodeIds,
-} = useCatalogTreeSearch({
+  results: searchResults,
+  totalResultCount,
+  hasMoreResults,
+} = useCatalogSearchResults({
   searchQuery: catalogSearch,
   categories: categoriesSource,
   allItems: itemsSource,
-  fullTree: fullTreeSource,
-  getCategoryById: (id) => categoriesSource.value.find((category) => category.id === id),
-  getChildren: (parentId) =>
-    categoriesSource.value
-      .filter((category) => category.parentId === parentId)
-      .sort((a, b) => a.name.localeCompare(b.name)),
-  includeItem: includeCatalogItem,
-  debounceMs: 0,
+  includeCategory: (category) => category.active !== false,
+  includeItem: (item) => item.active !== false,
+  debounceMs: 40,
+  maxResults: 250,
 })
 
-// Auto-expand matching paths when search query changes
-watch(isSearching, (searching) => {
-  if (searching) {
-    searchExpandedNodes.value = buildExpandedNodesForSearch()
-  } else {
-    searchExpandedNodes.value = new Set()
-  }
+const activeExpandedNodes = computed(() => browseExpandedNodes.value)
+const browseTreeIndex = computed(() =>
+  buildCatalogTreeIndex({
+    categories: categoriesSource.value,
+    items: itemsSource.value,
+    includeCategory: (category) => category.active !== false,
+    includeItem: (item) => item.active !== false,
+  })
+)
+const rootCategoryNodeIds = computed(() => browseTreeIndex.value.rootCategoryNodeIds)
+const uncategorizedItemNodeIds = computed(() => browseTreeIndex.value.rootItemNodeIds)
+
+const orderableNodeIds = computed(() => {
+  const orderable = new Set<string>()
+  browseTreeIndex.value.categoryNodesById.forEach((_category, nodeId) => {
+    if ((browseTreeIndex.value.childIds.get(nodeId)?.length ?? 0) === 0) {
+      orderable.add(nodeId)
+    }
+  })
+  browseTreeIndex.value.itemNodesById.forEach((_item, nodeId) => {
+    if ((browseTreeIndex.value.childIds.get(nodeId)?.length ?? 0) === 0) {
+      orderable.add(nodeId)
+    }
+  })
+
+  return orderable
 })
-
-// Update auto-expanded nodes when search results change while searching
-watch(searchVisibleIds, () => {
-  if (isSearching.value) {
-    searchExpandedNodes.value = buildExpandedNodesForSearch()
-  }
-})
-
-// Active expanded nodes: search mode uses search expansions, browse mode uses browse expansions
-const activeExpandedNodes = computed(() =>
-  isSearching.value ? searchExpandedNodes.value : browseExpandedNodes.value
-)
-
-// All root category node IDs (full list when browsing, filtered when searching)
-const rootCategoryNodeIds = computed(() =>
-  isSearching.value
-    ? visibleRootCategoryNodeIds.value
-    : fullTreeSource.value.map((c) => c.id)
-)
-
-// All uncategorized item node IDs
-const uncategorizedItemNodeIds = computed(() =>
-  isSearching.value
-    ? visibleUncategorizedItemNodeIds.value
-    : itemsSource.value
-        .filter((item) => includeCatalogItem(item) && !item.categoryId)
-        .map((item) => `item-${item.id}`)
-)
 
 const hasAnyNodes = computed(() =>
   rootCategoryNodeIds.value.length > 0 || uncategorizedItemNodeIds.value.length > 0
 )
+const hasSearchResults = computed(() => searchResults.value.length > 0)
+const showCatalogMissingState = computed(() => !itemsSource.value.length)
+const showNoCatalogNodes = computed(() => !isSearching.value && !hasAnyNodes.value)
+const showSearchResults = computed(() => isSearching.value && hasSearchResults.value)
+const showNoSearchResults = computed(() => isSearching.value && !hasSearchResults.value)
 
 const toggleExpand = (nodeId: string) => {
-  if (isSearching.value) {
-    const next = new Set(searchExpandedNodes.value)
-    if (next.has(nodeId)) next.delete(nodeId)
-    else next.add(nodeId)
-    searchExpandedNodes.value = next
-  } else {
-    const next = new Set(browseExpandedNodes.value)
-    if (next.has(nodeId)) next.delete(nodeId)
-    else next.add(nodeId)
-    browseExpandedNodes.value = next
+  const next = new Set(browseExpandedNodes.value)
+  if (next.has(nodeId)) next.delete(nodeId)
+  else next.add(nodeId)
+  browseExpandedNodes.value = next
+}
+
+async function revealSearchResult(result: CatalogSearchResult) {
+  catalogSearch.value = ''
+  const nextExpanded = new Set(browseExpandedNodes.value)
+  result.ancestorNodeIds.forEach((nodeId) => nextExpanded.add(nodeId))
+  if (result.hasChildren) {
+    nextExpanded.add(result.nodeId)
+  }
+  browseExpandedNodes.value = nextExpanded
+
+  await nextTick()
+  const target = document.getElementById(`btn-${result.nodeId}`)
+  if (!target) return
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (target instanceof HTMLElement) {
+    target.focus()
   }
 }
 </script>
@@ -134,13 +124,12 @@ const toggleExpand = (nodeId: string) => {
               Search names, SKU, and visible catalog details without reloading the tree.
             </div>
           </div>
-          <AppBadge v-if="isSearching" label="Search active" variant-class="text-bg-info" />
         </div>
         <div class="input-group">
           <span class="input-group-text"><i class="bi bi-search"></i></span>
           <input
             v-model="catalogSearch"
-            type="search"
+            type="text"
             class="form-control"
             autocomplete="off"
             spellcheck="false"
@@ -160,57 +149,52 @@ const toggleExpand = (nodeId: string) => {
 
     <div class="card-body">
       <AppAlert
-        v-if="!items.length"
+        v-if="showCatalogMissingState"
         variant="info"
         message="No items in catalog. Please add items to the catalog first in Admin > Shop Catalog."
       />
 
+      <template v-else-if="showNoCatalogNodes">
+        <AppEmptyState
+          icon="bi bi-inbox"
+          icon-class="fs-2"
+          message="No items available."
+        />
+      </template>
+
       <template v-else>
-        <AppAlert v-if="isSearching && !hasAnyNodes" variant="info" message="No items match your search." />
-        <AppAlert v-else-if="!hasAnyNodes" variant="info" message="No items available." />
+        <CatalogOrderSearchResults
+          v-if="showSearchResults"
+          :results="searchResults"
+          :total-result-count="totalResultCount"
+          :has-more-results="hasMoreResults"
+          :catalog-item-qtys="catalogItemQtys"
+          :orderable-node-ids="orderableNodeIds"
+          @reveal="revealSearchResult"
+          @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
+          @select-for-order="(item) => emit('select-for-order', item)"
+        />
 
-        <div v-show="hasAnyNodes" class="app-catalog-tree">
-          <div v-for="itemNodeId of uncategorizedItemNodeIds" :key="itemNodeId" class="mb-0">
-            <ShopCatalogTreeNode
-              :node-id="itemNodeId"
-              :expanded="activeExpandedNodes"
-              :items="items"
-              :order-mode="true"
-              :catalog-item-qtys="catalogItemQtys"
-              :item-filter="includeCatalogItem"
-              :node-child-ids="nodeChildIds"
-              :item-nodes-by-id="itemNodesById"
-              :search-mode="isSearching"
-              :search-visible-ids="searchVisibleIds"
-              :search-category-direct-match-ids="searchCategoryDirectMatchIds"
-              :search-direct-match-strengths="searchDirectMatchStrengths"
-              :search-visible-child-counts="searchVisibleChildCounts"
-              @toggle-expand="toggleExpand"
-              @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
-              @select-for-order="(item) => emit('select-for-order', item)"
-            />
-          </div>
+        <AppEmptyState
+          v-else-if="showNoSearchResults"
+          icon="bi bi-search"
+          icon-class="fs-2"
+          message="No catalog items match your search."
+        />
 
-          <div v-for="catId of rootCategoryNodeIds" :key="catId">
-            <ShopCatalogTreeNode
-              :node-id="catId"
-              :expanded="activeExpandedNodes"
-              :items="items"
-              :order-mode="true"
-              :catalog-item-qtys="catalogItemQtys"
-              :item-filter="includeCatalogItem"
-              :node-child-ids="nodeChildIds"
-              :item-nodes-by-id="itemNodesById"
-              :search-mode="isSearching"
-              :search-visible-ids="searchVisibleIds"
-              :search-category-direct-match-ids="searchCategoryDirectMatchIds"
-              :search-direct-match-strengths="searchDirectMatchStrengths"
-              :search-visible-child-counts="searchVisibleChildCounts"
-              @toggle-expand="toggleExpand"
-              @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
-              @select-for-order="(item) => emit('select-for-order', item)"
-            />
-          </div>
+        <div v-show="!isSearching && hasAnyNodes">
+          <ShopOrderBrowseTree
+            :root-category-node-ids="rootCategoryNodeIds"
+            :uncategorized-item-node-ids="uncategorizedItemNodeIds"
+            :node-child-ids="browseTreeIndex.childIds"
+            :item-nodes-by-id="browseTreeIndex.itemNodesById"
+            :category-nodes-by-id="browseTreeIndex.categoryNodesById"
+            :catalog-item-qtys="catalogItemQtys"
+            :expanded="activeExpandedNodes"
+            @toggle-expand="toggleExpand"
+            @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
+            @select-for-order="(item) => emit('select-for-order', item)"
+          />
         </div>
       </template>
     </div>
@@ -220,6 +204,3 @@ const toggleExpand = (nodeId: string) => {
     </div>
   </div>
 </template>
-
-<style scoped>
-</style>

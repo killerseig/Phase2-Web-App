@@ -36,12 +36,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.listTimecardsForWeek = exports.sendTimecardEmail = exports.sendDailyLogEmail = exports.sendPasswordResetEmail = void 0;
+exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.listTimecardsForWeek = exports.sendTimecardEmail = exports.sendDailyLogEmail = void 0;
 const admin = __importStar(require("firebase-admin"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const https_1 = require("firebase-functions/v2/https");
 const https_2 = require("firebase-functions/v2/https");
-const https_3 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const params_1 = require("firebase-functions/params");
@@ -611,46 +610,6 @@ function normalizeTimecardForEmail(tc) {
         totals,
     };
 }
-/**
- * Send password reset email using Firebase Admin SDK
- * Works without authentication via HTTP callable
- */
-exports.sendPasswordResetEmail = (0, https_3.onRequest)(async (req, res) => {
-    // Enable CORS
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-    // Handle preflight
-    if (req.method === 'OPTIONS') {
-        res.status(204).send('');
-        return;
-    }
-    if (req.method !== 'POST') {
-        res.status(405).json({ error: 'Method not allowed' });
-        return;
-    }
-    const { email } = req.body;
-    if (!email || !email.trim()) {
-        res.status(400).json({ error: 'Email is required' });
-        return;
-    }
-    try {
-        console.log(`[sendPasswordResetEmail] Sending reset email to: ${email}`);
-        // Generate password reset link (this sends the email automatically)
-        await auth.generatePasswordResetLink(email);
-        console.log(`[sendPasswordResetEmail] Email sent successfully to: ${email}`);
-        res.json({
-            success: true,
-            message: `Password reset email sent to ${email}`,
-        });
-    }
-    catch (error) {
-        console.error(`[sendPasswordResetEmail] Error:`, error.message);
-        res.status(500).json({
-            error: error?.message || 'Failed to send password reset email',
-        });
-    }
-});
 /**
  * Send Daily Log via email
  */

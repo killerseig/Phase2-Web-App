@@ -1,4 +1,4 @@
-import { updatePassword, updateProfile, type User } from 'firebase/auth'
+import { sendPasswordResetEmail as sendPasswordResetEmailWithFirebase, updatePassword, updateProfile, type User } from 'firebase/auth'
 import { doc, updateDoc } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '@/firebase'
@@ -57,36 +57,10 @@ export async function sendPasswordResetEmail(email: string): Promise<void> {
     throw new Error('Please enter your email')
   }
 
-  const apiKey = import.meta.env.VITE_FIREBASE_API_KEY
-  if (!apiKey) {
-    throw new Error('Missing Firebase API key')
-  }
-
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestType: 'PASSWORD_RESET',
-        email: sanitizedEmail,
-      }),
-    }
-  )
-
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    const message =
-      data &&
-      typeof data === 'object' &&
-      'error' in data &&
-      data.error &&
-      typeof data.error === 'object' &&
-      'message' in data.error
-        ? String(data.error.message)
-        : 'Failed to send reset email'
-    throw new Error(message)
+  try {
+    await sendPasswordResetEmailWithFirebase(auth, sanitizedEmail)
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to send reset email'))
   }
 }
 

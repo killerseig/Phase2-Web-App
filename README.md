@@ -43,9 +43,33 @@ npm run dev
 - ESLint: `npm run lint:vue`
 - Full lint: `npm run lint:all`
 - Unit tests (single run): `npm run test -- --run`
+- Browser smoke tests: `npm run test:e2e`
+- Browser smoke tests (headed): `npm run test:e2e:headed`
 - Production build: `npm run build`
 - Full local CI gate: `npm run check`
 
+## Browser Smoke Tests
+
+Playwright is configured for browser-level smoke coverage under `e2e/` and runs against a seeded local Firebase emulator stack.
+
+Prerequisites:
+
+- Java runtime on your machine. Firestore emulator will not start without it.
+- First-run emulator downloads are handled by the Firebase CLI and may take a few minutes.
+
+Commands:
+
+- `npm run test:e2e`
+- `npm run test:e2e:headed`
+- `npm run test:e2e:ui`
+
+The E2E stack uses:
+
+- `firebase emulators:exec` with a demo project id
+- `.env.e2e` for emulator-safe Firebase config
+- deterministic seed data from `e2e/fixtures/seed-data.mjs`
+
+The seeded baseline includes admin, controller, and foreman users plus representative jobs, roster, daily logs, timecards, shop orders, catalog items, and email settings.
 ## CI
 
 GitHub Actions runs:

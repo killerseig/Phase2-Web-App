@@ -58,4 +58,23 @@ describe('shop order detail card', () => {
     expect(wrapper.emitted('placeOrder')).toEqual([[]])
     expect(wrapper.emitted('receive')).toEqual([[]])
   })
+
+  it('emits deleteItem when removing a row', async () => {
+    const wrapper = mount(ShopOrderDetailCard, {
+      props: {
+        order: baseOrder(),
+        sendingEmail: false,
+        formatDate: (value) => String(value),
+        isEditable: true,
+        canSubmit: false,
+        canOrder: false,
+        canReceive: false,
+      },
+    })
+
+    const deleteButton = wrapper.find('button[title="Delete row"]')
+    await deleteButton.trigger('click')
+
+    expect(wrapper.emitted('deleteItem')).toEqual([[0]])
+  })
 })
