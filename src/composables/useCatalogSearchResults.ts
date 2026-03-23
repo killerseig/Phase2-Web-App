@@ -190,8 +190,6 @@ export function useCatalogSearchResults(options: UseCatalogSearchResultsOptions)
         label: category.name,
         parentNodeId,
         active: category.active !== false,
-        sku: category.sku ?? undefined,
-        price: category.price ?? undefined,
         category,
       })
       ensureChildBucket(category.id)

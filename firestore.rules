@@ -73,6 +73,66 @@ service cloud.firestore {
       return value == null || value is string;
     }
 
+    function isOptionalNumberOrNull(value) {
+      return value == null || value is number;
+    }
+
+    function validShopCatalogItemShape() {
+      return request.resource.data.keys().hasOnly([
+               'description',
+               'categoryId',
+               'sku',
+               'price',
+               'active',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             request.resource.data.description is string &&
+             request.resource.data.description.size() > 0 &&
+             isOptionalStringOrNull(request.resource.data.categoryId) &&
+             isOptionalStringOrNull(request.resource.data.sku) &&
+             isOptionalNumberOrNull(request.resource.data.price) &&
+             request.resource.data.active is bool;
+    }
+
+    function validShopCatalogItemCreate() {
+      return validShopCatalogItemShape() &&
+             request.resource.data.createdAt == request.time &&
+             request.resource.data.updatedAt == request.time;
+    }
+
+    function validShopCatalogItemUpdate() {
+      return validShopCatalogItemShape() &&
+             request.resource.data.createdAt == resource.data.createdAt &&
+             request.resource.data.updatedAt == request.time;
+    }
+
+    function validShopCategoryShape() {
+      return request.resource.data.keys().hasOnly([
+               'name',
+               'parentId',
+               'active',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             request.resource.data.name is string &&
+             request.resource.data.name.size() > 0 &&
+             isOptionalStringOrNull(request.resource.data.parentId) &&
+             request.resource.data.active is bool;
+    }
+
+    function validShopCategoryCreate() {
+      return validShopCategoryShape() &&
+             request.resource.data.createdAt == request.time &&
+             request.resource.data.updatedAt == request.time;
+    }
+
+    function validShopCategoryUpdate() {
+      return validShopCategoryShape() &&
+             request.resource.data.createdAt == resource.data.createdAt &&
+             request.resource.data.updatedAt == request.time;
+    }
+
     function selfCreateHasValidProfileShape() {
       return request.resource.data.keys().hasOnly([
                'email',
@@ -299,13 +359,17 @@ service cloud.firestore {
     /* ---------------- shop catalog (items with categories) ---------------- */
     match /shopCatalog/{itemId} {
       allow read: if activeAppUser();
-      allow write: if isAdmin();
+      allow create: if isAdmin() && validShopCatalogItemCreate();
+      allow update: if isAdmin() && validShopCatalogItemUpdate();
+      allow delete: if isAdmin();
     }
 
     /* ---------------- shop categories (hierarchical) ---------------- */
     match /shopCategories/{categoryId} {
       allow read: if activeAppUser();
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin() && validShopCategoryCreate();
+      allow update: if isAdmin() && validShopCategoryUpdate();
+      allow delete: if isAdmin();
     }
 
     /* ---------------- settings (app-wide) ---------------- */

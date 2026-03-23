@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildCatalogTreeIndex, getCatalogRootNodeIds } from '@/utils/catalogTree'
+import {
+  buildCatalogTreeIndex,
+  collectCatalogSubtreeDescendants,
+  getCatalogRootNodeIds,
+} from '@/utils/catalogTree'
 import type { ShopCatalogItem } from '@/services'
 import type { ShopCategory } from '@/stores/shopCategories'
 
@@ -60,5 +64,35 @@ describe('catalog tree roots', () => {
     expect(index.childIds.get('cat-a')).toEqual(['cat-b', 'item-item-a'])
     expect(index.categoryNodesById.get('cat-b')?.name).toBe('Bolts')
     expect(index.itemNodesById.get('item-item-a')?.description).toBe('Anchor kit')
+  })
+
+  it('collects mixed item/category descendants in child-first delete order', () => {
+    const categories: ShopCategory[] = [
+      { id: 'cat-root', name: 'Root', parentId: null, active: true },
+      { id: 'cat-under-item', name: 'Under Item', parentId: 'item-item-child', active: true },
+      { id: 'cat-grandchild', name: 'Grandchild', parentId: 'cat-under-item', active: true },
+    ]
+    const items: ShopCatalogItem[] = [
+      { id: 'item-child', description: 'Child Item', categoryId: 'cat-root', active: true },
+      { id: 'item-under-cat', description: 'Under Cat', categoryId: 'cat-under-item', active: true },
+      { id: 'item-under-grandchild', description: 'Under Grandchild', categoryId: 'cat-grandchild', active: true },
+    ]
+
+    const index = buildCatalogTreeIndex({ categories, items })
+    const subtree = collectCatalogSubtreeDescendants(index.childIds, 'cat-root')
+
+    expect(subtree.descendantNodeIds).toEqual([
+      'item-item-under-grandchild',
+      'cat-grandchild',
+      'item-item-under-cat',
+      'cat-under-item',
+      'item-item-child',
+    ])
+    expect(subtree.descendantCategoryIds).toEqual(['cat-grandchild', 'cat-under-item'])
+    expect(subtree.descendantItemIds).toEqual([
+      'item-under-grandchild',
+      'item-under-cat',
+      'item-child',
+    ])
   })
 })

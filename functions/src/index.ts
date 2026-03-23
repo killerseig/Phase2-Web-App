@@ -43,7 +43,7 @@ import {
   COLLECTIONS,
   EMAIL_STYLES,
 } from './constants'
-
+export {
 admin.initializeApp()
 
 const db = admin.firestore()

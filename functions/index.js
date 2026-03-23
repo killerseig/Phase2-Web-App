@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.listTimecardsForWeek = exports.sendTimecardEmail = exports.sendDailyLogEmail = void 0;
+exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.listTimecardsForWeek = exports.sendTimecardEmail = exports.sendDailyLogEmail = exports.restoreShopCatalogMigrationBackup = exports.runShopCatalogMigration = void 0;
 const admin = __importStar(require("firebase-admin"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const https_1 = require("firebase-functions/v2/https");
@@ -51,6 +51,9 @@ const graphTenantId = (0, params_1.defineSecret)('GRAPH_TENANT_ID');
 const graphClientSecret = (0, params_1.defineSecret)('GRAPH_CLIENT_SECRET');
 const outlookSenderEmail = (0, params_1.defineSecret)('OUTLOOK_SENDER_EMAIL');
 const constants_1 = require("./constants");
+var shopCatalogMigration_1 = require("./shopCatalogMigration");
+Object.defineProperty(exports, "runShopCatalogMigration", { enumerable: true, get: function () { return shopCatalogMigration_1.runShopCatalogMigration; } });
+Object.defineProperty(exports, "restoreShopCatalogMigrationBackup", { enumerable: true, get: function () { return shopCatalogMigration_1.restoreShopCatalogMigrationBackup; } });
 admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();

@@ -26,6 +26,52 @@ export function createCatalogItemNodeId(itemId: string): string {
   return `${ITEM_PREFIX}${itemId}`
 }
 
+export function isCatalogItemNodeId(nodeId: string): boolean {
+  return nodeId.startsWith(ITEM_PREFIX)
+}
+
+export function collectCatalogSubtreeDescendants(
+  childIds: CatalogTreeChildNodeMap,
+  rootNodeId: string,
+): {
+  descendantNodeIds: string[]
+  descendantCategoryIds: string[]
+  descendantItemIds: string[]
+} {
+  const descendantNodeIds: string[] = []
+  const descendantCategoryIds: string[] = []
+  const descendantItemIds: string[] = []
+  const visited = new Set<string>()
+  const MAX_DEPTH = 250
+
+  const walk = (nodeId: string, depth = 0) => {
+    if (depth > MAX_DEPTH) return
+    if (visited.has(nodeId)) return
+    visited.add(nodeId)
+
+    for (const childId of childIds.get(nodeId) ?? []) {
+      walk(childId, depth + 1)
+    }
+
+    if (nodeId === rootNodeId) return
+
+    descendantNodeIds.push(nodeId)
+    if (isCatalogItemNodeId(nodeId)) {
+      descendantItemIds.push(nodeId.slice(ITEM_PREFIX.length))
+    } else {
+      descendantCategoryIds.push(nodeId)
+    }
+  }
+
+  walk(rootNodeId)
+
+  return {
+    descendantNodeIds,
+    descendantCategoryIds,
+    descendantItemIds,
+  }
+}
+
 export function buildCatalogTreeIndex(options: RootOptions): CatalogTreeIndex {
   const includeCategory = options.includeCategory ?? (() => true)
   const includeItem = options.includeItem ?? (() => true)

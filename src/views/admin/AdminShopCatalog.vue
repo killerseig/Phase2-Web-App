@@ -22,7 +22,12 @@ import {
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
 import { normalizeError } from '@/services/serviceUtils'
-import { buildCatalogTreeIndex } from '@/utils/catalogTree'
+import {
+  buildCatalogTreeIndex,
+  collectCatalogSubtreeDescendants,
+  createCatalogItemNodeId,
+  isCatalogItemNodeId,
+} from '@/utils/catalogTree'
 import { logError } from '@/utils'
 
 const categoriesStore = useShopCategoriesStore()
@@ -53,10 +58,14 @@ const editCategoryName = ref('')
 const editCategoryNameOriginal = ref('')
 const savingCategoryEdit = ref(false)
 const searchQuery = ref('')
+const inlineDraftItem = ref<ShopCatalogItem | null>(null)
+const browseItems = computed(() => (
+  inlineDraftItem.value ? [...allItems.value, inlineDraftItem.value] : allItems.value
+))
 const browseTreeIndex = computed(() =>
   buildCatalogTreeIndex({
     categories: categories.value,
-    items: allItems.value,
+    items: browseItems.value,
   })
 )
 const rootCategoryNodeIds = computed(() => browseTreeIndex.value.rootCategoryNodeIds)
@@ -84,6 +93,19 @@ const {
   maxResults: 250,
 })
 const hasSearchResults = computed(() => searchResults.value.length > 0)
+
+function collectDeleteSubtree(rootNodeId: string) {
+  return collectCatalogSubtreeDescendants(browseTreeIndex.value.childIds, rootNodeId)
+}
+
+async function deleteTreeNode(nodeId: string) {
+  if (isCatalogItemNodeId(nodeId)) {
+    await deleteCatalogItemService(nodeId.slice('item-'.length))
+    return
+  }
+
+  await deleteCategoryService(nodeId)
+}
 
 function loadAll() {
   categoriesStore.subscribeAllCategories()
@@ -139,11 +161,36 @@ function openAddCategoryDialog(id: string | null = null) {
 }
 
 function openAddItemDialog(categoryId: string | null = null) {
-  selectedCategoryForItem.value = categoryId
-  newItemDesc.value = ''
-  newItemSku.value = ''
-  newItemPrice.value = ''
-  showAddItemForm.value = true
+  if (!categoryId) {
+    selectedCategoryForItem.value = null
+    newItemDesc.value = ''
+    newItemSku.value = ''
+    newItemPrice.value = ''
+    showAddItemForm.value = true
+    return
+  }
+
+  const parentNodeId = allItems.value.some((item) => item.id === categoryId)
+    ? normalizeItemNodeId(categoryId)
+    : categoryId
+
+  inlineDraftItem.value = {
+    id: `draft-item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    description: '',
+    categoryId,
+    active: true,
+    sku: undefined,
+    price: undefined,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+  editingItemId.value = inlineDraftItem.value.id
+  editingCategoryId.value = null
+
+  const nextExpanded = new Set(expandedNodes.value)
+  nextExpanded.add(parentNodeId)
+  expandAncestors(parentNodeId, nextExpanded)
+  expandedNodes.value = nextExpanded
 }
 
 async function createCategory() {
@@ -271,26 +318,8 @@ async function deleteCategory(categoryId: string) {
   const cat = categoriesStore.getCategoryById(categoryId)
   if (!cat) return
 
-  const categoryIds: string[] = []
-  const visited = new Set<string>()
-  const MAX_DEPTH = 100
-  const collectCategoryDescendants = (id: string, depth = 0) => {
-    if (depth > MAX_DEPTH) return
-    if (visited.has(id)) return
-    visited.add(id)
-    const children = categoriesStore.getChildren(id)
-    children.forEach(child => {
-      collectCategoryDescendants(child.id, depth + 1)
-      categoryIds.push(child.id)
-    })
-  }
-  collectCategoryDescendants(categoryId)
-
-  const itemIds = allItems.value
-    .filter(item => item.categoryId && [categoryId, ...categoryIds].includes(item.categoryId))
-    .map(item => item.id)
-
-  const totalDescendants = categoryIds.length + itemIds.length
+  const subtree = collectDeleteSubtree(categoryId)
+  const totalDescendants = subtree.descendantCategoryIds.length + subtree.descendantItemIds.length
   const confirmMessage = totalDescendants > 0
     ? `Delete "${cat.name}" and ${totalDescendants} descendant item(s)/category(ies)? This cannot be undone.`
     : `Delete "${cat.name}"? This cannot be undone.`
@@ -301,22 +330,24 @@ async function deleteCategory(categoryId: string) {
   })
   if (!confirmed) return
 
-  const categoryIdsToDelete = [...categoryIds, categoryId]
-  const rollbackItems = catalogStore.beginOptimisticDelete(itemIds)
+  const categoryIdsToDelete = [...subtree.descendantCategoryIds, categoryId]
+  const rollbackItems = catalogStore.beginOptimisticDelete(subtree.descendantItemIds)
   const rollbackCategories = categoriesStore.beginOptimisticDelete(categoryIdsToDelete)
+  const inlineDraftNodeId = inlineDraftItem.value ? createCatalogItemNodeId(inlineDraftItem.value.id) : null
+  const shouldClearInlineDraft = !!inlineDraftNodeId && subtree.descendantNodeIds.includes(inlineDraftNodeId)
+  const previousInlineDraft = shouldClearInlineDraft ? inlineDraftItem.value : null
+  if (shouldClearInlineDraft) {
+    inlineDraftItem.value = null
+    if (editingItemId.value === previousInlineDraft?.id) {
+      editingItemId.value = null
+    }
+  }
   saving.value = true
   try {
-    // Delete descendant items first
-    for (const itemId of itemIds) {
-      await deleteCatalogItemService(itemId)
+    for (const nodeId of subtree.descendantNodeIds) {
+      await deleteTreeNode(nodeId)
     }
 
-    // Delete descendant categories deepest-first
-    for (const childCategoryId of categoryIds) {
-      await deleteCategoryService(childCategoryId)
-    }
-
-    // Delete selected category
     await deleteCategoryService(categoryId)
     rollbackItems.commit()
     rollbackCategories.commit()
@@ -324,6 +355,10 @@ async function deleteCategory(categoryId: string) {
   } catch (e) {
     rollbackItems.rollback()
     rollbackCategories.rollback()
+    if (previousInlineDraft) {
+      inlineDraftItem.value = previousInlineDraft
+      editingItemId.value = previousInlineDraft.id
+    }
     toast.show('Failed to delete category', 'error')
   } finally {
     saving.value = false
@@ -338,6 +373,32 @@ async function saveItemFromTree(
   itemId: string,
   updates: { description?: string; sku?: string | null; price?: number | null }
 ) {
+  if (inlineDraftItem.value?.id === itemId) {
+    const description = updates.description?.trim() ?? ''
+    if (!description) return
+
+    const draftParentId = inlineDraftItem.value.categoryId
+    editingItemId.value = null
+    saving.value = true
+    try {
+      await catalogStore.createItem(
+        description,
+        draftParentId,
+        updates.sku ?? undefined,
+        updates.price ?? undefined
+      )
+      inlineDraftItem.value = null
+      toast.show('Item added', 'success')
+    } catch (err) {
+      editingItemId.value = itemId
+      logError('AdminShopCatalog', 'Failed to create inline item', err)
+      toast.show(`Failed to add item: ${normalizeError(err, 'Unknown error')}`, 'error')
+    } finally {
+      saving.value = false
+    }
+    return
+  }
+
   editingItemId.value = null
   saving.value = true
   try {
@@ -362,7 +423,7 @@ async function editCategory(categoryId: string) {
 
 async function saveCategoryEdit(
   categoryId: string,
-  updates: { name: string; sku?: string | null; price?: number | null }
+  updates: { name: string }
 ) {
   const nextName = updates.name.trim()
   if (!nextName) {
@@ -370,16 +431,8 @@ async function saveCategoryEdit(
     return
   }
 
-  const currentCategory = categoriesStore.getCategoryById(categoryId)
-  const nextSku = updates.sku === undefined ? currentCategory?.sku ?? null : updates.sku
-  const nextPrice = updates.price === undefined ? currentCategory?.price ?? null : updates.price
-  const currentSku = currentCategory?.sku ?? null
-  const currentPrice = currentCategory?.price ?? null
-
   if (
-    nextName === editCategoryNameOriginal.value &&
-    nextSku === currentSku &&
-    nextPrice === currentPrice
+    nextName === editCategoryNameOriginal.value
   ) {
     editingCategoryId.value = null
     return
@@ -388,11 +441,7 @@ async function saveCategoryEdit(
   editingCategoryId.value = null
   savingCategoryEdit.value = true
   try {
-    await categoriesStore.updateCategory(categoryId, {
-      name: nextName,
-      sku: nextSku,
-      price: nextPrice,
-    })
+    await categoriesStore.updateCategory(categoryId, { name: nextName })
     toast.show('Category updated', 'success')
   } catch (e) {
     toast.show('Failed to update category', 'error')
@@ -407,36 +456,16 @@ function cancelCategoryEdit() {
   editCategoryNameOriginal.value = ''
 }
 
-async function deleteItem(item: ShopCatalogItem) {
-  const childCategories = categories.value.filter(
-    c => c.parentId === `item-${item.id}` || c.parentId === item.id
-  )
-
-  const descendantCategoryIds: string[] = []
-  const visited = new Set<string>()
-  const MAX_DEPTH = 100
-  const collectCategoryDescendants = (parentCategoryId: string, depth = 0) => {
-    if (depth > MAX_DEPTH) return
-    if (visited.has(parentCategoryId)) return
-    visited.add(parentCategoryId)
-    const children = categoriesStore.getChildren(parentCategoryId)
-    children.forEach(child => {
-      collectCategoryDescendants(child.id, depth + 1)
-      descendantCategoryIds.push(child.id)
-    })
+function cancelItemEdit() {
+  if (inlineDraftItem.value && editingItemId.value === inlineDraftItem.value.id) {
+    inlineDraftItem.value = null
   }
+  editingItemId.value = null
+}
 
-  childCategories.forEach(cat => {
-    collectCategoryDescendants(cat.id)
-    descendantCategoryIds.push(cat.id)
-  })
-
-  const allCascadeCategoryIds = Array.from(new Set(descendantCategoryIds))
-  const descendantItemIds = allItems.value
-    .filter(i => i.categoryId && allCascadeCategoryIds.includes(i.categoryId))
-    .map(i => i.id)
-
-  const cascadeCount = allCascadeCategoryIds.length + descendantItemIds.length
+async function deleteItem(item: ShopCatalogItem) {
+  const subtree = collectDeleteSubtree(createCatalogItemNodeId(item.id))
+  const cascadeCount = subtree.descendantCategoryIds.length + subtree.descendantItemIds.length
   const confirmMessage = cascadeCount > 0
     ? `Delete "${item.description}" and ${cascadeCount} descendant item(s)/category(ies)? This cannot be undone.`
     : `Delete "${item.description}"? This cannot be undone.`
@@ -447,22 +476,24 @@ async function deleteItem(item: ShopCatalogItem) {
   })
   if (!confirmed) return
 
-  const itemIdsToDelete = [...descendantItemIds, item.id]
+  const itemIdsToDelete = [...subtree.descendantItemIds, item.id]
   const rollbackItems = catalogStore.beginOptimisticDelete(itemIdsToDelete)
-  const rollbackCategories = categoriesStore.beginOptimisticDelete(allCascadeCategoryIds)
+  const rollbackCategories = categoriesStore.beginOptimisticDelete(subtree.descendantCategoryIds)
+  const inlineDraftNodeId = inlineDraftItem.value ? createCatalogItemNodeId(inlineDraftItem.value.id) : null
+  const shouldClearInlineDraft = !!inlineDraftNodeId && subtree.descendantNodeIds.includes(inlineDraftNodeId)
+  const previousInlineDraft = shouldClearInlineDraft ? inlineDraftItem.value : null
+  if (shouldClearInlineDraft) {
+    inlineDraftItem.value = null
+    if (editingItemId.value === previousInlineDraft?.id) {
+      editingItemId.value = null
+    }
+  }
   saving.value = true
   try {
-    // Delete descendant items first
-    for (const childItemId of descendantItemIds) {
-      await deleteCatalogItemService(childItemId)
+    for (const nodeId of subtree.descendantNodeIds) {
+      await deleteTreeNode(nodeId)
     }
 
-    // Delete descendant categories deepest-first
-    for (const categoryId of allCascadeCategoryIds) {
-      await deleteCategoryService(categoryId)
-    }
-
-    // Delete selected item
     await deleteCatalogItemService(item.id)
     rollbackItems.commit()
     rollbackCategories.commit()
@@ -470,6 +501,10 @@ async function deleteItem(item: ShopCatalogItem) {
   } catch (e) {
     rollbackItems.rollback()
     rollbackCategories.rollback()
+    if (previousInlineDraft) {
+      inlineDraftItem.value = previousInlineDraft
+      editingItemId.value = previousInlineDraft.id
+    }
     toast.show('Failed to delete item', 'error')
   } finally {
     saving.value = false
@@ -784,6 +819,7 @@ onUnmounted(() => {
               :saving-category-edit="savingCategoryEdit"
               @toggle-expand="toggleExpand"
               @add-child="openAddCategoryDialog"
+              @add-item="openAddItemDialog"
               @edit-item="editItem"
               @save-item="saveItemFromTree"
               @delete-item="deleteItem"
@@ -792,7 +828,7 @@ onUnmounted(() => {
               @edit-category="editCategory"
               @save-category="saveCategoryEdit"
               @cancel-category-edit="cancelCategoryEdit"
-              @cancel-item-edit="() => editingItemId = null"
+              @cancel-item-edit="cancelItemEdit"
               @archive="archiveCategory"
               @reactivate="reactivateCategory"
               @delete-category="deleteCategory"
@@ -823,7 +859,7 @@ onUnmounted(() => {
               @edit-category="editCategory"
               @save-category="saveCategoryEdit"
               @cancel-category-edit="cancelCategoryEdit"
-              @cancel-item-edit="() => editingItemId = null"
+              @cancel-item-edit="cancelItemEdit"
               @archive="archiveCategory"
               @reactivate="reactivateCategory"
               @delete-category="deleteCategory"

@@ -31,8 +31,6 @@ export type ShopCategory = {
   id: string
   name: string
   parentId: string | null
-  sku?: string
-  price?: number
   active: boolean
   createdAt?: unknown
   updatedAt?: unknown
@@ -56,8 +54,6 @@ function normalizeCategory(id: string, data: DocumentData): ShopCategory {
     id,
     name: data.name ?? '',
     parentId: data.parentId ?? null,
-    sku: typeof data.sku === 'string' ? data.sku : undefined,
-    price: typeof data.price === 'number' ? data.price : undefined,
     active: data.active ?? true,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
@@ -181,15 +177,11 @@ export function subscribeCategories(
 export async function createCategory(
   name: string,
   parentId: string | null = null,
-  sku?: string,
-  price?: number
 ): Promise<ShopCategory> {
   try {
     const ref = await addDoc(collection(db, 'shopCategories'), {
       name: name.trim(),
       parentId: parentId || null,
-      sku: sku?.trim() || null,
-      price: price ?? null,
       active: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -223,7 +215,7 @@ function buildCatalogQuery(activeOnly: boolean) {
 
 export async function updateCategory(
   categoryId: string,
-  updates: { name?: string; active?: boolean; sku?: string | null; price?: number | null }
+  updates: { name?: string; active?: boolean }
 ): Promise<void> {
   try {
     const ref = doc(db, 'shopCategories', categoryId)

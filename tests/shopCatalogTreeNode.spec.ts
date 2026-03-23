@@ -78,7 +78,7 @@ describe('ShopCatalogTreeNode', () => {
   it('does not show sku or price metadata for parent category nodes', () => {
     const index = buildCatalogTreeIndex({
       categories: [
-        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+        { id: 'category-a', name: 'Anchor Kit', parentId: null, active: true },
         { id: 'category-b', name: 'Bolts', parentId: 'category-a', active: true },
       ],
       items: [],
@@ -107,7 +107,7 @@ describe('ShopCatalogTreeNode', () => {
   it('renders parent category edit with only the name input', () => {
     const index = buildCatalogTreeIndex({
       categories: [
-        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+        { id: 'category-a', name: 'Anchor Kit', parentId: null, active: true },
         { id: 'category-b', name: 'Bolts', parentId: 'category-a', active: true },
       ],
       items: [],
@@ -135,10 +135,10 @@ describe('ShopCatalogTreeNode', () => {
     expect((inputs[0]!.element as HTMLInputElement).value).toBe('Anchor Kit')
   })
 
-  it('shows sku and price metadata for leaf category nodes', () => {
+  it('does not show sku and price metadata for leaf category nodes', () => {
     const index = buildCatalogTreeIndex({
       categories: [
-        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+        { id: 'category-a', name: 'Anchor Kit', parentId: null, active: true },
       ],
       items: [],
     })
@@ -159,14 +159,14 @@ describe('ShopCatalogTreeNode', () => {
     })
 
     expect(wrapper.text()).toContain('Anchor Kit')
-    expect(wrapper.text()).toContain('AK-1')
-    expect(wrapper.text()).toContain('$12.50')
+    expect(wrapper.text()).not.toContain('AK-1')
+    expect(wrapper.text()).not.toContain('$12.50')
   })
 
-  it('renders leaf category edit with name, sku, and price inputs', () => {
+  it('renders leaf category edit with only the name input', () => {
     const index = buildCatalogTreeIndex({
       categories: [
-        { id: 'category-a', name: 'Anchor Kit', sku: 'AK-1', price: 12.5, parentId: null, active: true },
+        { id: 'category-a', name: 'Anchor Kit', parentId: null, active: true },
       ],
       items: [],
     })
@@ -189,10 +189,8 @@ describe('ShopCatalogTreeNode', () => {
     })
 
     const inputs = wrapper.findAll('input')
-    expect(inputs).toHaveLength(3)
+    expect(inputs).toHaveLength(1)
     expect((inputs[0]!.element as HTMLInputElement).value).toBe('Anchor Kit')
-    expect((inputs[1]!.element as HTMLInputElement).value).toBe('AK-1')
-    expect((inputs[2]!.element as HTMLInputElement).value).toBe('12.5')
   })
 
   it('renders item edit inputs when the item is in edit mode', () => {
@@ -313,6 +311,7 @@ describe('ShopCatalogTreeNode', () => {
     await wrapper.get('button[title="Toggle edit mode"]').trigger('click')
 
     expect(wrapper.find('button[title="Add subcategory"]').exists()).toBe(false)
+    expect(wrapper.find('button[title="Add item"]').exists()).toBe(true)
     expect(wrapper.find('button[title="Edit"]').exists()).toBe(true)
   })
 
@@ -343,5 +342,93 @@ describe('ShopCatalogTreeNode', () => {
 
     expect(wrapper.find('button[title="Add item"]').exists()).toBe(true)
     expect(wrapper.find('button[title="Add subcategory"]').exists()).toBe(false)
+  })
+
+  it('keeps delete on category rows that still have children', async () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchors', parentId: null, active: true },
+      ],
+      items: [
+        { id: 'item-a', description: 'Anchor Kit', categoryId: 'category-a', active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await wrapper.get('button[title="Toggle edit mode"]').trigger('click')
+
+    expect(wrapper.find('button[title="Delete"]').exists()).toBe(true)
+  })
+
+  it('keeps delete on leaf category rows', async () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchors', parentId: null, active: true },
+      ],
+      items: [],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await wrapper.get('button[title="Toggle edit mode"]').trigger('click')
+
+    expect(wrapper.find('button[title="Delete"]').exists()).toBe(true)
+  })
+
+  it('keeps delete on item rows that still have children', async () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'child-category', name: 'Fasteners', parentId: 'item-item-a', active: true },
+      ],
+      items: [
+        { id: 'item-a', description: 'Anchor Kit', sku: 'AK-1', price: 12.5, active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'item-item-a',
+        expanded: new Set<string>(),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await wrapper.get('button[title="Toggle edit mode"]').trigger('click')
+
+    expect(wrapper.find('button[title="Delete"]').exists()).toBe(true)
   })
 })

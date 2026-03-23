@@ -50,7 +50,7 @@ const emit = defineEmits<{
   'save-item': [itemId: string, updates: { description?: string; sku?: string | null; price?: number | null }]
   'delete-item': [item: ShopCatalogItem]
   'edit-category': [id: string]
-  'save-category': [id: string, updates: { name: string; sku?: string | null; price?: number | null }]
+  'save-category': [id: string, updates: { name: string }]
   'cancel-category-edit': []
   'cancel-item-edit': []
   'archive': [id: string]
@@ -72,10 +72,6 @@ const editPrice = ref('')
 const editDescOriginal = ref('')
 const editSkuOriginal = ref('')
 const editPriceOriginal = ref('')
-const editCategorySku = ref('')
-const editCategoryPrice = ref('')
-const editCategorySkuOriginal = ref('')
-const editCategoryPriceOriginal = ref('')
 const isSaving = ref(false)
 const showActions = ref(false)
 
@@ -160,7 +156,6 @@ const childBypassSearchFilter = computed(() =>
 )
 const showItemPurchasingFields = computed(() => !hasChildren.value)
 const isEditingCategory = computed(() => props.editingCategoryId === props.nodeId)
-const showCategoryPurchasingFields = computed(() => !hasChildren.value)
 function toggleSelf() {
   if (!hasChildren.value) return
   emit('toggle-expand', props.nodeId)
@@ -264,30 +259,11 @@ function handleEditCategory() {
 }
 
 function handleSaveCategory() {
-  const updates: { name: string; sku?: string | null; price?: number | null } = {
+  const updates: { name: string } = {
     name: (props.editCategoryName ?? '').trim(),
   }
 
-  if (showCategoryPurchasingFields.value) {
-    const skuValue = editCategorySku.value.trim()
-    if (skuValue !== editCategorySkuOriginal.value.trim()) {
-      updates.sku = skuValue || null
-    }
-
-    if (editCategoryPrice.value !== editCategoryPriceOriginal.value) {
-      updates.price = editCategoryPrice.value ? parseFloat(editCategoryPrice.value) : null
-    }
-  }
-
   emit('save-category', props.nodeId, updates)
-}
-
-function syncCategoryEditFields() {
-  if (!category.value) return
-  editCategorySku.value = category.value.sku || ''
-  editCategoryPrice.value = category.value.price?.toString() || ''
-  editCategorySkuOriginal.value = editCategorySku.value
-  editCategoryPriceOriginal.value = editCategoryPrice.value
 }
 
 function asHTMLElement(el: Element): HTMLElement | null {
@@ -347,8 +323,8 @@ watch(isEditing, (editing) => {
 }, { immediate: true })
 
 watch(isEditingCategory, (editing) => {
-  if (editing) {
-    syncCategoryEditFields()
+  if (!editing) {
+    showActions.value = false
   }
 }, { immediate: true })
 </script>
@@ -370,8 +346,6 @@ watch(isEditingCategory, (editing) => {
           class="catalog-row-content"
           :label="category.name"
           :archived="isArchived"
-          :sku="showCategoryPurchasingFields ? category.sku : undefined"
-          :price="showCategoryPurchasingFields ? category.price : undefined"
         />
       </button>
 
@@ -429,24 +403,6 @@ watch(isEditingCategory, (editing) => {
           v-model="editCategoryNameModel"
           input-class="form-control form-control-sm edit-category-input"
           placeholder="Category name"
-          @enter="handleSaveCategory"
-        />
-        <InlineField
-          v-if="showCategoryPurchasingFields"
-          :editing="true"
-          v-model="editCategorySku"
-          input-class="form-control form-control-sm"
-          placeholder="SKU"
-          @enter="handleSaveCategory"
-        />
-        <InlineField
-          v-if="showCategoryPurchasingFields"
-          :editing="true"
-          v-model="editCategoryPrice"
-          input-class="form-control form-control-sm"
-          type="number"
-          step="0.01"
-          placeholder="Price"
           @enter="handleSaveCategory"
         />
       </div>
@@ -615,6 +571,9 @@ watch(isEditingCategory, (editing) => {
         >
           <button class="btn btn-outline-danger" @click.stop="handleDeleteItem" title="Delete">
             <i class="bi bi-trash text-danger"></i>
+          </button>
+          <button v-if="item?.active" class="btn btn-outline-success" @click.stop="() => emit('add-item', itemSafeId)" title="Add item">
+            <i class="bi bi-file-earmark-plus text-success"></i>
           </button>
           <button class="btn btn-outline-secondary" @click.stop="handleEditItem" title="Edit">
             <i class="bi bi-pencil"></i>
@@ -891,7 +850,7 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
 
 .category-edit-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 8rem 7rem;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
   align-items: center;
   min-width: 0;

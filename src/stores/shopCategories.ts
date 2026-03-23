@@ -5,8 +5,6 @@ export interface ShopCategory {
   id: string
   name: string
   parentId: string | null
-  sku?: string
-  price?: number
   active: boolean
   createdAt?: unknown
   updatedAt?: unknown
@@ -42,8 +40,6 @@ function categoriesMatch(serverCategory: ShopCategory, pendingCategory: ShopCate
   return (
     serverCategory.name === pendingCategory.name &&
     (serverCategory.parentId ?? null) === (pendingCategory.parentId ?? null) &&
-    (serverCategory.sku ?? null) === (pendingCategory.sku ?? null) &&
-    (serverCategory.price ?? null) === (pendingCategory.price ?? null) &&
     (serverCategory.active ?? true) === (pendingCategory.active ?? true)
   )
 }
@@ -269,17 +265,12 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
   async function createCategory(
     name: string,
     parentId: string | null = null,
-    sku?: string,
-    price?: number
   ): Promise<ShopCategory> {
     const nextName = name.trim()
-    const nextSku = sku?.trim() || undefined
     const tempCategory: ShopCategory = {
       id: createTempCategoryId(),
       name: nextName,
       parentId,
-      sku: nextSku,
-      price: price ?? undefined,
       active: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -289,7 +280,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     applyCategoryState()
 
     try {
-      const createdCategory = await createCategoryService(nextName, parentId, nextSku, price)
+      const createdCategory = await createCategoryService(nextName, parentId)
       pendingUpsertCategories.delete(tempCategory.id)
       pendingUpsertCategories.set(createdCategory.id, cloneCategory(createdCategory))
       applyCategoryState()
@@ -305,7 +296,7 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
 
   async function updateCategory(
     id: string,
-    updates: { name?: string; active?: boolean; sku?: string | null; price?: number | null }
+    updates: { name?: string; active?: boolean }
   ): Promise<void> {
     ensureServerStateInitialized()
     const currentCategory = categories.value.find((category) => category.id === id)
@@ -318,8 +309,6 @@ export const useShopCategoriesStore = defineStore('shopCategories', () => {
     const optimisticChange = withOptimisticCategory(id, {
       ...cloneCategory(currentCategory),
       name: updates.name ?? currentCategory.name,
-      sku: updates.sku !== undefined ? updates.sku ?? undefined : currentCategory.sku,
-      price: updates.price !== undefined ? updates.price ?? undefined : currentCategory.price,
       active: updates.active ?? currentCategory.active,
       updatedAt: new Date(),
     })
