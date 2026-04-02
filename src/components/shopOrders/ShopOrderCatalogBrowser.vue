@@ -1,23 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, toRef, useSlots } from 'vue'
+import { toRef, useSlots } from 'vue'
+import CatalogBrowseTree from '@/components/catalog/CatalogBrowseTree.vue'
 import AppAlert from '@/components/common/AppAlert.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import CatalogOrderSearchResults from '@/components/shopOrders/CatalogOrderSearchResults.vue'
-import ShopOrderBrowseTree from '@/components/shopOrders/ShopOrderBrowseTree.vue'
-import { useCatalogSearchResults, type CatalogSearchResult } from '@/composables/useCatalogSearchResults'
 import type { ShopCatalogItem } from '@/services'
 import type { ShopCategory } from '@/stores/shopCategories'
-import { buildCatalogTreeIndex } from '@/utils/catalogTree'
-
-type CatalogSelectable = {
-  id?: string
-  name?: string
-  description?: string
-  sku?: string
-  price?: string | number
-  quantity?: number
-}
+import type { CatalogItemQuantityUpdate, CatalogOrderSelection } from '@/types/shopOrders'
+import { useShopOrderCatalogBrowser } from '@/components/shopOrders/useShopOrderCatalogBrowser'
 
 const props = defineProps<{
   items: ShopCatalogItem[]
@@ -28,91 +19,37 @@ const props = defineProps<{
 const slots = useSlots()
 
 const emit = defineEmits<{
-  (e: 'select-for-order', item: CatalogSelectable): void
-  (e: 'update:catalog-item-qty', payload: { id: string; qty: number }): void
+  (e: 'select-for-order', item: CatalogOrderSelection): void
+  (e: 'update:catalog-item-qty', payload: CatalogItemQuantityUpdate): void
 }>()
-
-const catalogSearch = ref('')
-const browseExpandedNodes = ref<Set<string>>(new Set())
 
 const itemsSource = toRef(props, 'items')
 const categoriesSource = toRef(props, 'categories')
-
 const {
+  catalogSearch,
+  activeExpandedNodes,
+  browseTreeIndex,
+  rootNodeIds,
   isSearching,
-  results: searchResults,
+  searchResults,
   totalResultCount,
   hasMoreResults,
-} = useCatalogSearchResults({
-  searchQuery: catalogSearch,
+  orderableNodeIds,
+  showCatalogMissingState,
+  showNoCatalogNodes,
+  showSearchResults,
+  showNoSearchResults,
+  toggleExpand,
+  revealSearchResult,
+} = useShopOrderCatalogBrowser({
+  items: itemsSource,
   categories: categoriesSource,
-  allItems: itemsSource,
-  includeCategory: (category) => category.active !== false,
-  includeItem: (item) => item.active !== false,
-  debounceMs: 40,
-  maxResults: 250,
 })
 
-const activeExpandedNodes = computed(() => browseExpandedNodes.value)
-const browseTreeIndex = computed(() =>
-  buildCatalogTreeIndex({
-    categories: categoriesSource.value,
-    items: itemsSource.value,
-    includeCategory: (category) => category.active !== false,
-    includeItem: (item) => item.active !== false,
-  })
-)
-const rootCategoryNodeIds = computed(() => browseTreeIndex.value.rootCategoryNodeIds)
-const uncategorizedItemNodeIds = computed(() => browseTreeIndex.value.rootItemNodeIds)
-
-const orderableNodeIds = computed(() => {
-  const orderable = new Set<string>()
-  browseTreeIndex.value.categoryNodesById.forEach((_category, nodeId) => {
-    if ((browseTreeIndex.value.childIds.get(nodeId)?.length ?? 0) === 0) {
-      orderable.add(nodeId)
-    }
-  })
-  browseTreeIndex.value.itemNodesById.forEach((_item, nodeId) => {
-    if ((browseTreeIndex.value.childIds.get(nodeId)?.length ?? 0) === 0) {
-      orderable.add(nodeId)
-    }
-  })
-
-  return orderable
-})
-
-const hasAnyNodes = computed(() =>
-  rootCategoryNodeIds.value.length > 0 || uncategorizedItemNodeIds.value.length > 0
-)
-const hasSearchResults = computed(() => searchResults.value.length > 0)
-const showCatalogMissingState = computed(() => !itemsSource.value.length)
-const showNoCatalogNodes = computed(() => !isSearching.value && !hasAnyNodes.value)
-const showSearchResults = computed(() => isSearching.value && hasSearchResults.value)
-const showNoSearchResults = computed(() => isSearching.value && !hasSearchResults.value)
-
-const toggleExpand = (nodeId: string) => {
-  const next = new Set(browseExpandedNodes.value)
-  if (next.has(nodeId)) next.delete(nodeId)
-  else next.add(nodeId)
-  browseExpandedNodes.value = next
-}
-
-async function revealSearchResult(result: CatalogSearchResult) {
-  catalogSearch.value = ''
-  const nextExpanded = new Set(browseExpandedNodes.value)
-  result.ancestorNodeIds.forEach((nodeId) => nextExpanded.add(nodeId))
-  if (result.hasChildren) {
-    nextExpanded.add(result.nodeId)
-  }
-  browseExpandedNodes.value = nextExpanded
-
-  await nextTick()
-  const target = document.getElementById(`btn-${result.nodeId}`)
-  if (!target) return
-  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  if (target instanceof HTMLElement) {
-    target.focus()
-  }
+const treeListeners = {
+  'toggle-expand': toggleExpand,
+  'update:catalogItemQty': (payload: CatalogItemQuantityUpdate) => emit('update:catalog-item-qty', payload),
+  'select-for-order': (item: CatalogOrderSelection) => emit('select-for-order', item),
 }
 </script>
 
@@ -189,19 +126,17 @@ async function revealSearchResult(result: CatalogSearchResult) {
             message="No catalog items match your search."
           />
 
-          <div v-show="!isSearching && hasAnyNodes">
-            <ShopOrderBrowseTree
-              :root-category-node-ids="rootCategoryNodeIds"
-              :uncategorized-item-node-ids="uncategorizedItemNodeIds"
+          <div v-show="!isSearching && rootNodeIds.length > 0">
+            <CatalogBrowseTree
+              :root-node-ids="rootNodeIds"
+              :expanded="activeExpandedNodes"
+              :order-mode="true"
+              :catalog-item-qtys="catalogItemQtys"
+              :selected-item-quantities="selectedItemQuantities"
               :node-child-ids="browseTreeIndex.childIds"
               :item-nodes-by-id="browseTreeIndex.itemNodesById"
               :category-nodes-by-id="browseTreeIndex.categoryNodesById"
-              :catalog-item-qtys="catalogItemQtys"
-              :selected-item-quantities="selectedItemQuantities"
-              :expanded="activeExpandedNodes"
-              @toggle-expand="toggleExpand"
-              @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
-              @select-for-order="(item) => emit('select-for-order', item)"
+              :tree-node-listeners="treeListeners"
             />
           </div>
         </template>

@@ -61,9 +61,30 @@ describe('catalog tree roots', () => {
 
     expect(index.rootCategoryNodeIds).toEqual(['cat-a'])
     expect(index.rootItemNodeIds).toEqual(['item-item-root'])
-    expect(index.childIds.get('cat-a')).toEqual(['cat-b', 'item-item-a'])
+    expect(index.childIds.get('cat-a')).toEqual(['item-item-a', 'cat-b'])
     expect(index.categoryNodesById.get('cat-b')?.name).toBe('Bolts')
     expect(index.itemNodesById.get('item-item-a')?.description).toBe('Anchor kit')
+  })
+
+  it('sorts mixed sibling node ids alphabetically across categories and items', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'cat-z', name: 'Zippers', parentId: 'cat-root', active: true },
+        { id: 'cat-root', name: 'Root', parentId: null, active: true },
+        { id: 'cat-b', name: 'Bolts', parentId: 'cat-root', active: true },
+      ],
+      items: [
+        { id: 'item-a', description: 'Anchors', categoryId: 'cat-root', active: true },
+        { id: 'item-m', description: 'Meters', categoryId: 'cat-root', active: true },
+      ],
+    })
+
+    expect(index.childIds.get('cat-root')).toEqual([
+      'item-item-a',
+      'cat-b',
+      'item-item-m',
+      'cat-z',
+    ])
   })
 
   it('collects mixed item/category descendants in child-first delete order', () => {

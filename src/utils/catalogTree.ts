@@ -1,7 +1,11 @@
 import type { ShopCatalogItem } from '@/services'
 import type { ShopCategory } from '@/stores/shopCategories'
-
-const ITEM_PREFIX = 'item-'
+import {
+  createCatalogItemNodeId,
+  getCatalogItemIdFromNodeId,
+  isCatalogItemNodeId,
+  normalizeCatalogParentNodeId,
+} from '@/utils/catalogNode'
 
 export type CatalogTreeChildNodeMap = Map<string, readonly string[]>
 export type CatalogTreeItemNodeMap = Map<string, ShopCatalogItem>
@@ -14,7 +18,7 @@ type RootOptions = {
   includeItem?: (item: ShopCatalogItem) => boolean
 }
 
-type CatalogTreeIndex = {
+export type CatalogTreeIndex = {
   childIds: CatalogTreeChildNodeMap
   itemNodesById: CatalogTreeItemNodeMap
   categoryNodesById: CatalogTreeCategoryNodeMap
@@ -22,12 +26,37 @@ type CatalogTreeIndex = {
   rootItemNodeIds: string[]
 }
 
-export function createCatalogItemNodeId(itemId: string): string {
-  return `${ITEM_PREFIX}${itemId}`
+export {
+  createCatalogItemNodeId,
+  getCatalogItemIdFromNodeId,
+  isCatalogItemNodeId,
+  normalizeCatalogParentNodeId,
+} from '@/utils/catalogNode'
+
+export function getCatalogNodeLabel(
+  nodeId: string,
+  itemNodesById: CatalogTreeItemNodeMap,
+  categoryNodesById: CatalogTreeCategoryNodeMap,
+): string {
+  if (isCatalogItemNodeId(nodeId)) {
+    return itemNodesById.get(nodeId)?.description ?? ''
+  }
+
+  return categoryNodesById.get(nodeId)?.name ?? ''
 }
 
-export function isCatalogItemNodeId(nodeId: string): boolean {
-  return nodeId.startsWith(ITEM_PREFIX)
+export function sortCatalogNodeIds(
+  nodeIds: readonly string[],
+  itemNodesById: CatalogTreeItemNodeMap,
+  categoryNodesById: CatalogTreeCategoryNodeMap,
+): string[] {
+  return [...nodeIds].sort((leftNodeId, rightNodeId) => (
+    getCatalogNodeLabel(leftNodeId, itemNodesById, categoryNodesById)
+      .localeCompare(getCatalogNodeLabel(rightNodeId, itemNodesById, categoryNodesById), undefined, {
+        sensitivity: 'base',
+        numeric: true,
+      })
+  ))
 }
 
 export function collectCatalogSubtreeDescendants(
@@ -57,7 +86,10 @@ export function collectCatalogSubtreeDescendants(
 
     descendantNodeIds.push(nodeId)
     if (isCatalogItemNodeId(nodeId)) {
-      descendantItemIds.push(nodeId.slice(ITEM_PREFIX.length))
+      const itemId = getCatalogItemIdFromNodeId(nodeId)
+      if (itemId) {
+        descendantItemIds.push(itemId)
+      }
     } else {
       descendantCategoryIds.push(nodeId)
     }
@@ -101,17 +133,6 @@ export function buildCatalogTreeIndex(options: RootOptions): CatalogTreeIndex {
     }
   }
 
-  const normalizeParentNodeId = (parentId: string | null | undefined): string | null => {
-    if (!parentId) return null
-    if (parentId.startsWith(ITEM_PREFIX)) {
-      const itemId = parentId.slice(ITEM_PREFIX.length)
-      return visibleItemIds.has(itemId) ? parentId : null
-    }
-    if (visibleItemIds.has(parentId)) return createCatalogItemNodeId(parentId)
-    if (visibleCategoryIds.has(parentId)) return parentId
-    return null
-  }
-
   visibleCategories.forEach((category) => ensureChildBucket(category.id))
   visibleItems.forEach((item) => ensureChildBucket(createCatalogItemNodeId(item.id)))
 
@@ -119,7 +140,11 @@ export function buildCatalogTreeIndex(options: RootOptions): CatalogTreeIndex {
   const rootItemNodeIds: string[] = []
 
   visibleCategories.forEach((category) => {
-    const parentNodeId = normalizeParentNodeId(category.parentId)
+    const parentNodeId = normalizeCatalogParentNodeId(
+      category.parentId,
+      visibleCategoryIds,
+      visibleItemIds,
+    )
     if (!parentNodeId) {
       rootCategoryNodeIds.push(category.id)
       return
@@ -131,7 +156,11 @@ export function buildCatalogTreeIndex(options: RootOptions): CatalogTreeIndex {
 
   visibleItems.forEach((item) => {
     const nodeId = createCatalogItemNodeId(item.id)
-    const parentNodeId = normalizeParentNodeId(item.categoryId ?? null)
+    const parentNodeId = normalizeCatalogParentNodeId(
+      item.categoryId ?? null,
+      visibleCategoryIds,
+      visibleItemIds,
+    )
     if (!parentNodeId) {
       rootItemNodeIds.push(nodeId)
       return
@@ -141,10 +170,15 @@ export function buildCatalogTreeIndex(options: RootOptions): CatalogTreeIndex {
     childIdsMutable.get(parentNodeId)?.push(nodeId)
   })
 
+  const sortedChildIds = new Map(
+    Array.from(childIdsMutable.entries()).map(([nodeId, children]) => [
+      nodeId,
+      sortCatalogNodeIds(children, itemNodesById, categoryNodesById),
+    ] as const)
+  )
+
   return {
-    childIds: new Map(
-      Array.from(childIdsMutable.entries()).map(([nodeId, children]) => [nodeId, children] as const)
-    ),
+    childIds: sortedChildIds,
     itemNodesById,
     categoryNodesById,
     rootCategoryNodeIds,

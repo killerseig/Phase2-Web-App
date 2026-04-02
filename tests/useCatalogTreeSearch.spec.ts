@@ -55,8 +55,6 @@ function mountComposable(initialQuery = '') {
       categories,
       allItems,
       fullTree,
-      getCategoryById: (id) => categories.value.find((category) => category.id === id),
-      getChildren: (parentId) => categories.value.filter((category) => category.parentId === parentId),
       includeItem: (item) => item.active,
       debounceMs: 10,
     })

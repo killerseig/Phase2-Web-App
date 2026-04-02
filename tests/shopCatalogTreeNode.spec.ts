@@ -102,6 +102,7 @@ describe('ShopCatalogTreeNode', () => {
     expect(wrapper.text()).toContain('Anchor Kit')
     expect(wrapper.text()).not.toContain('AK-1')
     expect(wrapper.text()).not.toContain('$12.50')
+    expect(wrapper.find('.node-item-icon.bi-folder').exists()).toBe(true)
   })
 
   it('renders parent category edit with only the name input', () => {
@@ -430,6 +431,37 @@ describe('ShopCatalogTreeNode', () => {
     await wrapper.get('button[title="Toggle edit mode"]').trigger('click')
 
     expect(wrapper.find('button[title="Delete"]').exists()).toBe(true)
+  })
+
+  it('forwards nested item edit cancel events to the root tree node', async () => {
+    const index = buildCatalogTreeIndex({
+      categories: [
+        { id: 'category-a', name: 'Anchors', parentId: null, active: true },
+      ],
+      items: [
+        { id: 'item-a', description: 'Anchor Kit', sku: 'AK-1', price: 12.5, categoryId: 'category-a', active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'category-a',
+        expanded: new Set(['category-a']),
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+        editingItemId: 'item-a',
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await wrapper.get('button[title="Cancel"]').trigger('click')
+
+    expect(wrapper.emitted('cancel-item-edit')).toHaveLength(1)
   })
 
   it('shows the in-order quantity next to orderable item labels', () => {

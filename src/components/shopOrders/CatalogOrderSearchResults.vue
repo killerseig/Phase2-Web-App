@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import CatalogOrderActionGroup from '@/components/catalog/CatalogOrderActionGroup.vue'
 import CatalogSearchResultsList from '@/components/catalog/CatalogSearchResultsList.vue'
 import type { CatalogSearchResult } from '@/composables/useCatalogSearchResults'
+import type { CatalogItemQuantityUpdate, CatalogOrderSelection } from '@/types/shopOrders'
+import { createCatalogOrderSelection, normalizeCatalogOrderQuantity } from '@/utils/catalogOrder'
 
 const props = defineProps<{
   results: CatalogSearchResult[]
@@ -13,8 +16,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'reveal', result: CatalogSearchResult): void
-  (e: 'update:catalog-item-qty', payload: { id: string; qty: number }): void
-  (e: 'select-for-order', item: { id: string; description: string; quantity: number }): void
+  (e: 'update:catalog-item-qty', payload: CatalogItemQuantityUpdate): void
+  (e: 'select-for-order', item: CatalogOrderSelection): void
 }>()
 
 function isOrderableResult(result: CatalogSearchResult): boolean {
@@ -22,7 +25,7 @@ function isOrderableResult(result: CatalogSearchResult): boolean {
 }
 
 function resultQuantity(result: CatalogSearchResult): number {
-  return props.catalogItemQtys[result.id] || 1
+  return normalizeCatalogOrderQuantity(props.catalogItemQtys[result.id], 1)
 }
 
 function selectedQuantity(result: CatalogSearchResult): number {
@@ -35,18 +38,16 @@ function resultDescription(result: CatalogSearchResult): string {
     : result.category?.name ?? result.label
 }
 
-function handleQuantityInput(result: CatalogSearchResult, event: Event) {
-  const rawValue = Number((event.target as HTMLInputElement).value)
-  const qty = Math.max(1, Math.floor(rawValue || 1))
+function handleQuantityInput(result: CatalogSearchResult, qty: number) {
   emit('update:catalog-item-qty', { id: result.id, qty })
 }
 
 function handleAddToOrder(result: CatalogSearchResult) {
-  emit('select-for-order', {
+  emit('select-for-order', createCatalogOrderSelection({
     id: result.id,
     description: resultDescription(result),
     quantity: resultQuantity(result),
-  })
+  }))
 }
 </script>
 
@@ -58,39 +59,14 @@ function handleAddToOrder(result: CatalogSearchResult) {
     @reveal="(result) => emit('reveal', result)"
   >
     <template #actions="{ result }">
-      <div
+      <CatalogOrderActionGroup
         v-if="isOrderableResult(result)"
-        class="btn-group btn-group-sm search-result-actions"
-        role="group"
-        @click.stop
-      >
-        <span
-          v-if="selectedQuantity(result) > 0"
-          class="badge text-bg-primary search-result-count"
-          :title="`${selectedQuantity(result)} currently in this order`"
-        >
-          x{{ selectedQuantity(result) }}
-        </span>
-        <input
-          type="number"
-          inputmode="numeric"
-          min="1"
-          step="1"
-          class="form-control form-control-sm search-result-qty"
-          :value="resultQuantity(result)"
-          aria-label="Quantity"
-          @input="(event) => handleQuantityInput(result, event)"
-        />
-        <button
-          type="button"
-          class="btn btn-sm btn-success"
-          title="Add to order"
-          aria-label="Add to order"
-          @click.stop="handleAddToOrder(result)"
-        >
-          <i class="bi bi-plus-circle"></i>
-        </button>
-      </div>
+        class="search-result-actions"
+        :quantity="resultQuantity(result)"
+        :selected-quantity="selectedQuantity(result)"
+        @update:qty="(qty) => handleQuantityInput(result, qty)"
+        @add="handleAddToOrder(result)"
+      />
 
       <button
         v-else
@@ -105,18 +81,3 @@ function handleAddToOrder(result: CatalogSearchResult) {
     </template>
   </CatalogSearchResultsList>
 </template>
-
-<style scoped lang="scss">
-.search-result-actions {
-  align-items: center;
-}
-
-.search-result-count {
-  align-self: center;
-  line-height: 1;
-}
-
-.search-result-qty {
-  width: 70px;
-}
-</style>

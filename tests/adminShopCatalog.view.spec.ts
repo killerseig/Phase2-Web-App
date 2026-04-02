@@ -47,7 +47,6 @@ describe('AdminShopCatalog view', () => {
           AppLoadingState: true,
           AppEmptyState: true,
           BaseModal: true,
-          AdminCatalogSearchResults: true,
         },
       },
     })
