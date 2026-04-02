@@ -58,12 +58,14 @@ describe('CatalogOrderSearchResults', () => {
         totalResultCount: 1,
         hasMoreResults: false,
         catalogItemQtys: { [itemFixture.id]: 2 },
+        selectedItemQuantities: { [itemFixture.id]: 3 },
         orderableNodeIds: new Set([itemResult.nodeId]),
       },
     })
 
     const qtyInput = wrapper.get('input[aria-label="Quantity"]')
     expect((qtyInput.element as HTMLInputElement).value).toBe('2')
+    expect(wrapper.text()).toContain('x3')
 
     await qtyInput.setValue('4')
     expect(wrapper.emitted('update:catalog-item-qty')).toEqual([
@@ -87,6 +89,7 @@ describe('CatalogOrderSearchResults', () => {
         totalResultCount: 1,
         hasMoreResults: false,
         catalogItemQtys: {},
+        selectedItemQuantities: {},
         orderableNodeIds: new Set<string>(),
       },
     })
@@ -104,6 +107,7 @@ describe('CatalogOrderSearchResults', () => {
         totalResultCount: 1,
         hasMoreResults: false,
         catalogItemQtys: { [itemFixture.id]: 1 },
+        selectedItemQuantities: { [itemFixture.id]: 1 },
         orderableNodeIds: new Set([itemResult.nodeId]),
       },
     })

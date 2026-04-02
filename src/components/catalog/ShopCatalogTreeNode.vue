@@ -24,6 +24,7 @@ interface Props {
   items?: ShopCatalogItem[]
   orderMode?: boolean
   catalogItemQtys?: Record<string, number>
+  selectedItemQuantities?: Record<string, number>
   itemFilter?: (item: ShopCatalogItem) => boolean
   nodeChildIds?: CatalogTreeChildNodeMap
   itemNodesById?: CatalogTreeItemNodeMap
@@ -38,6 +39,7 @@ interface Props {
   editingCategoryId?: string | null
   editCategoryName?: string
   savingCategoryEdit?: boolean
+  depth?: number
 }
 
 const props = defineProps<Props>()
@@ -156,6 +158,24 @@ const childBypassSearchFilter = computed(() =>
 )
 const showItemPurchasingFields = computed(() => !hasChildren.value)
 const isEditingCategory = computed(() => props.editingCategoryId === props.nodeId)
+const nodeDepth = computed(() => props.depth ?? 0)
+const depthClass = computed(() => (nodeDepth.value % 2 === 0 ? 'depth-even' : 'depth-odd'))
+const selectableNodeCount = computed(() => {
+  if (!props.orderMode || hasChildren.value) return 0
+  const nodeKey = isItem.value ? itemSafeId.value : categorySafeId.value
+  if (!nodeKey) return 0
+  return props.selectedItemQuantities?.[nodeKey] ?? 0
+})
+const categoryDisplayLabel = computed(() => {
+  const countSuffix = selectableNodeCount.value > 0 ? ` x${selectableNodeCount.value}` : ''
+  return `${categorySafeName.value}${countSuffix}`
+})
+const itemDisplayLabel = computed(() => {
+  const baseLabel = item.value?.description ?? ''
+  const countSuffix = selectableNodeCount.value > 0 ? ` x${selectableNodeCount.value}` : ''
+  return `${baseLabel}${countSuffix}`
+})
+
 function toggleSelf() {
   if (!hasChildren.value) return
   emit('toggle-expand', props.nodeId)
@@ -332,7 +352,12 @@ watch(isEditingCategory, (editing) => {
 <template>
   <!-- Category nodes -->
   <div v-if="category && (!searchMode || bypassSearchFilter || isSearchVisible)" class="tree-node accordion-item">
-    <div v-if="props.editingCategoryId !== props.nodeId" class="node-header" @click="handleNodeHeaderClick">
+    <div
+      v-if="props.editingCategoryId !== props.nodeId"
+      class="node-header"
+      :class="depthClass"
+      @click="handleNodeHeaderClick"
+    >
       <button
         :id="`btn-${props.nodeId}`"
         class="accordion-button"
@@ -344,7 +369,7 @@ watch(isEditingCategory, (editing) => {
       >
         <CatalogRowColumns
           class="catalog-row-content"
-          :label="category.name"
+          :label="categoryDisplayLabel"
           :archived="isArchived"
         />
       </button>
@@ -396,7 +421,7 @@ watch(isEditingCategory, (editing) => {
       </div>
     </div>
 
-    <div v-else class="node-header editing-category-header">
+    <div v-else class="node-header editing-category-header" :class="depthClass">
       <div class="category-edit-fields w-100">
         <InlineField
           :editing="true"
@@ -434,6 +459,7 @@ watch(isEditingCategory, (editing) => {
                 :items="items"
                 :order-mode="orderMode"
                 :catalog-item-qtys="catalogItemQtys"
+                :selected-item-quantities="selectedItemQuantities"
                 :item-filter="itemFilter"
                 :node-child-ids="nodeChildIds"
                 :item-nodes-by-id="itemNodesById"
@@ -448,6 +474,7 @@ watch(isEditingCategory, (editing) => {
                 :editing-category-id="editingCategoryId"
                 :edit-category-name="editCategoryName"
                 :saving-category-edit="savingCategoryEdit"
+                :depth="nodeDepth + 1"
                 @toggle-expand="forwardToggle"
                 @add-child="(id) => emit('add-child', id)"
                 @add-item="(id) => emit('add-item', id)"
@@ -481,6 +508,7 @@ watch(isEditingCategory, (editing) => {
               :items="items"
               :order-mode="orderMode"
               :catalog-item-qtys="catalogItemQtys"
+              :selected-item-quantities="selectedItemQuantities"
               :item-filter="itemFilter"
               :node-child-ids="nodeChildIds"
               :item-nodes-by-id="itemNodesById"
@@ -495,6 +523,7 @@ watch(isEditingCategory, (editing) => {
               :editing-category-id="editingCategoryId"
               :edit-category-name="editCategoryName"
               :saving-category-edit="savingCategoryEdit"
+              :depth="nodeDepth + 1"
               @toggle-expand="forwardToggle"
               @add-child="(id) => emit('add-child', id)"
               @add-item="(id) => emit('add-item', id)"
@@ -521,7 +550,12 @@ watch(isEditingCategory, (editing) => {
 
   <!-- Item nodes -->
   <div v-else-if="item && (!searchMode || bypassSearchFilter || isSearchVisible)" class="tree-node accordion-item">
-    <div v-if="!isEditing" class="node-header" @click="handleNodeHeaderClick">
+    <div
+      v-if="!isEditing"
+      class="node-header"
+      :class="depthClass"
+      @click="handleNodeHeaderClick"
+    >
       <button
         :id="`btn-${props.nodeId}`"
         class="accordion-button"
@@ -534,7 +568,7 @@ watch(isEditingCategory, (editing) => {
         <i class="bi me-2 node-item-icon" :class="hasChildren ? 'bi-folder2' : 'bi-file-text'"></i>
         <CatalogRowColumns
           class="catalog-row-content"
-          :label="item.description"
+          :label="itemDisplayLabel"
           :archived="itemArchived"
           :sku="showItemPurchasingFields ? item.sku : undefined"
           :price="showItemPurchasingFields ? item.price : undefined"
@@ -583,7 +617,7 @@ watch(isEditingCategory, (editing) => {
         </ActionToggleGroup>
       </div>
     </div>
-    <div v-else class="node-header editing-item-header" @click.stop>
+    <div v-else class="node-header editing-item-header" :class="depthClass" @click.stop>
       <div class="accordion-button not-expandable editing-item-fields">
         <i class="bi me-2 node-item-icon" :class="hasChildren ? 'bi-folder2' : 'bi-file-text'"></i>
         <div class="item-edit-fields w-100">
@@ -644,6 +678,7 @@ watch(isEditingCategory, (editing) => {
                 :items="items"
                 :order-mode="orderMode"
                 :catalog-item-qtys="catalogItemQtys"
+                :selected-item-quantities="selectedItemQuantities"
                 :item-filter="itemFilter"
                 :node-child-ids="nodeChildIds"
                 :item-nodes-by-id="itemNodesById"
@@ -658,6 +693,7 @@ watch(isEditingCategory, (editing) => {
                 :editing-category-id="editingCategoryId"
                 :edit-category-name="editCategoryName"
                 :saving-category-edit="savingCategoryEdit"
+                :depth="nodeDepth + 1"
                 @toggle-expand="forwardToggle"
                 @add-child="(id) => emit('add-child', id)"
                 @add-item="(id) => emit('add-item', id)"
@@ -691,6 +727,7 @@ watch(isEditingCategory, (editing) => {
               :items="items"
               :order-mode="orderMode"
               :catalog-item-qtys="catalogItemQtys"
+              :selected-item-quantities="selectedItemQuantities"
               :item-filter="itemFilter"
               :node-child-ids="nodeChildIds"
               :item-nodes-by-id="itemNodesById"
@@ -705,6 +742,7 @@ watch(isEditingCategory, (editing) => {
               :editing-category-id="editingCategoryId"
               :edit-category-name="editCategoryName"
               :saving-category-edit="savingCategoryEdit"
+              :depth="nodeDepth + 1"
               @toggle-expand="forwardToggle"
               @add-child="(id) => emit('add-child', id)"
               @add-item="(id) => emit('add-item', id)"
@@ -754,6 +792,14 @@ $arrow-color-hex: str-slice(#{ $arrow-color }, 2);
   border-bottom: 1px solid $border-color;
   cursor: pointer;
   transition: background-color 0.15s ease-in-out;
+}
+
+.node-header.depth-even {
+  background-color: rgba($surface-2, 0.18);
+}
+
+.node-header.depth-odd {
+  background-color: rgba($surface-3, 0.32);
 }
 
 .node-header:hover {

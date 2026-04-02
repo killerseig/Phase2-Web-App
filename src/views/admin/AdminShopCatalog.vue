@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, type ComputedRef } from 'vue'
 import { storeToRefs } from 'pinia'
 import AppAlert from '@/components/common/AppAlert.vue'
 import AdminAccordionFormCard from '@/components/admin/AdminAccordionFormCard.vue'
@@ -14,21 +14,12 @@ import ShopCatalogTreeNode from '@/components/catalog/ShopCatalogTreeNode.vue'
 import { useCatalogSearchResults, type CatalogSearchResult } from '@/composables/useCatalogSearchResults'
 import { useShopCategoriesStore } from '@/stores/shopCategories'
 import { useShopCatalogStore } from '@/stores/shopCatalog'
-import {
-  deleteCatalogItem as deleteCatalogItemService,
-  deleteCategory as deleteCategoryService,
-  type ShopCatalogItem,
-} from '@/services'
+import { type ShopCatalogItem } from '@/services'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
-import { normalizeError } from '@/services/serviceUtils'
-import {
-  buildCatalogTreeIndex,
-  collectCatalogSubtreeDescendants,
-  createCatalogItemNodeId,
-  isCatalogItemNodeId,
-} from '@/utils/catalogTree'
+import { buildCatalogTreeIndex } from '@/utils/catalogTree'
 import { logError } from '@/utils'
+import { useAdminCatalogMutations } from './useAdminCatalogMutations'
 
 const categoriesStore = useShopCategoriesStore()
 const catalogStore = useShopCatalogStore()
@@ -41,7 +32,6 @@ const {
 } = storeToRefs(categoriesStore)
 const { items: allItems, loading: catalogLoading, error: catalogError } = storeToRefs(catalogStore)
 
-const saving = ref(false)
 const downloading = ref(false)
 const expandedNodes = ref<Set<string>>(new Set())
 const newCategoryName = ref('')
@@ -52,17 +42,42 @@ const showAddCategory = ref(false)
 const showAddItemForm = ref(false)
 const parentId = ref<string | null>(null) // Can be category ID or item ID
 const selectedCategoryForItem = ref<string | null>(null)
-const editingItemId = ref<string | null>(null)
-const editingCategoryId = ref<string | null>(null)
-const editCategoryName = ref('')
-const editCategoryNameOriginal = ref('')
-const savingCategoryEdit = ref(false)
 const searchQuery = ref('')
-const inlineDraftItem = ref<ShopCatalogItem | null>(null)
+let browseTreeIndex: ComputedRef<ReturnType<typeof buildCatalogTreeIndex>>
+const {
+  saving,
+  editingItemId,
+  editingCategoryId,
+  editCategoryName,
+  savingCategoryEdit,
+  inlineDraftItem,
+  createCategory: createCategoryRecord,
+  createItem: createCatalogItem,
+  archiveCategory,
+  reactivateCategory,
+  deleteCategory,
+  editItem,
+  saveItemFromTree,
+  editCategory,
+  saveCategoryEdit,
+  cancelCategoryEdit,
+  cancelItemEdit,
+  deleteItem,
+  archiveItem,
+  reactivateItem,
+} = useAdminCatalogMutations({
+  categoriesStore,
+  catalogStore,
+  categories,
+  allItems,
+  getChildIds: () => browseTreeIndex.value.childIds,
+  confirm,
+  toast,
+})
 const browseItems = computed(() => (
   inlineDraftItem.value ? [...allItems.value, inlineDraftItem.value] : allItems.value
 ))
-const browseTreeIndex = computed(() =>
+browseTreeIndex = computed(() =>
   buildCatalogTreeIndex({
     categories: categories.value,
     items: browseItems.value,
@@ -93,19 +108,6 @@ const {
   maxResults: 250,
 })
 const hasSearchResults = computed(() => searchResults.value.length > 0)
-
-function collectDeleteSubtree(rootNodeId: string) {
-  return collectCatalogSubtreeDescendants(browseTreeIndex.value.childIds, rootNodeId)
-}
-
-async function deleteTreeNode(nodeId: string) {
-  if (isCatalogItemNodeId(nodeId)) {
-    await deleteCatalogItemService(nodeId.slice('item-'.length))
-    return
-  }
-
-  await deleteCategoryService(nodeId)
-}
 
 function loadAll() {
   categoriesStore.subscribeAllCategories()
@@ -208,15 +210,7 @@ async function createCategory() {
     expandedNodes.value = next
   }
 
-  saving.value = true
-  try {
-    await categoriesStore.createCategory(name, nextParentId)
-    toast.show(`Category "${name}" created`, 'success')
-  } catch (e) {
-    toast.show('Failed to create category', 'error')
-  } finally {
-    saving.value = false
-  }
+  await createCategoryRecord(name, nextParentId)
 }
 
 async function createItem() {
@@ -232,15 +226,7 @@ async function createItem() {
   selectedCategoryForItem.value = null
   showAddItemForm.value = false
 
-  saving.value = true
-  try {
-    await catalogStore.createItem(description, categoryId, sku, price)
-    toast.show('Item added', 'success')
-  } catch (e) {
-    toast.show('Failed to add item', 'error')
-  } finally {
-    saving.value = false
-  }
+  await createCatalogItem(description, categoryId, sku, price)
 }
 
 function cancelAddItem() {
@@ -249,297 +235,6 @@ function cancelAddItem() {
   newItemPrice.value = ''
   selectedCategoryForItem.value = null
   showAddItemForm.value = false
-}
-
-async function archiveCategory(categoryId: string) {
-  const cat = categoriesStore.getCategoryById(categoryId)
-  if (!cat) return
-  
-  saving.value = true
-  try {
-    await categoriesStore.archiveCategory(categoryId)
-    toast.show(`Archived "${cat.name}"`, 'success')
-  } catch (e) {
-    toast.show('Failed to archive category', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function reactivateCategory(categoryId: string) {
-  const visited = new Set<string>()
-  const MAX_DEPTH = 100
-  const reactivateRecursive = async (id: string, depth = 0): Promise<void> => {
-    if (depth > MAX_DEPTH) return
-    if (visited.has(id)) return
-    visited.add(id)
-
-    const current = categoriesStore.getCategoryById(id)
-    if (!current) return
-
-    // Reactivate this category
-    await categoriesStore.reactivateCategory(id)
-
-    // Then reactivate parent chain if needed
-    if (current.parentId) {
-      if (current.parentId.startsWith('item-')) {
-        // Parent is an item - reactivate the item
-        const itemId = current.parentId.slice(5)
-        const item = allItems.value.find(i => i.id === itemId)
-        if (item && !item.active) {
-          await catalogStore.setItemActive(itemId, true)
-        }
-      } else {
-        // Parent is a category - reactivate it recursively
-        const parentCat = categoriesStore.getCategoryById(current.parentId)
-        if (parentCat && !parentCat.active) {
-          await reactivateRecursive(current.parentId, depth + 1)
-        }
-      }
-    }
-  }
-
-  const cat = categoriesStore.getCategoryById(categoryId)
-  if (!cat) return
-
-  saving.value = true
-  try {
-    await reactivateRecursive(categoryId)
-    toast.show(`Reactivated "${cat.name}"`, 'success')
-  } catch (e) {
-    logError('AdminShopCatalog', 'Error reactivating category', e)
-    toast.show('Failed to reactivate category', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function deleteCategory(categoryId: string) {
-  const cat = categoriesStore.getCategoryById(categoryId)
-  if (!cat) return
-
-  const subtree = collectDeleteSubtree(categoryId)
-  const totalDescendants = subtree.descendantCategoryIds.length + subtree.descendantItemIds.length
-  const confirmMessage = totalDescendants > 0
-    ? `Delete "${cat.name}" and ${totalDescendants} descendant item(s)/category(ies)? This cannot be undone.`
-    : `Delete "${cat.name}"? This cannot be undone.`
-  const confirmed = await confirm(confirmMessage, {
-    title: 'Delete Category',
-    confirmText: 'Delete',
-    variant: 'danger',
-  })
-  if (!confirmed) return
-
-  const categoryIdsToDelete = [...subtree.descendantCategoryIds, categoryId]
-  const rollbackItems = catalogStore.beginOptimisticDelete(subtree.descendantItemIds)
-  const rollbackCategories = categoriesStore.beginOptimisticDelete(categoryIdsToDelete)
-  const inlineDraftNodeId = inlineDraftItem.value ? createCatalogItemNodeId(inlineDraftItem.value.id) : null
-  const shouldClearInlineDraft = !!inlineDraftNodeId && subtree.descendantNodeIds.includes(inlineDraftNodeId)
-  const previousInlineDraft = shouldClearInlineDraft ? inlineDraftItem.value : null
-  if (shouldClearInlineDraft) {
-    inlineDraftItem.value = null
-    if (editingItemId.value === previousInlineDraft?.id) {
-      editingItemId.value = null
-    }
-  }
-  saving.value = true
-  try {
-    for (const nodeId of subtree.descendantNodeIds) {
-      await deleteTreeNode(nodeId)
-    }
-
-    await deleteCategoryService(categoryId)
-    rollbackItems.commit()
-    rollbackCategories.commit()
-    toast.show(`Deleted "${cat.name}"${totalDescendants ? ` with ${totalDescendants} descendants` : ''}`, 'success')
-  } catch (e) {
-    rollbackItems.rollback()
-    rollbackCategories.rollback()
-    if (previousInlineDraft) {
-      inlineDraftItem.value = previousInlineDraft
-      editingItemId.value = previousInlineDraft.id
-    }
-    toast.show('Failed to delete category', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function editItem(item: ShopCatalogItem) {
-  editingItemId.value = item.id
-}
-
-async function saveItemFromTree(
-  itemId: string,
-  updates: { description?: string; sku?: string | null; price?: number | null }
-) {
-  if (inlineDraftItem.value?.id === itemId) {
-    const description = updates.description?.trim() ?? ''
-    if (!description) return
-
-    const draftParentId = inlineDraftItem.value.categoryId
-    editingItemId.value = null
-    saving.value = true
-    try {
-      await catalogStore.createItem(
-        description,
-        draftParentId,
-        updates.sku ?? undefined,
-        updates.price ?? undefined
-      )
-      inlineDraftItem.value = null
-      toast.show('Item added', 'success')
-    } catch (err) {
-      editingItemId.value = itemId
-      logError('AdminShopCatalog', 'Failed to create inline item', err)
-      toast.show(`Failed to add item: ${normalizeError(err, 'Unknown error')}`, 'error')
-    } finally {
-      saving.value = false
-    }
-    return
-  }
-
-  editingItemId.value = null
-  saving.value = true
-  try {
-    await catalogStore.updateItem(itemId, updates)
-    toast.show('Item updated', 'success')
-  } catch (err) {
-    logError('AdminShopCatalog', 'Failed to update item', err)
-    toast.show(`Failed to update item: ${normalizeError(err, 'Unknown error')}`, 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function editCategory(categoryId: string) {
-  const cat = categoriesStore.getCategoryById(categoryId)
-  if (!cat) return
-  
-  editingCategoryId.value = categoryId
-  editCategoryName.value = cat.name
-  editCategoryNameOriginal.value = cat.name
-}
-
-async function saveCategoryEdit(
-  categoryId: string,
-  updates: { name: string }
-) {
-  const nextName = updates.name.trim()
-  if (!nextName) {
-    toast.show('Category name is required', 'error')
-    return
-  }
-
-  if (
-    nextName === editCategoryNameOriginal.value
-  ) {
-    editingCategoryId.value = null
-    return
-  }
-
-  editingCategoryId.value = null
-  savingCategoryEdit.value = true
-  try {
-    await categoriesStore.updateCategory(categoryId, { name: nextName })
-    toast.show('Category updated', 'success')
-  } catch (e) {
-    toast.show('Failed to update category', 'error')
-  } finally {
-    savingCategoryEdit.value = false
-  }
-}
-
-function cancelCategoryEdit() {
-  editingCategoryId.value = null
-  editCategoryName.value = ''
-  editCategoryNameOriginal.value = ''
-}
-
-function cancelItemEdit() {
-  if (inlineDraftItem.value && editingItemId.value === inlineDraftItem.value.id) {
-    inlineDraftItem.value = null
-  }
-  editingItemId.value = null
-}
-
-async function deleteItem(item: ShopCatalogItem) {
-  const subtree = collectDeleteSubtree(createCatalogItemNodeId(item.id))
-  const cascadeCount = subtree.descendantCategoryIds.length + subtree.descendantItemIds.length
-  const confirmMessage = cascadeCount > 0
-    ? `Delete "${item.description}" and ${cascadeCount} descendant item(s)/category(ies)? This cannot be undone.`
-    : `Delete "${item.description}"? This cannot be undone.`
-  const confirmed = await confirm(confirmMessage, {
-    title: 'Delete Item',
-    confirmText: 'Delete',
-    variant: 'danger',
-  })
-  if (!confirmed) return
-
-  const itemIdsToDelete = [...subtree.descendantItemIds, item.id]
-  const rollbackItems = catalogStore.beginOptimisticDelete(itemIdsToDelete)
-  const rollbackCategories = categoriesStore.beginOptimisticDelete(subtree.descendantCategoryIds)
-  const inlineDraftNodeId = inlineDraftItem.value ? createCatalogItemNodeId(inlineDraftItem.value.id) : null
-  const shouldClearInlineDraft = !!inlineDraftNodeId && subtree.descendantNodeIds.includes(inlineDraftNodeId)
-  const previousInlineDraft = shouldClearInlineDraft ? inlineDraftItem.value : null
-  if (shouldClearInlineDraft) {
-    inlineDraftItem.value = null
-    if (editingItemId.value === previousInlineDraft?.id) {
-      editingItemId.value = null
-    }
-  }
-  saving.value = true
-  try {
-    for (const nodeId of subtree.descendantNodeIds) {
-      await deleteTreeNode(nodeId)
-    }
-
-    await deleteCatalogItemService(item.id)
-    rollbackItems.commit()
-    rollbackCategories.commit()
-    toast.show(cascadeCount > 0 ? `Item and ${cascadeCount} descendants deleted` : 'Item deleted', 'success')
-  } catch (e) {
-    rollbackItems.rollback()
-    rollbackCategories.rollback()
-    if (previousInlineDraft) {
-      inlineDraftItem.value = previousInlineDraft
-      editingItemId.value = previousInlineDraft.id
-    }
-    toast.show('Failed to delete item', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function archiveItem(item: ShopCatalogItem) {
-  saving.value = true
-  try {
-    const childCategories = categories.value.filter(c => c.parentId === `item-${item.id}`)
-
-    await Promise.all([
-      catalogStore.setItemActive(item.id, false),
-      ...childCategories.map((category) => categoriesStore.archiveCategory(category.id)),
-    ])
-
-    toast.show(`Archived "${item.description}" and ${childCategories.length} subcategories`, 'success')
-  } catch (e) {
-    toast.show('Failed to archive item', 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function reactivateItem(item: ShopCatalogItem) {
-  saving.value = true
-  try {
-    // Just reactivate the item - children stay archived
-    await catalogStore.setItemActive(item.id, true)
-    toast.show(`Reactivated "${item.description}"`, 'success')
-  } catch (e) {
-    toast.show('Failed to reactivate item', 'error')
-  } finally {
-    saving.value = false
-  }
 }
 
 const normalizeCategoryId = (value?: string | null) => {

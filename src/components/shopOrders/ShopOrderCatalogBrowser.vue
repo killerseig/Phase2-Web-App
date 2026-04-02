@@ -23,6 +23,7 @@ const props = defineProps<{
   items: ShopCatalogItem[]
   categories: ShopCategory[]
   catalogItemQtys: Record<string, number>
+  selectedItemQuantities: Record<string, number>
 }>()
 const slots = useSlots()
 
@@ -174,6 +175,7 @@ async function revealSearchResult(result: CatalogSearchResult) {
             :total-result-count="totalResultCount"
             :has-more-results="hasMoreResults"
             :catalog-item-qtys="catalogItemQtys"
+            :selected-item-quantities="selectedItemQuantities"
             :orderable-node-ids="orderableNodeIds"
             @reveal="revealSearchResult"
             @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
@@ -195,6 +197,7 @@ async function revealSearchResult(result: CatalogSearchResult) {
               :item-nodes-by-id="browseTreeIndex.itemNodesById"
               :category-nodes-by-id="browseTreeIndex.categoryNodesById"
               :catalog-item-qtys="catalogItemQtys"
+              :selected-item-quantities="selectedItemQuantities"
               :expanded="activeExpandedNodes"
               @toggle-expand="toggleExpand"
               @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"

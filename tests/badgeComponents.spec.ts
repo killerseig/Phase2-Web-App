@@ -78,6 +78,18 @@ describe('badge components', () => {
     expect(wrapper.findAll('.catalog-row-columns__cell')).toHaveLength(2)
   })
 
+  it('adds hover titles for truncated catalog labels and context', () => {
+    const wrapper = mount(CatalogRowColumns, {
+      props: {
+        label: 'Very Long Guard Rail Description',
+        context: 'Scaffolding > Perry Scaffold',
+      },
+    })
+
+    expect(wrapper.get('.catalog-row-columns__label').attributes('title')).toBe('Very Long Guard Rail Description')
+    expect(wrapper.get('.catalog-row-columns__context').attributes('title')).toBe('Scaffolding > Perry Scaffold')
+  })
+
   it('renders the weekly timecard status badge for the current week', () => {
     const wrapper = mount(TimecardWeekStatusBadge, {
       props: {

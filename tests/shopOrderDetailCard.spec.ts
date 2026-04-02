@@ -77,4 +77,24 @@ describe('shop order detail card', () => {
 
     expect(wrapper.emitted('deleteItem')).toEqual([[0]])
   })
+
+  it('preserves trailing spaces while typing in the note field', async () => {
+    const wrapper = mount(ShopOrderDetailCard, {
+      props: {
+        order: baseOrder(),
+        sendingEmail: false,
+        formatDate: (value) => String(value),
+        isEditable: true,
+        canSubmit: false,
+        canOrder: false,
+        canReceive: false,
+      },
+    })
+
+    const inputs = wrapper.findAll('input')
+    await inputs[2]?.setValue('Need ')
+
+    const updatedItems = wrapper.emitted('updateItems')?.[0]?.[0] as ShopOrder['items'] | undefined
+    expect(updatedItems?.[0]?.note).toBe('Need ')
+  })
 })

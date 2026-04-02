@@ -34,7 +34,7 @@ function updateItemField(index: number, field: 'description' | 'quantity' | 'not
       return { ...item, quantity: Math.max(0, Math.floor(Number(value) || 0)) }
     }
     if (field === 'note') {
-      const note = String(value || '').trim()
+      const note = String(value ?? '')
       return { ...item, ...(note ? { note } : { note: undefined }) }
     }
     return { ...item, description: String(value) }
@@ -83,7 +83,7 @@ function deleteItem(index: number) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, idx) in order.items" :key="item.catalogItemId ?? `${item.description}-${idx}`">
+            <tr v-for="(item, idx) in order.items" :key="`${item.catalogItemId ?? item.description}-${idx}`">
               <td class="p-2">
                 <template v-if="isEditable">
                   <input

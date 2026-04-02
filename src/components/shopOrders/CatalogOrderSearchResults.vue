@@ -7,6 +7,7 @@ const props = defineProps<{
   totalResultCount: number
   hasMoreResults: boolean
   catalogItemQtys: Record<string, number>
+  selectedItemQuantities: Record<string, number>
   orderableNodeIds: Set<string>
 }>()
 
@@ -22,6 +23,10 @@ function isOrderableResult(result: CatalogSearchResult): boolean {
 
 function resultQuantity(result: CatalogSearchResult): number {
   return props.catalogItemQtys[result.id] || 1
+}
+
+function selectedQuantity(result: CatalogSearchResult): number {
+  return props.selectedItemQuantities[result.id] || 0
 }
 
 function resultDescription(result: CatalogSearchResult): string {
@@ -59,6 +64,13 @@ function handleAddToOrder(result: CatalogSearchResult) {
         role="group"
         @click.stop
       >
+        <span
+          v-if="selectedQuantity(result) > 0"
+          class="badge text-bg-primary search-result-count"
+          :title="`${selectedQuantity(result)} currently in this order`"
+        >
+          x{{ selectedQuantity(result) }}
+        </span>
         <input
           type="number"
           inputmode="numeric"
@@ -97,6 +109,11 @@ function handleAddToOrder(result: CatalogSearchResult) {
 <style scoped lang="scss">
 .search-result-actions {
   align-items: center;
+}
+
+.search-result-count {
+  align-self: center;
+  line-height: 1;
 }
 
 .search-result-qty {

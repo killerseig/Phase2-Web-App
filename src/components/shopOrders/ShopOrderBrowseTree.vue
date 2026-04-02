@@ -22,6 +22,7 @@ const props = defineProps<{
   itemNodesById: CatalogTreeItemNodeMap
   categoryNodesById: CatalogTreeCategoryNodeMap
   catalogItemQtys: Record<string, number>
+  selectedItemQuantities: Record<string, number>
   expanded: Set<string>
 }>()
 
@@ -43,6 +44,8 @@ const emit = defineEmits<{
         :item-nodes-by-id="props.itemNodesById"
         :category-nodes-by-id="props.categoryNodesById"
         :catalog-item-qtys="props.catalogItemQtys"
+        :selected-item-quantities="props.selectedItemQuantities"
+        :depth="0"
         @toggle-expand="(nodeId) => emit('toggle-expand', nodeId)"
         @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
         @select-for-order="(item) => emit('select-for-order', item)"
@@ -58,6 +61,8 @@ const emit = defineEmits<{
         :item-nodes-by-id="props.itemNodesById"
         :category-nodes-by-id="props.categoryNodesById"
         :catalog-item-qtys="props.catalogItemQtys"
+        :selected-item-quantities="props.selectedItemQuantities"
+        :depth="0"
         @toggle-expand="(nodeId) => emit('toggle-expand', nodeId)"
         @update:catalog-item-qty="(payload) => emit('update:catalog-item-qty', payload)"
         @select-for-order="(item) => emit('select-for-order', item)"

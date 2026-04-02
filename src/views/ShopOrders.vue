@@ -31,6 +31,11 @@ import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
 import { useToast } from '@/composables/useToast'
 import { ROUTE_NAMES } from '@/constants/app'
 import { normalizeError } from '@/services/serviceUtils'
+import {
+  buildCatalogSelectionQuantities,
+  mergeShopOrderItem,
+  sanitizeShopOrderItems,
+} from '@/utils/shopOrderItems'
 import { formatDateTime, toMillis } from '@/utils/datetime'
 import { logError, logWarn } from '@/utils/logger'
 
@@ -79,6 +84,9 @@ const fmtDate = (ts: unknown) => formatDateTime(ts)
 let persistItemsChain: Promise<void> = Promise.resolve()
 
 const selected = computed(() => orders.value.find(o => o.id === selectedId.value) ?? null)
+const selectedCatalogItemQuantities = computed(() =>
+  buildCatalogSelectionQuantities(selected.value?.items ?? [])
+)
 
 const filtered = computed(() => {
   const s = search.value.trim().toLowerCase()
@@ -255,14 +263,6 @@ const updateCatalogItemQty = ({ id, qty }: { id: string; qty: number }) => {
 
 const cloneItems = (items: ShopOrderItem[] = []) => items.map((item) => ({ ...item }))
 
-const sanitizeItems = (items: ShopOrderItem[]) =>
-  items.map((item) => ({
-    description: (item.description || '').trim(),
-    quantity: Math.max(0, Math.floor(Number(item.quantity) || 0)),
-    ...(item.note ? { note: item.note } : {}),
-    catalogItemId: item.catalogItemId ?? null,
-  }))
-
 const setOrderItems = (orderId: string, items: ShopOrderItem[]) => {
   const order = orders.value.find((entry) => entry.id === orderId)
   if (!order) return
@@ -277,7 +277,7 @@ const queuePersistItems = (task: () => Promise<void>) => {
 
 const persistItems = (orderId: string, items: ShopOrderItem[]) =>
   queuePersistItems(async () => {
-    await updateShopOrderItems(jobId.value, orderId, sanitizeItems(items))
+    await updateShopOrderItems(jobId.value, orderId, sanitizeShopOrderItems(items))
   })
 
 const addItemOptimistically = async (item: ShopOrderItem, resetDraft: () => void, restoreDraft: () => void) => {
@@ -285,7 +285,7 @@ const addItemOptimistically = async (item: ShopOrderItem, resetDraft: () => void
 
   const orderId = selected.value.id
   const previousItems = cloneItems(selected.value.items || [])
-  const nextItems = [...previousItems, { ...item }]
+  const nextItems = mergeShopOrderItem(previousItems, item)
 
   setOrderItems(orderId, nextItems)
   resetDraft()
@@ -369,7 +369,7 @@ const submitOrder = async () => {
   if (!selected.value) return
   try {
     // Filter out items with 0 quantity
-    const filteredItems = selected.value.items.filter(item => item.quantity > 0)
+    const filteredItems = sanitizeShopOrderItems(selected.value.items).filter(item => item.quantity > 0)
     if (filteredItems.length === 0) {
       toast.show('Order must have at least one item with quantity > 0', 'error')
       return
@@ -517,6 +517,7 @@ onUnmounted(() => {
             :items="catalog"
             :categories="shopCategories"
             :catalog-item-qtys="catalogItemQtys"
+            :selected-item-quantities="selectedCatalogItemQuantities"
             @update:catalog-item-qty="updateCatalogItemQty"
             @select-for-order="selectCatalogItem"
           >

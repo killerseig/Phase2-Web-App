@@ -431,4 +431,33 @@ describe('ShopCatalogTreeNode', () => {
 
     expect(wrapper.find('button[title="Delete"]').exists()).toBe(true)
   })
+
+  it('shows the in-order quantity next to orderable item labels', () => {
+    const index = buildCatalogTreeIndex({
+      categories: [],
+      items: [
+        { id: 'item-a', description: 'Outrigger', active: true },
+      ],
+    })
+
+    const wrapper = mount(ShopCatalogTreeNode, {
+      props: {
+        nodeId: 'item-item-a',
+        expanded: new Set<string>(),
+        orderMode: true,
+        selectedItemQuantities: { 'item-a': 2 },
+        catalogItemQtys: { 'item-a': 1 },
+        nodeChildIds: index.childIds,
+        itemNodesById: index.itemNodesById,
+        categoryNodesById: index.categoryNodesById,
+      },
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Outrigger x2')
+  })
 })

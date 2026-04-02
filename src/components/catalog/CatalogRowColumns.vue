@@ -33,8 +33,8 @@ const displaySku = computed(() => {
 <template>
   <div class="catalog-row-columns" :class="{ 'is-archived': archived }">
     <div class="catalog-row-columns__name">
-      <span class="catalog-row-columns__label">{{ label }}</span>
-      <span v-if="context" class="catalog-row-columns__context">{{ context }}</span>
+      <span class="catalog-row-columns__label" :title="label">{{ label }}</span>
+      <span v-if="context" class="catalog-row-columns__context" :title="context">{{ context }}</span>
       <span v-if="archived" class="catalog-row-columns__status">Archived</span>
     </div>
     <span
