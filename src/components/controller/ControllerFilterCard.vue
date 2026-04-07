@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import AppAlert from '@/components/common/AppAlert.vue'
+import BaseCheckboxField from '@/components/common/BaseCheckboxField.vue'
+import BaseInputField from '@/components/common/BaseInputField.vue'
+import BaseSelectField from '@/components/common/BaseSelectField.vue'
 import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
+import AppToolbarMeta from '@/components/common/AppToolbarMeta.vue'
+import AppToolbarSummary from '@/components/common/AppToolbarSummary.vue'
 import DatePickerField from '@/components/common/DatePickerField.vue'
 import SearchSelectField from '@/components/common/SearchSelectField.vue'
 import type {
@@ -18,6 +23,7 @@ type JobOption = {
 }
 
 interface Props {
+  embedded?: boolean
   useWeekRange: boolean
   selectedSingleDate: string
   selectedRangeStartDate: string
@@ -58,60 +64,45 @@ const emit = defineEmits<{
   reset: []
 }>()
 
-function updateCheckbox(event: Event) {
-  emit('update:useWeekRange', Boolean((event.target as HTMLInputElement)?.checked))
-}
+const subcontractedOptions = [
+  { value: 'all', label: 'All' },
+  { value: 'subcontracted', label: 'Sub only' },
+  { value: 'direct', label: 'Non-sub only' },
+] as const
 
-function updateTradeFilter(event: Event) {
-  emit('update:tradeFilter', String((event.target as HTMLInputElement)?.value || ''))
-}
-
-function updateFirstNameFilter(event: Event) {
-  emit('update:firstNameFilter', String((event.target as HTMLInputElement)?.value || ''))
-}
-
-function updateLastNameFilter(event: Event) {
-  emit('update:lastNameFilter', String((event.target as HTMLInputElement)?.value || ''))
-}
-
-function updateSubcontractedFilter(event: Event) {
-  emit('update:subcontractedFilter', String((event.target as HTMLSelectElement)?.value || 'all') as ControllerSubcontractedFilter)
-}
-
-function updateStatusFilter(event: Event) {
-  emit('update:statusFilter', String((event.target as HTMLSelectElement)?.value || 'all') as ControllerTimecardStatusFilter)
-}
+const statusOptions = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'draft', label: 'Draft' },
+] as const
 </script>
 
 <template>
   <AppToolbarCard
-    class="controller-card controller-filter-card mb-4"
-    header-class="d-flex flex-wrap justify-content-between align-items-center gap-2"
+    :class="['controller-card controller-filter-card', embedded ? 'controller-filter-card--embedded' : '']"
+    :header-class="embedded ? '' : 'd-flex flex-wrap justify-content-between align-items-center gap-2'"
     body-class="controller-filter-card__body"
   >
-    <template #header>
-      <div>
-        <div class="text-muted small mb-1">Search Filters</div>
-        <h3 class="h5 mb-0">Find Timecards And Export The Same Results</h3>
-      </div>
-
-      <div class="small text-muted">
-        Downloads use the active search filters.
-      </div>
+    <template v-if="!embedded" #header>
+      <AppToolbarMeta
+        eyebrow="Search Filters"
+        title="Find & Export Timecards"
+        title-tag="h3"
+        title-class="mb-0 controller-filter-card__title"
+        subtitle="Downloads use the active search filters."
+      />
     </template>
 
-    <div class="row g-2 align-items-end controller-filter-grid">
-      <div class="col-xl-3 col-lg-4">
-        <div class="form-check form-switch controller-filter-switch">
-          <input
-            id="tc-use-range"
-            class="form-check-input"
-            type="checkbox"
-            :checked="useWeekRange"
-            @change="updateCheckbox"
-          />
-          <label class="form-check-label" for="tc-use-range">Use week range</label>
-        </div>
+    <div class="controller-filter-stack">
+      <div class="controller-filter-stack__section">
+        <BaseCheckboxField
+          id="tc-use-range"
+          :model-value="useWeekRange"
+          label="Use week range"
+          variant="switch"
+          wrapper-class="controller-filter-switch"
+          @update:model-value="emit('update:useWeekRange', $event)"
+        />
 
         <div v-if="!useWeekRange">
           <DatePickerField
@@ -126,8 +117,8 @@ function updateStatusFilter(event: Event) {
           />
         </div>
 
-        <div v-else class="row g-2">
-          <div class="col-12">
+        <div v-else class="controller-filter-stack__range-grid">
+          <div>
             <DatePickerField
               :model-value="selectedRangeStartDate"
               :config="weekPickerConfig"
@@ -140,7 +131,7 @@ function updateStatusFilter(event: Event) {
             />
           </div>
 
-          <div class="col-12">
+          <div>
             <DatePickerField
               :model-value="selectedRangeEndDate"
               :config="weekPickerConfig"
@@ -155,7 +146,7 @@ function updateStatusFilter(event: Event) {
         </div>
       </div>
 
-      <div class="col-xl-3 col-lg-4">
+      <div class="controller-filter-stack__section">
         <SearchSelectField
           :model-value="selectedJobId"
           :options="jobOptions"
@@ -170,111 +161,102 @@ function updateStatusFilter(event: Event) {
         />
       </div>
 
-      <div class="col-xl-2 col-md-4">
-        <label class="form-label small text-muted mb-1 controller-filter-label">Trade</label>
-        <input
-          type="text"
-          class="form-control form-control-sm"
+      <div class="controller-filter-grid-compact">
+        <BaseInputField
+          :model-value="tradeFilter"
+          label="Trade"
+          label-class="form-label small text-muted mb-1 controller-filter-label"
+          input-class="form-control form-control-sm"
+          wrapper-class="mb-0"
           placeholder="e.g. Carpenter"
-          :value="tradeFilter"
-          @input="updateTradeFilter"
+          @update:model-value="emit('update:tradeFilter', $event)"
         />
-      </div>
 
-      <div class="col-xl-2 col-md-4">
-        <label class="form-label small text-muted mb-1 controller-filter-label">First Name</label>
-        <input
-          type="text"
-          class="form-control form-control-sm"
+        <BaseInputField
+          :model-value="firstNameFilter"
+          label="First Name"
+          label-class="form-label small text-muted mb-1 controller-filter-label"
+          input-class="form-control form-control-sm"
+          wrapper-class="mb-0"
           placeholder="First name"
-          :value="firstNameFilter"
-          @input="updateFirstNameFilter"
+          @update:model-value="emit('update:firstNameFilter', $event)"
         />
-      </div>
 
-      <div class="col-xl-2 col-md-4">
-        <label class="form-label small text-muted mb-1 controller-filter-label">Last Name</label>
-        <input
-          type="text"
-          class="form-control form-control-sm"
+        <BaseInputField
+          :model-value="lastNameFilter"
+          label="Last Name"
+          label-class="form-label small text-muted mb-1 controller-filter-label"
+          input-class="form-control form-control-sm"
+          wrapper-class="mb-0"
           placeholder="Last name"
-          :value="lastNameFilter"
-          @input="updateLastNameFilter"
+          @update:model-value="emit('update:lastNameFilter', $event)"
+        />
+
+        <BaseSelectField
+          :model-value="subcontractedFilter"
+          :options="subcontractedOptions"
+          label="Subcontracted"
+          label-class="form-label small text-muted mb-1 controller-filter-label"
+          select-class="form-select form-select-sm"
+          wrapper-class="mb-0"
+          @update:model-value="emit('update:subcontractedFilter', $event as ControllerSubcontractedFilter)"
+        />
+
+        <BaseSelectField
+          :model-value="statusFilter"
+          :options="statusOptions"
+          label="Status"
+          label-class="form-label small text-muted mb-1 controller-filter-label"
+          select-class="form-select form-select-sm"
+          wrapper-class="mb-0 controller-filter-grid-compact__span-2"
+          @update:model-value="emit('update:statusFilter', $event as ControllerTimecardStatusFilter)"
         />
       </div>
 
-      <div class="col-xl-2 col-md-4">
-        <label class="form-label small text-muted mb-1 controller-filter-label">Subcontracted</label>
-        <select
-          class="form-select form-select-sm"
-          :value="subcontractedFilter"
-          @change="updateSubcontractedFilter"
-        >
-          <option value="all">All</option>
-          <option value="subcontracted">Sub only</option>
-          <option value="direct">Non-sub only</option>
-        </select>
-      </div>
-
-      <div class="col-xl-2 col-md-4">
-        <label class="form-label small text-muted mb-1 controller-filter-label">Status</label>
-        <select
-          class="form-select form-select-sm"
-          :value="statusFilter"
-          @change="updateStatusFilter"
-        >
-          <option value="all">All statuses</option>
-          <option value="submitted">Submitted</option>
-          <option value="draft">Draft</option>
-        </select>
-      </div>
-
-      <div class="col-12">
-        <div class="controller-filter-footer">
-          <div class="controller-search-summary controller-search-summary--compact">
-            <div class="controller-search-summary__line">
-              <span class="controller-search-summary__kicker">Weeks</span>
-              <span class="fw-semibold">{{ currentWeekLabel }}</span>
-            </div>
-            <div class="controller-search-summary__line text-muted">
-              <span>{{ currentFilterSummary }}</span>
-              <span v-if="pendingFilterChanges" class="text-warning">Updating results...</span>
-              <span v-else-if="refreshingTimecards">Refreshing current results...</span>
-            </div>
+      <div class="controller-filter-footer">
+        <AppToolbarSummary compact>
+          <div class="app-toolbar-summary__line">
+            <span class="app-toolbar-summary__kicker">Weeks</span>
+            <span class="fw-semibold">{{ currentWeekLabel }}</span>
           </div>
-
-          <div class="controller-actions-grid">
-            <button
-              type="button"
-              class="btn btn-outline-primary btn-sm"
-              :disabled="isDownloading || !!filterValidationError"
-              @click="emit('download', 'pdf')"
-            >
-              <span v-if="downloadingPdf" class="spinner-border spinner-border-sm me-2"></span>
-              <i v-else class="bi bi-file-earmark-pdf me-2"></i>
-              Download PDF
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-outline-primary btn-sm"
-              :disabled="isDownloading || !!filterValidationError"
-              @click="emit('download', 'csv')"
-            >
-              <span v-if="downloadingCsv" class="spinner-border spinner-border-sm me-2"></span>
-              <i v-else class="bi bi-filetype-csv me-2"></i>
-              Download CSV
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-outline-secondary btn-sm controller-actions-grid__full"
-              :disabled="loadingTimecards || isDownloading"
-              @click="emit('reset')"
-            >
-              Reset Filters
-            </button>
+          <div class="app-toolbar-summary__line text-muted">
+            <span>{{ currentFilterSummary }}</span>
+            <span v-if="pendingFilterChanges" class="text-warning">Updating results...</span>
+            <span v-else-if="refreshingTimecards">Refreshing current results...</span>
           </div>
+        </AppToolbarSummary>
+
+        <div class="controller-filter-actions">
+          <button
+            type="button"
+            class="btn btn-outline-primary btn-sm"
+            :disabled="isDownloading || !!filterValidationError"
+            @click="emit('download', 'pdf')"
+          >
+            <span v-if="downloadingPdf" class="spinner-border spinner-border-sm me-2"></span>
+            <i v-else class="bi bi-file-earmark-pdf me-2"></i>
+            Download PDF
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline-primary btn-sm"
+            :disabled="isDownloading || !!filterValidationError"
+            @click="emit('download', 'csv')"
+          >
+            <span v-if="downloadingCsv" class="spinner-border spinner-border-sm me-2"></span>
+            <i v-else class="bi bi-filetype-csv me-2"></i>
+            Download CSV
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm controller-filter-actions__full"
+            :disabled="loadingTimecards || isDownloading"
+            @click="emit('reset')"
+          >
+            Reset Filters
+          </button>
         </div>
       </div>
     </div>
@@ -298,112 +280,123 @@ function updateStatusFilter(event: Event) {
 }
 
 .controller-filter-card :deep(.panel-header) {
-  padding: 0.8rem 1rem 0.75rem;
+  padding: 0.7rem 0.85rem 0.65rem;
 }
 
 .controller-filter-card :deep(.controller-filter-card__body) {
-  padding: 0.9rem 1rem 1rem;
+  padding: 0.75rem 0.85rem 0.85rem;
 }
 
-.controller-filter-grid {
-  --bs-gutter-x: 0.75rem;
-  --bs-gutter-y: 0.7rem;
+.controller-filter-card.controller-filter-card--embedded :deep(.controller-filter-card__body) {
+  padding-top: 0.95rem;
+}
+
+.controller-filter-card__title {
+  font-size: clamp(1.15rem, 1.55vw, 1.45rem);
+  line-height: 1.1;
+}
+
+.controller-filter-stack {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.controller-filter-stack__section {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.controller-filter-stack__range-grid {
+  display: grid;
+  gap: 0.5rem;
 }
 
 .controller-filter-label {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .controller-filter-switch {
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.2rem;
   min-height: 1.25rem;
 }
 
-.controller-search-summary {
-  background: rgba($primary, 0.07);
-  border: 1px solid rgba($primary, 0.14);
-  border-radius: 0.75rem;
-  min-height: 100%;
-  padding: 0.85rem 1rem;
-}
-
-.controller-search-summary--compact {
-  min-height: auto;
-  padding: 0.6rem 0.8rem;
-}
-
-.controller-search-summary__line {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.6rem;
-}
-
-.controller-search-summary__line + .controller-search-summary__line {
-  margin-top: 0.2rem;
-}
-
-.controller-search-summary__kicker {
-  color: rgba($body-color, 0.7);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.controller-filter-footer {
-  align-items: stretch;
+.controller-filter-grid-compact {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-  margin-top: 0.15rem;
-}
-
-.controller-actions-grid {
-  display: grid;
-  gap: 0.5rem;
+  gap: 0.55rem 0.6rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.controller-actions-grid__full {
+.controller-filter-grid-compact__span-2 {
   grid-column: 1 / -1;
 }
 
+.controller-filter-footer {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.controller-filter-actions {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.controller-filter-actions__full {
+  grid-column: 1 / -1;
+}
+
+.controller-filter-card :deep(.app-toolbar-meta__eyebrow) {
+  margin-bottom: 0.2rem;
+}
+
+.controller-filter-card :deep(.app-toolbar-meta__subtitle) {
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.controller-filter-card :deep(.app-toolbar-summary) {
+  padding: 0.7rem 0.8rem;
+}
+
+.controller-filter-card :deep(.app-toolbar-summary__kicker) {
+  font-size: 0.62rem;
+}
+
+.controller-filter-card :deep(.app-toolbar-summary__line) {
+  gap: 0.45rem;
+}
+
+.controller-filter-card :deep(.btn.btn-sm) {
+  min-height: calc(1.5em + 0.45rem + 2px);
+  padding-block: 0.35rem;
+}
+
 .controller-filter-card :deep(.input-group-text) {
-  padding: 0.35rem 0.55rem;
+  padding: 0.32rem 0.5rem;
 }
 
 .controller-filter-card :deep(.form-control),
 .controller-filter-card :deep(.form-select) {
-  min-height: calc(1.5em + 0.55rem + 2px);
-}
-
-@media (max-width: 1199px) {
-  .controller-filter-footer {
-    grid-template-columns: 1fr;
-  }
-
-  .controller-actions-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  min-height: calc(1.5em + 0.45rem + 2px);
 }
 
 @media (max-width: 575px) {
+  .controller-filter-grid-compact,
+  .controller-filter-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .controller-filter-actions__full {
+    grid-column: auto;
+  }
+
   .controller-filter-card :deep(.panel-header),
   .controller-filter-card :deep(.controller-filter-card__body) {
     padding-left: 0.8rem;
     padding-right: 0.8rem;
-  }
-
-  .controller-actions-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .controller-actions-grid__full {
-    grid-column: auto;
   }
 }
 </style>

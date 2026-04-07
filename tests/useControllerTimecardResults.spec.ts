@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { useControllerTimecardResults } from '@/composables/useControllerTimecardResults'
 import type { ControllerTimecardWeekItem } from '@/services/Email'
-import type { TimecardModel } from '@/views/timecards/timecardUtils'
+import type { TimecardModel } from '@/utils/timecardUtils'
 
 function createReviewRow(overrides: Partial<ControllerTimecardWeekItem> = {}): ControllerTimecardWeekItem {
   return {

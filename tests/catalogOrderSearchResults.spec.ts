@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import CatalogOrderSearchResults from '@/components/shopOrders/CatalogOrderSearchResults.vue'
+import CatalogSearchResultsList from '@/components/catalog/CatalogSearchResultsList.vue'
 import type { CatalogSearchResult } from '@/composables/useCatalogSearchResults'
 import type { ShopCatalogItem } from '@/services'
 import type { ShopCategory } from '@/stores/shopCategories'
@@ -50,13 +50,14 @@ const categoryResult: CatalogSearchResult = {
   category: categoryFixture,
 }
 
-describe('CatalogOrderSearchResults', () => {
+describe('CatalogSearchResultsList in order mode', () => {
   it('shows qty and add controls for orderable results', async () => {
-    const wrapper = mount(CatalogOrderSearchResults, {
+    const wrapper = mount(CatalogSearchResultsList, {
       props: {
         results: [itemResult],
         totalResultCount: 1,
         hasMoreResults: false,
+        mode: 'order',
         catalogItemQtys: { [itemFixture.id]: 2 },
         selectedItemQuantities: { [itemFixture.id]: 3 },
         orderableNodeIds: new Set([itemResult.nodeId]),
@@ -68,7 +69,7 @@ describe('CatalogOrderSearchResults', () => {
     expect(wrapper.text()).toContain('x3')
 
     await qtyInput.setValue('4')
-    expect(wrapper.emitted('update:catalog-item-qty')).toEqual([
+    expect(wrapper.emitted('update:catalogItemQty')).toEqual([
       [{ id: itemFixture.id, qty: 4 }],
     ])
 
@@ -83,11 +84,12 @@ describe('CatalogOrderSearchResults', () => {
   })
 
   it('keeps reveal actions for branch results', async () => {
-    const wrapper = mount(CatalogOrderSearchResults, {
+    const wrapper = mount(CatalogSearchResultsList, {
       props: {
         results: [categoryResult],
         totalResultCount: 1,
         hasMoreResults: false,
+        mode: 'order',
         catalogItemQtys: {},
         selectedItemQuantities: {},
         orderableNodeIds: new Set<string>(),
@@ -101,11 +103,12 @@ describe('CatalogOrderSearchResults', () => {
   })
 
   it('shows order controls when a visible leaf is still marked as having children in search metadata', () => {
-    const wrapper = mount(CatalogOrderSearchResults, {
+    const wrapper = mount(CatalogSearchResultsList, {
       props: {
         results: [{ ...itemResult, hasChildren: true }],
         totalResultCount: 1,
         hasMoreResults: false,
+        mode: 'order',
         catalogItemQtys: { [itemFixture.id]: 1 },
         selectedItemQuantities: { [itemFixture.id]: 1 },
         orderableNodeIds: new Set([itemResult.nodeId]),

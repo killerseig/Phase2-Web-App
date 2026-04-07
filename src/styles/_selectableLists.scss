@@ -1,0 +1,63 @@
+@use '@/styles/_variables.scss' as vars;
+
+.app-selectable-list-item {
+  background: vars.$surface;
+  border-color: rgba(vars.$border-color, 0.6);
+  color: vars.$body-color;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+
+  &:hover {
+    background-color: mix(vars.$primary, vars.$surface, 12%);
+    border-color: rgba(vars.$primary, 0.4);
+    color: vars.$body-color;
+  }
+
+  &:focus-visible {
+    outline: 2px solid vars.$primary;
+    outline-offset: -4px;
+    box-shadow: none;
+  }
+
+  &:active {
+    background-color: mix(vars.$primary, vars.$surface, 16%);
+    transform: translateY(0);
+  }
+}
+
+.app-selectable-list-item--muted {
+  background: vars.$surface-2;
+  border-color: vars.$border-color;
+}
+
+.app-selectable-list-item--selected {
+  background: linear-gradient(135deg, mix(vars.$primary, vars.$surface, 20%), mix(vars.$primary, vars.$surface, 28%));
+  border-color: mix(vars.$primary, vars.$border-color, 55%);
+  box-shadow: 0 0 0 1px rgba(vars.$primary, 0.35);
+  color: vars.$body-color;
+}
+
+.app-selectable-list-item--selected .app-selectable-list-meta {
+  color: rgba(vars.$body-color, 0.9);
+}
+
+.app-selectable-list-item--selected .badge {
+  background-color: rgba(vars.$primary, 0.2);
+  border: 1px solid rgba(vars.$primary, 0.35);
+  color: vars.$body-color;
+}
+
+.app-selectable-list-meta {
+  color: vars.$text-muted;
+}
+
+.app-selectable-list--stacked .app-selectable-list-item {
+  border-radius: vars.$border-radius-sm;
+}
+
+.app-selectable-list--stacked .app-selectable-list-item + .app-selectable-list-item {
+  margin-top: 0.5rem;
+}

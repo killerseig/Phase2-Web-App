@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import AppStatCard from '@/components/common/AppStatCard.vue'
 import ControllerFilterCard from '@/components/controller/ControllerFilterCard.vue'
 import ControllerGroupedResults from '@/components/controller/ControllerGroupedResults.vue'
 import ControllerResultsToolbar from '@/components/controller/ControllerResultsToolbar.vue'
-import ControllerStatCard from '@/components/controller/ControllerStatCard.vue'
 import ControllerTimecardSummary from '@/components/controller/ControllerTimecardSummary.vue'
-import type { TimecardEmployeeEditorForm, TimecardModel } from '@/views/timecards/timecardUtils'
+import type { TimecardEmployeeEditorForm, TimecardModel } from '@/utils/timecardUtils'
 
 const editForm: TimecardEmployeeEditorForm = {
   employeeNumber: '',
@@ -41,20 +41,21 @@ const timecard: TimecardModel = {
 }
 
 describe('controller components', () => {
-  it('renders controller stat cards with value and helper text', () => {
-    const wrapper = mount(ControllerStatCard, {
+  it('renders shared stat cards with value and helper text', () => {
+    const wrapper = mount(AppStatCard, {
       props: {
         label: 'Submitted',
         value: 12,
         helperText: 'Matching results',
         valueClass: 'text-success',
+        tone: 'accent',
       },
     })
 
     expect(wrapper.text()).toContain('Submitted')
     expect(wrapper.text()).toContain('12')
     expect(wrapper.text()).toContain('Matching results')
-    expect(wrapper.find('.stat-value').classes()).toContain('text-success')
+    expect(wrapper.find('.app-stat-card__value').classes()).toContain('text-success')
   })
 
   it('renders grouped metrics with submission badges and totals', () => {

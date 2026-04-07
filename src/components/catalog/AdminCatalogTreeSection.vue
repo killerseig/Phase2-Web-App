@@ -5,7 +5,7 @@ import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import type { CatalogSearchResult } from '@/composables/useCatalogSearchResults'
 import type { CatalogTreeIndex } from '@/utils/catalogTree'
-import type { AdminCatalogTreeListeners } from '@/views/admin/adminCatalogTreeTypes'
+import type { AdminCatalogTreeListeners } from '@/composables/adminCatalog/adminCatalogTreeTypes'
 
 const props = defineProps<{
   isSearching: boolean

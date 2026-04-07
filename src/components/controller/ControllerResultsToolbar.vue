@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import AppToolbarMeta from '@/components/common/AppToolbarMeta.vue'
+import BaseSelectField from '@/components/common/BaseSelectField.vue'
 import type {
   ControllerSortKey,
   ControllerSortOption,
-} from '@/components/controller/controllerTypes'
+} from '@/types/controller'
 
 defineOptions({
   name: 'ControllerResultsToolbar',
@@ -24,35 +27,40 @@ const emit = defineEmits<{
   'toggle-direction': []
 }>()
 
-function handleSortKeyChange(event: Event) {
-  emit('update:sortKey', String((event.target as HTMLSelectElement)?.value || 'weekEnding') as ControllerSortKey)
-}
+const sortFieldOptions = computed(() =>
+  props.sortOptions.map((option) => ({
+    value: option.key,
+    label: option.label,
+  })),
+)
 </script>
 
 <template>
-  <div class="controller-results-meta mb-3">
-    <div>
-      <div class="small text-muted">Active filters</div>
-      <div class="fw-semibold">{{ activeFilterSummary }}</div>
-      <div class="small text-muted">
-        Sorted by {{ currentSortLabel }}
-        <span v-if="refreshing"> | Updating...</span>
-      </div>
-    </div>
+  <div class="app-toolbar-split mb-3">
+    <AppToolbarMeta
+      eyebrow="Active filters"
+      :title="activeFilterSummary"
+      :subtitle="`Sorted by ${currentSortLabel}${refreshing ? ' | Updating...' : ''}`"
+      title-tag="div"
+      title-class="fw-semibold"
+    />
 
-    <div class="controller-sort-controls">
-      <div class="controller-sort-controls__field">
-        <label class="form-label small text-muted mb-1">Sort by</label>
-        <select class="form-select form-select-sm" :value="sortKey" @change="handleSortKeyChange">
-          <option v-for="option in props.sortOptions" :key="option.key" :value="option.key">
-            {{ option.label }}
-          </option>
-        </select>
+    <div class="app-toolbar-controls app-toolbar-controls--end">
+      <div class="app-toolbar-controls__field">
+        <BaseSelectField
+          :model-value="sortKey"
+          :options="sortFieldOptions"
+          label="Sort by"
+          label-class="form-label small text-muted mb-1"
+          select-class="form-select form-select-sm"
+          wrapper-class="mb-0"
+          @update:model-value="emit('update:sortKey', $event as ControllerSortKey)"
+        />
       </div>
 
       <button
         type="button"
-        class="btn btn-outline-secondary btn-sm controller-sort-controls__toggle"
+        class="btn btn-outline-secondary btn-sm app-toolbar-controls__toggle"
         @click="emit('toggle-direction')"
       >
         <i :class="sortDir === 'asc' ? 'bi bi-sort-down me-2' : 'bi bi-sort-down-alt me-2'"></i>
@@ -61,39 +69,3 @@ function handleSortKeyChange(event: Event) {
     </div>
   </div>
 </template>
-
-<style scoped lang="scss">
-.controller-results-meta {
-  align-items: end;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
-  justify-content: space-between;
-}
-
-.controller-sort-controls {
-  align-items: end;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.controller-sort-controls__field {
-  min-width: 190px;
-}
-
-.controller-sort-controls__toggle {
-  min-width: 124px;
-}
-
-@media (max-width: 575px) {
-  .controller-sort-controls {
-    width: 100%;
-  }
-
-  .controller-sort-controls__field,
-  .controller-sort-controls__toggle {
-    width: 100%;
-  }
-}
-</style>

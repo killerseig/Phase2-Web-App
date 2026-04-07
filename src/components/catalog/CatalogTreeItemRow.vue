@@ -6,7 +6,7 @@ import CatalogRowColumns from '@/components/catalog/CatalogRowColumns.vue'
 import {
   useCatalogTreeItemRow,
   type CatalogTreeItemSaveUpdates,
-} from '@/components/catalog/useCatalogTreeItemRow'
+} from '@/composables/useCatalogTreeItemRow'
 import type { ShopCatalogItem } from '@/services'
 import type { CatalogItemQuantityUpdate, CatalogOrderSelection } from '@/types/shopOrders'
 import { createCatalogOrderSelection } from '@/utils/catalogOrder'

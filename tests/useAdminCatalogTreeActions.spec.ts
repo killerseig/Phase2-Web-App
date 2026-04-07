@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import type { ShopCatalogItem } from '@/services'
 import type { ShopCategory } from '@/stores/shopCategories'
-import { useAdminCatalogTreeActions } from '@/views/admin/useAdminCatalogTreeActions'
+import { useAdminCatalogTreeActions } from '@/composables/adminCatalog/useAdminCatalogTreeActions'
 
 function createHarness() {
   const allItems = ref<ShopCatalogItem[]>([])
@@ -110,5 +110,22 @@ describe('useAdminCatalogTreeActions', () => {
     actions.treeListeners['update:editCategoryName']('New Name')
 
     expect(editCategoryName.value).toBe('New Name')
+  })
+
+  it('creates top-level items with trimmed values and resets the form state', async () => {
+    const { actions, createCatalogItem } = createHarness()
+
+    actions.openAddItemDialog()
+    actions.newItemDesc.value = '  Cable Tie Gun  '
+    actions.newItemSku.value = '  SKU-42  '
+    actions.newItemPrice.value = '12.50'
+
+    await actions.createItem()
+
+    expect(actions.showAddItemForm.value).toBe(false)
+    expect(actions.newItemDesc.value).toBe('')
+    expect(actions.newItemSku.value).toBe('')
+    expect(actions.newItemPrice.value).toBe('')
+    expect(createCatalogItem).toHaveBeenCalledWith('Cable Tie Gun', undefined, 'SKU-42', 12.5)
   })
 })

@@ -1,0 +1,512 @@
+@use '@/styles/_variables.scss' as vars;
+
+$timecard-paper: #fff;
+$timecard-ink: #111;
+$timecard-grid: #111;
+$timecard-focus: #fff6c8;
+
+.timecard-workbook-fit {
+  --timecard-sheet-inner-width: 760px;
+  --timecard-sheet-frame-padding: 0.8rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.timecard-workbook-fit__sheet {
+  transform-origin: top left;
+  width: max-content;
+}
+
+.timecard-workbook-card {
+  background: rgba($timecard-paper, 0.98);
+  border: 1px solid rgba($timecard-grid, 0.18);
+  border-radius: 1rem;
+  box-shadow: 0 0.9rem 2rem rgba(0, 0, 0, 0.14);
+  color: $timecard-ink;
+  margin: 0;
+  max-width: none;
+  overflow: hidden;
+  width: calc(var(--timecard-sheet-inner-width) + (var(--timecard-sheet-frame-padding) * 2));
+}
+
+.timecard-workbook-card .card-body {
+  background: $timecard-paper;
+  padding: var(--timecard-sheet-frame-padding) !important;
+}
+
+.timecard-workbook-card__inner {
+  --timecard-workbook-columns: 11.5% 5.5% 4% 9.5% 5.5% 6.5% 6.5% 6.5% 6.5% 6.5% 6.5% 8.5% 8.5% 8.5%;
+  font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+  min-width: var(--timecard-sheet-inner-width);
+  width: var(--timecard-sheet-inner-width);
+  padding: 0;
+  border: 1px solid $timecard-grid;
+}
+
+.timecard-workbook-card__brand {
+  border-bottom: 1px solid $timecard-grid;
+  color: $timecard-ink;
+  font-size: 0.96rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+  padding: 0.34rem 0.6rem 0.28rem;
+  text-align: center;
+}
+
+.timecard-workbook-card__field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 62%) minmax(0, 38%);
+  min-height: 1.5rem;
+}
+
+.timecard-workbook-card__field-main,
+.timecard-workbook-card__field-side {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.08rem 0.34rem;
+}
+
+.timecard-workbook-card__field-side {
+  justify-content: space-between;
+}
+
+.timecard-workbook-card__field-label {
+  color: $timecard-ink;
+  flex-shrink: 0;
+  font-size: 0.56rem;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.timecard-workbook-card__field-value {
+  border-bottom: 1px solid $timecard-grid;
+  color: $timecard-ink;
+  flex: 1 1 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 0.15rem 0.03rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timecard-workbook-card__field-side .timecard-workbook-card__field-value {
+  flex: 0 0 7.6rem;
+  text-align: right;
+}
+
+.timecard-workbook-card__field-main .app-table-cell-input,
+.timecard-workbook-card__field-side .app-table-cell-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.timecard-workbook-card__field-side .app-table-cell-input {
+  flex: 0 0 7.6rem;
+}
+
+.timecard-workbook-card__header-input.form-control {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid $timecard-grid;
+  border-radius: 0;
+  box-shadow: none;
+  color: $timecard-ink;
+  font-size: 0.68rem;
+  font-weight: 700;
+  min-height: auto;
+  padding: 0 0.15rem 0.03rem;
+}
+
+.timecard-workbook-card__header-input.form-control:focus {
+  background: $timecard-focus;
+  outline: 1px solid rgba($timecard-grid, 0.45);
+  outline-offset: -1px;
+}
+
+.timecard-workbook-card__field-main--blank .timecard-workbook-card__field-label {
+  visibility: hidden;
+}
+
+.timecard-workbook-card__field-value--blank {
+  border-bottom: 0;
+}
+
+.timecard-workbook-card__field-row--week-ending {
+  margin-bottom: 0.18rem;
+}
+
+.timecard-workbook-grid {
+  --bs-table-bg: transparent;
+  --bs-table-accent-bg: transparent;
+  --bs-table-striped-bg: transparent;
+  --bs-table-hover-bg: transparent;
+  border: 0;
+  border-top: 0;
+  border-collapse: collapse;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 0.6rem;
+  margin-bottom: 0;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.timecard-workbook-card .table-responsive {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  overflow: visible;
+}
+
+.timecard-workbook-grid > :not(caption) > * > * {
+  box-shadow: none;
+}
+
+.timecard-workbook-grid th,
+.timecard-workbook-grid td {
+  background: $timecard-paper;
+  border: 1px solid $timecard-grid;
+  color: $timecard-ink;
+  line-height: 1.05;
+  padding: 0.06rem 0.1rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.timecard-workbook-grid thead th {
+  background: $timecard-paper;
+  font-size: 0.54rem;
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.12rem 0.08rem;
+}
+
+.timecard-workbook-grid th:nth-child(1),
+.timecard-workbook-grid td:nth-child(1) {
+  width: 11%;
+}
+
+.timecard-workbook-grid th:nth-child(2),
+.timecard-workbook-grid td:nth-child(2) {
+  width: 5%;
+}
+
+.timecard-workbook-grid th:nth-child(3),
+.timecard-workbook-grid td:nth-child(3) {
+  width: 4%;
+}
+
+.timecard-workbook-grid th:nth-child(4),
+.timecard-workbook-grid td:nth-child(4) {
+  width: 9%;
+}
+
+.timecard-workbook-grid th:nth-child(5),
+.timecard-workbook-grid td:nth-child(5) {
+  width: 7%;
+}
+
+.timecard-workbook-grid th:nth-child(6),
+.timecard-workbook-grid th:nth-child(7),
+.timecard-workbook-grid th:nth-child(8),
+.timecard-workbook-grid th:nth-child(9),
+.timecard-workbook-grid th:nth-child(10),
+.timecard-workbook-grid th:nth-child(11),
+.timecard-workbook-grid td:nth-child(6),
+.timecard-workbook-grid td:nth-child(7),
+.timecard-workbook-grid td:nth-child(8),
+.timecard-workbook-grid td:nth-child(9),
+.timecard-workbook-grid td:nth-child(10),
+.timecard-workbook-grid td:nth-child(11) {
+  width: 7%;
+}
+
+.timecard-workbook-grid th:nth-child(12),
+.timecard-workbook-grid td:nth-child(12),
+.timecard-workbook-grid th:nth-child(13),
+.timecard-workbook-grid td:nth-child(13),
+.timecard-workbook-grid th:nth-child(14),
+.timecard-workbook-grid td:nth-child(14) {
+  width: 7%;
+}
+
+.timecard-workbook-grid__row-label,
+.timecard-workbook-grid__summary-cell,
+.timecard-workbook-grid__readonly-cell,
+.timecard-workbook-grid__blank-cell {
+  background: $timecard-paper;
+}
+
+.timecard-workbook-grid__row-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.timecard-workbook-grid__readonly-cell {
+  font-size: 0.66rem;
+}
+
+.timecard-workbook-grid__summary-cell {
+  font-weight: 700;
+}
+
+.timecard-workbook-grid__totals-row td {
+  background: $timecard-paper;
+  border-top: 2px solid $timecard-grid;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.timecard-workbook-grid__totals-label {
+  letter-spacing: 0.02em;
+  padding-bottom: 0.02rem !important;
+  padding-right: 0.4rem !important;
+  text-align: right !important;
+  vertical-align: middle !important;
+}
+
+.timecard-workbook-grid__input-cell {
+  padding: 0 !important;
+}
+
+.timecard-workbook-grid__merged-cell {
+  vertical-align: middle;
+}
+
+.timecard-workbook-grid__dotted-right {
+  border-right-style: dotted !important;
+}
+
+.timecard-workbook-grid__input.form-control {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: $timecard-ink;
+  font-size: 0.62rem;
+  font-weight: 600;
+  min-height: 1.1rem;
+  padding: 0.04rem 0.12rem;
+}
+
+.timecard-workbook-grid__input.form-control:focus {
+  background: $timecard-focus;
+  outline: 1px solid rgba($timecard-grid, 0.45);
+  outline-offset: -1px;
+}
+
+.timecard-workbook-card__footer {
+  border-top: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin-top: 0.4rem;
+  padding: 0 0.34rem 0.28rem;
+}
+
+.timecard-workbook-card__footer-grid {
+  display: grid;
+  grid-template-columns: var(--timecard-workbook-columns);
+  grid-template-rows: auto 1.45rem 1.45rem;
+  row-gap: 0.08rem;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.timecard-workbook-card__footer-label,
+.timecard-workbook-card__footer-input {
+  align-items: center;
+  background: $timecard-paper;
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  min-width: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.timecard-workbook-card__footer-label {
+  color: $timecard-ink;
+  font-size: 0.56rem;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 0 0.2rem 0.06rem;
+}
+
+.timecard-workbook-card__footer-input {
+  border: 1px solid $timecard-grid;
+  padding: 0;
+}
+
+.timecard-workbook-card__footer-input .app-table-cell-input {
+  color: $timecard-ink;
+  font-size: 0.62rem;
+  font-weight: 600;
+  min-height: 1.2rem;
+  padding: 0.06rem 0.16rem;
+}
+
+.timecard-workbook-card__footer-label--job {
+  grid-column: 1 / span 2;
+  grid-row: 1;
+}
+
+.timecard-workbook-card__footer-input--job {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+}
+
+.timecard-workbook-card__footer-input--job-secondary {
+  grid-column: 1 / span 2;
+  grid-row: 3;
+}
+
+.timecard-workbook-card__footer-label--account {
+  grid-column: 3 / span 2;
+  grid-row: 1;
+}
+
+.timecard-workbook-card__footer-input--account {
+  grid-column: 3 / span 2;
+  grid-row: 2;
+}
+
+.timecard-workbook-card__footer-input--account-secondary {
+  grid-column: 3 / span 2;
+  grid-row: 3;
+}
+
+.timecard-workbook-card__footer-label--office {
+  grid-column: 5 / span 2;
+  grid-row: 1;
+}
+
+.timecard-workbook-card__footer-input--office {
+  grid-column: 5 / span 2;
+  grid-row: 2;
+}
+
+.timecard-workbook-card__footer-input--office-secondary {
+  grid-column: 5 / span 2;
+  grid-row: 3;
+}
+
+.timecard-workbook-card__footer-label--amount {
+  grid-column: 7 / span 2;
+  grid-row: 1;
+}
+
+.timecard-workbook-card__footer-input--amount {
+  grid-column: 7 / span 2;
+  grid-row: 2;
+}
+
+.timecard-workbook-card__footer-input--amount-secondary {
+  grid-column: 7 / span 2;
+  grid-row: 3;
+}
+
+.timecard-workbook-card__footer-underlined {
+  align-items: flex-end;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 100%;
+  padding: 0 0 0.1rem 0.45rem;
+}
+
+.timecard-workbook-card__footer-underlined--ot {
+  grid-column: 11 / span 2;
+  grid-row: 2;
+}
+
+.timecard-workbook-card__footer-underlined--reg {
+  grid-column: 11 / span 2;
+  grid-row: 3;
+}
+
+.timecard-workbook-card__footer-underlined-label {
+  color: $timecard-ink;
+  font-size: 0.58rem;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+  padding-bottom: 0.12rem;
+}
+
+.timecard-workbook-card__footer-underlined-value {
+  align-items: flex-start;
+  border-bottom: 1px solid $timecard-grid;
+  color: $timecard-ink;
+  display: flex;
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1;
+  min-height: 1rem;
+  padding: 0 0.2rem 0.08rem;
+}
+
+.timecard-workbook-card__notes-row {
+  align-items: end;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: 3.75rem minmax(0, 1fr);
+  margin-top: 1.35rem;
+  min-height: 2rem;
+  padding: 0;
+}
+
+.timecard-workbook-card__notes-label {
+  align-items: center;
+  color: $timecard-ink;
+  display: flex;
+  font-size: 0.58rem;
+  font-weight: 600;
+  grid-column: 1;
+  letter-spacing: 0.01em;
+  padding: 0 0 0.05rem;
+}
+
+.timecard-workbook-card__notes-input.form-control {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid $timecard-grid;
+  border-radius: 0;
+  box-shadow: none;
+  color: $timecard-ink;
+  font-size: 0.62rem;
+  grid-column: 2;
+  min-height: 1.4rem;
+  padding: 0.08rem 0.15rem;
+  resize: none;
+}
+
+.timecard-workbook-card__notes-input.form-control:focus {
+  background: $timecard-focus;
+}
+
+.timecard-selected-meta-card .card-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .timecard-workbook-fit {
+    --timecard-sheet-inner-width: 720px;
+    --timecard-sheet-frame-padding: 0.55rem;
+  }
+}

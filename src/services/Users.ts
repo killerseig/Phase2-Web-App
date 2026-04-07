@@ -8,6 +8,7 @@ import {
   query,
   where,
   updateDoc,
+  writeBatch,
   type Unsubscribe,
   type DocumentData,
 } from 'firebase/firestore'
@@ -270,6 +271,83 @@ export async function setForemanJobs(foremanId: string, jobIds: string[]): Promi
     await updateDoc(ref, { assignedJobIds: jobIds })
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to set foreman jobs'))
+  }
+}
+
+/**
+ * Atomically link a foreman user to a job on both documents.
+ */
+export async function linkForemanToJob(foremanId: string, jobId: string): Promise<void> {
+  try {
+    requireUser()
+
+    const userRef = doc(db, 'users', foremanId)
+    const jobRef = doc(db, 'jobs', jobId)
+    const [userSnap, jobSnap] = await Promise.all([getDoc(userRef), getDoc(jobRef)])
+
+    if (!userSnap.exists()) throw new Error('User not found')
+    if (!jobSnap.exists()) throw new Error('Job not found')
+
+    const userData = userSnap.data()
+    if (normalizeRoleValue(userData.role) !== ROLES.FOREMAN) {
+      throw new Error('Selected user is not a foreman')
+    }
+
+    const assignedJobIds = Array.isArray(userData.assignedJobIds)
+      ? userData.assignedJobIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : []
+    const assignedForemanIds = Array.isArray(jobSnap.data().assignedForemanIds)
+      ? jobSnap.data().assignedForemanIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : []
+
+    if (!assignedJobIds.includes(jobId)) assignedJobIds.push(jobId)
+    if (!assignedForemanIds.includes(foremanId)) assignedForemanIds.push(foremanId)
+
+    const batch = writeBatch(db)
+    batch.update(userRef, { assignedJobIds })
+    batch.update(jobRef, { assignedForemanIds })
+    await batch.commit()
+  } catch (err) {
+    if (
+      err instanceof Error
+      && ['User not found', 'Job not found', 'Selected user is not a foreman'].includes(err.message)
+    ) {
+      throw err
+    }
+    throw new Error(normalizeError(err, 'Failed to link foreman to job'))
+  }
+}
+
+/**
+ * Atomically unlink a foreman user from a job on both documents.
+ */
+export async function unlinkForemanFromJob(foremanId: string, jobId: string): Promise<void> {
+  try {
+    requireUser()
+
+    const userRef = doc(db, 'users', foremanId)
+    const jobRef = doc(db, 'jobs', jobId)
+    const [userSnap, jobSnap] = await Promise.all([getDoc(userRef), getDoc(jobRef)])
+
+    if (!userSnap.exists()) throw new Error('User not found')
+    if (!jobSnap.exists()) throw new Error('Job not found')
+
+    const assignedJobIds = Array.isArray(userSnap.data().assignedJobIds)
+      ? userSnap.data().assignedJobIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : []
+    const assignedForemanIds = Array.isArray(jobSnap.data().assignedForemanIds)
+      ? jobSnap.data().assignedForemanIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : []
+
+    const batch = writeBatch(db)
+    batch.update(userRef, { assignedJobIds: assignedJobIds.filter((id: string) => id !== jobId) })
+    batch.update(jobRef, { assignedForemanIds: assignedForemanIds.filter((id: string) => id !== foremanId) })
+    await batch.commit()
+  } catch (err) {
+    if (err instanceof Error && ['User not found', 'Job not found'].includes(err.message)) {
+      throw err
+    }
+    throw new Error(normalizeError(err, 'Failed to unlink foreman from job'))
   }
 }
 

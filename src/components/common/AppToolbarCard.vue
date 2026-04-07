@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useSlots } from 'vue'
+import BaseCard from '@/components/common/BaseCard.vue'
 
 withDefaults(defineProps<{
   bodyClass?: string
@@ -13,15 +14,15 @@ const slots = useSlots()
 </script>
 
 <template>
-  <div class="card app-toolbar-card">
-    <div
-      v-if="slots.header"
-      :class="['card-header', 'panel-header', headerClass]"
-    >
+  <BaseCard
+    card-class="app-toolbar-card"
+    :body-class="bodyClass"
+    :header-class="headerClass"
+  >
+    <template v-if="slots.header" #header>
       <slot name="header" />
-    </div>
-    <div :class="['card-body', bodyClass]">
-      <slot />
-    </div>
-  </div>
+    </template>
+
+    <slot />
+  </BaseCard>
 </template>

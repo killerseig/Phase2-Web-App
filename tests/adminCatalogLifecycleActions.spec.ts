@@ -16,7 +16,7 @@ import {
   deleteCatalogItem as deleteCatalogItemService,
   deleteCategory as deleteCategoryService,
 } from '@/services'
-import { useAdminCatalogLifecycleActions } from '@/views/admin/useAdminCatalogLifecycleActions'
+import { useAdminCatalogLifecycleActions } from '@/composables/adminCatalog/useAdminCatalogLifecycleActions'
 
 const deleteCatalogItemMock = deleteCatalogItemService as unknown as ReturnType<typeof vi.fn>
 const deleteCategoryMock = deleteCategoryService as unknown as ReturnType<typeof vi.fn>

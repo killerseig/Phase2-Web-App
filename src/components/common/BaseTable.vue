@@ -158,6 +158,9 @@ function cellValue(row: TableRow, key: string) {
           </td>
         </tr>
       </tbody>
+      <tfoot v-if="$slots.footer">
+        <slot name="footer" :columns="columns" :rows="rows" />
+      </tfoot>
     </table>
   </div>
 </template>

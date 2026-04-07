@@ -19,6 +19,7 @@ test-results
 users.json
 .firebase/*.cache
 .firebase/hosting.*.cache
+/customer files/
 
 # Editor directories and files
 .vscode/*

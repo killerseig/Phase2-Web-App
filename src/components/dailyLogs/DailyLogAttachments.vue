@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import AppSectionCard from '@/components/common/AppSectionCard.vue'
+import AttachmentGallery from '@/components/common/AttachmentGallery.vue'
+import BaseFileUploadField from '@/components/common/BaseFileUploadField.vue'
 import type { DailyLogAttachment } from '@/types'
 
 type AttachmentWithPath = DailyLogAttachment & { path?: string }
@@ -59,140 +62,43 @@ const emitDelete = (path?: string) => {
 </script>
 
 <template>
-  <div class="card mb-4">
-    <div class="card-header attachment-header"><h5 class="mb-0"><i class="bi bi-camera me-2"></i>Attachments</h5></div>
-    <div class="card-body">
-      <div class="mb-3">
-        <label class="form-label d-flex align-items-center gap-2">
-          <i class="bi bi-image"></i>
-          <span>Photos</span>
-        </label>
-        <input
-          class="form-control form-control-sm"
-          type="file"
-          accept="image/*"
-          multiple
-          @change="(e) => handleChange('photo', e)"
-          :disabled="!canEdit || uploading"
-        />
-        <div class="form-text">{{ photoDisplay }}</div>
+  <AppSectionCard title="Attachments" icon="bi bi-camera" class="mb-4">
+    <BaseFileUploadField
+      label="Photos"
+      icon="bi bi-image"
+      accept="image/*"
+      multiple
+      wrapper-class="mb-3"
+      :helper-text="photoDisplay"
+      :disabled="!canEdit || uploading"
+      @change="(event) => handleChange('photo', event)"
+    />
 
-        <div v-if="photos.length" class="thumb-grid mt-2">
-          <div v-for="att in photos" :key="att.path ?? att.url" class="thumb-card">
-            <img :src="att.url" class="thumb-image" />
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-secondary w-100"
-              @click="emitDelete(att.path)"
-              :disabled="!canEdit || uploading"
-            >
-              <i class="bi bi-trash me-1"></i>Remove
-            </button>
-          </div>
-        </div>
-      </div>
+    <AttachmentGallery
+      class="mt-2"
+      :attachments="photos"
+      :remove-disabled="!canEdit || uploading"
+      :min-column-width="280"
+      @remove="emitDelete"
+    />
 
-      <div class="mb-3">
-        <label class="form-label d-flex align-items-center gap-2">
-          <i class="bi bi-shield-check"></i>
-          <span>PTP Photos</span>
-        </label>
-        <input
-          class="form-control form-control-sm"
-          type="file"
-          accept="image/*"
-          multiple
-          @change="(e) => handleChange('ptp', e)"
-          :disabled="!canEdit || uploading"
-        />
-        <div class="form-text">{{ ptpDisplay }}</div>
+    <BaseFileUploadField
+      label="PTP Photos"
+      icon="bi bi-shield-check"
+      accept="image/*"
+      multiple
+      wrapper-class="mb-3"
+      :helper-text="ptpDisplay"
+      :disabled="!canEdit || uploading"
+      @change="(event) => handleChange('ptp', event)"
+    />
 
-        <div v-if="ptpPhotos.length" class="thumb-grid mt-2">
-          <div v-for="att in ptpPhotos" :key="att.path ?? att.url" class="thumb-card">
-            <img :src="att.url" class="thumb-image" />
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-secondary w-100"
-              @click="emitDelete(att.path)"
-              :disabled="!canEdit || uploading"
-            >
-              <i class="bi bi-trash me-1"></i>Remove
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <AttachmentGallery
+      class="mt-2"
+      :attachments="ptpPhotos"
+      :remove-disabled="!canEdit || uploading"
+      :min-column-width="280"
+      @remove="emitDelete"
+    />
+  </AppSectionCard>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.attachment-header {
-  background: $surface-2;
-  border-bottom: 1px solid rgba($border-color, 0.5);
-  color: $body-color;
-}
-
-.attachment-header h5 {
-  color: $body-color;
-}
-
-.form-control[type="file"]::file-selector-button,
-.form-control[type="file"]::-webkit-file-upload-button {
-  background: $surface-3;
-  color: $body-color;
-  border: none;
-  border-right: 1px solid $border-color;
-  padding: 0.375rem 0.75rem;
-  margin-right: 0.75rem;
-  cursor: pointer;
-}
-
-.form-control[type="file"]::file-selector-button:hover,
-.form-control[type="file"]::-webkit-file-upload-button:hover {
-  background: lighten($surface-3, 3%);
-}
-
-.form-control[type="file"]::-moz-file-upload-button {
-  background: $surface-3;
-  color: $body-color;
-  border: none;
-  border-right: 1px solid $border-color;
-  padding: 0.375rem 0.75rem;
-  margin-right: 0.75rem;
-  cursor: pointer;
-}
-
-.form-control[type="file"]::-moz-file-upload-button:hover {
-  background: lighten($surface-3, 3%);
-}
-
-.thumb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 0.6rem;
-}
-
-.thumb-card {
-  border: 1px solid $border-color;
-  border-radius: 8px;
-  overflow: hidden;
-  background: $surface-2;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  display: flex;
-  flex-direction: column;
-}
-
-.thumb-image {
-  max-width: 300px;
-  max-height: 200px;
-  object-fit: contain;
-  display: block;
-  background: $surface-3;
-  padding: 8px;
-  flex-grow: 1;
-  align-self: center;
-}
-
-</style>

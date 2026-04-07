@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppAlert from '@/components/common/AppAlert.vue'
+import BaseInputField from '@/components/common/BaseInputField.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
@@ -91,31 +92,27 @@ const sendReset = async () => {
         <h1 class="h3 mb-2">Sign In</h1>
         <p class="text-muted small mb-4">Access daily logs, timecards, shop orders, and admin tools.</p>
 
-        <div class="mb-3">
-          <label class="form-label" for="login-email">Email</label>
-          <input
-            id="login-email"
-            v-model="email"
-            class="form-control"
-            autocomplete="email"
-            type="email"
-            placeholder="you@example.com"
-            @keyup.enter="submit"
-          />
-        </div>
+        <BaseInputField
+          id="login-email"
+          v-model="email"
+          type="email"
+          label="Email"
+          autocomplete="email"
+          placeholder="you@example.com"
+          wrapper-class="mb-3"
+          @keyup.enter="submit"
+        />
 
-        <div class="mb-3">
-          <label class="form-label" for="login-password">Password</label>
-          <input
-            id="login-password"
-            v-model="password"
-            class="form-control"
-            type="password"
-            autocomplete="current-password"
-            placeholder="********"
-            @keyup.enter="submit"
-          />
-        </div>
+        <BaseInputField
+          id="login-password"
+          v-model="password"
+          type="password"
+          label="Password"
+          autocomplete="current-password"
+          placeholder="********"
+          wrapper-class="mb-3"
+          @keyup.enter="submit"
+        />
 
         <button class="btn btn-primary w-100" :disabled="loading" @click="submit">
           <span v-if="loading" class="spinner-border spinner-border-sm me-2" />
@@ -149,19 +146,16 @@ const sendReset = async () => {
     @close="handleResetModalEscape"
   >
     <p class="text-muted small mb-3">Enter your email address and we'll send you a link to reset your password.</p>
-    <div class="mb-0">
-      <label class="form-label" for="reset-email">Email Address</label>
-      <input
-        id="reset-email"
-        v-model="resetEmail"
-        class="form-control"
-        type="email"
-        placeholder="you@example.com"
-        @keyup.enter="sendReset"
-        :disabled="resetLoading"
-        autofocus
-      />
-    </div>
+    <BaseInputField
+      id="reset-email"
+      v-model="resetEmail"
+      type="email"
+      label="Email Address"
+      placeholder="you@example.com"
+      :disabled="resetLoading"
+      autofocus
+      @keyup.enter="sendReset"
+    />
 
     <template #footer>
       <button type="button" class="btn btn-secondary" @click="closeResetModal" :disabled="resetLoading">

@@ -1,16 +1,27 @@
 <script setup lang="ts">
+import AppDetailField from '@/components/common/AppDetailField.vue'
+import BaseCheckboxField from '@/components/common/BaseCheckboxField.vue'
 import TimecardStatusBadge from '@/components/timecards/TimecardStatusBadge.vue'
-import type { TimecardEmployeeEditorForm, TimecardModel } from '@/views/timecards/timecardUtils'
-import { getTimecardFirstName, getTimecardLastName } from '@/views/timecards/timecardUtils'
+import type { TimecardEmployeeEditorForm, TimecardModel } from '@/utils/timecardUtils'
+import { getTimecardDisplayName, getTimecardFirstName, getTimecardLastName } from '@/utils/timecardUtils'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   itemKey: string
   timecard: TimecardModel
+  open?: boolean
+  compactWhenClosed?: boolean
   isEditing: boolean
   editForm: TimecardEmployeeEditorForm
   editDisabled: boolean
   deleteDisabled: boolean
-}>()
+  showEditButton?: boolean
+  showDeleteButton?: boolean
+}>(), {
+  open: false,
+  compactWhenClosed: false,
+  showEditButton: true,
+  showDeleteButton: true,
+})
 
 const emit = defineEmits<{
   (e: 'update:editForm', value: TimecardEmployeeEditorForm): void
@@ -32,132 +43,136 @@ function formatWage(value: number | null | undefined): string {
   if (value == null || Number.isNaN(Number(value))) return '-'
   return `$${Number(value).toFixed(2)}`
 }
+
+function formatCompactMeta(): string {
+  const parts = [
+    props.timecard.employeeNumber ? `#${props.timecard.employeeNumber}` : null,
+    props.timecard.occupation || null,
+    props.timecard.subcontractedEmployee ? 'Sub' : 'Direct',
+  ].filter(Boolean)
+
+  return parts.join(' | ')
+}
 </script>
 
 <template>
-  <div class="timecard-header-row">
+  <div v-if="compactWhenClosed && !open && !isEditing" class="timecard-header-compact">
+    <div class="timecard-header-compact__identity">
+      <div class="timecard-header-compact__name">{{ getTimecardDisplayName(timecard) }}</div>
+      <div class="timecard-header-compact__meta">{{ formatCompactMeta() }}</div>
+    </div>
+
+    <div class="timecard-header-compact__status">
+      <slot name="badges" />
+      <TimecardStatusBadge :status="timecard.status" variant="editor" />
+    </div>
+
+    <div v-if="showEditButton" class="timecard-header-compact__actions">
+      <button
+        class="btn btn-sm btn-outline-secondary"
+        :disabled="editDisabled"
+        title="Edit employee details"
+        aria-label="Edit employee details"
+        @click.stop="emit('toggle-edit')"
+      >
+        <i class="bi bi-pencil"></i>
+      </button>
+    </div>
+  </div>
+
+  <div v-else class="timecard-header-row">
     <div class="timecard-header-row__item">
-      <div v-if="isEditing" class="d-flex align-items-center gap-2 w-100" @click.stop>
-        <div class="w-100">
-          <div class="tc-meta-label mb-1">First Name</div>
-          <input
-            :value="editForm.firstName"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder="First name"
-            @input="updateEditField('firstName', ($event.target as HTMLInputElement).value)"
-          />
-        </div>
-      </div>
-      <div v-else class="tc-meta">
-        <div class="tc-meta-label">First Name</div>
-        <div class="tc-meta-value">{{ getTimecardFirstName(timecard) || '-' }}</div>
-      </div>
+      <AppDetailField
+        :editing="isEditing"
+        label="First Name"
+        :model-value="editForm.firstName"
+        :display-value="getTimecardFirstName(timecard)"
+        placeholder="First name"
+        input-class="form-control form-control-sm"
+        @update:model-value="updateEditField('firstName', $event)"
+      />
     </div>
 
     <div class="timecard-header-row__item">
-      <div v-if="isEditing" class="d-flex align-items-center gap-2 w-100" @click.stop>
-        <div class="w-100">
-          <div class="tc-meta-label mb-1">Last Name</div>
-          <input
-            :value="editForm.lastName"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder="Last name"
-            @input="updateEditField('lastName', ($event.target as HTMLInputElement).value)"
-          />
-        </div>
-      </div>
-      <div v-else class="tc-meta">
-        <div class="tc-meta-label">Last Name</div>
-        <div class="tc-meta-value">{{ getTimecardLastName(timecard) || '-' }}</div>
-      </div>
+      <AppDetailField
+        :editing="isEditing"
+        label="Last Name"
+        :model-value="editForm.lastName"
+        :display-value="getTimecardLastName(timecard)"
+        placeholder="Last name"
+        input-class="form-control form-control-sm"
+        @update:model-value="updateEditField('lastName', $event)"
+      />
     </div>
 
     <div class="timecard-header-row__item">
-      <div v-if="isEditing" class="d-flex align-items-center gap-2 w-100" @click.stop>
-        <div class="w-100">
-          <div class="tc-meta-label mb-1">Employee #</div>
-          <input
-            :value="editForm.employeeNumber"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder="Employee #"
-            @input="updateEditField('employeeNumber', ($event.target as HTMLInputElement).value)"
-          />
-        </div>
-      </div>
-      <div v-else class="tc-meta">
-        <div class="tc-meta-label">Employee #</div>
-        <div class="tc-meta-value">{{ timecard.employeeNumber || '-' }}</div>
-      </div>
+      <AppDetailField
+        :editing="isEditing"
+        label="Employee #"
+        :model-value="editForm.employeeNumber"
+        :display-value="timecard.employeeNumber"
+        placeholder="Employee #"
+        input-class="form-control form-control-sm"
+        @update:model-value="updateEditField('employeeNumber', $event)"
+      />
     </div>
 
     <div class="timecard-header-row__item">
-      <div v-if="isEditing" class="d-flex align-items-center gap-2 w-100" @click.stop>
-        <div class="w-100">
-          <div class="tc-meta-label mb-1">Occupation</div>
-          <input
-            :value="editForm.occupation"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder="Occupation"
-            @input="updateEditField('occupation', ($event.target as HTMLInputElement).value)"
-          />
-        </div>
-      </div>
-      <div v-else class="tc-meta">
-        <div class="tc-meta-label">Occupation</div>
-        <div class="tc-meta-value">{{ timecard.occupation || '-' }}</div>
-      </div>
+      <AppDetailField
+        :editing="isEditing"
+        label="Occupation"
+        :model-value="editForm.occupation"
+        :display-value="timecard.occupation"
+        placeholder="Occupation"
+        input-class="form-control form-control-sm"
+        @update:model-value="updateEditField('occupation', $event)"
+      />
     </div>
 
     <div class="timecard-header-row__item">
-      <div v-if="isEditing" class="d-flex align-items-center gap-2 w-100" @click.stop>
-        <div class="d-flex align-items-start gap-2 w-100 tc-inline-edit">
-          <div class="tc-inline-field flex-grow-1">
-            <div class="tc-meta-label mb-1">Wage</div>
-            <input
-              :value="editForm.employeeWage"
-              type="number"
-              min="0"
-              step="0.01"
-              class="form-control form-control-sm"
-              placeholder="Wage"
-              @input="updateEditField('employeeWage', ($event.target as HTMLInputElement).value)"
+      <div class="d-flex align-items-end gap-2 w-100">
+        <AppDetailField
+          :editing="isEditing"
+          label="Wage"
+          :model-value="editForm.employeeWage"
+          :display-value="formatWage(timecard.employeeWage)"
+          field-class="tc-inline-field flex-grow-1"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Wage"
+          input-class="form-control form-control-sm"
+          @update:model-value="updateEditField('employeeWage', $event)"
+        />
+        <AppDetailField
+          :editing="isEditing"
+          label="Sub"
+          :display-value="timecard.subcontractedEmployee ? 'Yes' : 'No'"
+          field-class="tc-inline-field"
+        >
+          <template #input>
+            <BaseCheckboxField
+              :id="`timecard-subcontracted-${itemKey}`"
+              :model-value="editForm.subcontractedEmployee"
+              label="Yes"
+              label-class="ms-2 small"
+              wrapper-class="m-0 d-flex align-items-center tc-sub-check"
+              input-class="mt-0"
+              @update:model-value="updateEditField('subcontractedEmployee', $event)"
             />
-          </div>
-          <div class="tc-inline-field">
-            <div class="tc-meta-label mb-1">Sub</div>
-            <div class="form-check form-check-sm m-0 d-flex align-items-center tc-sub-check">
-              <input
-                :checked="editForm.subcontractedEmployee"
-                class="form-check-input mt-0"
-                type="checkbox"
-                :id="`timecard-subcontracted-${itemKey}`"
-                @change="updateEditField('subcontractedEmployee', ($event.target as HTMLInputElement).checked)"
-              />
-              <label class="form-check-label ms-2 small" :for="`timecard-subcontracted-${itemKey}`">Yes</label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-else class="d-flex align-items-end gap-2 w-100 tc-inline-display">
-        <div class="tc-meta tc-inline-field flex-grow-1">
-          <div class="tc-meta-label">Wage</div>
-          <div class="tc-meta-value">{{ formatWage(timecard.employeeWage) }}</div>
-        </div>
-        <div class="tc-meta tc-inline-field">
-          <div class="tc-meta-label">Sub</div>
-          <div class="tc-meta-value">{{ timecard.subcontractedEmployee ? 'Yes' : 'No' }}</div>
-        </div>
+          </template>
+        </AppDetailField>
       </div>
     </div>
 
     <div class="timecard-header-row__actions tc-header-actions">
       <div class="tc-header-actions__row">
-        <div class="tc-header-actions__buttons">
-          <div v-if="isEditing" class="btn-group btn-group-sm flex-nowrap" role="group">
+        <div v-if="showEditButton || (isEditing && showDeleteButton)" class="tc-header-actions__buttons">
+          <div
+            v-if="isEditing && showDeleteButton"
+            class="btn-group btn-group-sm flex-nowrap"
+            role="group"
+          >
             <button
               class="btn btn-outline-danger"
               :disabled="deleteDisabled"
@@ -170,6 +185,7 @@ function formatWage(value: number | null | undefined): string {
           </div>
 
           <button
+            v-if="showEditButton"
             class="btn btn-sm btn-outline-secondary"
             :aria-pressed="isEditing"
             :disabled="editDisabled"
@@ -194,13 +210,13 @@ function formatWage(value: number | null | undefined): string {
 @use '@/styles/_variables.scss' as *;
 
 .tc-header-actions {
-  padding-top: 0.25rem;
+  padding-top: 0.1rem;
 }
 
 .tc-header-actions__row {
   align-items: center;
   display: flex;
-  gap: 0.55rem;
+  gap: 0.4rem;
   justify-content: flex-end;
   min-width: 0;
   white-space: nowrap;
@@ -210,7 +226,7 @@ function formatWage(value: number | null | undefined): string {
 .tc-header-actions__badges {
   align-items: center;
   display: flex;
-  gap: 0.55rem;
+  gap: 0.4rem;
 }
 
 .tc-header-actions__buttons {
@@ -227,27 +243,48 @@ function formatWage(value: number | null | undefined): string {
   flex-shrink: 0;
 }
 
-.tc-meta {
-  min-height: 2.25rem;
+.tc-inline-field {
+  min-width: 0;
 }
 
-.tc-meta-label {
-  color: rgba($body-color, 0.65);
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
-  line-height: 1;
-  margin-bottom: 0.15rem;
-  text-transform: uppercase;
+.timecard-header-compact {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-width: 0;
+  width: 100%;
 }
 
-.tc-meta-value {
-  color: $body-color;
-  font-weight: 600;
+.timecard-header-compact__identity {
+  min-width: 0;
+}
+
+.timecard-header-compact__name {
+  font-size: 1rem;
+  font-weight: 700;
   line-height: 1.1;
 }
 
-.tc-inline-field {
-  min-width: 0;
+.timecard-header-compact__meta {
+  color: $text-muted;
+  font-size: 0.84rem;
+  margin-top: 0.12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timecard-header-compact__status {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.timecard-header-compact__actions {
+  flex-shrink: 0;
 }
 
 .tc-sub-check {
@@ -259,7 +296,7 @@ function formatWage(value: number | null | undefined): string {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 0.9rem;
+  gap: 0.3rem 0.65rem;
   width: 100%;
 }
 
@@ -274,12 +311,20 @@ function formatWage(value: number | null | undefined): string {
 }
 
 @media (max-width: 768px) {
+  .timecard-header-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .timecard-header-compact__status {
+    justify-content: flex-start;
+  }
+
   .timecard-header-row {
-    row-gap: 0.35rem;
+    row-gap: 0.25rem;
   }
 
   .tc-header-actions {
-    padding-top: 0.15rem;
+    padding-top: 0.05rem;
   }
 
   .tc-header-actions__row {

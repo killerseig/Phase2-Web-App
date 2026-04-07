@@ -1,0 +1,43 @@
+@use '@/styles/_variables.scss' as vars;
+
+.app-data-group-card {
+  background: vars.$surface;
+  overflow: hidden;
+}
+
+.app-data-group-card--accent {
+  border: 1px solid mix(vars.$surface-3, vars.$primary, 82%);
+}
+
+.app-data-group-card--accent > .card-header {
+  background: linear-gradient(180deg, rgba(vars.$primary, 0.08) 0%, rgba(vars.$primary, 0.02) 100%);
+  border-bottom: 1px solid rgba(vars.$primary, 0.18);
+}
+
+.app-data-group-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: space-between;
+}
+
+.app-data-group-header--subtle {
+  background: rgba(vars.$primary, 0.04);
+  border-bottom: 1px solid rgba(vars.$primary, 0.18);
+  padding: 0.9rem 1rem;
+}
+
+.app-data-group-header__summary {
+  margin-left: auto;
+}
+
+.app-data-group-header--summary-start .app-data-group-header__summary {
+  margin-left: 0;
+}
+
+@media (max-width: 991px) {
+  .app-data-group-header__summary {
+    margin-left: 0;
+  }
+}

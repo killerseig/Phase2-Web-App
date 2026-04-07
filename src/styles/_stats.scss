@@ -1,0 +1,31 @@
+@use '@/styles/_variables.scss' as vars;
+
+.app-stat-card {
+  color: vars.$body-color;
+  height: 100%;
+}
+
+.app-stat-card--accent {
+  background: linear-gradient(180deg, rgba(vars.$primary, 0.1) 0%, rgba(vars.$primary, 0.04) 100%);
+  border: 1px solid rgba(vars.$primary, 0.18);
+}
+
+.app-stat-card__label {
+  color: vars.$text-muted;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-stat-card__value {
+  font-size: clamp(1.55rem, 3vw, 2rem);
+  font-weight: 700;
+  line-height: 1.1;
+  margin: 0.35rem 0 0.15rem;
+}
+
+.app-stat-card__helper {
+  color: vars.$text-muted;
+  font-size: 0.875rem;
+}

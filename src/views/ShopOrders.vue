@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppAlert from '@/components/common/AppAlert.vue'
-import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import ShopOrderDetailCard from '@/components/shopOrders/ShopOrderDetailCard.vue'
+import ShopOrderEditorSection from '@/components/shopOrders/ShopOrderEditorSection.vue'
+import ShopOrdersFilterToolbar from '@/components/shopOrders/ShopOrdersFilterToolbar.vue'
 import ShopOrderListCard from '@/components/shopOrders/ShopOrderListCard.vue'
-import ShopOrderCatalogBrowser from '@/components/shopOrders/ShopOrderCatalogBrowser.vue'
-import type { ShopOrder } from '@/services'
-import { useShopOrdersData } from '@/views/shopOrders/useShopOrdersData'
-import { useShopOrderMutations } from '@/views/shopOrders/useShopOrderMutations'
+import { useShopOrdersData } from '@/composables/shopOrders/useShopOrdersData'
+import { useShopOrderMutations } from '@/composables/shopOrders/useShopOrderMutations'
 
 const props = defineProps<{ jobId?: string }>()
 
@@ -59,10 +56,12 @@ const {
   shopOrderRecipients,
 })
 
-const canEditOrder = (o: ShopOrder) => o.status === 'draft'
-const canSubmit = (o: ShopOrder) => o.status === 'draft' && o.items.length > 0
-const canOrder = (o: ShopOrder) => o.status === 'order'
-const canReceive = (o: ShopOrder) => o.status === 'order'
+const statusFilterOptions = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'order', label: 'Order' },
+  { value: 'receive', label: 'Receive' },
+] as const
 </script>
 
 <template>
@@ -90,82 +89,37 @@ const canReceive = (o: ShopOrder) => o.status === 'order'
     />
 
     <!-- Search & Filter -->
-    <AppToolbarCard class="mb-4">
-      <div class="row g-3">
-        <div class="col-md-6">
-          <input v-model="search" type="text" class="form-control" placeholder="Search orders..." />
-        </div>
-        <div class="col-md-6">
-          <select v-model="statusFilter" class="form-select">
-            <option value="all">All Statuses</option>
-            <option value="draft">Draft</option>
-            <option value="order">Order</option>
-            <option value="receive">Receive</option>
-          </select>
-        </div>
-      </div>
-    </AppToolbarCard>
+    <ShopOrdersFilterToolbar
+      v-model:search="search"
+      v-model:status-filter="statusFilter"
+      :status-options="statusFilterOptions"
+    />
 
     <!-- Main Content -->
     <div class="row g-4">
       <!-- Order Details -->
       <div class="col-lg-8">
-        <div v-if="!selected" class="card app-section-card app-empty-state-card">
-          <AppEmptyState
-            class="card-body"
-            icon="bi bi-hand-index-thumb"
-            message="Select an order to view details"
-          />
-        </div>
-        <div v-else>
-          <ShopOrderDetailCard
-            :order="selected"
-            :sending-email="sendingEmail"
-            :format-date="fmtDate"
-            :is-editable="canEditOrder(selected)"
-            :can-submit="canSubmit(selected)"
-            :can-order="canOrder(selected)"
-            :can-receive="canReceive(selected)"
-            @update-items="handleSelectedItemsUpdate"
-            @delete-item="handleDeleteSelectedItem"
-            @send-email="sendOrderEmail"
-            @submit="submitOrder"
-            @place-order="placeOrder"
-            @receive="receiveOrder"
-          />
-
-          <!-- Catalog Browser (when editing) -->
-          <ShopOrderCatalogBrowser
-            v-if="canEditOrder(selected)"
-            :items="catalog"
-            :categories="shopCategories"
-            :catalog-item-qtys="catalogItemQtys"
-            :selected-item-quantities="selectedCatalogItemQuantities"
-            @update:catalog-item-qty="updateCatalogItemQty"
-            @select-for-order="selectCatalogItem"
-          >
-            <template #footer>
-              <div class="row g-2 mb-2">
-                <div class="col-7"><input v-model="newItemDescription" type="text" class="form-control form-control-sm" placeholder="Description" /></div>
-                <div class="col-2">
-                  <input
-                    v-model="newItemQty"
-                    type="text"
-                    inputmode="numeric"
-                    pattern="[0-9]*"
-                    class="form-control form-control-sm"
-                    placeholder="Qty"
-                    @input="(e) => { newItemQty = (e.target as HTMLInputElement).value.replace(/[^0-9]/g, '') }"
-                    @focus="(e) => (e.target as HTMLInputElement).select()"
-                  />
-                </div>
-                <div class="col-3"><input v-model="newItemNote" type="text" class="form-control form-control-sm" placeholder="Note" /></div>
-              </div>
-              <button @click="addItem" class="btn btn-primary btn-sm"><i class="bi bi-plus me-1"></i>Add Custom Item</button>
-            </template>
-          </ShopOrderCatalogBrowser>
-
-        </div>
+        <ShopOrderEditorSection
+          :selected="selected"
+          :sending-email="sendingEmail"
+          :format-date="fmtDate"
+          :catalog="catalog"
+          :categories="shopCategories"
+          :catalog-item-qtys="catalogItemQtys"
+          :selected-item-quantities="selectedCatalogItemQuantities"
+          v-model:new-item-description="newItemDescription"
+          v-model:new-item-qty="newItemQty"
+          v-model:new-item-note="newItemNote"
+          @update-items="handleSelectedItemsUpdate"
+          @delete-item="handleDeleteSelectedItem"
+          @send-email="sendOrderEmail"
+          @submit="submitOrder"
+          @place-order="placeOrder"
+          @receive="receiveOrder"
+          @update:catalog-item-qty="updateCatalogItemQty"
+          @select-for-order="selectCatalogItem"
+          @add-item="addItem"
+        />
       </div>
 
       <!-- Orders List -->
@@ -185,7 +139,4 @@ const canReceive = (o: ShopOrder) => o.status === 'order'
 
 </template>
 
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-</style>
 

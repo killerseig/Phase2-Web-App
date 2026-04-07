@@ -1,5 +1,6 @@
 import { useAppStore } from '@/stores/app'
 import { useConfirmStore } from '@/stores/confirm'
+import { useEmployeesStore } from '@/stores/employees'
 import { useJobRosterStore } from '@/stores/jobRoster'
 import { useJobsStore } from '@/stores/jobs'
 import { useShopCatalogStore } from '@/stores/shopCatalog'
@@ -14,6 +15,7 @@ export function resetNonAuthStores(): void {
   useToast().clear()
   useAppStore().$reset()
   useConfirmStore().$reset()
+  useEmployeesStore().$reset()
   useUsersStore().$reset()
   useJobsStore().$reset()
   useJobRosterStore().$reset()

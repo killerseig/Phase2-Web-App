@@ -157,8 +157,7 @@ export async function addRosterEmployee(
       throw new Error(`Employee number ${employee.employeeNumber} already exists in this job`)
     }
     
-    // Create the document
-    const ref = await addDoc(collection(db, `jobs/${jobId}/roster`), {
+    const payload: Record<string, unknown> = {
       jobId,
       
       // Identity
@@ -168,7 +167,6 @@ export async function addRosterEmployee(
       
       // Job info
       occupation: employee.occupation.trim(),
-      contractor: employee.contractor,
       
       // Compensation
       wageRate: employee.wageRate ?? null,
@@ -181,7 +179,14 @@ export async function addRosterEmployee(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       addedByUid: u.uid,
-    })
+    }
+
+    if (employee.contractor) {
+      payload.contractor = employee.contractor
+    }
+
+    // Create the document
+    const ref = await addDoc(collection(db, `jobs/${jobId}/roster`), payload)
     
     return ref.id
   } catch (err) {
@@ -220,7 +225,7 @@ export async function updateRosterEmployee(
     if ('firstName' in updates) payload.firstName = updates.firstName?.trim()
     if ('lastName' in updates) payload.lastName = updates.lastName?.trim()
     if ('occupation' in updates) payload.occupation = updates.occupation?.trim()
-    if ('contractor' in updates) payload.contractor = updates.contractor
+    if ('contractor' in updates) payload.contractor = updates.contractor ?? null
     if ('wageRate' in updates) payload.wageRate = updates.wageRate ?? null
     if ('unitCost' in updates) payload.unitCost = updates.unitCost ?? null
     if ('active' in updates) payload.active = updates.active

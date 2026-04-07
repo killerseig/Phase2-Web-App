@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
-import { useAdminCatalogMutations } from '@/views/admin/useAdminCatalogMutations'
+import { useAdminCatalogMutations } from '@/composables/adminCatalog/useAdminCatalogMutations'
 import type { ShopCatalogItem } from '@/services'
 import type { ShopCategory } from '@/stores/shopCategories'
 

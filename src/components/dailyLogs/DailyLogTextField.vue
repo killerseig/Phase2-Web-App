@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BaseTextareaField from '@/components/common/BaseTextareaField.vue'
+
 defineProps<{
   label: string
   modelValue: string
@@ -12,23 +14,19 @@ const emit = defineEmits<{
   (e: 'input'): void
 }>()
 
-const handleInput = (event: Event) => {
-  const value = (event.target as HTMLTextAreaElement).value
-  emit('update:modelValue', value)
+const handleInput = () => {
   emit('input')
 }
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-1">
-    <label class="form-label">{{ label }}</label>
-    <textarea
-      class="form-control"
-      :rows="rows || 3"
-      :value="modelValue"
-      :placeholder="placeholder"
-      :disabled="disabled"
-      @input="handleInput"
-    />
-  </div>
+  <BaseTextareaField
+    :label="label"
+    :model-value="modelValue"
+    :rows="rows || 3"
+    :placeholder="placeholder"
+    :disabled="disabled"
+    @update:model-value="(value) => emit('update:modelValue', value)"
+    @input="handleInput"
+  />
 </template>

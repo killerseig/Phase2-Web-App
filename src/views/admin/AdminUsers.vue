@@ -2,14 +2,9 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import AppAlert from '@/components/common/AppAlert.vue'
-import AdminAccordionFormCard from '@/components/admin/AdminAccordionFormCard.vue'
-import ActionToggleGroup from '@/components/common/ActionToggleGroup.vue'
+import AdminUsersCreateCard from '@/components/admin/AdminUsersCreateCard.vue'
+import AdminUsersTableCard from '@/components/admin/AdminUsersTableCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
-import InlineField from '@/components/common/InlineField.vue'
-import RoleBadge from '@/components/common/RoleBadge.vue'
-import StatusBadge from '@/components/common/StatusBadge.vue'
-import BaseTable from '@/components/common/BaseTable.vue'
 import { useUsersStore } from '@/stores/users'
 import { type UserProfile } from '@/services'
 import { ROLES, type Role } from '@/constants/app'
@@ -17,9 +12,6 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
 import { normalizeError } from '@/services/serviceUtils'
 import { getFirstValidationMessage, validateCreateUserForm } from '@/utils/validation'
-
-type Align = 'start' | 'center' | 'end'
-type Column = { key: string; label: string; sortable?: boolean; width?: string; align?: Align; slot?: string }
 
 type SortDir = 'asc' | 'desc'
 type UserSortKey = 'email' | 'firstName' | 'lastName' | 'role'
@@ -53,15 +45,6 @@ const savingUserEdit = ref(false)
 const activeUserActionsId = ref('')
 
 const err = computed(() => usersError.value || '')
-
-const userColumns: Column[] = [
-  { key: 'email', label: 'Email', sortable: true },
-  { key: 'firstName', label: 'First Name', sortable: true, width: '16%' },
-  { key: 'lastName', label: 'Last Name', sortable: true, width: '16%' },
-  { key: 'role', label: 'Role', sortable: true, width: '12%', slot: 'role' },
-  { key: 'status', label: 'Status', width: '12%', slot: 'status' },
-  { key: 'actions', label: 'Actions', width: '18%', align: 'end', slot: 'actions' },
-]
 
 const userSortKey = ref<UserSortKey>('email')
 const userSortDir = ref<SortDir>('asc')
@@ -260,141 +243,33 @@ onUnmounted(() => {
       Setting a user to <strong>None</strong> role or <strong>Inactive</strong> automatically removes their email from all recipient lists.
     </AppAlert>
 
-    <AdminAccordionFormCard
+    <AdminUsersCreateCard
       v-model:open="showUserForm"
-      title="Create User"
-      subtitle="Add a new user account and set their role"
+      :form="userForm"
       :loading="creatingUser"
-      submit-label="Create User"
+      :role-options="userRoleOptions"
+      @update:form="userForm = $event"
       @submit="submitUserForm"
       @cancel="cancelUserForm"
-    >
-        <div class="col-md-4">
-          <label class="form-label small">Email</label>
-          <input
-            v-model="userForm.email"
-            type="email"
-            class="form-control"
-            placeholder="user@example.com"
-            required
-          />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label small">First Name</label>
-          <input
-            v-model="userForm.firstName"
-            type="text"
-            class="form-control"
-            placeholder="John"
-            required
-          />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label small">Last Name</label>
-          <input
-            v-model="userForm.lastName"
-            type="text"
-            class="form-control"
-            placeholder="Doe"
-            required
-          />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label small">Role</label>
-          <select v-model="userForm.role" class="form-select" required>
-            <option v-for="option in userRoleOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </div>
-    </AdminAccordionFormCard>
+    />
 
-    <AdminCardWrapper
-      title="User Profiles"
-      icon="person-circle"
+    <AdminUsersTableCard
+      :users="sortedUsers"
       :loading="loadingUsers"
       :error="err"
-    >
-      <AppAlert v-if="users.length === 0" variant="info" class="text-center mb-0" message="No users yet. Create your first user above." />
-
-      <div v-else>
-        <BaseTable
-          :rows="sortedUsers"
-          :columns="userColumns"
-          row-key="id"
-          :sort-key="userSortKey"
-          :sort-dir="userSortDir"
-          @sort-change="handleUserSort"
-        >
-          <template #cell-email="{ row }">
-            <InlineField
-              :editing="editingUserId === row.id"
-              v-model="editUserForm.email"
-              type="email"
-              :disabled="true"
-            >
-              <span class="small">{{ row.email }}</span>
-            </InlineField>
-          </template>
-
-          <template #cell-firstName="{ row }">
-            <InlineField
-              :editing="editingUserId === row.id"
-              v-model="editUserForm.firstName"
-              placeholder="First name"
-              @enter="saveUserEdit(row, true)"
-              @escape="cancelUserEdit"
-            >
-              <span>{{ row.firstName }}</span>
-            </InlineField>
-          </template>
-
-          <template #cell-lastName="{ row }">
-            <InlineField
-              :editing="editingUserId === row.id"
-              v-model="editUserForm.lastName"
-              placeholder="Last name"
-              @enter="saveUserEdit(row, true)"
-              @escape="cancelUserEdit"
-            >
-              <span>{{ row.lastName }}</span>
-            </InlineField>
-          </template>
-
-          <template #role="{ row }">
-            <InlineField
-              :editing="editingUserId === row.id"
-              v-model="editUserForm.role"
-              type="select"
-              :options="userRoleOptions"
-              @enter="saveUserEdit(row, true)"
-              @escape="cancelUserEdit"
-            >
-              <RoleBadge :role="row.role" />
-            </InlineField>
-          </template>
-
-          <template #status="{ row }">
-            <StatusBadge :status="row.active ? 'active' : 'inactive'" />
-          </template>
-
-          <template #actions="{ row }">
-            <ActionToggleGroup
-              :open="activeUserActionsId === row.id"
-              :toggle-disabled="savingUserEdit && editingUserId === row.id"
-              @toggle="toggleUserActions(row)"
-            >
-                <button
-                  @click.stop="handleDeleteUser(row)"
-                  class="btn btn-outline-danger"
-                  title="Delete user"
-                >
-                  <i class="bi bi-trash text-danger"></i>
-                </button>
-            </ActionToggleGroup>
-          </template>
-        </BaseTable>
-      </div>
-    </AdminCardWrapper>
+      :editing-user-id="editingUserId"
+      :edit-form="editUserForm"
+      :saving-user-edit="savingUserEdit"
+      :active-user-actions-id="activeUserActionsId"
+      :role-options="userRoleOptions"
+      :sort-key="userSortKey"
+      :sort-dir="userSortDir"
+      @update:edit-form="editUserForm = $event"
+      @sort-change="handleUserSort"
+      @save-edit="saveUserEdit($event, true)"
+      @cancel-edit="cancelUserEdit"
+      @toggle-actions="toggleUserActions"
+      @delete-user="handleDeleteUser"
+    />
   </div>
 </template>

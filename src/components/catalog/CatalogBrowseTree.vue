@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ShopCatalogTreeNode from '@/components/catalog/ShopCatalogTreeNode.vue'
-import type { ShopCatalogTreeNodeProps } from '@/components/catalog/useShopCatalogTreeNode'
+import type { ShopCatalogTreeNodeProps } from '@/composables/useShopCatalogTreeNode'
 
 type TreeNodeListener = (...args: never[]) => unknown
 

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
-import TimecardDetailPanel from '@/components/timecards/TimecardDetailPanel.vue'
 import TimecardEditorHeader from '@/components/timecards/TimecardEditorHeader.vue'
-import TimecardJobTable from '@/components/timecards/TimecardJobTable.vue'
-import type { DiffField } from '@/components/timecards/timecardEditorTypes'
-import { getTimecardDisplayName, type TimecardEmployeeEditorForm, type TimecardModel } from '@/views/timecards/timecardUtils'
+import TimecardSelectedMetaCard from '@/components/timecards/TimecardSelectedMetaCard.vue'
+import TimecardWorkspaceCard from '@/components/timecards/TimecardWorkspaceCard.vue'
+import type { DiffField, WorkbookFooterField, WorkbookOffField } from '@/types/timecards'
+import { getTimecardDisplayName, type TimecardEmployeeEditorForm, type TimecardModel } from '@/utils/timecardUtils'
 
 defineProps<{
   itemKey: string
   timecard: TimecardModel
   open: boolean
+  compactWhenClosed?: boolean
   isEditing: boolean
   editForm: TimecardEmployeeEditorForm
   isAdmin: boolean
@@ -31,8 +32,11 @@ const emit = defineEmits<{
   (e: 'update-subsection-area', payload: { jobIndex: number; value: string }): void
   (e: 'update-account', payload: { jobIndex: number; value: string }): void
   (e: 'update-diff-value', payload: { jobIndex: number; field: DiffField; value: string }): void
+  (e: 'update-off-value', payload: { jobIndex: number; field: WorkbookOffField; value: number }): void
   (e: 'update-hours', payload: { jobIndex: number; dayIndex: number; value: number }): void
   (e: 'update-production', payload: { jobIndex: number; dayIndex: number; value: number }): void
+  (e: 'update-unit-cost', payload: { jobIndex: number; dayIndex: number; value: number | null }): void
+  (e: 'update-footer-field', payload: { field: WorkbookFooterField; value: string }): void
   (e: 'update-mileage', value: string): void
   (e: 'update-notes', value: string): void
 }>()
@@ -50,6 +54,8 @@ const emit = defineEmits<{
       <TimecardEditorHeader
         :item-key="itemKey"
         :timecard="timecard"
+        :open="open"
+        :compact-when-closed="compactWhenClosed"
         :is-editing="isEditing"
         :edit-form="editForm"
         :edit-disabled="editDisabled"
@@ -63,28 +69,30 @@ const emit = defineEmits<{
         </template>
       </TimecardEditorHeader>
     </template>
+    <div class="timecard-editor-card__workspace">
+      <div class="timecard-editor-card__workspace-main">
+        <TimecardWorkspaceCard
+          :item-key="itemKey"
+          :timecard="timecard"
+          :job-fields-locked="jobFieldsLocked"
+          :notes-locked="notesLocked"
+          @update-job-number="emit('update-job-number', $event)"
+          @update-subsection-area="emit('update-subsection-area', $event)"
+          @update-account="emit('update-account', $event)"
+          @update-diff-value="emit('update-diff-value', $event)"
+          @update-off-value="emit('update-off-value', $event)"
+          @update-hours="emit('update-hours', $event)"
+          @update-production="emit('update-production', $event)"
+          @update-unit-cost="emit('update-unit-cost', $event)"
+          @update-footer-field="emit('update-footer-field', $event)"
+          @update-notes="emit('update-notes', $event)"
+        />
+      </div>
 
-    <TimecardJobTable
-      :item-key="itemKey"
-      :timecard="timecard"
-      :job-fields-locked="jobFieldsLocked"
-      @add-job-row="emit('add-job-row')"
-      @remove-job-row="emit('remove-job-row', $event)"
-      @update-job-number="emit('update-job-number', $event)"
-      @update-subsection-area="emit('update-subsection-area', $event)"
-      @update-account="emit('update-account', $event)"
-      @update-diff-value="emit('update-diff-value', $event)"
-      @update-hours="emit('update-hours', $event)"
-      @update-production="emit('update-production', $event)"
-    />
-
-    <TimecardDetailPanel
-      :timecard="timecard"
-      :notes-locked="notesLocked"
-      :mileage-disabled="mileageDisabled"
-      @update-mileage="emit('update-mileage', $event)"
-      @update-notes="emit('update-notes', $event)"
-    />
+      <div class="timecard-editor-card__workspace-side">
+        <TimecardSelectedMetaCard :timecard="timecard" />
+      </div>
+    </div>
   </BaseAccordionCard>
 </template>
 
@@ -105,7 +113,7 @@ $timecard-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
   background: $surface-2;
   color: $body-color;
   border-bottom: 1px solid transparent;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.8rem;
   transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -125,9 +133,37 @@ $timecard-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
   padding: 0;
 }
 
+.timecard-editor-card__workspace {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  padding: 0.8rem;
+}
+
+.timecard-editor-card :deep(.accordion-card:not(.accordion-card--open) .accordion-card__header) {
+  padding-bottom: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.timecard-editor-card__workspace-main,
+.timecard-editor-card__workspace-side {
+  min-width: 0;
+}
+
 @media (max-width: 768px) {
   .timecard-editor-card :deep(.accordion-card__header) {
-    padding: 0.65rem 0.95rem;
+    padding: 0.55rem 0.75rem;
+  }
+
+  .timecard-editor-card__workspace {
+    grid-template-columns: 1fr;
+    padding: 0.7rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .timecard-editor-card__workspace {
+    grid-template-columns: 1fr;
   }
 }
 </style>

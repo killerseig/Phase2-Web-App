@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
-import AppAlert from '@/components/common/AppAlert.vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import AppMasterDetailWorkspace from '@/components/common/AppMasterDetailWorkspace.vue'
 import ControllerFilterCard from '@/components/controller/ControllerFilterCard.vue'
-import ControllerGroupedResults from '@/components/controller/ControllerGroupedResults.vue'
-import ControllerResultsToolbar from '@/components/controller/ControllerResultsToolbar.vue'
-import ControllerStatCard from '@/components/controller/ControllerStatCard.vue'
-import AppLoadingState from '@/components/common/AppLoadingState.vue'
+import ControllerTimecardBrowser from '@/components/controller/ControllerTimecardBrowser.vue'
+import ControllerTimecardDetailPane from '@/components/controller/ControllerTimecardDetailPane.vue'
+import ControllerSummaryStats from '@/components/controller/ControllerSummaryStats.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
+import TimecardSelectedMetaCard from '@/components/timecards/TimecardSelectedMetaCard.vue'
 import { ROLES } from '@/constants/app'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useControllerFilters } from '@/composables/useControllerFilters'
@@ -105,22 +105,22 @@ function resetFilters() {
   resetSort()
 }
 
+const selectedTimecardKey = ref<string | null>(null)
+
 const {
-  addJobRow,
   cleanupAutoSaveTimers,
   editForm,
   editingTimecardId,
-  expandedId,
   handleDeleteTimecard,
-  handleGroupedResultsOpen,
-  handleGroupedResultsRemoveJobRow,
   handleGroupedResultsUpdateAccount,
   handleGroupedResultsUpdateDiffValue,
+  handleGroupedResultsUpdateFooterField,
   handleGroupedResultsUpdateHours,
   handleGroupedResultsUpdateJobNumber,
-  handleGroupedResultsUpdateMileage,
   handleGroupedResultsUpdateNotes,
+  handleGroupedResultsUpdateOffValue,
   handleGroupedResultsUpdateProduction,
+  handleGroupedResultsUpdateUnitCost,
   handleGroupedResultsUpdateSubsectionArea,
   isTimecardDeleteDisabled,
   isTimecardLocked,
@@ -137,6 +137,95 @@ const {
   toast,
 })
 
+const flattenedEntries = computed(() => (
+  groupedTimecards.value.flatMap((group) => (
+    group.creatorGroups.flatMap((creatorGroup) => creatorGroup.timecards)
+  ))
+))
+
+const selectedEntry = computed(() => {
+  if (!selectedTimecardKey.value) return flattenedEntries.value[0] ?? null
+  return flattenedEntries.value.find((entry) => entry.key === selectedTimecardKey.value) ?? flattenedEntries.value[0] ?? null
+})
+
+const selectedTimecard = computed(() => selectedEntry.value?.timecard ?? null)
+const selectedCardLocked = computed(() => (
+  selectedTimecard.value ? isTimecardLocked(selectedTimecard.value) : true
+))
+const selectedDeleteDisabled = computed(() => (
+  selectedTimecard.value ? isTimecardDeleteDisabled(selectedTimecard.value) : true
+))
+const selectedIsEditing = computed(() => (
+  Boolean(selectedEntry.value && editingTimecardId.value === selectedEntry.value.key)
+))
+
+function selectTimecard(key: string) {
+  selectedTimecardKey.value = key
+}
+
+function withSelectedEntry(run: (entry: NonNullable<typeof selectedEntry.value>) => void) {
+  const entry = selectedEntry.value
+  if (!entry) return
+  run(entry)
+}
+
+function handleSelectedToggleEdit() {
+  withSelectedEntry((entry) => {
+    selectTimecard(entry.key)
+    toggleEditingEmployee(entry)
+  })
+}
+
+function handleSelectedDelete() {
+  withSelectedEntry((entry) => {
+    void handleDeleteTimecard(entry)
+  })
+}
+
+function handleSelectedUpdateJobNumber(payload: { jobIndex: number; value: string }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateJobNumber({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateSubsectionArea(payload: { jobIndex: number; value: string }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateSubsectionArea({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateAccount(payload: { jobIndex: number; value: string }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateAccount({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateDiffValue(payload: { jobIndex: number; field: 'difH' | 'difP' | 'difC'; value: string }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateDiffValue({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateOffValue(payload: { jobIndex: number; field: 'offHours' | 'offProduction' | 'offCost'; value: number }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateOffValue({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateHours(payload: { jobIndex: number; dayIndex: number; value: number }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateHours({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateProduction(payload: { jobIndex: number; dayIndex: number; value: number }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateProduction({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateUnitCost(payload: { jobIndex: number; dayIndex: number; value: number | null }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateUnitCost({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateFooterField(payload: { field: 'footerJobOrGl' | 'footerAccount' | 'footerOffice' | 'footerAmount'; value: string }) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateFooterField({ timecard: entry.timecard, ...payload }))
+}
+
+function handleSelectedUpdateNotes(value: string) {
+  withSelectedEntry((entry) => handleGroupedResultsUpdateNotes({ timecard: entry.timecard, value }))
+}
+
+function handleEditFormUpdate(value: typeof editForm.value) {
+  editForm.value = value
+}
+
 onMounted(async () => {
   await Promise.all([
     jobsStore.fetchAllJobs(true),
@@ -148,6 +237,17 @@ watch(autoFilterSignature, () => {
   queueAutoReload()
 })
 
+watch(flattenedEntries, (entries) => {
+  if (!entries.length) {
+    selectedTimecardKey.value = null
+    return
+  }
+
+  if (!selectedTimecardKey.value || !entries.some((entry) => entry.key === selectedTimecardKey.value)) {
+    selectedTimecardKey.value = entries[0]?.key ?? null
+  }
+}, { immediate: true })
+
 onBeforeUnmount(() => {
   clearQueuedReload()
   cleanupAutoSaveTimers()
@@ -155,165 +255,162 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  
-
-  <div class="app-page app-page--wide">
+  <div class="app-page app-page--wide controller-page">
     <AppPageHeader eyebrow="Controller Workspace" title="Timecard Search, Review & Edits" :subtitle="`Signed in as ${displayName}`" />
 
-    <ControllerFilterCard
-      v-model:use-week-range="useWeekRange"
-      v-model:selected-single-date="selectedSingleDate"
-      v-model:selected-range-start-date="selectedRangeStartDate"
-      v-model:selected-range-end-date="selectedRangeEndDate"
-      v-model:selected-job-id="selectedJobId"
-      v-model:trade-filter="tradeFilter"
-      v-model:first-name-filter="firstNameFilter"
-      v-model:last-name-filter="lastNameFilter"
-      v-model:subcontracted-filter="subcontractedFilter"
-      v-model:status-filter="statusFilter"
-      :week-picker-config="weekPickerConfig"
-      :job-options="jobOptions"
-      :current-week-label="currentWeekLabel"
-      :current-filter-summary="currentFilterSummary"
-      :pending-filter-changes="pendingFilterChanges"
-      :refreshing-timecards="refreshingTimecards"
-      :downloading-pdf="downloadingPdf"
-      :downloading-csv="downloadingCsv"
-      :is-downloading="isDownloading"
-      :loading-timecards="loadingTimecards"
-      :filter-validation-error="filterValidationError"
-      @download="handleDownload"
-      @reset="resetFilters"
-    />
-
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-xl-3">
-        <ControllerStatCard label="Timecards" :value="reviewSummary.totalCount" :helper-text="loadedWeekLabel" />
-      </div>
-
-      <div class="col-6 col-xl-3">
-        <ControllerStatCard
-          label="Submitted"
-          :value="reviewSummary.submittedCount"
-          helper-text="Matching results"
-          value-class="text-success"
-        />
-      </div>
-
-      <div class="col-6 col-xl-3">
-        <ControllerStatCard
-          label="Drafts"
-          :value="reviewSummary.draftCount"
-          helper-text="Matching results"
-          value-class="text-warning"
-        />
-      </div>
-
-      <div class="col-6 col-xl-3">
-        <ControllerStatCard
-          label="Total Hours"
-          :value="Number(reviewSummary.totalHours ?? 0).toFixed(2).replace(/\\.00$/, '')"
-          helper-text="Across current search"
-        />
-      </div>
-    </div>
-
-    <div class="card controller-card app-section-card">
-      <div class="card-header panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-          <div class="text-muted small mb-1">Controller Review</div>
-          <h3 class="h5 mb-0">Grouped Timecards</h3>
-        </div>
-
-        <div class="text-end">
-          <div class="small text-muted">Loaded range</div>
-          <div class="fw-semibold">{{ loadedWeekLabel }}</div>
-        </div>
-      </div>
-
-      <div class="card-body">
-        <ControllerResultsToolbar
+    <AppMasterDetailWorkspace
+      browse-label="Timecards"
+      controls-label="Filters"
+      browser-title="Timecard Browser"
+      controls-title="Controller Controls"
+    >
+      <template #browser="{ closeDrawer, browserInDrawer }">
+        <ControllerTimecardBrowser
+          :grouped-timecards="groupedTimecards"
+          :selected-key="selectedTimecardKey"
           :active-filter-summary="activeFilterSummary"
           :current-sort-label="currentSortLabel"
           :refreshing="refreshingTimecards"
+          :loading="loadingTimecards"
+          :load-error="timecardsLoadError"
           :sort-options="sortOptions"
           :sort-key="timecardSortKey"
           :sort-dir="timecardSortDir"
+          :format-timecard-week="formatTimecardWeek"
+          :embedded="browserInDrawer"
+          @select="(key) => { selectTimecard(key); closeDrawer() }"
           @update:sort-key="handleSortKeyChange"
           @toggle-direction="toggleSortDirection"
         />
+      </template>
 
-        <AppLoadingState
-          v-if="loadingTimecards"
-          class="controller-loading-state"
-          sr-label="Loading timecards"
-          message="Loading timecards..."
-          spinner-class="mb-3"
-          aria-live="off"
+      <template #controls="{ controlsInDrawer }">
+        <div class="controller-page__rail">
+        <TimecardSelectedMetaCard
+          v-if="controlsInDrawer && selectedTimecard"
+          :timecard="selectedTimecard"
         />
 
-        <AppAlert
-          v-else-if="timecardsLoadError"
-          variant="danger"
-          title="Unable to load timecards."
-          :message="timecardsLoadError"
-          class="mb-0"
+        <ControllerFilterCard
+          v-model:use-week-range="useWeekRange"
+          v-model:selected-single-date="selectedSingleDate"
+          v-model:selected-range-start-date="selectedRangeStartDate"
+          v-model:selected-range-end-date="selectedRangeEndDate"
+          v-model:selected-job-id="selectedJobId"
+          v-model:trade-filter="tradeFilter"
+          v-model:first-name-filter="firstNameFilter"
+          v-model:last-name-filter="lastNameFilter"
+          v-model:subcontracted-filter="subcontractedFilter"
+          v-model:status-filter="statusFilter"
+          :week-picker-config="weekPickerConfig"
+          :job-options="jobOptions"
+          :current-week-label="currentWeekLabel"
+          :current-filter-summary="currentFilterSummary"
+          :pending-filter-changes="pendingFilterChanges"
+          :refreshing-timecards="refreshingTimecards"
+          :downloading-pdf="downloadingPdf"
+          :downloading-csv="downloadingCsv"
+          :is-downloading="isDownloading"
+          :loading-timecards="loadingTimecards"
+          :filter-validation-error="filterValidationError"
+          :embedded="controlsInDrawer"
+          @download="handleDownload"
+          @reset="resetFilters"
         />
 
-        <AppAlert v-else-if="!groupedTimecards.length" variant="info" class="mb-0" message="No timecards found for the current search." />
+        <ControllerSummaryStats
+          v-if="!controlsInDrawer"
+          :loaded-week-label="loadedWeekLabel"
+          :summary="reviewSummary"
+        />
+        </div>
+      </template>
 
-        <ControllerGroupedResults
-          v-else
-          v-model:edit-form="editForm"
-          :grouped-timecards="groupedTimecards"
-          :expanded-id="expandedId"
-          :editing-timecard-id="editingTimecardId"
-          :is-admin="isAdmin"
+      <template #default="{ controlsInDrawer }">
+        <ControllerTimecardDetailPane
+          :selected-entry="selectedEntry"
+          :edit-form="editForm"
+          :is-editing="selectedIsEditing"
+          :job-fields-locked="selectedCardLocked"
+          :notes-locked="selectedCardLocked"
+          :edit-disabled="selectedCardLocked"
+          :delete-disabled="selectedDeleteDisabled"
+          :show-meta-card="!controlsInDrawer"
           :format-timecard-week="formatTimecardWeek"
-          :is-timecard-locked="isTimecardLocked"
-          :is-timecard-delete-disabled="isTimecardDeleteDisabled"
-          @toggle-open="handleGroupedResultsOpen"
-          @toggle-edit="toggleEditingEmployee"
-          @delete="handleDeleteTimecard"
-          @add-job-row="addJobRow"
-          @remove-job-row="handleGroupedResultsRemoveJobRow"
-          @update-job-number="handleGroupedResultsUpdateJobNumber"
-          @update-subsection-area="handleGroupedResultsUpdateSubsectionArea"
-          @update-account="handleGroupedResultsUpdateAccount"
-          @update-diff-value="handleGroupedResultsUpdateDiffValue"
-          @update-hours="handleGroupedResultsUpdateHours"
-          @update-production="handleGroupedResultsUpdateProduction"
-          @update-mileage="handleGroupedResultsUpdateMileage"
-          @update-notes="handleGroupedResultsUpdateNotes"
+          @update:edit-form="handleEditFormUpdate"
+          @toggle-edit="handleSelectedToggleEdit"
+          @delete="handleSelectedDelete"
+          @update-job-number="handleSelectedUpdateJobNumber"
+          @update-subsection-area="handleSelectedUpdateSubsectionArea"
+          @update-account="handleSelectedUpdateAccount"
+          @update-diff-value="handleSelectedUpdateDiffValue"
+          @update-off-value="handleSelectedUpdateOffValue"
+          @update-hours="handleSelectedUpdateHours"
+          @update-production="handleSelectedUpdateProduction"
+          @update-unit-cost="handleSelectedUpdateUnitCost"
+          @update-footer-field="handleSelectedUpdateFooterField"
+          @update-notes="handleSelectedUpdateNotes"
         />
-      </div>
-    </div>
+      </template>
+    </AppMasterDetailWorkspace>
   </div>
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-$controller-group-border: mix($surface-3, $primary, 82%);
-$controller-divider: rgba($primary, 0.18);
-
-.controller-card {
-  background: $surface-2;
-  border: 1px solid $border-color;
-  color: $body-color;
+.controller-page :deep(.app-page__header) {
+  margin-bottom: 1rem;
+  min-height: 0;
+  padding: 0.9rem 1.1rem;
 }
 
-.controller-loading-state {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 220px;
+.controller-page :deep(.app-page__eyebrow) {
+  margin-bottom: 0.25rem;
+}
+
+.controller-page :deep(.app-page__title) {
+  font-size: clamp(1.35rem, 1.8vw, 1.7rem);
+}
+
+.controller-page :deep(.app-page__subtitle) {
+  font-size: 0.88rem;
+  margin-top: 0.3rem;
+}
+
+.controller-page__rail {
+  align-content: start;
+  display: grid;
+  gap: 0.75rem;
+  max-height: calc(100vh - 7.5rem);
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.controller-page__rail::-webkit-scrollbar {
+  width: 0.45rem;
+}
+
+.controller-page__rail::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+
+.controller-page :deep(.app-master-detail-workspace__controls) {
+  max-height: calc(100vh - 7.5rem);
+  overflow: hidden;
 }
 
 @media (max-width: 991px) {
+  .controller-page__rail,
+  .controller-page :deep(.app-master-detail-workspace__controls) {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
 }
 
-@media (max-width: 575px) {
+@media (max-width: 767px) {
+  .controller-page :deep(.app-page__header) {
+    display: none;
+  }
 }
 </style>

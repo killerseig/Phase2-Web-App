@@ -19,16 +19,30 @@
 }
 
 .form-control:disabled,
-.form-select:disabled {
+.form-control[readonly],
+.form-select:disabled,
+.form-select[readonly] {
   background: var(--surface-3, vars.$surface-3);
   color: var(--text-muted, vars.$text-muted);
   border-color: var(--border, vars.$border-color);
+}
+
+.form-check-input:disabled {
+  opacity: 0.5;
 }
 
 .input-group-text {
   background: var(--surface-3, vars.$surface-3);
   color: var(--text-body, vars.$body-color);
   border: 1px solid var(--border, vars.$border-color);
+}
+
+.app-password-field__toggle {
+  border: 1px solid var(--border, vars.$border-color);
+}
+
+.app-password-field__toggle:hover:not(:disabled) {
+  background-color: var(--surface-2, vars.$surface-2);
 }
 
 // Native pickers inherit dark theme where supported

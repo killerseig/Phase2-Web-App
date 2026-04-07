@@ -1,0 +1,16 @@
+@use '@/styles/_variables.scss' as *;
+
+.form-control,
+.form-select {
+  background-color: $surface-3;
+  color: $body-color;
+  border-color: $border-color;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: $surface-3;
+  color: $body-color;
+  border-color: $primary;
+  box-shadow: 0 0 0 0.15rem rgba($primary, 0.25);
+}

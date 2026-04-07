@@ -214,6 +214,11 @@ service cloud.firestore {
       }
     }
 
+    /* ---------------- employees (master directory) ---------------- */
+    match /employees/{employeeId} {
+      allow read, write: if isAdmin();
+    }
+
     /* ---------------- jobs ---------------- */
     match /jobs/{jobId} {
       allow read: if hasJobReadAccess(jobId) || isController();

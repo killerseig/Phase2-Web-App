@@ -51,14 +51,43 @@ const countText = computed(() => {
 
 <template>
   <div class="controller-timecard-summary small text-muted" :class="align === 'end' ? 'text-end' : 'text-start'">
-    <div>
-      <SubmissionCountBadges :draft-count="draftCount" :submitted-count="submittedCount" />
+    <div class="controller-timecard-summary__badges">
+      <SubmissionCountBadges
+        :draft-count="draftCount"
+        :submitted-count="submittedCount"
+        wrapper-class="controller-timecard-summary__badge-wrap"
+      />
     </div>
-    <div v-if="hasMetrics" class="mt-2">
+    <div v-if="hasMetrics" class="controller-timecard-summary__metrics">
       {{ formatMetric(totalHours) }} hrs | {{ formatMetric(totalProduction) }} prod | {{ formatCurrency(totalLine) }}
     </div>
-    <div v-if="hasCount" class="mt-1">
+    <div v-if="hasCount" class="controller-timecard-summary__count">
       {{ countText }}
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.controller-timecard-summary {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.controller-timecard-summary__metrics,
+.controller-timecard-summary__count {
+  line-height: 1.2;
+}
+
+.controller-timecard-summary__metrics {
+  font-size: 0.92em;
+}
+
+.controller-timecard-summary__count {
+  font-size: 0.95em;
+}
+
+.controller-timecard-summary :deep(.app-badge-pill) {
+  font-size: 0.82rem;
+  padding: 0.38rem 0.75rem;
+}
+</style>

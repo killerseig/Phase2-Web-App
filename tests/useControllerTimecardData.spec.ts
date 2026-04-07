@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
 import { useControllerTimecardData } from '@/composables/useControllerTimecardData'
 import type { ControllerTimecardFilters } from '@/services/Email'
-import type { TimecardModel } from '@/views/timecards/timecardUtils'
+import type { TimecardModel } from '@/utils/timecardUtils'
 
 const {
   downloadTimecardsForWeekMock,

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import CatalogTreeCategoryRow from '@/components/catalog/CatalogTreeCategoryRow.vue'
 import CatalogTreeChildrenPanel from '@/components/catalog/CatalogTreeChildrenPanel.vue'
 import CatalogTreeItemRow from '@/components/catalog/CatalogTreeItemRow.vue'
-import { useShopCatalogTreeNode, type ShopCatalogTreeNodeProps } from '@/components/catalog/useShopCatalogTreeNode'
+import { useShopCatalogTreeNode, type ShopCatalogTreeNodeProps } from '@/composables/useShopCatalogTreeNode'
 import type { ShopCatalogItem } from '@/services'
 import type { CatalogItemQuantityUpdate, CatalogOrderSelection } from '@/types/shopOrders'
 
@@ -173,34 +173,5 @@ function forwardToggle(id: string) {
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.tree-node {
-  background-color: transparent;
-  border-bottom: 1px solid $border-color;
-}
-
-.tree-node:last-child {
-  border-bottom: none;
-}
-
-.accordion-collapse {
-  padding-left: 1.5rem;
-  border-left: 1px solid $border-color;
-  overflow: hidden;
-}
-
-.accordion {
-  border: none;
-  --bs-accordion-bg: transparent;
-}
-
-.accordion-body {
-  padding: 0.25rem 0 0.5rem;
-  background-color: transparent;
-}
-
-.tree-node.accordion-item {
-  border-radius: 0;
-}
+@use '@/styles/_catalogTreeNode.scss';
 </style>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppSectionCard from '@/components/common/AppSectionCard.vue'
+import BaseInputField from '@/components/common/BaseInputField.vue'
 import type { IndoorClimateReading } from '@/types/documents'
 
 const props = defineProps<{
@@ -30,22 +32,19 @@ function indoorClimateKey(reading: unknown, idx: number): string {
   return generated
 }
 
-function updateField(
-  index: number,
-  field: 'area' | 'high' | 'low' | 'humidity',
-  event: Event
-) {
+function updateField(index: number, field: 'area' | 'high' | 'low' | 'humidity', value: string) {
   emit('update-field', {
     index,
     field,
-    value: (event.target as HTMLInputElement).value,
+    value,
   })
 }
 </script>
 
 <template>
-  <div class="card mb-4 app-section-card">
-    <div class="card-header panel-header d-flex justify-content-between align-items-center">
+  <AppSectionCard class="mb-4">
+    <template #header>
+      <div class="d-flex justify-content-between align-items-center">
       <h5 class="mb-0"><i class="bi bi-thermometer-half me-2"></i>Indoor Temperature Readings</h5>
       <button
         type="button"
@@ -55,55 +54,51 @@ function updateField(
       >
         <i class="bi bi-plus-lg me-1"></i>Add Floor / Area
       </button>
-    </div>
-    <div class="card-body">
+      </div>
+    </template>
       <div
         v-for="(reading, idx) in props.readings"
         :key="indoorClimateKey(reading, idx)"
         class="row g-2 align-items-end mb-2"
       >
         <div class="col-md-4">
-          <label class="form-label">Floor / Area</label>
-          <input
-            type="text"
-            class="form-control"
-            :value="reading.area"
+          <BaseInputField
+            :model-value="reading.area"
+            label="Floor / Area"
+            wrapper-class="mb-0"
             :disabled="!canEdit"
             placeholder="e.g., Level 2"
-            @input="updateField(idx, 'area', $event)"
+            @update:model-value="updateField(idx, 'area', $event)"
           />
         </div>
         <div class="col-md-2">
-          <label class="form-label">High (degF)</label>
-          <input
-            type="text"
-            class="form-control"
-            :value="reading.high"
+          <BaseInputField
+            :model-value="reading.high"
+            label="High (degF)"
+            wrapper-class="mb-0"
             :disabled="!canEdit"
             placeholder="High"
-            @input="updateField(idx, 'high', $event)"
+            @update:model-value="updateField(idx, 'high', $event)"
           />
         </div>
         <div class="col-md-2">
-          <label class="form-label">Low (degF)</label>
-          <input
-            type="text"
-            class="form-control"
-            :value="reading.low"
+          <BaseInputField
+            :model-value="reading.low"
+            label="Low (degF)"
+            wrapper-class="mb-0"
             :disabled="!canEdit"
             placeholder="Low"
-            @input="updateField(idx, 'low', $event)"
+            @update:model-value="updateField(idx, 'low', $event)"
           />
         </div>
         <div class="col-md-2">
-          <label class="form-label">Humidity (%)</label>
-          <input
-            type="text"
-            class="form-control"
-            :value="reading.humidity"
+          <BaseInputField
+            :model-value="reading.humidity"
+            label="Humidity (%)"
+            wrapper-class="mb-0"
             :disabled="!canEdit"
             placeholder="Humidity"
-            @input="updateField(idx, 'humidity', $event)"
+            @update:model-value="updateField(idx, 'humidity', $event)"
           />
         </div>
         <div class="col-md-2 d-grid">
@@ -117,6 +112,5 @@ function updateField(
           </button>
         </div>
       </div>
-    </div>
-  </div>
+  </AppSectionCard>
 </template>

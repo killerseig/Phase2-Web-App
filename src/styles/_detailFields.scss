@@ -1,0 +1,34 @@
+@use '@/styles/_variables.scss' as vars;
+
+.app-detail-field {
+  min-height: 2.25rem;
+  min-width: 0;
+}
+
+.app-detail-field__label {
+  color: rgba(vars.$body-color, 0.65);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  margin-bottom: 0.15rem;
+  text-transform: uppercase;
+}
+
+.app-detail-field__control,
+.app-detail-field__value {
+  min-width: 0;
+}
+
+.app-detail-field__control {
+  width: 100%;
+}
+
+.app-detail-field__control .app-field {
+  margin-bottom: 0;
+}
+
+.app-detail-field__value {
+  color: vars.$body-color;
+  font-weight: 600;
+  line-height: 1.1;
+}

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import AppBadge from '@/components/common/AppBadge.vue'
+import BaseInputField from '@/components/common/BaseInputField.vue'
 import { isValidEmail } from '@/utils/emailValidation'
 
 interface Props {
@@ -92,10 +93,11 @@ function removeEmail(email: string) {
     <!-- Add New Email -->
     <div class="row g-2">
       <div class="col">
-        <input
-          type="email"
-          class="form-control form-control-sm"
+        <BaseInputField
           v-model="newEmail"
+          type="email"
+          input-class="form-control form-control-sm"
+          wrapper-class="mb-0"
           :placeholder="placeholder"
           :name="inputName || undefined"
           :autocomplete="autocompleteSection ? `section-${autocompleteSection} email` : 'off'"

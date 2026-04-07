@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
-import AdminFormActions from '@/components/admin/AdminFormActions.vue'
+import BaseFormActions from '@/components/common/BaseFormActions.vue'
 
 withDefaults(defineProps<{
   open: boolean
@@ -43,7 +43,7 @@ const emit = defineEmits<{
   >
     <form :class="formClass" @submit.prevent="emit('submit')">
       <slot />
-      <AdminFormActions
+      <BaseFormActions
         :loading="loading"
         :submit-label="submitLabel"
         :cancel-label="cancelLabel"

@@ -7,7 +7,7 @@ import {
   type ControllerTimecardWeekItem,
 } from '@/services/Email'
 import { listTimecardsByJobAndWeek } from '@/services/Timecards'
-import { recalcTotalsForTimecard, type TimecardModel } from '@/views/timecards/timecardUtils'
+import { recalcTotalsForTimecard, type TimecardModel } from '@/utils/timecardUtils'
 
 type ReviewSummary = {
   totalCount: number

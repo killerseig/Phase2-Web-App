@@ -27,6 +27,12 @@ import { ROLES } from '@/constants/app'
 import { useAuthStore } from '@/stores/auth'
 import type { Timecard, TimecardInput, TimecardDay, TimecardTotals } from '@/types/models'
 import { calculateWeekStartDate } from '@/utils/modelValidation'
+import {
+  buildTimecardInputFromRosterEmployee,
+  matchesRosterEmployeeTimecard,
+} from '@/utils/timecardWorkbook'
+import { buildTimecardOfficeCsv } from '@/utils/timecardOfficeExport'
+import { listActiveRosterEmployees } from './JobRoster'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { jobCollectionPath, jobDocumentPath } from './servicePaths'
 import { normalizeError } from './serviceUtils'
@@ -60,6 +66,10 @@ function normalize(id: string, data: DocumentData): Timecard {
     regularHoursOverride: data.regularHoursOverride ?? null,
     overtimeHoursOverride: data.overtimeHoursOverride ?? null,
     mileage: data.mileage ?? null,
+    footerJobOrGl: data.footerJobOrGl ?? '',
+    footerAccount: data.footerAccount ?? '',
+    footerOffice: data.footerOffice ?? '',
+    footerAmount: data.footerAmount ?? '',
     
     // Job entries
     jobs: Array.isArray(data.jobs) ? data.jobs : [],
@@ -141,6 +151,31 @@ export async function listTimecardsByJobAndWeek(
     return visibleCreatorUid ? sortByEmployeeNumber(timecards) : timecards
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to load timecards for week'))
+  }
+}
+
+/**
+ * List all workspace timecards for a job/week without filtering by creator.
+ * This matches the upcoming workbook-style foreman experience where a job/week
+ * is shared across all active roster employees rather than scoped per creator.
+ */
+export async function listWorkspaceTimecardsByJobAndWeek(
+  jobId: string,
+  weekEndingDate: string,
+): Promise<Timecard[]> {
+  try {
+    assertJobAccess(jobId)
+    const q = query(
+      collection(db, ...jobCollectionPath(jobId, 'timecards')),
+      where('weekEndingDate', '==', weekEndingDate),
+      where('archived', '==', false),
+      orderBy('employeeNumber', 'asc'),
+    )
+
+    const snap = await getDocs(q)
+    return snap.docs.map((entry) => normalize(entry.id, entry.data()))
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to load workspace timecards for week'))
   }
 }
 
@@ -266,6 +301,37 @@ export function watchTimecardsByWeek(
   )
 }
 
+/**
+ * Real-time listener for the shared job/week workspace timecards without creator scoping.
+ * This supports the workbook-style weekly workspace where all active roster employees
+ * should appear for the selected job and week.
+ */
+export function watchWorkspaceTimecardsByWeek(
+  jobId: string,
+  weekEndingDate: string,
+  onUpdate: (timecards: Timecard[]) => void,
+  onError?: (error: unknown) => void,
+): Unsubscribe {
+  assertJobAccess(jobId)
+
+  const q = query(
+    collection(db, ...jobCollectionPath(jobId, 'timecards')),
+    where('weekEndingDate', '==', weekEndingDate),
+    where('archived', '==', false),
+    orderBy('employeeNumber', 'asc'),
+  )
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      onUpdate(snap.docs.map((entry) => normalize(entry.id, entry.data())))
+    },
+    (err) => {
+      onError?.(new Error(normalizeError(err, 'Failed to subscribe to workspace timecards')))
+    },
+  )
+}
+
 // ============================================================================
 // CREATE & UPDATE
 // ============================================================================
@@ -309,6 +375,10 @@ export async function createTimecard(jobId: string, input: TimecardInput): Promi
       regularHoursOverride: input.regularHoursOverride ?? null,
       overtimeHoursOverride: input.overtimeHoursOverride ?? null,
       mileage: input.mileage ?? null,
+      footerJobOrGl: input.footerJobOrGl ?? '',
+      footerAccount: input.footerAccount ?? '',
+      footerOffice: input.footerOffice ?? '',
+      footerAmount: input.footerAmount ?? '',
 
       // Job entries
       jobs: input.jobs ?? [],
@@ -332,6 +402,18 @@ export async function createTimecard(jobId: string, input: TimecardInput): Promi
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to create timecard'))
   }
+}
+
+/**
+ * Create a weekly timecard from an active roster employee using the fixed
+ * workbook-style line template.
+ */
+export async function createTimecardForRosterEmployee(
+  jobId: string,
+  employee: Awaited<ReturnType<typeof listActiveRosterEmployees>>[number],
+  weekEndingDate: string,
+): Promise<string> {
+  return createTimecard(jobId, buildTimecardInputFromRosterEmployee(employee, weekEndingDate))
 }
 
 /**
@@ -367,12 +449,56 @@ export async function updateTimecard(
     if ('regularHoursOverride' in updates) payload.regularHoursOverride = updates.regularHoursOverride ?? null
     if ('overtimeHoursOverride' in updates) payload.overtimeHoursOverride = updates.overtimeHoursOverride ?? null
     if ('mileage' in updates) payload.mileage = updates.mileage ?? null
+    if ('footerJobOrGl' in updates) payload.footerJobOrGl = updates.footerJobOrGl ?? ''
+    if ('footerAccount' in updates) payload.footerAccount = updates.footerAccount ?? ''
+    if ('footerOffice' in updates) payload.footerOffice = updates.footerOffice ?? ''
+    if ('footerAmount' in updates) payload.footerAmount = updates.footerAmount ?? ''
 
     payload.updatedAt = serverTimestamp()
 
     await updateDoc(ref, payload)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to update timecard'))
+  }
+}
+
+/**
+ * Ensure every active roster employee for the selected job has a weekly timecard.
+ * This is the data foundation for the workbook-style workspace where all active
+ * employees must be accounted for each week.
+ */
+export async function ensureWeekTimecardsForActiveRoster(
+  jobId: string,
+  weekEndingDate: string,
+): Promise<{
+  activeEmployeeCount: number
+  existingTimecardCount: number
+  createdIds: string[]
+}> {
+  try {
+    assertJobAccess(jobId)
+    const [activeEmployees, existingTimecards] = await Promise.all([
+      listActiveRosterEmployees(jobId),
+      listWorkspaceTimecardsByJobAndWeek(jobId, weekEndingDate),
+    ])
+
+    const createdIds: string[] = []
+
+    for (const employee of activeEmployees) {
+      const alreadyExists = existingTimecards.some((timecard) => matchesRosterEmployeeTimecard(employee, timecard))
+      if (alreadyExists) continue
+
+      const createdId = await createTimecardForRosterEmployee(jobId, employee, weekEndingDate)
+      createdIds.push(createdId)
+    }
+
+    return {
+      activeEmployeeCount: activeEmployees.length,
+      existingTimecardCount: existingTimecards.length,
+      createdIds,
+    }
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to ensure weekly timecards for active roster'))
   }
 }
 
@@ -508,6 +634,10 @@ export async function createTimecardFromCopy(
       regularHoursOverride: null,
       overtimeHoursOverride: null,
       mileage: null,
+      footerJobOrGl: '',
+      footerAccount: '',
+      footerOffice: '',
+      footerAmount: '',
       jobs: copiedJobs,
       days: newDays,
       notes: '', // Don't copy notes, start fresh
@@ -675,8 +805,7 @@ export async function deleteTimecard(jobId: string, timecardId: string): Promise
 // ============================================================================
 
 /**
- * Export timecards to CSV format for Plexis
- * Format: Employee#, Name, Occupation, Sun, Mon, Tue, Wed, Thu, Fri, Sat, Total Hours, Total Production
+ * Export weekly timecards to the office import CSV format.
  */
 export async function exportTimecardsToCsv(
   jobId: string,
@@ -685,53 +814,39 @@ export async function exportTimecardsToCsv(
   try {
     assertJobAccess(jobId)
     const timecards = await listTimecardsByJobAndWeek(jobId, weekEndingDate)
-
-    // CSV header
-    const headers = [
-      'Employee #',
-      'Name',
-      'Occupation',
-      'Sunday',
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Total Hours',
-      'Total Production',
-    ]
-
-    // CSV rows
-    const rows = timecards.map(tc => [
-      tc.employeeNumber,
-      tc.employeeName,
-      tc.occupation,
-      tc.days[0]?.hours ?? '',
-      tc.days[1]?.hours ?? '',
-      tc.days[2]?.hours ?? '',
-      tc.days[3]?.hours ?? '',
-      tc.days[4]?.hours ?? '',
-      tc.days[5]?.hours ?? '',
-      tc.days[6]?.hours ?? '',
-      tc.totals.hoursTotal.toString(),
-      tc.totals.productionTotal.toString(),
-    ])
-
-    // Combine with proper CSV escaping
-    const csv = [
-      headers.map(h => `"${h}"`).join(','),
-      ...rows.map(r => r.map(v => `"${v}"`).join(',')),
-    ].join('\n')
-
-    return csv
+    return buildTimecardOfficeCsv(timecards)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to export timecards'))
   }
 }
 
 /**
- * Export all submitted timecards for a job to CSV
+ * Submit all draft workspace timecards for a shared job/week without creator scoping.
+ * This supports the workbook-style weekly workspace used by foremen.
+ */
+export async function submitWorkspaceWeekTimecards(
+  jobId: string,
+  weekEndingDate: string,
+): Promise<number> {
+  try {
+    assertJobAccess(jobId)
+    const timecards = await listWorkspaceTimecardsByJobAndWeek(jobId, weekEndingDate)
+    const draftTimecards = timecards.filter((timecard) => timecard.status === 'draft')
+
+    let submitCount = 0
+    for (const timecard of draftTimecards) {
+      await submitTimecard(jobId, timecard.id)
+      submitCount++
+    }
+
+    return submitCount
+  } catch (err) {
+    throw new Error(normalizeError(err, 'Failed to submit workspace timecards'))
+  }
+}
+
+/**
+ * Export all submitted timecards for a job using the office import CSV format.
  */
 export async function exportAllSubmittedTimecardsToCsv(jobId: string): Promise<string> {
   try {
@@ -739,48 +854,7 @@ export async function exportAllSubmittedTimecardsToCsv(jobId: string): Promise<s
     const timecards = await listSubmittedTimecards(jobId)
 
     if (timecards.length === 0) return ''
-
-    // CSV header
-    const headers = [
-      'Week Ending',
-      'Employee #',
-      'Name',
-      'Occupation',
-      'Sunday',
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Total Hours',
-      'Total Production',
-    ]
-
-    // CSV rows (grouped by week for clarity)
-    const rows = timecards.map(tc => [
-      tc.weekEndingDate,
-      tc.employeeNumber,
-      tc.employeeName,
-      tc.occupation,
-      tc.days[0]?.hours ?? '',
-      tc.days[1]?.hours ?? '',
-      tc.days[2]?.hours ?? '',
-      tc.days[3]?.hours ?? '',
-      tc.days[4]?.hours ?? '',
-      tc.days[5]?.hours ?? '',
-      tc.days[6]?.hours ?? '',
-      tc.totals.hoursTotal.toString(),
-      tc.totals.productionTotal.toString(),
-    ])
-
-    // Combine with proper CSV escaping
-    const csv = [
-      headers.map(h => `"${h}"`).join(','),
-      ...rows.map(r => r.map(v => `"${v}"`).join(',')),
-    ].join('\n')
-
-    return csv
+    return buildTimecardOfficeCsv(timecards)
   } catch (err) {
     throw new Error(normalizeError(err, 'Failed to export submitted timecards'))
   }

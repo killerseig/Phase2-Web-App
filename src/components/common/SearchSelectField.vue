@@ -14,6 +14,7 @@ interface Props {
   modelValue: string
   options: SearchSelectOption[]
   label: string
+  disabled?: boolean
   placeholder?: string
   prependIcon?: string
   clearLabel?: string
@@ -27,6 +28,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: 'Search...',
+  disabled: false,
   prependIcon: '',
   clearLabel: 'All options',
   clearAriaLabel: 'Clear selection',
@@ -82,6 +84,7 @@ function clearQueuedMenuClose() {
 }
 
 function openMenu() {
+  if (props.disabled) return
   clearQueuedMenuClose()
   menuOpen.value = true
 }
@@ -95,6 +98,7 @@ function scheduleMenuClose() {
 }
 
 function handleInput(event: Event) {
+  if (props.disabled) return
   const nextValue = String((event.target as HTMLInputElement)?.value || '')
   query.value = nextValue
   openMenu()
@@ -110,18 +114,21 @@ function handleInput(event: Event) {
 }
 
 function selectOption(optionId: string) {
+  if (props.disabled) return
   emit('update:modelValue', optionId)
   query.value = props.options.find((option) => option.id === optionId)?.label || ''
   menuOpen.value = false
 }
 
 function clearSelection() {
+  if (props.disabled) return
   emit('update:modelValue', '')
   query.value = ''
   menuOpen.value = false
 }
 
 function handleKeydown(event: KeyboardEvent) {
+  if (props.disabled) return
   if (event.key === 'Escape') {
     menuOpen.value = false
     return
@@ -149,6 +156,7 @@ onBeforeUnmount(() => {
         :value="query"
         type="search"
         :class="inputClass"
+        :disabled="disabled"
         :placeholder="placeholder"
         :aria-label="inputAriaLabel || label"
         autocomplete="off"
@@ -161,6 +169,7 @@ onBeforeUnmount(() => {
         v-if="modelValue || query"
         type="button"
         :class="buttonClass"
+        :disabled="disabled"
         :aria-label="clearAriaLabel"
         @mousedown.prevent="clearSelection"
       >
@@ -168,7 +177,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div v-if="menuOpen" class="search-select__menu">
+    <div v-if="menuOpen && !disabled" class="search-select__menu">
       <button
         type="button"
         class="search-select__option"

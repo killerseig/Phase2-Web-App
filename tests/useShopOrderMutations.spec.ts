@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useShopOrderMutations } from '@/views/shopOrders/useShopOrderMutations'
+import { useShopOrderMutations } from '@/composables/shopOrders/useShopOrderMutations'
 import type { ShopOrder } from '@/services'
 
 const {

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
-import type { ControllerGroupedTimecard } from '@/components/controller/controllerTypes'
+import type { ControllerGroupedTimecard } from '@/types/controller'
 import { useControllerTimecardEditing } from '@/composables/useControllerTimecardEditing'
 import type { ControllerTimecardWeekItem } from '@/services/Email'
-import type { TimecardModel } from '@/views/timecards/timecardUtils'
+import type { TimecardModel } from '@/utils/timecardUtils'
 
 const { deleteTimecardMock, updateTimecardMock } = vi.hoisted(() => ({
   deleteTimecardMock: vi.fn(),

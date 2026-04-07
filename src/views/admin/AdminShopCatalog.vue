@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import AppAlert from '@/components/common/AppAlert.vue'
 import AppLoadingState from '@/components/common/AppLoadingState.vue'
-import AppToolbarCard from '@/components/common/AppToolbarCard.vue'
+import AppSearchToolbar from '@/components/common/AppSearchToolbar.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import AdminCatalogCategoryModal from '@/components/catalog/AdminCatalogCategoryModal.vue'
 import AdminCatalogTopLevelItemForm from '@/components/catalog/AdminCatalogTopLevelItemForm.vue'
 import AdminCatalogTreeSection from '@/components/catalog/AdminCatalogTreeSection.vue'
-import { useAdminShopCatalog } from './useAdminShopCatalog'
+import { useAdminShopCatalog } from '@/composables/adminCatalog/useAdminShopCatalog'
 
 const {
   allItems,
@@ -84,14 +84,11 @@ const {
     />
 
     <!-- Search Bar -->
-    <AppToolbarCard class="mb-4">
-      <input
-        v-model="searchQuery"
-        type="text"
-        class="form-control"
-        placeholder="Search by description, SKU, or price..."
-      />
-    </AppToolbarCard>
+    <AppSearchToolbar
+      v-model="searchQuery"
+      class="mb-4"
+      placeholder="Search by description, SKU, or price..."
+    />
 
     <!-- Error Alert -->
     <AppAlert v-if="err" variant="danger" :message="err" dismissible @close="clearErrors" />
@@ -133,21 +130,6 @@ const {
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.form-control,
-.form-select {
-  background-color: $surface-3;
-  color: $body-color;
-  border-color: $border-color;
-}
-
-.form-control:focus,
-.form-select:focus {
-  background-color: $surface-3;
-  color: $body-color;
-  border-color: $primary;
-  box-shadow: 0 0 0 0.15rem rgba($primary, 0.25);
-}
+@use '@/styles/_adminCatalogControls.scss';
 </style>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import BaseModal from '@/components/common/BaseModal.vue'
+import BaseFormModal from '@/components/common/BaseFormModal.vue'
+import BaseInputField from '@/components/common/BaseInputField.vue'
 
 const props = defineProps<{
   open: boolean
@@ -22,47 +23,31 @@ const categoryNameModel = computed({
 </script>
 
 <template>
-  <BaseModal
+  <BaseFormModal
     :open="props.open"
     :title="props.parentId ? 'Add Subcategory' : 'Add Category'"
+    :loading="props.saving"
+    submit-label="Create"
+    cancel-label="Cancel"
+    :submit-disabled="!props.categoryName.trim()"
     content-class="catalog-modal-content"
-    :close-disabled="props.saving"
-    :close-on-backdrop="!props.saving"
-    :close-on-escape="!props.saving"
     @close="emit('close')"
+    @cancel="emit('close')"
+    @submit="emit('submit')"
   >
-    <input
+    <BaseInputField
       v-model="categoryNameModel"
-      type="text"
-      class="form-control"
       placeholder="Category name"
       autofocus
+      wrapper-class="mb-0"
       @keyup.enter="emit('submit')"
     />
-
-    <template #footer>
-      <button
-        type="button"
-        class="btn btn-secondary"
-        :disabled="props.saving"
-        @click="emit('close')"
-      >
-        Cancel
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary"
-        :disabled="props.saving || !props.categoryName.trim()"
-        @click="emit('submit')"
-      >
-        {{ props.saving ? 'Creating...' : 'Create' }}
-      </button>
-    </template>
-  </BaseModal>
+  </BaseFormModal>
 </template>
 
 <style scoped lang="scss">
 @use '@/styles/_variables.scss' as *;
+@use '@/styles/_adminCatalogControls.scss';
 
 :deep(.catalog-modal-content) {
   background: $surface-2;
@@ -78,18 +63,5 @@ const categoryNameModel = computed({
 
 :deep(.catalog-modal-content .btn-close) {
   filter: invert(1) contrast(1.1);
-}
-
-.form-control {
-  background-color: $surface-3;
-  color: $body-color;
-  border-color: $border-color;
-}
-
-.form-control:focus {
-  background-color: $surface-3;
-  color: $body-color;
-  border-color: $primary;
-  box-shadow: 0 0 0 0.15rem rgba($primary, 0.25);
 }
 </style>

@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useControllerFilters } from '@/composables/useControllerFilters'
 import type { Job } from '@/types/models'
 
@@ -9,6 +9,27 @@ const jobs = ref<Job[]>([
 ])
 
 describe('useControllerFilters', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('defaults to the current week and allows selecting the in-progress week', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-06T12:00:00Z'))
+
+    const filters = useControllerFilters({
+      jobs: computed(() => jobs.value),
+    })
+
+    expect(filters.selectedSingleDate.value).toBe('2026-04-06')
+    expect(filters.currentStartWeek.value).toBe('2026-04-05')
+    expect(filters.weekPickerConfig.value.maxDate).toBe('2026-04-06')
+    expect(filters.buildFilterPayload()).toMatchObject({
+      startWeek: '2026-04-05',
+      endWeek: '2026-04-05',
+    })
+  })
+
   it('sorts job options and builds filter summaries', () => {
     const filters = useControllerFilters({
       jobs: computed(() => jobs.value),

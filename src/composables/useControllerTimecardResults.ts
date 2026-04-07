@@ -3,9 +3,9 @@ import type {
   ControllerJobGroup,
   ControllerSortKey,
   ControllerSortOption,
-} from '@/components/controller/controllerTypes'
+} from '@/types/controller'
 import type { ControllerTimecardWeekItem } from '@/services/Email'
-import type { TimecardModel } from '@/views/timecards/timecardUtils'
+import type { TimecardModel } from '@/utils/timecardUtils'
 
 type SortDir = 'asc' | 'desc'
 

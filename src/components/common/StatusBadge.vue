@@ -1,4 +1,4 @@
-<script setup lang="ts">
+Okay<script setup lang="ts">
 import { computed } from 'vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 

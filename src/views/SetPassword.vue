@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import BaseInputField from '@/components/common/BaseInputField.vue'
+import BasePasswordField from '@/components/common/BasePasswordField.vue'
 import AppLoadingState from '@/components/common/AppLoadingState.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
@@ -21,8 +23,6 @@ const confirmPassword = ref('')
 const loading = ref(false)
 const verifying = ref(true)
 const err = ref('')
-const showPassword = ref(false)
-const showConfirmPassword = ref(false)
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
@@ -122,13 +122,6 @@ const submit = async () => {
   }
 }
 
-const togglePasswordVisibility = () => {
-  showPassword.value = !showPassword.value
-}
-
-const toggleConfirmPasswordVisibility = () => {
-  showConfirmPassword.value = !showConfirmPassword.value
-}
 </script>
 
 <template>
@@ -160,61 +153,34 @@ const toggleConfirmPasswordVisibility = () => {
           <h1 class="card-title h3 mb-1">Set Your Password</h1>
           <p class="text-muted small mb-4">Create a password for your new Phase 2 account</p>
 
-          <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input
-              type="email"
-              class="form-control"
-              :value="email"
-              readonly
-              disabled
-            />
-          </div>
+          <BaseInputField
+            :model-value="email"
+            type="email"
+            label="Email"
+            wrapper-class="mb-3"
+            readonly
+            disabled
+          />
 
-          <div class="mb-3">
-            <label class="form-label">Password</label>
-            <div class="input-group">
-              <input
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                class="form-control"
-                placeholder="Enter your password"
-                @keyup.enter="submit"
-                :disabled="loading"
-              />
-              <button
-                type="button"
-                class="btn btn-outline-secondary"
-                @click="togglePasswordVisibility"
-                :disabled="loading"
-              >
-                <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
-              </button>
-            </div>
-            <small class="d-block text-muted mt-1">At least 6 characters</small>
-          </div>
+          <BasePasswordField
+            v-model="password"
+            label="Password"
+            wrapper-class="mb-3"
+            helper-text="At least 6 characters"
+            helper-class="d-block text-muted mt-1"
+            placeholder="Enter your password"
+            :disabled="loading"
+            @keyup.enter="submit"
+          />
 
-          <div class="mb-4">
-            <label class="form-label">Confirm Password</label>
-            <div class="input-group">
-              <input
-                v-model="confirmPassword"
-                :type="showConfirmPassword ? 'text' : 'password'"
-                class="form-control"
-                placeholder="Confirm your password"
-                @keyup.enter="submit"
-                :disabled="loading"
-              />
-              <button
-                type="button"
-                class="btn btn-outline-secondary"
-                @click="toggleConfirmPasswordVisibility"
-                :disabled="loading"
-              >
-                <i :class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
-              </button>
-            </div>
-          </div>
+          <BasePasswordField
+            v-model="confirmPassword"
+            label="Confirm Password"
+            wrapper-class="mb-4"
+            placeholder="Confirm your password"
+            :disabled="loading"
+            @keyup.enter="submit"
+          />
 
           <button
             @click="submit"
@@ -243,16 +209,6 @@ const toggleConfirmPasswordVisibility = () => {
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.input-group > .btn-outline-secondary {
-  border: 1px solid $border-color;
-}
-
-.input-group > .btn-outline-secondary:hover {
-  background-color: $surface-2;
-}
-
 .set-password-card {
   width: 100%;
 }

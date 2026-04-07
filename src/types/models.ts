@@ -109,6 +109,23 @@ export interface JobRosterEmployee {
 export type JobRosterEmployeeInput = Omit<JobRosterEmployee, 'id' | 'jobId' | 'createdAt' | 'updatedAt'>
 
 // ============================================================================
+// EMPLOYEE DIRECTORY
+// ============================================================================
+
+export interface EmployeeDirectoryEmployee {
+  id: string
+  employeeNumber: string
+  firstName: string
+  lastName: string
+  occupation: string
+  active: boolean
+  jobId?: string | null
+  wageRate?: number | null
+  createdAt?: Timestamp
+  updatedAt?: Timestamp
+}
+
+// ============================================================================
 // TIMECARD (Weekly, Job-Scoped)
 // ============================================================================
 
@@ -118,6 +135,7 @@ export interface TimecardDay {
   hours: number                     // Hours worked
   production: number                // Units produced
   unitCost: number                  // Cost per unit
+  unitCostOverride?: number | null  // Optional manual workbook C-row override
   lineTotal: number                 // production * unitCost
   notes?: string
 }
@@ -137,7 +155,14 @@ export interface TimecardJobEntry {
   area?: string                     // Subsection/Area (legacy alias)
   account?: string                  // Account number (alias)
   acct?: string                     // Account number
+  costCode?: string                 // Office/export cost code
   div?: string                      // Division
+  difH?: string                     // Workbook H-row diff value
+  difP?: string                     // Workbook P-row diff value
+  difC?: string                     // Workbook C-row diff value
+  offHours?: number                 // OFF column for H row
+  offProduction?: number            // OFF column for P row
+  offCost?: number                  // OFF column for C row
   // Daily tracking per job (0=Sun, 6=Sat)
   days?: TimecardDay[]              // Hours, production, cost per day for this job
 }
@@ -167,6 +192,10 @@ export interface Timecard {
   regularHoursOverride?: number | null  // Admin override for regular hours
   overtimeHoursOverride?: number | null // Admin override for overtime hours
   mileage?: number | null           // Drive mileage reimbursement amount/units
+  footerJobOrGl?: string            // Workbook footer "JOB or GL"
+  footerAccount?: string            // Workbook footer "ACCT"
+  footerOffice?: string             // Workbook footer "OFFICE"
+  footerAmount?: string             // Workbook footer "AMT"
   
   // Job entries (multiple jobs per timecard)
   jobs?: TimecardJobEntry[]         // Can have multiple jobs with H/P/C tracking

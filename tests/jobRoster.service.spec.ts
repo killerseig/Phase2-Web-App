@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { listRosterEmployees, updateRosterEmployee } from '@/services/JobRoster'
+import { addRosterEmployee, listRosterEmployees, updateRosterEmployee } from '@/services/JobRoster'
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -24,6 +25,7 @@ vi.mock('@/services/serviceGuards', () => ({
 }))
 
 type MockFn = ReturnType<typeof vi.fn>
+const addDocMock = addDoc as unknown as MockFn
 const getDocsMock = getDocs as unknown as MockFn
 const updateDocMock = updateDoc as unknown as MockFn
 
@@ -58,6 +60,26 @@ describe('JobRoster service', () => {
     await expect(updateRosterEmployee('job-1', 'target', { employeeNumber: '123' })).rejects.toThrow(
       /already exists/
     )
+  })
+
+  it('omits contractor when adding a direct roster employee', async () => {
+    const listSpy = vi.spyOn(JobRoster, 'listRosterEmployees')
+    listSpy.mockResolvedValue([])
+    addDocMock.mockResolvedValue({ id: 'new-employee' })
+
+    await addRosterEmployee('job-1', {
+      employeeNumber: '1234',
+      firstName: 'Avery',
+      lastName: 'Lopez',
+      occupation: 'Finisher',
+      active: true,
+      contractor: undefined,
+    })
+
+    const addCall = addDocMock.mock.calls[0]
+    expect(addCall).toBeDefined()
+    const [, payload] = addCall!
+    expect(payload).not.toHaveProperty('contractor')
   })
 
   it('updates roster employee and stamps updatedAt', async () => {

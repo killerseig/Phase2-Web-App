@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSectionCard from '@/components/common/AppSectionCard.vue'
 import EmailRecipientInput from '@/components/common/EmailRecipientInput.vue'
 
 const props = defineProps<{
@@ -14,9 +15,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="card mb-4 panel-muted app-section-card">
-    <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-envelope me-2"></i>Email Recipients</h5></div>
-    <div class="card-body">
+  <AppSectionCard title="Email Recipients" icon="bi bi-envelope" class="mb-4 panel-muted">
       <EmailRecipientInput
         :emails="props.recipients"
         label="Job-specific recipients"
@@ -31,6 +30,5 @@ const emit = defineEmits<{
         @add="(email) => emit('add', email)"
         @remove="(email) => emit('remove', email)"
       />
-    </div>
-  </div>
+  </AppSectionCard>
 </template>

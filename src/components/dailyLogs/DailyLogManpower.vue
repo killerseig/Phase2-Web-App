@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AppBadge from '@/components/common/AppBadge.vue'
+import AppSectionCard from '@/components/common/AppSectionCard.vue'
+import BaseTableCellInput from '@/components/common/BaseTableCellInput.vue'
 
 type ManpowerLine = {
   trade?: string
@@ -41,9 +43,7 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
 </script>
 
 <template>
-  <div class="card mb-4">
-    <div class="card-header panel-header"><h5 class="mb-0"><i class="bi bi-people me-2"></i>Manpower</h5></div>
-    <div class="card-body">
+  <AppSectionCard class="mb-4" title="Manpower" icon="bi bi-people">
       <div class="row g-3">
         <div class="col-12">
           <label class="form-label">Manpower</label>
@@ -60,38 +60,38 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
               <tbody>
                 <tr v-for="(ln, idx) in lines" :key="getLineKey(ln, idx)">
                   <td class="p-2">
-                    <input
+                    <BaseTableCellInput
                       type="text"
-                      class="form-control form-control-sm"
+                      input-class="manpower-input"
                       placeholder="Trade"
-                      :value="ln.trade"
+                      :model-value="ln.trade"
                       :disabled="!canEdit"
-                      @input="emit('update-field', { index: idx, field: 'trade', value: ($event.target as HTMLInputElement).value })"
+                      @update:model-value="emit('update-field', { index: idx, field: 'trade', value: $event })"
                     />
                   </td>
                   <td class="p-2">
-                    <input
+                    <BaseTableCellInput
                       type="number"
                       inputmode="numeric"
                       min="1"
                       step="1"
-                      class="form-control form-control-sm text-center count-input"
+                      input-class="text-center count-input"
                       placeholder="1"
-                      :value="ln.count"
+                      :model-value="ln.count"
                       :disabled="!canEdit"
-                      @input="emit('update-count', { index: idx, value: Number(($event.target as HTMLInputElement).value) })"
+                      @update:model-value="emit('update-count', { index: idx, value: Number($event) })"
                       @focus="(e) => handleFocus(e, ln)"
                     />
                   </td>
                   <td class="p-2">
                     <div class="d-flex gap-2 align-items-center">
-                      <input
+                      <BaseTableCellInput
                         type="text"
-                        class="form-control form-control-sm"
+                        input-class="manpower-input"
                         placeholder="Areas (optional)"
-                        :value="ln.areas"
+                        :model-value="ln.areas"
                         :disabled="!canEdit"
-                        @input="emit('update-field', { index: idx, field: 'areas', value: ($event.target as HTMLInputElement).value })"
+                        @update:model-value="emit('update-field', { index: idx, field: 'areas', value: $event })"
                       />
                       <AppBadge v-if="isAdminLine(ln)" label="admin" variant-class="bg-info" class="flex-shrink-0" />
                     </div>
@@ -117,6 +117,31 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
           </button>
         </div>
       </div>
-    </div>
-  </div>
+  </AppSectionCard>
 </template>
+
+<style scoped lang="scss">
+.col-trade { width: 40%; }
+.col-count { width: 20%; }
+.col-areas { width: 35%; }
+.col-actions { width: 5%; }
+
+.manpower-table td {
+  vertical-align: middle;
+}
+
+:deep(.count-input) {
+  min-width: 90px;
+}
+
+@media (max-width: 768px) {
+  :deep(.count-input) {
+    min-width: 80px;
+    font-size: 0.95rem;
+  }
+
+  .manpower-table td {
+    padding: 0.35rem;
+  }
+}
+</style>

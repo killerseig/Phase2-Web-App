@@ -43,7 +43,6 @@ import {
   COLLECTIONS,
   EMAIL_STYLES,
 } from './constants'
-export {
 admin.initializeApp()
 
 const db = admin.firestore()
@@ -54,7 +53,8 @@ const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
 const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024
 const MAX_ATTACHMENT_COUNT = 10
-const TIMECARD_BURDEN_RATE = 0.32
+const TIMECARD_WEEKDAY_RATE = 1.294
+const TIMECARD_SATURDAY_RATE = 1.5
 
 function normalizeRecipients(...groups: any[]): string[] {
   const merged = groups.flatMap(group => (Array.isArray(group) ? group : []))
@@ -136,18 +136,22 @@ function calculateUnitCostForExport(
   employeeWage: any,
   hours: any,
   production: any,
-  burdenRate = TIMECARD_BURDEN_RATE
+  rateMultiplier = TIMECARD_WEEKDAY_RATE,
 ): number {
   const wageValue = Math.max(0, toNumber(employeeWage))
   const hourValue = Math.max(0, toNumber(hours))
   const productionValue = Math.max(0, toNumber(production))
-  const burdenValue = Math.max(0, toNumber(burdenRate))
+  const multiplierValue = Math.max(0, toNumber(rateMultiplier))
 
-  if (wageValue <= 0 || hourValue <= 0 || productionValue <= 0 || burdenValue <= 0) {
+  if (wageValue <= 0 || hourValue <= 0 || productionValue <= 0 || multiplierValue <= 0) {
     return 0
   }
 
-  return (wageValue / hourValue / productionValue) * burdenValue
+  return (hourValue * wageValue * multiplierValue) / productionValue
+}
+
+function getRateMultiplierForDay(dayKey: string): number {
+  return dayKey === 'sat' ? TIMECARD_SATURDAY_RATE : TIMECARD_WEEKDAY_RATE
 }
 
 function formatPlexxisDate(dateString: string): string {
@@ -409,7 +413,23 @@ function getLineTotalProductionForForm(line: any): number {
   return getLineMonSatProduction(line)
 }
 
-function getLineTotalCostForForm(line: any): number {
+function getLineSummaryCostForForm(line: any, employeeWage: any): number {
+  const totalHours = getLineTotalHoursForForm(line)
+  const totalProduction = getLineTotalProductionForForm(line)
+  if (totalHours <= 0 || totalProduction <= 0) return 0
+  return calculateUnitCostForExport(
+    employeeWage,
+    totalHours,
+    totalProduction,
+    TIMECARD_WEEKDAY_RATE,
+  )
+}
+
+function getLineTotalCostForForm(line: any, employeeWage?: any): number {
+  if (employeeWage !== undefined) {
+    const summaryCost = getLineSummaryCostForForm(line, employeeWage)
+    if (summaryCost > 0) return summaryCost
+  }
   const fromTotals = toNumber(line?.totals?.lineTotal)
   if (fromTotals > 0) return fromTotals
   return getLineMonSatCost(line)
@@ -418,7 +438,7 @@ function getLineTotalCostForForm(line: any): number {
 function hasMeaningfulLineDataForPdf(line: any): boolean {
   const totalHours = getLineTotalHoursForForm(line)
   const totalProduction = getLineTotalProductionForForm(line)
-  const totalCost = getLineTotalCostForForm(line)
+  const totalCost = getLineMonSatCost(line)
   const offHours = getLineOffHours(line)
   const offProduction = getLineOffProduction(line)
   const offCost = getLineOffCost(line)
@@ -579,7 +599,12 @@ function normalizeTimecardForEmail(tc: any) {
         productionByDay[key] = lineProduction || productionByDay[key]
       }
 
-      const computedUnitCost = calculateUnitCostForExport(employeeWage, hoursByDay[key], productionByDay[key])
+      const computedUnitCost = calculateUnitCostForExport(
+        employeeWage,
+        hoursByDay[key],
+        productionByDay[key],
+        getRateMultiplierForDay(key),
+      )
       unitCostByDay[key] = lineUnitCost || unitCostByDay[key] || computedUnitCost
     })
 
@@ -1466,7 +1491,9 @@ async function buildTimecardPdfBuffer(payload: {
   weekStart?: string
   timecards: any[]
 }): Promise<Buffer> {
-  const doc = new PDFDocument({ margin: 24, size: 'LETTER' })
+  // Use a true landscape page so the emailed PDF prints in the same orientation
+  // as the legacy workbook instead of relying on rotated portrait content.
+  const doc = new PDFDocument({ margin: 24, size: 'LETTER', layout: 'landscape' })
   const chunks: Buffer[] = []
 
   const monSatKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
@@ -1477,10 +1504,25 @@ async function buildTimecardPdfBuffer(payload: {
     if (blankWhenZero && numeric === 0) return ''
     return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
   }
-  const fmtMoney = (value: any, blankWhenZero = false) => {
+  const fmtWorkbookEntry = (value: any, decimals = 2, blankWhenZero = false) => {
     const numeric = toNumber(value)
     if (blankWhenZero && numeric === 0) return ''
-    return `$${numeric.toFixed(2)}`
+    return numeric.toFixed(decimals)
+  }
+  const fmtWorkbookHoursTotal = (value: any, blankWhenZero = false) => {
+    const numeric = toNumber(value)
+    if (blankWhenZero && numeric === 0) return ''
+    return numeric.toFixed(1)
+  }
+  const fmtWorkbookCost = (value: any, blankWhenZero = false) => {
+    const numeric = toNumber(value)
+    if (blankWhenZero && numeric === 0) return ''
+    return numeric.toFixed(2)
+  }
+  const fmtWorkbookSummaryCost = (value: any, blankWhenZero = false) => {
+    const numeric = toNumber(value)
+    if (blankWhenZero && numeric === 0) return ''
+    return numeric.toFixed(3)
   }
   const percentWidths = (total: number, weights: number[]) => {
     const sum = weights.reduce((s, w) => s + w, 0) || 1
@@ -1502,13 +1544,66 @@ async function buildTimecardPdfBuffer(payload: {
     doc.on('end', () => resolve())
     doc.on('error', (err) => reject(err))
 
+    const sumWidths = (widths: number[], startIndex: number, endIndexExclusive: number) => (
+      widths.slice(startIndex, endIndexExclusive).reduce((sum, current) => sum + current, 0)
+    )
+
+    const getColumnX = (x: number, colWidths: number[], index: number) => (
+      x + sumWidths(colWidths, 0, index)
+    )
+
+    const drawCell = (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      text: string,
+      options?: {
+        bold?: boolean
+        align?: 'left' | 'center' | 'right'
+        fontSize?: number
+        fontName?: 'Helvetica' | 'Helvetica-Bold' | 'Helvetica-Oblique'
+        verticalAlign?: 'top' | 'middle'
+        paddingX?: number
+        paddingY?: number
+        textOffsetY?: number
+      },
+    ) => {
+      doc.lineWidth(0.5).strokeColor('#111111').rect(x, y, width, height).stroke()
+
+      const paddingX = options?.paddingX ?? 1.2
+      const paddingY = options?.paddingY ?? 1.2
+      const fontSize = options?.fontSize ?? 6.0
+      const lineHeight = fontSize * 1.15
+      const textOffsetY = options?.textOffsetY ?? 0
+      const textY = (options?.verticalAlign === 'middle'
+        ? y + Math.max((height - lineHeight) / 2, paddingY)
+        : y + paddingY) + textOffsetY
+
+      doc
+        .font(options?.fontName || (options?.bold ? 'Helvetica-Bold' : 'Helvetica'))
+        .fontSize(fontSize)
+        .fillColor('#111111')
+        .text(text, x + paddingX, textY, {
+          width: Math.max(width - (paddingX * 2), 0),
+          height: Math.max(height - (paddingY * 2), 0),
+          align: options?.align ?? 'center',
+          ellipsis: true,
+        })
+    }
+
     const drawGridRow = (
       x: number,
       y: number,
       colWidths: number[],
       rowHeight: number,
       cells: string[],
-      options?: { bold?: boolean; align?: Array<'left' | 'center' | 'right'>; fontSize?: number }
+      options?: {
+        bold?: boolean
+        align?: Array<'left' | 'center' | 'right'>
+        fontSize?: number
+        fontName?: 'Helvetica' | 'Helvetica-Bold' | 'Helvetica-Oblique'
+      }
     ) => {
       let cx = x
       const aligns = options?.align || []
@@ -1517,18 +1612,180 @@ async function buildTimecardPdfBuffer(payload: {
         const cellWidth = colWidths[i] || 0
         const text = cells[i] ?? ''
         const align = aligns[i] || 'center'
-        doc.rect(cx, y, cellWidth, rowHeight).stroke()
+        drawCell(cx, y, cellWidth, rowHeight, text, {
+          bold: options?.bold,
+          fontSize: options?.fontSize,
+          fontName: options?.fontName,
+          align,
+          verticalAlign: 'middle',
+        })
+        cx += cellWidth
+      }
+    }
+
+    const drawWorkbookDaySeparators = (
+      x: number,
+      yTop: number,
+      yBottom: number,
+      colWidths: number[],
+    ) => {
+      const separatorIndexes = [6, 7, 8, 9, 10]
+      separatorIndexes.forEach((index) => {
+        const separatorX = getColumnX(x, colWidths, index)
+        doc.save()
         doc
-          .font(options?.bold ? 'Helvetica-Bold' : 'Helvetica')
-          .fontSize(options?.fontSize ?? 6.0)
+          .lineWidth(1.1)
+          .strokeColor('#ffffff')
+          .moveTo(separatorX, yTop)
+          .lineTo(separatorX, yBottom)
+          .stroke()
+        doc
+          .dash(1.2, { space: 1.1 })
+          .lineWidth(0.5)
+          .strokeColor('#111111')
+          .moveTo(separatorX, yTop)
+          .lineTo(separatorX, yBottom)
+          .stroke()
+          .undash()
+        doc.restore()
+      })
+    }
+
+    const drawUnderlinedField = (
+      x: number,
+      y: number,
+      width: number,
+      rowHeight: number,
+      label: string,
+      value: string,
+      align: 'left' | 'right' = 'left',
+    ) => {
+      const normalizedLabel = String(label || '').trim()
+      const normalizedValue = String(value || '').trim()
+      const labelInset = 2
+      const labelFontSize = 6.8
+      const valueFontSize = 7.0
+      if (!normalizedLabel && !normalizedValue) return
+      doc.font('Helvetica-Oblique').fontSize(labelFontSize)
+      const labelWidth = normalizedLabel
+        ? Math.min(doc.widthOfString(normalizedLabel) + 8, width * 0.42)
+        : 12
+      const lineStart = x + Math.max(labelWidth + labelInset, 18)
+      const lineEnd = x + width - 2
+      const lineY = y + rowHeight - 3
+
+      if (normalizedLabel) {
+        doc
+          .font('Helvetica-Oblique')
+          .fontSize(labelFontSize)
           .fillColor('#111111')
-          .text(text, cx + 1.2, y + 1.2, {
-            width: Math.max(cellWidth - 3, 0),
-            height: Math.max(rowHeight - 3, 0),
+          .text(normalizedLabel, x + labelInset, y + 2, {
+            width: Math.max(labelWidth - labelInset, 0),
+            align: 'left',
+            ellipsis: true,
+          })
+      }
+
+      if (lineStart < lineEnd) {
+        doc.moveTo(lineStart, lineY).lineTo(lineEnd, lineY).stroke()
+      }
+
+      if (normalizedValue) {
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(valueFontSize)
+          .fillColor('#111111')
+          .text(normalizedValue, lineStart + 2, y + 2, {
+            width: Math.max(lineEnd - lineStart - 2, 0),
             align,
             ellipsis: true,
           })
-        cx += cellWidth
+      }
+    }
+
+    const drawWorkbookGroupCell = (
+      x: number,
+      y: number,
+      width: number,
+      rowHeight: number,
+      values: string[],
+      options?: {
+        fontSize?: number
+        align?: 'left' | 'center' | 'right'
+        paddingX?: number
+      },
+    ) => {
+      const groupHeight = rowHeight * 3
+      drawCell(x, y, width, groupHeight, '', {
+        fontSize: options?.fontSize,
+        align: options?.align ?? 'center',
+        verticalAlign: 'middle',
+      })
+
+      const fontSize = options?.fontSize ?? 5.8
+      const align = options?.align ?? 'right'
+      const paddingX = options?.paddingX ?? 1.6
+      const lineInsetY = Math.max((rowHeight - fontSize) / 2, 0.9)
+
+      values.forEach((value, index) => {
+        if (!value) return
+        doc
+          .font('Helvetica')
+          .fontSize(fontSize)
+          .fillColor('#111111')
+          .text(value, x + paddingX, y + (rowHeight * index) + lineInsetY, {
+            width: Math.max(width - (paddingX * 2), 0),
+            align,
+            ellipsis: true,
+          })
+      })
+    }
+
+    const drawFooterUnderlinedValue = (
+      x: number,
+      y: number,
+      width: number,
+      rowHeight: number,
+      label: string,
+      value: string,
+      options?: {
+        valueOffsetY?: number
+      },
+    ) => {
+      const labelInset = 2
+      const labelFontSize = 5.8
+      const valueFontSize = 6.2
+      doc.font('Helvetica').fontSize(labelFontSize)
+      const labelWidth = Math.max(doc.widthOfString(label) + 5, 16)
+      const lineStart = x + labelWidth + labelInset
+      const lineEnd = x + width - 2
+      const lineY = y + rowHeight - 2.2
+
+      doc
+        .font('Helvetica')
+        .fontSize(labelFontSize)
+        .fillColor('#111111')
+        .text(label, x + labelInset, y + 1.4, {
+          width: Math.max(labelWidth, 0),
+          align: 'left',
+          ellipsis: true,
+        })
+
+      if (lineStart < lineEnd) {
+        doc.moveTo(lineStart, lineY).lineTo(lineEnd, lineY).stroke()
+      }
+
+      if (value) {
+        const valueOffsetY = options?.valueOffsetY ?? 0
+        doc
+          .font('Helvetica')
+          .fontSize(valueFontSize)
+          .fillColor('#111111')
+          .text(value, lineStart + 2, y + 1.1 + valueOffsetY, {
+            width: Math.max(lineEnd - lineStart - 2, 0),
+            align: 'center',
+            ellipsis: true,
+          })
       }
     }
 
@@ -1537,24 +1794,12 @@ async function buildTimecardPdfBuffer(payload: {
       y: number,
       width: number,
       rowHeight: number,
-      leftText: string,
-      rightText: string
+      leftField: { label: string; value: string },
+      rightField: { label: string; value: string },
     ) => {
       const leftWidth = Math.round(width * 0.62 * 1000) / 1000
-      doc.rect(x, y, width, rowHeight).stroke()
-      doc.moveTo(x + leftWidth, y).lineTo(x + leftWidth, y + rowHeight).stroke()
-      doc.font('Helvetica').fontSize(6.8).text(leftText, x + 2, y + 2, {
-        width: leftWidth - 4,
-        height: rowHeight - 4,
-        align: 'left',
-        ellipsis: true,
-      })
-      doc.font('Helvetica').fontSize(6.8).text(rightText, x + leftWidth + 2, y + 2, {
-        width: width - leftWidth - 4,
-        height: rowHeight - 4,
-        align: 'left',
-        ellipsis: true,
-      })
+      drawUnderlinedField(x, y, leftWidth, rowHeight, leftField.label, leftField.value, 'left')
+      drawUnderlinedField(x + leftWidth, y, width - leftWidth, rowHeight, rightField.label, rightField.value, 'right')
     }
 
     const drawTimecardCard = (tc: any, x: number, y: number, width: number, height: number, renderBlankTemplate = false) => {
@@ -1569,28 +1814,46 @@ async function buildTimecardPdfBuffer(payload: {
 
       let cursorY = innerY
       doc
-        .font('Helvetica-Bold')
-        .fontSize(10)
+        .font('Helvetica')
+        .fontSize(9.8)
         .fillColor('#111111')
         .text('PHASE 2 COMPANY', innerX, cursorY, { width: innerWidth, align: 'center' })
-      cursorY += 14.5
+      cursorY += 14
 
       const employeeName = renderBlankTemplate ? '' : String(tc?.employeeName || '').trim()
       const employeeCode = renderBlankTemplate ? '' : String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim()
       const occupation = renderBlankTemplate ? '' : String(tc?.occupation || '').trim()
       const wageNumeric = toNumber(tc?.employeeWage ?? tc?.wage)
       const wageSource = tc?.employeeWage ?? tc?.wage ?? ''
-      const wageLabel = renderBlankTemplate ? '' : (wageNumeric > 0 ? `$${wageNumeric.toFixed(2)}` : String(wageSource).trim())
+      const wageLabel = renderBlankTemplate ? '' : (wageNumeric > 0 ? `$${wageNumeric.toFixed(2)}` : (String(wageSource).trim() || '-'))
       const cardWeekEnding = String(tc?.weekEndingDate || '').trim()
         || getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim())
       const weekEnding = renderBlankTemplate ? '' : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel
 
       const fieldRowHeight = 11.5
-      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, `EMP. NAME: ${employeeName}`, `EMPLOYEE# ${employeeCode}`)
+      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
+        label: 'EMP. NAME:',
+        value: employeeName,
+      }, {
+        label: 'EMPLOYEE#',
+        value: employeeCode,
+      })
       cursorY += fieldRowHeight
-      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, `OCCUPATION: ${occupation}`, `Wage ${wageLabel}`)
+      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
+        label: 'OCCUPATION:',
+        value: occupation,
+      }, {
+        label: 'Wage',
+        value: wageLabel,
+      })
       cursorY += fieldRowHeight
-      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, '', `WEEK ENDING ${weekEnding}`)
+      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
+        label: '',
+        value: '',
+      }, {
+        label: 'WEEK ENDING',
+        value: weekEnding,
+      })
       cursorY += fieldRowHeight + 2
 
       const footerHeight = 98
@@ -1601,7 +1864,7 @@ async function buildTimecardPdfBuffer(payload: {
       const maxLineGroups = 13
       const rowHeight = Math.max(5.5, (gridHeight - tableHeaderHeight) / (maxLineGroups * 3))
       const lineGroupHeight = rowHeight * 3
-      const columnWidths = percentWidths(innerWidth, [16, 4, 4, 10, 6, 7, 7, 7, 7, 7, 7, 8, 8, 6])
+      const columnWidths = percentWidths(innerWidth, [11.5, 5.5, 4, 9.5, 5.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 8.5, 8.5, 8.5])
       const detailFontSize = rowHeight >= 6.25 ? 5.8 : 4.9
       const costFontSize = rowHeight >= 6.25 ? 5.5 : 4.6
 
@@ -1612,13 +1875,14 @@ async function buildTimecardPdfBuffer(payload: {
         tableHeaderHeight,
         ['JOB #', '1', '', 'ACCT', 'DIF', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'TOTAL', 'PROD', 'OFF'],
         {
-          bold: true,
           fontSize: rowHeight >= 6.25 ? 5.9 : 5.1,
+          fontName: 'Helvetica-Oblique',
           align: ['left', 'center', 'center', 'left', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center'],
         }
       )
       let cursorDataY = gridTop + tableHeaderHeight
       const lines = renderBlankTemplate ? [] : (Array.isArray(tc?.lines) ? tc.lines.filter((line: any) => hasMeaningfulLineDataForPdf(line)) : [])
+      const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage)
 
       for (let lineIndex = 0; lineIndex < maxLineGroups; lineIndex++) {
         const line = lines[lineIndex]
@@ -1632,62 +1896,153 @@ async function buildTimecardPdfBuffer(payload: {
           : ''
         const lineHoursTotal = hasLine ? getLineTotalHoursForForm(line) : 0
         const lineProdTotal = hasLine ? getLineTotalProductionForForm(line) : 0
-        const lineCostTotal = hasLine ? getLineTotalCostForForm(line) : 0
+        const lineCostTotal = hasLine ? getLineTotalCostForForm(line, employeeWage) : 0
         const offHours = hasLine ? getLineOffHours(line) : 0
         const offProduction = hasLine ? getLineOffProduction(line) : 0
         const offCost = hasLine ? getLineOffCost(line) : 0
-
-        const hRow = [
-          jobCode,
-          hasLine ? '1' : '',
-          hasLine ? 'H' : '',
-          account,
-          hasLine ? String(line?.difH || '').trim() : '',
-          ...monSatKeys.map((k) => fmt(line?.[k], true)),
-          hasLine ? fmt(lineHoursTotal, true) : '',
-          '',
-          hasLine ? fmt(offHours, true) : '',
+        const subsectionArea = hasLine ? String(line?.subsectionArea || line?.area || '').trim() : ''
+        const groupHeight = rowHeight * 3
+        const mergedColumns = [
+          { index: 0, text: jobCode, align: 'center' as const },
+          { index: 1, text: subsectionArea, align: 'center' as const },
+          { index: 3, text: account, align: 'center' as const },
         ]
-        const pRow = [
-          '',
-          hasLine ? '1' : '',
-          hasLine ? 'P' : '',
-          '',
-          hasLine ? String(line?.difP || '').trim() : '',
-          ...monSatKeys.map((k) => fmt(line?.production?.[k], true)),
-          hasLine ? fmt(lineProdTotal, true) : '',
-          '',
-          hasLine ? fmt(offProduction, true) : '',
+        for (const column of mergedColumns) {
+          drawCell(
+            getColumnX(innerX, columnWidths, column.index),
+            cursorDataY,
+            columnWidths[column.index] || 0,
+            groupHeight,
+            column.text,
+            {
+              fontSize: detailFontSize,
+              align: column.align,
+              verticalAlign: 'middle',
+            },
+          )
+        }
+
+        const rowDefinitions = [
+          {
+            label: 'H',
+            diff: hasLine ? String(line?.difH || '').trim() : '',
+            dayValues: monSatKeys.map((key) => fmtWorkbookEntry(line?.[key], 2, true)),
+            fontSize: detailFontSize,
+          },
+          {
+            label: 'P',
+            diff: hasLine ? String(line?.difP || '').trim() : '',
+            dayValues: monSatKeys.map((key) => fmtWorkbookEntry(line?.production?.[key], 2, true)),
+            fontSize: detailFontSize,
+          },
+          {
+            label: 'C',
+            diff: hasLine ? String(line?.difC || '').trim() : '',
+            dayValues: monSatKeys.map((key) => fmtWorkbookCost(line?.unitCost?.[key], true)),
+            fontSize: costFontSize,
+          },
         ]
-        const cRow = [
-          '',
-          hasLine ? '1' : '',
-          hasLine ? 'C' : '',
-          '',
-          hasLine ? String(line?.difC || '').trim() : '',
-          ...monSatKeys.map((k) => fmtMoney(line?.unitCost?.[k], true)),
-          hasLine ? fmtMoney(lineCostTotal, true) : '',
-          '',
-          hasLine ? fmtMoney(offCost, true) : '',
-        ]
 
-        drawGridRow(innerX, cursorDataY, columnWidths, rowHeight, hRow, {
-          fontSize: detailFontSize,
-          align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
-        })
-        cursorDataY += rowHeight
+        rowDefinitions.forEach((rowDef, rowIndex) => {
+          const rowY = cursorDataY + (rowIndex * rowHeight)
+          drawCell(
+            getColumnX(innerX, columnWidths, 2),
+            rowY,
+            columnWidths[2] || 0,
+            rowHeight,
+            rowDef.label,
+            {
+              bold: true,
+              fontSize: detailFontSize,
+              align: 'center',
+              verticalAlign: 'middle',
+            },
+          )
+          drawCell(
+            getColumnX(innerX, columnWidths, 4),
+            rowY,
+            columnWidths[4] || 0,
+            rowHeight,
+            rowDef.diff,
+            {
+              fontSize: rowDef.fontSize,
+              align: 'center',
+              verticalAlign: 'middle',
+            },
+          )
 
-        drawGridRow(innerX, cursorDataY, columnWidths, rowHeight, pRow, {
-          fontSize: detailFontSize,
-          align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
         })
-        cursorDataY += rowHeight
 
-        drawGridRow(innerX, cursorDataY, columnWidths, rowHeight, cRow, {
-          fontSize: costFontSize,
-          align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+        monSatKeys.forEach((key, dayOffset) => {
+          const columnIndex = 5 + dayOffset
+          drawWorkbookGroupCell(
+            getColumnX(innerX, columnWidths, columnIndex),
+            cursorDataY,
+            columnWidths[columnIndex] || 0,
+            rowHeight,
+            [
+              fmtWorkbookEntry(line?.[key], 2, true),
+              fmtWorkbookEntry(line?.production?.[key], 2, true),
+              fmtWorkbookCost(line?.unitCost?.[key], true),
+            ],
+            {
+              fontSize: detailFontSize,
+              align: 'center',
+              paddingX: 1.6,
+            },
+          )
         })
-        cursorDataY += rowHeight
+
+        drawWorkbookGroupCell(
+          getColumnX(innerX, columnWidths, 11),
+          cursorDataY,
+          columnWidths[11] || 0,
+          rowHeight,
+          [
+            hasLine ? fmtWorkbookHoursTotal(lineHoursTotal, true) : '',
+            '',
+            '',
+          ],
+          {
+            fontSize: detailFontSize,
+            align: 'center',
+            paddingX: 1.6,
+          },
+        )
+        drawWorkbookGroupCell(
+          getColumnX(innerX, columnWidths, 12),
+          cursorDataY,
+          columnWidths[12] || 0,
+          rowHeight,
+          [
+            '',
+            hasLine ? fmt(lineProdTotal, true) : '',
+            hasLine ? fmtWorkbookSummaryCost(lineCostTotal, true) : '',
+          ],
+          {
+            fontSize: detailFontSize,
+            align: 'center',
+            paddingX: 1.6,
+          },
+        )
+        drawWorkbookGroupCell(
+          getColumnX(innerX, columnWidths, 13),
+          cursorDataY,
+          columnWidths[13] || 0,
+          rowHeight,
+          [
+            hasLine ? fmtWorkbookHoursTotal(offHours, true) : '',
+            hasLine ? fmt(offProduction, true) : '',
+            hasLine ? fmtWorkbookCost(offCost, true) : '',
+          ],
+          {
+            fontSize: detailFontSize,
+            align: 'center',
+            paddingX: 1.6,
+          },
+        )
+
+        cursorDataY += groupHeight
       }
 
       const footerTop = gridTop + tableHeaderHeight + (maxLineGroups * lineGroupHeight)
@@ -1697,75 +2052,180 @@ async function buildTimecardPdfBuffer(payload: {
       const thursdayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.thu), 0)
       const fridayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.fri), 0)
       const saturdayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.sat), 0)
-      const offHoursTotal = lines.reduce((sum: number, line: any) => sum + getLineOffHours(line), 0)
       const weekTotalHours = mondayHours + tuesdayHours + wednesdayHours + thursdayHours + fridayHours + saturdayHours
 
-      drawGridRow(
-        innerX,
+      const totalsRowHeight = 11
+      drawWorkbookDaySeparators(innerX, gridTop + tableHeaderHeight, footerTop + totalsRowHeight, columnWidths)
+      drawCell(innerX, footerTop, sumWidths(columnWidths, 0, 5), totalsRowHeight, 'TOTAL HOURS', {
+        bold: true,
+        fontSize: 5.8,
+        align: 'right',
+        verticalAlign: 'middle',
+        paddingX: 4,
+        textOffsetY: 0.45,
+      })
+      ;[
+        mondayHours,
+        tuesdayHours,
+        wednesdayHours,
+        thursdayHours,
+        fridayHours,
+        saturdayHours,
+      ].forEach((dayTotal, dayOffset) => {
+        const columnIndex = 5 + dayOffset
+        drawCell(
+          getColumnX(innerX, columnWidths, columnIndex),
+          footerTop,
+          columnWidths[columnIndex] || 0,
+          totalsRowHeight,
+          fmtWorkbookHoursTotal(dayTotal, true),
+          {
+            bold: true,
+            fontSize: 5.8,
+            align: 'center',
+            verticalAlign: 'middle',
+            paddingX: 1.2,
+            textOffsetY: 0.45,
+          },
+        )
+      })
+      drawCell(
+        getColumnX(innerX, columnWidths, 11),
         footerTop,
-        columnWidths,
-        11,
-        ['TOTAL HOURS', '', '', '', '', fmt(mondayHours, true), fmt(tuesdayHours, true), fmt(wednesdayHours, true), fmt(thursdayHours, true), fmt(fridayHours, true), fmt(saturdayHours, true), fmt(weekTotalHours, true), '', fmt(offHoursTotal, true)],
+        columnWidths[11] || 0,
+        totalsRowHeight,
+        fmtWorkbookHoursTotal(weekTotalHours, true),
         {
           bold: true,
           fontSize: 5.8,
-          align: ['left', 'center', 'center', 'left', 'center', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
-        }
-      )
-
-      const smallBoxY = footerTop + 11
-      const boxWidth = innerWidth / 4
-      const boxLabels = ['JOB or GL', 'ACCT', 'OFFICE', 'AMT']
-      for (let idx = 0; idx < 4; idx++) {
-        const bx = innerX + (idx * boxWidth)
-        doc.rect(bx, smallBoxY, boxWidth, 14).stroke()
-        doc.font('Helvetica').fontSize(6.2).text(boxLabels[idx] || '', bx + 2, smallBoxY + 2, {
-          width: boxWidth - 4,
           align: 'center',
-          ellipsis: true,
-        })
-      }
+          verticalAlign: 'middle',
+          paddingX: 1.2,
+          textOffsetY: 0.45,
+        },
+      )
+      drawCell(getColumnX(innerX, columnWidths, 12), footerTop, columnWidths[12] || 0, totalsRowHeight, '', { bold: true })
+      drawCell(getColumnX(innerX, columnWidths, 13), footerTop, columnWidths[13] || 0, totalsRowHeight, '', { bold: true })
 
       const totalHoursForFooter = Math.max(0, toNumber(weekTotalHours))
+      const regularOverride = toNumber(tc?.regularHoursOverride)
+      const overtimeOverride = toNumber(tc?.overtimeHoursOverride)
+      const hasRegularOverride = tc?.regularHoursOverride != null && tc?.regularHoursOverride !== ''
+      const hasOvertimeOverride = tc?.overtimeHoursOverride != null && tc?.overtimeHoursOverride !== ''
+
       let otHours = ''
       let regHours = ''
       if (!renderBlankTemplate) {
-        if (totalHoursForFooter <= 40) {
+        if (hasRegularOverride || hasOvertimeOverride) {
+          regHours = hasRegularOverride ? fmt(regularOverride, true) : ''
+          otHours = hasOvertimeOverride ? fmt(overtimeOverride, true) : ''
+        } else if (totalHoursForFooter <= 40) {
           regHours = totalHoursForFooter > 0 ? fmt(totalHoursForFooter) : ''
         } else {
           regHours = fmt(40)
           otHours = fmt(totalHoursForFooter - 40, true)
         }
       }
-      const otY = smallBoxY + 14 + 2
-      doc.rect(innerX, otY, 24, 11).stroke()
-      doc.rect(innerX + 24, otY, innerWidth - 24, 11).stroke()
-      doc.font('Helvetica-Bold').fontSize(6.6).text('OT', innerX + 2, otY + 2, { width: 20, align: 'left' })
-      doc.font('Helvetica').fontSize(6.6).text(otHours, innerX + 26, otY + 2, {
-        width: innerWidth - 28,
-        align: 'left',
+
+      const footerSectionGap = 8
+      const footerLabelRowY = footerTop + totalsRowHeight + footerSectionGap
+      const footerLabelRowHeight = 6
+      const footerInputRowY = footerLabelRowY + footerLabelRowHeight
+      const footerInputRowHeight = 9
+      const footerSecondRowY = footerInputRowY + footerInputRowHeight
+      const footerFields = [
+        {
+          label: 'JOB or GL',
+          value: safeText(renderBlankTemplate ? '' : tc?.footerJobOrGl).replace(/^-\s*$/, ''),
+          start: 0,
+          end: 2,
+        },
+        {
+          label: 'ACCT',
+          value: safeText(renderBlankTemplate ? '' : tc?.footerAccount).replace(/^-\s*$/, ''),
+          start: 2,
+          end: 4,
+        },
+        {
+          label: 'OFFICE',
+          value: safeText(renderBlankTemplate ? '' : tc?.footerOffice).replace(/^-\s*$/, ''),
+          start: 4,
+          end: 6,
+        },
+        {
+          label: 'AMT',
+          value: safeText(renderBlankTemplate ? '' : tc?.footerAmount).replace(/^-\s*$/, ''),
+          start: 6,
+          end: 8,
+        },
+      ]
+
+      footerFields.forEach((field) => {
+        const fieldX = getColumnX(innerX, columnWidths, field.start)
+        const fieldWidth = sumWidths(columnWidths, field.start, field.end)
+        doc
+          .font('Helvetica')
+          .fontSize(5.4)
+          .fillColor('#111111')
+          .text(field.label, fieldX, footerLabelRowY + 0.5, {
+            width: fieldWidth,
+            align: 'center',
+            ellipsis: true,
+          })
+        drawCell(fieldX, footerInputRowY, fieldWidth, footerInputRowHeight, field.value, {
+          fontSize: 6.0,
+          align: 'center',
+          verticalAlign: 'middle',
+        })
+        drawCell(fieldX, footerSecondRowY, fieldWidth, footerInputRowHeight, '', {
+          fontSize: 6.0,
+          align: 'center',
+          verticalAlign: 'middle',
+        })
       })
 
-      const regY = otY + 11
-      doc.rect(innerX, regY, 24, 11).stroke()
-      doc.rect(innerX + 24, regY, innerWidth - 24, 11).stroke()
-      doc.font('Helvetica-Bold').fontSize(6.6).text('REG', innerX + 2, regY + 2, { width: 20, align: 'left' })
-      doc.font('Helvetica').fontSize(6.6).text(regHours, innerX + 26, regY + 2, {
-        width: innerWidth - 28,
-        align: 'left',
+      const otRegX = getColumnX(innerX, columnWidths, 10)
+      const otRegWidth = sumWidths(columnWidths, 10, 12)
+      const otRegRowHeight = 8.5
+      drawFooterUnderlinedValue(otRegX, footerLabelRowY + 0.8, otRegWidth, otRegRowHeight, 'OT', otHours, {
+        valueOffsetY: -0.45,
+      })
+      drawFooterUnderlinedValue(otRegX, footerSecondRowY + 1.2, otRegWidth, otRegRowHeight, 'REG', regHours, {
+        valueOffsetY: -0.45,
       })
 
-      const notesY = regY + 11
-      const notesHeight = Math.max(bottom - notesY, 12)
-      doc.rect(innerX, notesY, 34, notesHeight).stroke()
-      doc.rect(innerX + 34, notesY, innerWidth - 34, notesHeight).stroke()
-      doc.font('Helvetica-Bold').fontSize(6.6).text('NOTES:', innerX + 2, notesY + 2, { width: 30, align: 'left' })
-      doc.font('Helvetica').fontSize(6.2).text(renderBlankTemplate ? '' : String(tc?.notes || '').trim(), innerX + 36, notesY + 2, {
-        width: innerWidth - 38,
-        height: notesHeight - 4,
-        align: 'left',
-        ellipsis: true,
-      })
+      const notesY = Math.max(footerSecondRowY + footerInputRowHeight + 12, bottom - 18)
+      const notesLabel = 'NOTES:'
+      doc.font('Helvetica-Bold').fontSize(6.6)
+      const notesLabelWidth = Math.max(doc.widthOfString(notesLabel) + 6, 34)
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(6.6)
+        .fillColor('#111111')
+        .text(notesLabel, innerX + 2, notesY, {
+          width: notesLabelWidth,
+          align: 'left',
+          ellipsis: true,
+        })
+      const notesLineStart = innerX + notesLabelWidth + 2
+      const notesLineEnd = innerX + innerWidth - 2
+      const notesLineY = notesY + 7
+      if (notesLineStart < notesLineEnd) {
+        doc.moveTo(notesLineStart, notesLineY).lineTo(notesLineEnd, notesLineY).stroke()
+      }
+      const notesText = renderBlankTemplate ? '' : String(tc?.notes || '').trim()
+      if (notesText) {
+        doc
+          .font('Helvetica')
+          .fontSize(6.2)
+          .fillColor('#111111')
+          .text(notesText, notesLineStart + 2, notesY - 1, {
+            width: Math.max(notesLineEnd - notesLineStart - 2, 0),
+            height: Math.max(bottom - notesY - 2, 10),
+            align: 'left',
+            ellipsis: true,
+          })
+      }
     }
 
     const timecards = (Array.isArray(payload.timecards) ? payload.timecards : []).filter((tc) => hasMeaningfulTimecard(tc))
@@ -1775,25 +2235,19 @@ async function buildTimecardPdfBuffer(payload: {
     const marginTop = doc.page.margins.top || 24
     const marginRight = doc.page.margins.right || 24
     const marginBottom = doc.page.margins.bottom || 24
-    const landscapeWidth = pageHeight
-    const landscapeHeight = pageWidth
     const contentLeft = marginLeft
     const contentTop = marginTop
-    const contentWidth = landscapeWidth - marginLeft - marginRight
-    const contentHeight = landscapeHeight - marginTop - marginBottom
+    const contentWidth = pageWidth - marginLeft - marginRight
+    const contentHeight = pageHeight - marginTop - marginBottom
     const columnGap = 10
     const cardWidth = (contentWidth - columnGap) / 2
 
     if (!timecards.length) {
-      doc.save()
-      doc.translate(pageWidth, 0)
-      doc.rotate(90)
       doc
         .font('Helvetica')
         .fontSize(10)
         .fillColor('#111111')
         .text('No submitted timecards found.', contentLeft, contentTop)
-      doc.restore()
       doc.end()
       return
     }
@@ -1806,15 +2260,11 @@ async function buildTimecardPdfBuffer(payload: {
 
       const leftX = contentLeft
       const rightX = contentLeft + cardWidth + columnGap
-      doc.save()
-      doc.translate(pageWidth, 0)
-      doc.rotate(90)
       drawTimecardCard(timecards[idx], leftX, cardTop, cardWidth, cardHeight, false)
 
       if (idx + 1 < timecards.length) {
         drawTimecardCard(timecards[idx + 1], rightX, cardTop, cardWidth, cardHeight, false)
       }
-      doc.restore()
     }
 
     doc.end()

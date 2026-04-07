@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import AppSectionCard from '@/components/common/AppSectionCard.vue'
+import BaseTable from '@/components/common/BaseTable.vue'
+import InlineField from '@/components/common/InlineField.vue'
 import ShopOrderStatusBadge from '@/components/shopOrders/ShopOrderStatusBadge.vue'
 import type { ShopOrder, ShopOrderItem } from '@/services'
 
@@ -27,7 +31,7 @@ const emit = defineEmits<{
   receive: []
 }>()
 
-function updateItemField(index: number, field: 'description' | 'quantity' | 'note', value: string | number) {
+function updateItemField(index: number, field: 'description' | 'quantity' | 'note', value: string | number | boolean) {
   const updatedItems = props.order.items.map((item, itemIndex) => {
     if (itemIndex !== index) return item
     if (field === 'quantity') {
@@ -45,11 +49,24 @@ function updateItemField(index: number, field: 'description' | 'quantity' | 'not
 function deleteItem(index: number) {
   emit('deleteItem', index)
 }
+
+type Align = 'start' | 'center' | 'end'
+type Column = { key: string; label: string; width?: string; align?: Align; slot?: string }
+
+const itemColumns: Column[] = [
+  { key: 'description', label: 'Description', slot: 'description' },
+  { key: 'quantity', label: 'Qty', width: '10%', align: 'center', slot: 'quantity' },
+  { key: 'note', label: 'Note', slot: 'note' },
+  { key: 'actions', label: 'Actions', width: '10%', align: 'center', slot: 'actions' },
+]
+
+const visibleItemColumns = computed(() =>
+  props.isEditable ? itemColumns : itemColumns.filter((column) => column.key !== 'actions'))
 </script>
 
 <template>
-  <div class="card mb-4 order-card app-section-card">
-    <div class="card-header panel-header">
+  <AppSectionCard class="mb-4 order-card" body-class="order-body">
+    <template #header>
       <div class="d-flex justify-content-between align-items-center">
         <div>
           <h5 class="mb-1">Order {{ order.id.slice(0, 8) }}</h5>
@@ -69,76 +86,61 @@ function deleteItem(index: number) {
           <ShopOrderStatusBadge :status="order.status" />
         </div>
       </div>
-    </div>
-    <div class="card-body order-body">
-      <div v-if="order.items.length > 0" class="table-responsive mb-3 order-table">
+    </template>
+
+      <div v-if="order.items.length > 0" class="mb-3 order-table">
         <h6 class="mb-2">Order Items</h6>
-        <table class="table table-sm table-striped table-hover mb-0 align-middle">
-          <thead>
-            <tr>
-              <th class="small fw-semibold">Description</th>
-              <th class="small fw-semibold text-center">Qty</th>
-              <th class="small fw-semibold">Note</th>
-              <th v-if="isEditable" class="small fw-semibold text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(item, idx) in order.items" :key="`${item.catalogItemId ?? item.description}-${idx}`">
-              <td class="p-2">
-                <template v-if="isEditable">
-                  <input
-                    type="text"
-                    class="form-control form-control-sm"
-                    :value="item.description"
-                    placeholder="Item description"
-                    @input="updateItemField(idx, 'description', ($event.target as HTMLInputElement).value)"
-                  />
-                </template>
-                <template v-else>
-                  <small>{{ item.description }}</small>
-                </template>
-              </td>
-              <td class="p-2 text-center">
-                <template v-if="isEditable">
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    class="form-control form-control-sm text-center"
-                    :value="item.quantity"
-                    @input="updateItemField(idx, 'quantity', ($event.target as HTMLInputElement).value)"
-                  />
-                </template>
-                <template v-else>
-                  <small class="text-center">{{ item.quantity }}</small>
-                </template>
-              </td>
-              <td class="p-2">
-                <template v-if="isEditable">
-                  <input
-                    type="text"
-                    class="form-control form-control-sm"
-                    :value="item.note || ''"
-                    placeholder="Optional note"
-                    @input="updateItemField(idx, 'note', ($event.target as HTMLInputElement).value)"
-                  />
-                </template>
-                <template v-else>
-                  <small class="text-muted">{{ item.note || '--' }}</small>
-                </template>
-              </td>
-              <td v-if="isEditable" class="p-2 text-center">
-                <button
-                  class="btn btn-sm btn-outline-danger"
-                  title="Delete row"
-                  @click="deleteItem(idx)"
-                >
-                  <i class="bi bi-trash"></i>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <BaseTable
+          :rows="order.items"
+          :columns="visibleItemColumns"
+          table-class="mb-0 align-middle"
+        >
+          <template #description="{ row, rowIndex }">
+            <InlineField
+              :editing="isEditable"
+              :model-value="row.description"
+              placeholder="Item description"
+              @update:model-value="updateItemField(rowIndex, 'description', $event)"
+            >
+              <small>{{ row.description }}</small>
+            </InlineField>
+          </template>
+
+          <template #quantity="{ row, rowIndex }">
+            <InlineField
+              :editing="isEditable"
+              :model-value="row.quantity"
+              type="number"
+              input-class="form-control form-control-sm text-center"
+              step="1"
+              @update:model-value="updateItemField(rowIndex, 'quantity', $event)"
+            >
+              <small class="text-center">{{ row.quantity }}</small>
+            </InlineField>
+          </template>
+
+          <template #note="{ row, rowIndex }">
+            <InlineField
+              :editing="isEditable"
+              :model-value="row.note || ''"
+              placeholder="Optional note"
+              @update:model-value="updateItemField(rowIndex, 'note', $event)"
+            >
+              <small class="text-muted">{{ row.note || '--' }}</small>
+            </InlineField>
+          </template>
+
+          <template #actions="{ rowIndex }">
+            <button
+              v-if="isEditable"
+              class="btn btn-sm btn-outline-danger"
+              title="Delete row"
+              @click="deleteItem(rowIndex)"
+            >
+              <i class="bi bi-trash"></i>
+            </button>
+          </template>
+        </BaseTable>
       </div>
 
       <div v-if="!isEditable" class="d-grid gap-2 mt-3">
@@ -146,8 +148,7 @@ function deleteItem(index: number) {
         <button v-if="canOrder" class="btn btn-info" @click="emit('placeOrder')"><i class="bi bi-box-seam me-1"></i>Place Order</button>
         <button v-if="canReceive" class="btn btn-success" @click="emit('receive')"><i class="bi bi-check me-1"></i>Receive</button>
       </div>
-    </div>
-  </div>
+  </AppSectionCard>
 </template>
 
 <style scoped lang="scss">

@@ -1,0 +1,27 @@
+@use '@/styles/_catalogTreeNode.scss';
+
+.catalog-search-results {
+  background-color: transparent;
+}
+
+.catalog-search-results .search-summary {
+  padding: 0.5rem 0.75rem;
+}
+
+.catalog-search-results .result-columns {
+  flex: 1;
+  min-width: 0;
+}
+
+.catalog-search-results .result-main {
+  cursor: pointer;
+}
+
+.catalog-search-results .result-action-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}

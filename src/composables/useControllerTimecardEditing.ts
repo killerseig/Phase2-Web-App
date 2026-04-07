@@ -1,9 +1,10 @@
 import { ref, type ComputedRef, type Ref } from 'vue'
 import { ROLES } from '@/constants/app'
-import type { ControllerGroupedTimecard } from '@/components/controller/controllerTypes'
+import type { ControllerGroupedTimecard } from '@/types/controller'
 import type { ControllerTimecardWeekItem } from '@/services/Email'
 import { deleteTimecard, updateTimecard } from '@/services/Timecards'
 import type { ToastNotifier } from '@/composables/useToast'
+import type { WorkbookFooterField, WorkbookOffField } from '@/types/timecards'
 import { validateRequired } from '@/utils/validation'
 import {
   buildTimecardEmployeeEditorForm,
@@ -13,8 +14,8 @@ import {
   recalcTotalsForTimecard,
   type TimecardEmployeeEditorForm,
   type TimecardModel,
-} from '@/views/timecards/timecardUtils'
-import { useTimecardJobEditing } from '@/views/timecards/useTimecardJobEditing'
+} from '@/utils/timecardUtils'
+import { useTimecardJobEditing } from '@/composables/timecards/useTimecardJobEditing'
 
 type DiffField = 'difH' | 'difP' | 'difC'
 
@@ -179,6 +180,10 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
         regularHoursOverride: timecard.regularHoursOverride ?? null,
         overtimeHoursOverride: timecard.overtimeHoursOverride ?? null,
         mileage: timecard.mileage ?? null,
+        footerJobOrGl: timecard.footerJobOrGl ?? '',
+        footerAccount: timecard.footerAccount ?? '',
+        footerOffice: timecard.footerOffice ?? '',
+        footerAmount: timecard.footerAmount ?? '',
         occupation: timecard.occupation,
       })
 
@@ -260,8 +265,10 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     updateSubsectionArea,
     updateAccount,
     updateDiffValue,
+    updateOffValue,
     handleHoursInput,
     handleProductionInput,
+    handleUnitCostInput,
   } = useTimecardJobEditing({
     getWeekStartDate: (timecard) => timecard.weekStartDate,
     recalcTotals: (timecard) => {
@@ -308,6 +315,26 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     handleProductionInput(payload.timecard, payload.jobIndex, payload.dayIndex, payload.value)
   }
 
+  function handleGroupedResultsUpdateUnitCost(
+    payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number | null },
+  ) {
+    handleUnitCostInput(payload.timecard, payload.jobIndex, payload.dayIndex, payload.value)
+  }
+
+  function handleGroupedResultsUpdateOffValue(
+    payload: { timecard: TimecardModel; jobIndex: number; field: WorkbookOffField; value: number },
+  ) {
+    updateOffValue(payload.timecard, payload.jobIndex, payload.field, payload.value)
+  }
+
+  function handleGroupedResultsUpdateFooterField(
+    payload: { timecard: TimecardModel; field: WorkbookFooterField; value: string },
+  ) {
+    payload.timecard[payload.field] = payload.value
+    updateLoadedTimecard(payload.timecard)
+    autoSave(payload.timecard)
+  }
+
   function handleGroupedResultsUpdateMileage(payload: { timecard: TimecardModel; value: string }) {
     updateMileage(payload.timecard, payload.value)
   }
@@ -327,11 +354,14 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     handleGroupedResultsRemoveJobRow,
     handleGroupedResultsUpdateAccount,
     handleGroupedResultsUpdateDiffValue,
+    handleGroupedResultsUpdateFooterField,
     handleGroupedResultsUpdateHours,
     handleGroupedResultsUpdateJobNumber,
     handleGroupedResultsUpdateMileage,
     handleGroupedResultsUpdateNotes,
+    handleGroupedResultsUpdateOffValue,
     handleGroupedResultsUpdateProduction,
+    handleGroupedResultsUpdateUnitCost,
     handleGroupedResultsUpdateSubsectionArea,
     isTimecardDeleteDisabled,
     isTimecardLocked,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AdminAccordionFormCard from '@/components/admin/AdminAccordionFormCard.vue'
+import BaseInputField from '@/components/common/BaseInputField.vue'
 
 const props = defineProps<{
   open: boolean
@@ -48,50 +49,38 @@ const priceModel = computed({
     @cancel="emit('cancel')"
   >
     <div class="col-md-6">
-      <label class="form-label small">Description</label>
-      <input
+      <BaseInputField
         v-model="descriptionModel"
-        type="text"
-        class="form-control"
+        label="Description"
+        label-class="small"
         placeholder="Item description"
         required
+        wrapper-class="mb-0"
       />
     </div>
     <div class="col-md-3">
-      <label class="form-label small">SKU (optional)</label>
-      <input
+      <BaseInputField
         v-model="skuModel"
-        type="text"
-        class="form-control"
+        label="SKU (optional)"
+        label-class="small"
         placeholder="e.g., SKU-12345"
+        wrapper-class="mb-0"
       />
     </div>
     <div class="col-md-3">
-      <label class="form-label small">Price (optional)</label>
-      <input
+      <BaseInputField
         v-model="priceModel"
+        label="Price (optional)"
+        label-class="small"
         type="number"
-        class="form-control"
         step="0.01"
         placeholder="0.00"
+        wrapper-class="mb-0"
       />
     </div>
   </AdminAccordionFormCard>
 </template>
 
 <style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.form-control {
-  background-color: $surface-3;
-  color: $body-color;
-  border-color: $border-color;
-}
-
-.form-control:focus {
-  background-color: $surface-3;
-  color: $body-color;
-  border-color: $primary;
-  box-shadow: 0 0 0 0.15rem rgba($primary, 0.25);
-}
+@use '@/styles/_adminCatalogControls.scss';
 </style>

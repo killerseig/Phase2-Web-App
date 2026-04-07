@@ -7,7 +7,7 @@ import type {
 } from '@/services/Email'
 import {
   createDatePickerConfig,
-  getLastCompletedSaturdayDateInputValue,
+  getTodayDateInputValue,
   isValidDateInputValue,
 } from '@/utils/dateInputs'
 import {
@@ -75,13 +75,13 @@ function summarizeFilters(
 }
 
 export function useControllerFilters(options: { jobs: Ref<Job[]> }) {
-  const lastCompletedSaturday = getLastCompletedSaturdayDateInputValue()
-  const lastCompletedWeekStart = snapToSunday(lastCompletedSaturday)
+  const today = getTodayDateInputValue()
+  const currentWeekStart = snapToSunday(today)
 
   const useWeekRange = ref(false)
-  const selectedSingleDate = ref(lastCompletedSaturday)
-  const selectedRangeStartDate = ref(lastCompletedSaturday)
-  const selectedRangeEndDate = ref(lastCompletedSaturday)
+  const selectedSingleDate = ref(today)
+  const selectedRangeStartDate = ref(today)
+  const selectedRangeEndDate = ref(today)
   const selectedJobId = ref('')
   const tradeFilter = ref('')
   const firstNameFilter = ref('')
@@ -91,13 +91,13 @@ export function useControllerFilters(options: { jobs: Ref<Job[]> }) {
 
   const appliedFilters = ref<ControllerTimecardFilters | null>(null)
   const loadedPeriod = ref<ControllerLoadedPeriod>({
-    startWeek: lastCompletedWeekStart,
-    endWeek: lastCompletedWeekStart,
-    startWeekEnding: getSaturdayFromSunday(lastCompletedWeekStart),
-    endWeekEnding: getSaturdayFromSunday(lastCompletedWeekStart),
+    startWeek: currentWeekStart,
+    endWeek: currentWeekStart,
+    startWeekEnding: getSaturdayFromSunday(currentWeekStart),
+    endWeekEnding: getSaturdayFromSunday(currentWeekStart),
   })
 
-  const maxSelectableWeek = computed(() => getLastCompletedSaturdayDateInputValue())
+  const maxSelectableWeek = computed(() => getTodayDateInputValue())
   const weekPickerConfig = computed(() => createDatePickerConfig({
     maxDate: maxSelectableWeek.value,
   }))
@@ -190,9 +190,9 @@ export function useControllerFilters(options: { jobs: Ref<Job[]> }) {
 
   function resetFilterValues() {
     useWeekRange.value = false
-    selectedSingleDate.value = lastCompletedSaturday
-    selectedRangeStartDate.value = lastCompletedSaturday
-    selectedRangeEndDate.value = lastCompletedSaturday
+    selectedSingleDate.value = today
+    selectedRangeStartDate.value = today
+    selectedRangeEndDate.value = today
     selectedJobId.value = ''
     tradeFilter.value = ''
     firstNameFilter.value = ''
@@ -213,9 +213,9 @@ export function useControllerFilters(options: { jobs: Ref<Job[]> }) {
     filterValidationError,
     formatSearchRange,
     jobOptions,
-    lastCompletedSaturday,
     loadedPeriod,
     loadedWeekLabel,
+    maxSelectableWeek,
     pendingFilterChanges,
     resetFilterValues,
     selectedJobId,

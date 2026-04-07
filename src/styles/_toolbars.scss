@@ -1,0 +1,150 @@
+@use '@/styles/_variables.scss' as vars;
+
+.app-toolbar-card {
+  background: linear-gradient(180deg, rgba(vars.$primary-50, 0.95) 0%, vars.$surface-2 100%);
+  border: 1px solid rgba(230, 237, 247, 0.12);
+  box-shadow: vars.$box-shadow-sm;
+}
+
+.app-toolbar-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.app-toolbar-meta__eyebrow {
+  color: rgba(vars.$body-color, 0.7);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.app-toolbar-meta__title {
+  color: vars.$body-color;
+  margin: 0;
+}
+
+.app-toolbar-meta__subtitle {
+  color: vars.$text-muted;
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.app-toolbar-meta--compact .app-toolbar-meta__eyebrow {
+  font-size: 0.64rem;
+}
+
+.app-toolbar-meta--compact .app-toolbar-meta__subtitle {
+  font-size: 0.82rem;
+}
+
+.app-toolbar-split {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: space-between;
+}
+
+.app-toolbar-split--center {
+  align-items: center;
+}
+
+.app-toolbar-controls {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.app-toolbar-controls--end {
+  justify-content: flex-end;
+}
+
+.app-toolbar-controls__field {
+  min-width: 190px;
+}
+
+.app-toolbar-controls__toggle {
+  min-width: 124px;
+}
+
+.app-toolbar-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.app-toolbar-actions--end {
+  justify-content: flex-end;
+}
+
+.app-toolbar-note {
+  color: vars.$text-muted;
+  font-size: 0.85rem;
+}
+
+.app-toolbar-summary {
+  background: rgba(vars.$primary, 0.07);
+  border: 1px solid rgba(vars.$primary, 0.14);
+  border-radius: 0.75rem;
+  min-height: 100%;
+  padding: 0.85rem 1rem;
+}
+
+.app-toolbar-summary--compact {
+  min-height: auto;
+  padding: 0.6rem 0.8rem;
+}
+
+.app-toolbar-summary__line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+}
+
+.app-toolbar-summary__line + .app-toolbar-summary__line {
+  margin-top: 0.2rem;
+}
+
+.app-toolbar-summary__kicker {
+  color: rgba(vars.$body-color, 0.7);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-toolbar-actions-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-toolbar-actions-grid__full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 575px) {
+  .app-toolbar-controls {
+    width: 100%;
+  }
+
+  .app-toolbar-controls__field,
+  .app-toolbar-controls__toggle {
+    width: 100%;
+  }
+
+  .app-toolbar-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-toolbar-actions-grid__full {
+    grid-column: auto;
+  }
+}
