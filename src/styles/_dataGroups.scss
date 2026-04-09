@@ -1,17 +1,15 @@
-@use '@/styles/_variables.scss' as vars;
-
 .app-data-group-card {
-  background: vars.$surface;
+  background: var(--bs-body-bg);
   overflow: hidden;
 }
 
 .app-data-group-card--accent {
-  border: 1px solid mix(vars.$surface-3, vars.$primary, 82%);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.18);
 }
 
 .app-data-group-card--accent > .card-header {
-  background: linear-gradient(180deg, rgba(vars.$primary, 0.08) 0%, rgba(vars.$primary, 0.02) 100%);
-  border-bottom: 1px solid rgba(vars.$primary, 0.18);
+  background: var(--app-accent-panel-bg);
+  border-bottom: 1px solid var(--app-divider-accent);
 }
 
 .app-data-group-header {
@@ -23,8 +21,8 @@
 }
 
 .app-data-group-header--subtle {
-  background: rgba(vars.$primary, 0.04);
-  border-bottom: 1px solid rgba(vars.$primary, 0.18);
+  background: rgba(var(--bs-primary-rgb), 0.04);
+  border-bottom: 1px solid var(--app-divider-accent);
   padding: 0.9rem 1rem;
 }
 

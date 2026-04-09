@@ -15,6 +15,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore'
 import type { Job as JobModel, JobType, TimecardStatus } from '@/types/models'
+import { DEFAULT_PRODUCTION_BURDEN, normalizeProductionBurden } from '@/constants/timecards'
 import { assertJobAccess } from './serviceGuards'
 import { normalizeError } from './serviceUtils'
 
@@ -41,6 +42,7 @@ function normalize(id: string, data: DocumentData): Job {
     cip: data.cip ?? null,
     kjic: data.kjic ?? null,
     accountNumber: data.accountNumber ?? null,
+    productionBurden: data.productionBurden == null ? DEFAULT_PRODUCTION_BURDEN : normalizeProductionBurden(data.productionBurden),
     type: (data.type ?? 'general') as JobType,
     active: data.active ?? true,
     
@@ -153,6 +155,7 @@ export async function createJob(
     cip?: string
     kjic?: string
     accountNumber?: string
+    productionBurden?: number | null
     type?: JobType
     assignedForemanIds?: string[]
   }
@@ -173,6 +176,7 @@ export async function createJob(
       cip: options?.cip?.trim() || null,
       kjic: options?.kjic?.trim() || null,
       accountNumber: options?.accountNumber?.trim() || null,
+      productionBurden: normalizeProductionBurden(options?.productionBurden),
       type: options?.type ?? 'general',
       active: true,
       
@@ -222,6 +226,7 @@ export async function updateJob(
     cip?: string | null
     kjic?: string | null
     accountNumber?: string | null
+    productionBurden?: number | null
     type?: JobType
   }
 ) {
@@ -242,6 +247,7 @@ export async function updateJob(
     if (updates.cip !== undefined) data.cip = updates.cip?.trim() || null
     if (updates.kjic !== undefined) data.kjic = updates.kjic?.trim() || null
     if (updates.accountNumber !== undefined) data.accountNumber = updates.accountNumber?.trim() || null
+    if (updates.productionBurden !== undefined) data.productionBurden = normalizeProductionBurden(updates.productionBurden)
     if (updates.type !== undefined) data.type = updates.type
     await updateDoc(ref, data)
   } catch (err) {

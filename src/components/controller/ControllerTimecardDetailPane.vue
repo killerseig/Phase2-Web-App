@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import BaseCard from '@/components/common/BaseCard.vue'
-import TimecardSelectedMetaCard from '@/components/timecards/TimecardSelectedMetaCard.vue'
 import TimecardStatusBadge from '@/components/timecards/TimecardStatusBadge.vue'
 import TimecardWorkspaceCard from '@/components/timecards/TimecardWorkspaceCard.vue'
 import type { ControllerGroupedTimecard } from '@/types/controller'
@@ -16,7 +15,7 @@ defineOptions({
   name: 'ControllerTimecardDetailPane',
 })
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   selectedEntry: ControllerGroupedTimecard | null
   editForm: TimecardEmployeeEditorForm
   isEditing: boolean
@@ -24,11 +23,8 @@ const props = withDefaults(defineProps<{
   notesLocked: boolean
   editDisabled: boolean
   deleteDisabled: boolean
-  showMetaCard?: boolean
   formatTimecardWeek: (timecard: TimecardModel) => string
-}>(), {
-  showMetaCard: true,
-})
+}>()
 
 const emit = defineEmits<{
   'update:editForm': [value: TimecardEmployeeEditorForm]
@@ -178,135 +174,5 @@ function handleEmployeeNameUpdate(value: string) {
       @update-footer-field="emit('update-footer-field', $event)"
       @update-notes="emit('update-notes', $event)"
     />
-
-    <TimecardSelectedMetaCard
-      v-if="showMetaCard !== false"
-      :timecard="selectedEntry.timecard"
-    />
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.controller-timecard-detail-pane {
-  display: grid;
-  gap: 0.8rem;
-}
-
-.controller-timecard-detail-pane__header-card {
-  background: $surface;
-}
-
-.controller-timecard-detail-pane__header-body {
-  padding: 0.7rem 0.85rem;
-}
-
-.controller-timecard-detail-pane__hero {
-  align-items: start;
-  display: grid;
-  gap: 0.55rem 0.8rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.controller-timecard-detail-pane__hero-main {
-  min-width: 0;
-}
-
-.controller-timecard-detail-pane__hero-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  line-height: 1.05;
-}
-
-.controller-timecard-detail-pane__hero-meta {
-  color: $text-muted;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.2rem;
-  font-size: 0.8rem;
-}
-
-.controller-timecard-detail-pane__hero-secondary {
-  color: $text-muted;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.12rem;
-  font-size: 0.74rem;
-}
-
-.controller-timecard-detail-pane__hero-actions {
-  align-content: start;
-  display: grid;
-  gap: 0.4rem;
-  justify-items: end;
-}
-
-.controller-timecard-detail-pane__hero-badges,
-.controller-timecard-detail-pane__hero-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  justify-content: flex-end;
-}
-
-.controller-timecard-detail-pane__hero-buttons :deep(.btn),
-.controller-timecard-detail-pane__hero-badges :deep(.badge),
-.controller-timecard-detail-pane__hero-badges :deep(.app-badge-pill) {
-  min-height: 2.1rem;
-}
-
-@media (max-width: 767px) {
-  .controller-timecard-detail-pane {
-    gap: 0.7rem;
-  }
-
-  .controller-timecard-detail-pane__header-body {
-    padding: 0.65rem 0.75rem;
-  }
-
-  .controller-timecard-detail-pane__hero {
-    grid-template-columns: 1fr;
-  }
-
-  .controller-timecard-detail-pane__hero-actions,
-  .controller-timecard-detail-pane__hero-badges,
-  .controller-timecard-detail-pane__hero-buttons {
-    justify-items: start;
-    justify-content: flex-start;
-  }
-
-  .controller-timecard-detail-pane__hero-title {
-    font-size: 1rem;
-  }
-
-  .controller-timecard-detail-pane__hero-meta,
-  .controller-timecard-detail-pane__hero-secondary {
-    font-size: 0.72rem;
-    margin-top: 0.15rem;
-  }
-
-  .controller-timecard-detail-pane__hero-buttons {
-    width: 100%;
-  }
-
-  .controller-timecard-detail-pane__hero-buttons .btn {
-    flex: 1 1 auto;
-  }
-}
-
-@media (max-width: 1199px) {
-  .controller-timecard-detail-pane__hero {
-    grid-template-columns: 1fr;
-  }
-
-  .controller-timecard-detail-pane__hero-actions,
-  .controller-timecard-detail-pane__hero-badges,
-  .controller-timecard-detail-pane__hero-buttons {
-    justify-items: start;
-    justify-content: flex-start;
-  }
-}
-</style>

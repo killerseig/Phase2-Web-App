@@ -1,4 +1,5 @@
 import type { Timecard, TimecardDay, TimecardJobEntry, TimecardTotals } from '@/types/models'
+import { DEFAULT_PRODUCTION_BURDEN, getProductionMultiplier, TIMECARD_OCCUPATIONS } from '@/constants/timecards'
 
 export type TimecardJobUi = TimecardJobEntry & { difH?: string; difP?: string; difC?: string }
 
@@ -16,9 +17,8 @@ export type TimecardEmployeeEditorForm = {
   subcontractedEmployee: boolean
 }
 
-export const TIMECARD_WEEKDAY_RATE = 1.294
-export const TIMECARD_SATURDAY_RATE = 1.5
 export const DEFAULT_REGULAR_HOURS_CAP = 40
+export const TIMECARD_OCCUPATION_OPTIONS = TIMECARD_OCCUPATIONS
 
 function toNonNegativeNumber(value: number | null | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || Number.isNaN(value)) {
@@ -87,12 +87,12 @@ export function calculateUnitCost(
   employeeWage: number | null | undefined,
   hours: number | null | undefined,
   production: number | null | undefined,
-  rateMultiplier = TIMECARD_WEEKDAY_RATE
+  productionBurden: number | null | undefined = DEFAULT_PRODUCTION_BURDEN,
 ): number {
   const wageValue = toNonNegativeNumber(employeeWage)
   const hourValue = toNonNegativeNumber(hours)
   const productionValue = toNonNegativeNumber(production)
-  const multiplierValue = toNonNegativeNumber(rateMultiplier)
+  const multiplierValue = toNonNegativeNumber(getProductionMultiplier(productionBurden))
 
   if (wageValue <= 0 || hourValue <= 0 || productionValue <= 0 || multiplierValue <= 0) {
     return 0
@@ -153,18 +153,18 @@ export function recalcTotalsForTimecard(timecard: TimecardModel, weekStartDate: 
   const production: number[] = Array(7).fill(0)
   const lineTotals: number[] = Array(7).fill(0)
   const employeeWage = toNonNegativeNumber(timecard.employeeWage)
+  const productionBurden = timecard.productionBurden ?? DEFAULT_PRODUCTION_BURDEN
 
   timecard.jobs?.forEach((job) => {
     job.days?.forEach((day, idx) => {
       if (idx < 0 || idx >= hours.length) return
       const dayHours = toNonNegativeNumber(day.hours)
       const dayProduction = toNonNegativeNumber(day.production)
-      const rateMultiplier = idx === 6 ? TIMECARD_SATURDAY_RATE : TIMECARD_WEEKDAY_RATE
       const overrideUnitCost = day.unitCostOverride == null
         ? null
         : toNonNegativeNumber(day.unitCostOverride)
       const dayUnitCost = overrideUnitCost == null || Number.isNaN(overrideUnitCost)
-        ? calculateUnitCost(employeeWage, dayHours, dayProduction, rateMultiplier)
+        ? calculateUnitCost(employeeWage, dayHours, dayProduction, productionBurden)
         : overrideUnitCost
       const dayLineTotal = dayProduction * dayUnitCost
 

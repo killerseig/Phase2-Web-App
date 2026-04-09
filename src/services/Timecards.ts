@@ -24,6 +24,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore'
 import { ROLES } from '@/constants/app'
+import { DEFAULT_PRODUCTION_BURDEN, normalizeProductionBurden } from '@/constants/timecards'
 import { useAuthStore } from '@/stores/auth'
 import type { Timecard, TimecardInput, TimecardDay, TimecardTotals } from '@/types/models'
 import { calculateWeekStartDate } from '@/utils/modelValidation'
@@ -33,6 +34,7 @@ import {
 } from '@/utils/timecardWorkbook'
 import { buildTimecardOfficeCsv } from '@/utils/timecardOfficeExport'
 import { listActiveRosterEmployees } from './JobRoster'
+import { getJob } from './Jobs'
 import { assertJobAccess, requireUser } from './serviceGuards'
 import { jobCollectionPath, jobDocumentPath } from './servicePaths'
 import { normalizeError } from './serviceUtils'
@@ -62,10 +64,10 @@ function normalize(id: string, data: DocumentData): Timecard {
     lastName: data.lastName ?? '',
     occupation: data.occupation ?? '',
     employeeWage: data.employeeWage ?? null,
+    productionBurden: data.productionBurden == null ? DEFAULT_PRODUCTION_BURDEN : normalizeProductionBurden(data.productionBurden),
     subcontractedEmployee: data.subcontractedEmployee ?? false,
     regularHoursOverride: data.regularHoursOverride ?? null,
     overtimeHoursOverride: data.overtimeHoursOverride ?? null,
-    mileage: data.mileage ?? null,
     footerJobOrGl: data.footerJobOrGl ?? '',
     footerAccount: data.footerAccount ?? '',
     footerOffice: data.footerOffice ?? '',
@@ -371,10 +373,10 @@ export async function createTimecard(jobId: string, input: TimecardInput): Promi
       lastName: input.lastName ?? '',
       occupation: input.occupation,
       employeeWage: input.employeeWage ?? null,
+      productionBurden: normalizeProductionBurden(input.productionBurden),
       subcontractedEmployee: input.subcontractedEmployee ?? false,
       regularHoursOverride: input.regularHoursOverride ?? null,
       overtimeHoursOverride: input.overtimeHoursOverride ?? null,
-      mileage: input.mileage ?? null,
       footerJobOrGl: input.footerJobOrGl ?? '',
       footerAccount: input.footerAccount ?? '',
       footerOffice: input.footerOffice ?? '',
@@ -413,7 +415,15 @@ export async function createTimecardForRosterEmployee(
   employee: Awaited<ReturnType<typeof listActiveRosterEmployees>>[number],
   weekEndingDate: string,
 ): Promise<string> {
-  return createTimecard(jobId, buildTimecardInputFromRosterEmployee(employee, weekEndingDate))
+  const job = await getJob(jobId)
+  return createTimecard(
+    jobId,
+    buildTimecardInputFromRosterEmployee(
+      employee,
+      weekEndingDate,
+      normalizeProductionBurden(job?.productionBurden),
+    ),
+  )
 }
 
 /**
@@ -445,10 +455,10 @@ export async function updateTimecard(
     if ('lastName' in updates) payload.lastName = updates.lastName ?? ''
     if ('occupation' in updates) payload.occupation = updates.occupation
     if ('employeeWage' in updates) payload.employeeWage = updates.employeeWage ?? null
+    if ('productionBurden' in updates) payload.productionBurden = normalizeProductionBurden(updates.productionBurden)
     if ('subcontractedEmployee' in updates) payload.subcontractedEmployee = updates.subcontractedEmployee ?? false
     if ('regularHoursOverride' in updates) payload.regularHoursOverride = updates.regularHoursOverride ?? null
     if ('overtimeHoursOverride' in updates) payload.overtimeHoursOverride = updates.overtimeHoursOverride ?? null
-    if ('mileage' in updates) payload.mileage = updates.mileage ?? null
     if ('footerJobOrGl' in updates) payload.footerJobOrGl = updates.footerJobOrGl ?? ''
     if ('footerAccount' in updates) payload.footerAccount = updates.footerAccount ?? ''
     if ('footerOffice' in updates) payload.footerOffice = updates.footerOffice ?? ''
@@ -630,10 +640,10 @@ export async function createTimecardFromCopy(
       lastName: sourceTimecard.lastName ?? '',
       occupation: sourceTimecard.occupation,
       employeeWage: sourceTimecard.employeeWage ?? null,
+      productionBurden: sourceTimecard.productionBurden ?? DEFAULT_PRODUCTION_BURDEN,
       subcontractedEmployee: sourceTimecard.subcontractedEmployee ?? false,
       regularHoursOverride: null,
       overtimeHoursOverride: null,
-      mileage: null,
       footerJobOrGl: '',
       footerAccount: '',
       footerOffice: '',

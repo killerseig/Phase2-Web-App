@@ -119,29 +119,3 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
       </div>
   </AppSectionCard>
 </template>
-
-<style scoped lang="scss">
-.col-trade { width: 40%; }
-.col-count { width: 20%; }
-.col-areas { width: 35%; }
-.col-actions { width: 5%; }
-
-.manpower-table td {
-  vertical-align: middle;
-}
-
-:deep(.count-input) {
-  min-width: 90px;
-}
-
-@media (max-width: 768px) {
-  :deep(.count-input) {
-    min-width: 80px;
-    font-size: 0.95rem;
-  }
-
-  .manpower-table td {
-    padding: 0.35rem;
-  }
-}
-</style>

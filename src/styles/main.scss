@@ -1,125 +1,45 @@
 /**
  * Main Styles
- * Bootstrap 5 + Custom Components
+ * Bootstrap 5 + app theme layers
  */
 
-@use "variables" as vars;
+// Bootstrap foundation
+@use "bootstrap";
 
-@use "../../node_modules/bootstrap/scss/bootstrap" with (
-  $primary: vars.$primary,
-  $secondary: vars.$secondary,
-  $success: vars.$success,
-  $warning: vars.$warning,
-  $danger: vars.$danger,
-  $info: vars.$info,
-  $light: vars.$light,
-  $dark: vars.$dark,
-  $body-bg: vars.$body-bg,
-  $body-color: vars.$body-color,
-  $body-secondary-color: vars.$text-muted,
-  $body-secondary-bg: vars.$surface-2,
-  $body-tertiary-color: vars.$text-muted-3,
-  $body-tertiary-bg: vars.$surface-3,
-  $body-emphasis-color: vars.$body-color,
-  $body-bg-dark: vars.$body-bg,
-  $body-color-dark: vars.$body-color,
-  $body-secondary-color-dark: vars.$text-muted,
-  $body-secondary-bg-dark: vars.$surface-2,
-  $body-tertiary-color-dark: vars.$text-muted-3,
-  $body-tertiary-bg-dark: vars.$surface-3,
-  $body-emphasis-color-dark: vars.$body-color,
-  $border-color: vars.$border-color,
-  $border-color-translucent: rgba(230, 237, 247, 0.10),
-  $border-color-dark: vars.$border-color,
-  $border-color-translucent-dark: rgba(230, 237, 247, 0.10),
-  $table-border-color: vars.$border-color,
-  $list-group-border-color: vars.$border-color,
-  $card-border-color: vars.$border-color,
-  $link-color: vars.$primary,
-  $link-hover-color: vars.$primary,
-  $link-color-dark: vars.$primary,
-  $link-hover-color-dark: vars.$primary,
-  $form-select-indicator-color: vars.$body-color,
-  $form-select-indicator-color-dark: vars.$body-color,
-  $accordion-icon-color: vars.$body-color,
-  $accordion-icon-active-color: vars.$primary,
-  $accordion-icon-color-dark: vars.$body-color,
-  $accordion-icon-active-color-dark: vars.$primary,
-  $font-family-sans-serif: vars.$font-family-sans-serif,
-  $headings-font-weight: vars.$headings-font-weight,
-  $headings-line-height: vars.$headings-line-height,
-  $font-size-base: vars.$font-size-base,
-  $line-height-base: vars.$line-height-base,
-  $border-radius: vars.$border-radius,
-  $border-radius-sm: vars.$border-radius-sm,
-  $border-radius-lg: vars.$border-radius-lg,
-  $btn-font-weight: vars.$btn-font-weight,
-  $btn-padding-y: vars.$btn-padding-y,
-  $btn-padding-x: vars.$btn-padding-x,
-  $navbar-padding-y: vars.$navbar-padding-y,
-  $input-padding-y: vars.$input-padding-y,
-  $input-padding-x: vars.$input-padding-x,
-  $input-border-radius: vars.$input-border-radius,
-  $container-max-widths: vars.$container-max-widths
-);
-
+// Theme tokens and global element defaults
 @use "theme";
-@use "layout";
-@use "pages";
-@use "toolbars";
+@use "base";
+
+// Bootstrap component theming
 @use "buttons";
 @use "cards";
-@use "dataGroups";
-@use "nav";
 @use "badges";
-@use "detailFields";
 @use "forms";
 @use "stats";
-@use "selectableLists";
-@use "tableCellFields";
 @use "tables";
-@use "timecardWorkbook";
 @use "alerts";
 @use "attachments";
 @use "flatpickr";
 
-// ---- Autofill theming (keep dark inputs consistent) ----
-input:-webkit-autofill,
-textarea:-webkit-autofill,
-select:-webkit-autofill {
-	box-shadow: 0 0 0 1000px vars.$surface-2 inset;
-	-webkit-text-fill-color: vars.$body-color;
-	border-color: vars.$border-color;
-	caret-color: vars.$body-color;
-}
+// Application layout and shared patterns
+@use "layout";
+@use "shell";
+@use "pages";
+@use "toolbars";
+@use "dataGroups";
+@use "detailFields";
+@use "selectableLists";
+@use "tableCellFields";
 
-input:-webkit-autofill:focus,
-textarea:-webkit-autofill:focus,
-select:-webkit-autofill:focus {
-	box-shadow: 0 0 0 1000px vars.$surface-3 inset;
-	border-color: vars.$primary;
-}
-
-/* Timecard summary modal print isolation */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-
-  #timecard-summary,
-  #timecard-summary * {
-    visibility: visible;
-  }
-
-  #timecard-summary {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    background: var(--bs-white, #fff);
-  }
-}
-
-
-
+// Feature and domain styles
+@use "admin";
+@use "catalog";
+@use "catalogColumns";
+@use "catalogTreeNode";
+@use "catalogSearchResults";
+@use "controller";
+@use "dailyLogs";
+@use "shopOrders";
+@use "timecards";
+@use "timecardWorkbook";
 

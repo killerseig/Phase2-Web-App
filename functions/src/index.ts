@@ -53,8 +53,7 @@ const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
 const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024
 const MAX_ATTACHMENT_COUNT = 10
-const TIMECARD_WEEKDAY_RATE = 1.294
-const TIMECARD_SATURDAY_RATE = 1.5
+const DEFAULT_PRODUCTION_BURDEN = 0.33
 
 function normalizeRecipients(...groups: any[]): string[] {
   const merged = groups.flatMap(group => (Array.isArray(group) ? group : []))
@@ -132,16 +131,28 @@ function toNumber(value: any): number {
   return n
 }
 
+function normalizeProductionBurden(value: any): number {
+  const burden = Number(value)
+  if (!Number.isFinite(burden) || Number.isNaN(burden) || burden < 0) {
+    return DEFAULT_PRODUCTION_BURDEN
+  }
+  return burden
+}
+
+function getProductionMultiplier(productionBurden: any): number {
+  return 1 + normalizeProductionBurden(productionBurden)
+}
+
 function calculateUnitCostForExport(
   employeeWage: any,
   hours: any,
   production: any,
-  rateMultiplier = TIMECARD_WEEKDAY_RATE,
+  productionBurden = DEFAULT_PRODUCTION_BURDEN,
 ): number {
   const wageValue = Math.max(0, toNumber(employeeWage))
   const hourValue = Math.max(0, toNumber(hours))
   const productionValue = Math.max(0, toNumber(production))
-  const multiplierValue = Math.max(0, toNumber(rateMultiplier))
+  const multiplierValue = Math.max(0, toNumber(getProductionMultiplier(productionBurden)))
 
   if (wageValue <= 0 || hourValue <= 0 || productionValue <= 0 || multiplierValue <= 0) {
     return 0
@@ -150,15 +161,57 @@ function calculateUnitCostForExport(
   return (hourValue * wageValue * multiplierValue) / productionValue
 }
 
-function getRateMultiplierForDay(dayKey: string): number {
-  return dayKey === 'sat' ? TIMECARD_SATURDAY_RATE : TIMECARD_WEEKDAY_RATE
-}
-
 function formatPlexxisDate(dateString: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString || '').trim())
   if (!match) return String(dateString || '')
   const [, year, month, day] = match
   return `${Number(month)}/${Number(day)}/${year}`
+}
+
+function buildEmptyDayDateRecord(): Record<typeof DAY_KEYS[number], string> {
+  return {
+    sun: '',
+    mon: '',
+    tue: '',
+    wed: '',
+    thu: '',
+    fri: '',
+    sat: '',
+  }
+}
+
+function buildWeekDateRecord(weekStartDate: string): Record<typeof DAY_KEYS[number], string> {
+  const dates = buildEmptyDayDateRecord()
+  const trimmed = String(weekStartDate || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return dates
+
+  const base = new Date(`${trimmed}T00:00:00Z`)
+  DAY_KEYS.forEach((key, index) => {
+    const date = new Date(base)
+    date.setUTCDate(base.getUTCDate() + index)
+    const yyyy = date.getUTCFullYear()
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const dd = String(date.getUTCDate()).padStart(2, '0')
+    dates[key] = `${yyyy}-${mm}-${dd}`
+  })
+
+  return dates
+}
+
+function mergeDayDates(
+  target: Record<typeof DAY_KEYS[number], string>,
+  sourceDays: any[],
+): void {
+  for (const day of Array.isArray(sourceDays) ? sourceDays : []) {
+    const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
+      ? day.dayOfWeek
+      : sourceDays.indexOf(day)
+    const key = DAY_KEYS[idx]
+    if (key === undefined) continue
+
+    const date = String(day?.date || '').trim()
+    if (date) target[key] = date
+  }
 }
 
 function formatPlexxisNumber(value: any, blankWhenZero = false): string {
@@ -413,7 +466,7 @@ function getLineTotalProductionForForm(line: any): number {
   return getLineMonSatProduction(line)
 }
 
-function getLineSummaryCostForForm(line: any, employeeWage: any): number {
+function getLineSummaryCostForForm(line: any, employeeWage: any, productionBurden: any): number {
   const totalHours = getLineTotalHoursForForm(line)
   const totalProduction = getLineTotalProductionForForm(line)
   if (totalHours <= 0 || totalProduction <= 0) return 0
@@ -421,13 +474,13 @@ function getLineSummaryCostForForm(line: any, employeeWage: any): number {
     employeeWage,
     totalHours,
     totalProduction,
-    TIMECARD_WEEKDAY_RATE,
+    productionBurden,
   )
 }
 
-function getLineTotalCostForForm(line: any, employeeWage?: any): number {
+function getLineTotalCostForForm(line: any, employeeWage?: any, productionBurden?: any): number {
   if (employeeWage !== undefined) {
-    const summaryCost = getLineSummaryCostForForm(line, employeeWage)
+    const summaryCost = getLineSummaryCostForForm(line, employeeWage, productionBurden)
     if (summaryCost > 0) return summaryCost
   }
   const fromTotals = toNumber(line?.totals?.lineTotal)
@@ -574,8 +627,12 @@ function normalizeTimecardForEmail(tc: any) {
       fri: 0,
       sat: 0,
     }
+    const datesByDay = buildWeekDateRecord(String(tc?.weekStartDate || ''))
 
     const days = Array.isArray(source?.days) ? source.days : []
+    const timecardDays = Array.isArray(tc?.days) ? tc.days : []
+    mergeDayDates(datesByDay, timecardDays)
+    mergeDayDates(datesByDay, days)
     for (const day of days) {
       const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
         ? day.dayOfWeek
@@ -603,7 +660,7 @@ function normalizeTimecardForEmail(tc: any) {
         employeeWage,
         hoursByDay[key],
         productionByDay[key],
-        getRateMultiplierForDay(key),
+        tc?.productionBurden,
       )
       unitCostByDay[key] = lineUnitCost || unitCostByDay[key] || computedUnitCost
     })
@@ -635,6 +692,7 @@ function normalizeTimecardForEmail(tc: any) {
       offHours: toNumber(source?.offHours ?? source?.off?.hours ?? source?.off),
       offProduction: toNumber(source?.offProduction ?? source?.off?.production),
       offCost: toNumber(source?.offCost ?? source?.off?.cost ?? source?.off?.amount),
+      dates: { ...datesByDay },
       production: productionByDay,
       unitCost: unitCostByDay,
     }
@@ -1104,7 +1162,6 @@ function toControllerTimecardRow(
     totalHours: Math.round(toNumber(tc?.totals?.hoursTotal) * 100) / 100,
     totalProduction: Math.round(toNumber(tc?.totals?.productionTotal) * 100) / 100,
     totalLine: Math.round(toNumber(tc?.totals?.lineTotal) * 100) / 100,
-    mileage: Math.round(toNumber(tc?.mileage) * 100) / 100,
     subcontractedEmployee: Boolean(tc?.subcontractedEmployee),
     submittedAt: submittedAtIso,
     submittedAtMs: submittedAtIso ? Date.parse(submittedAtIso) : null,
@@ -1406,17 +1463,14 @@ function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: 
   const fixedDataRowCount = 108
   const blankRow = Array(headers.length).fill('')
   const rows: Array<Array<string | number>> = [headers, [...blankRow]]
-  const fallbackWeekEnding = getWeekEndingFromWeekStart(weekStart)
+  const fallbackDates = buildWeekDateRecord(weekStart)
 
   for (const tc of Array.isArray(timecards) ? timecards : []) {
     const lines = Array.isArray(tc?.lines) && tc.lines.length ? tc.lines : []
-    const detailDate = formatPlexxisDate(String(tc?.weekEndingDate || fallbackWeekEnding || weekStart || ''))
     const employeeName = formatPlexxisEmployeeName(tc)
     const employeeCode = String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim()
 
     for (const line of lines) {
-      const lineHours = getLineTotalHoursForForm(line)
-      const lineProduction = getLineTotalProductionForForm(line)
       const subSection = getLineSubSection(line)
       const activityCode = sanitizeActivityCode(getLineActivityCode(line), line, [
         String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim(),
@@ -1424,23 +1478,27 @@ function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: 
       ])
       const costCode = getLineCostCode(line)
       const rowJobCode = String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim()
-      const hasData = lineHours > 0 || lineProduction > 0 || !!subSection || !!activityCode || !!costCode
+      for (const key of DAY_KEYS) {
+        const dayHours = toNumber(line?.[key])
+        const dayProduction = toNumber(line?.production?.[key])
+        const hasData = dayHours > 0 || dayProduction > 0
 
-      if (!hasData) continue
+        if (!hasData) continue
 
-      rows.push([
-        employeeName,
-        employeeCode,
-        rowJobCode,
-        detailDate,
-        subSection,
-        activityCode,
-        costCode,
-        formatPlexxisNumber(lineHours, true),
-        formatPlexxisNumber(lineProduction, true),
-        '',
-        '',
-      ])
+        rows.push([
+          employeeName,
+          employeeCode,
+          rowJobCode,
+          formatPlexxisDate(String(line?.dates?.[key] || fallbackDates[key] || tc?.weekEndingDate || '')),
+          subSection,
+          activityCode,
+          costCode,
+          formatPlexxisNumber(dayHours, true),
+          formatPlexxisNumber(dayProduction, true),
+          '',
+          '',
+        ])
+      }
     }
   }
 
@@ -1896,7 +1954,7 @@ async function buildTimecardPdfBuffer(payload: {
           : ''
         const lineHoursTotal = hasLine ? getLineTotalHoursForForm(line) : 0
         const lineProdTotal = hasLine ? getLineTotalProductionForForm(line) : 0
-        const lineCostTotal = hasLine ? getLineTotalCostForForm(line, employeeWage) : 0
+        const lineCostTotal = hasLine ? getLineTotalCostForForm(line, employeeWage, tc?.productionBurden) : 0
         const offHours = hasLine ? getLineOffHours(line) : 0
         const offProduction = hasLine ? getLineOffProduction(line) : 0
         const offCost = hasLine ? getLineOffCost(line) : 0

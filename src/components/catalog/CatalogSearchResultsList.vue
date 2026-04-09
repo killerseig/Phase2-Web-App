@@ -129,7 +129,3 @@ const hasCustomActions = computed(() => !!slots.actions)
     </div>
   </div>
 </template>
-
-<style lang="scss">
-@use '@/styles/_catalogSearchResults.scss';
-</style>

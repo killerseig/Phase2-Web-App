@@ -18,7 +18,6 @@ defineProps<{
   notesLocked: boolean
   editDisabled: boolean
   deleteDisabled: boolean
-  mileageDisabled: boolean
 }>()
 
 const emit = defineEmits<{
@@ -37,7 +36,6 @@ const emit = defineEmits<{
   (e: 'update-production', payload: { jobIndex: number; dayIndex: number; value: number }): void
   (e: 'update-unit-cost', payload: { jobIndex: number; dayIndex: number; value: number | null }): void
   (e: 'update-footer-field', payload: { field: WorkbookFooterField; value: string }): void
-  (e: 'update-mileage', value: string): void
   (e: 'update-notes', value: string): void
 }>()
 </script>
@@ -95,75 +93,3 @@ const emit = defineEmits<{
     </div>
   </BaseAccordionCard>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-$timecard-border-color: mix($surface-3, $primary, 78%);
-$timecard-divider-color: rgba($primary, 0.18);
-$timecard-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-
-.timecard-editor-card :deep(.accordion-card) {
-  background: $surface;
-  border-color: $timecard-border-color;
-  box-shadow: $timecard-shadow;
-}
-
-.timecard-editor-card :deep(.accordion-card__header) {
-  background: $surface-2;
-  color: $body-color;
-  border-bottom: 1px solid transparent;
-  padding: 0.6rem 0.8rem;
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.timecard-editor-card :deep(.accordion-card--open .accordion-card__header) {
-  background: linear-gradient(180deg, rgba($primary, 0.16) 0%, rgba($primary-200, 0.55) 60%, $surface-2 100%);
-}
-
-.timecard-editor-card :deep(.accordion-card__header:focus) {
-  box-shadow: 0 0 0 0.2rem rgba($primary, 0.22);
-}
-
-.timecard-editor-card :deep(.accordion-card__body) {
-  border-top-color: $timecard-divider-color;
-}
-
-.timecard-editor-card :deep(.accordion-card__inner) {
-  padding: 0;
-}
-
-.timecard-editor-card__workspace {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  padding: 0.8rem;
-}
-
-.timecard-editor-card :deep(.accordion-card:not(.accordion-card--open) .accordion-card__header) {
-  padding-bottom: 0.5rem;
-  padding-top: 0.5rem;
-}
-
-.timecard-editor-card__workspace-main,
-.timecard-editor-card__workspace-side {
-  min-width: 0;
-}
-
-@media (max-width: 768px) {
-  .timecard-editor-card :deep(.accordion-card__header) {
-    padding: 0.55rem 0.75rem;
-  }
-
-  .timecard-editor-card__workspace {
-    grid-template-columns: 1fr;
-    padding: 0.7rem;
-  }
-}
-
-@media (max-width: 1200px) {
-  .timecard-editor-card__workspace {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

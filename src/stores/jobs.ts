@@ -153,6 +153,7 @@ export const useJobsStore = defineStore('jobs', () => {
       cip?: string
       kjic?: string
       accountNumber?: string
+      productionBurden?: number | null
       type?: 'general' | 'subcontractor'
     }
   ) {
@@ -189,6 +190,7 @@ export const useJobsStore = defineStore('jobs', () => {
       cip?: string | null
       kjic?: string | null
       accountNumber?: string | null
+      productionBurden?: number | null
       type?: 'general' | 'subcontractor'
     }
   ) {

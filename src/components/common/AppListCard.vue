@@ -49,11 +49,11 @@ const cardClasses = computed(() => [
     <template #header>
       <div class="d-flex align-items-center justify-content-between gap-2">
         <div>
-          <h5 class="mb-0">
+          <h5 class="app-section-card__title mb-0">
             <i v-if="icon" :class="[icon, 'me-2']" aria-hidden="true" />
             {{ title }}
           </h5>
-          <small v-if="subtitle" class="text-muted d-block mt-1">{{ subtitle }}</small>
+          <small v-if="subtitle" class="app-section-card__subtitle d-block mt-1">{{ subtitle }}</small>
         </div>
         <div v-if="hasHeaderActions" class="d-flex align-items-center gap-2">
           <AppBadge v-if="badgeLabel !== null && badgeLabel !== undefined" :label="badgeLabel" :variant-class="badgeVariantClass" />

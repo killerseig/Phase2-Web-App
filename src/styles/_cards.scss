@@ -1,33 +1,23 @@
-@use '@/styles/_variables.scss' as vars;
-
 .card {
-  background: var(--surface-2, vars.$surface-2);
-  color: var(--text-body, vars.$body-color);
-  border: 1px solid var(--border, vars.$border-color);
-  box-shadow: var(--shadow-sm, vars.$box-shadow-sm);
-  border-radius: var(--radius, vars.$border-radius);
-  transition: all 0.2s ease;
-}
-
-.card-header,
-.card-footer {
-  padding: 0.95rem 1.2rem;
-}
-
-.card-body {
-  padding: 1.1rem 1.2rem;
+  --bs-card-spacer-y: clamp(0.78rem, 1.6vw, 0.95rem);
+  --bs-card-spacer-x: clamp(0.78rem, 1.6vw, 0.95rem);
+  --bs-card-cap-padding-y: 0.7rem;
+  --bs-card-cap-padding-x: 0.9rem;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .card-hover:hover {
-  box-shadow: var(--shadow, vars.$box-shadow);
-  transform: translateY(-2px);
+  border-color: rgba(var(--bs-primary-rgb), 0.2);
+  box-shadow: var(--shadow);
 }
 
 .panel-header {
-  background: var(--surface-2, vars.$surface-2);
-  color: var(--text-body, vars.$body-color);
-  border-bottom: 1px solid var(--border, vars.$border-color);
-  padding: 0.95rem 1.2rem;
+  background: var(--app-panel-header-bg);
+  color: var(--bs-body-color);
+  border-bottom: 1px solid var(--bs-border-color);
+  padding: 0.7rem 0.9rem;
 }
 
 .panel-header h1,
@@ -41,8 +31,74 @@
 }
 
 .panel-footer {
-  background: var(--surface-2, vars.$surface-2);
-  color: var(--text-body, vars.$body-color);
-  border-top: 1px solid var(--border, vars.$border-color);
-  padding: 0.95rem 1.2rem;
+  background: var(--app-panel-footer-bg);
+  color: var(--bs-body-color);
+  border-top: 1px solid var(--bs-border-color);
+  padding: 0.7rem 0.9rem;
+}
+
+.app-section-card__title {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.app-section-card__subtitle {
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.accordion-card {
+  background: var(--app-accordion-card-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+
+.accordion-card__header {
+  background: var(--bs-secondary-bg);
+  border-bottom: 0;
+  color: var(--bs-body-color);
+  padding: 0.72rem 0.95rem;
+}
+
+.accordion-card__body {
+  background: var(--app-accordion-card-bg);
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.chevron {
+  font-size: 0.95rem;
+  transition: transform 0.3s ease-in-out;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.inline-collapse {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+}
+
+.accordion-card__inner {
+  padding: 0.75rem 0.95rem;
+}
+
+.accordion-card__header h5 {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.accordion-card__header p {
+  font-size: 0.82rem;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import AdminJobsBrowserCard from '@/components/admin/AdminJobsBrowserCard.vue'
 import AdminJobsCreateCard from '@/components/admin/AdminJobsCreateCard.vue'
 import AdminJobsExportToolbar from '@/components/admin/AdminJobsExportToolbar.vue'
 import AdminJobsTableCard from '@/components/admin/AdminJobsTableCard.vue'
@@ -32,6 +33,26 @@ const baseJob: Job = {
 }
 
 describe('admin jobs section components', () => {
+  it('emits browser toolbar actions', async () => {
+    const wrapper = mount(AdminJobsBrowserCard, {
+      props: {
+        jobs: [baseJob],
+        loading: false,
+        error: '',
+        selectedJobId: 'job-1',
+        sortKey: 'name',
+        sortDir: 'asc',
+        currentWeekEnd: '2026-04-04',
+        currentWeekLabel: 'Mar 29 - Apr 4',
+        showCreate: false,
+      },
+    })
+
+    await wrapper.get('button.btn-primary').trigger('click')
+
+    expect(wrapper.emitted('toggle-create')).toEqual([[]])
+  })
+
   it('emits merged form updates from the create card', async () => {
     const wrapper = mount(AdminJobsCreateCard, {
       props: {

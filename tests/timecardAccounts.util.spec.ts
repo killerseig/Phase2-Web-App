@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildTimecardAccountsSummary } from '@/utils/timecardAccounts'
 import type { TimecardModel } from '@/utils/timecardUtils'
+import { buildLegacyWorkbookSampleTimecard } from './helpers/timecardWorkbookSample'
 
 function createTimecard(overrides: Partial<TimecardModel> = {}): TimecardModel {
   return {
@@ -89,6 +90,61 @@ describe('buildTimecardAccountsSummary', () => {
         account: '7000',
         hoursTotal: 6,
         productionTotal: 12,
+      },
+    ])
+  })
+
+  it('matches the account summary lines from the filled legacy workbook sample', () => {
+    const summary = buildTimecardAccountsSummary([buildLegacyWorkbookSampleTimecard()])
+
+    expect(summary).toEqual([
+      {
+        key: '4197|1|1101',
+        jobNumber: '4197',
+        subsectionArea: '1',
+        account: '1101',
+        hoursTotal: 2,
+        productionTotal: 8,
+      },
+      {
+        key: '4197|1|1118',
+        jobNumber: '4197',
+        subsectionArea: '1',
+        account: '1118',
+        hoursTotal: 3,
+        productionTotal: 48,
+      },
+      {
+        key: '4197|1|1121',
+        jobNumber: '4197',
+        subsectionArea: '1',
+        account: '1121',
+        hoursTotal: 29,
+        productionTotal: 100,
+      },
+      {
+        key: '4197|1|2089',
+        jobNumber: '4197',
+        subsectionArea: '1',
+        account: '2089',
+        hoursTotal: 1,
+        productionTotal: 15,
+      },
+      {
+        key: '4197|99|9001',
+        jobNumber: '4197',
+        subsectionArea: '99',
+        account: '9001',
+        hoursTotal: 2.5,
+        productionTotal: 0,
+      },
+      {
+        key: '4197|99|9015',
+        jobNumber: '4197',
+        subsectionArea: '99',
+        account: '9015',
+        hoursTotal: 2.5,
+        productionTotal: 0,
       },
     ])
   })

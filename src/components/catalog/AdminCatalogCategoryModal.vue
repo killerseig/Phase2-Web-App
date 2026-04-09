@@ -44,24 +44,3 @@ const categoryNameModel = computed({
     />
   </BaseFormModal>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-@use '@/styles/_adminCatalogControls.scss';
-
-:deep(.catalog-modal-content) {
-  background: $surface-2;
-  color: $body-color;
-  border-color: $border-color;
-  box-shadow: $box-shadow;
-}
-
-:deep(.catalog-modal-content .modal-header),
-:deep(.catalog-modal-content .modal-footer) {
-  border-color: $border-color;
-}
-
-:deep(.catalog-modal-content .btn-close) {
-  filter: invert(1) contrast(1.1);
-}
-</style>

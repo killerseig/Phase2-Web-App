@@ -51,6 +51,10 @@ vi.mock('@/services/JobRoster', () => ({
   listActiveRosterEmployees: listActiveRosterEmployeesMock,
 }))
 
+vi.mock('@/services/Jobs', () => ({
+  getJob: getJobMock,
+}))
+
 const addDocMock = addDoc as unknown as ReturnType<typeof vi.fn>
 const getDocMock = getDoc as unknown as ReturnType<typeof vi.fn>
 const getDocsMock = getDocs as unknown as ReturnType<typeof vi.fn>
@@ -62,12 +66,16 @@ const useAuthStoreMock = useAuthStore as unknown as ReturnType<typeof vi.fn>
 const { listActiveRosterEmployeesMock } = vi.hoisted(() => ({
   listActiveRosterEmployeesMock: vi.fn(),
 }))
+const { getJobMock } = vi.hoisted(() => ({
+  getJobMock: vi.fn(),
+}))
 
 describe('Timecards service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requireUserMock.mockReturnValue({ uid: 'u1' })
     useAuthStoreMock.mockReturnValue({ role: ROLES.ADMIN })
+    getJobMock.mockResolvedValue({ id: 'job-1', productionBurden: 0.33 })
   })
 
   it('creates timecard with totals, weekStartDate, and timestamps', async () => {
@@ -105,7 +113,7 @@ describe('Timecards service', () => {
     })
     expect(payload.regularHoursOverride).toBeNull()
     expect(payload.overtimeHoursOverride).toBeNull()
-    expect(payload.mileage).toBeNull()
+    expect(payload.productionBurden).toBe(0.33)
     expect(payload.footerJobOrGl).toBe('')
     expect(payload.footerAccount).toBe('')
     expect(payload.footerOffice).toBe('')
@@ -130,7 +138,7 @@ describe('Timecards service', () => {
       notes: 'updated',
       regularHoursOverride: 4.5,
       overtimeHoursOverride: 0.5,
-      mileage: 18.2,
+      productionBurden: 0.4,
       footerJobOrGl: '6428',
       footerAccount: '1101',
       footerOffice: 'Y',
@@ -143,7 +151,7 @@ describe('Timecards service', () => {
     expect(payload.notes).toBe('updated')
     expect(payload.regularHoursOverride).toBe(4.5)
     expect(payload.overtimeHoursOverride).toBe(0.5)
-    expect(payload.mileage).toBe(18.2)
+    expect(payload.productionBurden).toBe(0.4)
     expect(payload.footerJobOrGl).toBe('6428')
     expect(payload.footerAccount).toBe('1101')
     expect(payload.footerOffice).toBe('Y')
@@ -256,6 +264,7 @@ describe('Timecards service', () => {
     expect(payload.employeeNumber).toBe('8060')
     expect(payload.employeeName).toBe('Anselmo Gutierrez')
     expect(payload.occupation).toBe('Framer')
+    expect(payload.productionBurden).toBe(0.33)
     expect(payload.subcontractedEmployee).toBe(true)
     expect(payload.jobs).toHaveLength(13)
     expect(payload.jobs[0]).toMatchObject({
@@ -348,6 +357,7 @@ describe('Timecards service', () => {
       lastName: 'Doe',
       occupation: 'Foreman',
       employeeWage: 42.5,
+      productionBurden: 0.33,
       subcontractedEmployee: true,
       footerJobOrGl: '6428',
       footerAccount: '1101',
@@ -395,10 +405,10 @@ describe('Timecards service', () => {
       firstName: 'Jane',
       lastName: 'Doe',
       employeeWage: 42.5,
+      productionBurden: 0.33,
       subcontractedEmployee: true,
       regularHoursOverride: null,
       overtimeHoursOverride: null,
-      mileage: null,
       footerJobOrGl: '',
       footerAccount: '',
       footerOffice: '',
@@ -461,7 +471,8 @@ describe('Timecards service', () => {
     const rows = csv.split('\r\n')
 
     expect(rows[0]).toBe('Employee Name,Employee Code,Job Code,DETAIL_DATE,Sub-Section,Activity Code,Cost Code,H_Hours,P_HOURS,,')
-    expect(rows[2]).toBe('"Gutierrez, Anselmo",8060,6428,2/28/2026,2,1101,,16,39,,')
+    expect(rows[2]).toBe('"Gutierrez, Anselmo",8060,6428,2/23/2026,2,1101,,8,19,,')
+    expect(rows[3]).toBe('"Gutierrez, Anselmo",8060,6428,2/24/2026,2,1101,,8,20,,')
   })
 
   it('returns an empty string when there are no submitted timecards to export', async () => {

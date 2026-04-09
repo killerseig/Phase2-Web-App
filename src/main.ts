@@ -37,6 +37,10 @@ if (typeof window !== 'undefined' && !window.__phase2ErrorHandlersInstalled) {
   window.__phase2ErrorHandlersInstalled = true
 }
 
+if (typeof document !== 'undefined') {
+  document.documentElement.setAttribute('data-bs-theme', 'dark')
+}
+
 const auth = useAuthStore(pinia)
 void auth.init()
 

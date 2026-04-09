@@ -52,18 +52,3 @@ function handleQuantityInput(event: Event) {
     </button>
   </div>
 </template>
-
-<style scoped lang="scss">
-.catalog-order-actions {
-  align-items: center;
-}
-
-.catalog-order-count {
-  align-self: center;
-  line-height: 1;
-}
-
-.catalog-order-qty {
-  width: 70px;
-}
-</style>

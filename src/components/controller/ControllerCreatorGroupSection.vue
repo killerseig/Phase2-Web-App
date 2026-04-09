@@ -42,7 +42,6 @@ const emit = defineEmits<{
   'update-production': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number }]
   'update-unit-cost': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number | null }]
   'update-footer-field': [payload: { timecard: TimecardModel; field: WorkbookFooterField; value: string }]
-  'update-mileage': [payload: { timecard: TimecardModel; value: string }]
   'update-notes': [payload: { timecard: TimecardModel; value: string }]
 }>()
 </script>
@@ -81,7 +80,6 @@ const emit = defineEmits<{
       :notes-locked="isTimecardLocked(entry.timecard)"
       :edit-disabled="isTimecardLocked(entry.timecard)"
       :delete-disabled="isTimecardDeleteDisabled(entry.timecard)"
-      :mileage-disabled="isTimecardLocked(entry.timecard)"
       @update:edit-form="emit('update:editForm', $event)"
       @update:open="(open) => emit('toggle-open', { key: entry.key, open })"
       @toggle-edit="emit('toggle-edit', entry)"
@@ -97,7 +95,6 @@ const emit = defineEmits<{
       @update-production="({ jobIndex, dayIndex, value }) => emit('update-production', { timecard: entry.timecard, jobIndex, dayIndex, value })"
       @update-unit-cost="({ jobIndex, dayIndex, value }) => emit('update-unit-cost', { timecard: entry.timecard, jobIndex, dayIndex, value })"
       @update-footer-field="({ field, value }) => emit('update-footer-field', { timecard: entry.timecard, field, value })"
-      @update-mileage="(value) => emit('update-mileage', { timecard: entry.timecard, value })"
       @update-notes="(value) => emit('update-notes', { timecard: entry.timecard, value })"
     >
       <template #badges>
@@ -110,39 +107,3 @@ const emit = defineEmits<{
     </TimecardEditorCard>
   </section>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-$controller-divider: rgba($primary, 0.18);
-
-.controller-creator-group + .controller-creator-group {
-  border-top: 1px solid $controller-divider;
-}
-
-.controller-creator-group__header {
-  padding: 0.55rem 0.85rem;
-}
-
-.controller-creator-group__header :deep(.app-toolbar-meta__eyebrow) {
-  margin-bottom: 0.08rem;
-}
-
-.controller-creator-group__header :deep(.app-toolbar-meta__subtitle) {
-  margin-top: 0.12rem;
-}
-
-.controller-creator-group__header :deep(.controller-timecard-summary) {
-  gap: 0.2rem;
-}
-
-.controller-week-badge {
-  letter-spacing: 0.01em;
-}
-
-@media (max-width: 991px) {
-  .controller-creator-group__header {
-    align-items: flex-start;
-  }
-}
-</style>

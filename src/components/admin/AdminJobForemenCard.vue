@@ -12,6 +12,7 @@ defineProps<{
   removingForemanId: string
   settingDisplayForemanId: string
   displayForeman: string
+  embedded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -24,16 +25,18 @@ const emit = defineEmits<{
 
 <template>
   <AppSectionCard
-    title="Foremen"
-    subtitle="Assign existing foreman users to this job."
+    class="admin-job-foremen-card"
+    :class="{ 'admin-job-foremen-card--embedded': embedded }"
+    title="Foreman"
+    :subtitle="embedded ? '' : 'Assign the foreman who submits timecards for this job.'"
     icon="bi bi-person-workspace"
-    body-class="d-flex flex-column gap-3"
+    body-class="admin-job-foremen-card__body"
   >
-    <div class="d-flex flex-column gap-2">
+    <div class="admin-job-foremen-card__assign">
       <SearchSelectField
         :model-value="selectedForemanId"
         :options="availableForemanOptions"
-        label="Add Foreman"
+        label="Assign Foreman"
         placeholder="Search active foremen"
         prepend-icon="bi bi-search"
         clear-label="No selection"
@@ -47,12 +50,12 @@ const emit = defineEmits<{
         @click="emit('assign')"
       >
         <span v-if="assigningForemanId" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-        Add Foreman
-      </button>
+        Assign Foreman
+        </button>
     </div>
 
-    <div class="small text-muted">
-      Display foreman:
+    <div class="admin-job-foremen-card__display small text-muted">
+      Job foreman:
       <strong>{{ displayForeman || 'Not set' }}</strong>
     </div>
 
@@ -60,23 +63,23 @@ const emit = defineEmits<{
       v-if="assignedForemen.length === 0"
       variant="info"
       class="mb-0"
-      message="No foremen are assigned to this job yet."
+      message="No foreman is assigned to this job yet."
     />
 
-    <div v-else class="list-group list-group-flush">
+    <div v-else class="admin-job-foremen-card__list">
       <div
         v-for="foreman in assignedForemen"
         :key="foreman.id"
-        class="list-group-item bg-transparent px-0"
+        class="admin-job-foremen-card__item"
       >
-        <div class="d-flex flex-column gap-2">
+        <div class="admin-job-foremen-card__item-body">
           <div class="d-flex flex-wrap align-items-center gap-2">
             <span class="fw-semibold">{{ foreman.label }}</span>
             <span
               v-if="foreman.isDisplayForeman"
               class="badge text-bg-primary"
             >
-              Display
+              Foreman
             </span>
             <span
               v-if="!foreman.active"
@@ -96,7 +99,7 @@ const emit = defineEmits<{
             {{ foreman.email }}
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
+          <div class="admin-job-foremen-card__item-actions">
             <button
               v-if="!foreman.isDisplayForeman && !foreman.missing"
               type="button"
@@ -109,7 +112,7 @@ const emit = defineEmits<{
                 class="spinner-border spinner-border-sm me-2"
                 aria-hidden="true"
               ></span>
-              Use As Display
+              Set As Foreman
             </button>
             <button
               type="button"

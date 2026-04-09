@@ -86,10 +86,10 @@ const statusOptions = [
     <template v-if="!embedded" #header>
       <AppToolbarMeta
         eyebrow="Search Filters"
-        title="Find & Export Timecards"
+        title="Search & Export"
         title-tag="h3"
         title-class="mb-0 controller-filter-card__title"
-        subtitle="Downloads use the active search filters."
+        subtitle="Exports use the current search."
       />
     </template>
 
@@ -269,134 +269,3 @@ const statusOptions = [
     />
   </AppToolbarCard>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.controller-card {
-  background: $surface-2;
-  border: 1px solid $border-color;
-  color: $body-color;
-}
-
-.controller-filter-card :deep(.panel-header) {
-  padding: 0.7rem 0.85rem 0.65rem;
-}
-
-.controller-filter-card :deep(.controller-filter-card__body) {
-  padding: 0.75rem 0.85rem 0.85rem;
-}
-
-.controller-filter-card.controller-filter-card--embedded :deep(.controller-filter-card__body) {
-  padding-top: 0.95rem;
-}
-
-.controller-filter-card__title {
-  font-size: clamp(1.15rem, 1.55vw, 1.45rem);
-  line-height: 1.1;
-}
-
-.controller-filter-stack {
-  display: grid;
-  gap: 0.7rem;
-}
-
-.controller-filter-stack__section {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.controller-filter-stack__range-grid {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.controller-filter-label {
-  font-size: 0.64rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.controller-filter-switch {
-  margin-bottom: 0.2rem;
-  min-height: 1.25rem;
-}
-
-.controller-filter-grid-compact {
-  display: grid;
-  gap: 0.55rem 0.6rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.controller-filter-grid-compact__span-2 {
-  grid-column: 1 / -1;
-}
-
-.controller-filter-footer {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.controller-filter-actions {
-  display: grid;
-  gap: 0.55rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.controller-filter-actions__full {
-  grid-column: 1 / -1;
-}
-
-.controller-filter-card :deep(.app-toolbar-meta__eyebrow) {
-  margin-bottom: 0.2rem;
-}
-
-.controller-filter-card :deep(.app-toolbar-meta__subtitle) {
-  font-size: 0.85rem;
-  margin-top: 0.25rem;
-}
-
-.controller-filter-card :deep(.app-toolbar-summary) {
-  padding: 0.7rem 0.8rem;
-}
-
-.controller-filter-card :deep(.app-toolbar-summary__kicker) {
-  font-size: 0.62rem;
-}
-
-.controller-filter-card :deep(.app-toolbar-summary__line) {
-  gap: 0.45rem;
-}
-
-.controller-filter-card :deep(.btn.btn-sm) {
-  min-height: calc(1.5em + 0.45rem + 2px);
-  padding-block: 0.35rem;
-}
-
-.controller-filter-card :deep(.input-group-text) {
-  padding: 0.32rem 0.5rem;
-}
-
-.controller-filter-card :deep(.form-control),
-.controller-filter-card :deep(.form-select) {
-  min-height: calc(1.5em + 0.45rem + 2px);
-}
-
-@media (max-width: 575px) {
-  .controller-filter-grid-compact,
-  .controller-filter-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .controller-filter-actions__full {
-    grid-column: auto;
-  }
-
-  .controller-filter-card :deep(.panel-header),
-  .controller-filter-card :deep(.controller-filter-card__body) {
-    padding-left: 0.8rem;
-    padding-right: 0.8rem;
-  }
-}
-</style>

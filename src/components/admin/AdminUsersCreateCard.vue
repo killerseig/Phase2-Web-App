@@ -36,15 +36,17 @@ function updateField<K extends keyof UserCreateForm>(field: K, value: UserCreate
 <template>
   <AdminAccordionFormCard
     :open="open"
-    title="Create User"
-    subtitle="Add a new user account and set their role"
+    title="New User"
+    subtitle="Create an account and assign initial access."
+    form-class="row g-2 align-items-end"
+    body-class="p-2"
     :loading="loading"
     submit-label="Create User"
     @update:open="(value) => emit('update:open', value)"
     @submit="emit('submit')"
     @cancel="emit('cancel')"
   >
-    <div class="col-md-4">
+    <div class="col-xl-4 col-md-6">
       <BaseInputField
         :model-value="form.email"
         type="email"
@@ -55,7 +57,7 @@ function updateField<K extends keyof UserCreateForm>(field: K, value: UserCreate
         @update:model-value="updateField('email', $event)"
       />
     </div>
-    <div class="col-md-4">
+    <div class="col-xl-3 col-md-6">
       <BaseInputField
         :model-value="form.firstName"
         label="First Name"
@@ -65,7 +67,7 @@ function updateField<K extends keyof UserCreateForm>(field: K, value: UserCreate
         @update:model-value="updateField('firstName', $event)"
       />
     </div>
-    <div class="col-md-4">
+    <div class="col-xl-3 col-md-6">
       <BaseInputField
         :model-value="form.lastName"
         label="Last Name"
@@ -75,7 +77,7 @@ function updateField<K extends keyof UserCreateForm>(field: K, value: UserCreate
         @update:model-value="updateField('lastName', $event)"
       />
     </div>
-    <div class="col-md-4">
+    <div class="col-xl-2 col-md-6">
       <BaseSelectField
         :model-value="form.role"
         label="Role"

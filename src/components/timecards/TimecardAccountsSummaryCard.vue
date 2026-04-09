@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppSectionCard from '@/components/common/AppSectionCard.vue'
-import AppStatCard from '@/components/common/AppStatCard.vue'
 import type { TimecardAccountSummaryItem } from '@/types/timecards'
 
 defineOptions({
@@ -22,27 +21,24 @@ function formatNumber(value: number): string {
 
 <template>
   <AppSectionCard
+    class="timecard-summary-card"
     title="Week Summary"
     icon="bi bi-calculator"
-    body-class="timecard-summary-card__body d-flex flex-column gap-2"
+    body-class="timecard-summary-card__body d-flex flex-column gap-3"
   >
     <div class="timecard-summary-stats">
-      <AppStatCard
-        label="Employees"
-        :value="employeeCount"
-        card-class="timecard-summary-stat-card"
-      />
-      <AppStatCard
-        label="Draft"
-        :value="draftCount"
-        tone="accent"
-        card-class="timecard-summary-stat-card"
-      />
-      <AppStatCard
-        label="Submitted"
-        :value="submittedCount"
-        card-class="timecard-summary-stat-card"
-      />
+      <div class="timecard-summary-stats__item">
+        <div class="timecard-summary-stats__label">Employees</div>
+        <div class="timecard-summary-stats__value">{{ employeeCount }}</div>
+      </div>
+      <div class="timecard-summary-stats__item timecard-summary-stats__item--accent">
+        <div class="timecard-summary-stats__label">Draft</div>
+        <div class="timecard-summary-stats__value">{{ draftCount }}</div>
+      </div>
+      <div class="timecard-summary-stats__item">
+        <div class="timecard-summary-stats__label">Submitted</div>
+        <div class="timecard-summary-stats__value">{{ submittedCount }}</div>
+      </div>
     </div>
 
     <div class="timecard-summary-accounts">
@@ -92,99 +88,3 @@ function formatNumber(value: number): string {
     </div>
   </AppSectionCard>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.timecard-summary-stats {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.timecard-summary-card__body {
-  min-height: 0;
-}
-
-.timecard-summary-accounts__table-wrap {
-  max-height: 13.5rem;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.timecard-summary-accounts__table {
-  --bs-table-bg: transparent;
-  --bs-table-border-color: rgba($border-color, 0.55);
-  color: $body-color;
-  font-size: 0.88rem;
-  table-layout: fixed;
-  width: 100%;
-}
-
-.timecard-summary-accounts__table thead th {
-  background: rgba($surface-2, 0.82);
-  border-bottom-width: 1px;
-  color: $text-muted;
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 0.5rem 0.45rem 0.4rem;
-  position: static;
-  text-transform: uppercase;
-  white-space: nowrap;
-  word-break: keep-all;
-}
-
-.timecard-summary-accounts__table tbody td {
-  background: rgba($surface-2, 0.38);
-  padding: 0.6rem 0.45rem;
-  vertical-align: middle;
-}
-
-.timecard-summary-accounts__table tbody td:nth-child(1),
-.timecard-summary-accounts__table tbody td:nth-child(2),
-.timecard-summary-accounts__table tbody td:nth-child(3) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.timecard-summary-accounts__col--job {
-  width: 20%;
-}
-
-.timecard-summary-accounts__col--area,
-.timecard-summary-accounts__col--acct {
-  width: 14%;
-}
-
-.timecard-summary-accounts__col--hours,
-.timecard-summary-accounts__col--prod {
-  width: 26%;
-}
-
-.timecard-summary-stats :deep(.timecard-summary-stat-card .card-body) {
-  min-width: 0;
-  padding: 0.75rem;
-}
-
-.timecard-summary-stats :deep(.timecard-summary-stat-card .app-stat-card__label) {
-  font-size: 0.62rem;
-  letter-spacing: 0.02em;
-  line-height: 1.1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.timecard-summary-stats :deep(.timecard-summary-stat-card .app-stat-card__value) {
-  font-size: clamp(1.25rem, 1.7vw, 1.65rem);
-  margin-top: 0.2rem;
-}
-
-@media (max-width: 768px) {
-  .timecard-summary-stats {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

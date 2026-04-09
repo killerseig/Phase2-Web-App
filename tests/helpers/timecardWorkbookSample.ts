@@ -1,0 +1,142 @@
+import type { TimecardModel } from '@/utils/timecardUtils'
+import { makeDaysArray, recalcTotalsForTimecard } from '@/utils/timecardUtils'
+
+export const LEGACY_WORKBOOK_SAMPLE_WEEK_START = '2026-01-18'
+export const LEGACY_WORKBOOK_SAMPLE_WEEK_END = '2026-01-24'
+
+export function buildLegacyWorkbookSampleTimecard(): TimecardModel {
+  const timecard: TimecardModel = {
+    id: 'legacy-sample-1',
+    jobId: 'job-1',
+    weekStartDate: LEGACY_WORKBOOK_SAMPLE_WEEK_START,
+    weekEndingDate: LEGACY_WORKBOOK_SAMPLE_WEEK_END,
+    status: 'draft',
+    createdByUid: 'user-1',
+    employeeRosterId: 'roster-1',
+    employeeNumber: '240',
+    employeeName: 'Aguirre Marcelo',
+    firstName: 'Aguirre',
+    lastName: 'Marcelo',
+    occupation: 'Framer/Rocker',
+    employeeWage: 30,
+    productionBurden: 0.33,
+    subcontractedEmployee: false,
+    regularHoursOverride: null,
+    overtimeHoursOverride: null,
+    footerJobOrGl: '',
+    footerAccount: '',
+    footerOffice: '',
+    footerAmount: '',
+    jobs: [
+      {
+        jobNumber: '4197',
+        subsectionArea: '99',
+        area: '99',
+        account: '9015',
+        acct: '9015',
+        days: [
+          { date: '2026-01-18', dayOfWeek: 0, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-19', dayOfWeek: 1, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-20', dayOfWeek: 2, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-21', dayOfWeek: 3, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-22', dayOfWeek: 4, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-23', dayOfWeek: 5, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-24', dayOfWeek: 6, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+        ],
+      },
+      {
+        jobNumber: '4197',
+        subsectionArea: '99',
+        area: '99',
+        account: '9001',
+        acct: '9001',
+        days: [
+          { date: '2026-01-18', dayOfWeek: 0, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-19', dayOfWeek: 1, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-20', dayOfWeek: 2, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-21', dayOfWeek: 3, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-22', dayOfWeek: 4, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-23', dayOfWeek: 5, hours: 0.5, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-24', dayOfWeek: 6, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+        ],
+      },
+      {
+        jobNumber: '4197',
+        subsectionArea: '1',
+        area: '1',
+        account: '1121',
+        acct: '1121',
+        days: [
+          { date: '2026-01-18', dayOfWeek: 0, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-19', dayOfWeek: 1, hours: 7, production: 20, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-20', dayOfWeek: 2, hours: 5.5, production: 20, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-21', dayOfWeek: 3, hours: 6, production: 20, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-22', dayOfWeek: 4, hours: 7, production: 30, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-23', dayOfWeek: 5, hours: 3.5, production: 10, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-24', dayOfWeek: 6, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+        ],
+      },
+      {
+        jobNumber: '4197',
+        subsectionArea: '1',
+        area: '1',
+        account: '1118',
+        acct: '1118',
+        days: [
+          { date: '2026-01-18', dayOfWeek: 0, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-19', dayOfWeek: 1, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-20', dayOfWeek: 2, hours: 1.5, production: 20, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-21', dayOfWeek: 3, hours: 1, production: 20, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-22', dayOfWeek: 4, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-23', dayOfWeek: 5, hours: 0.5, production: 8, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-24', dayOfWeek: 6, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+        ],
+      },
+      {
+        jobNumber: '4197',
+        subsectionArea: '1',
+        area: '1',
+        account: '1101',
+        acct: '1101',
+        days: [
+          { date: '2026-01-18', dayOfWeek: 0, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-19', dayOfWeek: 1, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-20', dayOfWeek: 2, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-21', dayOfWeek: 3, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-22', dayOfWeek: 4, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-23', dayOfWeek: 5, hours: 2, production: 8, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-24', dayOfWeek: 6, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+        ],
+      },
+      {
+        jobNumber: '4197',
+        subsectionArea: '1',
+        area: '1',
+        account: '2089',
+        acct: '2089',
+        days: [
+          { date: '2026-01-18', dayOfWeek: 0, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-19', dayOfWeek: 1, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-20', dayOfWeek: 2, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-21', dayOfWeek: 3, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-22', dayOfWeek: 4, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-23', dayOfWeek: 5, hours: 1, production: 15, unitCost: 0, lineTotal: 0 },
+          { date: '2026-01-24', dayOfWeek: 6, hours: 0, production: 0, unitCost: 0, lineTotal: 0 },
+        ],
+      },
+    ],
+    days: makeDaysArray(LEGACY_WORKBOOK_SAMPLE_WEEK_START),
+    totals: {
+      hours: Array(7).fill(0),
+      production: Array(7).fill(0),
+      hoursTotal: 0,
+      productionTotal: 0,
+      lineTotal: 0,
+    },
+    notes: '',
+    archived: false,
+  }
+
+  recalcTotalsForTimecard(timecard, LEGACY_WORKBOOK_SAMPLE_WEEK_START)
+  return timecard
+}

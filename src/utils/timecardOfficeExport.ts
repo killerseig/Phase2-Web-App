@@ -1,9 +1,6 @@
 import type { Timecard, TimecardJobEntry } from '@/types/models'
-import {
-  calculateUnitCost,
-  TIMECARD_SATURDAY_RATE,
-  TIMECARD_WEEKDAY_RATE,
-} from '@/utils/timecardUtils'
+import { normalizeProductionBurden } from '@/constants/timecards'
+import { calculateUnitCost } from '@/utils/timecardUtils'
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 type DayKey = typeof DAY_KEYS[number]
@@ -24,6 +21,7 @@ type OfficeExportLine = {
   offHours: number
   offProduction: number
   offCost: number
+  dates: Record<DayKey, string>
   production: Record<DayKey, number>
   unitCost: Record<DayKey, number>
   totals: {
@@ -37,10 +35,6 @@ function toNumber(value: unknown): number {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return 0
   return parsed
-}
-
-function getRateMultiplierForDay(dayKey: DayKey): number {
-  return dayKey === 'sat' ? TIMECARD_SATURDAY_RATE : TIMECARD_WEEKDAY_RATE
 }
 
 function formatOfficeDate(dateString: string): string {
@@ -189,22 +183,6 @@ function sanitizeActivityCode(value: unknown, line: unknown, disallowedValues: u
   return raw
 }
 
-function getLineMonSatHours(line: OfficeExportLine): number {
-  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line[key as DayKey]), 0)
-}
-
-function getLineMonSatProduction(line: OfficeExportLine): number {
-  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line.production[key as DayKey]), 0)
-}
-
-function getLineTotalHoursForForm(line: OfficeExportLine): number {
-  return getLineMonSatHours(line)
-}
-
-function getLineTotalProductionForForm(line: OfficeExportLine): number {
-  return getLineMonSatProduction(line)
-}
-
 function buildEmptyDayRecord(): Record<DayKey, number> {
   return {
     sun: 0,
@@ -217,18 +195,71 @@ function buildEmptyDayRecord(): Record<DayKey, number> {
   }
 }
 
+function buildEmptyDayDateRecord(): Record<DayKey, string> {
+  return {
+    sun: '',
+    mon: '',
+    tue: '',
+    wed: '',
+    thu: '',
+    fri: '',
+    sat: '',
+  }
+}
+
+function buildWeekDateRecord(weekStartDate: string): Record<DayKey, string> {
+  const dates = buildEmptyDayDateRecord()
+  const trimmed = String(weekStartDate || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return dates
+
+  const base = new Date(`${trimmed}T00:00:00Z`)
+  DAY_KEYS.forEach((key, index) => {
+    const date = new Date(base)
+    date.setUTCDate(base.getUTCDate() + index)
+    const yyyy = date.getUTCFullYear()
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const dd = String(date.getUTCDate()).padStart(2, '0')
+    dates[key] = `${yyyy}-${mm}-${dd}`
+  })
+
+  return dates
+}
+
+function mergeDayDates(
+  target: Record<DayKey, string>,
+  sourceDays: Array<Record<string, unknown>>,
+): void {
+  for (const day of sourceDays) {
+    const idx = typeof day.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
+      ? day.dayOfWeek
+      : sourceDays.indexOf(day)
+    const key = DAY_KEYS[idx]
+    if (key === undefined) continue
+
+    const date = String(day.date || '').trim()
+    if (date) target[key] = date
+  }
+}
+
 function normalizeOfficeExportLine(
   timecard: Timecard,
   lineSource: TimecardJobEntry | Record<string, unknown>,
   defaultJobCode?: string,
 ): OfficeExportLine {
   const employeeWage = toNumber(timecard.employeeWage)
+  const productionBurden = normalizeProductionBurden(timecard.productionBurden)
   const sourceRecord = lineSource as Record<string, unknown>
   const hoursByDay = buildEmptyDayRecord()
   const productionByDay = buildEmptyDayRecord()
   const unitCostByDay = buildEmptyDayRecord()
+  const datesByDay = buildWeekDateRecord(timecard.weekStartDate)
 
   const days = Array.isArray(sourceRecord.days) ? sourceRecord.days as Array<Record<string, unknown>> : []
+  const timecardDays = Array.isArray(timecard.days)
+    ? timecard.days as unknown as Array<Record<string, unknown>>
+    : []
+  mergeDayDates(datesByDay, timecardDays)
+  mergeDayDates(datesByDay, days)
   for (const day of days) {
     const idx = typeof day.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
       ? day.dayOfWeek
@@ -258,7 +289,7 @@ function normalizeOfficeExportLine(
       employeeWage,
       hoursByDay[key],
       productionByDay[key],
-      getRateMultiplierForDay(key),
+      productionBurden,
     )
     unitCostByDay[key] = lineUnitCost || unitCostByDay[key] || computedUnitCost
   })
@@ -284,6 +315,7 @@ function normalizeOfficeExportLine(
     offHours: toNumber(sourceRecord.offHours),
     offProduction: toNumber(sourceRecord.offProduction),
     offCost: toNumber(sourceRecord.offCost),
+    dates: { ...datesByDay },
     production: { ...productionByDay },
     unitCost: { ...unitCostByDay },
     sun: hoursByDay.sun,
@@ -351,13 +383,10 @@ export function buildTimecardOfficeCsv(
 
   for (const timecard of Array.isArray(timecards) ? timecards : []) {
     const normalized = normalizeTimecardForOfficeExport(timecard, options.defaultJobCode)
-    const detailDate = formatOfficeDate(String(normalized.weekEndingDate || ''))
     const employeeName = formatOfficeEmployeeName(normalized)
     const employeeCode = String(normalized.employeeNumber || '').trim()
 
     for (const line of normalized.lines) {
-      const lineHours = getLineTotalHoursForForm(line)
-      const lineProduction = getLineTotalProductionForForm(line)
       const subSection = getLineSubSection(line)
       const activityCode = sanitizeActivityCode(getLineActivityCode(line), line, [
         String(line.jobNumber || options.defaultJobCode || '').trim(),
@@ -365,23 +394,27 @@ export function buildTimecardOfficeCsv(
       ])
       const costCode = getLineCostCode(line)
       const rowJobCode = String(line.jobNumber || options.defaultJobCode || '').trim()
-      const hasData = lineHours > 0 || lineProduction > 0 || !!subSection || !!activityCode || !!costCode
+      for (const key of DAY_KEYS) {
+        const dayHours = toNumber(line[key])
+        const dayProduction = toNumber(line.production[key])
+        const hasData = dayHours > 0 || dayProduction > 0
 
-      if (!hasData) continue
+        if (!hasData) continue
 
-      rows.push([
-        employeeName,
-        employeeCode,
-        rowJobCode,
-        detailDate,
-        subSection,
-        activityCode,
-        costCode,
-        formatOfficeNumber(lineHours, true),
-        formatOfficeNumber(lineProduction, true),
-        '',
-        '',
-      ])
+        rows.push([
+          employeeName,
+          employeeCode,
+          rowJobCode,
+          formatOfficeDate(String(line.dates[key] || normalized.weekEndingDate || '')),
+          subSection,
+          activityCode,
+          costCode,
+          formatOfficeNumber(dayHours, true),
+          formatOfficeNumber(dayProduction, true),
+          '',
+          '',
+        ])
+      }
     }
   }
 

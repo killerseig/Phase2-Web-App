@@ -191,7 +191,6 @@ describe('controller components', () => {
                 totalHours: 0,
                 totalProduction: 0,
                 totalLine: 0,
-                mileage: 0,
                 subcontractedEmployee: false,
                 submittedAt: null,
                 submittedAtMs: null,

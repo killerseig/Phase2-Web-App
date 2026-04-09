@@ -6,7 +6,6 @@ import AppLoadingState from '@/components/common/AppLoadingState.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import TimecardAccountsSummaryCard from '@/components/timecards/TimecardAccountsSummaryCard.vue'
 import TimecardEmployeeList from '@/components/timecards/TimecardEmployeeList.vue'
-import TimecardSelectedMetaCard from '@/components/timecards/TimecardSelectedMetaCard.vue'
 import TimecardWeekToolbar from '@/components/timecards/TimecardWeekToolbar.vue'
 import TimecardWeekWorkspaceLayout from '@/components/timecards/TimecardWeekWorkspaceLayout.vue'
 import TimecardWorkspaceCard from '@/components/timecards/TimecardWorkspaceCard.vue'
@@ -48,6 +47,9 @@ const {
 const hasWorkspaceItems = computed(() => workspaceEmployeeItems.value.length > 0)
 const selectedCardLocked = computed(() => (
   selectedTimecard.value?.status === 'submitted' && !isAdmin.value
+))
+const selectedWorkspaceItem = computed(() => (
+  workspaceEmployeeItems.value.find((item) => item.employeeId === selectedEmployeeId.value) ?? null
 ))
 
 function withSelectedTimecard(run: (timecard: NonNullable<typeof selectedTimecard.value>) => void) {
@@ -116,7 +118,12 @@ onUnmounted(() => {
 <template>
   <div class="timecards-page">
     <div class="app-page app-page--wide timecards-page__workspace">
-      <AppPageHeader eyebrow="Job Timecards" :title="jobName">
+      <AppPageHeader
+        eyebrow="Job Timecards"
+        :title="jobName"
+        subtitle="Review the weekly roster, open one employee workbook, and submit draft timecards."
+        compact
+      >
         <template #meta>
           <span>{{ weekRange }}</span>
           <span>Week ending Saturday: {{ weekEndingDate }}</span>
@@ -141,24 +148,20 @@ onUnmounted(() => {
       <div v-else>
         <TimecardWeekWorkspaceLayout>
           <template #browser>
-            <div class="d-grid gap-3">
-              <TimecardSelectedMetaCard
-                v-if="selectedTimecard"
-                :timecard="selectedTimecard"
-              />
-
+            <div class="d-grid gap-2">
               <TimecardEmployeeList
                 v-model:search-term="searchTerm"
                 :items="workspaceEmployeeItems"
                 :loading="loading"
                 :selected-employee-id="selectedEmployeeId"
+                :selected-item="selectedWorkspaceItem"
                 @select="selectEmployee"
               />
             </div>
           </template>
 
           <template #controls>
-            <div class="d-grid gap-3">
+            <div class="d-grid gap-2">
               <TimecardWeekToolbar
                 v-model:selected-date="selectedDate"
                 :week-picker-config="flatpickrConfig"
@@ -226,16 +229,3 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.timecards-page {
-  background: $body-bg;
-  min-height: 100%;
-}
-
-.timecards-page__workspace {
-  max-width: 1600px;
-}
-</style>

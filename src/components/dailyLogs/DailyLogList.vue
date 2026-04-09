@@ -74,10 +74,3 @@ const handleDelete = (event: MouseEvent, id: string) => {
     />
   </AppListCard>
 </template>
-
-<style scoped lang="scss">
-.log-delete-btn {
-  line-height: 1;
-  padding: 0.2rem 0.4rem;
-}
-</style>

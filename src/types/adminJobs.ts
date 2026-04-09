@@ -31,6 +31,7 @@ export type JobFormInput = {
   cip: string
   kjic: string
   accountNumber: string
+  productionBurden: string
   type: JobType
 }
 
@@ -49,6 +50,7 @@ export function createJobForm(): JobFormInput {
     cip: '',
     kjic: '',
     accountNumber: '',
+    productionBurden: '0.33',
     type: 'general',
   }
 }

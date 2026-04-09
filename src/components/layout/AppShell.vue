@@ -1,6 +1,6 @@
 <template>
   <div
-    class="d-flex vh-100 app-shell"
+    class="d-flex app-shell"
     :class="{ 'is-collapsed': app.sidebarCollapsed, 'is-mobile-open': app.sidebarOpenMobile }"
   >
     <!-- Sidebar: fixed position -->
@@ -18,7 +18,7 @@
     <!-- Main content area: account for fixed sidebar with dynamic margin -->
     <div class="flex-grow-1 d-flex flex-column main-pane">
       <TopNav />
-      <main class="container-fluid py-4 app-shell__content">
+      <main class="container-fluid app-shell__content">
         <slot />
       </main>
     </div>
@@ -33,50 +33,3 @@ import { useAppStore } from '@/stores/app'
 const app = useAppStore()
 </script>
 
-<style scoped lang="scss">
-.app-shell {
-  --sidebar-width: 260px;
-  overflow: hidden;
-}
-
-.app-shell.is-collapsed {
-  --sidebar-width: 56px;
-}
-
-@media (max-width: 991px) {
-  .app-shell {
-    --sidebar-width: 56px;
-  }
-  .app-shell.is-mobile-open {
-    --sidebar-width: 260px;
-  }
-
-  .main-pane {
-    margin-left: 0;
-  }
-}
-
-.main-pane {
-  transition: margin-left 0.3s ease;
-  overflow: hidden;
-  margin-left: var(--sidebar-width);
-  width: calc(100% - var(--sidebar-width));
-  min-width: 0;
-}
-
-.main-pane > main {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
-
-.sidebar-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 90;
-}
-</style>

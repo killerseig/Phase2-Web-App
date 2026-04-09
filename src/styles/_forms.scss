@@ -1,48 +1,49 @@
-@use '@/styles/_variables.scss' as vars;
-
-.form-control:focus,
-.form-select:focus {
-  border-color: vars.$primary;
-  box-shadow: 0 0 0 0.2rem rgba(vars.$primary, 0.15);
+.form-label {
+  color: var(--bs-secondary-color);
+  font-size: 0.79rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.4rem;
 }
 
 .form-control,
 .form-select {
-  background: var(--surface-2, vars.$surface-2);
-  color: var(--text-body, vars.$body-color);
-  border: 1px solid var(--border, vars.$border-color);
+  color-scheme: dark;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 
-.form-control::placeholder,
-.form-select::placeholder {
-  color: var(--text-muted-3, vars.$text-muted-3);
-}
-
-.form-control:disabled,
-.form-control[readonly],
-.form-select:disabled,
-.form-select[readonly] {
-  background: var(--surface-3, vars.$surface-3);
-  color: var(--text-muted, vars.$text-muted);
-  border-color: var(--border, vars.$border-color);
-}
-
-.form-check-input:disabled {
-  opacity: 0.5;
-}
-
-.input-group-text {
-  background: var(--surface-3, vars.$surface-3);
-  color: var(--text-body, vars.$body-color);
-  border: 1px solid var(--border, vars.$border-color);
+.form-control:hover,
+.form-select:hover {
+  border-color: var(--border-strong);
 }
 
 .app-password-field__toggle {
-  border: 1px solid var(--border, vars.$border-color);
+  border: 1px solid var(--app-control-disabled-border);
 }
 
 .app-password-field__toggle:hover:not(:disabled) {
-  background-color: var(--surface-2, vars.$surface-2);
+  background-color: var(--app-control-bg-hover);
+}
+
+.form-select-sm,
+.form-control-sm {
+  border-radius: 0.55rem;
+  font-size: 0.84rem;
+}
+
+.form-select option,
+.form-select optgroup {
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+
+.form-select option:checked {
+  background: rgba(var(--bs-primary-rgb), 0.28);
+  color: var(--bs-body-color);
+}
+
+textarea.form-control {
+  min-height: 7rem;
 }
 
 // Native pickers inherit dark theme where supported
@@ -50,4 +51,134 @@ input[type="date"],
 input[type="datetime-local"],
 input[type="time"] {
   color-scheme: dark;
+}
+
+.search-select {
+  position: relative;
+}
+
+.search-select__menu {
+  background: var(--bs-secondary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+  left: 0;
+  margin-top: 0.35rem;
+  max-height: 280px;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+}
+
+.search-select__option {
+  background: transparent;
+  border: 0;
+  color: var(--bs-body-color);
+  display: block;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  width: 100%;
+}
+
+.search-select__option:hover,
+.search-select__option.is-selected {
+  background: rgba(var(--bs-primary-rgb), 0.14);
+}
+
+.search-select__empty {
+  color: rgba(var(--bs-body-color-rgb), 0.72);
+  padding: 0.65rem 0.75rem;
+}
+
+.inline-select {
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+.inline-select__trigger {
+  cursor: pointer;
+  min-width: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.inline-select__trigger.is-placeholder {
+  color: rgba(var(--bs-secondary-color-rgb), 0.82);
+}
+
+.inline-select__trigger.is-open {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.18rem rgba(var(--bs-primary-rgb), 0.16);
+}
+
+.inline-select__trigger:focus-visible {
+  outline: none;
+}
+
+.inline-select__label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-select__menu {
+  max-height: min(18rem, calc(100vh - 1rem));
+  overflow-y: auto;
+  position: fixed;
+  z-index: 1085;
+}
+
+.inline-select__option {
+  border-radius: 0.5rem;
+  margin: 0.1rem 0;
+  white-space: nowrap;
+}
+
+.inline-select__option-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-recipient-input__label {
+  margin-bottom: 0.5rem;
+}
+
+.email-recipient-input__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.email-recipient-input__add {
+  min-width: 5.75rem;
+}
+
+.email-recipient-input--compact .email-recipient-input__chips {
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+}
+
+.email-recipient-input--compact .email-recipient-input__entry {
+  margin-top: 0;
+}
+
+.email-recipient-input--compact .app-badge-pill.badge {
+  font-size: 0.72rem;
+  min-height: 1.45rem;
+  padding: 0.18rem 0.48rem;
+}
+
+.email-recipient-input--compact .email-recipient-input__empty {
+  margin-top: 0.5rem !important;
+}
+
+.recipient-remove-btn {
+  font-size: 0.65rem;
+  padding: 0;
 }

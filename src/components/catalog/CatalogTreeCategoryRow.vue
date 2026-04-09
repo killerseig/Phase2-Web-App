@@ -196,7 +196,3 @@ function handleSaveCategory() {
     </button>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_catalogTreeNode.scss';
-</style>

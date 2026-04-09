@@ -7,8 +7,10 @@ import { isValidEmail } from '@/utils/emailValidation'
 interface Props {
   emails: string[]
   label?: string
+  showLabel?: boolean
   placeholder?: string
   disabled?: boolean
+  compact?: boolean
   maxEmails?: number
   inputName?: string
   autocompleteSection?: string
@@ -25,8 +27,10 @@ const emit = defineEmits<{
 
 const props = withDefaults(defineProps<Props>(), {
   label: 'Email Recipients',
+  showLabel: true,
   placeholder: 'email@example.com',
   disabled: false,
+  compact: false,
   maxEmails: undefined,
   inputName: '',
   autocompleteSection: '',
@@ -67,17 +71,17 @@ function removeEmail(email: string) {
 </script>
 
 <template>
-  <div>
-    <!-- Label -->
-    <label class="form-label small fw-semibold">{{ label }}</label>
+  <div :class="['email-recipient-input', { 'email-recipient-input--compact': props.compact }]">
+    <label v-if="props.showLabel" class="form-label small fw-semibold email-recipient-input__label">
+      {{ label }}
+    </label>
 
-    <!-- Current Emails -->
-    <div v-if="emails.length > 0" class="d-flex flex-wrap gap-2 mb-3">
+    <div v-if="emails.length > 0" class="email-recipient-input__chips">
       <AppBadge
         v-for="email in emails"
         :key="email"
         variant-class="text-bg-primary"
-        class="d-flex align-items-center gap-1"
+        class="email-recipient-input__chip d-flex align-items-center gap-1"
       >
         {{ email }}
         <button
@@ -90,8 +94,7 @@ function removeEmail(email: string) {
       </AppBadge>
     </div>
 
-    <!-- Add New Email -->
-    <div class="row g-2">
+    <div class="row g-2 align-items-center email-recipient-input__entry">
       <div class="col">
         <BaseInputField
           v-model="newEmail"
@@ -108,7 +111,7 @@ function removeEmail(email: string) {
       <div class="col-auto">
         <button
           type="button"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary btn-sm email-recipient-input__add"
           @click="addEmail"
           :disabled="!newEmail.trim() || disabled"
         >
@@ -117,12 +120,10 @@ function removeEmail(email: string) {
       </div>
     </div>
 
-    <!-- Empty State -->
-    <small v-if="emails.length === 0" class="text-muted d-block mt-2">
+    <small v-if="emails.length === 0" class="text-muted d-block mt-2 email-recipient-input__empty">
       {{ emptyText }}
     </small>
 
-    <!-- Max Emails Warning -->
     <small v-if="maxEmails && emails.length >= maxEmails" class="text-warning d-block mt-2">
       Maximum {{ maxEmails }} recipients reached
     </small>
@@ -142,10 +143,3 @@ function removeEmail(email: string) {
     </div>
   </div>
 </template>
-
-<style scoped>
-.recipient-remove-btn {
-  font-size: 0.65rem;
-  padding: 0;
-}
-</style>

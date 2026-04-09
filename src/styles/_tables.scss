@@ -1,36 +1,20 @@
-@use '@/styles/_variables.scss' as vars;
-
 .table {
   font-family: var(--bs-body-font-family);
-  font-size: 0.98rem;
   --bs-table-bg: transparent;
-  --bs-table-color: var(--text-body, vars.$body-color);
-  --bs-table-striped-bg: rgba(vars.$primary, 0.08);
-  --bs-table-striped-color: var(--text-body, vars.$body-color);
-  --bs-table-hover-bg: rgba(vars.$primary, 0.12);
-  --bs-table-hover-color: var(--text-body, vars.$body-color);
-  --bs-border-color: var(--border, vars.$border-color);
-  border-color: var(--border, vars.$border-color);
-  color: var(--text-body, vars.$body-color);
-  background: var(--surface, vars.$surface);
+  --bs-table-accent-bg: transparent;
+  --bs-table-color: var(--bs-body-color);
+  border-color: var(--bs-border-color);
 }
 
-.table tbody tr {
-  color: var(--text-body, vars.$body-color);
+.table:not(.timecard-workbook-grid) tbody tr,
+.table:not(.timecard-workbook-grid) > :not(caption) > * > * {
+  color: var(--bs-body-color);
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
 .table th {
-  border-color: var(--border, vars.$border-color);
-  font-weight: 700;
-  background-color: rgba(vars.$primary, 0.08);
-  letter-spacing: 0.3px;
-  color: var(--text-body, vars.$body-color);
-  padding: 0.85rem 0.9rem;
-}
-
-.table td {
-  padding: 0.85rem 0.9rem;
-  vertical-align: middle;
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
 }
 
 .table-sort-trigger {
@@ -45,28 +29,44 @@
 }
 
 .table-sort-trigger:focus-visible {
-  outline: 2px solid var(--bs-primary, vars.$primary);
+  outline: 2px solid var(--bs-primary);
   outline-offset: 2px;
 }
 
-.table-hover tbody tr:hover {
-  background-color: rgba(vars.$primary, 0.10);
-  color: var(--text-body, vars.$body-color);
-}
-
-.table-striped > tbody > tr:nth-of-type(odd) {
-  background-color: rgba(vars.$primary, 0.08);
-  color: var(--text-body, vars.$body-color);
-}
-
-.table-striped > tbody > tr:nth-of-type(even) {
-  background-color: var(--surface, vars.$surface);
-  color: var(--text-body, vars.$body-color);
-}
-
 .table-responsive {
-  background: var(--surface, vars.$surface);
-  border: 1px solid var(--border, vars.$border-color);
-  border-radius: 8px;
-  box-shadow: var(--shadow-sm, vars.$box-shadow-sm);
+  width: 100%;
+}
+
+.app-data-table {
+  font-size: 0.91rem;
+  margin-bottom: 0;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--bs-body-color);
+  --bs-table-striped-bg: rgba(var(--bs-emphasis-color-rgb), 0.03);
+  --bs-table-striped-color: var(--bs-body-color);
+  --bs-table-hover-bg: rgba(var(--bs-emphasis-color-rgb), 0.06);
+  --bs-table-hover-color: var(--bs-body-color);
+  --bs-table-border-color: var(--bs-border-color);
+}
+
+.app-data-table th {
+  background-color: var(--app-table-head-bg);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.62rem 0.8rem;
+  text-transform: uppercase;
+}
+
+.app-data-table td {
+  padding: 0.66rem 0.8rem;
+  vertical-align: middle;
+}
+
+.app-data-table-responsive {
+  background: var(--app-table-shell-bg);
+  border: 1px solid var(--app-table-shell-border);
+  border-radius: 0.85rem;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }

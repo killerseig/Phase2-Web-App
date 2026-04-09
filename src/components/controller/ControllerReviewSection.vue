@@ -54,7 +54,6 @@ const emit = defineEmits<{
   'update-production': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number }]
   'update-unit-cost': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number | null }]
   'update-footer-field': [payload: { timecard: TimecardModel; field: WorkbookFooterField; value: string }]
-  'update-mileage': [payload: { timecard: TimecardModel; value: string }]
   'update-notes': [payload: { timecard: TimecardModel; value: string }]
 }>()
 </script>
@@ -141,26 +140,7 @@ const emit = defineEmits<{
       @update-production="emit('update-production', $event)"
       @update-unit-cost="emit('update-unit-cost', $event)"
       @update-footer-field="emit('update-footer-field', $event)"
-      @update-mileage="emit('update-mileage', $event)"
       @update-notes="emit('update-notes', $event)"
     />
   </AppSectionCard>
 </template>
-
-<style scoped lang="scss">
-.controller-loading-state {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 220px;
-}
-
-.controller-review-card :deep(.card-header) {
-  padding: 0.85rem 1rem;
-}
-
-.controller-review-card :deep(.card-body) {
-  padding: 0.95rem 1rem 1rem;
-}
-</style>

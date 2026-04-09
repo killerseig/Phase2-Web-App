@@ -47,11 +47,11 @@ const hasFooter = computed(() => Boolean(slots.footer))
   >
     <template v-if="hasHeader" #header>
       <slot name="header">
-        <component :is="titleTag" class="mb-0">
+        <component :is="titleTag" class="app-section-card__title mb-0">
           <i v-if="icon" :class="[icon, 'me-2']" aria-hidden="true" />
           {{ title }}
         </component>
-        <small v-if="subtitle" class="text-muted d-block mt-1">{{ subtitle }}</small>
+        <small v-if="subtitle" class="app-section-card__subtitle d-block mt-1">{{ subtitle }}</small>
       </slot>
     </template>
 

@@ -86,10 +86,3 @@ function canDeleteOrder(order: ShopOrder): boolean {
     </div>
   </AppListCard>
 </template>
-
-<style scoped lang="scss">
-.order-delete-btn {
-  line-height: 1;
-  padding: 0.2rem 0.4rem;
-}
-</style>

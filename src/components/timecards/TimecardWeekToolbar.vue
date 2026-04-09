@@ -36,7 +36,7 @@ function handleWeekChange(value: string) {
 
 <template>
   <AppToolbarCard
-    class="timecard-week-toolbar mb-3"
+    class="timecard-week-toolbar"
     body-class="timecard-week-toolbar__body"
   >
     <div class="app-toolbar-split app-toolbar-split--center">
@@ -53,18 +53,18 @@ function handleWeekChange(value: string) {
           @change="handleWeekChange"
         />
         <div class="app-toolbar-note ms-1">
-          Select any day in the week to load that job's Sunday-Saturday timecards.
+          Pick any day in the target week to load the Sunday-Saturday workbook.
         </div>
       </div>
 
       <div class="app-toolbar-actions app-toolbar-actions--end">
-        <div class="small text-muted">
+        <div class="timecard-week-toolbar__metric small text-muted">
           {{ employeeCount }} employee{{ employeeCount === 1 ? '' : 's' }}
         </div>
         <SubmissionCountBadges
           :draft-count="draftCount"
           :submitted-count="submittedCount"
-          wrapper-class="small text-muted"
+          wrapper-class="timecard-week-toolbar__badges small text-muted"
         />
         <button
           class="btn btn-success btn-sm"
@@ -72,62 +72,9 @@ function handleWeekChange(value: string) {
           @click="emit('submitAll')"
         >
           <i class="bi bi-send me-1"></i>
-          {{ submittingAll ? 'Submitting...' : `Submit Week (${draftCount})` }}
+          {{ submittingAll ? 'Submitting...' : `Submit Drafts (${draftCount})` }}
         </button>
       </div>
     </div>
   </AppToolbarCard>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.timecard-week-toolbar {
-  box-shadow: $box-shadow-sm;
-}
-
-.timecard-week-toolbar :deep(.timecard-week-toolbar__body) {
-  padding: 0.9rem 1rem;
-}
-
-.timecard-week-toolbar :deep(.app-toolbar-split) {
-  gap: 0.6rem 1rem;
-}
-
-.timecard-week-toolbar :deep(.app-toolbar-actions) {
-  gap: 0.45rem;
-}
-
-.timecard-week-toolbar :deep(.app-toolbar-note) {
-  font-size: 0.8rem;
-  line-height: 1.45;
-  max-width: 19rem;
-}
-
-.timecard-week-toolbar :deep(.submission-count-badges) {
-  display: inline-flex;
-  align-items: center;
-}
-
-:deep(.date-input-group) {
-  max-width: 190px;
-}
-
-:deep(.date-input) {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-:deep(.date-input::-webkit-calendar-picker-indicator) {
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
-@media (max-width: 991.98px) {
-  .timecard-week-toolbar :deep(.app-toolbar-note) {
-    max-width: none;
-  }
-}
-</style>

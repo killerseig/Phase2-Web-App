@@ -37,10 +37,10 @@ function buildTimecardWritePayload(timecard: TimecardModel) {
     employeeNumber: timecard.employeeNumber,
     employeeName: timecard.employeeName,
     employeeWage: timecard.employeeWage ?? null,
+    productionBurden: timecard.productionBurden ?? null,
     subcontractedEmployee: timecard.subcontractedEmployee ?? false,
     regularHoursOverride: timecard.regularHoursOverride ?? null,
     overtimeHoursOverride: timecard.overtimeHoursOverride ?? null,
-    mileage: timecard.mileage ?? null,
     footerJobOrGl: timecard.footerJobOrGl ?? '',
     footerAccount: timecard.footerAccount ?? '',
     footerOffice: timecard.footerOffice ?? '',
@@ -50,14 +50,6 @@ function buildTimecardWritePayload(timecard: TimecardModel) {
     days: timecard.days,
     notes: timecard.notes,
   }
-}
-
-function parseMileageInput(value: string): number | null {
-  const trimmed = value.trim()
-  if (!trimmed) return null
-  const parsed = Number(trimmed)
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) return null
-  return parsed
 }
 
 export function useTimecardWeekPage(jobId: ComputedRef<string>) {
@@ -218,11 +210,6 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
     autoSave(timecard)
   }
 
-  function updateMileage(timecard: TimecardModel, rawValue: string) {
-    timecard.mileage = parseMileageInput(rawValue)
-    autoSave(timecard)
-  }
-
   function updateFooterField(timecard: TimecardModel, field: WorkbookFooterField, value: string) {
     timecard[field] = value
     autoSave(timecard)
@@ -313,7 +300,6 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
     submittingAll,
     submittedCount: workspace.submittedCount,
     updateFooterField,
-    updateMileage,
     weekEndingDate,
     weekRange,
     workspaceEmployeeItems: workspace.filteredEmployeeItems,

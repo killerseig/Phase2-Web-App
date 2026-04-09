@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import EmailRecipientInput from '@/components/common/EmailRecipientInput.vue'
 
 const props = defineProps<{
@@ -25,6 +26,13 @@ const emit = defineEmits<{
     :icon="props.icon"
     :subtitle="props.subtitle"
   >
+    <template #header-actions>
+      <AppBadge
+        :label="`${props.emails.length} recipient${props.emails.length === 1 ? '' : 's'}`"
+        variant-class="text-bg-secondary"
+      />
+    </template>
+
     <EmailRecipientInput
       :emails="props.emails"
       :label="props.label"

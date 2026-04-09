@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { listTimecardsByJobAndWeek } from '@/services/Timecards'
 import { useJobsStore } from '@/stores/jobs'
@@ -13,6 +13,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useAdminJobTeam } from '@/composables/admin/useAdminJobTeam'
 import { useToast } from '@/composables/useToast'
 import { ROLES } from '@/constants/app'
+import { formatProductionBurdenInput, normalizeProductionBurden } from '@/constants/timecards'
 
 type NonStatusSortKey = Exclude<JobSortKey, 'status'>
 
@@ -47,6 +48,9 @@ export function useAdminJobs() {
 
   const activeJob = computed(() => (
     jobs.value.find((job) => job.id === activeJobActionsId.value) ?? null
+  ))
+  const activeJobDirty = computed(() => (
+    activeJob.value ? isJobDirty(activeJob.value) : false
   ))
 
   const sortedJobs = computed(() => {
@@ -108,6 +112,28 @@ export function useAdminJobs() {
     selectedJob: activeJob,
     users: computed(() => allUsers.value),
   })
+
+  watch(
+    () => sortedJobs.value.map((job) => job.id).join('|'),
+    (jobIds) => {
+      if (!jobIds) {
+        if (activeJobActionsId.value) {
+          clearInlineJob()
+          activeJobActionsId.value = ''
+        }
+        return
+      }
+
+      const selectedStillExists = sortedJobs.value.some((job) => job.id === activeJobActionsId.value)
+      if (selectedStillExists) return
+
+      const firstJob = sortedJobs.value[0]
+      if (!firstJob) return
+      setInlineJob(firstJob)
+      activeJobActionsId.value = firstJob.id
+    },
+    { immediate: true }
+  )
 
   function setJobForm(value: JobFormInput) {
     jobForm.value = value
@@ -235,6 +261,7 @@ export function useAdminJobs() {
       cip: job.cip || '',
       kjic: job.kjic || '',
       accountNumber: job.accountNumber || '',
+      productionBurden: formatProductionBurdenInput(job.productionBurden),
       type: job.type || 'general',
     }
   }
@@ -259,6 +286,7 @@ export function useAdminJobs() {
       editingJobForm.value.cip.trim() !== (job.cip || '') ||
       editingJobForm.value.kjic.trim() !== (job.kjic || '') ||
       editingJobForm.value.accountNumber.trim() !== (job.accountNumber || '') ||
+      normalizeProductionBurden(editingJobForm.value.productionBurden) !== normalizeProductionBurden(job.productionBurden) ||
       editingJobForm.value.type !== (job.type || 'general')
     )
   }
@@ -283,6 +311,7 @@ export function useAdminJobs() {
         cip: editingJobForm.value.cip.trim() || null,
         kjic: editingJobForm.value.kjic.trim() || null,
         accountNumber: editingJobForm.value.accountNumber.trim() || null,
+        productionBurden: normalizeProductionBurden(editingJobForm.value.productionBurden),
         type: editingJobForm.value.type,
       })
       toast.show('Job updated', 'success')
@@ -293,18 +322,40 @@ export function useAdminJobs() {
     }
   }
 
+  async function saveActiveJob() {
+    if (!activeJob.value) return
+    await saveInlineJob(activeJob.value)
+  }
+
+  function resetActiveJobChanges() {
+    if (!activeJob.value) return
+    setInlineJob(activeJob.value)
+  }
+
+  async function selectJob(job: Job) {
+    if (activeJob.value?.id === job.id) return
+    if (activeJob.value) {
+      await saveInlineJob(activeJob.value)
+    }
+    setInlineJob(job)
+    activeJobActionsId.value = job.id
+  }
+
+  async function closeActiveJob() {
+    if (activeJob.value) {
+      await saveInlineJob(activeJob.value)
+    }
+    clearInlineJob()
+    activeJobActionsId.value = ''
+  }
+
   async function toggleJobActions(job: Job) {
     const isOpen = activeJobActionsId.value === job.id
     if (isOpen) {
-      await saveInlineJob(job)
-      clearInlineJob()
-      activeJobActionsId.value = ''
+      await closeActiveJob()
       return
     }
-
-    clearInlineJob()
-    setInlineJob(job)
-    activeJobActionsId.value = job.id
+    await selectJob(job)
   }
 
   async function submitJobForm() {
@@ -323,6 +374,7 @@ export function useAdminJobs() {
         cip: jobForm.value.cip,
         kjic: jobForm.value.kjic,
         accountNumber: jobForm.value.accountNumber,
+        productionBurden: normalizeProductionBurden(jobForm.value.productionBurden),
         type: jobForm.value.type,
       })
       toast.show('Job created successfully', 'success')
@@ -355,6 +407,10 @@ export function useAdminJobs() {
     try {
       await jobsStore.deleteJob(job.id)
       toast.show('Job deleted', 'success')
+      if (activeJobActionsId.value === job.id) {
+        clearInlineJob()
+        activeJobActionsId.value = ''
+      }
       loadJobs()
     } catch {
       toast.show('Failed to delete job', 'error')
@@ -392,8 +448,10 @@ export function useAdminJobs() {
   return {
     activeJobActionsId,
     activeJob,
+    activeJobDirty,
     asText,
     cancelJobForm,
+    closeActiveJob,
     creatingJob,
     currentWeekEnd,
     currentWeekLabel,
@@ -418,6 +476,9 @@ export function useAdminJobs() {
     setExportDateInWeek,
     setJobForm,
     setShowJobForm,
+    selectJob,
+    saveActiveJob,
+    resetActiveJobChanges,
     showJobForm,
     sortedJobs,
     submitJobForm,

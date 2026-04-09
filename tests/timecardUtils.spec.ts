@@ -9,9 +9,9 @@ import {
 import { calculateWorkbookSummaryCost } from '@/utils/timecardWorkbook'
 
 describe('timecard utilities', () => {
-  it('calculates workbook unit cost from wage, hours, production, and rate multiplier', () => {
+  it('calculates workbook unit cost from wage, hours, production, and burden multiplier', () => {
     const unitCost = calculateUnitCost(32, 8, 4)
-    expect(unitCost).toBeCloseTo(82.816, 6)
+    expect(unitCost).toBeCloseTo(85.12, 6)
   })
 
   it('returns zero unit cost when inputs are missing or non-positive', () => {
@@ -54,6 +54,7 @@ describe('timecard utilities', () => {
       lastName: 'Doe',
       occupation: 'Foreman',
       employeeWage: 32,
+      productionBurden: 0.33,
       subcontractedEmployee: false,
       regularHoursOverride: null,
       overtimeHoursOverride: null,
@@ -95,18 +96,18 @@ describe('timecard utilities', () => {
     recalcTotalsForTimecard(timecard, '2024-02-04')
 
     const day = timecard.jobs?.[0]?.days?.[0]
-    expect(day?.unitCost ?? 0).toBeCloseTo(82.816, 6)
-    expect(day?.lineTotal ?? 0).toBeCloseTo(331.264, 6)
+    expect(day?.unitCost ?? 0).toBeCloseTo(85.12, 6)
+    expect(day?.lineTotal ?? 0).toBeCloseTo(340.48, 6)
     expect(timecard.totals.hoursTotal).toBe(8)
     expect(timecard.totals.productionTotal).toBe(4)
-    expect(timecard.totals.lineTotal).toBeCloseTo(331.264, 6)
+    expect(timecard.totals.lineTotal).toBeCloseTo(340.48, 6)
   })
 
-  it('matches legacy workbook unit-cost math from the sample card values', () => {
-    expect(calculateUnitCost(24, 1.5, 25)).toBeCloseTo(1.86336, 5)
-    expect(calculateUnitCost(24, 1, 20)).toBeCloseTo(1.5528, 4)
-    expect(calculateWorkbookSummaryCost(24, 2.5, 45)).toBeCloseTo(1.725333, 5)
-    expect(calculateWorkbookSummaryCost(24, 6, 470)).toBeCloseTo(0.39645957, 6)
+  it('matches burden-based workbook unit-cost math', () => {
+    expect(calculateUnitCost(24, 1.5, 25)).toBeCloseTo(1.9152, 5)
+    expect(calculateUnitCost(24, 1, 20)).toBeCloseTo(1.596, 4)
+    expect(calculateWorkbookSummaryCost(24, 2.5, 45)).toBeCloseTo(1.773333, 5)
+    expect(calculateWorkbookSummaryCost(24, 6, 470)).toBeCloseTo(0.40748936, 6)
   })
 
   it('produces the visible workbook totals for the current screenshot values', () => {
@@ -124,6 +125,7 @@ describe('timecard utilities', () => {
       lastName: 'Acevedo',
       occupation: 'Framer Rocker',
       employeeWage: 24,
+      productionBurden: 0.33,
       subcontractedEmployee: false,
       regularHoursOverride: null,
       overtimeHoursOverride: null,
@@ -398,16 +400,16 @@ describe('timecard utilities', () => {
     expect(timecard.totals.hours).toEqual([0, 8, 8, 8, 8, 8, 0])
     expect(timecard.totals.hoursTotal).toBe(40)
 
-    expect(timecard.jobs?.[2]?.days?.[1]?.unitCost).toBeCloseTo(13.587, 6)
-    expect(timecard.jobs?.[2]?.days?.[2]?.unitCost).toBeCloseTo(10.6755, 6)
-    expect(timecard.jobs?.[2]?.days?.[3]?.unitCost).toBeCloseTo(11.646, 6)
-    expect(timecard.jobs?.[2]?.days?.[4]?.unitCost).toBeCloseTo(9.058, 3)
-    expect(timecard.jobs?.[2]?.days?.[5]?.unitCost).toBeCloseTo(13.587, 6)
+    expect(timecard.jobs?.[2]?.days?.[1]?.unitCost).toBeCloseTo(13.965, 6)
+    expect(timecard.jobs?.[2]?.days?.[2]?.unitCost).toBeCloseTo(10.9725, 6)
+    expect(timecard.jobs?.[2]?.days?.[3]?.unitCost).toBeCloseTo(11.97, 6)
+    expect(timecard.jobs?.[2]?.days?.[4]?.unitCost).toBeCloseTo(9.31, 3)
+    expect(timecard.jobs?.[2]?.days?.[5]?.unitCost).toBeCloseTo(13.965, 6)
 
-    expect(calculateWorkbookSummaryCost(30, 29, 100)).toBeCloseTo(11.2578, 6)
-    expect(calculateWorkbookSummaryCost(30, 3, 48)).toBeCloseTo(2.42625, 6)
-    expect(calculateWorkbookSummaryCost(30, 2, 8)).toBeCloseTo(9.705, 6)
-    expect(calculateWorkbookSummaryCost(30, 1, 15)).toBeCloseTo(2.588, 6)
+    expect(calculateWorkbookSummaryCost(30, 29, 100)).toBeCloseTo(11.571, 6)
+    expect(calculateWorkbookSummaryCost(30, 3, 48)).toBeCloseTo(2.49375, 6)
+    expect(calculateWorkbookSummaryCost(30, 2, 8)).toBeCloseTo(9.975, 6)
+    expect(calculateWorkbookSummaryCost(30, 1, 15)).toBeCloseTo(2.66, 6)
 
     const breakdown = calculateRegularAndOvertimeHours(timecard.totals.hoursTotal, null, null)
     expect(breakdown.regularHours).toBe(40)

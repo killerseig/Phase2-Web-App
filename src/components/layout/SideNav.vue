@@ -1,5 +1,4 @@
 <template>
-  <!-- Sidebar: Always 56px when collapsed, expands to 260px overlay -->
   <aside
     class="sidebar d-flex flex-column h-100 position-fixed"
     :class="{ 'is-collapsed': isSidebarCollapsed, 'is-mobile-open': app.sidebarOpenMobile }"
@@ -9,9 +8,9 @@
     ref="sidebarRef"
   >
     <!-- Header with Toggle Button -->
-    <div class="p-2 sidebar-header">
+    <div class="sidebar-header">
       <div class="d-flex align-items-center gap-2 sidebar-header-text">
-        <div class="fw-bold fs-5 sidebar-title">Phase 2</div>
+        <div class="fw-bold sidebar-title">Phase 2</div>
         <RoleBadge
           v-if="role"
           :role="role"
@@ -37,7 +36,7 @@
       <!-- Dashboard -->
       <router-link
         :to="{ name: ROUTE_NAMES.DASHBOARD }"
-        class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+        class="nav-link d-flex align-items-center sidebar-nav-link"
         active-class="active"
         :title="isSidebarCollapsed ? 'Dashboard' : ''"
       >
@@ -47,7 +46,7 @@
 
       <!-- Job Section -->
       <template v-if="jobId">
-        <div class="px-3 mt-3 mb-2 sidebar-section-label">
+        <div class="sidebar-section-label sidebar-section-label--spaced">
           <small class="text-uppercase text-muted fw-semibold">Job</small>
         </div>
 
@@ -55,7 +54,7 @@
           v-for="item in jobNav"
           :key="item.label"
           :to="resolveNavTarget(item)"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+          class="nav-link d-flex align-items-center sidebar-nav-link"
           active-class="active"
           :title="isSidebarCollapsed ? item.label : ''"
         >
@@ -66,7 +65,7 @@
 
       <!-- Admin Section -->
       <template v-if="controllerNav.length > 0">
-        <div class="px-3 mt-4 mb-2 sidebar-section-label">
+        <div class="sidebar-section-label sidebar-section-label--spaced-lg">
           <small class="text-uppercase text-muted fw-semibold">Controller</small>
         </div>
 
@@ -74,7 +73,7 @@
           v-for="item in controllerNav"
           :key="item.label"
           :to="item.to"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+          class="nav-link d-flex align-items-center sidebar-nav-link"
           active-class="active"
           :title="isSidebarCollapsed ? item.label : ''"
         >
@@ -85,7 +84,7 @@
 
       <!-- Admin Section -->
       <template v-if="adminNav.length > 0">
-        <div class="px-3 mt-4 mb-2 sidebar-section-label">
+        <div class="sidebar-section-label sidebar-section-label--spaced-lg">
           <small class="text-uppercase text-muted fw-semibold">Admin</small>
         </div>
 
@@ -93,7 +92,7 @@
           v-for="item in adminNav"
           :key="item.label"
           :to="item.to"
-          class="nav-link py-2 px-3 d-flex align-items-center gap-3"
+          class="nav-link d-flex align-items-center sidebar-nav-link"
           active-class="active"
           :title="isSidebarCollapsed ? item.label : ''"
         >
@@ -104,7 +103,7 @@
     </nav>
 
     <!-- Current Job Footer -->
-    <div v-if="jobName" class="p-2 small sidebar-footer">
+    <div v-if="jobName" class="small sidebar-footer">
       <div class="text-muted mb-1 sidebar-link-text">Current Job</div>
       <div class="fw-semibold text-truncate" :title="jobName">
         {{ jobName }}
@@ -206,167 +205,3 @@ function onToggleClick() {
 }
 </script>
 
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.sidebar {
-  background: var(--surface, $surface);
-  color: var(--text-body, $body-color);
-  border-right: 1px solid var(--border, $border-color);
-  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.25);
-  overflow-y: auto;
-  overflow-x: hidden;
-  transition: width 0.3s ease, transform 0.3s ease;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  z-index: 99;
-  width: var(--sidebar-width, 260px);
-}
-
-.sidebar.is-collapsed .sidebar-header-text,
-.sidebar.is-collapsed .sidebar-section-label,
-.sidebar.is-collapsed .sidebar-link-text,
-.sidebar.is-collapsed .sidebar-footer .text-truncate,
-.sidebar.is-collapsed .sidebar-footer .text-muted {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.sidebar.is-collapsed .sidebar-header {
-  justify-content: center;
-}
-
-.sidebar.is-collapsed .sidebar-toggle {
-  margin: 0 auto;
-}
-
-@media (max-width: 991px) {
-  .sidebar {
-    width: 56px;
-    transform: translateX(0);
-  }
-
-  .sidebar.is-mobile-open {
-    width: 260px;
-  }
-
-  .sidebar:not(.is-mobile-open) .sidebar-header-text,
-  .sidebar:not(.is-mobile-open) .sidebar-section-label,
-  .sidebar:not(.is-mobile-open) .sidebar-link-text,
-  .sidebar:not(.is-mobile-open) .sidebar-footer .text-truncate,
-  .sidebar:not(.is-mobile-open) .sidebar-footer .text-muted {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
-
-}
-
-.sidebar-header {
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  border-bottom: 1px solid var(--border, $border-color);
-}
-
-.sidebar-header-text {
-  max-width: 180px;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-  overflow: hidden;
-}
-
-.sidebar-title,
-.sidebar-role {
-  white-space: nowrap;
-}
-
-.sidebar-toggle {
-  border: none;
-  background: none;
-  padding: 8px;
-  color: var(--text-muted, $text-muted);
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.sidebar-toggle-icon {
-  font-size: 1.25rem;
-}
-
-.sidebar-link-text {
-  display: inline-block;
-  max-width: 180px;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-  overflow: hidden;
-}
-
-.sidebar-section-label {
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-}
-
-.sidebar-footer .text-truncate,
-.sidebar-footer .text-muted {
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-}
-
-.sidebar.is-collapsed .sidebar-header-text {
-  max-width: 0;
-}
-
-.sidebar.is-collapsed .sidebar-link-text {
-  max-width: 0;
-}
-
-.sidebar-footer {
-  min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  border-top: 1px solid var(--border, $border-color);
-}
-
-.sidebar-footer-icon {
-  font-size: 1.25rem;
-  opacity: 0.6;
-}
-
-.nav-link {
-  color: inherit;
-  text-decoration: none;
-  border: none;
-  background: none;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
-}
-
-.nav-link:hover {
-  background-color: rgba($primary, 0.12);
-}
-
-.nav-link.active {
-  font-weight: 600;
-  color: $primary;
-  background-color: rgba($primary, 0.16);
-}
-
-.nav-link.router-link-active {
-  font-weight: 600;
-}
-
-.nav-link i {
-  font-size: 1.25rem;
-  min-width: 1.25rem;
-  text-align: center;
-}
-</style>

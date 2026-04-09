@@ -36,10 +36,3 @@ const hasMessage = computed(() => Boolean(props.message || slots.default))
     </div>
   </div>
 </template>
-
-<style scoped>
-.app-empty-state-icon {
-  display: block;
-  margin-bottom: 0.75rem;
-}
-</style>

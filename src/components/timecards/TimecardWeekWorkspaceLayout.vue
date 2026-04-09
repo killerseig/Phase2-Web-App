@@ -8,12 +8,12 @@ defineOptions({
 
 <template>
   <AppMasterDetailWorkspace
-    browse-label="Employees"
-    controls-label="Week Controls"
-    browser-title="Employees"
-    controls-title="Week Controls"
-    browser-column="minmax(250px, 290px)"
-    controls-column="minmax(280px, 330px)"
+    browse-label="Roster"
+    controls-label="Week"
+    browser-title="Roster"
+    controls-title="Week"
+    browser-column="minmax(250px, 280px)"
+    controls-column="minmax(280px, 315px)"
   >
     <slot />
 

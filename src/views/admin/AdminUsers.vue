@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import AppAlert from '@/components/common/AppAlert.vue'
-import AdminUsersCreateCard from '@/components/admin/AdminUsersCreateCard.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import AdminUsersTableCard from '@/components/admin/AdminUsersTableCard.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import { useUsersStore } from '@/stores/users'
@@ -54,6 +54,10 @@ const userRoleOptions = [
   { value: ROLES.CONTROLLER, label: 'Controller' },
   { value: ROLES.ADMIN, label: 'Admin' },
 ] as const
+
+const totalUsersCount = computed(() => users.value.length)
+const activeUsersCount = computed(() => users.value.filter((user) => user.active).length)
+const adminUsersCount = computed(() => users.value.filter((user) => user.role === ROLES.ADMIN).length)
 
 const sortedUsers = computed(() => {
   const key = userSortKey.value
@@ -231,45 +235,54 @@ onUnmounted(() => {
 </script>
 
 <template>
-  
-  <div class="app-page">
-    <AppPageHeader eyebrow="Admin Panel" title="User Management" subtitle="Manage user profiles and permissions." />
-
-    <AppAlert
-      class="app-note small"
-      icon="bi bi-info-circle"
-      icon-class="mt-1"
+  <div class="app-page app-page--wide admin-users-page">
+    <AppPageHeader
+      eyebrow="Admin Workspace"
+      title="Users"
+      subtitle="Manage user profiles, roles, and account access."
+      compact
     >
-      Setting a user to <strong>None</strong> role or <strong>Inactive</strong> automatically removes their email from all recipient lists.
-    </AppAlert>
+      <template #badges>
+        <AppBadge :label="`${totalUsersCount} total`" variant-class="text-bg-secondary" />
+        <AppBadge :label="`${activeUsersCount} active`" variant-class="text-bg-success" />
+        <AppBadge :label="`${adminUsersCount} admins`" variant-class="text-bg-danger" />
+      </template>
+    </AppPageHeader>
 
-    <AdminUsersCreateCard
-      v-model:open="showUserForm"
-      :form="userForm"
-      :loading="creatingUser"
-      :role-options="userRoleOptions"
-      @update:form="userForm = $event"
-      @submit="submitUserForm"
-      @cancel="cancelUserForm"
-    />
+    <div class="admin-users-page__stack">
+      <AppAlert
+        class="app-note admin-users-page__note"
+        icon="bi bi-info-circle"
+      >
+        Setting a user to <strong>None</strong> role or <strong>Inactive</strong> automatically removes their email from all recipient lists.
+      </AppAlert>
 
-    <AdminUsersTableCard
-      :users="sortedUsers"
-      :loading="loadingUsers"
-      :error="err"
-      :editing-user-id="editingUserId"
-      :edit-form="editUserForm"
-      :saving-user-edit="savingUserEdit"
-      :active-user-actions-id="activeUserActionsId"
-      :role-options="userRoleOptions"
-      :sort-key="userSortKey"
-      :sort-dir="userSortDir"
-      @update:edit-form="editUserForm = $event"
-      @sort-change="handleUserSort"
-      @save-edit="saveUserEdit($event, true)"
-      @cancel-edit="cancelUserEdit"
-      @toggle-actions="toggleUserActions"
-      @delete-user="handleDeleteUser"
-    />
+      <AdminUsersTableCard
+        class="admin-users-page__table-card"
+        :users="sortedUsers"
+        :loading="loadingUsers"
+        :error="err"
+        :editing-user-id="editingUserId"
+        :edit-form="editUserForm"
+        :saving-user-edit="savingUserEdit"
+        :active-user-actions-id="activeUserActionsId"
+        :role-options="userRoleOptions"
+        :create-form="userForm"
+        :show-inline-create="showUserForm"
+        :creating-user="creatingUser"
+        :sort-key="userSortKey"
+        :sort-dir="userSortDir"
+        @update:create-form="userForm = $event"
+        @update:edit-form="editUserForm = $event"
+        @sort-change="handleUserSort"
+        @toggle-create="showUserForm = !showUserForm"
+        @submit-create="submitUserForm"
+        @cancel-create="cancelUserForm"
+        @save-edit="saveUserEdit($event, true)"
+        @cancel-edit="cancelUserEdit"
+        @toggle-actions="toggleUserActions"
+        @delete-user="handleDeleteUser"
+      />
+    </div>
   </div>
 </template>

@@ -58,8 +58,7 @@ const storageBucket = admin.storage().bucket();
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024;
 const MAX_ATTACHMENT_COUNT = 10;
-const TIMECARD_WEEKDAY_RATE = 1.294;
-const TIMECARD_SATURDAY_RATE = 1.5;
+const DEFAULT_PRODUCTION_BURDEN = 0.33;
 function normalizeRecipients(...groups) {
     const merged = groups.flatMap(group => (Array.isArray(group) ? group : []));
     const cleaned = merged
@@ -131,18 +130,25 @@ function toNumber(value) {
         return 0;
     return n;
 }
-function calculateUnitCostForExport(employeeWage, hours, production, rateMultiplier = TIMECARD_WEEKDAY_RATE) {
+function normalizeProductionBurden(value) {
+    const burden = Number(value);
+    if (!Number.isFinite(burden) || Number.isNaN(burden) || burden < 0) {
+        return DEFAULT_PRODUCTION_BURDEN;
+    }
+    return burden;
+}
+function getProductionMultiplier(productionBurden) {
+    return 1 + normalizeProductionBurden(productionBurden);
+}
+function calculateUnitCostForExport(employeeWage, hours, production, productionBurden = DEFAULT_PRODUCTION_BURDEN) {
     const wageValue = Math.max(0, toNumber(employeeWage));
     const hourValue = Math.max(0, toNumber(hours));
     const productionValue = Math.max(0, toNumber(production));
-    const multiplierValue = Math.max(0, toNumber(rateMultiplier));
+    const multiplierValue = Math.max(0, toNumber(getProductionMultiplier(productionBurden)));
     if (wageValue <= 0 || hourValue <= 0 || productionValue <= 0 || multiplierValue <= 0) {
         return 0;
     }
     return (hourValue * wageValue * multiplierValue) / productionValue;
-}
-function getRateMultiplierForDay(dayKey) {
-    return dayKey === 'sat' ? TIMECARD_SATURDAY_RATE : TIMECARD_WEEKDAY_RATE;
 }
 function formatPlexxisDate(dateString) {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString || '').trim());
@@ -150,6 +156,46 @@ function formatPlexxisDate(dateString) {
         return String(dateString || '');
     const [, year, month, day] = match;
     return `${Number(month)}/${Number(day)}/${year}`;
+}
+function buildEmptyDayDateRecord() {
+    return {
+        sun: '',
+        mon: '',
+        tue: '',
+        wed: '',
+        thu: '',
+        fri: '',
+        sat: '',
+    };
+}
+function buildWeekDateRecord(weekStartDate) {
+    const dates = buildEmptyDayDateRecord();
+    const trimmed = String(weekStartDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed))
+        return dates;
+    const base = new Date(`${trimmed}T00:00:00Z`);
+    DAY_KEYS.forEach((key, index) => {
+        const date = new Date(base);
+        date.setUTCDate(base.getUTCDate() + index);
+        const yyyy = date.getUTCFullYear();
+        const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(date.getUTCDate()).padStart(2, '0');
+        dates[key] = `${yyyy}-${mm}-${dd}`;
+    });
+    return dates;
+}
+function mergeDayDates(target, sourceDays) {
+    for (const day of Array.isArray(sourceDays) ? sourceDays : []) {
+        const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
+            ? day.dayOfWeek
+            : sourceDays.indexOf(day);
+        const key = DAY_KEYS[idx];
+        if (key === undefined)
+            continue;
+        const date = String(day?.date || '').trim();
+        if (date)
+            target[key] = date;
+    }
 }
 function formatPlexxisNumber(value, blankWhenZero = false) {
     const numeric = toNumber(value);
@@ -385,16 +431,16 @@ function getLineTotalProductionForForm(line) {
     // Form TOTAL for P row is based on MON-SAT production.
     return getLineMonSatProduction(line);
 }
-function getLineSummaryCostForForm(line, employeeWage) {
+function getLineSummaryCostForForm(line, employeeWage, productionBurden) {
     const totalHours = getLineTotalHoursForForm(line);
     const totalProduction = getLineTotalProductionForForm(line);
     if (totalHours <= 0 || totalProduction <= 0)
         return 0;
-    return calculateUnitCostForExport(employeeWage, totalHours, totalProduction, TIMECARD_WEEKDAY_RATE);
+    return calculateUnitCostForExport(employeeWage, totalHours, totalProduction, productionBurden);
 }
-function getLineTotalCostForForm(line, employeeWage) {
+function getLineTotalCostForForm(line, employeeWage, productionBurden) {
     if (employeeWage !== undefined) {
-        const summaryCost = getLineSummaryCostForForm(line, employeeWage);
+        const summaryCost = getLineSummaryCostForForm(line, employeeWage, productionBurden);
         if (summaryCost > 0)
             return summaryCost;
     }
@@ -528,7 +574,11 @@ function normalizeTimecardForEmail(tc) {
             fri: 0,
             sat: 0,
         };
+        const datesByDay = buildWeekDateRecord(String(tc?.weekStartDate || ''));
         const days = Array.isArray(source?.days) ? source.days : [];
+        const timecardDays = Array.isArray(tc?.days) ? tc.days : [];
+        mergeDayDates(datesByDay, timecardDays);
+        mergeDayDates(datesByDay, days);
         for (const day of days) {
             const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
                 ? day.dayOfWeek
@@ -550,7 +600,7 @@ function normalizeTimecardForEmail(tc) {
             if (lineProduction > 0 || productionByDay[key] === 0) {
                 productionByDay[key] = lineProduction || productionByDay[key];
             }
-            const computedUnitCost = calculateUnitCostForExport(employeeWage, hoursByDay[key], productionByDay[key], getRateMultiplierForDay(key));
+            const computedUnitCost = calculateUnitCostForExport(employeeWage, hoursByDay[key], productionByDay[key], tc?.productionBurden);
             unitCostByDay[key] = lineUnitCost || unitCostByDay[key] || computedUnitCost;
         });
         const lineSubSection = getLineSubSection(source);
@@ -579,6 +629,7 @@ function normalizeTimecardForEmail(tc) {
             offHours: toNumber(source?.offHours ?? source?.off?.hours ?? source?.off),
             offProduction: toNumber(source?.offProduction ?? source?.off?.production),
             offCost: toNumber(source?.offCost ?? source?.off?.cost ?? source?.off?.amount),
+            dates: { ...datesByDay },
             production: productionByDay,
             unitCost: unitCostByDay,
         };
@@ -966,7 +1017,6 @@ function toControllerTimecardRow(tc, fallbackWeekStart, fallbackWeekEnding, crea
         totalHours: Math.round(toNumber(tc?.totals?.hoursTotal) * 100) / 100,
         totalProduction: Math.round(toNumber(tc?.totals?.productionTotal) * 100) / 100,
         totalLine: Math.round(toNumber(tc?.totals?.lineTotal) * 100) / 100,
-        mileage: Math.round(toNumber(tc?.mileage) * 100) / 100,
         subcontractedEmployee: Boolean(tc?.subcontractedEmployee),
         submittedAt: submittedAtIso,
         submittedAtMs: submittedAtIso ? Date.parse(submittedAtIso) : null,
@@ -1249,15 +1299,12 @@ function buildTimecardCsv(timecards, weekStart, defaultJobCode) {
     const fixedDataRowCount = 108;
     const blankRow = Array(headers.length).fill('');
     const rows = [headers, [...blankRow]];
-    const fallbackWeekEnding = getWeekEndingFromWeekStart(weekStart);
+    const fallbackDates = buildWeekDateRecord(weekStart);
     for (const tc of Array.isArray(timecards) ? timecards : []) {
         const lines = Array.isArray(tc?.lines) && tc.lines.length ? tc.lines : [];
-        const detailDate = formatPlexxisDate(String(tc?.weekEndingDate || fallbackWeekEnding || weekStart || ''));
         const employeeName = formatPlexxisEmployeeName(tc);
         const employeeCode = String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim();
         for (const line of lines) {
-            const lineHours = getLineTotalHoursForForm(line);
-            const lineProduction = getLineTotalProductionForForm(line);
             const subSection = getLineSubSection(line);
             const activityCode = sanitizeActivityCode(getLineActivityCode(line), line, [
                 String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim(),
@@ -1265,22 +1312,26 @@ function buildTimecardCsv(timecards, weekStart, defaultJobCode) {
             ]);
             const costCode = getLineCostCode(line);
             const rowJobCode = String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim();
-            const hasData = lineHours > 0 || lineProduction > 0 || !!subSection || !!activityCode || !!costCode;
-            if (!hasData)
-                continue;
-            rows.push([
-                employeeName,
-                employeeCode,
-                rowJobCode,
-                detailDate,
-                subSection,
-                activityCode,
-                costCode,
-                formatPlexxisNumber(lineHours, true),
-                formatPlexxisNumber(lineProduction, true),
-                '',
-                '',
-            ]);
+            for (const key of DAY_KEYS) {
+                const dayHours = toNumber(line?.[key]);
+                const dayProduction = toNumber(line?.production?.[key]);
+                const hasData = dayHours > 0 || dayProduction > 0;
+                if (!hasData)
+                    continue;
+                rows.push([
+                    employeeName,
+                    employeeCode,
+                    rowJobCode,
+                    formatPlexxisDate(String(line?.dates?.[key] || fallbackDates[key] || tc?.weekEndingDate || '')),
+                    subSection,
+                    activityCode,
+                    costCode,
+                    formatPlexxisNumber(dayHours, true),
+                    formatPlexxisNumber(dayProduction, true),
+                    '',
+                    '',
+                ]);
+            }
         }
     }
     while (rows.length < fixedDataRowCount + 1) {
@@ -1618,7 +1669,7 @@ async function buildTimecardPdfBuffer(payload) {
                     : '';
                 const lineHoursTotal = hasLine ? getLineTotalHoursForForm(line) : 0;
                 const lineProdTotal = hasLine ? getLineTotalProductionForForm(line) : 0;
-                const lineCostTotal = hasLine ? getLineTotalCostForForm(line, employeeWage) : 0;
+                const lineCostTotal = hasLine ? getLineTotalCostForForm(line, employeeWage, tc?.productionBurden) : 0;
                 const offHours = hasLine ? getLineOffHours(line) : 0;
                 const offProduction = hasLine ? getLineOffProduction(line) : 0;
                 const offCost = hasLine ? getLineOffCost(line) : 0;

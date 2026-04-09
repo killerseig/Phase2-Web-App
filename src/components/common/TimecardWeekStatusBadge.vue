@@ -24,7 +24,7 @@ const isSubmittedThisWeek = computed(() => (
 ))
 
 const badgeLabel = computed(() => (
-  isSubmittedThisWeek.value ? 'Submitted this week' : 'Not submitted this week'
+  isSubmittedThisWeek.value ? 'Weekly timecards submitted' : 'Weekly timecards pending'
 ))
 
 const badgeVariantClass = computed(() => (
@@ -33,7 +33,7 @@ const badgeVariantClass = computed(() => (
 
 const badgeTitle = computed(() => {
   if (!props.currentWeekLabel) return undefined
-  return `Timecards for week ${props.currentWeekLabel}: ${isSubmittedThisWeek.value ? 'Submitted' : 'Not submitted'}`
+  return `Timecards for week ${props.currentWeekLabel}: ${isSubmittedThisWeek.value ? 'Submitted' : 'Pending submission'}`
 })
 </script>
 

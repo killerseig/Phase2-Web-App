@@ -8,10 +8,10 @@ defineOptions({
 })
 
 const roleMap: Record<Role, { label: string; class: string }> = {
-  [ROLES.NONE]: { label: 'None', class: 'bg-secondary' },
-  [ROLES.FOREMAN]: { label: 'Foreman', class: 'bg-warning text-dark' },
-  [ROLES.CONTROLLER]: { label: 'Controller', class: 'bg-primary' },
-  [ROLES.ADMIN]: { label: 'Admin', class: 'bg-danger' },
+  [ROLES.NONE]: { label: 'None', class: 'text-bg-secondary' },
+  [ROLES.FOREMAN]: { label: 'Foreman', class: 'text-bg-warning' },
+  [ROLES.CONTROLLER]: { label: 'Controller', class: 'text-bg-primary' },
+  [ROLES.ADMIN]: { label: 'Admin', class: 'text-bg-danger' },
 }
 
 interface Props {
@@ -24,7 +24,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const badgeInfo = computed(() => (
-  roleMap[props.role as Role] ?? { label: props.role, class: 'bg-secondary' }
+  roleMap[props.role as Role] ?? { label: props.role, class: 'text-bg-secondary' }
 ))
 </script>
 

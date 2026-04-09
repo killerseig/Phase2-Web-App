@@ -100,7 +100,7 @@ describe('badge components', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('Submitted this week')
+    expect(wrapper.text()).toContain('Weekly timecards submitted')
     expect(wrapper.attributes('title')).toContain('Mar 15 - Mar 21')
     expect(wrapper.classes()).toContain('text-bg-success')
   })

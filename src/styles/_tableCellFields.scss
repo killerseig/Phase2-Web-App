@@ -1,5 +1,3 @@
-@use '@/styles/_variables.scss' as vars;
-
 .app-table-cell-input {
   min-width: 0;
 }
@@ -25,7 +23,7 @@
 }
 
 .app-table-cell-input--ghost {
-  color: var(--text-body, vars.$body-color);
+  color: var(--bs-body-color);
   padding: 0.05rem 0.14rem;
 }
 
@@ -35,6 +33,6 @@
 
 .app-table-cell-input--ghost:disabled,
 .app-table-cell-input--ghost[readonly] {
-  color: var(--text-body, vars.$body-color);
+  color: var(--bs-body-color);
   opacity: 1;
 }

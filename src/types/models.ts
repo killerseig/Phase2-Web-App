@@ -50,6 +50,7 @@ export interface Job {
   cip?: string | null
   kjic?: string | null
   accountNumber?: string | null     // 4-digit account number
+  productionBurden?: number | null  // Decimal burden added to wage multiplier (0.33 => 1.33)
   type: JobType                     // general or subcontractor
   active: boolean
   
@@ -188,10 +189,10 @@ export interface Timecard {
   lastName?: string                 // Denormalized last name
   occupation: string                // Denormalized
   employeeWage?: number | null      // Hourly wage
+  productionBurden?: number | null  // Snapshot of job burden used for production cost
   subcontractedEmployee?: boolean   // Is subcontracted employee
   regularHoursOverride?: number | null  // Admin override for regular hours
   overtimeHoursOverride?: number | null // Admin override for overtime hours
-  mileage?: number | null           // Drive mileage reimbursement amount/units
   footerJobOrGl?: string            // Workbook footer "JOB or GL"
   footerAccount?: string            // Workbook footer "ACCT"
   footerOffice?: string             // Workbook footer "OFFICE"

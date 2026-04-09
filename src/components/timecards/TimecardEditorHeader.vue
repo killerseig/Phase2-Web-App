@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import AppDetailField from '@/components/common/AppDetailField.vue'
 import BaseCheckboxField from '@/components/common/BaseCheckboxField.vue'
 import TimecardStatusBadge from '@/components/timecards/TimecardStatusBadge.vue'
 import type { TimecardEmployeeEditorForm, TimecardModel } from '@/utils/timecardUtils'
 import { getTimecardDisplayName, getTimecardFirstName, getTimecardLastName } from '@/utils/timecardUtils'
+import { getTimecardOccupationOptions } from '@/constants/timecards'
 
 const props = withDefaults(defineProps<{
   itemKey: string
@@ -53,6 +55,10 @@ function formatCompactMeta(): string {
 
   return parts.join(' | ')
 }
+
+const occupationOptions = computed(() => (
+  getTimecardOccupationOptions(props.editForm.occupation || props.timecard.occupation)
+))
 </script>
 
 <template>
@@ -126,7 +132,24 @@ function formatCompactMeta(): string {
         placeholder="Occupation"
         input-class="form-control form-control-sm"
         @update:model-value="updateEditField('occupation', $event)"
-      />
+      >
+        <template #input>
+          <select
+            class="form-select form-select-sm"
+            :value="editForm.occupation"
+            @change="updateEditField('occupation', String(($event.target as HTMLSelectElement).value || ''))"
+          >
+            <option value="">Select occupation</option>
+            <option
+              v-for="occupation in occupationOptions"
+              :key="occupation"
+              :value="occupation"
+            >
+              {{ occupation }}
+            </option>
+          </select>
+        </template>
+      </AppDetailField>
     </div>
 
     <div class="timecard-header-row__item">
@@ -205,147 +228,3 @@ function formatCompactMeta(): string {
     </div>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.tc-header-actions {
-  padding-top: 0.1rem;
-}
-
-.tc-header-actions__row {
-  align-items: center;
-  display: flex;
-  gap: 0.4rem;
-  justify-content: flex-end;
-  min-width: 0;
-  white-space: nowrap;
-}
-
-.tc-header-actions__buttons,
-.tc-header-actions__badges {
-  align-items: center;
-  display: flex;
-  gap: 0.4rem;
-}
-
-.tc-header-actions__buttons {
-  flex-shrink: 0;
-}
-
-.tc-header-actions__badges {
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.tc-header-actions__badges :deep(.badge),
-.tc-header-actions__badges .badge {
-  flex-shrink: 0;
-}
-
-.tc-inline-field {
-  min-width: 0;
-}
-
-.timecard-header-compact {
-  align-items: center;
-  display: grid;
-  gap: 0.5rem 0.75rem;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  min-width: 0;
-  width: 100%;
-}
-
-.timecard-header-compact__identity {
-  min-width: 0;
-}
-
-.timecard-header-compact__name {
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.timecard-header-compact__meta {
-  color: $text-muted;
-  font-size: 0.84rem;
-  margin-top: 0.12rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.timecard-header-compact__status {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  justify-content: flex-end;
-}
-
-.timecard-header-compact__actions {
-  flex-shrink: 0;
-}
-
-.tc-sub-check {
-  min-height: 31px;
-  white-space: nowrap;
-}
-
-.timecard-header-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem 0.65rem;
-  width: 100%;
-}
-
-.timecard-header-row__item {
-  flex: 1 1 calc(50% - 0.45rem);
-  min-width: 0;
-}
-
-.timecard-header-row__actions {
-  flex: 1 1 100%;
-  min-width: 0;
-}
-
-@media (max-width: 768px) {
-  .timecard-header-compact {
-    grid-template-columns: 1fr;
-  }
-
-  .timecard-header-compact__status {
-    justify-content: flex-start;
-  }
-
-  .timecard-header-row {
-    row-gap: 0.25rem;
-  }
-
-  .tc-header-actions {
-    padding-top: 0.05rem;
-  }
-
-  .tc-header-actions__row {
-    justify-content: space-between;
-  }
-}
-
-@media (min-width: 768px) {
-  .timecard-header-row {
-    flex-wrap: nowrap;
-  }
-
-  .timecard-header-row__item {
-    flex: 1 1 0;
-  }
-
-  .timecard-header-row__actions {
-    display: flex;
-    flex: 0 0 auto;
-    justify-content: flex-end;
-    margin-left: auto;
-  }
-}
-</style>

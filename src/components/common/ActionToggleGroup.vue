@@ -14,9 +14,9 @@ withDefaults(defineProps<{
   toggleTitle: 'Toggle edit mode',
   toggleAriaLabel: 'Toggle edit mode',
   toggleIcon: 'bi bi-pencil',
-  wrapperClass: 'd-flex align-items-center justify-content-end gap-2 flex-nowrap',
+  wrapperClass: 'd-flex align-items-center justify-content-end gap-1 flex-nowrap',
   groupClass: 'btn-group btn-group-sm flex-nowrap',
-  toggleButtonClass: 'btn btn-sm btn-outline-secondary',
+  toggleButtonClass: 'btn btn-sm btn-outline-secondary btn-icon',
 })
 
 const emit = defineEmits<{

@@ -52,6 +52,7 @@ const jobColumns: Column[] = [
   { key: 'certified', label: 'Certified', sortable: true, width: '8%', slot: 'certified' },
   { key: 'cip', label: '?CIP', sortable: true, width: '8%', slot: 'cip' },
   { key: 'kjic', label: 'KJIC', sortable: true, width: '8%', slot: 'kjic' },
+  { key: 'productionBurden', label: 'Burden', width: '8%', slot: 'productionBurden' },
   { key: 'timecards', label: 'Timecards This Week', width: '12%', slot: 'timecards' },
   { key: 'actions', label: 'Actions', width: '16%', align: 'end', slot: 'actions' },
 ]
@@ -248,6 +249,20 @@ function asText(value: unknown, fallback = '--') {
         </InlineField>
       </template>
 
+      <template #productionBurden="{ row }">
+        <InlineField
+          :editing="editingJobId === asJob(row).id"
+          :model-value="editForm.productionBurden"
+          type="number"
+          step="0.01"
+          placeholder="0.33"
+          :disabled="editingJobSaving"
+          @update:model-value="updateEditField('productionBurden', String($event))"
+        >
+          {{ asJob(row).productionBurden?.toFixed(2) ?? '0.33' }}
+        </InlineField>
+      </template>
+
       <template #timecards="{ row }">
         <TimecardWeekStatusBadge
           :status="asJob(row).timecardStatus"
@@ -297,30 +312,3 @@ function asText(value: unknown, fallback = '--') {
     </BaseTable>
   </AdminCardWrapper>
 </template>
-
-<style scoped lang="scss">
-:deep(.jobs-sheet-table thead th) {
-  white-space: nowrap;
-  font-size: 0.75rem;
-}
-
-:deep(.jobs-sheet-table .table-sort-trigger) {
-  white-space: nowrap;
-}
-
-:deep(.jobs-sheet-table td) {
-  vertical-align: middle;
-}
-
-.cell-ellipsis {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cell-nowrap {
-  white-space: nowrap;
-}
-</style>

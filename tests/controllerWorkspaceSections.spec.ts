@@ -87,7 +87,6 @@ const groupedTimecards: ControllerJobGroup[] = [{
         totalHours: 8,
         totalProduction: 12,
         totalLine: 0,
-        mileage: 0,
         subcontractedEmployee: false,
         submittedAt: null,
         submittedAtMs: null,

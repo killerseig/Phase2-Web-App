@@ -208,13 +208,4 @@ const submit = async () => {
   </div>
 </template>
 
-<style scoped lang="scss">
-.set-password-card {
-  width: 100%;
-}
-
-.invalid-link-icon {
-  font-size: 3rem;
-}
-</style>
 

@@ -74,7 +74,3 @@ const emit = defineEmits<{
     </div>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_catalogTreeNode.scss';
-</style>

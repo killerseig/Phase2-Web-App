@@ -1,31 +1,29 @@
-@use '@/styles/_variables.scss' as vars;
-
 .app-stat-card {
-  color: vars.$body-color;
+  color: var(--bs-body-color);
   height: 100%;
 }
 
 .app-stat-card--accent {
-  background: linear-gradient(180deg, rgba(vars.$primary, 0.1) 0%, rgba(vars.$primary, 0.04) 100%);
-  border: 1px solid rgba(vars.$primary, 0.18);
+  background: var(--app-accent-panel-bg);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.16);
 }
 
 .app-stat-card__label {
-  color: vars.$text-muted;
-  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .app-stat-card__value {
-  font-size: clamp(1.55rem, 3vw, 2rem);
-  font-weight: 700;
+  font-size: clamp(1.45rem, 3vw, 1.9rem);
+  font-weight: 650;
   line-height: 1.1;
-  margin: 0.35rem 0 0.15rem;
+  margin: 0.28rem 0 0.12rem;
 }
 
 .app-stat-card__helper {
-  color: vars.$text-muted;
-  font-size: 0.875rem;
+  color: var(--bs-secondary-color);
+  font-size: 0.84rem;
 }

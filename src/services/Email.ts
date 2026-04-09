@@ -82,7 +82,6 @@ export type ControllerTimecardWeekItem = {
   totalHours: number
   totalProduction: number
   totalLine: number
-  mileage: number
   subcontractedEmployee: boolean
   submittedAt: string | null
   submittedAtMs: number | null

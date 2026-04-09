@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import TimecardSelectedMetaCard from '@/components/timecards/TimecardSelectedMetaCard.vue'
 import TimecardWorkspaceCard from '@/components/timecards/TimecardWorkspaceCard.vue'
 import type { TimecardModel } from '@/utils/timecardUtils'
+import { buildLegacyWorkbookSampleTimecard } from './helpers/timecardWorkbookSample'
 
 function createTimecard(): TimecardModel {
   return {
@@ -20,7 +21,7 @@ function createTimecard(): TimecardModel {
     occupation: 'Framer/Rocker',
     employeeWage: 30,
     subcontractedEmployee: false,
-    mileage: 12.5,
+    productionBurden: 0.33,
     jobs: [
       {
         jobNumber: '4197',
@@ -72,9 +73,9 @@ describe('timecard workspace card', () => {
     expect(wrapper.text()).toContain('PHASE 2 COMPANY')
     expect(wrapper.text()).toContain('EMPLOYEE#')
     expect(wrapper.text()).toContain('WEEK ENDING')
-    expect(wrapper.get('input[aria-label="Workbook line 1 job number"]').element.closest('td')?.getAttribute('rowspan')).toBe('3')
-    expect(wrapper.get('input[aria-label="Workbook line 1 area"]').element.closest('td')?.getAttribute('rowspan')).toBe('3')
-    expect(wrapper.get('input[aria-label="Workbook line 1 account"]').element.closest('td')?.getAttribute('rowspan')).toBe('3')
+    expect(wrapper.find('input[aria-label="Workbook line 1 job number"]').exists()).toBe(true)
+    expect(wrapper.find('input[aria-label="Workbook line 1 area"]').exists()).toBe(true)
+    expect(wrapper.find('input[aria-label="Workbook line 1 account"]').exists()).toBe(true)
 
     await wrapper.get('input[aria-label="Workbook line 1 job number"]').setValue('5000')
     await wrapper.get('input[aria-label="Workbook line 1 area"]').setValue('42')
@@ -122,20 +123,46 @@ describe('timecard workspace card', () => {
         headerEditable: true,
         headerEmployeeName: 'Casey Stone',
         headerEmployeeNumber: '100',
-        headerOccupation: 'Carpenter',
+        headerOccupation: 'Framer & Rocker',
         headerEmployeeWage: '32',
       },
     })
 
     await wrapper.get('input[aria-label="Workbook employee name for tc-1"]').setValue('Jordan Stone')
     await wrapper.get('input[aria-label="Workbook employee number for tc-1"]').setValue('101')
-    await wrapper.get('input[aria-label="Workbook occupation for tc-1"]').setValue('Foreman')
+    await wrapper.get('select[aria-label="Workbook occupation for tc-1"]').setValue('AC Foreman')
     await wrapper.get('input[aria-label="Workbook wage for tc-1"]').setValue('34.5')
 
     expect(wrapper.emitted('update-employee-name')).toEqual([['Jordan Stone']])
     expect(wrapper.emitted('update-employee-number')).toEqual([['101']])
-    expect(wrapper.emitted('update-occupation')).toEqual([['Foreman']])
+    expect(wrapper.emitted('update-occupation')).toEqual([['AC Foreman']])
     expect(wrapper.emitted('update-employee-wage')).toEqual([['34.5']])
+  })
+
+  it('renders the extracted legacy workbook sample values on the workbook card', () => {
+    const wrapper = mount(TimecardWorkspaceCard, {
+      props: {
+        itemKey: 'legacy-sample-1',
+        timecard: buildLegacyWorkbookSampleTimecard(),
+        jobFieldsLocked: false,
+        notesLocked: false,
+      },
+    })
+
+    expect(wrapper.text()).toContain('Aguirre Marcelo')
+    expect(wrapper.text()).toContain('Framer/Rocker')
+    expect(wrapper.text()).toContain('1/24/2026')
+    expect(wrapper.text()).toContain('TOTAL HOURS')
+    expect(wrapper.text()).toContain('REG')
+
+    expect((wrapper.get('input[aria-label="Workbook line 1 MON hours"]').element as HTMLInputElement).value).toBe('0.50')
+    expect((wrapper.get('input[aria-label="Workbook line 3 MON hours"]').element as HTMLInputElement).value).toBe('7.00')
+    expect((wrapper.get('input[aria-label="Workbook line 3 MON production"]').element as HTMLInputElement).value).toBe('20.00')
+    expect((wrapper.get('input[aria-label="Workbook line 3 MON cost"]').element as HTMLInputElement).value).toBe('13.96')
+    expect((wrapper.get('input[aria-label="Workbook line 4 TUE cost"]').element as HTMLInputElement).value).toBe('2.99')
+    expect((wrapper.get('input[aria-label="Workbook line 5 FRI cost"]').element as HTMLInputElement).value).toBe('9.98')
+    expect(wrapper.text()).toContain('40.0')
+    expect(wrapper.text()).toContain('11.571')
   })
 
   it('renders a compact selected meta summary without mileage controls', () => {

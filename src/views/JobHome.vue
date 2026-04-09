@@ -153,7 +153,7 @@ onUnmounted(() => {
       <div v-if="canEmployeeModules" class="col-12 col-md-6">
         <AppModuleCard
           title="Timecards"
-          description="Track hours and production for this job."
+          description="Enter, review, and submit weekly hours and production for this job."
           icon="bi bi-clock-history"
           icon-class="text-info"
           :to="{ name: ROUTE_NAMES.JOB_TIMECARDS, params: { jobId } }"

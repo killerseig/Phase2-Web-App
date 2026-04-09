@@ -44,6 +44,7 @@ const normalizeClasses = (cls?: string | string[]) => {
 
 const tableClasses = computed(() => [
   'table',
+  'app-data-table',
   props.striped !== false ? 'table-striped' : '',
   props.hover !== false ? 'table-hover' : '',
   props.small !== false ? 'table-sm' : '',
@@ -103,7 +104,7 @@ function cellValue(row: TableRow, key: string) {
 </script>
 
 <template>
-  <div class="table-responsive">
+  <div class="table-responsive app-data-table-responsive">
     <table :class="tableClasses">
       <colgroup v-if="columns.some(c => c.width)">
         <col v-for="col in columns" :key="col.key" :style="col.width ? { width: col.width } : undefined" />
@@ -129,6 +130,8 @@ function cellValue(row: TableRow, key: string) {
         </tr>
       </thead>
       <tbody>
+        <slot name="row-prepend" :columns="columns" />
+
         <tr v-for="(row, rowIndex) in rows" :key="rowId(row, rowIndex)">
           <td v-for="col in columns" :key="col.key" :class="alignClass(col.align)">
             <slot

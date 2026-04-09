@@ -77,14 +77,6 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     expandedId.value = open ? key : null
   }
 
-  function parseMileageInput(value: string): number | null {
-    const trimmed = value.trim()
-    if (!trimmed) return null
-    const parsed = Number(trimmed)
-    if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) return null
-    return parsed
-  }
-
   function updateLoadedTimecard(timecard: TimecardModel) {
     loadedTimecardMap.value = {
       ...loadedTimecardMap.value,
@@ -115,7 +107,6 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
       totalHours: timecard.totals?.hoursTotal ?? 0,
       totalProduction: timecard.totals?.productionTotal ?? 0,
       totalLine: timecard.totals?.lineTotal ?? 0,
-      mileage: Number(timecard.mileage ?? 0),
       subcontractedEmployee: !!timecard.subcontractedEmployee,
     }
     recalculateReviewSummary()
@@ -176,10 +167,10 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
         employeeName: timecard.employeeName,
         employeeNumber: timecard.employeeNumber,
         employeeWage: timecard.employeeWage,
+        productionBurden: timecard.productionBurden ?? null,
         subcontractedEmployee: timecard.subcontractedEmployee ?? false,
         regularHoursOverride: timecard.regularHoursOverride ?? null,
         overtimeHoursOverride: timecard.overtimeHoursOverride ?? null,
-        mileage: timecard.mileage ?? null,
         footerJobOrGl: timecard.footerJobOrGl ?? '',
         footerAccount: timecard.footerAccount ?? '',
         footerOffice: timecard.footerOffice ?? '',
@@ -245,12 +236,6 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     } catch (err) {
       toast.show(formatErr(err), 'error')
     }
-  }
-
-  function updateMileage(timecard: TimecardModel, rawValue: string) {
-    timecard.mileage = parseMileageInput(rawValue)
-    updateLoadedTimecard(timecard)
-    autoSave(timecard)
   }
 
   function cleanupAutoSaveTimers() {
@@ -335,10 +320,6 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     autoSave(payload.timecard)
   }
 
-  function handleGroupedResultsUpdateMileage(payload: { timecard: TimecardModel; value: string }) {
-    updateMileage(payload.timecard, payload.value)
-  }
-
   function handleGroupedResultsUpdateNotes(payload: { timecard: TimecardModel; value: string }) {
     handleNotesInput(payload.timecard, payload.value)
   }
@@ -357,7 +338,6 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     handleGroupedResultsUpdateFooterField,
     handleGroupedResultsUpdateHours,
     handleGroupedResultsUpdateJobNumber,
-    handleGroupedResultsUpdateMileage,
     handleGroupedResultsUpdateNotes,
     handleGroupedResultsUpdateOffValue,
     handleGroupedResultsUpdateProduction,
@@ -367,6 +347,5 @@ export function useControllerTimecardEditing(options: UseControllerTimecardEditi
     isTimecardLocked,
     saveTimecard,
     toggleEditingEmployee,
-    updateMileage,
   }
 }

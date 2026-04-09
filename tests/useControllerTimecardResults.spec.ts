@@ -24,7 +24,6 @@ function createReviewRow(overrides: Partial<ControllerTimecardWeekItem> = {}): C
     totalHours: overrides.totalHours ?? 8,
     totalProduction: overrides.totalProduction ?? 5,
     totalLine: overrides.totalLine ?? 240,
-    mileage: overrides.mileage ?? 0,
     subcontractedEmployee: overrides.subcontractedEmployee ?? false,
     submittedAt: overrides.submittedAt ?? null,
     submittedAtMs: overrides.submittedAtMs ?? null,
@@ -47,7 +46,7 @@ function createTimecard(overrides: Partial<TimecardModel> = {}): TimecardModel {
     occupation: overrides.occupation ?? 'Carpenter',
     employeeWage: overrides.employeeWage ?? 30,
     subcontractedEmployee: overrides.subcontractedEmployee ?? false,
-    mileage: overrides.mileage ?? 0,
+    productionBurden: overrides.productionBurden ?? 0.33,
     jobs: overrides.jobs ?? [],
     days: overrides.days ?? [],
     totals: overrides.totals ?? {

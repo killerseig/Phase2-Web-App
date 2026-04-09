@@ -34,32 +34,3 @@ function animationStyle(duration?: number) {
   </div>
 </template>
 
-<style scoped>
-.toast-stack {
-  z-index: 9999;
-}
-
-.toast {
-  animation: fadeInOut 5s ease-in-out forwards;
-  min-width: 300px;
-}
-
-@keyframes fadeInOut {
-  0% {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  10% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  90% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-}
-</style>

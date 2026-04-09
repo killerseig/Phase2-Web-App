@@ -1,0 +1,697 @@
+.controller-card {
+  background: var(--bs-card-bg);
+  border: 1px solid var(--bs-card-border-color);
+  color: var(--bs-body-color);
+}
+
+.controller-timecard-summary {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.controller-timecard-summary__metrics,
+.controller-timecard-summary__count {
+  line-height: 1.2;
+}
+
+.controller-timecard-summary__metrics {
+  font-size: 0.92em;
+}
+
+.controller-timecard-summary__count {
+  font-size: 0.95em;
+}
+
+.controller-timecard-summary .app-badge-pill {
+  font-size: 0.82rem;
+  padding: 0.38rem 0.75rem;
+}
+
+.controller-filter-card .panel-header {
+  padding: 0.62rem 0.78rem 0.58rem;
+}
+
+.controller-filter-card .controller-filter-card__body {
+  padding: 0.72rem 0.78rem 0.78rem;
+}
+
+.controller-filter-card.controller-filter-card--embedded .controller-filter-card__body {
+  padding-top: 0.88rem;
+}
+
+.controller-filter-card__title {
+  font-size: clamp(1rem, 1.15vw, 1.16rem);
+  line-height: 1.1;
+}
+
+.controller-filter-stack {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.controller-filter-stack__section {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.controller-filter-stack__section + .controller-filter-stack__section,
+.controller-filter-grid-compact,
+.controller-filter-footer {
+  border-top: 1px solid var(--app-divider-subtle);
+  padding-top: 0.68rem;
+}
+
+.controller-filter-stack__range-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.controller-filter-label {
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.controller-filter-switch {
+  margin-bottom: 0.2rem;
+  min-height: 1.25rem;
+}
+
+.controller-filter-grid-compact {
+  display: grid;
+  gap: 0.5rem 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.controller-filter-grid-compact__span-2 {
+  grid-column: 1 / -1;
+}
+
+.controller-filter-footer {
+  background: var(--app-subtle-surface-bg);
+  border: 1px solid var(--app-subtle-surface-border);
+  border-radius: 0.82rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.68rem 0.72rem;
+}
+
+.controller-filter-actions {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.controller-filter-actions__full {
+  grid-column: 1 / -1;
+}
+
+.controller-filter-card .app-toolbar-meta__eyebrow {
+  margin-bottom: 0.2rem;
+}
+
+.controller-filter-card .app-toolbar-meta__subtitle {
+  font-size: 0.79rem;
+  margin-top: 0.2rem;
+}
+
+.controller-filter-card .app-toolbar-summary {
+  padding: 0;
+}
+
+.controller-filter-card .app-toolbar-summary__kicker {
+  font-size: 0.62rem;
+}
+
+.controller-filter-card .app-toolbar-summary__line {
+  gap: 0.45rem;
+}
+
+.controller-filter-card .btn.btn-sm {
+  min-height: calc(1.5em + 0.45rem + 2px);
+  padding-block: 0.35rem;
+}
+
+.controller-filter-card .input-group-text {
+  padding: 0.32rem 0.5rem;
+}
+
+.controller-filter-card .form-control,
+.controller-filter-card .form-select {
+  min-height: calc(1.5em + 0.45rem + 2px);
+}
+
+.controller-timecard-browser__body {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.72rem;
+}
+
+.controller-timecard-browser--embedded .card-body {
+  padding-top: 0.95rem;
+}
+
+.controller-timecard-browser__controls {
+  background: var(--app-subtle-surface-bg);
+  border: 1px solid var(--app-subtle-surface-border-strong);
+  border-radius: 0.82rem;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 1fr;
+  padding: 0.62rem 0.68rem;
+}
+
+.controller-timecard-browser__filters-label,
+.controller-timecard-browser__sort-label,
+.controller-timecard-browser__eyebrow {
+  color: var(--bs-secondary-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.controller-timecard-browser__filters-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 0.15rem;
+}
+
+.controller-timecard-browser__filters-meta {
+  color: var(--bs-secondary-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem 0.55rem;
+  font-size: 0.78rem;
+  margin-top: 0.18rem;
+}
+
+.controller-timecard-browser__refreshing {
+  color: var(--bs-warning-text-emphasis);
+  font-weight: 600;
+}
+
+.controller-timecard-browser__sort-row {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 0.2rem;
+}
+
+.controller-timecard-browser__groups {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.controller-timecard-browser__group {
+  background: var(--app-group-surface-bg);
+  border: 1px solid var(--app-group-surface-border);
+  border-radius: 0.74rem;
+  overflow: hidden;
+}
+
+.controller-timecard-browser__group-header {
+  align-items: start;
+  background: var(--app-accent-panel-bg);
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0.6rem 0.72rem;
+}
+
+.controller-timecard-browser__group-heading {
+  min-width: 0;
+}
+
+.controller-timecard-browser__group-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-top: 0.1rem;
+  text-wrap: balance;
+}
+
+.controller-timecard-browser__group-meta,
+.controller-timecard-browser__creator-meta,
+.controller-timecard-browser__item-meta,
+.controller-timecard-browser__item-week,
+.controller-timecard-browser__item-metrics {
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+}
+
+.controller-timecard-browser__group-summary {
+  align-items: start;
+  justify-items: start;
+}
+
+.controller-timecard-browser__creator {
+  border-top: 1px solid var(--app-divider-subtle);
+  padding: 0.55rem 0.62rem 0.62rem;
+}
+
+.controller-timecard-browser__creator-header {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.controller-timecard-browser__creator-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.controller-timecard-browser__items {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.controller-timecard-browser__item {
+  align-items: start;
+  background: var(--app-item-surface-bg);
+  border-color: var(--app-item-surface-border);
+  border-radius: 0.66rem;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.52rem 0.62rem;
+  text-align: left;
+}
+
+.controller-timecard-browser__item-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.controller-timecard-browser__item-meta,
+.controller-timecard-browser__item-week {
+  margin-top: 0.14rem;
+}
+
+.controller-timecard-browser__item-side {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: right;
+}
+
+.controller-timecard-browser__item-metrics {
+  font-weight: 600;
+}
+
+.controller-timecard-browser .app-selectable-list-item--selected {
+  border-color: rgba(var(--bs-primary-rgb), 0.9);
+  box-shadow: 0 0 0 0.12rem rgba(var(--bs-primary-rgb), 0.18);
+}
+
+.controller-timecard-browser .app-selectable-list-item--selected .controller-timecard-browser__item-name {
+  color: var(--bs-body-color);
+}
+
+.controller-timecard-browser .controller-timecard-summary {
+  gap: 0.18rem;
+}
+
+.controller-timecard-browser .controller-timecard-summary__metrics {
+  font-size: 0.78rem;
+}
+
+.controller-timecard-browser .controller-timecard-summary__count {
+  font-size: 0.82rem;
+}
+
+.controller-timecard-browser .app-badge-pill {
+  font-size: 0.72rem;
+  padding: 0.28rem 0.58rem;
+}
+
+.controller-job-groups {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.controller-job-group__summary {
+  text-align: right;
+}
+
+.controller-job-group .card-header {
+  padding: 0.85rem 1rem;
+}
+
+.controller-job-group .app-toolbar-meta__eyebrow {
+  margin-bottom: 0.2rem;
+}
+
+.controller-job-group .app-toolbar-meta__subtitle {
+  font-size: 0.9rem;
+  margin-top: 0.2rem;
+}
+
+.controller-job-group .controller-timecard-summary {
+  gap: 0.35rem;
+}
+
+.controller-timecards-accordion .timecard-editor-card {
+  border-radius: 0;
+  margin-bottom: 0 !important;
+}
+
+.controller-creator-group + .controller-creator-group {
+  border-top: 1px solid var(--app-divider-accent);
+}
+
+.controller-creator-group__header {
+  padding: 0.55rem 0.85rem;
+}
+
+.controller-creator-group__header .app-toolbar-meta__eyebrow {
+  margin-bottom: 0.08rem;
+}
+
+.controller-creator-group__header .app-toolbar-meta__subtitle {
+  margin-top: 0.12rem;
+}
+
+.controller-creator-group__header .controller-timecard-summary {
+  gap: 0.2rem;
+}
+
+.controller-week-badge {
+  letter-spacing: 0.01em;
+}
+
+.controller-summary-stats {
+  background: var(--bs-card-bg);
+  border: 1px solid var(--bs-card-border-color);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0.8rem 0.8rem;
+}
+
+.controller-summary-stats__header {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.6rem;
+}
+
+.controller-summary-stats__eyebrow {
+  color: var(--bs-secondary-color);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.controller-summary-stats__week {
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.controller-summary-stats__grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.controller-summary-stats__item {
+  background: var(--app-stat-surface-bg);
+  border: 1px solid var(--app-stat-surface-border);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+}
+
+.controller-summary-stats__label {
+  color: var(--bs-secondary-color);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.controller-summary-stats__value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.controller-summary-stats__value--success {
+  color: var(--bs-success-text-emphasis);
+}
+
+.controller-summary-stats__value--warning {
+  color: var(--bs-warning-text-emphasis);
+}
+
+.controller-loading-state {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 220px;
+}
+
+.controller-review-card .card-header {
+  padding: 0.85rem 1rem;
+}
+
+.controller-review-card .card-body {
+  padding: 0.95rem 1rem 1rem;
+}
+
+.controller-timecard-detail-pane {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.controller-timecard-detail-pane__header-card {
+  background: var(--app-empty-state-bg);
+  border-color: var(--app-item-surface-border);
+}
+
+.controller-timecard-detail-pane__header-body {
+  padding: 0.68rem 0.82rem;
+}
+
+.controller-timecard-detail-pane__hero {
+  align-items: start;
+  display: grid;
+  gap: 0.45rem 0.72rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.controller-timecard-detail-pane__hero-main {
+  min-width: 0;
+}
+
+.controller-timecard-detail-pane__hero-title {
+  font-size: 1.06rem;
+  font-weight: 700;
+  line-height: 1.08;
+}
+
+.controller-timecard-detail-pane__hero-meta {
+  color: var(--bs-secondary-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+  font-size: 0.77rem;
+}
+
+.controller-timecard-detail-pane__hero-secondary {
+  color: var(--bs-secondary-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.12rem;
+  font-size: 0.71rem;
+}
+
+.controller-timecard-detail-pane__hero-actions {
+  align-content: start;
+  display: grid;
+  gap: 0.35rem;
+  justify-items: end;
+}
+
+.controller-timecard-detail-pane__hero-badges,
+.controller-timecard-detail-pane__hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.controller-timecard-detail-pane__hero-buttons .btn,
+.controller-timecard-detail-pane__hero-badges .badge,
+.controller-timecard-detail-pane__hero-badges .app-badge-pill {
+  min-height: 1.95rem;
+}
+
+@media (min-width: 1500px) {
+  .controller-timecard-browser__group-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .controller-filter-grid-compact,
+  .controller-filter-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .controller-filter-actions__full {
+    grid-column: auto;
+  }
+
+  .controller-filter-card .panel-header,
+  .controller-filter-card .controller-filter-card__body,
+  .controller-timecard-browser__body {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  .controller-timecard-browser__item {
+    grid-template-columns: 1fr;
+  }
+
+  .controller-timecard-browser__item-side {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .controller-timecard-detail-pane {
+    gap: 0.7rem;
+  }
+
+  .controller-timecard-detail-pane__header-body {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .controller-timecard-detail-pane__hero {
+    grid-template-columns: 1fr;
+  }
+
+  .controller-timecard-detail-pane__hero-actions,
+  .controller-timecard-detail-pane__hero-badges,
+  .controller-timecard-detail-pane__hero-buttons {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+
+  .controller-timecard-detail-pane__hero-title {
+    font-size: 1rem;
+  }
+
+  .controller-timecard-detail-pane__hero-meta,
+  .controller-timecard-detail-pane__hero-secondary {
+    font-size: 0.72rem;
+    margin-top: 0.15rem;
+  }
+
+  .controller-timecard-detail-pane__hero-buttons {
+    width: 100%;
+  }
+
+  .controller-timecard-detail-pane__hero-buttons .btn {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 1199px) {
+  .controller-timecard-detail-pane__hero {
+    grid-template-columns: 1fr;
+  }
+
+  .controller-timecard-detail-pane__hero-actions,
+  .controller-timecard-detail-pane__hero-badges,
+  .controller-timecard-detail-pane__hero-buttons {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+}
+
+.controller-page .app-page__header {
+  margin-bottom: 0.8rem;
+}
+
+.controller-page .app-page__eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+.controller-page .app-page__title {
+  font-size: clamp(1.08rem, 1.35vw, 1.28rem);
+}
+
+.controller-page .app-page__subtitle {
+  font-size: 0.8rem;
+  margin-top: 0.22rem;
+}
+
+.controller-page .app-page__meta {
+  margin-top: 0.38rem;
+}
+
+.controller-page__rail {
+  align-content: start;
+  display: grid;
+  gap: 0.65rem;
+  max-height: calc(100vh - 7.5rem);
+  overflow-y: auto;
+  padding-right: 0.1rem;
+}
+
+.controller-page__rail::-webkit-scrollbar {
+  width: 0.45rem;
+}
+
+.controller-page__rail::-webkit-scrollbar-thumb {
+  background: var(--app-floating-border);
+  border-radius: 999px;
+}
+
+.controller-page .app-master-detail-workspace__controls {
+  max-height: calc(100vh - 7.5rem);
+  overflow: hidden;
+}
+
+@media (max-width: 991px) {
+  .controller-page__rail,
+  .controller-page .app-master-detail-workspace__controls {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .controller-job-group__summary {
+    text-align: left;
+  }
+
+  .controller-creator-group__header {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 767px) {
+  .controller-page .app-page__header {
+    display: none;
+  }
+}
+
+@media (max-width: 575px) {
+  .controller-summary-stats__grid {
+    grid-template-columns: 1fr;
+  }
+}

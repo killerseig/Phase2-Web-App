@@ -130,6 +130,11 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
       }))
   })
 
+  const currentDisplayForemanId = computed(() => (
+    assignedForemen.value.find((entry) => entry.isDisplayForeman)?.id
+    ?? ''
+  ))
+
   const filteredRosterEmployees = computed(() => {
     const term = rosterSearchTerm.value.trim().toLowerCase()
     if (!term) return rosterEmployees.value
@@ -241,9 +246,9 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
     settingDisplayForemanId.value = foremanId
     try {
       await jobsStore.updateJob(job.id, { foreman: foreman.label })
-      toast.show('Display foreman updated', 'success')
+      toast.show('Foreman updated', 'success')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update display foreman'
+      const message = error instanceof Error ? error.message : 'Failed to update foreman'
       toast.show(message, 'error')
     } finally {
       settingDisplayForemanId.value = ''
@@ -260,7 +265,7 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
     const wageRate = parseOptionalNumber(rosterForm.value.wageRate)
 
     if (!directoryEmployee) {
-      toast.show('Select an employee from the employee database first', 'error')
+      toast.show('Select an employee to add to the crew', 'error')
       return
     }
 
@@ -292,7 +297,7 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
           : undefined,
       })
       resetRosterForm()
-      toast.show('Employee added to job roster', 'success')
+      toast.show('Crew member added to job', 'success')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add employee'
       toast.show(message, 'error')
@@ -308,7 +313,7 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
     togglingRosterEmployeeId.value = employeeId
     try {
       await rosterStore.toggleEmployeeStatus(jobId, employeeId)
-      toast.show('Employee status updated', 'success')
+      toast.show('Crew member status updated', 'success')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update employee status'
       toast.show(message, 'error')
@@ -323,9 +328,9 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
     if (!jobId || !employee) return
 
     const confirmed = await confirm(
-      `Remove ${employee.firstName} ${employee.lastName} from this job roster?`,
+      `Remove ${employee.firstName} ${employee.lastName} from this crew?`,
       {
-        title: 'Remove Employee',
+        title: 'Remove Crew Member',
         confirmText: 'Remove',
         variant: 'danger',
       },
@@ -335,7 +340,7 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
     removingRosterEmployeeId.value = employeeId
     try {
       await rosterStore.removeEmployee(jobId, employeeId)
-      toast.show('Employee removed from job roster', 'success')
+      toast.show('Crew member removed from job', 'success')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to remove employee'
       toast.show(message, 'error')
@@ -357,6 +362,22 @@ export function useAdminJobTeam(options: UseAdminJobTeamOptions) {
 
       if (!nextJobId) return
       rosterStore.subscribeJobRoster(nextJobId)
+    },
+    { immediate: true },
+  )
+
+  watch(
+    [selectedJobId, currentDisplayForemanId],
+    ([jobId, displayForemanId]) => {
+      if (!jobId) {
+        foremanSelectionId.value = ''
+        return
+      }
+
+      const hasSelection = assignedForemen.value.some((entry) => entry.id === foremanSelectionId.value)
+      if (hasSelection && foremanSelectionId.value !== displayForemanId) return
+
+      foremanSelectionId.value = displayForemanId
     },
     { immediate: true },
   )

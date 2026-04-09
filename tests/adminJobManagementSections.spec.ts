@@ -127,16 +127,71 @@ describe('admin job management section components', () => {
         selectedEmployeeId: 'directory-1',
       },
     })
-    await wrapper.get('input[placeholder="25.00"]').setValue('30')
     await wrapper.get('button.btn-outline-primary').trigger('click')
     await wrapper.get('button.btn-outline-secondary').trigger('click')
     await wrapper.get('button.btn-outline-danger').trigger('click')
 
     expect(wrapper.emitted('update:selectedEmployeeId')).toEqual([['directory-1']])
-    expect(wrapper.emitted('update:form')?.[0]?.[0]).toMatchObject({ wageRate: '30' })
     expect(wrapper.emitted('submit')).toEqual([[]])
     expect(wrapper.emitted('toggle-employee')).toEqual([['emp-1']])
     expect(wrapper.emitted('remove-employee')).toEqual([['emp-1']])
+  })
+
+  it('emits foreman selection from the crew workspace', async () => {
+    const wrapper = mount(AdminJobManagementPanel, {
+      props: {
+        job: baseJob,
+        assignedForemen: [
+          {
+            id: 'foreman-1',
+            label: 'Pat Foreman',
+            email: 'pat@example.com',
+            active: true,
+            isDisplayForeman: true,
+            missing: false,
+          },
+          {
+            id: 'foreman-2',
+            label: 'Casey Foreman',
+            email: 'casey@example.com',
+            active: true,
+            isDisplayForeman: false,
+            missing: false,
+          },
+        ],
+        availableForemanOptions: [],
+        selectedForemanId: 'foreman-1',
+        assigningForemanId: '',
+        removingForemanId: '',
+        settingDisplayForemanId: '',
+        rosterEmployees: [baseEmployee],
+        totalRosterEmployees: 1,
+        rosterSearchTerm: '',
+        availableEmployeeOptions: [],
+        employeeDirectoryLoading: false,
+        employeeDirectoryError: '',
+        rosterForm: createJobRosterForm(),
+        selectedEmployee: null,
+        savingRosterEmployee: false,
+        togglingRosterEmployeeId: '',
+        removingRosterEmployeeId: '',
+      },
+      global: {
+        stubs: {
+          SearchSelectField: {
+            props: ['modelValue'],
+            template: '<input class="foreman-picker-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+          },
+        },
+      },
+    })
+
+    await wrapper.get('.foreman-picker-stub').setValue('foreman-2')
+    await wrapper.setProps({ selectedForemanId: 'foreman-2' })
+    await wrapper.findAll('button.btn-outline-primary')[0].trigger('click')
+
+    expect(wrapper.emitted('update:selectedForemanId')).toEqual([['foreman-2']])
+    expect(wrapper.emitted('set-display-foreman')).toEqual([['foreman-2']])
   })
 
   it('shows the empty guidance state when no job is selected', () => {
@@ -163,6 +218,6 @@ describe('admin job management section components', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('Open a job above with the edit button to manage foremen and roster employees.')
+    expect(wrapper.text()).toContain('Select a job from the browser to manage its crew.')
   })
 })

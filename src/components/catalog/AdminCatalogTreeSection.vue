@@ -29,7 +29,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <AdminCardWrapper title="Catalog" class="table-responsive">
+  <AdminCardWrapper title="Catalog" class="admin-catalog-tree-section table-responsive">
     <CatalogSearchResultsList
       v-if="props.isSearching && props.hasSearchResults"
       :results="props.results"
@@ -68,9 +68,3 @@ const emit = defineEmits<{
     />
   </AdminCardWrapper>
 </template>
-
-<style scoped lang="scss">
-.table-responsive {
-  overflow: visible;
-}
-</style>

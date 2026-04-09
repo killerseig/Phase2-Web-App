@@ -28,14 +28,3 @@ const isAuthReady = computed(() => auth.ready)
 const isPublicRoute = computed(() => route.meta.requiresAuth === false)
 </script>
 
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as vars;
-
-.app-boot-screen {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface, vars.$surface);
-}
-</style>

@@ -50,7 +50,7 @@ function createTimecard(): TimecardModel {
     occupation: 'Carpenter',
     employeeWage: 30,
     subcontractedEmployee: false,
-    mileage: 0,
+    productionBurden: 0.33,
     jobs: [],
     days: [],
     totals: {
@@ -114,7 +114,6 @@ describe('useControllerTimecardData', () => {
         totalHours: 0,
         totalProduction: 0,
         totalLine: 0,
-        mileage: 0,
         subcontractedEmployee: false,
         submittedAt: null,
         submittedAtMs: null,

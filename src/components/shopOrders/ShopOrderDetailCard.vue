@@ -150,22 +150,3 @@ const visibleItemColumns = computed(() =>
       </div>
   </AppSectionCard>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-.order-card .card-header {
-  border-bottom: 1px solid $border-color;
-  background: $surface-2;
-}
-
-.order-card .order-body {
-  background: $surface;
-}
-
-.order-table {
-  border: 1px solid $border-color;
-  border-radius: $border-radius;
-  background: $surface;
-}
-</style>

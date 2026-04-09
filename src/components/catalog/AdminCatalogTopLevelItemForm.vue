@@ -80,7 +80,3 @@ const priceModel = computed({
     </div>
   </AdminAccordionFormCard>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_adminCatalogControls.scss';
-</style>

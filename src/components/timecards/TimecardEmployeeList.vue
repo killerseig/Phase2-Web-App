@@ -15,12 +15,14 @@ interface Props {
   items: TimecardWorkspaceEmployeeItem[]
   loading?: boolean
   selectedEmployeeId?: string | null
+  selectedItem?: TimecardWorkspaceEmployeeItem | null
   searchTerm?: string
 }
 
 withDefaults(defineProps<Props>(), {
   loading: false,
   selectedEmployeeId: null,
+  selectedItem: null,
   searchTerm: '',
 })
 
@@ -41,20 +43,49 @@ function handleSelect(employeeId: string) {
 <template>
   <AppListCard
     class="timecard-employee-list"
-    title="Employees"
+    title="Roster"
     icon="bi bi-people"
     :badge-label="items.length"
     body-class="p-0"
     muted
   >
-    <div class="p-3 border-bottom">
+    <div v-if="selectedItem" class="timecard-employee-list__selected border-bottom">
+      <div class="timecard-employee-list__selected-top">
+        <div class="timecard-employee-list__selected-copy">
+          <div class="timecard-employee-list__selected-eyebrow">Selected Workbook</div>
+          <div class="timecard-employee-list__selected-name">{{ selectedItem.employeeName }}</div>
+        </div>
+
+        <TimecardStatusBadge
+          v-if="selectedItem.status === 'draft' || selectedItem.status === 'submitted'"
+          :status="selectedItem.status"
+        />
+        <AppBadge
+          v-else
+          label="Missing"
+          variant-class="text-bg-secondary"
+        />
+      </div>
+
+      <div class="timecard-employee-list__selected-meta">
+        <span>#{{ selectedItem.employeeNumber }}</span>
+        <span aria-hidden="true">|</span>
+        <span>{{ selectedItem.occupation || 'No occupation' }}</span>
+        <span aria-hidden="true">|</span>
+        <span>{{ selectedItem.hoursTotal.toFixed(2) }} hrs</span>
+        <span aria-hidden="true">|</span>
+        <span>{{ selectedItem.productionTotal.toFixed(2) }} prod</span>
+      </div>
+    </div>
+
+    <div class="timecard-employee-list__toolbar border-bottom">
       <BaseSearchField
         :model-value="searchTerm"
         input-class="form-control form-control-sm"
         group-class="input-group input-group-sm"
-        placeholder="Search employees"
+        placeholder="Search roster"
         clearable
-        input-aria-label="Search employees"
+        input-aria-label="Search roster"
         @update:model-value="handleSearchInput"
       />
     </div>
@@ -73,7 +104,7 @@ function handleSelect(employeeId: string) {
         message-class="small mb-0"
       />
 
-      <div v-else class="list-group list-group-flush">
+      <div v-else class="list-group list-group-flush app-selectable-list--stacked">
         <AppSelectableListItem
           v-for="item in items"
           :key="item.employeeId"
@@ -112,14 +143,3 @@ function handleSelect(employeeId: string) {
     </div>
   </AppListCard>
 </template>
-
-<style scoped lang="scss">
-.timecard-employee-list {
-  min-height: 0;
-}
-
-.timecard-employee-list__results {
-  max-height: min(42vh, 28rem);
-  overflow-y: auto;
-}
-</style>

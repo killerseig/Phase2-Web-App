@@ -496,7 +496,7 @@ export function buildTimecardsEmail(payload: {
             </tr>
             <tr>
               <td style="padding:4px 6px;"><strong>SUBCONTRACTED</strong></td>
-              <td style="padding:4px 6px; text-align:right;">${tc?.subcontracted ? 'YES' : 'NO'}</td>
+              <td style="padding:4px 6px; text-align:right;">${tc?.subcontractedEmployee ? 'YES' : 'NO'}</td>
             </tr>
           </tbody>
         </table>

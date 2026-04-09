@@ -46,7 +46,6 @@ const emit = defineEmits<{
   'update-production': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number }]
   'update-unit-cost': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number | null }]
   'update-footer-field': [payload: { timecard: TimecardModel; field: WorkbookFooterField; value: string }]
-  'update-mileage': [payload: { timecard: TimecardModel; value: string }]
   'update-notes': [payload: { timecard: TimecardModel; value: string }]
 }>()
 
@@ -85,14 +84,7 @@ const editFormModel = computed({
       @update-production="emit('update-production', $event)"
       @update-unit-cost="emit('update-unit-cost', $event)"
       @update-footer-field="emit('update-footer-field', $event)"
-      @update-mileage="emit('update-mileage', $event)"
       @update-notes="emit('update-notes', $event)"
     />
   </div>
 </template>
-<style scoped lang="scss">
-.controller-job-groups {
-  display: grid;
-  gap: 0.75rem;
-}
-</style>

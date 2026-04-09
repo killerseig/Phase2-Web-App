@@ -119,6 +119,13 @@ const routeConfigs: RouteConfig[] = [
     title: 'Admin - Users',
   },
   {
+    path: ROUTES.ADMIN_EMPLOYEES,
+    name: ROUTE_NAMES.ADMIN_EMPLOYEES,
+    component: () => import('../views/admin/AdminEmployees.vue'),
+    roles: [ROLES.ADMIN],
+    title: 'Admin - Employees',
+  },
+  {
     path: ROUTES.ADMIN_JOBS,
     name: ROUTE_NAMES.ADMIN_JOBS,
     component: () => import('../views/admin/AdminJobs.vue'),

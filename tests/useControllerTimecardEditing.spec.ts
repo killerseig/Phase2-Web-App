@@ -31,7 +31,7 @@ function createTimecard(): TimecardModel {
     occupation: 'Carpenter',
     employeeWage: 30,
     subcontractedEmployee: false,
-    mileage: 0,
+    productionBurden: 0.33,
     jobs: [],
     days: [],
     totals: {
@@ -66,7 +66,6 @@ function createRow(): ControllerTimecardWeekItem {
     totalHours: 0,
     totalProduction: 0,
     totalLine: 0,
-    mileage: 0,
     subcontractedEmployee: false,
     submittedAt: null,
     submittedAtMs: null,
@@ -87,7 +86,7 @@ afterEach(() => {
 })
 
 describe('useControllerTimecardEditing', () => {
-  it('autosaves mileage updates and refreshes the review row', async () => {
+  it('autosaves burden-aware timecard changes without mileage handling', async () => {
     vi.useFakeTimers()
     updateTimecardMock.mockResolvedValue(undefined)
 
@@ -112,13 +111,13 @@ describe('useControllerTimecardEditing', () => {
       toast,
     })
 
-    editing.updateMileage(timecard, '12.5')
+    editing.handleGroupedResultsUpdateNotes({ timecard, value: 'Mileage noted in comments' })
     await vi.advanceTimersByTimeAsync(500)
 
     expect(updateTimecardMock).toHaveBeenCalledWith('job-1', 'tc-1', expect.objectContaining({
-      mileage: 12.5,
+      notes: 'Mileage noted in comments',
+      productionBurden: 0.33,
     }))
-    expect(reviewTimecards.value[0]?.mileage).toBe(12.5)
     expect(queueAutoReload).toHaveBeenCalledWith(700)
   })
 

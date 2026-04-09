@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BaseCard from '@/components/common/BaseCard.vue'
 import BaseTableCellInput from '@/components/common/BaseTableCellInput.vue'
 import type { DiffField, WorkbookFooterField, WorkbookOffField } from '@/types/timecards'
+import { getTimecardOccupationOptions } from '@/constants/timecards'
 import {
   calculateRegularAndOvertimeHours,
   type TimecardModel,
@@ -66,6 +67,7 @@ const fitContainerRef = ref<HTMLElement | null>(null)
 const fitSheetRef = ref<HTMLElement | null>(null)
 const fitScale = ref(1)
 const fitHeight = ref<number | null>(null)
+const WORKBOOK_COLUMN_WIDTHS = ['11.5%', '5.5%', '4%', '9.5%', '5.5%', '6.5%', '6.5%', '6.5%', '6.5%', '6.5%', '6.5%', '8.5%', '8.5%', '8.5%'] as const
 const lastWorkbookDayIndex = TIMECARD_WORKBOOK_DAY_INDEXES[TIMECARD_WORKBOOK_DAY_INDEXES.length - 1] ?? 6
 const hoursBreakdown = computed(() => calculateRegularAndOvertimeHours(
   weekHoursTotal.value,
@@ -92,6 +94,9 @@ const resolvedHeaderEmployeeNumber = computed(() => (
 ))
 const resolvedHeaderOccupation = computed(() => (
   props.headerOccupation ?? props.timecard.occupation ?? ''
+))
+const resolvedHeaderOccupationOptions = computed(() => (
+  getTimecardOccupationOptions(resolvedHeaderOccupation.value || props.timecard.occupation)
 ))
 const resolvedHeaderEmployeeWage = computed(() => {
   if (props.headerEmployeeWage != null) return props.headerEmployeeWage
@@ -187,6 +192,7 @@ function getLineSummaryCost(jobIndex: number): number {
     props.timecard.employeeWage,
     getLineHoursTotal(jobIndex),
     getLineProductionTotal(jobIndex),
+    props.timecard.productionBurden,
   )
 }
 
@@ -304,14 +310,21 @@ watch(
             <div class="timecard-workbook-card__field-main">
               <span class="timecard-workbook-card__field-label">OCCUPATION:</span>
               <template v-if="headerEditable">
-                <BaseTableCellInput
-                  type="text"
-                  variant="ghost"
-                  :model-value="resolvedHeaderOccupation"
-                  input-class="timecard-workbook-card__header-input"
+                <select
+                  class="form-select form-select-sm timecard-workbook-card__header-select"
                   :aria-label="`Workbook occupation for ${itemKey}`"
-                  @update:model-value="emit('update-occupation', $event)"
-                />
+                  :value="resolvedHeaderOccupation"
+                  @change="emit('update-occupation', String(($event.target as HTMLSelectElement).value || ''))"
+                >
+                  <option value="">Select occupation</option>
+                  <option
+                    v-for="occupation in resolvedHeaderOccupationOptions"
+                    :key="occupation"
+                    :value="occupation"
+                  >
+                    {{ occupation }}
+                  </option>
+                </select>
               </template>
               <span v-else class="timecard-workbook-card__field-value">{{ timecard.occupation || '-' }}</span>
             </div>
@@ -345,6 +358,13 @@ watch(
 
           <div class="table-responsive">
             <table class="table table-sm mb-0 timecard-workbook-grid">
+              <colgroup>
+                <col
+                  v-for="(columnWidth, columnIndex) in WORKBOOK_COLUMN_WIDTHS"
+                  :key="`workbook-col-${columnIndex}`"
+                  :style="{ width: columnWidth }"
+                />
+              </colgroup>
               <thead>
                 <tr>
                   <th>JOB #</th>
@@ -366,202 +386,205 @@ watch(
               </thead>
 
               <tbody>
-                <template v-for="(job, jobIdx) in workbookLines" :key="`${itemKey}-line-${jobIdx}`">
-                  <tr class="timecard-workbook-grid__row">
-                <td rowspan="3" class="timecard-workbook-grid__input-cell timecard-workbook-grid__merged-cell">
-                  <BaseTableCellInput
-                    type="text"
-                    variant="ghost"
-                    :model-value="job.jobNumber || ''"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    :aria-label="`Workbook line ${jobIdx + 1} job number`"
-                    @update:model-value="emit('update-job-number', { jobIndex: jobIdx, value: $event })"
-                  />
-                </td>
-                <td rowspan="3" class="timecard-workbook-grid__input-cell timecard-workbook-grid__merged-cell">
-                  <BaseTableCellInput
-                    type="text"
-                    variant="ghost"
-                    :model-value="job.subsectionArea ?? job.area ?? ''"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    :aria-label="`Workbook line ${jobIdx + 1} area`"
-                    @update:model-value="emit('update-subsection-area', { jobIndex: jobIdx, value: $event })"
-                  />
-                </td>
-                <td class="timecard-workbook-grid__row-label">H</td>
-                <td rowspan="3" class="timecard-workbook-grid__input-cell timecard-workbook-grid__merged-cell">
-                  <BaseTableCellInput
-                    type="text"
-                    variant="ghost"
-                    :model-value="job.account ?? job.acct ?? ''"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    :aria-label="`Workbook line ${jobIdx + 1} account`"
-                    @update:model-value="emit('update-account', { jobIndex: jobIdx, value: $event })"
-                  />
-                </td>
-                <td class="timecard-workbook-grid__input-cell">
-                  <BaseTableCellInput
-                    type="text"
-                    variant="ghost"
-                    :model-value="job.difH || ''"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    :aria-label="`Workbook line ${jobIdx + 1} H diff`"
-                    @update:model-value="emit('update-diff-value', { jobIndex: jobIdx, field: 'difH', value: $event })"
-                  />
-                </td>
-                <td
-                  v-for="dayIndex in TIMECARD_WORKBOOK_DAY_INDEXES"
-                  :key="`h-${jobIdx}-${dayIndex}`"
-                  :class="[
-                    'timecard-workbook-grid__input-cell',
-                    dayIndex < lastWorkbookDayIndex
-                      ? 'timecard-workbook-grid__dotted-right'
-                      : null,
-                  ]"
+                <tr
+                  v-for="(job, jobIdx) in workbookLines"
+                  :key="`${itemKey}-line-${jobIdx}`"
+                  class="timecard-workbook-grid__row"
                 >
-                  <BaseTableCellInput
-                    :model-value="formatWorkbookEntry(getDayHours(jobIdx, dayIndex))"
-                    type="text"
-                    variant="ghost"
-                    inputmode="decimal"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    select-on-focus
-                    :aria-label="`Workbook line ${jobIdx + 1} ${TIMECARD_WORKBOOK_DAY_LABELS[dayIndex - 1]} hours`"
-                    @update:model-value="emit('update-hours', { jobIndex: jobIdx, dayIndex, value: parseNumericInput($event) })"
-                  />
-                </td>
-                <td class="timecard-workbook-grid__summary-cell">
-                  {{ formatHoursCell(getLineHoursTotal(jobIdx)) }}
-                </td>
-                <td class="timecard-workbook-grid__blank-cell"></td>
-                <td class="timecard-workbook-grid__input-cell">
-                  <BaseTableCellInput
-                    :model-value="formatWorkbookEntry(workbookLines[jobIdx]?.offHours, 2, true)"
-                    type="text"
-                    variant="ghost"
-                    inputmode="decimal"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    select-on-focus
-                    :aria-label="`Workbook line ${jobIdx + 1} off hours`"
-                    @update:model-value="emit('update-off-value', { jobIndex: jobIdx, field: 'offHours', value: parseNumericInput($event) })"
-                  />
-                </td>
-              </tr>
-
-              <tr class="timecard-workbook-grid__row">
-                <td class="timecard-workbook-grid__row-label">P</td>
-                <td class="timecard-workbook-grid__input-cell">
-                  <BaseTableCellInput
-                    type="text"
-                    variant="ghost"
-                    :model-value="job.difP || ''"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    :aria-label="`Workbook line ${jobIdx + 1} P diff`"
-                    @update:model-value="emit('update-diff-value', { jobIndex: jobIdx, field: 'difP', value: $event })"
-                  />
-                </td>
-                <td
-                  v-for="dayIndex in TIMECARD_WORKBOOK_DAY_INDEXES"
-                  :key="`p-${jobIdx}-${dayIndex}`"
-                  :class="[
-                    'timecard-workbook-grid__input-cell',
-                    dayIndex < lastWorkbookDayIndex
-                      ? 'timecard-workbook-grid__dotted-right'
-                      : null,
-                  ]"
-                >
-                  <BaseTableCellInput
-                    :model-value="formatWorkbookEntry(getDayProduction(jobIdx, dayIndex))"
-                    type="text"
-                    variant="ghost"
-                    inputmode="decimal"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    select-on-focus
-                    :aria-label="`Workbook line ${jobIdx + 1} ${TIMECARD_WORKBOOK_DAY_LABELS[dayIndex - 1]} production`"
-                    @update:model-value="emit('update-production', { jobIndex: jobIdx, dayIndex, value: parseNumericInput($event) })"
-                  />
-                </td>
-                <td class="timecard-workbook-grid__blank-cell"></td>
-                <td class="timecard-workbook-grid__summary-cell">
-                  {{ formatTrimmedNumber(getLineProductionTotal(jobIdx), 3) }}
-                </td>
-                <td class="timecard-workbook-grid__input-cell">
-                  <BaseTableCellInput
-                    :model-value="formatWorkbookEntry(workbookLines[jobIdx]?.offProduction, 2, true)"
-                    type="text"
-                    variant="ghost"
-                    inputmode="decimal"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    select-on-focus
-                    :aria-label="`Workbook line ${jobIdx + 1} off production`"
-                    @update:model-value="emit('update-off-value', { jobIndex: jobIdx, field: 'offProduction', value: parseNumericInput($event) })"
-                  />
-                </td>
-              </tr>
-
-              <tr class="timecard-workbook-grid__row">
-                <td class="timecard-workbook-grid__row-label">C</td>
-                <td class="timecard-workbook-grid__input-cell">
-                  <BaseTableCellInput
-                    type="text"
-                    variant="ghost"
-                    :model-value="job.difC || ''"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    :aria-label="`Workbook line ${jobIdx + 1} C diff`"
-                    @update:model-value="emit('update-diff-value', { jobIndex: jobIdx, field: 'difC', value: $event })"
-                  />
-                </td>
-                <td
-                  v-for="dayIndex in TIMECARD_WORKBOOK_DAY_INDEXES"
-                  :key="`c-${jobIdx}-${dayIndex}`"
-                  :class="[
-                    'timecard-workbook-grid__input-cell',
-                    dayIndex < lastWorkbookDayIndex
-                      ? 'timecard-workbook-grid__dotted-right'
-                      : null,
-                  ]"
-                >
-                  <BaseTableCellInput
-                    :model-value="formatCostCell(getDayCost(jobIdx, dayIndex))"
-                    type="text"
-                    variant="ghost"
-                    inputmode="decimal"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    select-on-focus
-                    :aria-label="`Workbook line ${jobIdx + 1} ${TIMECARD_WORKBOOK_DAY_LABELS[dayIndex - 1]} cost`"
-                    @update:model-value="emit('update-unit-cost', { jobIndex: jobIdx, dayIndex, value: parseNullableNumericInput($event) })"
-                  />
-                </td>
-                <td class="timecard-workbook-grid__blank-cell"></td>
-                <td class="timecard-workbook-grid__summary-cell">
-                  {{ formatSummaryCost(getLineSummaryCost(jobIdx)) }}
-                </td>
-                <td class="timecard-workbook-grid__input-cell">
-                  <BaseTableCellInput
-                    :model-value="formatWorkbookEntry(workbookLines[jobIdx]?.offCost, 2, true)"
-                    type="text"
-                    variant="ghost"
-                    inputmode="decimal"
-                    :disabled="jobFieldsLocked"
-                    input-class="text-center timecard-workbook-grid__input"
-                    select-on-focus
-                    :aria-label="`Workbook line ${jobIdx + 1} off cost`"
-                    @update:model-value="emit('update-off-value', { jobIndex: jobIdx, field: 'offCost', value: parseNumericInput($event) })"
-                  />
-                </td>
-              </tr>
-                </template>
+                  <td class="timecard-workbook-grid__input-cell timecard-workbook-grid__merged-cell">
+                    <BaseTableCellInput
+                      type="text"
+                      variant="ghost"
+                      :model-value="job.jobNumber || ''"
+                      :disabled="jobFieldsLocked"
+                      input-class="text-center timecard-workbook-grid__input"
+                      :aria-label="`Workbook line ${jobIdx + 1} job number`"
+                      @update:model-value="emit('update-job-number', { jobIndex: jobIdx, value: $event })"
+                    />
+                  </td>
+                  <td class="timecard-workbook-grid__input-cell timecard-workbook-grid__merged-cell">
+                    <BaseTableCellInput
+                      type="text"
+                      variant="ghost"
+                      :model-value="job.subsectionArea ?? job.area ?? ''"
+                      :disabled="jobFieldsLocked"
+                      input-class="text-center timecard-workbook-grid__input"
+                      :aria-label="`Workbook line ${jobIdx + 1} area`"
+                      @update:model-value="emit('update-subsection-area', { jobIndex: jobIdx, value: $event })"
+                    />
+                  </td>
+                  <td class="timecard-workbook-grid__stacked-label-cell">
+                    <div class="timecard-workbook-grid__stacked-label">
+                      <div class="timecard-workbook-grid__stacked-label-slot">H</div>
+                      <div class="timecard-workbook-grid__stacked-label-slot">P</div>
+                      <div class="timecard-workbook-grid__stacked-label-slot">C</div>
+                    </div>
+                  </td>
+                  <td class="timecard-workbook-grid__input-cell timecard-workbook-grid__merged-cell">
+                    <BaseTableCellInput
+                      type="text"
+                      variant="ghost"
+                      :model-value="job.account ?? job.acct ?? ''"
+                      :disabled="jobFieldsLocked"
+                      input-class="text-center timecard-workbook-grid__input"
+                      :aria-label="`Workbook line ${jobIdx + 1} account`"
+                      @update:model-value="emit('update-account', { jobIndex: jobIdx, value: $event })"
+                    />
+                  </td>
+                  <td class="timecard-workbook-grid__input-cell timecard-workbook-grid__stacked-group-cell">
+                    <div class="timecard-workbook-grid__stacked-group">
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          type="text"
+                          variant="ghost"
+                          :model-value="job.difH || ''"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          :aria-label="`Workbook line ${jobIdx + 1} H diff`"
+                          @update:model-value="emit('update-diff-value', { jobIndex: jobIdx, field: 'difH', value: $event })"
+                        />
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          type="text"
+                          variant="ghost"
+                          :model-value="job.difP || ''"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          :aria-label="`Workbook line ${jobIdx + 1} P diff`"
+                          @update:model-value="emit('update-diff-value', { jobIndex: jobIdx, field: 'difP', value: $event })"
+                        />
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          type="text"
+                          variant="ghost"
+                          :model-value="job.difC || ''"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          :aria-label="`Workbook line ${jobIdx + 1} C diff`"
+                          @update:model-value="emit('update-diff-value', { jobIndex: jobIdx, field: 'difC', value: $event })"
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  <td
+                    v-for="dayIndex in TIMECARD_WORKBOOK_DAY_INDEXES"
+                    :key="`stack-${jobIdx}-${dayIndex}`"
+                    :class="[
+                      'timecard-workbook-grid__input-cell',
+                      'timecard-workbook-grid__stacked-group-cell',
+                      dayIndex < lastWorkbookDayIndex
+                        ? 'timecard-workbook-grid__dotted-right'
+                        : null,
+                    ]"
+                  >
+                    <div class="timecard-workbook-grid__stacked-group">
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          :model-value="formatWorkbookEntry(getDayHours(jobIdx, dayIndex))"
+                          type="text"
+                          variant="ghost"
+                          inputmode="decimal"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          select-on-focus
+                          :aria-label="`Workbook line ${jobIdx + 1} ${TIMECARD_WORKBOOK_DAY_LABELS[dayIndex - 1]} hours`"
+                          @update:model-value="emit('update-hours', { jobIndex: jobIdx, dayIndex, value: parseNumericInput($event) })"
+                        />
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          :model-value="formatWorkbookEntry(getDayProduction(jobIdx, dayIndex))"
+                          type="text"
+                          variant="ghost"
+                          inputmode="decimal"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          select-on-focus
+                          :aria-label="`Workbook line ${jobIdx + 1} ${TIMECARD_WORKBOOK_DAY_LABELS[dayIndex - 1]} production`"
+                          @update:model-value="emit('update-production', { jobIndex: jobIdx, dayIndex, value: parseNumericInput($event) })"
+                        />
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          :model-value="formatCostCell(getDayCost(jobIdx, dayIndex))"
+                          type="text"
+                          variant="ghost"
+                          inputmode="decimal"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          select-on-focus
+                          :aria-label="`Workbook line ${jobIdx + 1} ${TIMECARD_WORKBOOK_DAY_LABELS[dayIndex - 1]} cost`"
+                          @update:model-value="emit('update-unit-cost', { jobIndex: jobIdx, dayIndex, value: parseNullableNumericInput($event) })"
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  <td class="timecard-workbook-grid__summary-cell timecard-workbook-grid__stacked-group-cell">
+                    <div class="timecard-workbook-grid__stacked-group">
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        {{ formatHoursCell(getLineHoursTotal(jobIdx)) }}
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot"></div>
+                      <div class="timecard-workbook-grid__stacked-group-slot"></div>
+                    </div>
+                  </td>
+                  <td class="timecard-workbook-grid__summary-cell timecard-workbook-grid__stacked-group-cell">
+                    <div class="timecard-workbook-grid__stacked-group">
+                      <div class="timecard-workbook-grid__stacked-group-slot"></div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        {{ formatTrimmedNumber(getLineProductionTotal(jobIdx), 3) }}
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        {{ formatSummaryCost(getLineSummaryCost(jobIdx)) }}
+                      </div>
+                    </div>
+                  </td>
+                  <td class="timecard-workbook-grid__input-cell timecard-workbook-grid__stacked-group-cell">
+                    <div class="timecard-workbook-grid__stacked-group">
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          :model-value="formatWorkbookEntry(workbookLines[jobIdx]?.offHours, 2, true)"
+                          type="text"
+                          variant="ghost"
+                          inputmode="decimal"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          select-on-focus
+                          :aria-label="`Workbook line ${jobIdx + 1} off hours`"
+                          @update:model-value="emit('update-off-value', { jobIndex: jobIdx, field: 'offHours', value: parseNumericInput($event) })"
+                        />
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          :model-value="formatWorkbookEntry(workbookLines[jobIdx]?.offProduction, 2, true)"
+                          type="text"
+                          variant="ghost"
+                          inputmode="decimal"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          select-on-focus
+                          :aria-label="`Workbook line ${jobIdx + 1} off production`"
+                          @update:model-value="emit('update-off-value', { jobIndex: jobIdx, field: 'offProduction', value: parseNumericInput($event) })"
+                        />
+                      </div>
+                      <div class="timecard-workbook-grid__stacked-group-slot">
+                        <BaseTableCellInput
+                          :model-value="formatWorkbookEntry(workbookLines[jobIdx]?.offCost, 2, true)"
+                          type="text"
+                          variant="ghost"
+                          inputmode="decimal"
+                          :disabled="jobFieldsLocked"
+                          input-class="text-center timecard-workbook-grid__input"
+                          select-on-focus
+                          :aria-label="`Workbook line ${jobIdx + 1} off cost`"
+                          @update:model-value="emit('update-off-value', { jobIndex: jobIdx, field: 'offCost', value: parseNumericInput($event) })"
+                        />
+                      </div>
+                    </div>
+                  </td>
+                </tr>
 
                 <tr class="timecard-workbook-grid__totals-row">
                   <td colspan="5" class="timecard-workbook-grid__totals-label">TOTAL HOURS</td>
@@ -639,26 +662,32 @@ watch(
               <div class="timecard-workbook-card__footer-input timecard-workbook-card__footer-input--office-secondary"></div>
               <div class="timecard-workbook-card__footer-input timecard-workbook-card__footer-input--amount-secondary"></div>
 
-              <div class="timecard-workbook-card__footer-underlined timecard-workbook-card__footer-underlined--ot">
-                <span class="timecard-workbook-card__footer-underlined-label">OT</span>
-                <span class="timecard-workbook-card__footer-underlined-value">{{ formatHoursCell(hoursBreakdown.overtimeHours) }}</span>
+              <div class="timecard-workbook-card__footer-underlined-label-cell timecard-workbook-card__footer-underlined-label-cell--ot">
+                OT
               </div>
-              <div class="timecard-workbook-card__footer-underlined timecard-workbook-card__footer-underlined--reg">
-                <span class="timecard-workbook-card__footer-underlined-label">REG</span>
-                <span class="timecard-workbook-card__footer-underlined-value">{{ formatHoursCell(hoursBreakdown.regularHours) }}</span>
+              <div class="timecard-workbook-card__footer-underlined-value-cell timecard-workbook-card__footer-underlined-value-cell--ot">
+                {{ formatHoursCell(hoursBreakdown.overtimeHours) }}
+              </div>
+              <div class="timecard-workbook-card__footer-underlined-label-cell timecard-workbook-card__footer-underlined-label-cell--reg">
+                REG
+              </div>
+              <div class="timecard-workbook-card__footer-underlined-value-cell timecard-workbook-card__footer-underlined-value-cell--reg">
+                {{ formatHoursCell(hoursBreakdown.regularHours) }}
               </div>
             </div>
 
             <div class="timecard-workbook-card__notes-row">
               <div class="timecard-workbook-card__notes-label">NOTES:</div>
-              <textarea
-                class="form-control form-control-sm timecard-workbook-card__notes-input"
-                :value="timecard.notes"
-                rows="2"
-                :disabled="notesLocked"
-                :aria-label="`Workbook notes for ${timecard.employeeName}`"
-                @input="handleNotesInput"
-              />
+              <div class="timecard-workbook-card__notes-line">
+                <textarea
+                  class="form-control form-control-sm timecard-workbook-card__notes-input"
+                  :value="timecard.notes"
+                  rows="1"
+                  :disabled="notesLocked"
+                  :aria-label="`Workbook notes for ${timecard.employeeName}`"
+                  @input="handleNotesInput"
+                />
+              </div>
             </div>
           </div>
         </div>

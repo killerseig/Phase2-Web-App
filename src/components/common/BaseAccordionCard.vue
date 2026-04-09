@@ -11,7 +11,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   subtitle: '',
-  bodyClass: 'p-3',
+  bodyClass: 'p-2',
 })
 
 const emit = defineEmits<{
@@ -63,50 +63,3 @@ function onHeaderKeydown(event: KeyboardEvent) {
     </div>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as *;
-
-$accordion-border-color: $border-color;
-
-.accordion-card {
-  background: $surface;
-  border-color: $accordion-border-color;
-  color: $body-color;
-}
-
-.accordion-card__header {
-  background: $surface-2;
-  border-bottom: 0;
-  color: $body-color;
-}
-
-.accordion-card__body {
-  background: $surface;
-  border-top: 1px solid $accordion-border-color;
-}
-
-.cursor-pointer {
-  cursor: pointer;
-}
-
-.chevron {
-  transition: transform 0.3s ease-in-out;
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-.inline-collapse {
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0;
-  padding: 0;
-  transition: max-height 0.3s ease, opacity 0.2s ease;
-}
-
-.accordion-card__inner {
-  padding: 1rem 1.25rem;
-}
-</style>

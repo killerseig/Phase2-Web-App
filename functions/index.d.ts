@@ -55,7 +55,6 @@ export declare const listTimecardsForWeek: import("firebase-functions/v2/https")
         totalHours: number;
         totalProduction: number;
         totalLine: number;
-        mileage: number;
         subcontractedEmployee: boolean;
         submittedAt: string | null;
         submittedAtMs: number | null;

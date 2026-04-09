@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
-import AppAlert from '@/components/common/AppAlert.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import BaseSearchField from '@/components/common/BaseSearchField.vue'
 import BaseAccordionCard from '@/components/common/BaseAccordionCard.vue'
 import EmailRecipientInput from '@/components/common/EmailRecipientInput.vue'
 import type { Job } from '@/services'
@@ -27,8 +29,34 @@ function getJobRecipients(jobId: string) {
 
 function getRecipientSummary(jobId: string) {
   const count = getJobRecipients(jobId).length
-  return count ? `${count} recipients` : 'No recipients'
+  return count ? `${count} recipient${count === 1 ? '' : 's'}` : 'No overrides'
 }
+
+const searchTerm = ref('')
+
+const jobsWithOverridesCount = computed(() => (
+  props.jobs.filter((job) => getJobRecipients(job.id).length > 0).length
+))
+
+const filteredJobs = computed(() => {
+  const normalizedSearch = searchTerm.value.trim().toLowerCase()
+
+  return [...props.jobs]
+    .sort((left, right) => {
+      const leftCount = getJobRecipients(left.id).length
+      const rightCount = getJobRecipients(right.id).length
+      if (leftCount !== rightCount) return rightCount - leftCount
+      return (left.name || '').localeCompare(right.name || '')
+    })
+    .filter((job) => {
+      if (!normalizedSearch) return true
+      const haystack = [job.name, job.code, job.projectManager, job.gc]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(normalizedSearch)
+    })
+})
 </script>
 
 <template>
@@ -39,15 +67,24 @@ function getRecipientSummary(jobId: string) {
     :loading="props.loading"
     :error="props.error"
   >
-    <AppAlert
-      class="app-note small mb-3"
-      icon="bi bi-info-circle"
-      icon-class="flex-shrink-0 mt-1"
-      title="Tip:"
-    >
-      Department supervisors can be added as job-specific recipients. When a daily log is submitted for a
-      job, the supervisor's email will automatically receive the report.
-    </AppAlert>
+    <template #header-actions>
+      <AppBadge
+        :label="`${jobsWithOverridesCount} override job${jobsWithOverridesCount === 1 ? '' : 's'}`"
+        variant-class="text-bg-secondary"
+      />
+    </template>
+
+    <div class="admin-email-job-recipients-card__tools">
+      <BaseSearchField
+        :model-value="searchTerm"
+        label="Find Job"
+        label-class="small mb-1"
+        wrapper-class="mb-0"
+        placeholder="Search jobs by name, code, PM, or GC"
+        clearable
+        @update:model-value="searchTerm = $event"
+      />
+    </div>
 
     <AppEmptyState
       v-if="props.jobs.length === 0"
@@ -59,25 +96,58 @@ function getRecipientSummary(jobId: string) {
       message-class="small mb-0"
     />
 
-    <div v-else>
+    <AppEmptyState
+      v-else-if="filteredJobs.length === 0"
+      compact
+      icon="bi bi-search"
+      icon-class="fs-4"
+      title="No matching jobs"
+      message="Try a different search to find the job recipient list you need."
+      message-class="small mb-0"
+    />
+
+    <div v-else class="admin-email-job-recipients-card__list">
       <BaseAccordionCard
-        v-for="job in props.jobs"
+        v-for="job in filteredJobs"
         :key="job.id"
         :open="props.openJobId === job.id"
         :title="job.name"
-        :subtitle="getRecipientSummary(job.id)"
-        body-class="p-3"
+        body-class="admin-email-job-recipients-card__body"
         @update:open="emit('update:openJobId', $event ? job.id : null)"
       >
-        <p class="small text-uppercase text-muted mb-2">Daily Logs</p>
+        <template #header>
+          <div class="admin-email-job-recipients-card__item-header">
+            <h5 class="admin-email-job-recipients-card__item-title mb-0">{{ job.name }}</h5>
+            <p
+              v-if="job.code || job.projectManager || job.gc"
+              class="admin-email-job-recipients-card__item-meta mb-0"
+            >
+              <span v-if="job.code">Job #{{ job.code }}</span>
+              <span v-if="job.projectManager">PM {{ job.projectManager }}</span>
+              <span v-if="job.gc">{{ job.gc }}</span>
+            </p>
+          </div>
+        </template>
 
-        <EmailRecipientInput
-          :emails="getJobRecipients(job.id)"
-          :label="`Recipients for ${job.name}`"
-          :disabled="props.saving"
-          @add="emit('add-job-recipient', { jobId: job.id, email: $event })"
-          @remove="emit('remove-job-recipient', { jobId: job.id, email: $event })"
-        />
+        <template #header-actions>
+          <AppBadge
+            :label="getRecipientSummary(job.id)"
+            :variant-class="getJobRecipients(job.id).length ? 'text-bg-info' : 'text-bg-secondary'"
+          />
+        </template>
+
+        <div class="admin-email-job-recipients-card__editor">
+          <EmailRecipientInput
+            :emails="getJobRecipients(job.id)"
+            :show-label="false"
+            compact
+            placeholder="email@example.com"
+            empty-text="No override recipients yet"
+            :disabled="props.saving"
+            @add="emit('add-job-recipient', { jobId: job.id, email: $event })"
+            @remove="emit('remove-job-recipient', { jobId: job.id, email: $event })"
+          />
+        </div>
       </BaseAccordionCard>
     </div>
   </AdminCardWrapper>

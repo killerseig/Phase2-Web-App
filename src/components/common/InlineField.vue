@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import InlineSelectMenu from '@/components/common/InlineSelectMenu.vue'
 
 type InlineFieldType = 'text' | 'email' | 'date' | 'number' | 'select'
 type InlineFieldValue = string | number | boolean | null | undefined
@@ -25,7 +26,7 @@ const props = withDefaults(defineProps<{
   disabled: false,
   placeholder: '',
   inputClass: 'form-control form-control-sm',
-  selectClass: 'form-select form-select-sm',
+  selectClass: 'form-select form-select-sm app-table-cell-input',
   options: () => [],
   stopPointer: true,
   step: undefined,
@@ -42,7 +43,7 @@ const model = computed({
   set: (value: string | number | boolean) => emit('update:modelValue', value),
 })
 
-function stopPointer(event: Event) {
+function stopPointerEvent(event: Event) {
   if (props.stopPointer) {
     event.stopPropagation()
   }
@@ -69,27 +70,21 @@ function handleKeydown(event: KeyboardEvent) {
       :class="inputClass"
       :placeholder="placeholder"
       :disabled="disabled"
-      @click="stopPointer"
-      @mousedown="stopPointer"
+      @click="stopPointerEvent"
+      @mousedown="stopPointerEvent"
       @keydown="handleKeydown"
     />
-    <select
+    <InlineSelectMenu
       v-else
-      v-model="model"
-      :class="selectClass"
+      :model-value="model"
+      :options="options"
       :disabled="disabled"
-      @click="stopPointer"
-      @mousedown="stopPointer"
-      @keydown="handleKeydown"
-    >
-      <option
-        v-for="option in options"
-        :key="String(option.value)"
-        :value="option.value"
-      >
-        {{ option.label }}
-      </option>
-    </select>
+      :placeholder="placeholder"
+      :button-class="selectClass"
+      :stop-pointer="props.stopPointer"
+      @update:model-value="emit('update:modelValue', $event)"
+      @escape="emit('escape')"
+    />
   </template>
   <slot v-else />
 </template>

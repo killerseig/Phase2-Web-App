@@ -1,6 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { listEmployees, subscribeEmployees } from '@/services'
+import { createEmployee, deleteEmployee, listEmployees, subscribeEmployees, updateEmployee } from '@/services'
 import type { EmployeeDirectoryEmployee } from '@/types/models'
 import { normalizeError } from '@/services/serviceUtils'
 import { logError } from '@/utils'
@@ -58,6 +58,62 @@ export const useEmployeesStore = defineStore('employees', () => {
     error.value = null
   }
 
+  async function createEmployeeRecord(input: {
+    employeeNumber: string
+    firstName: string
+    lastName: string
+    occupation: string
+    active?: boolean
+    jobId?: string | null
+    wageRate?: number | null
+  }) {
+    error.value = null
+    try {
+      const employeeId = await createEmployee(input)
+      await fetchAllEmployees()
+      return employeeId
+    } catch (err) {
+      setStoreError(err, 'Failed to create employee')
+      logError('Employees Store', 'Error creating employee', err)
+      throw err
+    }
+  }
+
+  async function updateEmployeeRecord(
+    employeeId: string,
+    updates: Partial<{
+      employeeNumber: string
+      firstName: string
+      lastName: string
+      occupation: string
+      active: boolean
+      jobId: string | null
+      wageRate: number | null
+    }>,
+  ) {
+    error.value = null
+    try {
+      await updateEmployee(employeeId, updates)
+      await fetchAllEmployees()
+    } catch (err) {
+      setStoreError(err, 'Failed to update employee')
+      logError('Employees Store', 'Error updating employee', err)
+      throw err
+    }
+  }
+
+  async function deleteEmployeeRecord(employeeId: string) {
+    error.value = null
+    try {
+      await deleteEmployee(employeeId)
+      employees.value = employees.value.filter((employee) => employee.id !== employeeId)
+    } catch (err) {
+      setStoreError(err, 'Failed to delete employee')
+      logError('Employees Store', 'Error deleting employee', err)
+      throw err
+    }
+  }
+
   function $reset() {
     stopEmployeesSubscription()
     employees.value = []
@@ -73,6 +129,9 @@ export const useEmployeesStore = defineStore('employees', () => {
     fetchAllEmployees,
     subscribeAllEmployees,
     stopEmployeesSubscription,
+    createEmployeeRecord,
+    updateEmployeeRecord,
+    deleteEmployeeRecord,
     clearError,
     $reset,
   }

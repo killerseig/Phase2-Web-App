@@ -1,9 +1,9 @@
 import type { JobRosterEmployee, TimecardInput } from '@/types/models'
 import {
   calculateUnitCost,
-  TIMECARD_WEEKDAY_RATE,
   type TimecardJobUi,
 } from '@/utils/timecardUtils'
+import { DEFAULT_PRODUCTION_BURDEN } from '@/constants/timecards'
 import { calculateWeekStartDate } from '@/utils/modelValidation'
 import { makeDaysArray, type TimecardModel } from '@/utils/timecardUtils'
 
@@ -132,24 +132,28 @@ export function calculateWorkbookSummaryCost(
   employeeWage: number | null | undefined,
   totalHours: number,
   totalProduction: number,
+  productionBurden: number | null | undefined = DEFAULT_PRODUCTION_BURDEN,
 ): number {
-  return calculateUnitCost(employeeWage, totalHours, totalProduction, TIMECARD_WEEKDAY_RATE)
+  return calculateUnitCost(employeeWage, totalHours, totalProduction, productionBurden)
 }
 
 export function getWorkbookJobSummaryCost(
   employeeWage: number | null | undefined,
+  productionBurden: number | null | undefined,
   job: Pick<TimecardJobUi, 'days'> | null | undefined,
 ): number {
   return calculateWorkbookSummaryCost(
     employeeWage,
     getWorkbookJobHoursTotal(job),
     getWorkbookJobProductionTotal(job),
+    productionBurden ?? DEFAULT_PRODUCTION_BURDEN,
   )
 }
 
 export function buildTimecardInputFromRosterEmployee(
   employee: JobRosterEmployee,
   weekEndingDate: string,
+  productionBurden = DEFAULT_PRODUCTION_BURDEN,
 ): TimecardInput {
   const weekStartDate = calculateWeekStartDate(weekEndingDate)
   const employeeName = `${employee.firstName} ${employee.lastName}`.trim()
@@ -163,10 +167,10 @@ export function buildTimecardInputFromRosterEmployee(
     lastName: employee.lastName,
     occupation: employee.occupation,
     employeeWage: employee.wageRate ?? null,
+    productionBurden,
     subcontractedEmployee: !!employee.contractor,
     regularHoursOverride: null,
     overtimeHoursOverride: null,
-    mileage: null,
     footerJobOrGl: '',
     footerAccount: '',
     footerOffice: '',

@@ -42,7 +42,6 @@ const emit = defineEmits<{
   'update-production': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number }]
   'update-unit-cost': [payload: { timecard: TimecardModel; jobIndex: number; dayIndex: number; value: number | null }]
   'update-footer-field': [payload: { timecard: TimecardModel; field: WorkbookFooterField; value: string }]
-  'update-mileage': [payload: { timecard: TimecardModel; value: string }]
   'update-notes': [payload: { timecard: TimecardModel; value: string }]
 }>()
 
@@ -81,11 +80,11 @@ const subtitle = computed(() => (
         :creator-group="creatorGroup"
         :edit-form="editForm"
         :expanded-id="expandedId"
-      :editing-timecard-id="editingTimecardId"
-      :is-admin="isAdmin"
-      :format-timecard-week="formatTimecardWeek"
-      :is-timecard-locked="isTimecardLocked"
-      :is-timecard-delete-disabled="isTimecardDeleteDisabled"
+        :editing-timecard-id="editingTimecardId"
+        :is-admin="isAdmin"
+        :format-timecard-week="formatTimecardWeek"
+        :is-timecard-locked="isTimecardLocked"
+        :is-timecard-delete-disabled="isTimecardDeleteDisabled"
         @update:edit-form="emit('update:editForm', $event)"
         @toggle-open="emit('toggle-open', $event)"
         @toggle-edit="emit('toggle-edit', $event)"
@@ -101,43 +100,8 @@ const subtitle = computed(() => (
         @update-production="emit('update-production', $event)"
         @update-unit-cost="emit('update-unit-cost', $event)"
         @update-footer-field="emit('update-footer-field', $event)"
-        @update-mileage="emit('update-mileage', $event)"
         @update-notes="emit('update-notes', $event)"
       />
     </div>
   </AppDataGroupCard>
 </template>
-
-<style scoped lang="scss">
-.controller-job-group__summary {
-  text-align: right;
-}
-
-.controller-job-group :deep(.card-header) {
-  padding: 0.85rem 1rem;
-}
-
-.controller-job-group :deep(.app-toolbar-meta__eyebrow) {
-  margin-bottom: 0.2rem;
-}
-
-.controller-job-group :deep(.app-toolbar-meta__subtitle) {
-  font-size: 0.9rem;
-  margin-top: 0.2rem;
-}
-
-.controller-job-group :deep(.controller-timecard-summary) {
-  gap: 0.35rem;
-}
-
-.controller-timecards-accordion :deep(.timecard-editor-card) {
-  border-radius: 0;
-  margin-bottom: 0 !important;
-}
-
-@media (max-width: 991px) {
-  .controller-job-group__summary {
-    text-align: left;
-  }
-}
-</style>

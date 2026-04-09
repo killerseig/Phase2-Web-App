@@ -129,7 +129,4 @@ const {
   </div>
 </template>
 
-<style scoped lang="scss">
-@use '@/styles/_adminCatalogControls.scss';
-</style>
 

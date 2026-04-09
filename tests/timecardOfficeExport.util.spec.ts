@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Timecard } from '@/types/models'
 import { buildTimecardOfficeCsv } from '@/utils/timecardOfficeExport'
+import { buildLegacyWorkbookSampleTimecard } from './helpers/timecardWorkbookSample'
 
 function buildBaseTimecard(): Timecard {
   return {
@@ -80,13 +81,14 @@ describe('timecardOfficeExport', () => {
 
     expect(rows[0]).toBe('Employee Name,Employee Code,Job Code,DETAIL_DATE,Sub-Section,Activity Code,Cost Code,H_Hours,P_HOURS,,')
     expect(rows[1]).toBe(',,,,,,,,,,')
-    expect(rows[2]).toBe('"Gutierrez, Anselmo",8060,6428,2/28/2026,2,1101,,16,39,,')
-    expect(rows[3]).toBe('"Gutierrez, Anselmo",8060,6428,2/28/2026,7131,7000-WO,7000-WO,8,,,')
-    expect(rows[4]).toBe('"Gutierrez, Anselmo",8060,6428,2/28/2026,99,9015,,1,,,')
+    expect(rows[2]).toBe('"Gutierrez, Anselmo",8060,6428,2/23/2026,2,1101,,8,19,,')
+    expect(rows[3]).toBe('"Gutierrez, Anselmo",8060,6428,2/24/2026,2,1101,,8,20,,')
+    expect(rows[4]).toBe('"Gutierrez, Anselmo",8060,6428,2/23/2026,7131,7000-WO,7000-WO,8,,,')
+    expect(rows[5]).toBe('"Gutierrez, Anselmo",8060,6428,2/23/2026,99,9015,,1,,,')
     expect(rows).toHaveLength(109)
   })
 
-  it('ignores sunday hours in the form total and strips leaked activity codes', () => {
+  it('exports one CSV row per actual day and strips leaked activity codes', () => {
     const timecard: Timecard = {
       ...buildBaseTimecard(),
       jobs: [
@@ -105,6 +107,21 @@ describe('timecardOfficeExport', () => {
     const csv = buildTimecardOfficeCsv([timecard], { fixedDataRowCount: 5 })
     const rows = csv.split('\r\n')
 
-    expect(rows[2]).toBe('"Gutierrez, Anselmo",8060,6428,2/28/2026,10,,,8,,,')
+    expect(rows[2]).toBe('"Gutierrez, Anselmo",8060,6428,2/22/2026,10,,,5,,,')
+    expect(rows[3]).toBe('"Gutierrez, Anselmo",8060,6428,2/23/2026,10,,,8,,,')
+  })
+
+  it('exports the extracted legacy workbook sample with day-level dates and values', () => {
+    const csv = buildTimecardOfficeCsv([buildLegacyWorkbookSampleTimecard() as Timecard])
+    const rows = csv.split('\r\n')
+
+    expect(rows[2]).toBe('"Marcelo, Aguirre",240,4197,1/19/2026,99,9015,,0.5,,,')
+    expect(rows[6]).toBe('"Marcelo, Aguirre",240,4197,1/23/2026,99,9015,,0.5,,,')
+    expect(rows[7]).toBe('"Marcelo, Aguirre",240,4197,1/19/2026,99,9001,,0.5,,,')
+    expect(rows[12]).toBe('"Marcelo, Aguirre",240,4197,1/19/2026,1,1121,,7,20,,')
+    expect(rows[16]).toBe('"Marcelo, Aguirre",240,4197,1/23/2026,1,1121,,3.5,10,,')
+    expect(rows[20]).toBe('"Marcelo, Aguirre",240,4197,1/23/2026,1,1101,,2,8,,')
+    expect(rows[21]).toBe('"Marcelo, Aguirre",240,4197,1/23/2026,1,2089,,1,15,,')
+    expect(rows.slice(2).filter((row) => row !== ',,,,,,,,,,')).toHaveLength(20)
   })
 })

@@ -171,7 +171,3 @@ function forwardToggle(id: string) {
     </CatalogTreeChildrenPanel>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_catalogTreeNode.scss';
-</style>

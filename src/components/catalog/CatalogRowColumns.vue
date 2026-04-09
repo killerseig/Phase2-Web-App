@@ -49,7 +49,3 @@ const displaySku = computed(() => {
     </span>
   </div>
 </template>
-
-<style scoped lang="scss">
-@use '@/styles/_catalogColumns.scss';
-</style>

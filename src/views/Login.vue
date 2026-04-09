@@ -169,21 +169,5 @@ const sendReset = async () => {
   </BaseModal>
 </template>
 
-<style scoped lang="scss">
-@use '@/styles/_variables.scss' as vars;
-
-.btn-link {
-  color: var(--color-primary, vars.$primary);
-  text-decoration: none;
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.btn-link:hover {
-  text-decoration: underline;
-}
-</style>
 
 

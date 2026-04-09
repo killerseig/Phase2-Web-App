@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import AppMasterDetailWorkspace from '@/components/common/AppMasterDetailWorkspace.vue'
 import ControllerFilterCard from '@/components/controller/ControllerFilterCard.vue'
 import ControllerTimecardBrowser from '@/components/controller/ControllerTimecardBrowser.vue'
 import ControllerTimecardDetailPane from '@/components/controller/ControllerTimecardDetailPane.vue'
-import ControllerSummaryStats from '@/components/controller/ControllerSummaryStats.vue'
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
-import TimecardSelectedMetaCard from '@/components/timecards/TimecardSelectedMetaCard.vue'
 import { ROLES } from '@/constants/app'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useControllerFilters } from '@/composables/useControllerFilters'
@@ -79,6 +78,10 @@ const {
   buildTimecardKey,
   toast,
 })
+
+const totalHoursLabel = computed(() => (
+  `${Number(reviewSummary.value.totalHours ?? 0).toFixed(1).replace(/\.0$/, '')} hrs`
+))
 
 const {
   currentSortLabel,
@@ -256,13 +259,31 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-page app-page--wide controller-page">
-    <AppPageHeader eyebrow="Controller Workspace" title="Timecard Search, Review & Edits" :subtitle="`Signed in as ${displayName}`" />
+    <AppPageHeader
+      eyebrow="Controller Workspace"
+      title="Timecards"
+      subtitle="Search, review, and edit weekly timecards."
+      compact
+    >
+      <template #meta>
+        <span>Signed in as {{ displayName }}</span>
+      </template>
+      <template #badges>
+        <AppBadge :label="loadedWeekLabel" variant-class="text-bg-secondary" />
+        <AppBadge :label="`${reviewSummary.totalCount} cards`" variant-class="text-bg-info" />
+        <AppBadge :label="`${reviewSummary.submittedCount} submitted`" variant-class="text-bg-success" />
+        <AppBadge :label="`${reviewSummary.draftCount} drafts`" variant-class="text-bg-warning" />
+        <AppBadge :label="totalHoursLabel" variant-class="text-bg-secondary" />
+      </template>
+    </AppPageHeader>
 
     <AppMasterDetailWorkspace
+      browser-column="minmax(270px, 300px)"
+      controls-column="minmax(300px, 340px)"
       browse-label="Timecards"
       controls-label="Filters"
       browser-title="Timecard Browser"
-      controls-title="Controller Controls"
+      controls-title="Search Filters"
     >
       <template #browser="{ closeDrawer, browserInDrawer }">
         <ControllerTimecardBrowser
@@ -286,43 +307,32 @@ onBeforeUnmount(() => {
 
       <template #controls="{ controlsInDrawer }">
         <div class="controller-page__rail">
-        <TimecardSelectedMetaCard
-          v-if="controlsInDrawer && selectedTimecard"
-          :timecard="selectedTimecard"
-        />
-
-        <ControllerFilterCard
-          v-model:use-week-range="useWeekRange"
-          v-model:selected-single-date="selectedSingleDate"
-          v-model:selected-range-start-date="selectedRangeStartDate"
-          v-model:selected-range-end-date="selectedRangeEndDate"
-          v-model:selected-job-id="selectedJobId"
-          v-model:trade-filter="tradeFilter"
-          v-model:first-name-filter="firstNameFilter"
-          v-model:last-name-filter="lastNameFilter"
-          v-model:subcontracted-filter="subcontractedFilter"
-          v-model:status-filter="statusFilter"
-          :week-picker-config="weekPickerConfig"
-          :job-options="jobOptions"
-          :current-week-label="currentWeekLabel"
-          :current-filter-summary="currentFilterSummary"
-          :pending-filter-changes="pendingFilterChanges"
-          :refreshing-timecards="refreshingTimecards"
-          :downloading-pdf="downloadingPdf"
-          :downloading-csv="downloadingCsv"
-          :is-downloading="isDownloading"
-          :loading-timecards="loadingTimecards"
-          :filter-validation-error="filterValidationError"
-          :embedded="controlsInDrawer"
-          @download="handleDownload"
-          @reset="resetFilters"
-        />
-
-        <ControllerSummaryStats
-          v-if="!controlsInDrawer"
-          :loaded-week-label="loadedWeekLabel"
-          :summary="reviewSummary"
-        />
+          <ControllerFilterCard
+            v-model:use-week-range="useWeekRange"
+            v-model:selected-single-date="selectedSingleDate"
+            v-model:selected-range-start-date="selectedRangeStartDate"
+            v-model:selected-range-end-date="selectedRangeEndDate"
+            v-model:selected-job-id="selectedJobId"
+            v-model:trade-filter="tradeFilter"
+            v-model:first-name-filter="firstNameFilter"
+            v-model:last-name-filter="lastNameFilter"
+            v-model:subcontracted-filter="subcontractedFilter"
+            v-model:status-filter="statusFilter"
+            :week-picker-config="weekPickerConfig"
+            :job-options="jobOptions"
+            :current-week-label="currentWeekLabel"
+            :current-filter-summary="currentFilterSummary"
+            :pending-filter-changes="pendingFilterChanges"
+            :refreshing-timecards="refreshingTimecards"
+            :downloading-pdf="downloadingPdf"
+            :downloading-csv="downloadingCsv"
+            :is-downloading="isDownloading"
+            :loading-timecards="loadingTimecards"
+            :filter-validation-error="filterValidationError"
+            :embedded="controlsInDrawer"
+            @download="handleDownload"
+            @reset="resetFilters"
+          />
         </div>
       </template>
 
@@ -335,7 +345,6 @@ onBeforeUnmount(() => {
           :notes-locked="selectedCardLocked"
           :edit-disabled="selectedCardLocked"
           :delete-disabled="selectedDeleteDisabled"
-          :show-meta-card="!controlsInDrawer"
           :format-timecard-week="formatTimecardWeek"
           @update:edit-form="handleEditFormUpdate"
           @toggle-edit="handleSelectedToggleEdit"
@@ -355,62 +364,3 @@ onBeforeUnmount(() => {
     </AppMasterDetailWorkspace>
   </div>
 </template>
-
-<style scoped lang="scss">
-.controller-page :deep(.app-page__header) {
-  margin-bottom: 1rem;
-  min-height: 0;
-  padding: 0.9rem 1.1rem;
-}
-
-.controller-page :deep(.app-page__eyebrow) {
-  margin-bottom: 0.25rem;
-}
-
-.controller-page :deep(.app-page__title) {
-  font-size: clamp(1.35rem, 1.8vw, 1.7rem);
-}
-
-.controller-page :deep(.app-page__subtitle) {
-  font-size: 0.88rem;
-  margin-top: 0.3rem;
-}
-
-.controller-page__rail {
-  align-content: start;
-  display: grid;
-  gap: 0.75rem;
-  max-height: calc(100vh - 7.5rem);
-  overflow-y: auto;
-  padding-right: 0.2rem;
-}
-
-.controller-page__rail::-webkit-scrollbar {
-  width: 0.45rem;
-}
-
-.controller-page__rail::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-}
-
-.controller-page :deep(.app-master-detail-workspace__controls) {
-  max-height: calc(100vh - 7.5rem);
-  overflow: hidden;
-}
-
-@media (max-width: 991px) {
-  .controller-page__rail,
-  .controller-page :deep(.app-master-detail-workspace__controls) {
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
-  }
-}
-
-@media (max-width: 767px) {
-  .controller-page :deep(.app-page__header) {
-    display: none;
-  }
-}
-</style>

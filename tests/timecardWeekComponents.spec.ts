@@ -81,10 +81,6 @@ describe('timecard week components', () => {
           AppSectionCard: {
             template: '<div><slot /></div>',
           },
-          AppStatCard: {
-            props: ['label', 'value'],
-            template: '<div class="stat-stub">{{ label }}:{{ value }}</div>',
-          },
           AppEmptyState: {
             template: '<div class="empty-stub"></div>',
           },
@@ -92,9 +88,10 @@ describe('timecard week components', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('Employees:4')
-    expect(wrapper.text()).toContain('Draft:2')
-    expect(wrapper.text()).toContain('Submitted:2')
+    expect(wrapper.text()).toContain('Employees')
+    expect(wrapper.text()).toContain('Draft')
+    expect(wrapper.text()).toContain('Submitted')
+    expect(wrapper.findAll('.timecard-summary-stats__item')).toHaveLength(3)
     expect(wrapper.text()).toContain('1000')
     expect(wrapper.text()).toContain('Frame')
     expect(wrapper.text()).toContain('5000')

@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import AppAlert from '@/components/common/AppAlert.vue'
 import AdminCardWrapper from '@/components/admin/AdminCardWrapper.vue'
-import AdminJobForemenCard from '@/components/admin/AdminJobForemenCard.vue'
 import AdminJobRosterCard from '@/components/admin/AdminJobRosterCard.vue'
+import SearchSelectField from '@/components/common/SearchSelectField.vue'
 import type {
   EmployeeDirectoryOption,
   JobAssignedForemanItem,
@@ -11,7 +12,20 @@ import type {
 } from '@/types/adminJobTeam'
 import type { EmployeeDirectoryEmployee, Job, JobRosterEmployee } from '@/types/models'
 
-defineProps<{
+const emit = defineEmits<{
+  'update:selectedForemanId': [value: string]
+  'update:rosterSearchTerm': [value: string]
+  'update:selectedEmployeeId': [value: string]
+  'update:rosterForm': [value: JobRosterFormInput]
+  'assign-foreman': []
+  'remove-foreman': [foremanId: string]
+  'set-display-foreman': [foremanId: string]
+  'add-roster-employee': []
+  'toggle-roster-employee': [employeeId: string]
+  'remove-roster-employee': [employeeId: string]
+}>()
+
+const props = defineProps<{
   job: Job | null
   assignedForemen: JobAssignedForemanItem[]
   availableForemanOptions: JobForemanOption[]
@@ -30,54 +44,93 @@ defineProps<{
   savingRosterEmployee: boolean
   togglingRosterEmployeeId: string
   removingRosterEmployeeId: string
+  embedded?: boolean
 }>()
 
-const emit = defineEmits<{
-  'update:selectedForemanId': [value: string]
-  'update:rosterSearchTerm': [value: string]
-  'update:selectedEmployeeId': [value: string]
-  'update:rosterForm': [value: JobRosterFormInput]
-  'assign-foreman': []
-  'remove-foreman': [foremanId: string]
-  'set-display-foreman': [foremanId: string]
-  'add-roster-employee': []
-  'toggle-roster-employee': [employeeId: string]
-  'remove-roster-employee': [employeeId: string]
-}>()
+const foremanOptions = computed(() => (
+  props.assignedForemen
+    .filter((foreman) => !foreman.missing)
+    .map((foreman) => ({
+      id: foreman.id,
+      label: foreman.label,
+    }))
+))
+
+const currentForemanId = computed(() => (
+  props.assignedForemen.find((foreman) => foreman.isDisplayForeman)?.id
+  ?? ''
+))
+
+const canSetForeman = computed(() => (
+  Boolean(
+    props.selectedForemanId
+    && props.selectedForemanId !== currentForemanId.value
+    && !props.settingDisplayForemanId,
+  )
+))
 </script>
 
 <template>
-  <AdminCardWrapper
-    title="Job Team Management"
-    icon="people"
-    :subtitle="job ? `${job.name}${job.code ? ` | ${job.code}` : ''}` : 'Open a job row above to manage foremen and roster employees.'"
+  <component
+    :is="embedded ? 'div' : AdminCardWrapper"
+    v-bind="embedded
+        ? {}
+        : {
+          title: 'Job Crew',
+          icon: 'people',
+          subtitle: job ? `${job.name}${job.code ? ` | ${job.code}` : ''}` : 'Select a job to manage its crew.',
+        }"
+    class="admin-job-management-panel"
+    :class="{ 'admin-job-management-panel--embedded': embedded }"
   >
     <AppAlert
       v-if="!job"
       variant="info"
       class="mb-0"
-      message="Open a job above with the edit button to manage foremen and roster employees."
+      message="Select a job from the browser to manage its crew."
     />
 
-    <div v-else class="row g-3">
-      <div class="col-12 col-xl-4">
-        <AdminJobForemenCard
-          :assigned-foremen="assignedForemen"
-          :available-foreman-options="availableForemanOptions"
-          :selected-foreman-id="selectedForemanId"
-          :assigning-foreman-id="assigningForemanId"
-          :removing-foreman-id="removingForemanId"
-          :setting-display-foreman-id="settingDisplayForemanId"
-          :display-foreman="job.foreman || ''"
-          @update:selected-foreman-id="emit('update:selectedForemanId', $event)"
-          @assign="emit('assign-foreman')"
-          @remove="emit('remove-foreman', $event)"
-          @set-display="emit('set-display-foreman', $event)"
-        />
+    <div v-else class="admin-job-management-panel__grid">
+      <div v-if="foremanOptions.length" class="admin-job-management-panel__context">
+        <div class="admin-job-management-panel__context-controls">
+          <div class="admin-job-management-panel__foreman-field">
+            <SearchSelectField
+              :model-value="selectedForemanId"
+              :options="foremanOptions"
+              label="Foreman"
+              placeholder="Search assigned foremen"
+              prepend-icon="bi bi-search"
+              clear-label="Clear selection"
+              @update:model-value="emit('update:selectedForemanId', $event)"
+            />
+          </div>
+
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            :disabled="!canSetForeman"
+            @click="selectedForemanId && emit('set-display-foreman', selectedForemanId)"
+          >
+            <span
+              v-if="settingDisplayForemanId === selectedForemanId"
+              class="spinner-border spinner-border-sm me-2"
+              aria-hidden="true"
+            ></span>
+            Update Foreman
+          </button>
+        </div>
       </div>
 
-      <div class="col-12 col-xl-8">
+      <AppAlert
+        v-if="!foremanOptions.length"
+        variant="secondary"
+        class="mb-0"
+        message="No foremen are assigned to this job yet. Assign a foreman from the Users workspace first."
+      />
+
+      <div class="admin-job-management-panel__roster">
         <AdminJobRosterCard
+          :embedded="embedded"
           :employees="rosterEmployees"
           :total-employee-count="totalRosterEmployees"
           :search-term="rosterSearchTerm"
@@ -98,5 +151,5 @@ const emit = defineEmits<{
         />
       </div>
     </div>
-  </AdminCardWrapper>
+  </component>
 </template>
