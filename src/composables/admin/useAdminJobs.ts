@@ -14,6 +14,7 @@ import { useAdminJobTeam } from '@/composables/admin/useAdminJobTeam'
 import { useToast } from '@/composables/useToast'
 import { ROLES } from '@/constants/app'
 import { formatProductionBurdenInput, normalizeProductionBurden } from '@/constants/timecards'
+import { getFirstValidationMessage, validateJobForm } from '@/utils/validation'
 
 type NonStatusSortKey = Exclude<JobSortKey, 'status'>
 
@@ -140,6 +141,9 @@ export function useAdminJobs() {
   }
 
   function setShowJobForm(value: boolean) {
+    if (!value) {
+      jobForm.value = createJobForm()
+    }
     showJobForm.value = value
   }
 
@@ -245,6 +249,17 @@ export function useAdminJobs() {
     jobsStore.subscribeAllJobs(true)
   }
 
+  function getJobValidationMessage(form: JobFormInput) {
+    return getFirstValidationMessage(validateJobForm({
+      name: form.name,
+      code: form.code,
+      accountNumber: form.accountNumber,
+      startDate: form.startDate,
+      finishDate: form.finishDate,
+      productionBurden: form.productionBurden,
+    }))
+  }
+
   function setInlineJob(job: Job) {
     editingJobId.value = job.id
     editingJobForm.value = {
@@ -295,6 +310,12 @@ export function useAdminJobs() {
     if (editingJobId.value !== job.id) return
     if (!isJobDirty(job)) return
 
+    const validationMessage = getJobValidationMessage(editingJobForm.value)
+    if (validationMessage) {
+      toast.show(validationMessage, 'error')
+      throw new Error(validationMessage)
+    }
+
     editingJobSaving.value = true
     try {
       await jobsStore.updateJob(job.id, {
@@ -324,7 +345,11 @@ export function useAdminJobs() {
 
   async function saveActiveJob() {
     if (!activeJob.value) return
-    await saveInlineJob(activeJob.value)
+    try {
+      await saveInlineJob(activeJob.value)
+    } catch {
+      return
+    }
   }
 
   function resetActiveJobChanges() {
@@ -335,7 +360,11 @@ export function useAdminJobs() {
   async function selectJob(job: Job) {
     if (activeJob.value?.id === job.id) return
     if (activeJob.value) {
-      await saveInlineJob(activeJob.value)
+      try {
+        await saveInlineJob(activeJob.value)
+      } catch {
+        return
+      }
     }
     setInlineJob(job)
     activeJobActionsId.value = job.id
@@ -343,7 +372,11 @@ export function useAdminJobs() {
 
   async function closeActiveJob() {
     if (activeJob.value) {
-      await saveInlineJob(activeJob.value)
+      try {
+        await saveInlineJob(activeJob.value)
+      } catch {
+        return
+      }
     }
     clearInlineJob()
     activeJobActionsId.value = ''
@@ -355,10 +388,20 @@ export function useAdminJobs() {
       await closeActiveJob()
       return
     }
-    await selectJob(job)
+    try {
+      await selectJob(job)
+    } catch {
+      return
+    }
   }
 
   async function submitJobForm() {
+    const validationMessage = getJobValidationMessage(jobForm.value)
+    if (validationMessage) {
+      toast.show(validationMessage, 'error')
+      return
+    }
+
     creatingJob.value = true
     try {
       await jobsStore.createJob(jobForm.value.name, {
@@ -380,7 +423,6 @@ export function useAdminJobs() {
       toast.show('Job created successfully', 'success')
       showJobForm.value = false
       jobForm.value = createJobForm()
-      loadJobs()
     } catch (error) {
       toast.show(formatErr(error), 'error')
     } finally {
@@ -389,8 +431,7 @@ export function useAdminJobs() {
   }
 
   function cancelJobForm() {
-    jobForm.value = createJobForm()
-    showJobForm.value = false
+    setShowJobForm(false)
   }
 
   async function handleDeleteJob(job: Job) {
@@ -411,7 +452,6 @@ export function useAdminJobs() {
         clearInlineJob()
         activeJobActionsId.value = ''
       }
-      loadJobs()
     } catch {
       toast.show('Failed to delete job', 'error')
     }
@@ -422,7 +462,6 @@ export function useAdminJobs() {
     try {
       await jobsStore.setJobActive(job.id, active)
       toast.show(active ? 'Job restored' : 'Job archived', 'success')
-      loadJobs()
     } catch (error) {
       toast.show(formatErr(error), 'error')
     } finally {

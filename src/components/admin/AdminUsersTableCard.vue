@@ -215,7 +215,9 @@ function handleCreateRowKeydown(event: KeyboardEvent) {
           :disabled="true"
           @update:model-value="updateEditField('email', String($event))"
         >
-          <span class="admin-users-table__email" :title="asUser(row).email">{{ asUser(row).email }}</span>
+          <span class="admin-users-table__email" :title="asUser(row).email ?? undefined">
+            {{ asUser(row).email ?? '' }}
+          </span>
         </InlineField>
       </template>
 
@@ -228,8 +230,8 @@ function handleCreateRowKeydown(event: KeyboardEvent) {
           @enter="emit('save-edit', asUser(row))"
           @escape="emit('cancel-edit')"
         >
-          <span class="admin-users-table__cell-text" :title="asUser(row).firstName">
-            {{ asUser(row).firstName }}
+          <span class="admin-users-table__cell-text" :title="asUser(row).firstName ?? undefined">
+            {{ asUser(row).firstName ?? '' }}
           </span>
         </InlineField>
       </template>
@@ -243,8 +245,8 @@ function handleCreateRowKeydown(event: KeyboardEvent) {
           @enter="emit('save-edit', asUser(row))"
           @escape="emit('cancel-edit')"
         >
-          <span class="admin-users-table__cell-text" :title="asUser(row).lastName">
-            {{ asUser(row).lastName }}
+          <span class="admin-users-table__cell-text" :title="asUser(row).lastName ?? undefined">
+            {{ asUser(row).lastName ?? '' }}
           </span>
         </InlineField>
       </template>

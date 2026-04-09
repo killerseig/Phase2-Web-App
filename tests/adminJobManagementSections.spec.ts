@@ -188,7 +188,7 @@ describe('admin job management section components', () => {
 
     await wrapper.get('.foreman-picker-stub').setValue('foreman-2')
     await wrapper.setProps({ selectedForemanId: 'foreman-2' })
-    await wrapper.findAll('button.btn-outline-primary')[0].trigger('click')
+    await wrapper.get('button.btn-outline-primary').trigger('click')
 
     expect(wrapper.emitted('update:selectedForemanId')).toEqual([['foreman-2']])
     expect(wrapper.emitted('set-display-foreman')).toEqual([['foreman-2']])

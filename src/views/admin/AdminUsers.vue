@@ -107,10 +107,9 @@ async function submitUserForm() {
       userForm.value.lastName.trim(),
       userForm.value.role
     )
-    toast.show(`User created successfully. Welcome email sent to ${userForm.value.email}`, 'success')
+    toast.show(`User created successfully. Welcome email sent to ${userForm.value.email.trim()}`, 'success')
     showUserForm.value = false
     resetUserForm()
-    loadUsers()
   } catch (e) {
     const msg = normalizeError(e, 'Failed to create user')
     toast.show(friendlyError(msg), 'error')
@@ -138,6 +137,17 @@ function resetUserForm() {
 function cancelUserForm() {
   resetUserForm()
   showUserForm.value = false
+}
+
+function toggleUserForm() {
+  if (showUserForm.value) {
+    cancelUserForm()
+    return
+  }
+
+  cancelUserEdit()
+  resetUserForm()
+  showUserForm.value = true
 }
 
 async function saveUserEdit(user: UserProfile, closeActions = false) {
@@ -275,7 +285,7 @@ onUnmounted(() => {
         @update:create-form="userForm = $event"
         @update:edit-form="editUserForm = $event"
         @sort-change="handleUserSort"
-        @toggle-create="showUserForm = !showUserForm"
+        @toggle-create="toggleUserForm"
         @submit-create="submitUserForm"
         @cancel-create="cancelUserForm"
         @save-edit="saveUserEdit($event, true)"

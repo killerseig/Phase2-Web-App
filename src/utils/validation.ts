@@ -157,6 +157,65 @@ export function validateCreateUserForm(data: {
 }
 
 /**
+ * Validate create/edit job form fields
+ */
+export function validateJobForm(data: {
+  name: string
+  code?: string | null
+  accountNumber?: string | null
+  startDate?: string | null
+  finishDate?: string | null
+  productionBurden?: string | number | null
+}): ValidationResult {
+  const errors: ValidationError[] = []
+
+  errors.push(...validateRequired(data.name, 'Job name'))
+
+  const code = String(data.code ?? '').trim()
+  const accountNumber = String(data.accountNumber ?? '').trim()
+  const startDate = String(data.startDate ?? '').trim()
+  const finishDate = String(data.finishDate ?? '').trim()
+
+  if (accountNumber && !/^\d{4}$/.test(accountNumber)) {
+    errors.push({
+      field: 'accountNumber',
+      message: 'Account number must be exactly 4 digits',
+    })
+  }
+
+  const isGlCode = /^\d{3}$/.test(code)
+  if (isGlCode && accountNumber) {
+    errors.push({
+      field: 'accountNumber',
+      message: 'Account number must be blank when using a 3-digit GL code',
+    })
+  }
+
+  if (startDate && finishDate && finishDate < startDate) {
+    errors.push({
+      field: 'finishDate',
+      message: 'Finish date cannot be earlier than start date',
+    })
+  }
+
+  const productionBurdenRaw = String(data.productionBurden ?? '').trim()
+  if (productionBurdenRaw) {
+    const burden = Number(productionBurdenRaw)
+    if (!Number.isFinite(burden) || Number.isNaN(burden) || burden < 0) {
+      errors.push({
+        field: 'productionBurden',
+        message: 'Burden must be a non-negative number',
+      })
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  }
+}
+
+/**
  * Validate login form fields
  */
 export function validateLoginForm(data: {
