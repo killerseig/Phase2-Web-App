@@ -52,7 +52,7 @@ function updateField(index: number, field: 'area' | 'high' | 'low' | 'humidity',
         :disabled="!canEdit"
         @click="emit('add-reading')"
       >
-        <i class="bi bi-plus-lg me-1"></i>Add Floor / Area
+        <i class="bi bi-plus-lg me-1"></i>Add Reading
       </button>
       </div>
     </template>
@@ -111,6 +111,16 @@ function updateField(index: number, field: 'area' | 'high' | 'low' | 'humidity',
             <i class="bi bi-trash"></i>
           </button>
         </div>
+      </div>
+      <div class="mt-3 d-flex justify-content-end">
+        <button
+          type="button"
+          class="btn btn-outline-primary btn-sm"
+          :disabled="!canEdit"
+          @click="emit('add-reading')"
+        >
+          <i class="bi bi-plus-lg me-1"></i>Add Reading
+        </button>
       </div>
   </AppSectionCard>
 </template>

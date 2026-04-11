@@ -4,6 +4,7 @@ import AppSectionCard from '@/components/common/AppSectionCard.vue'
 import BaseFormActions from '@/components/common/BaseFormActions.vue'
 import BaseInputField from '@/components/common/BaseInputField.vue'
 import BaseSelectField from '@/components/common/BaseSelectField.vue'
+import { JOB_TYPE_OPTIONS } from '@/constants/jobs'
 import type { JobFormInput } from '@/types/adminJobs'
 
 const props = defineProps<{
@@ -26,11 +27,6 @@ function updateField<K extends keyof JobFormInput>(field: K, value: JobFormInput
     [field]: value,
   })
 }
-
-const jobTypeOptions = [
-  { value: 'general', label: 'General' },
-  { value: 'subcontractor', label: 'Subcontractor' },
-] as const
 
 const showAdvancedFields = ref(false)
 
@@ -97,7 +93,7 @@ watch(
       <div class="col-md-6">
         <BaseSelectField
           :model-value="form.foreman"
-          label="Foreman"
+          label="Assigned Foreman"
           label-class="small"
           :options="[...foremanOptions]"
           include-empty-option
@@ -114,22 +110,15 @@ watch(
           @update:model-value="updateField('gc', String($event))"
         />
       </div>
-      <div class="col-md-4">
+      <div class="col-md-8">
         <BaseSelectField
           :model-value="form.type"
           label="Job Type"
           label-class="small"
-          :options="jobTypeOptions"
+          :options="JOB_TYPE_OPTIONS"
+          include-empty-option
+          empty-option-label="Select job type"
           @update:model-value="updateField('type', $event as JobFormInput['type'])"
-        />
-      </div>
-      <div class="col-md-4">
-        <BaseInputField
-          :model-value="form.accountNumber"
-          label="Account #"
-          label-class="small"
-          placeholder="9001"
-          @update:model-value="updateField('accountNumber', String($event))"
         />
       </div>
       <div class="col-12">
@@ -224,7 +213,7 @@ watch(
       <BaseFormActions
         :loading="loading"
         submit-label="Create Job"
-        :submit-disabled="!form.name"
+        :submit-disabled="!form.name || !form.type"
         wrapper-class="col-12 d-flex gap-2 justify-content-end pt-1"
         @cancel="emit('cancel')"
       />

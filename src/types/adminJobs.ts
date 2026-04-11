@@ -1,6 +1,7 @@
 import type { JobType } from '@/types/models'
 
 export type SortDir = 'asc' | 'desc'
+export type JobFormType = JobType | ''
 
 export type JobSortKey =
   | 'code'
@@ -30,9 +31,8 @@ export type JobFormInput = {
   certified: string
   cip: string
   kjic: string
-  accountNumber: string
   productionBurden: string
-  type: JobType
+  type: JobFormType
 }
 
 export function createJobForm(): JobFormInput {
@@ -49,8 +49,7 @@ export function createJobForm(): JobFormInput {
     certified: '',
     cip: '',
     kjic: '',
-    accountNumber: '',
     productionBurden: '0.33',
-    type: 'general',
+    type: '',
   }
 }

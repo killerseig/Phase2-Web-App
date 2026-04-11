@@ -1,13 +1,18 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, nextTick } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
+import { ROLES, type Role } from '@/constants/app'
 import { useTimecardWeekWorkspace } from '@/composables/timecards/useTimecardWeekWorkspace'
+import { useAuthStore } from '@/stores/auth'
 
 const {
   ensureWeekTimecardsForActiveRosterMock,
+  getForemanTimecardWorkspaceMock,
   subscribeRosterEmployeesMock,
   watchWorkspaceTimecardsByWeekMock,
 } = vi.hoisted(() => ({
   ensureWeekTimecardsForActiveRosterMock: vi.fn(),
+  getForemanTimecardWorkspaceMock: vi.fn(),
   subscribeRosterEmployeesMock: vi.fn(),
   watchWorkspaceTimecardsByWeekMock: vi.fn(),
 }))
@@ -21,7 +26,14 @@ vi.mock('@/services/Timecards', () => ({
   watchWorkspaceTimecardsByWeek: watchWorkspaceTimecardsByWeekMock,
 }))
 
-function createWorkspace() {
+vi.mock('@/services/ForemanTimecards', () => ({
+  getForemanTimecardWorkspace: getForemanTimecardWorkspaceMock,
+}))
+
+function createWorkspace(role: Role = ROLES.ADMIN) {
+  const auth = useAuthStore()
+  auth.role = role
+
   const subscriptions = {
     replace: vi.fn(),
     clear: vi.fn(),
@@ -43,6 +55,12 @@ function createWorkspace() {
 
 afterEach(() => {
   vi.clearAllMocks()
+})
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+  const auth = useAuthStore()
+  auth.role = ROLES.ADMIN
 })
 
 describe('useTimecardWeekWorkspace', () => {
@@ -112,7 +130,9 @@ describe('useTimecardWeekWorkspace', () => {
     const { workspace, subscriptions } = createWorkspace()
     await workspace.init()
 
-    expect(subscriptions.replace).toHaveBeenCalledTimes(2)
+    expect(subscriptions.replace).toHaveBeenCalledTimes(4)
+    expect(subscriptions.replace).toHaveBeenNthCalledWith(1, 'timecard-week-workspace-roster', null)
+    expect(subscriptions.replace).toHaveBeenNthCalledWith(2, 'timecard-week-workspace-cards', null)
     expect(ensureWeekTimecardsForActiveRosterMock).toHaveBeenCalledWith('job-1', '2026-02-28')
     expect(workspace.employeeItems.value).toHaveLength(1)
     expect(workspace.employeeItems.value[0]).toMatchObject({
@@ -265,5 +285,65 @@ describe('useTimecardWeekWorkspace', () => {
 
     expect(ensureWeekTimecardsForActiveRosterMock).toHaveBeenCalledTimes(2)
     expect(ensureWeekTimecardsForActiveRosterMock).toHaveBeenLastCalledWith('job-1', '2026-02-28')
+  })
+
+  it('loads the sanitized callable workspace for foremen instead of subscribing to Firestore', async () => {
+    getForemanTimecardWorkspaceMock.mockResolvedValue({
+      rosterEmployees: [
+        {
+          id: 'roster-1',
+          jobId: 'job-1',
+          employeeNumber: '9001',
+          firstName: 'Mateo',
+          lastName: 'Silva',
+          occupation: 'Laborer',
+          active: true,
+        },
+      ],
+      timecards: [
+        {
+          id: 'tc-1',
+          jobId: 'job-1',
+          weekStartDate: '2026-02-22',
+          weekEndingDate: '2026-02-28',
+          status: 'draft',
+          createdByUid: '',
+          employeeRosterId: 'roster-1',
+          employeeNumber: '9001',
+          employeeName: 'Mateo Silva',
+          firstName: 'Mateo',
+          lastName: 'Silva',
+          occupation: 'Laborer',
+          employeeWage: null,
+          subcontractedEmployee: false,
+          jobs: [],
+          days: [],
+          totals: {
+            hours: [0, 0, 0, 0, 0, 0, 0],
+            production: [0, 0, 0, 0, 0, 0, 0],
+            hoursTotal: 0,
+            productionTotal: 0,
+            lineTotal: 0,
+          },
+          notes: '',
+          archived: false,
+        },
+      ],
+    })
+
+    const { workspace, subscriptions } = createWorkspace(ROLES.FOREMAN)
+    await workspace.init()
+
+    expect(getForemanTimecardWorkspaceMock).toHaveBeenCalledWith('job-1', '2026-02-28')
+    expect(subscriptions.replace).toHaveBeenNthCalledWith(1, 'timecard-week-workspace-roster', null)
+    expect(subscriptions.replace).toHaveBeenNthCalledWith(2, 'timecard-week-workspace-cards', null)
+    expect(subscribeRosterEmployeesMock).not.toHaveBeenCalled()
+    expect(watchWorkspaceTimecardsByWeekMock).not.toHaveBeenCalled()
+    expect(ensureWeekTimecardsForActiveRosterMock).not.toHaveBeenCalled()
+    expect(workspace.employeeItems.value[0]).toMatchObject({
+      employeeId: 'roster-1',
+      timecardId: 'tc-1',
+      status: 'draft',
+    })
   })
 })

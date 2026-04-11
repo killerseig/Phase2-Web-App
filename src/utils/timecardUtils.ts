@@ -199,3 +199,50 @@ export function recalcTotalsForTimecard(timecard: TimecardModel, weekStartDate: 
     lineTotal: lineTotals.reduce((sum, v) => sum + v, 0),
   }
 }
+
+export function recalcVisibleTotalsForTimecard(timecard: TimecardModel, weekStartDate: string): void {
+  const hours: number[] = Array(7).fill(0)
+  const production: number[] = Array(7).fill(0)
+  const lineTotals: number[] = Array(7).fill(0)
+
+  timecard.jobs?.forEach((job) => {
+    job.days?.forEach((day, idx) => {
+      if (idx < 0 || idx >= hours.length) return
+      const dayHours = toNonNegativeNumber(day.hours)
+      const dayProduction = toNonNegativeNumber(day.production)
+      const dayUnitCost = day.unitCostOverride == null
+        ? toNonNegativeNumber(day.unitCost)
+        : toNonNegativeNumber(day.unitCostOverride)
+      const dayLineTotal = dayProduction * dayUnitCost
+
+      day.hours = dayHours
+      day.production = dayProduction
+      day.unitCost = dayUnitCost
+      day.lineTotal = dayLineTotal
+
+      hours[idx] = (hours[idx] ?? 0) + dayHours
+      production[idx] = (production[idx] ?? 0) + dayProduction
+      lineTotals[idx] = (lineTotals[idx] ?? 0) + dayLineTotal
+    })
+  })
+
+  const dates = buildWeekDates(weekStartDate)
+  timecard.days = dates.map((date, idx) => ({
+    date,
+    dayOfWeek: idx,
+    hours: hours[idx] ?? 0,
+    production: production[idx] ?? 0,
+    unitCost: 0,
+    unitCostOverride: null,
+    lineTotal: lineTotals[idx] ?? 0,
+    notes: timecard.days?.[idx]?.notes ?? '',
+  }))
+
+  timecard.totals = {
+    hours,
+    production,
+    hoursTotal: hours.reduce((sum, h) => sum + h, 0),
+    productionTotal: production.reduce((sum, p) => sum + p, 0),
+    lineTotal: lineTotals.reduce((sum, v) => sum + v, 0),
+  }
+}

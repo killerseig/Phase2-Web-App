@@ -86,6 +86,14 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
   })
 
   const form = ref<DailyLogDraftInput>(createEmptyDailyLogDraft(jobName.value))
+  const siteInfo = computed(() => ({
+    projectName: String(job.value?.name ?? form.value.projectName ?? '').trim(),
+    jobNumber: String(job.value?.code ?? form.value.jobSiteNumbers ?? '').trim(),
+    projectManager: String(job.value?.projectManager ?? form.value.siteForemanAssistant ?? '').trim(),
+    foreman: String(job.value?.foreman ?? form.value.foremanOnSite ?? '').trim(),
+    generalContractor: String(job.value?.gc ?? '').trim(),
+    address: String(job.value?.jobAddress ?? '').trim(),
+  }))
 
   let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null
   const creatingDraft = ref(false)
@@ -95,8 +103,13 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     photoFileName,
     ptpFileName,
     qcFileName,
+    photoDescription,
+    ptpPhotoNote,
+    qcDescription,
     resetFileNames,
+    resetUploadMetadata,
     handleFileChange,
+    updateUploadDescription,
     deleteAttachment,
   } = useDailyLogAttachments({
     jobId,
@@ -111,9 +124,11 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
 
   const resetForm = () => {
     form.value = createEmptyDailyLogDraft(jobName.value)
+    syncJobSnapshotFields(form.value)
     currentOwnerId.value = auth.user?.uid ?? null
     currentSubmittedAt.value = null
     resetFileNames()
+    resetUploadMetadata()
   }
 
   const stopLiveLog = () => {
@@ -138,6 +153,28 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
   const setError = (errorValue: unknown, fallback: string) => {
     err.value = normalizeError(errorValue, fallback)
   }
+
+  const syncJobSnapshotFields = (target: DailyLogDraftInput) => {
+    target.projectName = siteInfo.value.projectName
+    target.jobSiteNumbers = siteInfo.value.jobNumber
+    target.foremanOnSite = siteInfo.value.foreman
+    target.siteForemanAssistant = siteInfo.value.projectManager
+  }
+
+  const buildDailyLogPayload = (): DailyLogDraftInput => {
+    const payload = {
+      ...form.value,
+    }
+    syncJobSnapshotFields(payload)
+    return payload
+  }
+
+  const isLocallyEditableDraft = (log: Pick<DailyLog, 'id' | 'status' | 'uid' | 'logDate'>) => (
+    log.id === currentId.value
+    && log.status === 'draft'
+    && log.uid === auth.user?.uid
+    && log.logDate === today.value
+  )
 
   const applyDailyLogToForm = (log: DailyLog) => {
     currentOwnerId.value = log.uid
@@ -170,6 +207,9 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
       actionItems: log.actionItems,
       attachments: log.attachments || [],
     }
+    if (log.status === 'draft') {
+      syncJobSnapshotFields(form.value)
+    }
   }
 
   const startLiveLog = (dailyLogId: string) => {
@@ -177,7 +217,11 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     subscriptions.replace('liveLog', subscribeToDailyLog(jobId.value, dailyLogId, (log) => {
       if (log.id === currentId.value) {
         currentStatus.value = log.status
-        applyDailyLogToForm(log)
+        currentOwnerId.value = log.uid
+        currentSubmittedAt.value = log.submittedAt
+        if (!isLocallyEditableDraft(log)) {
+          applyDailyLogToForm(log)
+        }
       }
     }, () => {}))
   }
@@ -210,7 +254,11 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
           const mine = getMineFromLogs(logs, dateStr)
           if (mine && mine.id === currentId.value) {
             currentStatus.value = mine.status
-            applyDailyLogToForm(mine)
+            currentOwnerId.value = mine.uid
+            currentSubmittedAt.value = mine.submittedAt
+            if (!isLocallyEditableDraft(mine)) {
+              applyDailyLogToForm(mine)
+            }
           } else if (!currentId.value && mine) {
             currentId.value = mine.id
             currentStatus.value = mine.status
@@ -304,7 +352,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
       if (creatingDraft.value) return
       creatingDraft.value = true
 
-      const id = await createDailyLog(jobId.value, dateStr, { ...form.value })
+      const id = await createDailyLog(jobId.value, dateStr, buildDailyLogPayload())
       currentId.value = id
       currentStatus.value = 'draft'
       currentOwnerId.value = auth.user?.uid ?? null
@@ -327,7 +375,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     err.value = ''
     try {
       resetForm()
-      const id = await createDailyLog(jobId.value, today.value, { ...form.value })
+      const id = await createDailyLog(jobId.value, today.value, buildDailyLogPayload())
       currentId.value = id
       currentStatus.value = 'draft'
       currentOwnerId.value = auth.user?.uid ?? null
@@ -390,7 +438,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     autoSaveTimeout = setTimeout(async () => {
       try {
         saving.value = true
-        await updateDailyLog(jobId.value, currentId.value!, { ...form.value })
+        await updateDailyLog(jobId.value, currentId.value!, buildDailyLogPayload())
       } catch (e) {
         logError('DailyLogs', 'Auto-save failed', e)
       } finally {
@@ -405,7 +453,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     saving.value = true
     err.value = ''
     try {
-      await updateDailyLog(jobId.value, currentId.value, { ...form.value })
+      await updateDailyLog(jobId.value, currentId.value, buildDailyLogPayload())
     } catch (e) {
       setError(e, 'Failed to save daily log')
       toast.show('Failed to save daily log', 'error')
@@ -423,7 +471,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     saving.value = true
     err.value = ''
     try {
-      await updateDailyLog(jobId.value, currentId.value, { ...form.value })
+      await updateDailyLog(jobId.value, currentId.value, buildDailyLogPayload())
       await submitDailyLog(jobId.value, currentId.value)
       currentStatus.value = 'submitted'
 
@@ -531,7 +579,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     ])).filter(Boolean)
 
     if (!currentId.value || !combinedRecipients.length) {
-      toast.show('No recipients selected', 'warning')
+      toast.show('No global or job-specific recipients are configured for this daily log', 'warning')
       return
     }
 
@@ -632,6 +680,21 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
       void init()
     }
   )
+  watch(
+    () => [
+      job.value?.name,
+      job.value?.code,
+      job.value?.projectManager,
+      job.value?.foreman,
+      job.value?.gc,
+      job.value?.jobAddress,
+    ],
+    () => {
+      if (currentStatus.value === 'draft') {
+        syncJobSnapshotFields(form.value)
+      }
+    }
+  )
   onUnmounted(() => {
     clearAutoSaveTimer()
     subscriptions.clearAll()
@@ -664,8 +727,12 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     photoFileName,
     ptpFileName,
     qcFileName,
+    photoDescription,
+    ptpPhotoNote,
+    qcDescription,
     form,
     creatingDraft,
+    siteInfo,
     // methods
     formatTimestamp,
     loadLogById,
@@ -677,6 +744,7 @@ export function useDailyLog(jobId: Readonly<{ value: string }>, opts?: { toast?:
     deleteDraft,
     deleteLogById,
     handleFileChange,
+    updateUploadDescription,
     addEmailRecipient,
     removeEmailRecipient,
     sendEmail,

@@ -3,7 +3,13 @@ import { useRouter } from 'vue-router'
 import { useShopCatalogSources } from '@/composables/useShopCatalogSources'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
-import { subscribeEmailSettings, subscribeShopOrders, type ShopOrder, type ShopOrderStatus } from '@/services'
+import {
+  getShopOrderDisplayNumber,
+  subscribeEmailSettings,
+  subscribeShopOrders,
+  type ShopOrder,
+  type ShopOrderStatus,
+} from '@/services'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
 import { useToast } from '@/composables/useToast'
@@ -46,6 +52,7 @@ export function useShopOrdersData(jobId: ComputedRef<string>) {
 
       const haystack = [
         order.id,
+        getShopOrderDisplayNumber(order),
         order.status,
         ...(order.items ?? []).map((item) => item.description),
       ].join(' ').toLowerCase()

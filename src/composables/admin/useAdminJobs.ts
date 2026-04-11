@@ -1,16 +1,18 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { isSelectableJobType } from '@/constants/jobs'
 import { listTimecardsByJobAndWeek } from '@/services/Timecards'
+import { linkForemanToJob, unlinkForemanFromJob } from '@/services'
 import { useJobsStore } from '@/stores/jobs'
 import { useUsersStore } from '@/stores/users'
 import type { Job, UserProfile } from '@/services'
 import type { JobFormInput, JobSortKey, SortDir } from '@/types/adminJobs'
+import type { JobType } from '@/types/models'
 import { createJobForm } from '@/types/adminJobs'
 import { createDatePickerConfig, getTodayDateInputValue, isValidDateInputValue, toDateInputValue } from '@/utils/dateInputs'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 import { downloadCsv } from '@/utils/plexisIntegration'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
-import { useAdminJobTeam } from '@/composables/admin/useAdminJobTeam'
 import { useToast } from '@/composables/useToast'
 import { ROLES } from '@/constants/app'
 import { formatProductionBurdenInput, normalizeProductionBurden } from '@/constants/timecards'
@@ -83,7 +85,7 @@ export function useAdminJobs() {
   const foremanOptions = computed(() => foremanUsers.value.map((foreman) => {
     const label = foremanDisplayName(foreman)
     return {
-      value: label,
+      value: foreman.id,
       label,
     }
   }))
@@ -108,11 +110,6 @@ export function useAdminJobs() {
   const exportDateConfig = computed(() => createDatePickerConfig({
     maxDate: currentWeekEnd.value,
   }))
-
-  const jobTeam = useAdminJobTeam({
-    selectedJob: activeJob,
-    users: computed(() => allUsers.value),
-  })
 
   watch(
     () => sortedJobs.value.map((job) => job.id).join('|'),
@@ -253,20 +250,39 @@ export function useAdminJobs() {
     return getFirstValidationMessage(validateJobForm({
       name: form.name,
       code: form.code,
-      accountNumber: form.accountNumber,
+      type: form.type,
       startDate: form.startDate,
       finishDate: form.finishDate,
       productionBurden: form.productionBurden,
     }))
   }
 
-  function setInlineJob(job: Job) {
-    editingJobId.value = job.id
-    editingJobForm.value = {
+  function resolveForemanUserById(foremanId: string) {
+    return foremanUsers.value.find((user) => user.id === foremanId) ?? null
+  }
+
+  function resolveJobForemanId(job: Job) {
+    const assignedForemanId = (job.assignedForemanIds ?? []).find((foremanId) => (
+      foremanUsers.value.some((user) => user.id === foremanId)
+    ))
+    if (assignedForemanId) return assignedForemanId
+
+    const foremanLabel = String(job.foreman ?? '').trim()
+    if (!foremanLabel) return ''
+
+    return foremanUsers.value.find((user) => foremanDisplayName(user) === foremanLabel)?.id ?? ''
+  }
+
+  function createEditableJobType(job: Job) {
+    return isSelectableJobType(job.type) ? job.type : ''
+  }
+
+  function createJobFormFromJob(job: Job): JobFormInput {
+    return {
       name: job.name || '',
       code: job.code || '',
       projectManager: job.projectManager || '',
-      foreman: job.foreman || '',
+      foreman: resolveJobForemanId(job),
       gc: job.gc || '',
       jobAddress: job.jobAddress || '',
       startDate: job.startDate || '',
@@ -275,10 +291,14 @@ export function useAdminJobs() {
       certified: job.certified || '',
       cip: job.cip || '',
       kjic: job.kjic || '',
-      accountNumber: job.accountNumber || '',
       productionBurden: formatProductionBurdenInput(job.productionBurden),
-      type: job.type || 'general',
+      type: createEditableJobType(job),
     }
+  }
+
+  function setInlineJob(job: Job) {
+    editingJobId.value = job.id
+    editingJobForm.value = createJobFormFromJob(job)
   }
 
   function clearInlineJob() {
@@ -291,7 +311,6 @@ export function useAdminJobs() {
       editingJobForm.value.name.trim() !== (job.name || '') ||
       editingJobForm.value.code.trim() !== (job.code || '') ||
       editingJobForm.value.projectManager.trim() !== (job.projectManager || '') ||
-      editingJobForm.value.foreman.trim() !== (job.foreman || '') ||
       editingJobForm.value.gc.trim() !== (job.gc || '') ||
       editingJobForm.value.jobAddress.trim() !== (job.jobAddress || '') ||
       editingJobForm.value.startDate.trim() !== (job.startDate || '') ||
@@ -300,9 +319,9 @@ export function useAdminJobs() {
       editingJobForm.value.certified.trim() !== (job.certified || '') ||
       editingJobForm.value.cip.trim() !== (job.cip || '') ||
       editingJobForm.value.kjic.trim() !== (job.kjic || '') ||
-      editingJobForm.value.accountNumber.trim() !== (job.accountNumber || '') ||
+      editingJobForm.value.foreman !== resolveJobForemanId(job) ||
       normalizeProductionBurden(editingJobForm.value.productionBurden) !== normalizeProductionBurden(job.productionBurden) ||
-      editingJobForm.value.type !== (job.type || 'general')
+      editingJobForm.value.type !== createEditableJobType(job)
     )
   }
 
@@ -316,13 +335,29 @@ export function useAdminJobs() {
       throw new Error(validationMessage)
     }
 
+    const selectedForeman = resolveForemanUserById(editingJobForm.value.foreman)
+    if (editingJobForm.value.foreman && !selectedForeman) {
+      const message = 'Selected foreman could not be found'
+      toast.show(message, 'error')
+      throw new Error(message)
+    }
+
     editingJobSaving.value = true
     try {
+      const currentForemanIds = (job.assignedForemanIds ?? []).filter((foremanId) => typeof foremanId === 'string' && foremanId.trim())
+      for (const foremanId of currentForemanIds) {
+        if (foremanId === selectedForeman?.id) continue
+        await unlinkForemanFromJob(foremanId, job.id)
+      }
+      if (selectedForeman && !currentForemanIds.includes(selectedForeman.id)) {
+        await linkForemanToJob(selectedForeman.id, job.id)
+      }
+
       await jobsStore.updateJob(job.id, {
         name: editingJobForm.value.name.trim(),
         code: editingJobForm.value.code.trim() || null,
         projectManager: editingJobForm.value.projectManager.trim() || null,
-        foreman: editingJobForm.value.foreman.trim() || null,
+        foreman: selectedForeman ? foremanDisplayName(selectedForeman) : null,
         gc: editingJobForm.value.gc.trim() || null,
         jobAddress: editingJobForm.value.jobAddress.trim() || null,
         startDate: editingJobForm.value.startDate.trim() || null,
@@ -331,13 +366,15 @@ export function useAdminJobs() {
         certified: editingJobForm.value.certified.trim() || null,
         cip: editingJobForm.value.cip.trim() || null,
         kjic: editingJobForm.value.kjic.trim() || null,
-        accountNumber: editingJobForm.value.accountNumber.trim() || null,
         productionBurden: normalizeProductionBurden(editingJobForm.value.productionBurden),
-        type: editingJobForm.value.type,
+        type: editingJobForm.value.type as JobType,
       })
+      job.assignedForemanIds = selectedForeman ? [selectedForeman.id] : []
       toast.show('Job updated', 'success')
     } catch (error) {
-      toast.show(formatErr(error), 'error')
+      const message = formatErr(error)
+      toast.show(message, 'error')
+      throw error instanceof Error ? error : new Error(message)
     } finally {
       editingJobSaving.value = false
     }
@@ -404,10 +441,15 @@ export function useAdminJobs() {
 
     creatingJob.value = true
     try {
-      await jobsStore.createJob(jobForm.value.name, {
+      const selectedForeman = resolveForemanUserById(jobForm.value.foreman)
+      if (jobForm.value.foreman && !selectedForeman) {
+        toast.show('Selected foreman could not be found', 'error')
+        return
+      }
+
+      const createdJob = await jobsStore.createJob(jobForm.value.name, {
         code: jobForm.value.code,
         projectManager: jobForm.value.projectManager,
-        foreman: jobForm.value.foreman,
         gc: jobForm.value.gc,
         jobAddress: jobForm.value.jobAddress,
         startDate: jobForm.value.startDate,
@@ -416,10 +458,19 @@ export function useAdminJobs() {
         certified: jobForm.value.certified,
         cip: jobForm.value.cip,
         kjic: jobForm.value.kjic,
-        accountNumber: jobForm.value.accountNumber,
         productionBurden: normalizeProductionBurden(jobForm.value.productionBurden),
-        type: jobForm.value.type,
+        type: jobForm.value.type as JobType,
       })
+
+      if (createdJob && selectedForeman) {
+        await linkForemanToJob(selectedForeman.id, createdJob.id)
+        await jobsStore.updateJob(createdJob.id, {
+          foreman: foremanDisplayName(selectedForeman),
+        })
+        createdJob.foreman = foremanDisplayName(selectedForeman)
+        createdJob.assignedForemanIds = [selectedForeman.id]
+      }
+
       toast.show('Job created successfully', 'success')
       showJobForm.value = false
       jobForm.value = createJobForm()
@@ -507,7 +558,6 @@ export function useAdminJobs() {
     handleDeleteJob,
     handleJobSort,
     jobForm,
-    jobTeam,
     jobSortDir,
     jobSortKey,
     loadingJobs,

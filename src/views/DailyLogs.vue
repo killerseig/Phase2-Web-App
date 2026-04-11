@@ -34,8 +34,12 @@ const {
   photoFileName,
   ptpFileName,
   qcFileName,
+  photoDescription,
+  ptpPhotoNote,
+  qcDescription,
   form,
   creatingDraft,
+  siteInfo,
   formatTimestamp,
   loadLogById,
   loadForDate,
@@ -43,6 +47,7 @@ const {
   submit,
   deleteLogById,
   handleFileChange,
+  updateUploadDescription,
   addEmailRecipient,
   removeEmailRecipient,
   sendEmail,
@@ -71,9 +76,6 @@ const datedDraftLabel = computed(() => `${logDate.value > today.value ? 'Future'
 const datedDraftMessageTense = computed(() => (logDate.value > today.value ? 'future' : 'previous'))
 
 type DailyLogEditableField =
-  | 'jobSiteNumbers'
-  | 'foremanOnSite'
-  | 'siteForemanAssistant'
   | 'weeklySchedule'
   | 'manpowerAssessment'
   | 'safetyConcerns'
@@ -140,12 +142,16 @@ function formatSubmittedAt(value: unknown): string {
       <DailyLogMainColumn
         class="col-lg-8"
         :job-name="jobName"
+        :site-info="siteInfo"
         :form="form"
         :can-edit="canEditDraft"
         :uploading="uploading"
         :photo-file-name="photoFileName"
         :ptp-file-name="ptpFileName"
         :qc-file-name="qcFileName"
+        :photo-description="photoDescription"
+        :ptp-photo-note="ptpPhotoNote"
+        :qc-photo-description="qcDescription"
         :current-status="currentStatus"
         :saving="saving"
         :has-email-recipients="hasEmailRecipients"
@@ -161,6 +167,9 @@ function formatSubmittedAt(value: unknown): string {
         @add-indoor-climate-reading="addIndoorClimateReading"
         @update-indoor-climate-field="updateIndoorClimateField"
         @remove-indoor-climate-reading="removeIndoorClimateReading"
+        @update-photo-description="(value) => updateUploadDescription('photo', value)"
+        @update-ptp-photo-note="(value) => updateUploadDescription('ptp', value)"
+        @update-qc-photo-description="(value) => updateUploadDescription('qc', value)"
         @upload="({ event, type }) => handleFileChange(event, type)"
         @delete-attachment="deleteAttachment"
         @submit="submit"

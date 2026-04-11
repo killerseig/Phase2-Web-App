@@ -1,8 +1,9 @@
 import { computed } from 'vue'
-import type { ShopOrder, ShopOrderItem } from '@/services'
+import type { ShopOrder, ShopOrderItem, ShopOrderStatus } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
 import {
   buildCatalogSelectionQuantities,
+  deriveShopOrderStatus,
   mergeShopOrderItem,
 } from '@/utils/shopOrderItems'
 import type { CatalogOrderSelection, CatalogItemQuantityUpdate } from '@/types/shopOrders'
@@ -31,6 +32,7 @@ export function useShopOrderItemActions(
   const {
     cloneItems,
     setOrderItems,
+    setOrderStatus,
     persistItems,
     runOptimisticItemUpdate,
   } = useShopOrderItemPersistence(options)
@@ -70,6 +72,7 @@ export function useShopOrderItemActions(
       description,
       quantity,
       catalogItemId: item.id,
+      costCode: item.sku?.trim() || null,
       note: buildCatalogSelectionNote(item),
     }
   }
@@ -81,11 +84,13 @@ export function useShopOrderItemActions(
     const orderId = selectedOrder.id
     const previousItems = cloneItems(selectedOrder.items ?? [])
     const nextItems = mergeShopOrderItem(previousItems, item)
+    const nextStatus = getNextOrderStatus(selectedOrder.status, nextItems)
 
     resetDraft()
     await runOptimisticItemUpdate({
       orderId,
       nextItems,
+      ...(nextStatus ? { nextStatus } : {}),
       successMessage: 'Item added successfully',
       errorMessage: (error) => `Failed to add item: ${normalizeError(error, 'Unknown error')}`,
       logMessage: 'Add item error',
@@ -117,6 +122,9 @@ export function useShopOrderItemActions(
         quantity,
         ...(note ? { note } : {}),
         catalogItemId: state.newItemCatalogId.value ?? null,
+        ...(state.selectedCatalogItem.value?.sku?.trim()
+          ? { costCode: state.selectedCatalogItem.value.sku.trim() }
+          : {}),
       },
       snapshot,
     )
@@ -149,8 +157,21 @@ export function useShopOrderItemActions(
     const selectedOrder = options.selected.value
     if (!selectedOrder) return
 
+    const previousItems = cloneItems(selectedOrder.items ?? [])
+    const previousStatus = selectedOrder.status
+    const nextStatus = getNextOrderStatus(selectedOrder.status, items)
     setOrderItems(selectedOrder.id, items)
-    void persistItems(selectedOrder.id, items).catch((error) => {
+    if (nextStatus) {
+      setOrderStatus(selectedOrder.id, nextStatus)
+    }
+
+    void persistItems(
+      selectedOrder.id,
+      items,
+      nextStatus ? { status: nextStatus } : {},
+    ).catch((error) => {
+      setOrderItems(selectedOrder.id, previousItems)
+      setOrderStatus(selectedOrder.id, previousStatus)
       logError('ShopOrders', 'Failed to persist items', error)
       toast.show('Failed to save item changes', 'error')
     })
@@ -162,10 +183,12 @@ export function useShopOrderItemActions(
 
     const previousItems = cloneItems(selectedOrder.items ?? [])
     const nextItems = previousItems.filter((_, itemIndex) => itemIndex !== index)
+    const nextStatus = getNextOrderStatus(selectedOrder.status, nextItems)
 
     await runOptimisticItemUpdate({
       orderId: selectedOrder.id,
       nextItems,
+      ...(nextStatus ? { nextStatus } : {}),
       errorMessage: (error) => `Failed to delete item: ${normalizeError(error, 'Unknown error')}`,
       logMessage: 'Delete item error',
     })
@@ -179,4 +202,18 @@ export function useShopOrderItemActions(
     handleSelectedItemsUpdate,
     handleDeleteSelectedItem,
   }
+}
+
+function getNextOrderStatus(
+  currentStatus: ShopOrderStatus,
+  items: ShopOrderItem[],
+): ShopOrderStatus | undefined {
+  if (currentStatus === 'draft') return undefined
+
+  const fallbackStatus: Exclude<ShopOrderStatus, 'draft' | 'received'> =
+    currentStatus === 'partial' || currentStatus === 'backordered'
+      ? currentStatus
+      : 'submitted'
+
+  return deriveShopOrderStatus(items, fallbackStatus)
 }

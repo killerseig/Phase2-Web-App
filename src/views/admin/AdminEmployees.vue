@@ -248,7 +248,7 @@ onUnmounted(() => {
         class="app-note admin-employees-page__note"
         icon="bi bi-info-circle"
       >
-        Employees are managed here once, then assigned to jobs from the Jobs page.
+        Employees are managed here once, then foremen can pull them into their timecard workflow as needed.
       </AppAlert>
 
       <AdminEmployeesTableCard

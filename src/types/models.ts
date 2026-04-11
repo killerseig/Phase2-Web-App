@@ -31,7 +31,13 @@ export interface UserProfile {
 // JOB
 // ============================================================================
 
-export type JobType = 'general' | 'subcontractor'
+export type JobType =
+  | 'paint'
+  | 'acoustics'
+  | 'drywall'
+  | 'small-jobs'
+  | 'general'
+  | 'subcontractor'
 export type TimecardStatus = 'pending' | 'submitted' | 'archived'
 
 export interface Job {
@@ -49,13 +55,13 @@ export interface Job {
   certified?: string | null
   cip?: string | null
   kjic?: string | null
-  accountNumber?: string | null     // 4-digit account number
+  accountNumber?: string | null     // Legacy job-level account number
   productionBurden?: number | null  // Decimal burden added to wage multiplier (0.33 => 1.33)
-  type: JobType                     // general or subcontractor
+  type: JobType                     // Active jobs use business categories; legacy values may still exist
   active: boolean
   
   // Foreman assignment
-  assignedForemanIds?: string[]     // UIDs of foremen responsible for this job
+  assignedForemanIds?: string[]     // Underlying access control list; UI now manages a single foreman
   
   // Timecard tracking
   timecardStatus?: TimecardStatus   // Current submission status
@@ -248,6 +254,7 @@ export interface Attachment {
   url: string
   path: string
   type?: 'photo' | 'ptp' | 'qc' | 'other'
+  description?: string
   createdAt?: Timestamp
 }
 

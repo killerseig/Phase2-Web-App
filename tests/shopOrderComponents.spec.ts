@@ -8,8 +8,10 @@ const baseOrder = (overrides: Partial<ShopOrder> = {}): ShopOrder => ({
   jobId: 'job-1',
   uid: 'scope:employee',
   ownerUid: 'user-1',
+  orderNumber: '24001',
   orderDate: '2026-03-19',
   status: 'draft',
+  requestedDeliveryDate: '',
   items: [],
   ...overrides,
 })
@@ -20,7 +22,7 @@ describe('shop order components', () => {
       props: {
         orders: [
           baseOrder({ id: 'order-1', items: [{ description: 'Item A', quantity: 1 }] }),
-          baseOrder({ id: 'order-2', status: 'order' }),
+          baseOrder({ id: 'order-2', status: 'submitted' }),
         ],
         loading: false,
         selectedId: 'order-1',
@@ -31,6 +33,7 @@ describe('shop order components', () => {
 
     const items = wrapper.findAll('.order-list-item')
     expect(items).toHaveLength(2)
+    expect(wrapper.text()).toContain('Order #24001')
 
     await items[0]?.trigger('click')
     expect(wrapper.emitted('select')).toEqual([['order-1']])

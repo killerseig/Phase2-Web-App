@@ -229,7 +229,7 @@ service cloud.firestore {
 
       /* -------- job roster (employees) -------- */
       match /roster/{employeeId} {
-        allow read: if hasJobReadAccess(jobId);
+        allow read: if isAdmin();
         allow create, update, delete: if isAdmin();
       }
 
@@ -277,32 +277,17 @@ service cloud.firestore {
                  request.resource.data.uid == resource.data.uid;
         }
 
-        allow read: if (hasJobReadAccess(jobId) && userRole() != 'foreman') ||
-                     isController() ||
-                     (isForemanAssigned(jobId) && resource.data.createdByUid == request.auth.uid);
+        allow read: if isAdmin() || isController();
         allow create: if isAdmin() ||
                       (isController() &&
-                       request.resource.data.status == 'draft' &&
-                       request.resource.data.jobId == jobId) ||
-                      (hasJobWriteAccess(jobId) &&
-                       request.resource.data.uid == request.auth.uid &&
-                       request.resource.data.createdByUid == request.auth.uid &&
                        request.resource.data.status == 'draft' &&
                        request.resource.data.jobId == jobId);
         allow update: if isAdmin() ||
                       (isController() &&
                        fieldsUnchanged() &&
                        request.resource.data.status == resource.data.status &&
-                       request.resource.data.submittedAt == resource.data.submittedAt) ||
-                      (hasJobWriteAccess(jobId) &&
-                       isOwnerOfDoc() &&
-                       resource.data.status == 'draft' &&
-                       fieldsUnchanged() &&
-                       (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
+                       request.resource.data.submittedAt == resource.data.submittedAt);
         allow delete: if isAdmin() ||
-                      (isForemanAssigned(jobId) &&
-                       resource.data.createdByUid == request.auth.uid &&
-                       resource.data.status == 'draft') ||
                       (isController() && resource.data.status == 'draft');
       }
     }

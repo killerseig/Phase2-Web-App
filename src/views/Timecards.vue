@@ -17,6 +17,8 @@ const props = defineProps<{ jobId?: string }>()
 const jobId = computed(() => String(props.jobId ?? ''))
 
 const {
+  addStaffingEmployeeToRoster,
+  addingStaffingEmployee,
   accountsSummary,
   changeWeek,
   cleanup,
@@ -29,9 +31,14 @@ const {
   jobEditing,
   jobName,
   loading,
+  selectedStaffingEmployee,
   searchTerm,
   selectEmployee,
   selectedDate,
+  staffingError,
+  staffingLoading,
+  staffingOptions,
+  staffingSelectedEmployeeId,
   selectedEmployeeId,
   selectedTimecard,
   submitWeek,
@@ -121,7 +128,7 @@ onUnmounted(() => {
       <AppPageHeader
         eyebrow="Job Timecards"
         :title="jobName"
-        subtitle="Review the weekly roster, open one employee workbook, and submit draft timecards."
+        subtitle="Pull employees in from the master list, open each weekly workbook, and submit draft timecards."
         compact
       >
         <template #meta>
@@ -151,10 +158,17 @@ onUnmounted(() => {
             <div class="d-grid gap-2">
               <TimecardEmployeeList
                 v-model:search-term="searchTerm"
+                v-model:selected-staffing-employee-id="staffingSelectedEmployeeId"
                 :items="workspaceEmployeeItems"
+                :staffing-options="staffingOptions"
+                :staffing-loading="staffingLoading"
+                :staffing-error="staffingError"
+                :selected-staffing-employee="selectedStaffingEmployee"
+                :adding-staffing-employee="addingStaffingEmployee"
                 :loading="loading"
                 :selected-employee-id="selectedEmployeeId"
                 :selected-item="selectedWorkspaceItem"
+                @add-staffing-employee="addStaffingEmployeeToRoster"
                 @select="selectEmployee"
               />
             </div>
@@ -188,7 +202,7 @@ onUnmounted(() => {
             icon="bi bi-people"
             icon-class="fs-2"
             title="No active roster employees"
-            message="Add active employees to this job roster before entering weekly timecards."
+            message="Add active employees from the employee database to start entering weekly timecards."
           />
 
           <AppEmptyState
@@ -211,6 +225,7 @@ onUnmounted(() => {
             v-else
             :item-key="selectedTimecard.id"
             :timecard="selectedTimecard"
+            :show-employee-wage="isAdmin"
             :job-fields-locked="selectedCardLocked"
             :notes-locked="selectedCardLocked"
             @update-job-number="handleUpdateJobNumber"

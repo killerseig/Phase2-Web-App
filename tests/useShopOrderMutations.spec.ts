@@ -8,13 +8,17 @@ const {
   createShopOrderMock,
   deleteShopOrderMock,
   sendShopOrderEmailMock,
+  updateShopOrderDetailsMock,
   updateShopOrderItemsMock,
+  updateShopOrderRequestedDeliveryDateMock,
   updateShopOrderStatusMock,
 } = vi.hoisted(() => ({
   createShopOrderMock: vi.fn(),
   deleteShopOrderMock: vi.fn(),
   sendShopOrderEmailMock: vi.fn(),
+  updateShopOrderDetailsMock: vi.fn(),
   updateShopOrderItemsMock: vi.fn(),
+  updateShopOrderRequestedDeliveryDateMock: vi.fn(),
   updateShopOrderStatusMock: vi.fn(),
 }))
 
@@ -22,7 +26,9 @@ vi.mock('@/services', () => ({
   createShopOrder: createShopOrderMock,
   deleteShopOrder: deleteShopOrderMock,
   sendShopOrderEmail: sendShopOrderEmailMock,
+  updateShopOrderDetails: updateShopOrderDetailsMock,
   updateShopOrderItems: updateShopOrderItemsMock,
+  updateShopOrderRequestedDeliveryDate: updateShopOrderRequestedDeliveryDateMock,
   updateShopOrderStatus: updateShopOrderStatusMock,
 }))
 
@@ -32,6 +38,7 @@ function createOrder(overrides: Partial<ShopOrder> = {}): ShopOrder {
     jobId: overrides.jobId ?? 'job-1',
     uid: overrides.uid ?? 'scope:employee',
     ownerUid: overrides.ownerUid ?? 'user-1',
+    orderNumber: overrides.orderNumber ?? '24001',
     status: overrides.status ?? 'draft',
     items: overrides.items ?? [],
     createdAt: overrides.createdAt ?? new Date(),
@@ -88,12 +95,39 @@ describe('useShopOrderMutations', () => {
     expect(selected.value?.items).toEqual([
       { description: 'Outrigger', quantity: 3, catalogItemId: 'catalog-1' },
     ])
-    expect(updateShopOrderItemsMock).toHaveBeenCalledWith('job-1', 'order-1', [
-      { description: 'Outrigger', quantity: 3, catalogItemId: 'catalog-1' },
-    ])
+    expect(updateShopOrderItemsMock).toHaveBeenCalledWith(
+      'job-1',
+      'order-1',
+      [{ description: 'Outrigger', quantity: 3, catalogItemId: 'catalog-1' }],
+      {},
+    )
     expect(mutations.catalogItemQtys.value['catalog-1']).toBe(1)
     expect(mutations.newItemDescription.value).toBe('')
     expect(toast.show).toHaveBeenCalledWith('Item added successfully', 'success')
+  })
+
+  it('stores catalog sku values as line-item cost codes', async () => {
+    updateShopOrderItemsMock.mockResolvedValue(undefined)
+    const { selected, mutations } = createHarness()
+
+    mutations.selectCatalogItem({
+      id: 'catalog-1',
+      description: 'Outrigger',
+      sku: 'CC-100',
+      quantity: 1,
+    })
+
+    await flushPromises()
+
+    expect(selected.value?.items).toEqual([
+      {
+        description: 'Outrigger',
+        quantity: 1,
+        note: 'SKU: CC-100',
+        catalogItemId: 'catalog-1',
+        costCode: 'CC-100',
+      },
+    ])
   })
 
   it('restores the draft inputs and items when optimistic add persistence fails', async () => {
@@ -153,6 +187,7 @@ describe('useShopOrderMutations', () => {
 
   it('emails the selected order and updates its status', async () => {
     sendShopOrderEmailMock.mockResolvedValue(undefined)
+    updateShopOrderDetailsMock.mockResolvedValue(undefined)
     updateShopOrderStatusMock.mockResolvedValue(undefined)
 
     const { mutations, toast } = createHarness(createOrder({
@@ -163,8 +198,46 @@ describe('useShopOrderMutations', () => {
     await mutations.sendOrderEmail()
 
     expect(sendShopOrderEmailMock).toHaveBeenCalledWith('job-1', 'order-1', ['ops@example.com'])
-    expect(updateShopOrderStatusMock).toHaveBeenCalledWith('job-1', 'order-1', 'order')
+    expect(updateShopOrderDetailsMock).toHaveBeenCalledWith('job-1', 'order-1', {
+      items: [{ description: 'Outrigger', quantity: 2, catalogItemId: null }],
+      requestedDeliveryDate: null,
+    })
+    expect(updateShopOrderStatusMock).toHaveBeenCalledWith('job-1', 'order-1', 'submitted')
     expect(mutations.sendingEmail.value).toBe(false)
     expect(toast.show).toHaveBeenCalledWith('Order emailed successfully', 'success')
+  })
+
+  it('updates requested delivery date optimistically', async () => {
+    updateShopOrderRequestedDeliveryDateMock.mockResolvedValue(undefined)
+    const { selected, mutations, toast } = createHarness(createOrder({
+      requestedDeliveryDate: null,
+    }))
+
+    await mutations.updateRequestedDeliveryDate('2026-04-15')
+
+    expect(updateShopOrderRequestedDeliveryDateMock).toHaveBeenCalledWith('job-1', 'order-1', '2026-04-15')
+    expect(selected.value?.requestedDeliveryDate).toBe('2026-04-15')
+    expect(toast.show).toHaveBeenCalledWith('Requested delivery date saved', 'success')
+  })
+
+  it('moves submitted orders into partial status when receipt quantities are entered', async () => {
+    updateShopOrderItemsMock.mockResolvedValue(undefined)
+    const { selected, mutations } = createHarness(createOrder({
+      status: 'submitted',
+      items: [{ description: 'Outrigger', quantity: 3 }],
+    }))
+
+    mutations.handleSelectedItemsUpdate([
+      { description: 'Outrigger', quantity: 3, receivedQuantity: 1 },
+    ])
+    await flushPromises()
+
+    expect(selected.value?.status).toBe('partial')
+    expect(updateShopOrderItemsMock).toHaveBeenCalledWith(
+      'job-1',
+      'order-1',
+      [{ description: 'Outrigger', quantity: 3, receivedQuantity: 1, catalogItemId: null }],
+      { status: 'partial' },
+    )
   })
 })

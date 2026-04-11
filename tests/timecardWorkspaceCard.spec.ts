@@ -139,6 +139,23 @@ describe('timecard workspace card', () => {
     expect(wrapper.emitted('update-employee-wage')).toEqual([['34.5']])
   })
 
+  it('can hide wage details while still showing bottom production totals', () => {
+    const wrapper = mount(TimecardWorkspaceCard, {
+      props: {
+        itemKey: 'tc-1',
+        timecard: createTimecard(),
+        jobFieldsLocked: false,
+        notesLocked: false,
+        showEmployeeWage: false,
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('Wage')
+    expect(wrapper.text()).not.toContain('$30.00')
+    expect(wrapper.text()).toContain('TOTAL PROD')
+    expect(wrapper.text()).toContain('100')
+  })
+
   it('renders the extracted legacy workbook sample values on the workbook card', () => {
     const wrapper = mount(TimecardWorkspaceCard, {
       props: {

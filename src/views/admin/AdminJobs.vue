@@ -24,7 +24,6 @@ const {
   handleDeleteJob,
   handleJobSort,
   jobForm,
-  jobTeam,
   jobSortDir,
   jobSortKey,
   loadingJobs,
@@ -41,35 +40,6 @@ const {
   togglingJobId,
 } = useAdminJobs()
 
-const {
-  assignedForemen,
-  assigningForemanId,
-  availableEmployeeOptions,
-  availableForemanOptions,
-  employeeDirectoryError,
-  employeeDirectoryLoading,
-  foremanSelectionId,
-  removingForemanId,
-  removingRosterEmployeeId,
-  rosterEmployees,
-  rosterForm,
-  rosterSearchTerm,
-  savingRosterEmployee,
-  selectedDirectoryEmployee,
-  setDisplayForeman,
-  setForemanSelectionId,
-  setRosterForm,
-  setRosterSearchTerm,
-  setSelectedEmployeeId,
-  settingDisplayForemanId,
-  addRosterEmployee,
-  assignSelectedForeman,
-  removeAssignedForeman,
-  removeRosterEmployee,
-  toggleRosterEmployeeStatus,
-  togglingRosterEmployeeId,
-} = jobTeam
-
 const totalJobsCount = computed(() => sortedJobs.value.length)
 const activeJobsCount = computed(() => sortedJobs.value.filter((job) => job.active).length)
 const archivedJobsCount = computed(() => sortedJobs.value.filter((job) => !job.active).length)
@@ -84,7 +54,7 @@ const jobsBrowserBreakpoint = computed(() => (showJobForm.value ? 1320 : 1160))
     <AppPageHeader
       eyebrow="Admin Workspace"
       title="Jobs"
-      subtitle="Browse jobs, edit details, and manage each job's crew from one split workspace."
+      subtitle="Browse jobs, edit details, and assign one foreman from one split workspace."
       compact
     >
       <template #badges>
@@ -137,44 +107,18 @@ const jobsBrowserBreakpoint = computed(() => (showJobForm.value ? 1320 : 1160))
         <AdminJobWorkspacePane
           :job="activeJob"
           :form="editingJobForm"
+          :foreman-options="foremanOptions"
           :dirty="activeJobDirty"
           :saving="editingJobSaving"
           :toggling-job-id="togglingJobId"
           :current-week-end="currentWeekEnd"
           :current-week-label="currentWeekLabel"
-          :assigned-foremen="assignedForemen"
-          :available-foreman-options="availableForemanOptions"
-          :selected-foreman-id="foremanSelectionId"
-          :assigning-foreman-id="assigningForemanId"
-          :removing-foreman-id="removingForemanId"
-          :setting-display-foreman-id="settingDisplayForemanId"
-          :roster-employees="rosterEmployees"
-          :total-roster-employees="rosterEmployees.length"
-          :roster-search-term="rosterSearchTerm"
-          :available-employee-options="availableEmployeeOptions"
-          :employee-directory-loading="employeeDirectoryLoading"
-          :employee-directory-error="employeeDirectoryError || ''"
-          :roster-form="rosterForm"
-          :selected-employee="selectedDirectoryEmployee"
-          :saving-roster-employee="savingRosterEmployee"
-          :toggling-roster-employee-id="togglingRosterEmployeeId"
-          :removing-roster-employee-id="removingRosterEmployeeId"
           @update:form="setEditingJobForm"
           @save="saveActiveJob"
           @reset="resetActiveJobChanges"
           @close="closeActiveJob"
           @delete="handleDeleteJob"
           @toggle-archive="({ job, active }) => toggleArchive(job, active)"
-          @update:selected-foreman-id="setForemanSelectionId"
-          @update:roster-search-term="setRosterSearchTerm"
-          @update:selected-employee-id="setSelectedEmployeeId"
-          @update:roster-form="setRosterForm"
-          @assign-foreman="assignSelectedForeman"
-          @remove-foreman="removeAssignedForeman"
-          @set-display-foreman="setDisplayForeman"
-          @add-roster-employee="addRosterEmployee"
-          @toggle-roster-employee="toggleRosterEmployeeStatus"
-          @remove-roster-employee="removeRosterEmployee"
         />
       </div>
     </AppMasterDetailWorkspace>

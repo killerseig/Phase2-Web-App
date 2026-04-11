@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import AppAlert from '@/components/common/AppAlert.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppListCard from '@/components/common/AppListCard.vue'
 import AppSelectableListItem from '@/components/common/AppSelectableListItem.vue'
 import BaseSearchField from '@/components/common/BaseSearchField.vue'
+import SearchSelectField from '@/components/common/SearchSelectField.vue'
 import TimecardStatusBadge from '@/components/timecards/TimecardStatusBadge.vue'
 import type { TimecardWorkspaceEmployeeItem } from '@/types/timecards'
+import type { TimecardStaffingEmployee } from '@/services/TimecardStaffing'
 
 defineOptions({
   name: 'TimecardEmployeeList',
@@ -13,6 +16,12 @@ defineOptions({
 
 interface Props {
   items: TimecardWorkspaceEmployeeItem[]
+  staffingOptions?: Array<{ id: string; label: string }>
+  staffingLoading?: boolean
+  staffingError?: string
+  selectedStaffingEmployeeId?: string
+  selectedStaffingEmployee?: TimecardStaffingEmployee | null
+  addingStaffingEmployee?: boolean
   loading?: boolean
   selectedEmployeeId?: string | null
   selectedItem?: TimecardWorkspaceEmployeeItem | null
@@ -20,6 +29,12 @@ interface Props {
 }
 
 withDefaults(defineProps<Props>(), {
+  staffingOptions: () => [],
+  staffingLoading: false,
+  staffingError: '',
+  selectedStaffingEmployeeId: '',
+  selectedStaffingEmployee: null,
+  addingStaffingEmployee: false,
   loading: false,
   selectedEmployeeId: null,
   selectedItem: null,
@@ -27,12 +42,22 @@ withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
+  'update:selectedStaffingEmployeeId': [value: string]
   'update:searchTerm': [value: string]
+  'add-staffing-employee': []
   select: [employeeId: string]
 }>()
 
 function handleSearchInput(value: string) {
   emit('update:searchTerm', value)
+}
+
+function handleStaffingSelection(value: string) {
+  emit('update:selectedStaffingEmployeeId', value)
+}
+
+function handleAddStaffingEmployee() {
+  emit('add-staffing-employee')
 }
 
 function handleSelect(employeeId: string) {
@@ -49,6 +74,62 @@ function handleSelect(employeeId: string) {
     body-class="p-0"
     muted
   >
+    <div class="timecard-employee-list__staffing border-bottom">
+      <div class="timecard-employee-list__staffing-header">
+        <div class="timecard-employee-list__staffing-eyebrow">Timecard Staffing</div>
+        <div class="timecard-employee-list__staffing-title">Add employees from the master list</div>
+      </div>
+
+      <AppAlert
+        v-if="staffingError"
+        variant="danger"
+        class="mb-2"
+        :message="staffingError"
+      />
+
+      <AppAlert
+        v-else-if="!staffingLoading && !staffingOptions.length"
+        variant="secondary"
+        class="mb-2"
+        message="All active employees are already on this job's timecard roster."
+      />
+
+      <div class="timecard-employee-list__staffing-form">
+        <SearchSelectField
+          :model-value="selectedStaffingEmployeeId"
+          :options="staffingOptions"
+          :disabled="staffingLoading || !!staffingError"
+          label="Add Employee"
+          placeholder="Search employees by name, #, or occupation"
+          prepend-icon="bi bi-search"
+          clear-label="Clear selection"
+          @update:model-value="handleStaffingSelection"
+        />
+
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-primary"
+          :disabled="addingStaffingEmployee || !selectedStaffingEmployeeId"
+          @click="handleAddStaffingEmployee"
+        >
+          <span
+            v-if="addingStaffingEmployee"
+            class="spinner-border spinner-border-sm me-2"
+            aria-hidden="true"
+          ></span>
+          Add
+        </button>
+      </div>
+
+      <div v-if="selectedStaffingEmployee" class="timecard-employee-list__staffing-selected">
+        <span class="fw-semibold">
+          {{ selectedStaffingEmployee.firstName }} {{ selectedStaffingEmployee.lastName }}
+        </span>
+        <span>#{{ selectedStaffingEmployee.employeeNumber }}</span>
+        <span>{{ selectedStaffingEmployee.occupation || 'No occupation' }}</span>
+      </div>
+    </div>
+
     <div v-if="selectedItem" class="timecard-employee-list__selected border-bottom">
       <div class="timecard-employee-list__selected-top">
         <div class="timecard-employee-list__selected-copy">

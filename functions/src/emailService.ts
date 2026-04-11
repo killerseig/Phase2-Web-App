@@ -225,10 +225,12 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
             : 'Attachment'
       const name = att?.name || att?.path || 'Attachment'
       const url = att?.url || '#'
+      const description = displayValue(att?.description)
       const hasImagePreview = typeof url === 'string' && /^https?:\/\//i.test(url)
       return `
         <li style="margin-bottom: 12px;">
           <div style="margin-bottom: 4px;"><strong>${label}:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${name}</a></div>
+          <div style="margin-bottom: 6px;"><strong>${att?.type === 'ptp' ? 'Note' : 'Description'}:</strong> ${description}</div>
           ${hasImagePreview
             ? `<a href="${url}" target="_blank" rel="noopener noreferrer"><img src="${url}" alt="${name}" style="max-width: 180px; max-height: 120px; border: 1px solid #ddd; border-radius: 4px; display: block;" /></a>`
             : ''}
@@ -249,9 +251,9 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
 
         <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Site Information</h3>
         <p><strong>Project Name:</strong> ${displayValue(dailyLog?.projectName)}</p>
-        <p><strong>Job Site Numbers / Notes:</strong> ${displayValue(dailyLog?.jobSiteNumbers)}</p>
-        <p><strong>Foreman on Site:</strong> ${displayValue(dailyLog?.foremanOnSite)}</p>
-        <p><strong>Site Foreman Assistant:</strong> ${displayValue(dailyLog?.siteForemanAssistant)}</p>
+        <p><strong>Job Number:</strong> ${displayValue(dailyLog?.jobSiteNumbers || jobDetails?.number)}</p>
+        <p><strong>Foreman:</strong> ${displayValue(dailyLog?.foremanOnSite)}</p>
+        <p><strong>Project Manager:</strong> ${displayValue(dailyLog?.siteForemanAssistant)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
@@ -656,15 +658,127 @@ function formatOrderEmailDate(value: any): string {
   }
 }
 
+function normalizeShopOrderNumber(value: any): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value))
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed.length) return trimmed
+  }
+
+  return ''
+}
+
+function buildTimestampShopOrderNumber(value: any): string {
+  try {
+    if (!value) return ''
+    const dateValue = typeof value?.toDate === 'function'
+      ? value.toDate()
+      : value instanceof Date
+        ? value
+        : new Date(value)
+
+    if (Number.isNaN(dateValue.getTime())) return ''
+
+    return [
+      dateValue.getUTCFullYear(),
+      String(dateValue.getUTCMonth() + 1).padStart(2, '0'),
+      String(dateValue.getUTCDate()).padStart(2, '0'),
+      String(dateValue.getUTCHours()).padStart(2, '0'),
+      String(dateValue.getUTCMinutes()).padStart(2, '0'),
+      String(dateValue.getUTCSeconds()).padStart(2, '0'),
+    ].join('')
+  } catch {
+    return ''
+  }
+}
+
+function getShopOrderDisplayNumber(order: any): string {
+  return (
+    normalizeShopOrderNumber(order?.orderNumber)
+    || buildTimestampShopOrderNumber(order?.orderDate)
+    || buildTimestampShopOrderNumber(order?.createdAt)
+    || buildTimestampShopOrderNumber(order?.updatedAt)
+    || 'Unnumbered'
+  )
+}
+
+function getShopOrderItemCostCode(
+  item: any,
+  costCodesByCatalogItemId: Record<string, string>,
+): string {
+  const directCostCode = String(item?.costCode || '').trim()
+  if (directCostCode) return directCostCode
+
+  const catalogItemId = String(item?.catalogItemId || '').trim()
+  const catalogCostCode = catalogItemId
+    ? String(costCodesByCatalogItemId[catalogItemId] || '').trim()
+    : ''
+  if (catalogCostCode) return catalogCostCode
+
+  const note = String(item?.note || item?.notes || '').trim()
+  const noteMatch = /^(?:SKU|Cost Code)\s*:\s*(.+)$/i.exec(note)
+  if (!noteMatch?.[1]) return '-'
+
+  const extractedCostCode = noteMatch[1].split(/\s+-\s+\$/)[0]?.trim()
+  return extractedCostCode || '-'
+}
+
+function normalizeShopOrderQuantity(value: any): number {
+  return Math.max(0, Math.floor(Number(value) || 0))
+}
+
+function getShopOrderItemReceivedQuantity(item: any): number {
+  return Math.min(
+    normalizeShopOrderQuantity(item?.quantity),
+    normalizeShopOrderQuantity(item?.receivedQuantity),
+  )
+}
+
+function getShopOrderItemBackorderedQuantity(item: any): number {
+  const quantity = normalizeShopOrderQuantity(item?.quantity)
+  const receivedQuantity = getShopOrderItemReceivedQuantity(item)
+  return Math.min(
+    Math.max(0, quantity - receivedQuantity),
+    normalizeShopOrderQuantity(item?.backorderedQuantity),
+  )
+}
+
+function getShopOrderItemPendingQuantity(item: any): number {
+  const quantity = normalizeShopOrderQuantity(item?.quantity)
+  return Math.max(
+    0,
+    quantity - getShopOrderItemReceivedQuantity(item) - getShopOrderItemBackorderedQuantity(item),
+  )
+}
+
+function getShopOrderStatusLabel(status: any): string {
+  const normalized = String(status || '').trim().toLowerCase()
+  if (normalized === 'submitted' || normalized === 'order') return 'Submitted'
+  if (normalized === 'partial') return 'Partial'
+  if (normalized === 'backordered') return 'Backordered'
+  if (normalized === 'received' || normalized === 'receive') return 'Received'
+  return 'Draft'
+}
+
 /**
  * Build HTML template for shop order email
  */
-export function buildShopOrderEmail(order: any): string {
+export function buildShopOrderEmail(
+  order: any,
+  costCodesByCatalogItemId: Record<string, string> = {},
+): string {
   const items = order?.items || []
   const totalAmount = Number(order?.totalAmount)
   const hasTotalAmount = Number.isFinite(totalAmount)
-  const orderIdentifier = order?.orderNumber || order?.id || 'N/A'
+  const orderIdentifier = getShopOrderDisplayNumber(order)
   const orderDate = formatOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt)
+  const requestedDeliveryDate = String(order?.requestedDeliveryDate || '').trim()
+  const requestedDeliveryDateLabel = requestedDeliveryDate
+    ? formatOrderEmailDate(requestedDeliveryDate)
+    : 'Not requested'
 
   const itemsHtml = items.length > 0 ? `
     <h3>Order Items:</h3>
@@ -674,7 +788,10 @@ export function buildShopOrderEmail(order: any): string {
           <th style="text-align: center; padding: 8px; border-right: 1px solid #ddd;">#</th>
           <th style="text-align: left; padding: 8px; border-right: 1px solid #ddd;">Item Description</th>
           <th style="text-align: center; padding: 8px;">Quantity</th>
-          <th style="text-align: left; padding: 8px; border-left: 1px solid #ddd;">Catalog Item ID</th>
+          <th style="text-align: center; padding: 8px; border-left: 1px solid #ddd;">Received</th>
+          <th style="text-align: center; padding: 8px;">Backordered</th>
+          <th style="text-align: center; padding: 8px;">Pending</th>
+          <th style="text-align: left; padding: 8px; border-left: 1px solid #ddd;">Cost Code</th>
           <th style="text-align: left; padding: 8px;">Notes</th>
         </tr>
       </thead>
@@ -683,14 +800,35 @@ export function buildShopOrderEmail(order: any): string {
           <tr style="border-bottom: 1px solid #ddd;">
             <td style="text-align: center; padding: 8px; border-right: 1px solid #ddd;">${index + 1}</td>
             <td style="padding: 8px; border-right: 1px solid #ddd;">${item.description || 'N/A'}</td>
-            <td style="text-align: center; padding: 8px;">${item.quantity || 0}</td>
-            <td style="padding: 8px; border-left: 1px solid #ddd;">${item.catalogItemId || '-'}</td>
+            <td style="text-align: center; padding: 8px;">${normalizeShopOrderQuantity(item.quantity)}</td>
+            <td style="text-align: center; padding: 8px; border-left: 1px solid #ddd;">${getShopOrderItemReceivedQuantity(item)}</td>
+            <td style="text-align: center; padding: 8px;">${getShopOrderItemBackorderedQuantity(item)}</td>
+            <td style="text-align: center; padding: 8px;">${getShopOrderItemPendingQuantity(item)}</td>
+            <td style="padding: 8px; border-left: 1px solid #ddd;">${getShopOrderItemCostCode(item, costCodesByCatalogItemId)}</td>
             <td style="padding: 8px;">${item.note || item.notes || '-'}</td>
           </tr>
         `).join('')}
       </tbody>
     </table>
   ` : '<p><em>No items in this order</em></p>'
+
+  const signOffHtml = `
+    <div style="margin-top: 28px;">
+      <h3>Sign-Off</h3>
+      <table role="presentation" style="width: 100%; border: none; margin-top: 16px;">
+        <tbody>
+          <tr>
+            <td style="width: 50%; border: none; padding: 24px 18px 0 0;">
+              <div style="border-top: 1px solid #333; padding-top: 6px;">Ordered By</div>
+            </td>
+            <td style="width: 50%; border: none; padding: 24px 0 0 18px;">
+              <div style="border-top: 1px solid #333; padding-top: 6px;">Approved By</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `
 
   return `
     ${EMAIL_STYLES}
@@ -701,9 +839,11 @@ export function buildShopOrderEmail(order: any): string {
       <div class="content">
         <p><strong>Order Number:</strong> ${orderIdentifier}</p>
         <p><strong>Order Date:</strong> ${orderDate}</p>
+        <p><strong>Requested Delivery Date:</strong> ${requestedDeliveryDateLabel}</p>
         ${hasTotalAmount ? `<p><strong>Total Amount:</strong> $${totalAmount.toFixed(2)}</p>` : ''}
-        <p><strong>Status:</strong> ${order?.status || 'draft'}</p>
+        <p><strong>Status:</strong> ${getShopOrderStatusLabel(order?.status)}</p>
         ${itemsHtml}
+        ${signOffHtml}
         <p>A shop order has been submitted. Please review the Phase 2 application for full details.</p>
       </div>
       <div class="footer">
@@ -905,10 +1045,11 @@ export async function sendShopOrderEmailNotification(
   recipients: string[],
   order: any
 ): Promise<void> {
+  const orderIdentifier = getShopOrderDisplayNumber(order)
   const html = buildShopOrderEmail(order)
   await sendEmail({
     to: recipients,
-    subject: `${EMAIL.SUBJECTS.SHOP_ORDER} - Order #${order?.orderNumber || 'N/A'}`,
+    subject: `${EMAIL.SUBJECTS.SHOP_ORDER} - Order #${orderIdentifier}`,
     html,
   })
 }

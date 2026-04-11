@@ -6,7 +6,7 @@ describe('validation utils', () => {
     const result = validateJobForm({
       name: '',
       code: '',
-      accountNumber: '',
+      type: '',
       startDate: '',
       finishDate: '',
       productionBurden: '0.33',
@@ -16,21 +16,21 @@ describe('validation utils', () => {
     expect(getFirstValidationMessage(result)).toBe('Job name is required')
   })
 
-  it('rejects account numbers when using a 3-digit GL code', () => {
+  it('requires a job type when validating job forms', () => {
     const result = validateJobForm({
       name: 'Project One',
-      code: '123',
-      accountNumber: '9001',
+      type: '',
       productionBurden: '0.33',
     })
 
     expect(result.valid).toBe(false)
-    expect(result.errors.some((error) => error.message.includes('Account number must be blank'))).toBe(true)
+    expect(result.errors.some((error) => error.message.includes('Job type is required'))).toBe(true)
   })
 
   it('rejects finish dates earlier than the start date', () => {
     const result = validateJobForm({
       name: 'Project One',
+      type: 'drywall',
       startDate: '2026-04-10',
       finishDate: '2026-04-09',
       productionBurden: '0.33',
@@ -43,6 +43,7 @@ describe('validation utils', () => {
   it('rejects invalid negative production burden values', () => {
     const result = validateJobForm({
       name: 'Project One',
+      type: 'paint',
       productionBurden: '-1',
     })
 

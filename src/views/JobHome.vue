@@ -8,7 +8,6 @@ import TimecardWeekStatusBadge from '@/components/common/TimecardWeekStatusBadge
 import AppPageHeader from '@/components/layout/AppPageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
-import { useJobRosterStore } from '@/stores/jobRoster'
 import { useAppStore } from '@/stores/app'
 import { useJobAccess } from '@/composables/useJobAccess'
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
@@ -22,7 +21,6 @@ const props = defineProps<{
 const router = useRouter()
 const auth = useAuthStore()
 const jobs = useJobsStore()
-const roster = useJobRosterStore()
 const app = useAppStore()
 const jobAccess = useJobAccess()
 
@@ -38,21 +36,13 @@ const currentWeekStart = computed(() => snapToSunday(new Date()))
 const currentWeekEnd = computed(() => getSaturdayFromSunday(currentWeekStart.value))
 const currentWeekLabel = computed(() => formatWeekRange(currentWeekStart.value, currentWeekEnd.value))
 
-const currentUser = computed(() => auth.user)
 const isAdmin = computed(() => auth.role === ROLES.ADMIN)
 
-// Check if current user is foreman of this job (either assigned via auth store OR has roster entry)
 const isForemanAssigned = computed(() => auth.assignedJobIds.includes(jobId.value))
+const isForeman = computed(() => isForemanAssigned.value)
 
-const currentUserRosterEntry = computed(() => {
-  if (!currentUser.value?.uid) return null
-  return roster.currentJobRoster.find(e => e.id === currentUser.value?.uid)
-})
-
-const isForeman = computed(() => isForemanAssigned.value || (currentUserRosterEntry.value?.isPrimaryForeman ?? false))
-
-const canEmployeeModules = computed(() => isAdmin.value || isForeman.value || currentUserRosterEntry.value?.active)
-const canShopOrders = computed(() => isAdmin.value || isForeman.value || currentUserRosterEntry.value?.active)
+const canEmployeeModules = computed(() => isAdmin.value || isForeman.value)
+const canShopOrders = computed(() => isAdmin.value || isForeman.value)
 
 async function boot() {
   if (!jobId.value) return
@@ -67,10 +57,6 @@ async function boot() {
   try {
     jobs.subscribeJob(jobId.value)
     app.setCurrentJob(jobId.value, jobs.currentJob?.name ?? null)
-
-    roster.setCurrentJob(jobId.value)
-    roster.stopJobRosterSubscription()
-    roster.subscribeJobRoster(jobId.value)
   } catch (e) {
     app.clearJob()
     logError('JobHome', 'Failed to load job', e)
@@ -99,7 +85,6 @@ watch(
 
 onUnmounted(() => {
   jobs.stopCurrentJobSubscription()
-  roster.stopJobRosterSubscription()
   app.clearJob()
 })
 
@@ -115,7 +100,6 @@ onUnmounted(() => {
         <JobAccessBadge
           :is-foreman="isForeman"
           :is-admin="isAdmin"
-          :is-on-roster="!!currentUserRosterEntry?.active"
           class="app-page-chip"
         />
         <TimecardWeekStatusBadge
@@ -129,15 +113,7 @@ onUnmounted(() => {
     </AppPageHeader>
 
     <!-- No Access Alert -->
-    <AppAlert
-      v-if="!isAdmin && !canEmployeeModules && !canShopOrders"
-      variant="warning"
-      class="mb-4"
-      icon="bi bi-exclamation-triangle"
-      message="You don't have roster access to this job. Contact an administrator to be added."
-    />
-
-    <div v-else class="row g-3">
+    <div class="row g-3">
       <!-- Daily Logs -->
       <div v-if="canEmployeeModules" class="col-12 col-md-6">
         <AppModuleCard

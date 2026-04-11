@@ -5,6 +5,8 @@ type AttachmentPreview = {
   name?: string
   path?: string
   url: string
+  description?: string
+  type?: string
 }
 
 const props = withDefaults(defineProps<{
@@ -50,6 +52,11 @@ function handleRemove(path?: string) {
         :alt="attachment.name || 'Attachment preview'"
         class="app-attachment-image"
       />
+
+      <div class="small mt-2 px-1">
+        <div class="fw-semibold text-truncate">{{ attachment.name || 'Attachment' }}</div>
+        <div v-if="attachment.description" class="text-muted">{{ attachment.description }}</div>
+      </div>
 
       <button
         v-if="removable"

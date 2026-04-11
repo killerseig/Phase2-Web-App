@@ -8,8 +8,10 @@ defineOptions({
 
 const shopOrderStatusMap: Record<ShopOrderStatus, { label: string; class: string }> = {
   draft: { label: 'Draft', class: 'text-bg-secondary' },
-  order: { label: 'Submitted', class: 'text-bg-primary' },
-  receive: { label: 'Received', class: 'text-bg-success' },
+  submitted: { label: 'Submitted', class: 'text-bg-primary' },
+  partial: { label: 'Partial', class: 'text-bg-warning text-dark' },
+  backordered: { label: 'Backordered', class: 'text-bg-danger' },
+  received: { label: 'Received', class: 'text-bg-success' },
 }
 
 defineProps<{

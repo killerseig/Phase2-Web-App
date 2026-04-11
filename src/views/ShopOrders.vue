@@ -44,9 +44,7 @@ const {
   handleDeleteSelectedItem,
   createDraft,
   handleDeleteOrder,
-  submitOrder,
-  placeOrder,
-  receiveOrder,
+  updateRequestedDeliveryDate,
   sendOrderEmail,
 } = useShopOrderMutations({
   jobId,
@@ -59,8 +57,10 @@ const {
 const statusFilterOptions = [
   { value: 'all', label: 'All Statuses' },
   { value: 'draft', label: 'Draft' },
-  { value: 'order', label: 'Order' },
-  { value: 'receive', label: 'Receive' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'backordered', label: 'Backordered' },
+  { value: 'received', label: 'Received' },
 ] as const
 </script>
 
@@ -107,15 +107,14 @@ const statusFilterOptions = [
           :categories="shopCategories"
           :catalog-item-qtys="catalogItemQtys"
           :selected-item-quantities="selectedCatalogItemQuantities"
+          :requested-delivery-date="selected?.requestedDeliveryDate ?? ''"
           v-model:new-item-description="newItemDescription"
           v-model:new-item-qty="newItemQty"
           v-model:new-item-note="newItemNote"
           @update-items="handleSelectedItemsUpdate"
+          @update:requested-delivery-date="updateRequestedDeliveryDate"
           @delete-item="handleDeleteSelectedItem"
           @send-email="sendOrderEmail"
-          @submit="submitOrder"
-          @place-order="placeOrder"
-          @receive="receiveOrder"
           @update:catalog-item-qty="updateCatalogItemQty"
           @select-for-order="selectCatalogItem"
           @add-item="addItem"

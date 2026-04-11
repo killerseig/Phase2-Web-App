@@ -213,4 +213,76 @@ describe('useDailyLog', () => {
     expect(mockUpdateDailyLog).not.toHaveBeenCalled()
     expect(toast.show).toHaveBeenCalledWith('Attachments can only be changed on your active draft for today', 'warning')
   })
+
+  it('preserves the local draft text while live subscriptions refresh the same editable draft', async () => {
+    const existingDraft = {
+      id: 'draft-1',
+      jobId: 'job-1',
+      uid: 'user-1',
+      status: 'draft',
+      logDate: '2026-03-16',
+      jobSiteNumbers: '111A1',
+      foremanOnSite: 'Pat',
+      siteForemanAssistant: 'Riley',
+      projectName: 'Job Alpha',
+      manpower: '',
+      weeklySchedule: 'Server version',
+      manpowerAssessment: '',
+      indoorClimateReadings: [],
+      manpowerLines: [],
+      safetyConcerns: '',
+      ahaReviewed: '',
+      scheduleConcerns: '',
+      budgetConcerns: '',
+      deliveriesReceived: '',
+      deliveriesNeeded: '',
+      newWorkAuthorizations: '',
+      qcInspection: '',
+      qcAssignedTo: '',
+      qcAreasInspected: '',
+      qcIssuesIdentified: '',
+      qcIssuesResolved: '',
+      notesCorrespondence: '',
+      actionItems: '',
+      attachments: [],
+      createdAt: { toMillis: () => 1 },
+      updatedAt: { toMillis: () => 1 },
+      submittedAt: null,
+    }
+
+    let liveLogUpdate: ((log: typeof existingDraft) => void) | null = null
+    mockGetMyDailyLogByDate.mockResolvedValue(existingDraft)
+    mockSubscribeToDailyLog.mockImplementation((_jobId, _logId, onData) => {
+      liveLogUpdate = onData
+      return vi.fn()
+    })
+
+    let state: ReturnType<typeof useDailyLog> | null = null
+    const Harness = defineComponent({
+      setup() {
+        const jobId = ref('job-1')
+        state = useDailyLog(jobId, { toast: null })
+        return {}
+      },
+      template: '<div />',
+    })
+
+    mount(Harness)
+    await flushPromises()
+
+    expect(state).not.toBeNull()
+    state!.form.value.weeklySchedule = 'Local typing in progress'
+
+    const pushLiveLogUpdate = liveLogUpdate as ((log: typeof existingDraft) => void) | null
+    if (pushLiveLogUpdate) {
+      pushLiveLogUpdate({
+        ...existingDraft,
+        weeklySchedule: 'Server pushed value',
+        updatedAt: { toMillis: () => 2 },
+      })
+    }
+    await flushPromises()
+
+    expect(state!.form.value.weeklySchedule).toBe('Local typing in progress')
+  })
 })

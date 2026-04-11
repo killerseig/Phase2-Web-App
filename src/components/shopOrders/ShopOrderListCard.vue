@@ -3,7 +3,8 @@ import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppListCard from '@/components/common/AppListCard.vue'
 import AppSelectableListItem from '@/components/common/AppSelectableListItem.vue'
 import ShopOrderStatusBadge from '@/components/shopOrders/ShopOrderStatusBadge.vue'
-import type { ShopOrder } from '@/services'
+import { getShopOrderDisplayNumber, type ShopOrder } from '@/services'
+import { summarizeShopOrderItems } from '@/utils/shopOrderItems'
 
 defineOptions({
   name: 'ShopOrderListCard',
@@ -39,6 +40,13 @@ function handleDeleteOrderClick(event: MouseEvent, orderId: string) {
 function canDeleteOrder(order: ShopOrder): boolean {
   return order.status === 'draft'
 }
+
+function getReceiptSummary(order: ShopOrder): string {
+  const summary = summarizeShopOrderItems(order.items)
+  if (summary.orderedQuantity <= 0) return 'No items'
+
+  return `${summary.receivedQuantity}/${summary.orderedQuantity} received`
+}
 </script>
 
 <template>
@@ -67,8 +75,15 @@ function canDeleteOrder(order: ShopOrder): boolean {
       >
         <div class="me-2">
           <div class="fw-semibold">{{ formatDate(order.orderDate) }}</div>
-          <div class="app-selectable-list-meta small">{{ order.id.slice(0, 8) }}</div>
+          <div class="app-selectable-list-meta small">Order #{{ getShopOrderDisplayNumber(order) }}</div>
           <div class="small mt-1 app-selectable-list-meta">{{ order.items.length }} item(s)</div>
+          <div class="small app-selectable-list-meta">{{ getReceiptSummary(order) }}</div>
+          <div
+            v-if="order.requestedDeliveryDate"
+            class="small app-selectable-list-meta"
+          >
+            Requested {{ order.requestedDeliveryDate }}
+          </div>
         </div>
         <div class="d-flex flex-column align-items-end gap-2">
           <ShopOrderStatusBadge :status="order.status" />

@@ -17,6 +17,7 @@ const props = defineProps<{
   categories: ShopCategory[]
   catalogItemQtys: Record<string, number>
   selectedItemQuantities: Record<string, number>
+  requestedDeliveryDate: string
   newItemDescription: string
   newItemQty: string
   newItemNote: string
@@ -24,11 +25,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update-items': [items: ShopOrder['items']]
+  'update:requestedDeliveryDate': [value: string]
   'delete-item': [index: number]
   'send-email': []
-  submit: []
-  'place-order': []
-  receive: []
   'update:catalog-item-qty': [payload: CatalogItemQuantityUpdate]
   'select-for-order': [item: CatalogOrderSelection]
   'update:newItemDescription': [value: string]
@@ -38,9 +37,15 @@ const emit = defineEmits<{
 }>()
 
 const canEditOrder = computed(() => props.selected?.status === 'draft')
-const canSubmit = computed(() => props.selected?.status === 'draft' && (props.selected.items?.length ?? 0) > 0)
-const canOrder = computed(() => props.selected?.status === 'order')
-const canReceive = computed(() => props.selected?.status === 'order')
+const canManageReceipt = computed(() =>
+  props.selected != null
+  && props.selected.status !== 'draft'
+  && props.selected.status !== 'received',
+)
+const canSendEmail = computed(() =>
+  props.selected != null
+  && (props.selected.status !== 'draft' || (props.selected.items?.some((item) => item.quantity > 0) ?? false)),
+)
 
 function updateNewItemQty(value: string) {
   emit('update:newItemQty', value.replace(/[^0-9]/g, ''))
@@ -65,15 +70,13 @@ function selectInputText(event: FocusEvent) {
       :sending-email="sendingEmail"
       :format-date="formatDate"
       :is-editable="canEditOrder"
-      :can-submit="canSubmit"
-      :can-order="canOrder"
-      :can-receive="canReceive"
+      :can-manage-receipt="canManageReceipt"
+      :can-send-email="canSendEmail"
+      :requested-delivery-date="requestedDeliveryDate"
       @update-items="emit('update-items', $event)"
+      @update:requested-delivery-date="emit('update:requestedDeliveryDate', $event)"
       @delete-item="emit('delete-item', $event)"
       @send-email="emit('send-email')"
-      @submit="emit('submit')"
-      @place-order="emit('place-order')"
-      @receive="emit('receive')"
     />
 
     <ShopOrderCatalogBrowser

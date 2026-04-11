@@ -35,6 +35,7 @@ describe('daily log components', () => {
         canEdit: true,
         uploading: false,
         fileName: 'qc.png',
+        qcPhotoDescription: 'Cracked joint at north wall',
         qcAssignedTo: '',
         qcAreasInspected: '',
         qcIssuesIdentified: '',
@@ -64,6 +65,8 @@ describe('daily log components', () => {
         uploading: false,
         photoFileName: 'photo.png',
         ptpFileName: 'ptp.png',
+        photoDescription: 'East elevation',
+        ptpPhotoNote: 'Late arrival noted',
       },
     })
 

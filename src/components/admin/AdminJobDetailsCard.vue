@@ -2,14 +2,17 @@
 import AppAlert from '@/components/common/AppAlert.vue'
 import AppSectionCard from '@/components/common/AppSectionCard.vue'
 import BaseInputField from '@/components/common/BaseInputField.vue'
+import BaseSelectField from '@/components/common/BaseSelectField.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import TimecardWeekStatusBadge from '@/components/common/TimecardWeekStatusBadge.vue'
+import { JOB_TYPE_OPTIONS } from '@/constants/jobs'
 import type { Job } from '@/types/models'
 import type { JobFormInput } from '@/types/adminJobs'
 
 const props = defineProps<{
   job: Job | null
   form: JobFormInput
+  foremanOptions: readonly { value: string; label: string }[]
   dirty: boolean
   saving: boolean
   togglingJobId: string
@@ -27,11 +30,6 @@ const emit = defineEmits<{
   'toggle-archive': [payload: { job: Job; active: boolean }]
 }>()
 
-const jobTypeOptions = [
-  { value: 'general', label: 'General' },
-  { value: 'subcontractor', label: 'Subcontractor' },
-] as const
-
 function updateField<K extends keyof JobFormInput>(field: K, value: JobFormInput[K]) {
   emit('update:form', {
     ...props.form,
@@ -47,7 +45,7 @@ function updateField<K extends keyof JobFormInput>(field: K, value: JobFormInput
       ? {}
         : {
           title: 'Selected Job',
-          subtitle: 'Job details are edited here. Crew is managed on the Crew tab.',
+          subtitle: 'Job details and foreman assignment are edited here.',
           icon: 'bi bi-building',
         }"
     class="admin-job-details-card"
@@ -57,7 +55,7 @@ function updateField<K extends keyof JobFormInput>(field: K, value: JobFormInput
       v-if="!job"
       variant="info"
       class="mb-0"
-      message="Select a job from the list to edit details and manage its people."
+      message="Select a job from the list to edit its details and foreman assignment."
     />
 
     <div v-else class="d-flex flex-column gap-3">
@@ -158,6 +156,17 @@ function updateField<K extends keyof JobFormInput>(field: K, value: JobFormInput
           />
         </div>
         <div class="col-md-4">
+          <BaseSelectField
+            :model-value="form.foreman"
+            label="Assigned Foreman"
+            label-class="small"
+            :options="foremanOptions"
+            include-empty-option
+            empty-option-label="Select foreman"
+            @update:model-value="updateField('foreman', String($event))"
+          />
+        </div>
+        <div class="col-md-4">
           <BaseInputField
             :model-value="form.gc"
             label="GC"
@@ -171,12 +180,14 @@ function updateField<K extends keyof JobFormInput>(field: K, value: JobFormInput
             :model-value="form.type"
             label="Job Type"
             label-class="small"
-            :options="jobTypeOptions"
+            :options="JOB_TYPE_OPTIONS"
+            include-empty-option
+            empty-option-label="Select job type"
             @update:model-value="updateField('type', $event as JobFormInput['type'])"
           />
         </div>
 
-        <div class="col-12">
+        <div class="col-md-8">
           <BaseInputField
             :model-value="form.jobAddress"
             label="Job Address"
@@ -214,15 +225,6 @@ function updateField<K extends keyof JobFormInput>(field: K, value: JobFormInput
             label-class="small"
             placeholder="0.33"
             @update:model-value="updateField('productionBurden', String($event))"
-          />
-        </div>
-        <div class="col-md-3">
-          <BaseInputField
-            :model-value="form.accountNumber"
-            label="Account #"
-            label-class="small"
-            placeholder="9001"
-            @update:model-value="updateField('accountNumber', String($event))"
           />
         </div>
 

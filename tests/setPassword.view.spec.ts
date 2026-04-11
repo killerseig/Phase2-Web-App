@@ -85,4 +85,13 @@ describe('SetPassword view', () => {
 
     expect(mockPush).toHaveBeenCalledWith({ name: ROUTE_NAMES.UNAUTHORIZED })
   })
+
+  it('does not render the self-serve sign-in footer on the invite-only screen', async () => {
+    mockRoute = { query: { setupToken: 'token-3', uid: 'user-3' } }
+    const wrapper = mountSetPassword()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Already have an account?')
+    expect(wrapper.text()).not.toContain('Sign in here')
+  })
 })

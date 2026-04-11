@@ -75,6 +75,10 @@ $timecard-focus: #fff6c8;
   grid-template-columns: 4.15rem minmax(0, 1fr);
 }
 
+.timecard-workbook-card__field-main--full {
+  grid-column: 1 / -1;
+}
+
 .timecard-workbook-card__field-side {
   gap: 0.14rem;
   grid-template-columns: 4rem 7.1rem;

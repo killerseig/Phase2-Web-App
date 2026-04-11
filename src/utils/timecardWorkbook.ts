@@ -128,6 +128,18 @@ export function getWorkbookWeekHoursTotal(timecard: Pick<TimecardModel, 'jobs'>)
   return getWorkbookWeekHoursByDay(timecard).reduce((sum, value) => sum + value, 0)
 }
 
+export function getWorkbookWeekProductionByDay(timecard: Pick<TimecardModel, 'jobs'>): number[] {
+  return TIMECARD_WORKBOOK_DAY_INDEXES.map((dayIndex) => (
+    (Array.isArray(timecard.jobs) ? timecard.jobs : []).reduce((sum, job) => (
+      sum + Number(job?.days?.[dayIndex]?.production ?? 0)
+    ), 0)
+  ))
+}
+
+export function getWorkbookWeekProductionTotal(timecard: Pick<TimecardModel, 'jobs'>): number {
+  return getWorkbookWeekProductionByDay(timecard).reduce((sum, value) => sum + value, 0)
+}
+
 export function calculateWorkbookSummaryCost(
   employeeWage: number | null | undefined,
   totalHours: number,

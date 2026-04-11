@@ -35,7 +35,7 @@ describe('badge components', () => {
     })
 
     expect(wrapper.text()).toContain('Admin')
-    expect(wrapper.classes()).toContain('bg-danger')
+    expect(wrapper.classes()).toContain('text-bg-danger')
   })
 
   it('renders status badges through the shared badge primitive', () => {
@@ -108,7 +108,7 @@ describe('badge components', () => {
   it('renders shop order status badges with the shared labels', () => {
     const wrapper = mount(ShopOrderStatusBadge, {
       props: {
-        status: 'order',
+        status: 'submitted',
       },
     })
 

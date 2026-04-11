@@ -20,7 +20,8 @@ export async function uploadAttachment(
   file: File,
   jobId: string,
   logId: string,
-  type: AttachmentType = 'photo'
+  type: AttachmentType = 'photo',
+  description = '',
 ): Promise<Attachment> {
   try {
     const u = requireUser()
@@ -37,6 +38,7 @@ export async function uploadAttachment(
       customMetadata: {
         jobId,
         type,
+        description: description.trim(),
         uploadedBy: u.uid,
         uploadedAt: new Date().toISOString(),
       },
@@ -50,6 +52,7 @@ export async function uploadAttachment(
       url,
       path: storagePath,
       type,
+      description: description.trim(),
       createdAt: new Date(),
     }
   } catch (err) {

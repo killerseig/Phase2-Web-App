@@ -16,7 +16,7 @@ import {
 } from '@/services'
 import { normalizeError } from '@/services/serviceUtils'
 import { logError } from '@/utils'
-import type { Job } from '@/types/models'
+import type { Job, JobType } from '@/types/models'
 
 export const useJobsStore = defineStore('jobs', () => {
   const jobs = ref<Job[]>([])
@@ -154,7 +154,7 @@ export const useJobsStore = defineStore('jobs', () => {
       kjic?: string
       accountNumber?: string
       productionBurden?: number | null
-      type?: 'general' | 'subcontractor'
+      type?: JobType
     }
   ) {
     error.value = null
@@ -191,7 +191,7 @@ export const useJobsStore = defineStore('jobs', () => {
       kjic?: string | null
       accountNumber?: string | null
       productionBurden?: number | null
-      type?: 'general' | 'subcontractor'
+      type?: JobType
     }
   ) {
     error.value = null

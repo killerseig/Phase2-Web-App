@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createShopOrder,
   updateShopOrderItems,
+  updateShopOrderRequestedDeliveryDate,
   updateShopOrderStatus,
 } from '@/services/ShopOrders'
 import {
@@ -47,6 +48,8 @@ describe('ShopOrders service', () => {
       ownerUid: 'user-1',
       status: 'draft',
     })
+    expect(payload).toHaveProperty('orderNumber')
+    expect(typeof payload.orderNumber).toBe('string')
     expect(serverTimestamp).toHaveBeenCalled()
   })
 
@@ -62,15 +65,46 @@ describe('ShopOrders service', () => {
     expect(payload).toMatchObject({ items: [{ description: 'Item', quantity: 1 }], updatedAt: 'ts' })
   })
 
-  it('updates status and stamps updatedAt', async () => {
+  it('updates items with derived order metadata when provided', async () => {
     updateDocMock.mockResolvedValue(undefined)
 
-    await updateShopOrderStatus('job-1', 'order-1', 'order')
+    await updateShopOrderItems(
+      'job-1',
+      'order-1',
+      [{ description: 'Item', quantity: 2, receivedQuantity: 1 }],
+      { status: 'partial' },
+    )
 
     const updateCall = updateDocMock.mock.calls[0]
     expect(updateCall).toBeDefined()
     const [, payload] = updateCall!
-    expect(payload).toMatchObject({ status: 'order', updatedAt: 'ts' })
+    expect(payload).toMatchObject({
+      items: [{ description: 'Item', quantity: 2, receivedQuantity: 1, catalogItemId: null }],
+      status: 'partial',
+      updatedAt: 'ts',
+    })
+  })
+
+  it('updates status and stamps updatedAt', async () => {
+    updateDocMock.mockResolvedValue(undefined)
+
+    await updateShopOrderStatus('job-1', 'order-1', 'submitted')
+
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
+    expect(payload).toMatchObject({ status: 'submitted', updatedAt: 'ts' })
+  })
+
+  it('updates requested delivery date and stamps updatedAt', async () => {
+    updateDocMock.mockResolvedValue(undefined)
+
+    await updateShopOrderRequestedDeliveryDate('job-1', 'order-1', '2026-04-15')
+
+    const updateCall = updateDocMock.mock.calls[0]
+    expect(updateCall).toBeDefined()
+    const [, payload] = updateCall!
+    expect(payload).toMatchObject({ requestedDeliveryDate: '2026-04-15', updatedAt: 'ts' })
   })
 })
 

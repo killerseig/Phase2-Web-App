@@ -5,7 +5,16 @@ import { usePermissions } from '@/composables/usePermissions'
 import { useSubscriptionRegistry } from '@/composables/useSubscriptionRegistry'
 import { useToast } from '@/composables/useToast'
 import { sendTimecardEmail, subscribeEmailSettings } from '@/services/Email'
+import {
+  saveForemanTimecard,
+  submitForemanTimecardsForWeek,
+} from '@/services/ForemanTimecards'
 import { markTimecardsSent } from '@/services/Jobs'
+import {
+  addEmployeeToTimecardRoster,
+  listTimecardStaffingEmployees,
+  type TimecardStaffingEmployee,
+} from '@/services/TimecardStaffing'
 import {
   listWorkspaceTimecardsByJobAndWeek,
   submitWorkspaceWeekTimecards,
@@ -19,6 +28,7 @@ import { createDatePickerConfig, getTodayDateInputValue } from '@/utils/dateInpu
 import { formatWeekRange, getSaturdayFromSunday, snapToSunday } from '@/utils/modelValidation'
 import { ensureWorkbookTimecardLines } from '@/utils/timecardWorkbook'
 import {
+  recalcVisibleTotalsForTimecard,
   recalcTotalsForTimecard,
   type TimecardModel,
 } from '@/utils/timecardUtils'
@@ -67,6 +77,11 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
   const localError = ref('')
   const timecardRecipients = ref<string[]>([])
   const autoSaveTimers = ref<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const staffingEmployees = ref<TimecardStaffingEmployee[]>([])
+  const staffingLoading = ref(false)
+  const staffingError = ref('')
+  const staffingSelectedEmployeeId = ref('')
+  const addingStaffingEmployee = ref(false)
 
   const isAdmin = computed(() => auth.role === ROLES.ADMIN)
   const jobName = computed(() => jobsStore.currentJob?.name ?? 'Timecards')
@@ -78,7 +93,12 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
 
   function recalcTotals(timecard: TimecardModel) {
     ensureWorkbookTimecardLines(timecard)
-    recalcTotalsForTimecard(timecard, timecard.weekStartDate || weekStartDate.value)
+    if (isAdmin.value) {
+      recalcTotalsForTimecard(timecard, timecard.weekStartDate || weekStartDate.value)
+      return
+    }
+
+    recalcVisibleTotalsForTimecard(timecard, timecard.weekStartDate || weekStartDate.value)
   }
 
   const workspace = useTimecardWeekWorkspace({
@@ -92,6 +112,26 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
   const err = computed(() => localError.value || workspace.error.value)
   const employeeCount = computed(() => workspace.employeeItems.value.length)
   const accountsSummary = computed(() => buildTimecardAccountsSummary(workspace.timecards.value))
+  const rosterEmployeeNumbers = computed(() => new Set(
+    workspace.rosterEmployees.value
+      .map((employee) => String(employee.employeeNumber || '').trim())
+      .filter(Boolean),
+  ))
+  const staffingOptions = computed(() => (
+    staffingEmployees.value
+      .filter((employee) => !rosterEmployeeNumbers.value.has(employee.employeeNumber))
+      .map((employee) => ({
+        id: employee.id,
+        label: [
+          `${employee.firstName} ${employee.lastName}`.trim(),
+          employee.employeeNumber ? `#${employee.employeeNumber}` : '',
+          employee.occupation || 'No occupation',
+        ].filter(Boolean).join(' | '),
+      }))
+  ))
+  const selectedStaffingEmployee = computed(() => (
+    staffingEmployees.value.find((employee) => employee.id === staffingSelectedEmployeeId.value) ?? null
+  ))
 
   function setError(error: unknown, fallback: string, showToast = true) {
     localError.value = normalizeError(error, fallback)
@@ -107,6 +147,50 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
     autoSaveTimers.value.delete(id)
   }
 
+  async function loadStaffingEmployees() {
+    if (!jobId.value) {
+      staffingEmployees.value = []
+      staffingError.value = ''
+      staffingSelectedEmployeeId.value = ''
+      return
+    }
+
+    staffingLoading.value = true
+    staffingError.value = ''
+    try {
+      staffingEmployees.value = await listTimecardStaffingEmployees(jobId.value)
+    } catch (error) {
+      staffingEmployees.value = []
+      staffingError.value = normalizeError(error, 'Failed to load employees for timecards')
+    } finally {
+      staffingLoading.value = false
+    }
+  }
+
+  async function addStaffingEmployeeToRoster() {
+    if (!jobId.value || !staffingSelectedEmployeeId.value) return
+
+    addingStaffingEmployee.value = true
+    try {
+      const result = await addEmployeeToTimecardRoster(jobId.value, staffingSelectedEmployeeId.value)
+      staffingSelectedEmployeeId.value = ''
+      toast.show(
+        result.action === 'reactivated'
+          ? `Reactivated ${result.employee.firstName} ${result.employee.lastName} for this job`
+          : `Added ${result.employee.firstName} ${result.employee.lastName} to this job`,
+        'success',
+      )
+      await Promise.all([
+        workspace.refreshWorkspace(),
+        loadStaffingEmployees(),
+      ])
+    } catch (error) {
+      toast.show(normalizeError(error, 'Failed to add employee to timecards'), 'error')
+    } finally {
+      addingStaffingEmployee.value = false
+    }
+  }
+
   async function persistTimecard(timecard: TimecardModel, showToast = false) {
     if (!timecard?.id) return
     clearAutoSaveTimer(timecard.id)
@@ -115,7 +199,21 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
 
     try {
       recalcTotals(timecard)
-      await updateTimecard(jobId.value, timecard.id, buildTimecardWritePayload(timecard))
+      if (isAdmin.value) {
+        await updateTimecard(jobId.value, timecard.id, buildTimecardWritePayload(timecard))
+      } else {
+        const updatedTimecard = await saveForemanTimecard({
+          jobId: jobId.value,
+          timecardId: timecard.id,
+          jobs: timecard.jobs ?? [],
+          notes: timecard.notes ?? '',
+          footerJobOrGl: timecard.footerJobOrGl ?? '',
+          footerAccount: timecard.footerAccount ?? '',
+          footerOffice: timecard.footerOffice ?? '',
+          footerAmount: timecard.footerAmount ?? '',
+        })
+        workspace.upsertTimecard(updatedTimecard)
+      }
       if (showToast) {
         toast.show(`Saved ${timecard.employeeName}`, 'success')
       }
@@ -191,7 +289,10 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
         ),
       )
 
-      await workspace.init()
+      await Promise.all([
+        workspace.init(),
+        loadStaffingEmployees(),
+      ])
     } catch (error) {
       setError(error, 'Failed to initialize timecards')
     } finally {
@@ -235,8 +336,14 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
     try {
       await flushPendingAutoSaves()
 
-      const count = await submitWorkspaceWeekTimecards(jobId.value, weekEndingDate.value)
+      const { count, submittedIds } = isAdmin.value
+        ? {
+            count: await submitWorkspaceWeekTimecards(jobId.value, weekEndingDate.value),
+            submittedIds: [] as string[],
+          }
+        : await submitForemanTimecardsForWeek(jobId.value, weekEndingDate.value)
       toast.show(`Submitted ${count} timecard(s)`, 'success')
+      await workspace.refreshWorkspace()
 
       try {
         await markTimecardsSent(jobId.value, weekEndingDate.value)
@@ -247,13 +354,14 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
 
       if (timecardRecipients.value.length) {
         try {
-          const submitted = await listWorkspaceTimecardsByJobAndWeek(jobId.value, weekEndingDate.value)
-          const submittedIds = submitted
-            .filter((timecard) => timecard.status === 'submitted')
-            .map((timecard) => timecard.id)
+          const resolvedSubmittedIds = submittedIds.length
+            ? submittedIds
+            : (await listWorkspaceTimecardsByJobAndWeek(jobId.value, weekEndingDate.value))
+              .filter((timecard) => timecard.status === 'submitted')
+              .map((timecard) => timecard.id)
 
-          if (submittedIds.length) {
-            await sendTimecardEmail(jobId.value, submittedIds, weekStartDate.value, timecardRecipients.value)
+          if (resolvedSubmittedIds.length) {
+            await sendTimecardEmail(jobId.value, resolvedSubmittedIds, weekStartDate.value, timecardRecipients.value)
             toast.show(`Timecards emailed to ${timecardRecipients.value.length} recipient(s)`, 'success')
           } else {
             toast.show('No submitted timecards to email', 'info')
@@ -275,9 +383,16 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
     autoSaveTimers.value.clear()
     subscriptions.clearAll()
     jobsStore.stopCurrentJobSubscription()
+    staffingEmployees.value = []
+    staffingError.value = ''
+    staffingSelectedEmployeeId.value = ''
+    staffingLoading.value = false
+    addingStaffingEmployee.value = false
   }
 
   return {
+    addStaffingEmployeeToRoster,
+    addingStaffingEmployee,
     accountsSummary,
     changeWeek,
     cleanup,
@@ -290,10 +405,15 @@ export function useTimecardWeekPage(jobId: ComputedRef<string>) {
     jobEditing,
     jobName,
     loading,
+    selectedStaffingEmployee,
     saving,
     searchTerm: workspace.searchTerm,
     selectEmployee: workspace.selectEmployee,
     selectedDate,
+    staffingError,
+    staffingLoading,
+    staffingOptions,
+    staffingSelectedEmployeeId,
     selectedEmployeeId: workspace.selectedEmployeeId,
     selectedTimecard: workspace.selectedTimecard,
     submitWeek,

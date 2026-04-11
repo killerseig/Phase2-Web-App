@@ -38,6 +38,7 @@ export interface Attachment {
   url: string
   path: string
   type?: AttachmentType
+  description?: string
   createdAt?: Timestamp | unknown
 }
 

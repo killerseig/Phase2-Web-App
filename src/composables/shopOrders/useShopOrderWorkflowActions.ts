@@ -2,14 +2,19 @@ import {
   createShopOrder,
   deleteShopOrder,
   sendShopOrderEmail,
-  updateShopOrderItems,
+  updateShopOrderDetails,
+  updateShopOrderRequestedDeliveryDate,
   updateShopOrderStatus,
   type ShopOrderStatus,
 } from '@/services'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
 import { normalizeError } from '@/services/serviceUtils'
-import { sanitizeShopOrderItems } from '@/utils/shopOrderItems'
+import {
+  deriveShopOrderStatus,
+  normalizeShopOrderRequestedDeliveryDate,
+  sanitizeShopOrderItems,
+} from '@/utils/shopOrderItems'
 import { logError } from '@/utils/logger'
 import type {
   ShopOrderMutationState,
@@ -24,22 +29,6 @@ export function useShopOrderWorkflowActions(
   const confirm = options.confirm ?? ((message, confirmOptions) => (
     useConfirmDialog().confirm(message, confirmOptions)
   ))
-
-  const updateSelectedOrderStatus = async (
-    status: ShopOrderStatus,
-    successMessage: string,
-    errorMessage: string,
-  ) => {
-    const selectedOrder = options.selected.value
-    if (!selectedOrder) return
-
-    try {
-      await updateShopOrderStatus(options.jobId.value, selectedOrder.id, status)
-      toast.show(successMessage, 'success')
-    } catch {
-      toast.show(errorMessage, 'error')
-    }
-  }
 
   const deleteOrderById = async (orderId: string) => {
     const confirmed = await confirm('Delete this draft order?', {
@@ -87,20 +76,40 @@ export function useShopOrderWorkflowActions(
         return
       }
 
-      await updateShopOrderItems(options.jobId.value, selectedOrder.id, filteredItems)
-      await updateShopOrderStatus(options.jobId.value, selectedOrder.id, 'order')
+      const requestedDeliveryDate = normalizeShopOrderRequestedDeliveryDate(
+        selectedOrder.requestedDeliveryDate ?? null,
+      ) ?? null
+
+      await updateShopOrderDetails(options.jobId.value, selectedOrder.id, {
+        items: filteredItems,
+        requestedDeliveryDate,
+        status: 'submitted',
+      })
+
+      selectedOrder.items = filteredItems.map((item) => ({ ...item }))
+      selectedOrder.requestedDeliveryDate = requestedDeliveryDate
+      selectedOrder.status = 'submitted'
       toast.show('Order submitted', 'success')
     } catch {
       toast.show('Failed to submit order', 'error')
     }
   }
 
-  const placeOrder = async () => {
-    await updateSelectedOrderStatus('receive', 'Order placed', 'Failed to place order')
-  }
+  const updateRequestedDeliveryDate = async (value: string) => {
+    const selectedOrder = options.selected.value
+    if (!selectedOrder) return
 
-  const receiveOrder = async () => {
-    await updateSelectedOrderStatus('receive', 'Order received', 'Failed to receive order')
+    const previousValue = selectedOrder.requestedDeliveryDate ?? null
+    const nextValue = normalizeShopOrderRequestedDeliveryDate(value) ?? null
+    selectedOrder.requestedDeliveryDate = nextValue
+
+    try {
+      await updateShopOrderRequestedDeliveryDate(options.jobId.value, selectedOrder.id, nextValue)
+      toast.show('Requested delivery date saved', 'success')
+    } catch {
+      selectedOrder.requestedDeliveryDate = previousValue
+      toast.show('Failed to save requested delivery date', 'error')
+    }
   }
 
   const sendOrderEmail = async () => {
@@ -114,8 +123,32 @@ export function useShopOrderWorkflowActions(
 
     state.sendingEmail.value = true
     try {
+      const filteredItems = sanitizeShopOrderItems(selectedOrder.items).filter((item) => item.quantity > 0)
+      if (filteredItems.length === 0) {
+        toast.show('Order must have at least one item with quantity > 0', 'error')
+        return
+      }
+
+      const requestedDeliveryDate = normalizeShopOrderRequestedDeliveryDate(
+        selectedOrder.requestedDeliveryDate ?? null,
+      ) ?? null
+
+      await updateShopOrderDetails(options.jobId.value, selectedOrder.id, {
+        items: filteredItems,
+        requestedDeliveryDate,
+      })
+
+      selectedOrder.items = filteredItems.map((item) => ({ ...item }))
+      selectedOrder.requestedDeliveryDate = requestedDeliveryDate
+
       await sendShopOrderEmail(options.jobId.value, selectedOrder.id, options.shopOrderRecipients.value)
-      await updateShopOrderStatus(options.jobId.value, selectedOrder.id, 'order')
+
+      if (selectedOrder.status === 'draft') {
+        const nextStatus: ShopOrderStatus = deriveShopOrderStatus(filteredItems, 'submitted')
+        await updateShopOrderStatus(options.jobId.value, selectedOrder.id, nextStatus)
+        selectedOrder.status = nextStatus
+      }
+
       toast.show('Order emailed successfully', 'success')
     } catch (error) {
       toast.show(normalizeError(error, 'Failed to email order'), 'error')
@@ -128,8 +161,7 @@ export function useShopOrderWorkflowActions(
     createDraft,
     handleDeleteOrder,
     submitOrder,
-    placeOrder,
-    receiveOrder,
+    updateRequestedDeliveryDate,
     sendOrderEmail,
   }
 }

@@ -25,6 +25,48 @@
   min-height: 0;
 }
 
+.timecard-employee-list__staffing {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem 0.9rem 0.78rem;
+}
+
+.timecard-employee-list__staffing-header {
+  min-width: 0;
+}
+
+.timecard-employee-list__staffing-eyebrow {
+  color: rgba(var(--bs-secondary-color-rgb), 0.92);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.timecard-employee-list__staffing-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.15;
+  margin-top: 0.3rem;
+}
+
+.timecard-employee-list__staffing-form {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.timecard-employee-list__staffing-selected {
+  color: var(--bs-secondary-color);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  gap: 0.28rem;
+  line-height: 1.25;
+}
+
 .timecard-employee-list__selected {
   background: linear-gradient(180deg, rgba(var(--bs-tertiary-bg-rgb), 0.4) 0%, rgba(var(--bs-body-bg-rgb), 0.64) 100%);
   display: grid;

@@ -66,6 +66,7 @@ export interface DailyLogAttachment {
   url: string
   path?: string
   type?: string
+  description?: string
   createdAt?: unknown
 }
 
@@ -163,13 +164,16 @@ export interface ShopCatalogItem {
 // SHOP ORDERS
 // ============================================================================
 
-export type ShopOrderStatus = 'draft' | 'order' | 'receive'
+export type ShopOrderStatus = 'draft' | 'submitted' | 'partial' | 'backordered' | 'received'
 
 export interface ShopOrderItem {
   catalogItemId?: string
   description: string
   quantity: number
   note?: string
+  costCode?: string | null
+  receivedQuantity?: number
+  backorderedQuantity?: number
 }
 
 export interface ShopOrder {
@@ -177,6 +181,7 @@ export interface ShopOrder {
   jobId: string
   orderDate: unknown
   status: ShopOrderStatus
+  requestedDeliveryDate?: string | null
   items: ShopOrderItem[]
   submittedAt?: unknown
   createdBy: string

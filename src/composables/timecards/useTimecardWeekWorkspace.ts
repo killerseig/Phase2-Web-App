@@ -1,4 +1,7 @@
 import { computed, ref, watch, type ComputedRef } from 'vue'
+import { ROLES } from '@/constants/app'
+import { useAuthStore } from '@/stores/auth'
+import { getForemanTimecardWorkspace } from '@/services/ForemanTimecards'
 import { subscribeRosterEmployees } from '@/services/JobRoster'
 import {
   ensureWeekTimecardsForActiveRoster,
@@ -36,6 +39,7 @@ function buildWorkspaceSearchText(item: TimecardWorkspaceEmployeeItem): string {
 
 export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOptions) {
   const { jobId, weekEndingDate, subscriptions, recalcTotals } = options
+  const auth = useAuthStore()
 
   const loading = ref(true)
   const ensuring = ref(false)
@@ -47,6 +51,7 @@ export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOption
   const rosterReady = ref(false)
   const timecardsReady = ref(false)
   const lastCoverageSweepKey = ref('')
+  const useForemanWorkspace = computed(() => auth.role === ROLES.FOREMAN)
 
   const activeRosterEmployees = computed(() => rosterEmployees.value.filter((employee) => employee.active))
   const missingEmployeeIds = computed(() => (
@@ -140,6 +145,22 @@ export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOption
     ensuring.value = false
   }
 
+  async function loadForemanWorkspace() {
+    try {
+      const workspace = await getForemanTimecardWorkspace(jobId.value, weekEndingDate.value)
+      rosterEmployees.value = workspace.rosterEmployees
+      timecards.value = workspace.timecards
+      rosterReady.value = true
+      timecardsReady.value = true
+      syncLoadingState()
+    } catch (err) {
+      setError(err, 'Failed to load timecard workspace')
+      rosterReady.value = true
+      timecardsReady.value = true
+      syncLoadingState()
+    }
+  }
+
   async function ensureCoverage() {
     if (!jobId.value || !weekEndingDate.value) return
     lastCoverageSweepKey.value = missingCoverageKey.value
@@ -166,6 +187,14 @@ export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOption
     timecardsReady.value = false
     ensuring.value = false
     syncLoadingState()
+
+    subscriptions.replace('timecard-week-workspace-roster', null)
+    subscriptions.replace('timecard-week-workspace-cards', null)
+
+    if (useForemanWorkspace.value) {
+      await loadForemanWorkspace()
+      return
+    }
 
     subscriptions.replace(
       'timecard-week-workspace-roster',
@@ -214,9 +243,10 @@ export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOption
       ensuring: ensuring.value,
       missingKey: missingCoverageKey.value,
       missingCount: missingEmployeeIds.value.length,
+      useForemanWorkspace: useForemanWorkspace.value,
     }),
-    ({ ready, ensuring: isEnsuring, missingKey, missingCount }) => {
-      if (!ready || isEnsuring || missingCount === 0) return
+    ({ ready, ensuring: isEnsuring, missingKey, missingCount, useForemanWorkspace: isForemanWorkspace }) => {
+      if (isForemanWorkspace || !ready || isEnsuring || missingCount === 0) return
       if (missingKey === lastCoverageSweepKey.value) return
       void ensureCoverage()
     },
@@ -225,6 +255,18 @@ export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOption
 
   async function refreshWorkspace() {
     await init()
+  }
+
+  function upsertTimecard(nextTimecard: TimecardModel) {
+    const existingIndex = timecards.value.findIndex((timecard) => timecard.id === nextTimecard.id)
+    if (existingIndex === -1) {
+      timecards.value = [...timecards.value, nextTimecard]
+      return
+    }
+
+    timecards.value = timecards.value.map((timecard) => (
+      timecard.id === nextTimecard.id ? nextTimecard : timecard
+    ))
   }
 
   return {
@@ -236,6 +278,7 @@ export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOption
     loading,
     readOnly,
     refreshWorkspace,
+    rosterEmployees,
     searchTerm,
     selectEmployee,
     selectedEmployeeId,
@@ -243,5 +286,6 @@ export function useTimecardWeekWorkspace(options: UseTimecardWeekWorkspaceOption
     selectedTimecard,
     submittedCount,
     timecards,
+    upsertTimecard,
   }
 }

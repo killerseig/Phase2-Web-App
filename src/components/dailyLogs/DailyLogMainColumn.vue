@@ -10,9 +10,6 @@ import DailyLogTextSectionCard, { type DailyLogTextSectionField } from '@/compon
 import type { DailyLogDraftInput, DailyLogStatus } from '@/services'
 
 type DailyLogEditableField =
-  | 'jobSiteNumbers'
-  | 'foremanOnSite'
-  | 'siteForemanAssistant'
   | 'weeklySchedule'
   | 'manpowerAssessment'
   | 'safetyConcerns'
@@ -40,12 +37,23 @@ type DailyLogManpowerLine = {
 
 const props = defineProps<{
   jobName: string
+  siteInfo: {
+    projectName: string
+    jobNumber: string
+    projectManager: string
+    foreman: string
+    generalContractor: string
+    address: string
+  }
   form: DailyLogDraftInput
   canEdit: boolean
   uploading: boolean
   photoFileName: string
   ptpFileName: string
   qcFileName: string
+  photoDescription: string
+  ptpPhotoNote: string
+  qcPhotoDescription: string
   currentStatus: DailyLogStatus
   saving: boolean
   hasEmailRecipients: boolean
@@ -57,6 +65,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update-field': [payload: { key: DailyLogEditableField; value: string }]
+  'update-photo-description': [value: string]
+  'update-ptp-photo-note': [value: string]
+  'update-qc-photo-description': [value: string]
   'add-manpower-line': []
   'update-manpower-field': [payload: { index: number; field: 'trade' | 'areas'; value: string }]
   'update-manpower-count': [payload: { index: number; value: number }]
@@ -114,14 +125,12 @@ function emitFieldUpdate(key: DailyLogEditableField, value: string) {
 <template>
   <div class="daily-log-main-column">
     <DailyLogSiteInfoCard
-      :job-name="jobName"
-      :job-site-numbers="form.jobSiteNumbers"
-      :foreman-on-site="form.foremanOnSite"
-      :site-foreman-assistant="form.siteForemanAssistant"
-      :can-edit="canEdit"
-      @update:job-site-numbers="(value) => emitFieldUpdate('jobSiteNumbers', value)"
-      @update:foreman-on-site="(value) => emitFieldUpdate('foremanOnSite', value)"
-      @update:site-foreman-assistant="(value) => emitFieldUpdate('siteForemanAssistant', value)"
+      :project-name="siteInfo.projectName || jobName"
+      :job-number="siteInfo.jobNumber"
+      :project-manager="siteInfo.projectManager"
+      :foreman="siteInfo.foreman"
+      :general-contractor="siteInfo.generalContractor"
+      :address="siteInfo.address"
     />
 
     <DailyLogManpower
@@ -165,6 +174,10 @@ function emitFieldUpdate(key: DailyLogEditableField, value: string) {
       :uploading="uploading"
       :photo-file-name="photoFileName"
       :ptp-file-name="ptpFileName"
+      :photo-description="photoDescription"
+      :ptp-photo-note="ptpPhotoNote"
+      @update:photo-description="(value) => emit('update-photo-description', value)"
+      @update:ptp-photo-note="(value) => emit('update-ptp-photo-note', value)"
       @upload="(payload) => emit('upload', payload)"
       @delete="(path) => emit('delete-attachment', path)"
     />
@@ -182,10 +195,12 @@ function emitFieldUpdate(key: DailyLogEditableField, value: string) {
       :can-edit="canEdit"
       :uploading="uploading"
       :file-name="qcFileName"
+      :qc-photo-description="qcPhotoDescription"
       :qc-assigned-to="form.qcAssignedTo ?? ''"
       :qc-areas-inspected="form.qcAreasInspected ?? ''"
       :qc-issues-identified="form.qcIssuesIdentified ?? ''"
       :qc-issues-resolved="form.qcIssuesResolved ?? ''"
+      @update:qc-photo-description="(value) => emit('update-qc-photo-description', value)"
       @update:qc-assigned-to="(value) => emitFieldUpdate('qcAssignedTo', value)"
       @update:qc-areas-inspected="(value) => emitFieldUpdate('qcAreasInspected', value)"
       @update:qc-issues-identified="(value) => emitFieldUpdate('qcIssuesIdentified', value)"

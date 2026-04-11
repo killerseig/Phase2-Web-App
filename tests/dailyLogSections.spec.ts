@@ -99,12 +99,23 @@ describe('daily log section components', () => {
     const wrapper = mount(DailyLogMainColumn, {
       props: {
         jobName: 'Project One',
+        siteInfo: {
+          projectName: 'Project One',
+          jobNumber: '111A1',
+          projectManager: 'Riley',
+          foreman: 'Pat',
+          generalContractor: 'ACME GC',
+          address: '123 Main St',
+        },
         form: createEmptyDailyLogDraft('Project One'),
         canEdit: true,
         uploading: false,
         photoFileName: '',
         ptpFileName: '',
         qcFileName: '',
+        photoDescription: '',
+        ptpPhotoNote: '',
+        qcPhotoDescription: '',
         currentStatus: 'draft',
         saving: false,
         hasEmailRecipients: true,
@@ -115,17 +126,34 @@ describe('daily log section components', () => {
       },
     })
 
-    wrapper.findComponent(DailyLogSiteInfoCard).vm.$emit('update:foremanOnSite', 'Pat')
     wrapper.findComponent(DailyLogQualityControlCard).vm.$emit('update:qcAssignedTo', 'Jordan')
     wrapper.findComponent(DailyLogActionPanel).vm.$emit('submit')
 
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('update-field')).toEqual([
-      [{ key: 'foremanOnSite', value: 'Pat' }],
       [{ key: 'qcAssignedTo', value: 'Jordan' }],
     ])
     expect(wrapper.emitted('submit')).toEqual([[]])
+  })
+
+  it('renders job information as read-only fields', () => {
+    const wrapper = mount(DailyLogSiteInfoCard, {
+      props: {
+        projectName: 'Project One',
+        jobNumber: '111A1',
+        projectManager: 'Riley',
+        foreman: 'Pat',
+        generalContractor: 'ACME GC',
+        address: '123 Main St',
+      },
+    })
+
+    const inputs = wrapper.findAll('input')
+    expect(inputs).toHaveLength(6)
+    expect(inputs.every((input) => input.attributes('disabled') !== undefined)).toBe(true)
+    expect(wrapper.text()).toContain('Project Manager')
+    expect(wrapper.text()).toContain('General Contractor')
   })
 
   it('forwards sidebar events from list and recipients', async () => {
@@ -150,5 +178,17 @@ describe('daily log section components', () => {
 
     expect(wrapper.emitted('select')).toEqual([['log-1']])
     expect(wrapper.emitted('add-recipient')).toEqual([['new@example.com']])
+  })
+
+  it('shows a global-recipient warning when no job-specific recipients exist', () => {
+    const wrapper = mount(DailyLogRecipients, {
+      props: {
+        recipients: [],
+        globalRecipients: ['global@example.com'],
+        saving: false,
+      },
+    })
+
+    expect(wrapper.text()).toContain('Only the global recipient list will receive this daily log right now')
   })
 })

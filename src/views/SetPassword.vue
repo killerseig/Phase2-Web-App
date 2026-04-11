@@ -193,15 +193,6 @@ const submit = async () => {
               Creating...
             </span>
           </button>
-
-          <hr class="my-4" />
-
-          <div class="text-center">
-              <small class="text-muted"
-              >Already have an account?
-              <router-link :to="{ name: ROUTE_NAMES.LOGIN }" class="text-decoration-none">Sign in here</router-link>
-            </small>
-          </div>
         </div>
       </div>
     </div>

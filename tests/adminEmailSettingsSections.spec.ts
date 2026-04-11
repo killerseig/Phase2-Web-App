@@ -20,7 +20,7 @@ const baseJob: Job = {
   cip: '2445',
   kjic: 'Yes',
   accountNumber: null,
-  type: 'general',
+  type: 'drywall',
   active: true,
   timecardStatus: 'pending',
   timecardPeriodEndDate: '2026-04-04',

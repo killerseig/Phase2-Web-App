@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.listTimecardsForWeek = exports.sendTimecardEmail = exports.sendDailyLogEmail = void 0;
+exports.notifySecretExpiration = exports.setUserPassword = exports.verifySetupToken = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.listTimecardsForWeek = exports.submitForemanTimecardsForWeek = exports.saveForemanTimecard = exports.getForemanTimecardWorkspace = exports.addEmployeeToTimecardRoster = exports.listTimecardStaffingEmployees = exports.sendTimecardEmail = exports.sendDailyLogEmail = void 0;
 const admin = __importStar(require("firebase-admin"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const https_1 = require("firebase-functions/v2/https");
@@ -65,6 +65,22 @@ function normalizeRecipients(...groups) {
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter(Boolean);
     return Array.from(new Set(cleaned));
+}
+async function getShopOrderCostCodesByCatalogItemId(items) {
+    const catalogItemIds = Array.from(new Set((Array.isArray(items) ? items : [])
+        .map((item) => String(item?.catalogItemId || '').trim())
+        .filter(Boolean)));
+    if (!catalogItemIds.length)
+        return {};
+    const refs = catalogItemIds.map((catalogItemId) => db.collection('shopCatalog').doc(catalogItemId));
+    const snapshots = await db.getAll(...refs);
+    return snapshots.reduce((costCodesByCatalogItemId, snapshot) => {
+        const costCode = String(snapshot.data()?.sku || '').trim();
+        if (snapshot.exists && costCode) {
+            costCodesByCatalogItemId[snapshot.id] = costCode;
+        }
+        return costCodesByCatalogItemId;
+    }, {});
 }
 function getAssignedJobIds(user) {
     if (!Array.isArray(user?.assignedJobIds))
@@ -99,6 +115,29 @@ function assertAdminOrAssignedForeman(user, jobId, errorMessage) {
         throw new https_2.HttpsError('permission-denied', errorMessage);
     }
     return authorizedUser;
+}
+function normalizeTimecardStaffingEmployee(docId, data) {
+    return {
+        id: docId,
+        employeeNumber: String(data?.employeeNumber || '').trim(),
+        firstName: String(data?.firstName || '').trim(),
+        lastName: String(data?.lastName || '').trim(),
+        occupation: String(data?.occupation || '').trim(),
+        active: data?.active === true,
+    };
+}
+function sortTimecardStaffingEmployeesByName(employees) {
+    return employees
+        .slice()
+        .sort((a, b) => {
+        const lastNameCompare = a.lastName.localeCompare(b.lastName);
+        if (lastNameCompare !== 0)
+            return lastNameCompare;
+        const firstNameCompare = a.firstName.localeCompare(b.firstName);
+        if (firstNameCompare !== 0)
+            return firstNameCompare;
+        return a.employeeNumber.localeCompare(b.employeeNumber);
+    });
 }
 async function getJobDailyLogRecipients(jobId) {
     const jobSnap = await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).get();
@@ -476,6 +515,255 @@ function hasMeaningfulTimecard(tc) {
 }
 function roundToHundredths(value) {
     return Math.round(toNumber(value) * 100) / 100;
+}
+function buildWeekDatesList(weekStartDate) {
+    const parsed = parseDateOnly(weekStartDate);
+    if (!parsed)
+        return [];
+    return Array.from({ length: 7 }, (_, index) => {
+        const nextDate = new Date(parsed);
+        nextDate.setUTCDate(parsed.getUTCDate() + index);
+        return formatDateOnly(nextDate);
+    });
+}
+function createEmptyWorkbookDay(date, dayOfWeek) {
+    return {
+        date,
+        dayOfWeek,
+        hours: 0,
+        production: 0,
+        unitCost: 0,
+        unitCostOverride: null,
+        lineTotal: 0,
+        notes: '',
+    };
+}
+function normalizeWorkbookJobDays(weekStartDate, days) {
+    const weekDates = buildWeekDatesList(weekStartDate);
+    const templateDays = weekDates.map((date, index) => createEmptyWorkbookDay(date, index));
+    for (const day of Array.isArray(days) ? days : []) {
+        const fallbackIndex = Array.isArray(days) ? days.indexOf(day) : -1;
+        const dayOfWeek = Number(day?.dayOfWeek);
+        const targetIndex = Number.isInteger(dayOfWeek) && dayOfWeek >= 0 && dayOfWeek < templateDays.length
+            ? dayOfWeek
+            : fallbackIndex;
+        if (targetIndex < 0 || targetIndex >= templateDays.length)
+            continue;
+        const existing = templateDays[targetIndex];
+        if (!existing)
+            continue;
+        templateDays[targetIndex] = {
+            ...existing,
+            ...day,
+            date: String(day?.date || existing.date || '').trim() || existing.date,
+            dayOfWeek: targetIndex,
+            unitCostOverride: day?.unitCostOverride == null ? null : toNumber(day.unitCostOverride),
+            notes: String(day?.notes || '').trim(),
+        };
+    }
+    return templateDays;
+}
+function recalculateWorkbookTimecardDocument(sourceTimecard, incomingJobs) {
+    const weekStartDate = String(sourceTimecard?.weekStartDate || '').trim();
+    const weekDates = buildWeekDatesList(weekStartDate);
+    const hours = Array(7).fill(0);
+    const production = Array(7).fill(0);
+    const lineTotals = Array(7).fill(0);
+    const employeeWage = toNumber(sourceTimecard?.employeeWage);
+    const productionBurden = sourceTimecard?.productionBurden;
+    const jobs = (Array.isArray(incomingJobs) ? incomingJobs : []).map((job) => {
+        const normalizedDays = normalizeWorkbookJobDays(weekStartDate, job?.days)
+            .map((day, index) => {
+            const dayHours = Math.max(0, toNumber(day?.hours));
+            const dayProduction = Math.max(0, toNumber(day?.production));
+            const overrideValue = day?.unitCostOverride == null ? null : Math.max(0, toNumber(day.unitCostOverride));
+            const resolvedUnitCost = overrideValue == null
+                ? calculateUnitCostForExport(employeeWage, dayHours, dayProduction, productionBurden)
+                : overrideValue;
+            const resolvedLineTotal = dayProduction * resolvedUnitCost;
+            hours[index] = (hours[index] ?? 0) + dayHours;
+            production[index] = (production[index] ?? 0) + dayProduction;
+            lineTotals[index] = (lineTotals[index] ?? 0) + resolvedLineTotal;
+            return {
+                ...day,
+                date: String(day?.date || weekDates[index] || '').trim() || weekDates[index] || '',
+                dayOfWeek: index,
+                hours: dayHours,
+                production: dayProduction,
+                unitCost: resolvedUnitCost,
+                unitCostOverride: overrideValue,
+                lineTotal: resolvedLineTotal,
+                notes: String(day?.notes || '').trim(),
+            };
+        });
+        return {
+            ...job,
+            jobNumber: String(job?.jobNumber || '').trim(),
+            subsectionArea: String(job?.subsectionArea ?? job?.area ?? '').trim(),
+            area: String(job?.area ?? job?.subsectionArea ?? '').trim(),
+            account: String(job?.account ?? job?.acct ?? '').trim(),
+            acct: String(job?.acct ?? job?.account ?? '').trim(),
+            costCode: String(job?.costCode || '').trim(),
+            div: String(job?.div || '').trim(),
+            difH: String(job?.difH || '').trim(),
+            difP: String(job?.difP || '').trim(),
+            difC: String(job?.difC || '').trim(),
+            offHours: Math.max(0, toNumber(job?.offHours)),
+            offProduction: Math.max(0, toNumber(job?.offProduction)),
+            offCost: Math.max(0, toNumber(job?.offCost)),
+            days: normalizedDays,
+        };
+    });
+    const summaryDays = weekDates.map((date, index) => ({
+        date,
+        dayOfWeek: index,
+        hours: hours[index] ?? 0,
+        production: production[index] ?? 0,
+        unitCost: 0,
+        unitCostOverride: null,
+        lineTotal: lineTotals[index] ?? 0,
+        notes: String(sourceTimecard?.days?.[index]?.notes || '').trim(),
+    }));
+    return {
+        jobs,
+        days: summaryDays,
+        totals: {
+            hours,
+            production,
+            hoursTotal: hours.reduce((sum, value) => sum + value, 0),
+            productionTotal: production.reduce((sum, value) => sum + value, 0),
+            lineTotal: lineTotals.reduce((sum, value) => sum + value, 0),
+        },
+    };
+}
+function sanitizeRosterEmployeeForForeman(docId, data) {
+    return {
+        id: docId,
+        jobId: String(data?.jobId || '').trim(),
+        employeeNumber: String(data?.employeeNumber || '').trim(),
+        firstName: String(data?.firstName || '').trim(),
+        lastName: String(data?.lastName || '').trim(),
+        occupation: String(data?.occupation || '').trim(),
+        contractor: data?.contractor
+            ? {
+                name: String(data.contractor.name || '').trim(),
+                category: String(data.contractor.category || '').trim(),
+            }
+            : undefined,
+        active: data?.active !== false,
+        addedByUid: String(data?.addedByUid || '').trim(),
+    };
+}
+function sanitizeTimecardForForeman(docId, data) {
+    return {
+        id: docId,
+        jobId: String(data?.jobId || '').trim(),
+        weekStartDate: String(data?.weekStartDate || '').trim(),
+        weekEndingDate: String(data?.weekEndingDate || '').trim(),
+        status: String(data?.status || 'draft').trim() || 'draft',
+        createdByUid: String(data?.createdByUid || '').trim(),
+        submittedAt: null,
+        employeeRosterId: String(data?.employeeRosterId || '').trim(),
+        employeeNumber: String(data?.employeeNumber || '').trim(),
+        employeeName: String(data?.employeeName || '').trim(),
+        firstName: String(data?.firstName || '').trim(),
+        lastName: String(data?.lastName || '').trim(),
+        occupation: String(data?.occupation || '').trim(),
+        employeeWage: null,
+        productionBurden: null,
+        subcontractedEmployee: data?.subcontractedEmployee === true,
+        regularHoursOverride: data?.regularHoursOverride ?? null,
+        overtimeHoursOverride: data?.overtimeHoursOverride ?? null,
+        footerJobOrGl: String(data?.footerJobOrGl || '').trim(),
+        footerAccount: String(data?.footerAccount || '').trim(),
+        footerOffice: String(data?.footerOffice || '').trim(),
+        footerAmount: String(data?.footerAmount || '').trim(),
+        jobs: Array.isArray(data?.jobs) ? data.jobs : [],
+        days: Array.isArray(data?.days) ? data.days : [],
+        totals: data?.totals ?? { hours: [], production: [], hoursTotal: 0, productionTotal: 0, lineTotal: 0 },
+        notes: String(data?.notes || '').trim(),
+        archived: data?.archived === true,
+    };
+}
+async function ensureForemanWorkspaceTimecards(jobId, weekEndingDate) {
+    const rosterSnap = await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('roster').get();
+    const rosterDocs = rosterSnap.docs
+        .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }))
+        .filter((entry) => entry.data?.active !== false);
+    const timecardsSnap = await db
+        .collection(constants_1.COLLECTIONS.JOBS)
+        .doc(jobId)
+        .collection('timecards')
+        .where('weekEndingDate', '==', weekEndingDate)
+        .where('archived', '==', false)
+        .get();
+    const existingTimecards = timecardsSnap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+    const existingByRosterId = new Set(existingTimecards
+        .map((entry) => String(entry.data?.employeeRosterId || '').trim())
+        .filter(Boolean));
+    const jobSnap = await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).get();
+    const productionBurden = normalizeProductionBurden(jobSnap.data()?.productionBurden);
+    const weekStartDate = getWeekStartFromWeekEnding(weekEndingDate);
+    const weekDates = buildWeekDatesList(weekStartDate);
+    const emptyDays = weekDates.map((date, index) => createEmptyWorkbookDay(date, index));
+    for (const rosterEntry of rosterDocs) {
+        const rosterEmployeeId = String(rosterEntry.id || '').trim();
+        if (!rosterEmployeeId || existingByRosterId.has(rosterEmployeeId))
+            continue;
+        await db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('timecards').add({
+            jobId,
+            weekStartDate,
+            weekEndingDate,
+            status: 'draft',
+            uid: '',
+            createdByUid: '',
+            submittedAt: null,
+            employeeRosterId: rosterEmployeeId,
+            employeeNumber: String(rosterEntry.data?.employeeNumber || '').trim(),
+            employeeName: `${String(rosterEntry.data?.firstName || '').trim()} ${String(rosterEntry.data?.lastName || '').trim()}`.trim(),
+            firstName: String(rosterEntry.data?.firstName || '').trim(),
+            lastName: String(rosterEntry.data?.lastName || '').trim(),
+            occupation: String(rosterEntry.data?.occupation || '').trim(),
+            employeeWage: rosterEntry.data?.wageRate ?? null,
+            productionBurden,
+            subcontractedEmployee: !!rosterEntry.data?.contractor,
+            regularHoursOverride: null,
+            overtimeHoursOverride: null,
+            footerJobOrGl: '',
+            footerAccount: '',
+            footerOffice: '',
+            footerAmount: '',
+            jobs: [],
+            days: emptyDays,
+            totals: {
+                hours: Array(7).fill(0),
+                production: Array(7).fill(0),
+                hoursTotal: 0,
+                productionTotal: 0,
+                lineTotal: 0,
+            },
+            notes: '',
+            archived: false,
+            archivedAt: null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    }
+    const refreshedTimecardsSnap = await db
+        .collection(constants_1.COLLECTIONS.JOBS)
+        .doc(jobId)
+        .collection('timecards')
+        .where('weekEndingDate', '==', weekEndingDate)
+        .where('archived', '==', false)
+        .get();
+    const rosterEmployees = sortTimecardStaffingEmployeesByName(rosterDocs.map((entry) => sanitizeRosterEmployeeForForeman(entry.id, entry.data)));
+    const timecards = refreshedTimecardsSnap.docs
+        .map((docSnap) => sanitizeTimecardForForeman(docSnap.id, docSnap.data()))
+        .sort((a, b) => String(a.employeeNumber || '').localeCompare(String(b.employeeNumber || '')));
+    return {
+        rosterEmployees,
+        timecards,
+    };
 }
 function validatePdfCsvHourParity(timecards) {
     const mismatches = [];
@@ -1169,6 +1457,257 @@ async function queryControllerTimecards(filters) {
  * List filtered weekly timecards across jobs for controller review.
  * Access: admin and controller roles
  */
+exports.listTimecardStaffingEmployees = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    const jobId = String(request.data?.jobId || '').trim();
+    if (!jobId) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
+    }
+    const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
+    assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can manage timecard staffing');
+    try {
+        const employeesSnap = await db.collection('employees').where('active', '==', true).get();
+        const employees = sortTimecardStaffingEmployeesByName(employeesSnap.docs
+            .map((docSnap) => normalizeTimecardStaffingEmployee(docSnap.id, docSnap.data()))
+            .filter((employee) => employee.employeeNumber.length > 0));
+        return {
+            success: true,
+            employees,
+        };
+    }
+    catch (error) {
+        console.error('[listTimecardStaffingEmployees] Error', { jobId, error });
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to load employees');
+    }
+});
+exports.addEmployeeToTimecardRoster = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    const jobId = String(request.data?.jobId || '').trim();
+    const employeeId = String(request.data?.employeeId || '').trim();
+    if (!jobId) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
+    }
+    if (!employeeId) {
+        throw new https_2.HttpsError('invalid-argument', 'employeeId is required');
+    }
+    const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
+    assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can manage timecard staffing');
+    try {
+        const employeeRef = db.collection('employees').doc(employeeId);
+        const employeeSnap = await employeeRef.get();
+        if (!employeeSnap.exists) {
+            throw new https_2.HttpsError('not-found', 'Employee not found');
+        }
+        const employeeData = employeeSnap.data() || {};
+        const employee = normalizeTimecardStaffingEmployee(employeeSnap.id, employeeData);
+        if (!employee.active) {
+            throw new https_2.HttpsError('failed-precondition', 'Employee is inactive');
+        }
+        if (!employee.employeeNumber) {
+            throw new https_2.HttpsError('failed-precondition', 'Employee is missing an employee number');
+        }
+        const rosterCollection = db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('roster');
+        const existingSnap = await rosterCollection.where('employeeNumber', '==', employee.employeeNumber).limit(1).get();
+        const existingDoc = existingSnap.docs[0];
+        if (existingDoc) {
+            const existingData = existingDoc.data() || {};
+            if (existingData.active === true) {
+                throw new https_2.HttpsError('already-exists', 'Employee is already active on this job');
+            }
+            await existingDoc.ref.update({
+                employeeNumber: employee.employeeNumber,
+                firstName: employee.firstName,
+                lastName: employee.lastName,
+                occupation: employee.occupation,
+                wageRate: employeeData.wageRate ?? null,
+                unitCost: null,
+                contractor: admin.firestore.FieldValue.delete(),
+                active: true,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                addedByUid: request.auth.uid,
+            });
+            return {
+                success: true,
+                action: 'reactivated',
+                rosterEmployeeId: existingDoc.id,
+                employee,
+            };
+        }
+        const createdRef = await rosterCollection.add({
+            jobId,
+            employeeNumber: employee.employeeNumber,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            occupation: employee.occupation,
+            wageRate: employeeData.wageRate ?? null,
+            unitCost: null,
+            active: true,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            addedByUid: request.auth.uid,
+        });
+        return {
+            success: true,
+            action: 'added',
+            rosterEmployeeId: createdRef.id,
+            employee,
+        };
+    }
+    catch (error) {
+        console.error('[addEmployeeToTimecardRoster] Error', { jobId, employeeId, error });
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to add employee to roster');
+    }
+});
+exports.getForemanTimecardWorkspace = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    const callerUid = request.auth.uid;
+    const jobId = String(request.data?.jobId || '').trim();
+    const weekEndingDate = String(request.data?.weekEndingDate || '').trim();
+    if (!jobId) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
+    }
+    if (!weekEndingDate) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.WEEK_START_REQUIRED);
+    }
+    const user = await (0, firestoreService_1.getUserProfile)(callerUid);
+    assertActiveRoleUser(user, ['foreman'], 'Only active foremen can load the foreman timecard workspace');
+    assertAdminOrAssignedForeman(user, jobId, 'Only assigned foremen can load this timecard workspace');
+    try {
+        const workspace = await ensureForemanWorkspaceTimecards(jobId, weekEndingDate);
+        return {
+            success: true,
+            rosterEmployees: workspace.rosterEmployees,
+            timecards: workspace.timecards,
+        };
+    }
+    catch (error) {
+        console.error('[getForemanTimecardWorkspace] Error', { jobId, weekEndingDate, error });
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to load timecard workspace');
+    }
+});
+exports.saveForemanTimecard = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    const callerUid = request.auth.uid;
+    const jobId = String(request.data?.jobId || '').trim();
+    const timecardId = String(request.data?.timecardId || '').trim();
+    if (!jobId) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
+    }
+    if (!timecardId) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.TIMECARD_ID_REQUIRED);
+    }
+    const user = await (0, firestoreService_1.getUserProfile)(callerUid);
+    assertActiveRoleUser(user, ['foreman'], 'Only active foremen can update foreman timecards');
+    assertAdminOrAssignedForeman(user, jobId, 'Only assigned foremen can update this timecard');
+    try {
+        const timecardRef = db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('timecards').doc(timecardId);
+        const timecardSnap = await timecardRef.get();
+        if (!timecardSnap.exists) {
+            throw new https_2.HttpsError('not-found', constants_1.ERROR_MESSAGES.TIMECARD_NOT_FOUND);
+        }
+        const existing = timecardSnap.data() || {};
+        if (String(existing.status || 'draft') !== 'draft') {
+            throw new https_2.HttpsError('failed-precondition', 'Submitted timecards cannot be changed by foremen');
+        }
+        const nextNotes = String(request.data?.notes ?? existing.notes ?? '').trim();
+        const nextFooterJobOrGl = String(request.data?.footerJobOrGl ?? existing.footerJobOrGl ?? '').trim();
+        const nextFooterAccount = String(request.data?.footerAccount ?? existing.footerAccount ?? '').trim();
+        const nextFooterOffice = String(request.data?.footerOffice ?? existing.footerOffice ?? '').trim();
+        const nextFooterAmount = String(request.data?.footerAmount ?? existing.footerAmount ?? '').trim();
+        const incomingJobs = Array.isArray(request.data?.jobs) ? request.data.jobs : existing.jobs;
+        const recalculated = recalculateWorkbookTimecardDocument(existing, incomingJobs);
+        await timecardRef.update({
+            jobs: recalculated.jobs,
+            days: recalculated.days,
+            totals: recalculated.totals,
+            notes: nextNotes,
+            footerJobOrGl: nextFooterJobOrGl,
+            footerAccount: nextFooterAccount,
+            footerOffice: nextFooterOffice,
+            footerAmount: nextFooterAmount,
+            uid: callerUid,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        const updatedSnap = await timecardRef.get();
+        return {
+            success: true,
+            timecard: sanitizeTimecardForForeman(updatedSnap.id, updatedSnap.data()),
+        };
+    }
+    catch (error) {
+        console.error('[saveForemanTimecard] Error', { jobId, timecardId, error });
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to save timecard');
+    }
+});
+exports.submitForemanTimecardsForWeek = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    const callerUid = request.auth.uid;
+    const jobId = String(request.data?.jobId || '').trim();
+    const weekEndingDate = String(request.data?.weekEndingDate || '').trim();
+    if (!jobId) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
+    }
+    if (!weekEndingDate) {
+        throw new https_2.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.WEEK_START_REQUIRED);
+    }
+    const user = await (0, firestoreService_1.getUserProfile)(callerUid);
+    assertActiveRoleUser(user, ['foreman'], 'Only active foremen can submit foreman timecards');
+    assertAdminOrAssignedForeman(user, jobId, 'Only assigned foremen can submit this job timecards');
+    try {
+        await ensureForemanWorkspaceTimecards(jobId, weekEndingDate);
+        const timecardsSnap = await db
+            .collection(constants_1.COLLECTIONS.JOBS)
+            .doc(jobId)
+            .collection('timecards')
+            .where('weekEndingDate', '==', weekEndingDate)
+            .where('archived', '==', false)
+            .where('status', '==', 'draft')
+            .get();
+        const submittedIds = [];
+        const batch = db.batch();
+        timecardsSnap.docs.forEach((docSnap) => {
+            submittedIds.push(docSnap.id);
+            batch.update(docSnap.ref, {
+                uid: callerUid,
+                status: 'submitted',
+                submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        });
+        if (submittedIds.length) {
+            await batch.commit();
+        }
+        return {
+            success: true,
+            count: submittedIds.length,
+            submittedIds,
+        };
+    }
+    catch (error) {
+        console.error('[submitForemanTimecardsForWeek] Error', { jobId, weekEndingDate, error });
+        if (error instanceof https_2.HttpsError)
+            throw error;
+        throw new https_2.HttpsError('internal', error?.message || 'Failed to submit timecards');
+    }
+});
 exports.listTimecardsForWeek = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
@@ -1984,8 +2523,11 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
             console.log('[sendShopOrderEmail] Email sending disabled. Skipping send.');
             return { success: true, message: 'Email sending disabled. Skipped.' };
         }
+        const requestedRecipients = Array.isArray(request.data?.recipients)
+            ? request.data.recipients
+            : [];
         const settings = await (0, firestoreService_1.getEmailSettings)();
-        const recipients = normalizeRecipients(settings.shopOrderSubmitRecipients);
+        const recipients = normalizeRecipients(requestedRecipients, settings.shopOrderSubmitRecipients);
         if (!recipients.length) {
             throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
@@ -2007,7 +2549,8 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: [graphClientId, grap
             throw new https_2.HttpsError('permission-denied', 'Shop order does not belong to the requested job');
         }
         const job = await (0, firestoreService_1.getJobDetails)(resolvedJobId || jobId);
-        const emailHtml = (0, emailService_1.buildShopOrderEmail)(order);
+        const costCodesByCatalogItemId = await getShopOrderCostCodesByCatalogItemId(order?.items);
+        const emailHtml = (0, emailService_1.buildShopOrderEmail)(order, costCodesByCatalogItemId);
         const orderDateLabel = formatEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
         await (0, emailService_1.sendEmail)({
             to: recipients,

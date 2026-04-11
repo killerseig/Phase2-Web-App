@@ -21,7 +21,7 @@ const baseJob: Job = {
   cip: '2445',
   kjic: 'Yes',
   accountNumber: null,
-  type: 'general',
+  type: 'drywall',
   active: true,
   assignedForemanIds: ['foreman-1'],
   timecardStatus: 'pending',

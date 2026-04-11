@@ -8,7 +8,7 @@ import type { Job } from '@/services'
 import { createJobForm } from '@/types/adminJobs'
 
 const foremanOptions = [
-  { value: 'Pat Foreman', label: 'Pat Foreman' },
+  { value: 'foreman-1', label: 'Pat Foreman' },
 ] as const
 
 const baseJob: Job = {
@@ -26,7 +26,7 @@ const baseJob: Job = {
   cip: '2445',
   kjic: 'Yes',
   accountNumber: null,
-  type: 'general',
+  type: 'drywall',
   active: true,
   timecardStatus: 'pending',
   timecardPeriodEndDate: '2026-04-04',
@@ -109,7 +109,7 @@ describe('admin jobs section components', () => {
             name: baseJob.name,
             code: baseJob.code ?? '',
             projectManager: baseJob.projectManager ?? '',
-            foreman: baseJob.foreman ?? '',
+            foreman: 'foreman-1',
             gc: baseJob.gc ?? '',
             jobAddress: baseJob.jobAddress ?? '',
             startDate: baseJob.startDate ?? '',

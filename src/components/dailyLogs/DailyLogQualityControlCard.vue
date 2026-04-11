@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import AttachmentGallery from '@/components/common/AttachmentGallery.vue'
 import AppSectionCard from '@/components/common/AppSectionCard.vue'
 import BaseFileUploadField from '@/components/common/BaseFileUploadField.vue'
+import BaseInputField from '@/components/common/BaseInputField.vue'
 import DailyLogTextField from '@/components/dailyLogs/DailyLogTextField.vue'
 import type { Attachment } from '@/types/documents'
 
@@ -11,6 +12,7 @@ const props = defineProps<{
   canEdit: boolean
   uploading: boolean
   fileName: string
+  qcPhotoDescription: string
   qcAssignedTo: string
   qcAreasInspected: string
   qcIssuesIdentified: string
@@ -22,6 +24,7 @@ const emit = defineEmits<{
   (e: 'update:qcAreasInspected', value: string): void
   (e: 'update:qcIssuesIdentified', value: string): void
   (e: 'update:qcIssuesResolved', value: string): void
+  (e: 'update:qcPhotoDescription', value: string): void
   (e: 'upload', event: Event): void
   (e: 'delete-attachment', path: string): void
 }>()
@@ -78,13 +81,22 @@ function deleteAttachment(path?: string) {
           />
         </div>
         <div class="col-12">
+          <BaseInputField
+            :model-value="qcPhotoDescription"
+            label="QC Photo Description"
+            placeholder="Describe what the QC photo shows"
+            wrapper-class="mb-3"
+            :disabled="!canEdit || uploading"
+            @update:model-value="emit('update:qcPhotoDescription', $event)"
+          />
+
           <BaseFileUploadField
             label="QC Photos"
             icon="bi bi-camera"
             accept="image/*"
             multiple
             wrapper-class="mb-0"
-            :helper-text="fileName"
+            :helper-text="qcPhotoDescription.trim() ? `${fileName} | Description ready` : `${fileName} | Description required before upload`"
             :disabled="!canEdit || uploading"
             @change="handleUpload"
           />

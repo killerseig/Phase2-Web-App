@@ -162,7 +162,7 @@ export function validateCreateUserForm(data: {
 export function validateJobForm(data: {
   name: string
   code?: string | null
-  accountNumber?: string | null
+  type?: string | null
   startDate?: string | null
   finishDate?: string | null
   productionBurden?: string | number | null
@@ -170,26 +170,10 @@ export function validateJobForm(data: {
   const errors: ValidationError[] = []
 
   errors.push(...validateRequired(data.name, 'Job name'))
+  errors.push(...validateRequired(data.type, 'Job type'))
 
-  const code = String(data.code ?? '').trim()
-  const accountNumber = String(data.accountNumber ?? '').trim()
   const startDate = String(data.startDate ?? '').trim()
   const finishDate = String(data.finishDate ?? '').trim()
-
-  if (accountNumber && !/^\d{4}$/.test(accountNumber)) {
-    errors.push({
-      field: 'accountNumber',
-      message: 'Account number must be exactly 4 digits',
-    })
-  }
-
-  const isGlCode = /^\d{3}$/.test(code)
-  if (isGlCode && accountNumber) {
-    errors.push({
-      field: 'accountNumber',
-      message: 'Account number must be blank when using a 3-digit GL code',
-    })
-  }
 
   if (startDate && finishDate && finishDate < startDate) {
     errors.push({

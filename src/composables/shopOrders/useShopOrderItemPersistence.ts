@@ -1,4 +1,4 @@
-import { updateShopOrderItems, type ShopOrderItem } from '@/services'
+import { updateShopOrderItems, type ShopOrderItem, type ShopOrderStatus } from '@/services'
 import { useToast } from '@/composables/useToast'
 import { sanitizeShopOrderItems } from '@/utils/shopOrderItems'
 import { logError } from '@/utils/logger'
@@ -9,10 +9,11 @@ type PersistOrderItemsErrorMessage = string | ((error: unknown) => string)
 type RunOptimisticOrderItemUpdateOptions = {
   orderId: string
   nextItems: ShopOrderItem[]
+  nextStatus?: ShopOrderStatus
   successMessage?: string
   errorMessage: PersistOrderItemsErrorMessage
   logMessage: string
-  onRollback?: (previousItems: ShopOrderItem[], error: unknown) => void
+  onRollback?: (previousItems: ShopOrderItem[], previousStatus: ShopOrderStatus, error: unknown) => void
 }
 
 export function useShopOrderItemPersistence(options: UseShopOrderMutationsOptions) {
@@ -26,10 +27,21 @@ export function useShopOrderItemPersistence(options: UseShopOrderMutationsOption
     return cloneItems(order?.items ?? [])
   }
 
+  const getOrderStatus = (orderId: string): ShopOrderStatus => {
+    const order = options.orders.value.find((entry) => entry.id === orderId)
+    return order?.status ?? 'draft'
+  }
+
   const setOrderItems = (orderId: string, items: ShopOrderItem[]) => {
     const order = options.orders.value.find((entry) => entry.id === orderId)
     if (!order) return
     order.items = cloneItems(items)
+  }
+
+  const setOrderStatus = (orderId: string, status: ShopOrderStatus) => {
+    const order = options.orders.value.find((entry) => entry.id === orderId)
+    if (!order) return
+    order.status = status
   }
 
   const queuePersistItems = (task: () => Promise<void>) => {
@@ -38,24 +50,42 @@ export function useShopOrderItemPersistence(options: UseShopOrderMutationsOption
     return nextTask
   }
 
-  const persistItems = (orderId: string, items: ShopOrderItem[]) =>
+  const persistItems = (
+    orderId: string,
+    items: ShopOrderItem[],
+    updates: {
+      status?: ShopOrderStatus
+    } = {},
+  ) =>
     queuePersistItems(async () => {
-      await updateShopOrderItems(options.jobId.value, orderId, sanitizeShopOrderItems(items))
+      await updateShopOrderItems(
+        options.jobId.value,
+        orderId,
+        sanitizeShopOrderItems(items),
+        updates,
+      )
     })
 
   const runOptimisticItemUpdate = async (config: RunOptimisticOrderItemUpdateOptions) => {
     const previousItems = getOrderItems(config.orderId)
+    const previousStatus = getOrderStatus(config.orderId)
     setOrderItems(config.orderId, config.nextItems)
+    if (config.nextStatus) {
+      setOrderStatus(config.orderId, config.nextStatus)
+    }
 
     try {
-      await persistItems(config.orderId, config.nextItems)
+      await persistItems(config.orderId, config.nextItems, {
+        ...(config.nextStatus ? { status: config.nextStatus } : {}),
+      })
 
       if (config.successMessage) {
         toast.show(config.successMessage, 'success')
       }
     } catch (error) {
       setOrderItems(config.orderId, previousItems)
-      config.onRollback?.(previousItems, error)
+      setOrderStatus(config.orderId, previousStatus)
+      config.onRollback?.(previousItems, previousStatus, error)
       logError('ShopOrders', config.logMessage, error)
 
       const errorMessage = typeof config.errorMessage === 'function'
@@ -68,6 +98,7 @@ export function useShopOrderItemPersistence(options: UseShopOrderMutationsOption
   return {
     cloneItems,
     setOrderItems,
+    setOrderStatus,
     persistItems,
     runOptimisticItemUpdate,
   }

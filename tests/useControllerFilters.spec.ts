@@ -4,8 +4,8 @@ import { useControllerFilters } from '@/composables/useControllerFilters'
 import type { Job } from '@/types/models'
 
 const jobs = ref<Job[]>([
-  { id: 'job-2', name: 'Bravo', code: '200', type: 'general', active: true },
-  { id: 'job-1', name: 'Alpha', code: '100', type: 'general', active: true },
+  { id: 'job-2', name: 'Bravo', code: '200', type: 'drywall', active: true },
+  { id: 'job-1', name: 'Alpha', code: '100', type: 'paint', active: true },
 ])
 
 describe('useControllerFilters', () => {

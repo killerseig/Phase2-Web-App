@@ -54,7 +54,7 @@ const getLineKey = (line: ManpowerLine, idx: number): string => {
                   <th class="small fw-semibold col-trade">Trade</th>
                   <th class="small fw-semibold text-center col-count">Count</th>
                   <th class="small fw-semibold col-areas">Areas</th>
-                  <th class="text-center col-actions">Actions</th>
+                  <th class="text-center col-actions" aria-label="Row actions"></th>
                 </tr>
               </thead>
               <tbody>

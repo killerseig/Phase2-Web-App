@@ -36,6 +36,9 @@ export function useDailyLogAttachments({
   const photoFileName = ref(DEFAULT_FILE_NAME)
   const ptpFileName = ref(DEFAULT_FILE_NAME)
   const qcFileName = ref(DEFAULT_FILE_NAME)
+  const photoDescription = ref('')
+  const ptpPhotoNote = ref('')
+  const qcDescription = ref('')
 
   const setFileName = (type: FilePickerType, label = DEFAULT_FILE_NAME) => {
     if (type === 'photo') photoFileName.value = label
@@ -49,10 +52,53 @@ export function useDailyLogAttachments({
     qcFileName.value = DEFAULT_FILE_NAME
   }
 
+  const resetUploadMetadata = () => {
+    photoDescription.value = ''
+    ptpPhotoNote.value = ''
+    qcDescription.value = ''
+  }
+
   const uploadLabel = (type: AttachmentUploadType) => {
     if (type === 'ptp') return 'PTP Photo'
     if (type === 'qc') return 'QC Photo'
     return 'Photo'
+  }
+
+  const descriptionLabel = (type: AttachmentUploadType) => {
+    if (type === 'ptp') return 'note'
+    return 'description'
+  }
+
+  const getUploadDescription = (type: AttachmentUploadType) => {
+    if (type === 'ptp') return ptpPhotoNote.value.trim()
+    if (type === 'qc') return qcDescription.value.trim()
+    return photoDescription.value.trim()
+  }
+
+  const clearUploadDescription = (type: AttachmentUploadType) => {
+    if (type === 'ptp') {
+      ptpPhotoNote.value = ''
+      return
+    }
+    if (type === 'qc') {
+      qcDescription.value = ''
+      return
+    }
+    photoDescription.value = ''
+  }
+
+  const requiresDescription = (type: AttachmentUploadType) => type === 'photo' || type === 'qc'
+
+  function updateUploadDescription(type: FilePickerType, value: string) {
+    if (type === 'ptp') {
+      ptpPhotoNote.value = value
+      return
+    }
+    if (type === 'qc') {
+      qcDescription.value = value
+      return
+    }
+    photoDescription.value = value
   }
 
   const uploadAttachment = async (files: File[], type: AttachmentUploadType) => {
@@ -66,10 +112,17 @@ export function useDailyLogAttachments({
       return
     }
 
+    const description = getUploadDescription(type)
+    if (requiresDescription(type) && !description) {
+      toast.show(`Add a ${descriptionLabel(type)} before uploading ${uploadLabel(type).toLowerCase()}`, 'warning')
+      return
+    }
+
     const maxSize = 10 * 1024 * 1024
 
     uploading.value = true
     try {
+      let uploadedCount = 0
       for (const file of files) {
         if (file.size > maxSize) {
           toast.show('File size must be less than 10MB', 'error')
@@ -80,11 +133,16 @@ export function useDailyLogAttachments({
           continue
         }
 
-        const attachment = await uploadPhotoToStorage(file, jobId.value, currentId.value, type)
+        const attachment = await uploadPhotoToStorage(file, jobId.value, currentId.value, type, description)
         if (!form.value.attachments) form.value.attachments = []
         form.value.attachments.push(attachment)
         await updateDailyLog(jobId.value, currentId.value, { ...form.value })
         toast.show(`${uploadLabel(type)} uploaded: ${file.name}`, 'success')
+        uploadedCount += 1
+      }
+
+      if (uploadedCount > 0) {
+        clearUploadDescription(type)
       }
     } catch (error) {
       logError('DailyLogs', 'Upload attachment failed', error)
@@ -138,8 +196,13 @@ export function useDailyLogAttachments({
     photoFileName,
     ptpFileName,
     qcFileName,
+    photoDescription,
+    ptpPhotoNote,
+    qcDescription,
     resetFileNames,
+    resetUploadMetadata,
     handleFileChange,
+    updateUploadDescription,
     deleteAttachment,
   }
 }

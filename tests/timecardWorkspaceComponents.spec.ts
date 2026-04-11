@@ -22,9 +22,28 @@ describe('timecard workspace components', () => {
         ],
         selectedEmployeeId: 'roster-1',
         searchTerm: '',
+        staffingOptions: [
+          { id: 'directory-1', label: 'Mateo Silva | #9001 | Laborer' },
+        ],
+        staffingError: '',
+        staffingLoading: false,
+        selectedStaffingEmployeeId: '',
+        selectedStaffingEmployee: {
+          id: 'directory-1',
+          employeeNumber: '9001',
+          firstName: 'Mateo',
+          lastName: 'Silva',
+          occupation: 'Laborer',
+          active: true,
+        },
+        addingStaffingEmployee: false,
       },
       global: {
         stubs: {
+          AppAlert: {
+            props: ['message'],
+            template: '<div class="alert-stub">{{ message }}</div>',
+          },
           AppListCard: {
             template: '<div><slot /></div>',
           },
@@ -32,6 +51,11 @@ describe('timecard workspace components', () => {
             props: ['modelValue'],
             emits: ['update:modelValue'],
             template: '<input class="search-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+          },
+          SearchSelectField: {
+            props: ['modelValue'],
+            emits: ['update:modelValue'],
+            template: '<input class="staffing-search-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
           },
           AppSelectableListItem: {
             emits: ['activate'],
@@ -52,12 +76,18 @@ describe('timecard workspace components', () => {
       },
     })
 
+    await wrapper.get('.staffing-search-stub').setValue('directory-1')
+    await wrapper.setProps({ selectedStaffingEmployeeId: 'directory-1' })
+    await wrapper.get('button.btn-outline-primary').trigger('click')
     await wrapper.get('.search-stub').setValue('anselmo')
     await wrapper.get('.list-item-stub').trigger('click')
 
+    expect(wrapper.emitted('update:selectedStaffingEmployeeId')).toEqual([['directory-1']])
+    expect(wrapper.emitted('add-staffing-employee')).toEqual([[]])
     expect(wrapper.emitted('update:searchTerm')).toEqual([['anselmo']])
     expect(wrapper.emitted('select')).toEqual([['roster-1']])
     expect(wrapper.text()).toContain('Sub')
+    expect(wrapper.text()).toContain('Mateo Silva')
   })
 
   it('renders the workspace slots', () => {

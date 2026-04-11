@@ -9,8 +9,10 @@ const baseOrder: ShopOrder = {
   jobId: 'job-1',
   uid: 'scope:employee',
   ownerUid: 'user-1',
+  orderNumber: '24001',
   orderDate: '2026-03-19',
   status: 'draft',
+  requestedDeliveryDate: '',
   items: [{ description: 'Item A', quantity: 1, note: 'Note A' }],
 }
 
@@ -44,6 +46,7 @@ describe('shop order section components', () => {
         categories: [],
         catalogItemQtys: {},
         selectedItemQuantities: {},
+        requestedDeliveryDate: '',
         newItemDescription: '',
         newItemQty: '',
         newItemNote: '',

@@ -37,7 +37,7 @@ export declare function buildTimecardEmail(employeeName: string, weekEnding: str
 /**
  * Build HTML template for shop order email
  */
-export declare function buildShopOrderEmail(order: any): string;
+export declare function buildShopOrderEmail(order: any, costCodesByCatalogItemId?: Record<string, string>): string;
 /**
  * Build HTML template for client secret expiration notification
  */

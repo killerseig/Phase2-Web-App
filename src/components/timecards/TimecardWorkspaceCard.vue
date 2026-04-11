@@ -17,6 +17,8 @@ import {
   getWorkbookJobProductionTotal,
   getWorkbookWeekHoursByDay,
   getWorkbookWeekHoursTotal,
+  getWorkbookWeekProductionByDay,
+  getWorkbookWeekProductionTotal,
 } from '@/utils/timecardWorkbook'
 
 defineOptions({
@@ -33,6 +35,7 @@ const props = withDefaults(defineProps<{
   headerEmployeeNumber?: string
   headerOccupation?: string
   headerEmployeeWage?: string
+  showEmployeeWage?: boolean
   fitToViewport?: boolean
 }>(), {
   headerEditable: false,
@@ -40,6 +43,7 @@ const props = withDefaults(defineProps<{
   headerEmployeeNumber: undefined,
   headerOccupation: undefined,
   headerEmployeeWage: undefined,
+  showEmployeeWage: true,
   fitToViewport: false,
 })
 
@@ -63,6 +67,8 @@ const emit = defineEmits<{
 const workbookLines = computed(() => buildWorkbookTimecardLines(props.timecard))
 const weekHoursByDay = computed(() => getWorkbookWeekHoursByDay(props.timecard))
 const weekHoursTotal = computed(() => getWorkbookWeekHoursTotal(props.timecard))
+const weekProductionByDay = computed(() => getWorkbookWeekProductionByDay(props.timecard))
+const weekProductionTotal = computed(() => getWorkbookWeekProductionTotal(props.timecard))
 const fitContainerRef = ref<HTMLElement | null>(null)
 const fitSheetRef = ref<HTMLElement | null>(null)
 const fitScale = ref(1)
@@ -188,6 +194,14 @@ function getLineProductionTotal(jobIndex: number): number {
 }
 
 function getLineSummaryCost(jobIndex: number): number {
+  const job = workbookLines.value[jobIndex]
+  if (!props.showEmployeeWage) {
+    const totalProduction = getLineProductionTotal(jobIndex)
+    if (totalProduction <= 0) return 0
+    const totalLine = (job?.days ?? []).reduce((sum, day) => sum + Number(day?.lineTotal ?? 0), 0)
+    return totalLine / totalProduction
+  }
+
   return calculateWorkbookSummaryCost(
     props.timecard.employeeWage,
     getLineHoursTotal(jobIndex),
@@ -307,7 +321,10 @@ watch(
           </div>
 
           <div class="timecard-workbook-card__field-row">
-            <div class="timecard-workbook-card__field-main">
+            <div
+              class="timecard-workbook-card__field-main"
+              :class="{ 'timecard-workbook-card__field-main--full': !showEmployeeWage }"
+            >
               <span class="timecard-workbook-card__field-label">OCCUPATION:</span>
               <template v-if="headerEditable">
                 <select
@@ -328,7 +345,7 @@ watch(
               </template>
               <span v-else class="timecard-workbook-card__field-value">{{ timecard.occupation || '-' }}</span>
             </div>
-            <div class="timecard-workbook-card__field-side">
+            <div v-if="showEmployeeWage" class="timecard-workbook-card__field-side">
               <span class="timecard-workbook-card__field-label">Wage</span>
               <template v-if="headerEditable">
                 <BaseTableCellInput
@@ -600,6 +617,23 @@ watch(
                   </td>
                   <td class="timecard-workbook-grid__summary-cell">{{ formatHoursCell(weekHoursTotal) }}</td>
                   <td class="timecard-workbook-grid__blank-cell"></td>
+                  <td class="timecard-workbook-grid__blank-cell"></td>
+                </tr>
+
+                <tr class="timecard-workbook-grid__totals-row">
+                  <td colspan="5" class="timecard-workbook-grid__totals-label">TOTAL PROD</td>
+                  <td
+                    v-for="(productionTotal, index) in weekProductionByDay"
+                    :key="`production-day-total-${index}`"
+                    :class="[
+                      'timecard-workbook-grid__summary-cell',
+                      index < weekProductionByDay.length - 1 ? 'timecard-workbook-grid__dotted-right' : null,
+                    ]"
+                  >
+                    {{ formatTrimmedNumber(productionTotal, 3) }}
+                  </td>
+                  <td class="timecard-workbook-grid__blank-cell"></td>
+                  <td class="timecard-workbook-grid__summary-cell">{{ formatTrimmedNumber(weekProductionTotal, 3) }}</td>
                   <td class="timecard-workbook-grid__blank-cell"></td>
                 </tr>
               </tbody>
