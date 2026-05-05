@@ -1,6 +1,6 @@
 /**
  * Application Constants
- * Centralized configuration for roles, collections, messages, etc.
+ * Centralized configuration for roles, collections, messages, and shared email styling.
  */
 
 // User Roles
@@ -22,26 +22,18 @@ export const COLLECTIONS = {
 export const EMAIL = {
   SUBJECTS: {
     WELCOME: 'Create Your Phase 2 Account Password',
+    PASSWORD_RESET: 'Reset Your Phase 2 Password',
     DAILY_LOG: 'Daily Log Report',
     DAILY_LOG_AUTO: 'Daily Log (Auto-Submitted)',
     TIMECARD: 'Timecard Report',
     SHOP_ORDER: 'Shop Order',
-    SECRET_EXPIRATION: '⚠️ Graph API Secret Expiring Soon - Action Required',
+    SECRET_EXPIRATION: 'Graph API Secret Expiring Soon - Action Required',
   },
-  URLS: {
-    LOGIN: 'https://phase2-website.web.app/login',
-    BRAND_NAME: 'Phase 2',
-  },
-  // Microsoft Graph API Configuration
   GRAPH: {
     SCOPE: 'https://graph.microsoft.com/.default',
     TOKEN_ENDPOINT_TEMPLATE: 'https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token',
-    SEND_MAIL_ENDPOINT: 'https://graph.microsoft.com/v1.0/me/sendMail',
     TOKEN_EXPIRATION_BUFFER_MS: 300000, // 5 minutes before actual expiration
   },
-  SENDER_EMAIL: 'no-reply@phase2co.com',
-  // Secret expiration monitoring
-  SECRET_EXPIRATION_DATE: '2027-02-09', // YYYY-MM-DD format
   SECRET_NOTIFICATION_DAYS: 30,
 } as const
 

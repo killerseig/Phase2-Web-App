@@ -1,93 +1,73 @@
-# Phase2 Web App
+# Phase2 Web Application
 
-Vue 3 + TypeScript + Vite application with Firebase-backed services.
+This template should help get you started developing with Vue 3 in Vite.
 
-## Prerequisites
+## Recommended IDE Setup
 
-- Node.js `>=20.19.0` (project uses Node `22` in CI)
-- npm `>=10`
+[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
 
-## Setup
+## Recommended Browser Setup
 
-1. Install dependencies:
+- Chromium-based browsers (Chrome, Edge, Brave, etc.):
+  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
+  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
+- Firefox:
+  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
+  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
 
-```bash
-npm ci
+## Type Support for `.vue` Imports in TS
+
+TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+
+## Customize configuration
+
+See [Vite Configuration Reference](https://vite.dev/config/).
+
+## Project Setup
+
+```sh
+npm install
 ```
 
-2. Configure environment variables:
+### Compile and Hot-Reload for Development
 
-PowerShell (Windows):
-
-```powershell
-Copy-Item .env.example .env.local
-```
-
-macOS/Linux:
-
-```bash
-cp .env.example .env.local
-```
-
-Populate `.env.local` with your Firebase project values.
-
-3. Start local development:
-
-```bash
+```sh
 npm run dev
 ```
 
-## Quality Commands
+### Type-Check, Compile and Minify for Production
 
-- Type check: `npm run typecheck`
-- ESLint: `npm run lint:vue`
-- Full lint: `npm run lint:all`
-- Unit tests (single run): `npm run test -- --run`
-- Browser smoke tests: `npm run test:e2e`
-- Browser smoke tests (headed): `npm run test:e2e:headed`
-- Production build: `npm run build`
-- Full local CI gate: `npm run check`
+```sh
+npm run build
+```
 
-## Browser Smoke Tests
+### Run Unit Tests with [Vitest](https://vitest.dev/)
 
-Playwright is configured for browser-level smoke coverage under `e2e/` and runs against a seeded local Firebase emulator stack.
+```sh
+npm run test:unit
+```
 
-Prerequisites:
+### Run End-to-End Tests with [Playwright](https://playwright.dev)
 
-- Java runtime on your machine. Firestore emulator will not start without it.
-- First-run emulator downloads are handled by the Firebase CLI and may take a few minutes.
+```sh
+# Install browsers for the first run
+npx playwright install
 
-Commands:
+# When testing on CI, must build the project first
+npm run build
 
-- `npm run test:e2e`
-- `npm run test:e2e:headed`
-- `npm run test:e2e:ui`
+# Runs the end-to-end tests
+npm run test:e2e
+# Runs the tests only on Chromium
+npm run test:e2e -- --project=chromium
+# Runs the tests of a specific file
+npm run test:e2e -- tests/example.spec.ts
+# Runs the tests in debug mode
+npm run test:e2e -- --debug
+```
 
-The E2E stack uses:
+### Lint with [ESLint](https://eslint.org/)
 
-- `firebase emulators:exec` with a demo project id
-- `.env.e2e` for emulator-safe Firebase config
-- deterministic seed data from `e2e/fixtures/seed-data.mjs`
-
-The seeded baseline includes admin, controller, and foreman users plus representative jobs, roster, daily logs, timecards, shop orders, catalog items, and email settings.
-## CI
-
-GitHub Actions runs:
-
-- type checking
-- linting (warning-gated)
-- unit tests
-- production build
-
-Workflow file: `.github/workflows/ci.yml`.
-
-## Firebase Notes
-
-This repo includes Firebase configuration and rules files:
-
-- `firebase.json`
-- `firestore.rules`
-- `firestore.indexes.json`
-- `storage.rules`
-
-Deploy and emulator workflows are managed via Firebase CLI and project-specific credentials.
+```sh
+npm run lint
+```

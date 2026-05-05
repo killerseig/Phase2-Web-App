@@ -10,6 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isEmailEnabled = isEmailEnabled;
 exports.getSenderEmail = getSenderEmail;
 exports.buildWelcomeEmail = buildWelcomeEmail;
+exports.buildPasswordResetEmail = buildPasswordResetEmail;
 exports.buildDailyLogAutoSubmitEmail = buildDailyLogAutoSubmitEmail;
 exports.buildDailyLogEmail = buildDailyLogEmail;
 exports.buildTimecardsEmail = buildTimecardsEmail;
@@ -22,14 +23,8 @@ exports.sendTimecardEmailNotification = sendTimecardEmailNotification;
 exports.sendShopOrderEmailNotification = sendShopOrderEmailNotification;
 exports.sendSecretExpirationWarning = sendSecretExpirationWarning;
 const axios_1 = __importDefault(require("axios"));
-const params_1 = require("firebase-functions/params");
 const constants_1 = require("./constants");
-// Define secrets for Graph API credentials
-const graphClientId = (0, params_1.defineSecret)('GRAPH_CLIENT_ID');
-const graphTenantId = (0, params_1.defineSecret)('GRAPH_TENANT_ID');
-const graphClientSecret = (0, params_1.defineSecret)('GRAPH_CLIENT_SECRET');
-const outlookSenderEmail = (0, params_1.defineSecret)('OUTLOOK_SENDER_EMAIL');
-const emailEnabled = (0, params_1.defineBoolean)('EMAIL_ENABLED', { default: true });
+const functionConfig_1 = require("./functionConfig");
 // Token cache
 let cachedToken = null;
 /**
@@ -42,9 +37,9 @@ async function getGraphAuthToken() {
         return cachedToken.token;
     }
     try {
-        const clientId = graphClientId.value();
-        const tenantId = graphTenantId.value();
-        const clientSecret = graphClientSecret.value();
+        const clientId = functionConfig_1.graphClientId.value();
+        const tenantId = functionConfig_1.graphTenantId.value();
+        const clientSecret = functionConfig_1.graphClientSecret.value();
         console.log('[getGraphAuthToken] Requesting new token from Azure AD');
         const response = await axios_1.default.post(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, new URLSearchParams({
             client_id: clientId,
@@ -77,13 +72,13 @@ async function getGraphAuthToken() {
  * Check if email sending is enabled
  */
 function isEmailEnabled() {
-    return emailEnabled.value();
+    return functionConfig_1.emailEnabled.value();
 }
 /**
  * Get sender email address
  */
 function getSenderEmail() {
-    return outlookSenderEmail.value();
+    return functionConfig_1.outlookSenderEmail.value();
 }
 function displayValue(value) {
     if (value === null || value === undefined)
@@ -125,6 +120,7 @@ function formatAnyDate(value) {
  * Build HTML template for welcome email
  */
 function buildWelcomeEmail(firstName, resetLink) {
+    const appUrl = (0, functionConfig_1.getAppBaseUrl)();
     return `
     ${constants_1.EMAIL_STYLES}
     <div class="email-container">
@@ -147,11 +143,43 @@ function buildWelcomeEmail(firstName, resetLink) {
         </div>
         
         <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
-          <p style="margin: 0; color: #666;"><strong>Or visit us directly:</strong> <a href="https://phase2-website.web.app" style="color: #007bff; text-decoration: none;">https://phase2-website.web.app</a></p>
+          <p style="margin: 0; color: #666;"><strong>Or visit us directly:</strong> <a href="${appUrl}" style="color: #007bff; text-decoration: none;">${appUrl}</a></p>
         </div>
         
         <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not create this account, please ignore this email.</p>
         <p style="color: #999; font-size: 12px;"><strong>Note:</strong> This link expires in 7 days.</p>
+      </div>
+      <div class="footer">
+        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+}
+/**
+ * Build HTML template for password reset email
+ */
+function buildPasswordResetEmail(displayName, resetLink) {
+    const appUrl = (0, functionConfig_1.getAppBaseUrl)();
+    return `
+    ${constants_1.EMAIL_STYLES}
+    <div class="email-container">
+      <div class="header">
+        <h1>Reset Your Password</h1>
+      </div>
+      <div class="content">
+        <p>Hello${displayName ? ` ${displayName}` : ''},</p>
+        <p>We received a request to reset your Phase 2 password.</p>
+        <p>If you made this request, use the button below to choose a new password.</p>
+
+        <div style="margin: 25px 0; text-align: center;">
+          <p style="margin-bottom: 15px;"><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Reset Password</a></p>
+        </div>
+
+        <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
+          <p style="margin: 0; color: #666;"><strong>Need to sign in after resetting?</strong> <a href="${appUrl}/login" style="color: #007bff; text-decoration: none;">Go to Phase 2 Login</a></p>
+        </div>
+
+        <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not request a password reset, you can ignore this email.</p>
       </div>
       <div class="footer">
         <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
@@ -821,7 +849,7 @@ function buildSecretExpirationEmail() {
       </div>
       <div class="content">
         <p style="color: #d32f2f; font-weight: bold;">Your Azure AD client secret is expiring in 30 days.</p>
-        <p><strong>Expiration Date:</strong> ${constants_1.EMAIL.SECRET_EXPIRATION_DATE}</p>
+        <p><strong>Expiration Date:</strong> ${(0, functionConfig_1.getGraphSecretExpirationDate)()}</p>
         <p>To avoid service disruption, please renew your client secret before the expiration date.</p>
         
         <h3>Steps to Renew:</h3>
@@ -875,7 +903,7 @@ async function sendEmail(options) {
         if (invalidEmails.length > 0) {
             throw new Error(`Invalid email addresses: ${invalidEmails.join(', ')}`);
         }
-        const senderEmail = outlookSenderEmail.value();
+        const senderEmail = functionConfig_1.outlookSenderEmail.value();
         console.log(`[sendEmail] Sending email to ${recipients.join(', ')} from ${senderEmail}`);
         console.log(`[sendEmail] Subject: ${options.subject}`);
         // Build Graph API request payload

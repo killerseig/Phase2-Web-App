@@ -1,282 +1,246 @@
-import { db } from '@/firebase'
 import {
-  addDoc,
   collection,
-  deleteDoc,
-  doc,
   onSnapshot,
-  orderBy,
   query,
-  serverTimestamp,
-  updateDoc,
+  where,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore'
-import { assertJobAccess, requireUser } from './serviceGuards'
-import { jobCollectionPath, jobDocumentPath } from './servicePaths'
-import { normalizeError } from './serviceUtils'
-import {
-  deriveShopOrderStatus,
-  normalizeShopOrderRequestedDeliveryDate,
-  sanitizeShopOrderItems,
-} from '@/utils/shopOrderItems'
+import { httpsCallable } from 'firebase/functions'
+import { requireFirebaseServices } from '@/firebase'
+import type { ShopOrderItemRecord, ShopOrderRecord, ShopOrderStatus } from '@/types/domain'
+import { normalizeError } from '@/utils/normalizeError'
 
-export type ShopOrderStatus = 'draft' | 'submitted' | 'partial' | 'backordered' | 'received'
-const LEGACY_FOREMAN_SCOPE_KEY = 'scope:employee'
-
-export type ShopOrderItem = {
-  description: string
-  quantity: number
-  note?: string
-  catalogItemId?: string | null
-  costCode?: string | null
-  receivedQuantity?: number
-  backorderedQuantity?: number
-}
-
-export type ShopOrder = {
-  id: string
+export interface CreateShopOrderInput {
   jobId: string
-  uid: string // Legacy scope marker kept for existing documents and indexes.
-  ownerUid: string // real creator
-  status: ShopOrderStatus
-  orderNumber?: string | null
-  orderDate?: unknown
-  createdAt?: unknown
-  updatedAt?: unknown
-  requestedDeliveryDate?: string | null
-  items: ShopOrderItem[]
+  jobCode: string | null
+  jobName: string | null
+  foremanUserId: string | null
+  foremanName: string | null
+  deliveryDate: string | null
 }
 
-type ShopOrderUpdate = {
-  items?: ShopOrderItem[]
+export interface ShopOrderUpdateInput {
+  deliveryDate?: string | null
+  comments?: string
+  items?: ShopOrderItemRecord[]
   status?: ShopOrderStatus
-  requestedDeliveryDate?: string | null
 }
 
-type ShopOrderSnapshotHandlers = {
-  onUpdate: (orders: ShopOrder[]) => void
-  onError?: (error: Error) => void
+export interface ShopOrderActor {
+  userId: string | null
+  displayName: string | null
 }
 
-function normalizeShopOrderNumber(value: unknown): string | null {
+function toNullableText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length ? value.trim() : null
+}
+
+function toQuantity(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(Math.trunc(value))
+    return value >= 1 ? Math.round(value) : null
   }
 
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    return trimmed.length ? trimmed : null
+  if (typeof value === 'string' && value.trim().length) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 1 ? Math.round(parsed) : null
   }
 
   return null
 }
 
-function buildTimestampShopOrderNumber(value: unknown): string | null {
-  if (!value) return null
+function makeItemId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
 
-  const dateValue = typeof (value as { toDate?: () => Date })?.toDate === 'function'
-    ? (value as { toDate: () => Date }).toDate()
-    : value instanceof Date
-      ? value
-      : new Date(value as string | number)
-
-  if (Number.isNaN(dateValue.getTime())) return null
-
-  return [
-    dateValue.getUTCFullYear(),
-    String(dateValue.getUTCMonth() + 1).padStart(2, '0'),
-    String(dateValue.getUTCDate()).padStart(2, '0'),
-    String(dateValue.getUTCHours()).padStart(2, '0'),
-    String(dateValue.getUTCMinutes()).padStart(2, '0'),
-    String(dateValue.getUTCSeconds()).padStart(2, '0'),
-  ].join('')
+  return `item-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function createShopOrderNumber(date = new Date()): string {
-  return buildTimestampShopOrderNumber(date) ?? String(Date.now())
+function sanitizeShopOrderItem(item: ShopOrderItemRecord): ShopOrderItemRecord {
+  return {
+    id: item.id?.trim() || makeItemId(),
+    sourceType: item.sourceType === 'custom' ? 'custom' : 'catalog',
+    catalogItemId: toNullableText(item.catalogItemId),
+    description: item.description.trim(),
+    quantity: toQuantity(item.quantity),
+    note: item.note.trim(),
+    categoryId: toNullableText(item.categoryId),
+    sku: toNullableText(item.sku),
+  }
 }
 
-export function getShopOrderDisplayNumber(
-  order: Pick<ShopOrder, 'orderNumber' | 'orderDate' | 'createdAt' | 'updatedAt'>
-): string {
-  return (
-    normalizeShopOrderNumber(order.orderNumber)
-    ?? buildTimestampShopOrderNumber(order.orderDate)
-    ?? buildTimestampShopOrderNumber(order.createdAt)
-    ?? buildTimestampShopOrderNumber(order.updatedAt)
-    ?? 'Unnumbered'
-  )
+function sanitizeShopOrderItems(items: ShopOrderItemRecord[]) {
+  return items
+    .map((item) => sanitizeShopOrderItem(item))
+    .filter((item) => item.description.length > 0)
 }
 
-function normalizeShopOrderStatusValue(
-  status: unknown,
-  items: ShopOrderItem[],
-): ShopOrderStatus {
-  const rawStatus = String(status ?? '').trim().toLowerCase()
-
-  if (!rawStatus || rawStatus === 'draft') return 'draft'
-  if (rawStatus === 'receive' || rawStatus === 'received') return 'received'
-
-  const fallbackStatus: Exclude<ShopOrderStatus, 'draft'> =
-    rawStatus === 'partial'
-      ? 'partial'
-      : rawStatus === 'backordered'
-        ? 'backordered'
-        : 'submitted'
-
-  return deriveShopOrderStatus(items, fallbackStatus)
+function normalizeShopOrderItem(data: Record<string, unknown>): ShopOrderItemRecord {
+  return {
+    id: typeof data.id === 'string' && data.id.trim().length ? data.id : makeItemId(),
+    sourceType: data.sourceType === 'custom' ? 'custom' : 'catalog',
+    catalogItemId: toNullableText(data.catalogItemId),
+    description: typeof data.description === 'string' ? data.description.trim() : '',
+    quantity: toQuantity(data.quantity),
+    note: typeof data.note === 'string' ? data.note.trim() : '',
+    categoryId: toNullableText(data.categoryId),
+    sku: toNullableText(data.sku),
+  }
 }
 
-function normalize(id: string, data: DocumentData): ShopOrder {
-  const items = sanitizeShopOrderItems(Array.isArray(data.items) ? data.items : [])
+function toMillis(value: unknown): number {
+  if (typeof (value as { toMillis?: () => number })?.toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis()
+  }
+
+  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().getTime()
+  }
+
+  if (value instanceof Date) {
+    return value.getTime()
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime()
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  return 0
+}
+
+function normalizeShopOrder(id: string, data: DocumentData): ShopOrderRecord {
+  const rawItems = Array.isArray(data.items) ? data.items : []
 
   return {
     id,
-    jobId: data.jobId,
-    uid: data.uid,
-    ownerUid: data.ownerUid ?? '',
-    status: normalizeShopOrderStatusValue(data.status, items),
-    orderNumber: normalizeShopOrderNumber(data.orderNumber),
-    orderDate: data.orderDate,
+    jobId: typeof data.jobId === 'string' ? data.jobId : '',
+    jobCode: toNullableText(data.jobCode),
+    jobName: toNullableText(data.jobName),
+    deliveryDate: toNullableText(data.deliveryDate),
+    status: data.status === 'submitted' ? 'submitted' : 'draft',
+    comments: typeof data.comments === 'string' ? data.comments.trim() : '',
+    foremanUserId: toNullableText(data.foremanUserId),
+    foremanName: toNullableText(data.foremanName),
+    items: rawItems
+      .map((item) => (item && typeof item === 'object' ? normalizeShopOrderItem(item as Record<string, unknown>) : null))
+      .filter((item): item is ShopOrderItemRecord => item !== null && item.description.length > 0),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
-    requestedDeliveryDate: normalizeShopOrderRequestedDeliveryDate(data.requestedDeliveryDate) ?? null,
-    items,
+    submittedAt: data.submittedAt,
   }
 }
 
-/**
- * Create a new draft shop order.
- * The legacy uid field is still written for compatibility with existing data.
- */
-export async function createShopOrder(jobId: string) {
-  try {
-    assertJobAccess(jobId)
-    const u = requireUser()
+function getOrderSortTimestamp(order: ShopOrderRecord) {
+  return toMillis(order.submittedAt) || toMillis(order.updatedAt) || toMillis(order.createdAt)
+}
 
-    // Firebase's addDoc automatically generates a unique document ID
-    // No redundancy checking needed - Firestore ensures uniqueness at the database level
-    const ref = await addDoc(collection(db, ...jobCollectionPath(jobId, 'shop_orders')), {
-      jobId,
-      uid: LEGACY_FOREMAN_SCOPE_KEY,
-      ownerUid: u.uid, // real creator
-      status: 'draft',
-      orderNumber: createShopOrderNumber(),
-      requestedDeliveryDate: null,
-      items: [],
-      orderDate: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+function sortOrders(orders: ShopOrderRecord[]) {
+  return orders
+    .slice()
+    .sort((left, right) => {
+      const rightTimestamp = getOrderSortTimestamp(right)
+      const leftTimestamp = getOrderSortTimestamp(left)
+      if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
+
+      return right.id.localeCompare(left.id)
     })
-
-    return ref.id
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to create shop order'))
-  }
 }
 
 export function subscribeShopOrders(
   jobId: string,
-  handlers: ShopOrderSnapshotHandlers
+  onUpdate: (orders: ShopOrderRecord[]) => void,
+  onError?: (error: unknown) => void,
 ): Unsubscribe {
-  assertJobAccess(jobId)
-  requireUser()
+  const { db } = requireFirebaseServices()
 
-  const q = query(collection(db, ...jobCollectionPath(jobId, 'shop_orders')), orderBy('orderDate', 'desc'))
   return onSnapshot(
-    q,
-    (snap) => {
-      const orders = snap.docs.map((item) => normalize(item.id, item.data()))
-      handlers.onUpdate(orders)
+    query(collection(db, 'shopOrders'), where('jobId', '==', jobId)),
+    (snapshot) => {
+      onUpdate(sortOrders(snapshot.docs.map((item) => normalizeShopOrder(item.id, item.data()))))
     },
-    (err) => {
-      handlers.onError?.(new Error(normalizeError(err, 'Failed to subscribe to shop orders')))
-    }
+    (error) => {
+      onError?.(error)
+    },
   )
 }
 
-/**
- * Update shop order fields
- */
-export async function updateShopOrderDetails(
-  jobId: string,
-  orderId: string,
-  updates: ShopOrderUpdate,
-) {
+export async function createShopOrderRecord(input: CreateShopOrderInput): Promise<string> {
   try {
-    assertJobAccess(jobId)
-    requireUser()
-    const ref = doc(db, ...jobDocumentPath(jobId, 'shop_orders', orderId))
-    const payload: Record<string, unknown> = {
-      updatedAt: serverTimestamp(),
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<CreateShopOrderInput, { id: string }>(
+      functions,
+      'createShopOrderRecordCallable',
+    )
+
+    const result = await callable(input)
+    const id = String(result.data?.id || '').trim()
+    if (!id) {
+      throw new Error('Shop order did not return an id.')
     }
 
-    if ('items' in updates) {
-      payload.items = sanitizeShopOrderItems(updates.items ?? [])
-    }
-
-    if ('status' in updates && updates.status) {
-      payload.status = updates.status
-    }
-
-    if ('requestedDeliveryDate' in updates) {
-      payload.requestedDeliveryDate = normalizeShopOrderRequestedDeliveryDate(
-        updates.requestedDeliveryDate ?? null,
-      ) ?? null
-    }
-
-    await updateDoc(ref, payload)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update shop order'))
+    return id
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to create shop order.'))
   }
 }
 
-/**
- * Update shop order items
- */
-export async function updateShopOrderItems(
-  jobId: string,
+export async function updateShopOrderRecord(
   orderId: string,
-  items: ShopOrderItem[],
-  updates: Omit<ShopOrderUpdate, 'items'> = {},
-) {
-  await updateShopOrderDetails(jobId, orderId, {
-    ...updates,
-    items,
-  })
-}
-
-/**
- * Update shop order status
- */
-export async function updateShopOrderStatus(
-  jobId: string,
-  orderId: string,
-  status: ShopOrderStatus,
-) {
-  await updateShopOrderDetails(jobId, orderId, { status })
-}
-
-export async function updateShopOrderRequestedDeliveryDate(
-  jobId: string,
-  orderId: string,
-  requestedDeliveryDate: string | null,
-) {
+  input: ShopOrderUpdateInput,
+  actor?: ShopOrderActor,
+): Promise<void> {
   try {
-    await updateShopOrderDetails(jobId, orderId, { requestedDeliveryDate })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update requested delivery date'))
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<
+      {
+        orderId: string
+        deliveryDate?: string | null
+        comments?: string
+        items?: ShopOrderItemRecord[]
+        status?: ShopOrderStatus
+        actor?: ShopOrderActor
+      },
+      { success: boolean }
+    >(functions, 'updateShopOrderRecordCallable')
+
+    await callable({
+      orderId,
+      ...('deliveryDate' in input ? { deliveryDate: input.deliveryDate } : {}),
+      ...('comments' in input ? { comments: input.comments } : {}),
+      ...('items' in input && input.items ? { items: sanitizeShopOrderItems(input.items) } : {}),
+      ...('status' in input && input.status ? { status: input.status } : {}),
+      ...(actor ? { actor } : {}),
+    })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to update shop order.'))
   }
 }
 
-export async function deleteShopOrder(jobId: string, orderId: string) {
+export async function deleteShopOrderRecord(orderId: string): Promise<void> {
   try {
-    assertJobAccess(jobId)
-    requireUser()
-    const ref = doc(db, ...jobDocumentPath(jobId, 'shop_orders', orderId))
-    await deleteDoc(ref)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to delete shop order'))
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<{ orderId: string }, { success: boolean }>(
+      functions,
+      'deleteShopOrderRecordCallable',
+    )
+    await callable({ orderId })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to delete shop order.'))
+  }
+}
+
+export async function sendShopOrderSubmissionEmail(jobId: string, shopOrderId: string): Promise<void> {
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<
+      { jobId: string; shopOrderId: string },
+      { success: boolean; message?: string }
+    >(functions, 'sendShopOrderEmail')
+
+    await callable({ jobId, shopOrderId })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Shop order was submitted, but the email could not be sent.'))
   }
 }

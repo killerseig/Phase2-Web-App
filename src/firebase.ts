@@ -1,8 +1,8 @@
-import { initializeApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
-import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
-import { connectStorageEmulator, getStorage } from 'firebase/storage'
+import { initializeApp, type FirebaseApp } from 'firebase/app'
+import { getAuth, type Auth } from 'firebase/auth'
+import { getFirestore, type Firestore } from 'firebase/firestore'
+import { getFunctions, type Functions } from 'firebase/functions'
+import { getStorage, type FirebaseStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,39 +13,55 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-const app = initializeApp(firebaseConfig)
+export const hasFirebaseConfig = [
+  firebaseConfig.apiKey,
+  firebaseConfig.authDomain,
+  firebaseConfig.projectId,
+  firebaseConfig.storageBucket,
+  firebaseConfig.messagingSenderId,
+  firebaseConfig.appId,
+].every(Boolean)
 
-export const auth = getAuth(app)
-export const db = getFirestore(app)
-export const functions = getFunctions(app, 'us-central1')
-export const storage = getStorage(app)
+let app: FirebaseApp | null = null
+let auth: Auth | null = null
+let db: Firestore | null = null
+let functions: Functions | null = null
+let storage: FirebaseStorage | null = null
 
-export const isUsingFirebaseEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true'
+function initializeFirebaseServices() {
+  if (!hasFirebaseConfig) {
+    return {
+      app: null,
+      auth: null,
+      db: null,
+      functions: null,
+      storage: null,
+    }
+  }
 
-const parsePort = (value: string | undefined, fallback: number): number => {
-  const numeric = Number(value)
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback
+  if (app && auth && db && functions && storage) {
+    return { app, auth, db, functions, storage }
+  }
+
+  app = initializeApp(firebaseConfig)
+  auth = getAuth(app)
+  db = getFirestore(app)
+  functions = getFunctions(app, 'us-central1')
+  storage = getStorage(app)
+
+  return { app, auth, db, functions, storage }
 }
 
-if (isUsingFirebaseEmulators) {
-  const globalScope = globalThis as typeof globalThis & {
-    __phase2FirebaseEmulatorsConnected__?: boolean
+export function getFirebaseServices() {
+  return initializeFirebaseServices()
+}
+
+export function requireFirebaseServices() {
+  const services = initializeFirebaseServices()
+
+  if (!services.app || !services.auth || !services.db || !services.functions || !services.storage) {
+    throw new Error('Firebase config is missing. Copy the v1 VITE_FIREBASE_* values into .env.local.')
   }
 
-  if (!globalScope.__phase2FirebaseEmulatorsConnected__) {
-    const authUrl = import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL || 'http://127.0.0.1:9099'
-    const firestoreHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST || '127.0.0.1'
-    const firestorePort = parsePort(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT, 8080)
-    const functionsHost = import.meta.env.VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST || '127.0.0.1'
-    const functionsPort = parsePort(import.meta.env.VITE_FIREBASE_FUNCTIONS_EMULATOR_PORT, 5001)
-    const storageHost = import.meta.env.VITE_FIREBASE_STORAGE_EMULATOR_HOST || '127.0.0.1'
-    const storagePort = parsePort(import.meta.env.VITE_FIREBASE_STORAGE_EMULATOR_PORT, 9199)
-
-    connectAuthEmulator(auth, authUrl, { disableWarnings: true })
-    connectFirestoreEmulator(db, firestoreHost, firestorePort)
-    connectFunctionsEmulator(functions, functionsHost, functionsPort)
-    connectStorageEmulator(storage, storageHost, storagePort)
-
-    globalScope.__phase2FirebaseEmulatorsConnected__ = true
-  }
+  return services
 }

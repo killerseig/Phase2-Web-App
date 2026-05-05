@@ -32,65 +32,74 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return activeAppUser() && userRole() == 'admin';
+      return activeAppUser() && userRole() in ['admin', 'controller'];
     }
 
-    function dailyLogDoc(jobId, logId) {
-      return jobId != null
-        ? firestore.get(/databases/(default)/documents/jobs/$(jobId)/dailyLogs/$(logId))
-        : null;
+    function dailyLogDoc(logId) {
+      return firestore.get(/databases/(default)/documents/dailyLogs/$(logId));
     }
 
-    function dailyLogExists(jobId, logId) {
-      return dailyLogDoc(jobId, logId) != null && dailyLogDoc(jobId, logId).data != null;
+    function dailyLogExists(logId) {
+      return dailyLogDoc(logId) != null && dailyLogDoc(logId).data != null;
     }
 
-    function canAccessDailyLog(jobId, logId) {
+    function dailyLogOwnerUid(logId) {
+      return dailyLogExists(logId) ? dailyLogDoc(logId).data.foremanUserId : null;
+    }
+
+    function dailyLogStatus(logId) {
+      return dailyLogExists(logId) ? dailyLogDoc(logId).data.status : null;
+    }
+
+    function dailyLogJobId(logId) {
+      return dailyLogExists(logId) ? dailyLogDoc(logId).data.jobId : null;
+    }
+
+    function canReadDailyLogAttachment(logId) {
       return activeAppUser() &&
-             dailyLogExists(jobId, logId) &&
-             (isAdmin() || dailyLogDoc(jobId, logId).data.uid == request.auth.uid);
+             dailyLogExists(logId) &&
+             (
+               isAdmin() ||
+               dailyLogOwnerUid(logId) == request.auth.uid
+             );
     }
 
-    function canMutateDailyLogAttachment(jobId, logId) {
+    function canCreateDailyLogAttachment(logId) {
       return activeAppUser() &&
-             dailyLogExists(jobId, logId) &&
+             request.resource != null &&
+             request.resource.metadata != null &&
+             dailyLogExists(logId) &&
+             request.resource.metadata.jobId == dailyLogJobId(logId) &&
+             request.resource.metadata.dailyLogId == logId &&
+             request.resource.metadata.uploadedBy == request.auth.uid &&
              (
                isAdmin() ||
                (
-                 dailyLogDoc(jobId, logId).data.uid == request.auth.uid &&
-                 dailyLogDoc(jobId, logId).data.status == 'draft'
+                 dailyLogOwnerUid(logId) == request.auth.uid &&
+                 dailyLogStatus(logId) == 'draft'
                )
              );
     }
 
-    function hasLegacyAttachmentAccess() {
+    function canDeleteDailyLogAttachment(logId) {
       return activeAppUser() &&
-             (isAdmin() || (resource != null && resource.metadata.uploadedBy == request.auth.uid));
-    }
-
-    function canReadAttachment(logId) {
-      return canAccessDailyLog(resource != null ? resource.metadata.jobId : null, logId) ||
-             hasLegacyAttachmentAccess();
-    }
-
-    function canCreateAttachment(logId) {
-      return request.resource != null &&
-             request.resource.metadata.uploadedBy == request.auth.uid &&
-             canMutateDailyLogAttachment(request.resource.metadata.jobId, logId);
-    }
-
-    function canDeleteAttachment(logId) {
-      return request.resource == null &&
-             canMutateDailyLogAttachment(resource != null ? resource.metadata.jobId : null, logId);
+             resource != null &&
+             dailyLogExists(logId) &&
+             (
+               isAdmin() ||
+               (
+                 dailyLogOwnerUid(logId) == request.auth.uid &&
+                 dailyLogStatus(logId) == 'draft'
+               )
+             );
     }
 
     match /daily-logs/{logId}/{allPaths=**} {
-      allow read: if canReadAttachment(logId);
-      allow write: if (resource == null && canCreateAttachment(logId)) ||
-                   (resource != null && canDeleteAttachment(logId));
+      allow read: if canReadDailyLogAttachment(logId);
+      allow write: if (resource == null && canCreateDailyLogAttachment(logId)) ||
+                   (request.resource == null && canDeleteDailyLogAttachment(logId));
     }
 
-    // Default deny
     match /{allPaths=**} {
       allow read, write: if false;
     }

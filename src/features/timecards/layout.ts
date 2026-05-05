@@ -1,0 +1,1 @@
+export const MAX_TIMECARD_CARD_SCALE = 1.18

@@ -1,4 +1,3 @@
-import { db } from '@/firebase'
 import {
   addDoc,
   collection,
@@ -6,96 +5,166 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  writeBatch,
+  where,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore'
-import type { EmployeeDirectoryEmployee } from '@/types/models'
-import { requireUser } from './serviceGuards'
-import { normalizeError } from './serviceUtils'
+import { requireFirebaseServices } from '@/firebase'
+import { getTodayIsoDate, getWeekStartFromSaturday, snapToSaturday } from '@/features/timecards/workbook'
+import { normalizeTimecardCardData, sanitizeTimecardCardPayload } from '@/services/timecards'
+import type { EmployeeRecord } from '@/types/domain'
+import { normalizeError } from '@/utils/normalizeError'
 
-type FirestoreLikeError = {
-  code?: string
-  message?: string
+export interface EmployeeInput {
+  employeeNumber: string
+  firstName: string
+  lastName: string
+  occupation: string
+  wageRate: number | null
+  active: boolean
+  isContractor: boolean
 }
 
-const asFirestoreLikeError = (error: unknown): FirestoreLikeError | null => {
-  if (typeof error !== 'object' || error === null) return null
-  return error as FirestoreLikeError
+function normalizeWageRate(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim().length) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
-function normalize(id: string, data: DocumentData): EmployeeDirectoryEmployee {
+function normalizeEmployee(id: string, data: DocumentData): EmployeeRecord {
   return {
     id,
-    employeeNumber: data.employeeNumber ?? '',
-    firstName: data.firstName ?? '',
-    lastName: data.lastName ?? '',
-    occupation: data.occupation ?? '',
-    active: data.active ?? true,
-    jobId: data.jobId ?? null,
-    wageRate: data.wageRate ?? null,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
+    employeeNumber: typeof data.employeeNumber === 'string' ? data.employeeNumber : '',
+    firstName: typeof data.firstName === 'string' ? data.firstName : '',
+    lastName: typeof data.lastName === 'string' ? data.lastName : '',
+    occupation: typeof data.occupation === 'string' ? data.occupation : '',
+    wageRate: normalizeWageRate(data.wageRate),
+    active: data.active !== false,
+    isContractor: data.isContractor === true,
+    jobId: typeof data.jobId === 'string' && data.jobId.trim().length ? data.jobId : null,
   }
 }
 
-function sortEmployeesByName(employees: EmployeeDirectoryEmployee[]): EmployeeDirectoryEmployee[] {
-  return employees.slice().sort((a, b) => {
-    const lastNameCmp = a.lastName.localeCompare(b.lastName)
-    if (lastNameCmp !== 0) return lastNameCmp
-    const firstNameCmp = a.firstName.localeCompare(b.firstName)
-    if (firstNameCmp !== 0) return firstNameCmp
-    return a.employeeNumber.localeCompare(b.employeeNumber)
+function sortEmployees(employees: EmployeeRecord[]): EmployeeRecord[] {
+  return employees.slice().sort((left, right) => {
+    const leftLast = left.lastName.toLowerCase()
+    const rightLast = right.lastName.toLowerCase()
+    if (leftLast !== rightLast) return leftLast.localeCompare(rightLast)
+
+    const leftFirst = left.firstName.toLowerCase()
+    const rightFirst = right.firstName.toLowerCase()
+    if (leftFirst !== rightFirst) return leftFirst.localeCompare(rightFirst)
+
+    return left.employeeNumber.localeCompare(right.employeeNumber)
   })
 }
 
-async function assertUniqueEmployeeNumber(employeeNumber: string, excludeId?: string) {
-  const existingEmployees = await listEmployees()
-  const normalizedEmployeeNumber = employeeNumber.trim()
-  const duplicate = existingEmployees.find(
-    (employee) => employee.employeeNumber === normalizedEmployeeNumber && employee.id !== excludeId,
+async function syncCurrentWeekDraftEmployeeCards(employeeId: string, input: EmployeeInput) {
+  const { db } = requireFirebaseServices()
+  const currentWeekEndDate = snapToSaturday(getTodayIsoDate())
+  const trimmedFirstName = input.firstName.trim()
+  const trimmedLastName = input.lastName.trim()
+  const trimmedEmployeeNumber = input.employeeNumber.trim()
+  const trimmedOccupation = input.occupation.trim()
+
+  const weeksSnapshot = await getDocs(
+    query(collection(db, 'timecardWeeks'), where('weekEndDate', '==', currentWeekEndDate)),
   )
 
-  if (duplicate) {
-    throw new Error(`Employee number ${normalizedEmployeeNumber} already exists`)
+  for (const weekEntry of weeksSnapshot.docs) {
+    const weekData = weekEntry.data()
+    if (weekData.status === 'submitted') continue
+
+    const weekStartDate = typeof weekData.weekStartDate === 'string' && weekData.weekStartDate.trim().length
+      ? weekData.weekStartDate
+      : getWeekStartFromSaturday(currentWeekEndDate)
+
+    const cardsSnapshot = await getDocs(
+      query(
+        collection(db, 'timecardWeeks', weekEntry.id, 'cards'),
+        where('employeeId', '==', employeeId),
+      ),
+    )
+
+    if (!cardsSnapshot.docs.length) continue
+
+    const batch = writeBatch(db)
+    let hasCardUpdates = false
+
+    for (const cardEntry of cardsSnapshot.docs) {
+      const card = normalizeTimecardCardData(cardEntry.id, cardEntry.data(), weekStartDate)
+      if (card.sourceType === 'custom') continue
+
+      const hasChanges = (
+        card.firstName !== trimmedFirstName
+        || card.lastName !== trimmedLastName
+        || card.employeeNumber !== trimmedEmployeeNumber
+        || card.occupation !== trimmedOccupation
+        || !Object.is(card.wageRate, input.wageRate)
+        || card.isContractor !== input.isContractor
+      )
+
+      if (!hasChanges) continue
+
+      card.firstName = trimmedFirstName
+      card.lastName = trimmedLastName
+      card.employeeNumber = trimmedEmployeeNumber
+      card.occupation = trimmedOccupation
+      card.wageRate = input.wageRate
+      card.isContractor = input.isContractor
+
+      batch.update(
+        doc(db, 'timecardWeeks', weekEntry.id, 'cards', card.id),
+        sanitizeTimecardCardPayload(card, weekStartDate),
+      )
+      hasCardUpdates = true
+    }
+
+    if (!hasCardUpdates) continue
+
+    batch.update(doc(db, 'timecardWeeks', weekEntry.id), {
+      updatedAt: serverTimestamp(),
+    })
+
+    await batch.commit()
   }
 }
 
-export async function listEmployees(): Promise<EmployeeDirectoryEmployee[]> {
-  requireUser()
-  try {
-    const q = query(
-      collection(db, 'employees'),
-      orderBy('lastName', 'asc'),
-      orderBy('firstName', 'asc'),
-    )
-    const snap = await getDocs(q)
-    return snap.docs.map((docSnap) => normalize(docSnap.id, docSnap.data()))
-  } catch (error) {
-    const firestoreError = asFirestoreLikeError(error)
-    if (
-      firestoreError?.code === 'failed-precondition'
-      || firestoreError?.message?.includes('composite index')
-    ) {
-      const snap = await getDocs(query(collection(db, 'employees')))
-      return sortEmployeesByName(snap.docs.map((docSnap) => normalize(docSnap.id, docSnap.data())))
-    }
-    throw new Error(normalizeError(error, 'Failed to load employees'))
+async function listEmployees(): Promise<EmployeeRecord[]> {
+  const { db } = requireFirebaseServices()
+  const snapshot = await getDocs(query(collection(db, 'employees')))
+  return sortEmployees(snapshot.docs.map((item) => normalizeEmployee(item.id, item.data())))
+}
+
+async function assertUniqueEmployeeNumber(employeeNumber: string, excludeId?: string) {
+  const normalizedNumber = employeeNumber.trim()
+  const existingEmployees = await listEmployees()
+  const duplicate = existingEmployees.find(
+    (employee) => employee.employeeNumber.trim() === normalizedNumber && employee.id !== excludeId,
+  )
+
+  if (duplicate) {
+    throw new Error(`Employee number ${normalizedNumber} already exists.`)
   }
 }
 
 export function subscribeEmployees(
-  onUpdate: (employees: EmployeeDirectoryEmployee[]) => void,
+  onUpdate: (employees: EmployeeRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
-  requireUser()
+  const { db } = requireFirebaseServices()
+
   return onSnapshot(
     query(collection(db, 'employees')),
-    (snap) => {
-      onUpdate(sortEmployeesByName(snap.docs.map((docSnap) => normalize(docSnap.id, docSnap.data()))))
+    (snapshot) => {
+      onUpdate(sortEmployees(snapshot.docs.map((item) => normalizeEmployee(item.id, item.data()))))
     },
     (error) => {
       onError?.(error)
@@ -103,84 +172,56 @@ export function subscribeEmployees(
   )
 }
 
-export async function createEmployee(input: {
-  employeeNumber: string
-  firstName: string
-  lastName: string
-  occupation: string
-  active?: boolean
-  jobId?: string | null
-  wageRate?: number | null
-}): Promise<string> {
-  requireUser()
+export async function createEmployeeRecord(input: EmployeeInput): Promise<string> {
   try {
+    const { db } = requireFirebaseServices()
     await assertUniqueEmployeeNumber(input.employeeNumber)
 
-    const ref = await addDoc(collection(db, 'employees'), {
+    const reference = await addDoc(collection(db, 'employees'), {
       employeeNumber: input.employeeNumber.trim(),
       firstName: input.firstName.trim(),
       lastName: input.lastName.trim(),
       occupation: input.occupation.trim(),
-      active: input.active ?? true,
-      jobId: input.jobId?.trim() || null,
-      wageRate: input.wageRate ?? null,
+      wageRate: input.wageRate,
+      active: input.active,
+      isContractor: input.isContractor,
+      updatedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
+    })
+
+    return reference.id
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to create employee.'))
+  }
+}
+
+export async function updateEmployeeRecord(employeeId: string, input: EmployeeInput): Promise<void> {
+  try {
+    const { db } = requireFirebaseServices()
+    await assertUniqueEmployeeNumber(input.employeeNumber, employeeId)
+
+    await updateDoc(doc(db, 'employees', employeeId), {
+      employeeNumber: input.employeeNumber.trim(),
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      occupation: input.occupation.trim(),
+      wageRate: input.wageRate,
+      active: input.active,
+      isContractor: input.isContractor,
       updatedAt: serverTimestamp(),
     })
 
-    return ref.id
+    await syncCurrentWeekDraftEmployeeCards(employeeId, input)
   } catch (error) {
-    if (error instanceof Error && error.message.includes('already exists')) {
-      throw error
-    }
-    throw new Error(normalizeError(error, 'Failed to create employee'))
+    throw new Error(normalizeError(error, 'Failed to update employee.'))
   }
 }
 
-export async function updateEmployee(
-  employeeId: string,
-  updates: Partial<{
-    employeeNumber: string
-    firstName: string
-    lastName: string
-    occupation: string
-    active: boolean
-    jobId: string | null
-    wageRate: number | null
-  }>,
-): Promise<void> {
-  requireUser()
+export async function deleteEmployeeRecord(employeeId: string): Promise<void> {
   try {
-    if (updates.employeeNumber !== undefined) {
-      await assertUniqueEmployeeNumber(updates.employeeNumber, employeeId)
-    }
-
-    const payload: Record<string, unknown> = {
-      updatedAt: serverTimestamp(),
-    }
-
-    if (updates.employeeNumber !== undefined) payload.employeeNumber = updates.employeeNumber.trim()
-    if (updates.firstName !== undefined) payload.firstName = updates.firstName.trim()
-    if (updates.lastName !== undefined) payload.lastName = updates.lastName.trim()
-    if (updates.occupation !== undefined) payload.occupation = updates.occupation.trim()
-    if (updates.active !== undefined) payload.active = updates.active
-    if (updates.jobId !== undefined) payload.jobId = updates.jobId?.trim() || null
-    if (updates.wageRate !== undefined) payload.wageRate = updates.wageRate ?? null
-
-    await updateDoc(doc(db, 'employees', employeeId), payload)
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('already exists')) {
-      throw error
-    }
-    throw new Error(normalizeError(error, 'Failed to update employee'))
-  }
-}
-
-export async function deleteEmployee(employeeId: string): Promise<void> {
-  requireUser()
-  try {
+    const { db } = requireFirebaseServices()
     await deleteDoc(doc(db, 'employees', employeeId))
   } catch (error) {
-    throw new Error(normalizeError(error, 'Failed to delete employee'))
+    throw new Error(normalizeError(error, 'Failed to delete employee.'))
   }
 }

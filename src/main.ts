@@ -1,124 +1,59 @@
-import { createApp } from 'vue'
+import { createApp, defineComponent, h } from 'vue'
 import { createPinia } from 'pinia'
-import { watch } from 'vue'
-import App from '@/App.vue'
-import { getRouteAccessRedirect, router } from '@/router'
-import { useAuthStore } from '@/stores/auth'
-import { ROLES, ROUTE_NAMES } from '@/constants/app'
-import { logError } from '@/utils'
-import { canAccessJobForSnapshot } from '@/utils/accessControl'
-import 'bootstrap'
-import 'bootstrap-icons/font/bootstrap-icons.css'
-import './styles/main.scss'
+import PrimeVue from 'primevue/config'
+import ToastService from 'primevue/toastservice'
+import Toast from 'primevue/toast'
+import Aura from '@primeuix/themes/aura'
+import 'primeicons/primeicons.css'
 
-declare global {
-  interface Window {
-    __phase2ErrorHandlersInstalled?: boolean
-  }
-}
+import App from './App.vue'
+import router from './router'
+import './styles/main.css'
+
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault()
+  window.location.reload()
+})
 
 const app = createApp(App)
-const pinia = createPinia()
-app.use(pinia)
-app.use(router)
-app.config.errorHandler = (error, _instance, info) => {
-  logError('Vue', `Unhandled component error (${info})`, error)
-}
 
-if (typeof window !== 'undefined' && !window.__phase2ErrorHandlersInstalled) {
-  window.addEventListener('error', (event: ErrorEvent) => {
-    logError('Window', 'Unhandled error event', event.error ?? event.message)
-  })
-
-  window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
-    logError('Window', 'Unhandled promise rejection', event.reason)
-  })
-
-  window.__phase2ErrorHandlersInstalled = true
-}
-
-if (typeof document !== 'undefined') {
-  document.documentElement.setAttribute('data-bs-theme', 'dark')
-}
-
-const auth = useAuthStore(pinia)
-void auth.init()
-
-const canAccessJob = (jobId: string): boolean =>
-  canAccessJobForSnapshot(
-    {
-      user: auth.user,
-      active: auth.active,
-      role: auth.role,
-      assignedJobIds: auth.assignedJobIds,
+app.use(createPinia())
+app.use(PrimeVue, {
+  ripple: false,
+  theme: {
+    preset: Aura,
+    options: {
+      darkModeSelector: '.app-theme-dark',
+      cssLayer: false,
     },
-    jobId
-  )
-
-const getAssignedJobsSignature = () => [...auth.assignedJobIds].sort().join('|')
-
-let enforcingRouteAccess = false
-let lastAuthSignature = ''
-watch(
-  [
-    () => auth.ready,
-    () => auth.user?.uid ?? null,
-    () => auth.active,
-    () => auth.role,
-    getAssignedJobsSignature,
-    () => router.currentRoute.value.fullPath,
-  ],
-  async () => {
-    const authSignature = `${auth.user?.uid ?? ''}|${auth.active}|${auth.role ?? ''}|${getAssignedJobsSignature()}`
-    const authChanged = authSignature !== lastAuthSignature
-    lastAuthSignature = authSignature
-
-    if (!auth.ready || enforcingRouteAccess) return
-
-    const currentRoute = router.currentRoute.value
-
-    // If permissions are restored while on unauthorized, recover automatically.
-    if (
-      authChanged &&
-      currentRoute.name === ROUTE_NAMES.UNAUTHORIZED &&
-      auth.user &&
-      auth.active &&
-      auth.role &&
-      auth.role !== ROLES.NONE
-    ) {
-      enforcingRouteAccess = true
-      try {
-        await router.replace({ name: ROUTE_NAMES.DASHBOARD })
-      } finally {
-        enforcingRouteAccess = false
-      }
-      return
-    }
-
-    const redirect = getRouteAccessRedirect(
-      currentRoute,
-      { user: auth.user, active: auth.active, role: auth.role },
-      canAccessJob
-    )
-
-    if (redirect === true) return
-
-    const target = router.resolve(redirect)
-    if (target.fullPath === currentRoute.fullPath) return
-
-    enforcingRouteAccess = true
-    try {
-      await router.replace(redirect)
-    } finally {
-      enforcingRouteAccess = false
-    }
   },
-  { immediate: true }
+  unstyled: true,
+})
+app.use(ToastService)
+app.use(router)
+
+app.mount('#app')
+
+const toastHost = document.createElement('div')
+toastHost.id = 'app-toast-root'
+document.body.appendChild(toastHost)
+
+const toastApp = createApp(
+  defineComponent({
+    name: 'AppToastHost',
+    render: () => h(Toast, { group: 'app', position: 'top-right' }),
+  }),
 )
 
-const bootstrap = async () => {
-  await router.isReady()
-  app.mount('#app')
-}
+toastApp.use(PrimeVue, {
+  ripple: false,
+  theme: {
+    preset: Aura,
+    options: {
+      darkModeSelector: 'none',
+      cssLayer: false,
+    },
+  },
+})
 
-void bootstrap()
+toastApp.mount('#app-toast-root')

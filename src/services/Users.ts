@@ -1,4 +1,3 @@
-import { db } from '@/firebase'
 import {
   collection,
   doc,
@@ -6,427 +5,219 @@ import {
   getDocs,
   onSnapshot,
   query,
-  where,
   updateDoc,
   writeBatch,
-  type Unsubscribe,
   type DocumentData,
+  type Unsubscribe,
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '@/firebase'
-import type { UserProfile as UserProfileModel, Role } from '@/types/models'
-import { ROLES } from '@/constants/app'
-import { requireUser } from './serviceGuards'
-import { normalizeError } from './serviceUtils'
+import { requireFirebaseServices } from '@/firebase'
+import type { RoleKey, UserProfile } from '@/types/domain'
+import { normalizeRoleKey, toEffectiveRole } from '@/types/domain'
+import { normalizeError } from '@/utils/normalizeError'
 
-// Export as both old name (backward compatibility) and new name
-export type UserProfile = UserProfileModel
+export interface CreateUserInput {
+  email: string
+  firstName: string
+  lastName: string
+  role: Exclude<RoleKey, 'none'>
+  assignedJobIds?: string[]
+  sendInvite?: boolean
+}
 
-export type DeleteUserResult = {
+export interface UpdateUserInput {
+  firstName: string
+  lastName: string
+  role: Exclude<RoleKey, 'none'>
+  active: boolean
+  assignedJobIds?: string[]
+}
+
+export interface DeleteUserResult {
   success: boolean
   message: string
   removedFromRecipientLists?: boolean
   updatedJobCount?: number
 }
 
-type CreateUserByAdminResult = {
+export interface SendPendingUserInvitesResult {
+  success: boolean
+  message: string
+  sentCount: number
+  skippedCount: number
+}
+
+interface CreateUserByAdminResponse {
   success: boolean
   message: string
   uid: string
 }
 
-const CANONICAL_ROLES = Object.values(ROLES) as Role[]
+function normalizeAssignedJobIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
 
-const normalizeRoleValue = (value: unknown): Role => {
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (CANONICAL_ROLES.includes(normalized as Role)) {
-      return normalized as Role
-    }
-  }
-  return ROLES.NONE
+  return Array.from(
+    new Set(value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)),
+  )
 }
 
 function normalizeUser(id: string, data: DocumentData): UserProfile {
   return {
     id,
-    email: data.email ?? null,
-    firstName: data.firstName ?? null,
-    lastName: data.lastName ?? null,
-    role: normalizeRoleValue(data.role),
-    active: typeof data.active === 'boolean' ? data.active : true,
-    assignedJobIds: Array.isArray(data.assignedJobIds) ? data.assignedJobIds : [],
-    createdAt: data.createdAt,
-    lastLoginAt: data.lastLoginAt,
+    email: typeof data.email === 'string' ? data.email : null,
+    firstName: typeof data.firstName === 'string' ? data.firstName : null,
+    lastName: typeof data.lastName === 'string' ? data.lastName : null,
+    role: normalizeRoleKey(data.role),
+    active: data.active !== false,
+    assignedJobIds: normalizeAssignedJobIds(data.assignedJobIds),
+    inviteStatus: typeof data.inviteStatus === 'string' ? data.inviteStatus : null,
+    inviteSentAt: data.inviteSentAt ?? null,
   }
 }
 
-/**
- * Fetch the current signed-in user's Firestore profile (users/{uid}).
- */
-export async function getMyUserProfile(): Promise<UserProfile | null> {
-  try {
-    const u = requireUser()
+function sortUsers(users: UserProfile[]): UserProfile[] {
+  return users.slice().sort((left, right) => {
+    const leftName = `${left.firstName ?? ''} ${left.lastName ?? ''}`.trim()
+    const rightName = `${right.firstName ?? ''} ${right.lastName ?? ''}`.trim()
 
-    const snap = await getDoc(doc(db, 'users', u.uid))
-    if (!snap.exists()) return null
+    if (leftName && rightName && leftName !== rightName) {
+      return leftName.localeCompare(rightName)
+    }
 
-    return normalizeUser(snap.id, snap.data())
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load user profile'))
-  }
+    return (left.email ?? '').localeCompare(right.email ?? '')
+  })
 }
 
-/**
- * Admin: list all user profiles in Firestore (users collection).
- */
-export async function listUsers(): Promise<UserProfile[]> {
-  try {
-    requireUser()
+async function syncUserJobAssignments(uid: string, role: Exclude<RoleKey, 'none'>, nextAssignedJobIds: string[]) {
+  const { db } = requireFirebaseServices()
+  const userRef = doc(db, 'users', uid)
+  const userSnapshot = await getDoc(userRef)
 
-    const q = buildUsersQuery()
-    const snap = await getDocs(q)
-    return sortUsersByEmail(snap.docs.map((d) => normalizeUser(d.id, d.data())))
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load users'))
+  if (!userSnapshot.exists()) {
+    throw new Error('User not found.')
   }
+
+  const previousAssignedJobIds = normalizeAssignedJobIds(userSnapshot.data().assignedJobIds)
+  const effectiveAssignedJobIds = role === 'foreman' ? nextAssignedJobIds : []
+  const changedJobIds = Array.from(new Set([...previousAssignedJobIds, ...effectiveAssignedJobIds]))
+
+  const batch = writeBatch(db)
+  batch.update(userRef, { assignedJobIds: effectiveAssignedJobIds })
+
+  for (const jobId of changedJobIds) {
+    const jobRef = doc(db, 'jobs', jobId)
+    const jobSnapshot = await getDoc(jobRef)
+    if (!jobSnapshot.exists()) continue
+
+    const currentAssignedForemanIds = normalizeAssignedJobIds(jobSnapshot.data().assignedForemanIds)
+    const nextAssignedForemanIds = new Set(currentAssignedForemanIds)
+
+    if (effectiveAssignedJobIds.includes(jobId) && role === 'foreman') {
+      nextAssignedForemanIds.add(uid)
+    } else {
+      nextAssignedForemanIds.delete(uid)
+    }
+
+    batch.update(jobRef, { assignedForemanIds: Array.from(nextAssignedForemanIds) })
+  }
+
+  await batch.commit()
 }
 
 export function subscribeUsers(
   onUpdate: (users: UserProfile[]) => void,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
 ): Unsubscribe {
-  requireUser()
+  const { db } = requireFirebaseServices()
+
   return onSnapshot(
-    buildUsersQuery(),
-    (snap) => {
-      const users = sortUsersByEmail(snap.docs.map((d) => normalizeUser(d.id, d.data())))
-      onUpdate(users)
+    query(collection(db, 'users')),
+    (snapshot) => {
+      onUpdate(sortUsers(snapshot.docs.map((item) => normalizeUser(item.id, item.data()))))
     },
-    (err) => {
-      onError?.(err)
-    }
+    (error) => {
+      onError?.(error)
+    },
   )
 }
 
-export function subscribeUserProfile(
-  uid: string,
-  onUpdate: (user: UserProfile | null) => void,
-  onError?: (error: unknown) => void
-): Unsubscribe {
-  requireUser()
-  const ref = doc(db, 'users', uid)
-  return onSnapshot(
-    ref,
-    (snap) => {
-      if (!snap.exists()) {
-        onUpdate(null)
-        return
-      }
-      onUpdate(normalizeUser(snap.id, snap.data()))
-    },
-    (err) => {
-      onError?.(err)
-    }
-  )
-}
-
-/**
- * Update a user profile document in Firestore (users/{uid}).
- * Which fields are allowed depends on Firestore rules.
- */
-export async function updateUser(
-  uid: string,
-  updates: Partial<Pick<UserProfile, 'firstName' | 'lastName' | 'role' | 'active' | 'assignedJobIds'>>
-): Promise<void> {
+export async function createUserByAdmin(input: CreateUserInput): Promise<CreateUserByAdminResponse> {
   try {
-    const ref = doc(db, 'users', uid)
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<CreateUserInput, CreateUserByAdminResponse>(functions, 'createUserByAdmin')
+    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    const sanitizedAssignedJobIds = normalizeAssignedJobIds(input.assignedJobIds)
+    const result = await callable({
+      email: input.email.trim(),
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      role: sanitizedRole,
+      sendInvite: input.sendInvite === true,
+    })
 
-    const payload: Record<string, unknown> = {}
-
-    if ('firstName' in updates) payload.firstName = updates.firstName ?? null
-    if ('lastName' in updates) payload.lastName = updates.lastName ?? null
-    if ('role' in updates && typeof updates.role !== 'undefined') {
-      payload.role = normalizeRoleValue(updates.role)
-    }
-    if ('active' in updates && typeof updates.active === 'boolean') payload.active = updates.active
-    if ('assignedJobIds' in updates) payload.assignedJobIds = updates.assignedJobIds ?? []
-
-    await updateDoc(ref, payload)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update user'))
-  }
-}
-
-/**
- * Admin: delete a user from both Firestore and Firebase Authentication (users/{uid}).
- * Note: This deletes the user completely from both Auth and Firestore.
- */
-export async function deleteUser(uid: string): Promise<DeleteUserResult> {
-  const callable = httpsCallable(functions, 'deleteUser')
-  try {
-    const result = await callable({ uid })
-    return result.data as DeleteUserResult
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to delete user'))
-  }
-}
-
-/**
- * Admin: Create a new user account
- * Sends welcome email with password reset link
- */
-export async function createUserByAdmin(
-  email: string,
-  firstName: string,
-  lastName: string,
-  role?: Role
-): Promise<{ success: boolean; message: string; uid: string }> {
-  const callable = httpsCallable(functions, 'createUserByAdmin')
-  try {
-    const normalizedRole = typeof role === 'string' ? normalizeRoleValue(role) : undefined
-    const result = await callable({ email, firstName, lastName, role: normalizedRole })
-    return result.data as CreateUserByAdminResult
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to create user'))
-  }
-}
-
-function sortUsersByEmail(users: UserProfile[]): UserProfile[] {
-  return users
-    .slice()
-    .sort((a, b) => (a.email || '').localeCompare(b.email || ''))
-}
-
-function buildUsersQuery() {
-  return query(collection(db, 'users'))
-}
-
-// ============================================================================
-// FOREMAN MANAGEMENT
-// ============================================================================
-
-/**
- * Get a foreman's assigned jobs
- */
-export async function getForemanAssignedJobs(foremanId: string): Promise<string[]> {
-  try {
-    const snap = await getDoc(doc(db, 'users', foremanId))
-    if (!snap.exists()) return []
-    const data = snap.data()
-    return Array.isArray(data.assignedJobIds) ? data.assignedJobIds : []
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load foreman jobs'))
-  }
-}
-
-/**
- * Assign a job to a foreman
- */
-export async function assignJobToForeman(foremanId: string, jobId: string): Promise<void> {
-  try {
-    const ref = doc(db, 'users', foremanId)
-    const snap = await getDoc(ref)
-    if (!snap.exists()) throw new Error('User not found')
-    
-    const current = snap.data().assignedJobIds ?? []
-    if (!current.includes(jobId)) {
-      current.push(jobId)
-      await updateDoc(ref, { assignedJobIds: current })
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message === 'User not found') {
-      throw err
-    }
-    throw new Error(normalizeError(err, 'Failed to assign job to foreman'))
-  }
-}
-
-/**
- * Remove a job from a foreman
- */
-export async function removeJobFromForeman(foremanId: string, jobId: string): Promise<void> {
-  try {
-    const ref = doc(db, 'users', foremanId)
-    const snap = await getDoc(ref)
-    if (!snap.exists()) throw new Error('User not found')
-    
-    const current = snap.data().assignedJobIds ?? []
-    const updated = current.filter((id: string) => id !== jobId)
-    await updateDoc(ref, { assignedJobIds: updated })
-  } catch (err) {
-    if (err instanceof Error && err.message === 'User not found') {
-      throw err
-    }
-    throw new Error(normalizeError(err, 'Failed to remove job from foreman'))
-  }
-}
-
-/**
- * Set all jobs for a foreman (replaces existing)
- */
-export async function setForemanJobs(foremanId: string, jobIds: string[]): Promise<void> {
-  try {
-    const ref = doc(db, 'users', foremanId)
-    await updateDoc(ref, { assignedJobIds: jobIds })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to set foreman jobs'))
-  }
-}
-
-/**
- * Atomically link a foreman user to a job on both documents.
- */
-export async function linkForemanToJob(foremanId: string, jobId: string): Promise<void> {
-  try {
-    requireUser()
-
-    const userRef = doc(db, 'users', foremanId)
-    const jobRef = doc(db, 'jobs', jobId)
-    const [userSnap, jobSnap] = await Promise.all([getDoc(userRef), getDoc(jobRef)])
-
-    if (!userSnap.exists()) throw new Error('User not found')
-    if (!jobSnap.exists()) throw new Error('Job not found')
-
-    const userData = userSnap.data()
-    if (normalizeRoleValue(userData.role) !== ROLES.FOREMAN) {
-      throw new Error('Selected user is not a foreman')
-    }
-
-    const assignedJobIds = Array.isArray(userData.assignedJobIds)
-      ? userData.assignedJobIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
-      : []
-    const assignedForemanIds = Array.isArray(jobSnap.data().assignedForemanIds)
-      ? jobSnap.data().assignedForemanIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
-      : []
-
-    if (!assignedJobIds.includes(jobId)) assignedJobIds.push(jobId)
-    if (!assignedForemanIds.includes(foremanId)) assignedForemanIds.push(foremanId)
-
-    const batch = writeBatch(db)
-    batch.update(userRef, { assignedJobIds })
-    batch.update(jobRef, { assignedForemanIds })
-    await batch.commit()
-  } catch (err) {
-    if (
-      err instanceof Error
-      && ['User not found', 'Job not found', 'Selected user is not a foreman'].includes(err.message)
-    ) {
-      throw err
-    }
-    throw new Error(normalizeError(err, 'Failed to link foreman to job'))
-  }
-}
-
-/**
- * Atomically unlink a foreman user from a job on both documents.
- */
-export async function unlinkForemanFromJob(foremanId: string, jobId: string): Promise<void> {
-  try {
-    requireUser()
-
-    const userRef = doc(db, 'users', foremanId)
-    const jobRef = doc(db, 'jobs', jobId)
-    const [userSnap, jobSnap] = await Promise.all([getDoc(userRef), getDoc(jobRef)])
-
-    if (!userSnap.exists()) throw new Error('User not found')
-    if (!jobSnap.exists()) throw new Error('Job not found')
-
-    const assignedJobIds = Array.isArray(userSnap.data().assignedJobIds)
-      ? userSnap.data().assignedJobIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
-      : []
-    const assignedForemanIds = Array.isArray(jobSnap.data().assignedForemanIds)
-      ? jobSnap.data().assignedForemanIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
-      : []
-
-    const batch = writeBatch(db)
-    batch.update(userRef, { assignedJobIds: assignedJobIds.filter((id: string) => id !== jobId) })
-    batch.update(jobRef, { assignedForemanIds: assignedForemanIds.filter((id: string) => id !== foremanId) })
-    await batch.commit()
-  } catch (err) {
-    if (err instanceof Error && ['User not found', 'Job not found'].includes(err.message)) {
-      throw err
-    }
-    throw new Error(normalizeError(err, 'Failed to unlink foreman from job'))
-  }
-}
-
-/**
- * List all foremen (users with role 'foreman')
- */
-export async function listForemen(): Promise<UserProfile[]> {
-  try {
-    requireUser()
-
-    const q = buildUsersQuery()
-    const snap = await getDocs(q)
-    return sortUsersByEmail(snap.docs.map((d) => normalizeUser(d.id, d.data())))
-      .filter((user) => user.role === ROLES.FOREMAN)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load foremen'))
-  }
-}
-
-/**
- * Admin utility: ensure a job's assignedForemanIds and each foreman's assignedJobIds stay in sync.
- * Makes no destructive changes--only adds missing links in either direction.
- */
-export async function syncForemanAssignmentsForJob(jobId: string): Promise<void> {
-  try {
-    const jobRef = doc(db, 'jobs', jobId)
-    const jobSnap = await getDoc(jobRef)
-    if (!jobSnap.exists()) {
-      throw new Error('Job not found')
-    }
-
-    const jobData = jobSnap.data()
-    const jobForemen = Array.isArray(jobData.assignedForemanIds)
-      ? jobData.assignedForemanIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
-      : []
-
-    const usersWithJobSnap = await getDocs(
-      query(collection(db, 'users'), where('assignedJobIds', 'array-contains', jobId))
-    )
-
-    const union = new Set<string>(jobForemen)
-    usersWithJobSnap.docs.forEach((docSnap) => union.add(docSnap.id))
-
-    // Update job doc if we filled gaps
-    await updateDoc(jobRef, { assignedForemanIds: Array.from(union) })
-
-    // Ensure each foreman's user doc lists this job
-    await Promise.all(
-      Array.from(union).map(async (foremanId) => {
-        const existingUserSnap = usersWithJobSnap.docs.find((d) => d.id === foremanId) ?? (await getDoc(doc(db, 'users', foremanId)))
-        if (!existingUserSnap.exists()) return
-        const userData = existingUserSnap.data()
-        const assigned = Array.isArray(userData.assignedJobIds)
-          ? userData.assignedJobIds.slice()
-          : []
-        if (!assigned.includes(jobId)) {
-          assigned.push(jobId)
-          await updateDoc(doc(db, 'users', foremanId), { assignedJobIds: assigned })
+    if (sanitizedRole === 'foreman' && sanitizedAssignedJobIds.length) {
+      try {
+        await syncUserJobAssignments(result.data.uid, sanitizedRole, sanitizedAssignedJobIds)
+      } catch (error) {
+        const baseMessage = result.data.message || 'User created. Invite queued.'
+        const assignmentMessage = normalizeError(error, 'Assigned jobs could not be saved.')
+        return {
+          ...result.data,
+          message: `${baseMessage} ${assignmentMessage} Open the user and save assigned jobs again if needed.`,
         }
-      })
-    )
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to sync foreman assignments'))
+      }
+    }
+
+    return result.data
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to create user.'))
   }
 }
 
-/**
- * Get all foremen assigned to a job
- * Used by admin to see who manages a job
- */
-export async function getForemenForJob(jobId: string): Promise<UserProfile[]> {
+export async function updateUser(uid: string, input: UpdateUserInput): Promise<void> {
   try {
-    requireUser()
+    const { db } = requireFirebaseServices()
+    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    const sanitizedAssignedJobIds = normalizeAssignedJobIds(input.assignedJobIds)
 
-    const allForemen = await listForemen()
-    return allForemen.filter(foreman =>
-      foreman.assignedJobIds?.includes(jobId)
-    )
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load foremen for job'))
+    await updateDoc(doc(db, 'users', uid), {
+      firstName: input.firstName.trim() || null,
+      lastName: input.lastName.trim() || null,
+      role: sanitizedRole,
+      active: input.active,
+    })
+
+    await syncUserJobAssignments(uid, sanitizedRole, sanitizedAssignedJobIds)
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to update user.'))
   }
+}
+
+export async function deleteUserByAdmin(uid: string): Promise<DeleteUserResult> {
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<{ uid: string }, DeleteUserResult>(functions, 'deleteUser')
+    const result = await callable({ uid })
+    return result.data
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to delete user.'))
+  }
+}
+
+export async function sendPendingInvitesByAdmin(): Promise<SendPendingUserInvitesResult> {
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<Record<string, never>, SendPendingUserInvitesResult>(functions, 'sendPendingUserInvites')
+    const result = await callable({})
+    return result.data
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to send pending invites.'))
+  }
+}
+
+export function getRoleBadgeLabel(role: UserProfile['role']): string {
+  const effectiveRole = toEffectiveRole(role)
+  if (effectiveRole === 'admin') return 'Admin'
+  if (effectiveRole === 'foreman') return 'Foreman'
+  return 'No Access'
 }

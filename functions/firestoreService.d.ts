@@ -7,10 +7,17 @@ export interface JobDetails {
     name: string;
     number: string;
 }
+export type NotificationModuleKey = 'dailyLogs' | 'timecards' | 'shopOrders';
+export interface NotificationRecipients {
+    dailyLogs: string[];
+    timecards: string[];
+    shopOrders: string[];
+}
 export interface EmailSettings {
     timecardSubmitRecipients?: string[];
     shopOrderSubmitRecipients?: string[];
     dailyLogSubmitRecipients?: string[];
+    globalNotificationRecipients: NotificationRecipients;
 }
 export interface UserProfile {
     uid: string;
@@ -55,4 +62,5 @@ export declare function getShopOrder(shopOrderId: string): Promise<any>;
  * Get global email settings
  */
 export declare function getEmailSettings(): Promise<EmailSettings>;
+export declare function getJobNotificationRecipients(jobId: string, moduleKey: NotificationModuleKey): Promise<string[]>;
 //# sourceMappingURL=firestoreService.d.ts.map

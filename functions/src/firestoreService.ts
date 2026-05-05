@@ -16,16 +16,51 @@ function getDb(): admin.firestore.Firestore {
   return db
 }
 
+function normalizeRecipientList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return Array.from(
+    new Set(
+      value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  )
+}
+
+function normalizeNotificationRecipients(
+  value: unknown,
+  legacyFallbacks?: Partial<NotificationRecipients>,
+): NotificationRecipients {
+  const data = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+
+  return {
+    dailyLogs: normalizeRecipientList(data.dailyLogs ?? legacyFallbacks?.dailyLogs),
+    timecards: normalizeRecipientList(data.timecards ?? legacyFallbacks?.timecards),
+    shopOrders: normalizeRecipientList(data.shopOrders ?? legacyFallbacks?.shopOrders),
+  }
+}
+
 export interface JobDetails {
   id: string
   name: string
   number: string
 }
 
+export type NotificationModuleKey = 'dailyLogs' | 'timecards' | 'shopOrders'
+
+export interface NotificationRecipients {
+  dailyLogs: string[]
+  timecards: string[]
+  shopOrders: string[]
+}
+
 export interface EmailSettings {
   timecardSubmitRecipients?: string[]
   shopOrderSubmitRecipients?: string[]
   dailyLogSubmitRecipients?: string[]
+  globalNotificationRecipients: NotificationRecipients
 }
 
 export interface UserProfile {
@@ -108,16 +143,24 @@ export async function verifyAdminRole(uid: string): Promise<void> {
  * Get daily log by ID
  */
 export async function getDailyLog(jobId: string, dailyLogId: string): Promise<any> {
-  const logSnap = await getDb()
-    .collection('jobs')
-    .doc(jobId)
-    .collection('dailyLogs')
-    .doc(dailyLogId)
-    .get()
+  const directLogSnap = await getDb().collection('dailyLogs').doc(dailyLogId).get()
+  if (directLogSnap.exists) {
+    const data = directLogSnap.data() || {}
+    if (String(data.jobId || '').trim() === String(jobId || '').trim()) {
+      return {
+        id: directLogSnap.id,
+        ...data,
+        additionalRecipients: normalizeRecipientList(data.additionalRecipients),
+      }
+    }
+  }
+
+  const logSnap = await getDb().collection('jobs').doc(jobId).collection('dailyLogs').doc(dailyLogId).get()
   if (!logSnap.exists) return null
   return {
     id: logSnap.id,
     ...logSnap.data(),
+    additionalRecipients: normalizeRecipientList(logSnap.data()?.additionalRecipients),
   }
 }
 
@@ -175,11 +218,55 @@ export async function getShopOrder(shopOrderId: string): Promise<any> {
  */
 export async function getEmailSettings(): Promise<EmailSettings> {
   const settingsSnap = await getDb().collection('settings').doc('email').get()
-  if (!settingsSnap.exists) return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] }
-  const data = settingsSnap.data() || {}
-  return {
-    timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
-    shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
-    dailyLogSubmitRecipients: Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients : [],
+  if (!settingsSnap.exists) {
+    return {
+      timecardSubmitRecipients: [],
+      shopOrderSubmitRecipients: [],
+      dailyLogSubmitRecipients: [],
+      globalNotificationRecipients: {
+        dailyLogs: [],
+        timecards: [],
+        shopOrders: [],
+      },
+    }
   }
+  const data = settingsSnap.data() || {}
+  const timecardSubmitRecipients = normalizeRecipientList(data.timecardSubmitRecipients)
+  const shopOrderSubmitRecipients = normalizeRecipientList(data.shopOrderSubmitRecipients)
+  const dailyLogSubmitRecipients = normalizeRecipientList(data.dailyLogSubmitRecipients)
+
+  return {
+    timecardSubmitRecipients,
+    shopOrderSubmitRecipients,
+    dailyLogSubmitRecipients,
+    globalNotificationRecipients: normalizeNotificationRecipients(data.globalNotificationRecipients, {
+      dailyLogs: dailyLogSubmitRecipients,
+      timecards: timecardSubmitRecipients,
+      shopOrders: shopOrderSubmitRecipients,
+    }),
+  }
+}
+
+export async function getJobNotificationRecipients(
+  jobId: string,
+  moduleKey: NotificationModuleKey,
+): Promise<string[]> {
+  const jobSnap = await getDb().collection(COLLECTIONS.JOBS).doc(jobId).get()
+  if (!jobSnap.exists) return []
+
+  const data = jobSnap.data() || {}
+  const notificationRecipients = normalizeNotificationRecipients(data.notificationRecipients, {
+    dailyLogs: data.dailyLogRecipients,
+  })
+
+  const legacyOfficeDailyLogRecipients = moduleKey === 'dailyLogs'
+    ? normalizeRecipientList(data.adminDailyLogRecipients)
+    : []
+
+  return Array.from(
+    new Set([
+      ...notificationRecipients[moduleKey],
+      ...legacyOfficeDailyLogRecipients,
+    ]),
+  )
 }

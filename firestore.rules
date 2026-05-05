@@ -2,17 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /* ---------------- helpers ---------------- */
     function signedIn() {
       return request.auth != null;
     }
 
-    function isSelf(uid) {
-      return signedIn() && request.auth.uid == uid;
-    }
-
     function userDoc() {
-      return signedIn() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
+      return signedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid))
+        : null;
     }
 
     function userDocExists() {
@@ -36,101 +33,41 @@ service cloud.firestore {
     }
 
     function userAssignedJobs() {
-      return userDocExists() && userDoc().data.assignedJobIds != null
+      return userDocExists() && userDoc().data.assignedJobIds is list
         ? userDoc().data.assignedJobIds
         : [];
     }
 
     function isAdmin() {
-      return activeAppUser() && userRole() == 'admin';
-    }
-
-    function isController() {
-      return activeAppUser() && userRole() == 'controller';
+      return activeAppUser() && userRole() in ['admin', 'controller'];
     }
 
     function isForemanAssigned(jobId) {
       return activeAppUser() &&
-             userRole() == 'foreman' &&
-             userAssignedJobs().hasAny([jobId]);
+        userRole() == 'foreman' &&
+        userAssignedJobs().hasAny([jobId]);
     }
 
     function hasJobReadAccess(jobId) {
       return activeAppUser() && (
         isAdmin() ||
-        (userRole() == 'foreman' && userAssignedJobs().hasAny([jobId]))
+        isForemanAssigned(jobId)
       );
     }
 
     function hasJobWriteAccess(jobId) {
       return activeAppUser() && (
         isAdmin() ||
-        (userRole() == 'foreman' && userAssignedJobs().hasAny([jobId]))
+        isForemanAssigned(jobId)
       );
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
     }
 
     function isOptionalStringOrNull(value) {
       return value == null || value is string;
-    }
-
-    function isOptionalNumberOrNull(value) {
-      return value == null || value is number;
-    }
-
-    function validShopCatalogItemShape() {
-      return request.resource.data.keys().hasOnly([
-               'description',
-               'categoryId',
-               'sku',
-               'price',
-               'active',
-               'createdAt',
-               'updatedAt'
-             ]) &&
-             request.resource.data.description is string &&
-             request.resource.data.description.size() > 0 &&
-             isOptionalStringOrNull(request.resource.data.categoryId) &&
-             isOptionalStringOrNull(request.resource.data.sku) &&
-             isOptionalNumberOrNull(request.resource.data.price) &&
-             request.resource.data.active is bool;
-    }
-
-    function validShopCatalogItemCreate() {
-      return validShopCatalogItemShape() &&
-             request.resource.data.createdAt == request.time &&
-             request.resource.data.updatedAt == request.time;
-    }
-
-    function validShopCatalogItemUpdate() {
-      return validShopCatalogItemShape() &&
-             request.resource.data.createdAt == resource.data.createdAt &&
-             request.resource.data.updatedAt == request.time;
-    }
-
-    function validShopCategoryShape() {
-      return request.resource.data.keys().hasOnly([
-               'name',
-               'parentId',
-               'active',
-               'createdAt',
-               'updatedAt'
-             ]) &&
-             request.resource.data.name is string &&
-             request.resource.data.name.size() > 0 &&
-             isOptionalStringOrNull(request.resource.data.parentId) &&
-             request.resource.data.active is bool;
-    }
-
-    function validShopCategoryCreate() {
-      return validShopCategoryShape() &&
-             request.resource.data.createdAt == request.time &&
-             request.resource.data.updatedAt == request.time;
-    }
-
-    function validShopCategoryUpdate() {
-      return validShopCategoryShape() &&
-             request.resource.data.createdAt == resource.data.createdAt &&
-             request.resource.data.updatedAt == request.time;
     }
 
     function selfCreateHasValidProfileShape() {
@@ -173,207 +110,122 @@ service cloud.firestore {
              isOptionalStringOrNull(request.resource.data.lastName);
     }
 
-    function foremanCanMarkTimecardsSent(jobId) {
-      return isForemanAssigned(jobId) &&
-             request.resource.data.diff(resource.data).changedKeys().hasOnly([
-               'timecardStatus',
-               'timecardSubmittedAt',
-               'timecardPeriodEndDate',
-               'timecardLastSentWeekEnding'
-             ]) &&
-             request.resource.data.timecardStatus == 'submitted' &&
-             request.resource.data.timecardSubmittedAt != null &&
-             request.resource.data.timecardPeriodEndDate == request.resource.data.timecardLastSentWeekEnding;
-    }
-
     function foremanCanUpdateDailyLogRecipients(jobId) {
       return isForemanAssigned(jobId) &&
-             request.resource.data.diff(resource.data).changedKeys().hasOnly(['dailyLogRecipients']);
+             request.resource.data.diff(resource.data).changedKeys().hasOnly([
+               'dailyLogRecipients'
+             ]);
     }
 
-    function isDraft() {
-      return resource.data.status == 'draft';
+    function timecardWeekDoc(weekId) {
+      return get(/databases/$(database)/documents/timecardWeeks/$(weekId));
     }
 
-    /* ---------------- users ---------------- */
+    function timecardWeekExists(weekId) {
+      return timecardWeekDoc(weekId).data != null;
+    }
+
+    function timecardWeekJobId(weekId) {
+      return timecardWeekExists(weekId) ? timecardWeekDoc(weekId).data.jobId : null;
+    }
+
+    function timecardWeekIsSubmitted(weekId) {
+      return timecardWeekExists(weekId) && timecardWeekDoc(weekId).data.status == 'submitted';
+    }
+
+    function foremanCanUpdateTimecardWeek() {
+      return hasJobWriteAccess(resource.data.jobId) &&
+             resource.data.status == 'draft' &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly([
+               'status',
+               'employeeCardCount',
+               'submittedAt',
+               'updatedAt',
+               'updatedByUserId',
+               'submittedByUserId',
+               'submittedByName'
+             ]);
+    }
+
     match /users/{uid} {
-      // Users can always read their own profile so role/active changes can be applied immediately client-side.
       allow get: if signedIn() && (isSelf(uid) || isAdmin());
       allow list: if isAdmin();
-
-      // Self-create is only allowed for the locked-down bootstrap profile shape.
       allow create: if isSelf(uid) && selfCreateHasValidProfileShape();
-
-      // Admins can manage users. Users can only update their own name fields.
       allow update: if isAdmin() || selfUpdateKeepsPrivileges(uid);
       allow delete: if isAdmin();
-
-      match /jobs/{jobId} {
-        allow read: if isSelf(uid) || isAdmin();
-        allow write: if isAdmin();
-      }
     }
 
-    /* ---------------- employees (master directory) ---------------- */
     match /employees/{employeeId} {
-      allow read, write: if isAdmin();
+      allow read: if activeAppUser();
+      allow create, update, delete: if isAdmin();
     }
 
-    /* ---------------- jobs ---------------- */
     match /jobs/{jobId} {
-      allow read: if hasJobReadAccess(jobId) || isController();
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() ||
-                    foremanCanMarkTimecardsSent(jobId) ||
-                    foremanCanUpdateDailyLogRecipients(jobId);
-
-      /* -------- job roster (employees) -------- */
-      match /roster/{employeeId} {
-        allow read: if isAdmin();
-        allow create, update, delete: if isAdmin();
-      }
-
-      /* -------- job shop orders -------- */
-      match /shop_orders/{orderId} {
-        allow read: if hasJobReadAccess(jobId);
-        allow create, update, delete: if hasJobWriteAccess(jobId);
-      }
-
-      /* -------- job daily logs -------- */
-      match /dailyLogs/{logId} {
-        function isOwnerOfDoc() {
-          return signedIn() && resource.data.uid == request.auth.uid;
-        }
-
-        allow read: if hasJobReadAccess(jobId) &&
-                     (isAdmin() || isOwnerOfDoc());
-        allow create: if hasJobWriteAccess(jobId) &&
-                      request.resource.data.uid == request.auth.uid &&
-                      request.resource.data.status == 'draft' &&
-                      request.resource.data.jobId == jobId;
-        allow update: if isAdmin() ||
-                      (hasJobWriteAccess(jobId) &&
-                       isOwnerOfDoc() &&
-                       resource.data.status == 'draft' &&
-                       request.resource.data.uid == resource.data.uid &&
-                       request.resource.data.jobId == resource.data.jobId &&
-                       (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
-        allow delete: if isAdmin() ||
-                      (hasJobWriteAccess(jobId) &&
-                       isOwnerOfDoc() &&
-                       resource.data.status == 'draft');
-      }
-
-      /* -------- job timecards -------- */
-      match /timecards/{timecardId} {
-        function isOwnerOfDoc() {
-          return signedIn() && resource.data.uid == request.auth.uid;
-        }
-
-        function fieldsUnchanged() {
-          return request.resource.data.jobId == resource.data.jobId &&
-                 request.resource.data.employeeRosterId == resource.data.employeeRosterId &&
-                 request.resource.data.createdByUid == resource.data.createdByUid &&
-                 request.resource.data.uid == resource.data.uid;
-        }
-
-        allow read: if isAdmin() || isController();
-        allow create: if isAdmin() ||
-                      (isController() &&
-                       request.resource.data.status == 'draft' &&
-                       request.resource.data.jobId == jobId);
-        allow update: if isAdmin() ||
-                      (isController() &&
-                       fieldsUnchanged() &&
-                       request.resource.data.status == resource.data.status &&
-                       request.resource.data.submittedAt == resource.data.submittedAt);
-        allow delete: if isAdmin() ||
-                      (isController() && resource.data.status == 'draft');
-      }
-    }
-
-    /* ---------------- daily logs (legacy, flat collection) ---------------- */
-    match /dailyLogs/{logId} {
-      allow read, write: if isAdmin();
-    }
-
-    /* ---------------- timecards (legacy/dev) ---------------- */
-    match /timecards/{timecardId} {
-      allow read, write: if isAdmin();
-    }
-
-    /* ---------------- nested timecards by week ---------------- */
-    match /jobs/{jobId}/weeks/{weekStart}/timecards/{employeeId} {
-      function isOwnerOfDoc() {
-        return signedIn() && resource.data.uid == request.auth.uid;
-      }
-
-      function fieldsUnchanged() {
-        return request.resource.data.jobId == resource.data.jobId &&
-               request.resource.data.employeeId == resource.data.employeeId &&
-               request.resource.data.weekStart == resource.data.weekStart &&
-               request.resource.data.weekEnding == resource.data.weekEnding &&
-               request.resource.data.uid == resource.data.uid;
-      }
-
-      function withinExistingWeek() {
-        return resource.data.weekStartTs != null && resource.data.weekEndTs != null &&
-               request.time >= resource.data.weekStartTs &&
-               request.time <= resource.data.weekEndTs;
-      }
-
-      function withinRequestedWeek() {
-        return request.resource.data.weekStartTs != null && request.resource.data.weekEndTs != null &&
-               request.time >= request.resource.data.weekStartTs &&
-               request.time <= request.resource.data.weekEndTs;
-      }
-
       allow read: if hasJobReadAccess(jobId);
-      allow create: if isAdmin() ||
-                    (hasJobWriteAccess(jobId) &&
-                     request.resource.data.uid == request.auth.uid &&
-                     request.resource.data.status == 'draft' &&
-                     request.resource.data.employeeId == employeeId &&
-                     request.resource.data.jobId == jobId &&
-                     withinRequestedWeek());
-      allow update: if isAdmin() ||
-                    (hasJobWriteAccess(jobId) &&
-                     isOwnerOfDoc() &&
-                     isDraft() &&
-                     withinExistingWeek() &&
-                     fieldsUnchanged() &&
-                     (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted'));
-      allow delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || foremanCanUpdateDailyLogRecipients(jobId);
     }
 
-    /* ---------------- shop catalog (items with categories) ---------------- */
+    match /dailyLogs/{logId} {
+      allow read: if hasJobReadAccess(resource.data.jobId);
+      allow create: if hasJobWriteAccess(request.resource.data.jobId);
+      allow update: if isAdmin() ||
+                    (hasJobWriteAccess(resource.data.jobId) &&
+                     resource.data.status == 'draft' &&
+                     request.resource.data.jobId == resource.data.jobId &&
+                     request.resource.data.logDate == resource.data.logDate);
+      allow delete: if isAdmin() ||
+                    (hasJobWriteAccess(resource.data.jobId) &&
+                     resource.data.status == 'draft');
+    }
+
+    match /timecardWeeks/{weekId} {
+      allow read: if hasJobReadAccess(resource.data.jobId);
+      allow create: if hasJobWriteAccess(request.resource.data.jobId);
+      allow update: if isAdmin() || foremanCanUpdateTimecardWeek();
+      allow delete: if isAdmin() ||
+                    (hasJobWriteAccess(resource.data.jobId) &&
+                     resource.data.status == 'draft');
+
+      match /cards/{cardId} {
+        allow read: if timecardWeekExists(weekId) &&
+                     hasJobReadAccess(timecardWeekJobId(weekId));
+        allow create: if timecardWeekExists(weekId) &&
+                       hasJobWriteAccess(timecardWeekJobId(weekId)) &&
+                       (isAdmin() || !timecardWeekIsSubmitted(weekId));
+        allow update, delete: if timecardWeekExists(weekId) &&
+                              hasJobWriteAccess(timecardWeekJobId(weekId)) &&
+                              (isAdmin() || !timecardWeekIsSubmitted(weekId));
+      }
+    }
+
     match /shopCatalog/{itemId} {
       allow read: if activeAppUser();
-      allow create: if isAdmin() && validShopCatalogItemCreate();
-      allow update: if isAdmin() && validShopCatalogItemUpdate();
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
-    /* ---------------- shop categories (hierarchical) ---------------- */
     match /shopCategories/{categoryId} {
       allow read: if activeAppUser();
-      allow create: if isAdmin() && validShopCategoryCreate();
-      allow update: if isAdmin() && validShopCategoryUpdate();
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
-    /* ---------------- settings (app-wide) ---------------- */
+    match /shopOrders/{orderId} {
+      allow read: if hasJobReadAccess(resource.data.jobId);
+      allow create: if hasJobWriteAccess(request.resource.data.jobId);
+      allow update: if isAdmin() ||
+                    (hasJobWriteAccess(resource.data.jobId) &&
+                     resource.data.status == 'draft' &&
+                     request.resource.data.jobId == resource.data.jobId);
+      allow delete: if isAdmin() ||
+                    (hasJobWriteAccess(resource.data.jobId) &&
+                     resource.data.status == 'draft');
+    }
+
     match /settings/{settingId} {
       allow read: if activeAppUser();
       allow write: if isAdmin();
     }
 
-    /* ---------------- shop orders (legacy/dev) ---------------- */
-    match /shopOrders/{orderId} {
-      allow read, write: if isAdmin();
-    }
-
-    /* ---------------- default deny ---------------- */
     match /{document=**} {
       allow read, write: if false;
     }

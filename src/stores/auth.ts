@@ -1,125 +1,184 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as fbSignOut,
+  signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth'
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
+import { hasFirebaseConfig, requireFirebaseServices } from '@/firebase'
+import { useJobsStore } from '@/stores/jobs'
+import type { RoleKey, RawRoleKey, UserProfile } from '@/types/domain'
+import { normalizeRoleKey, toEffectiveRole } from '@/types/domain'
+import { normalizeError } from '@/utils/normalizeError'
 
-import { auth, db } from '@/firebase'
-import { ROLES, type Role } from '@/constants/app'
-import { logError } from '@/utils'
-import { resetNonAuthStores } from '@/stores/reset'
-
-const CANONICAL_ROLES = Object.values(ROLES) as Role[]
-
-const normalizeRoleValue = (value: unknown): Role => {
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (CANONICAL_ROLES.includes(normalized as Role)) {
-      return normalized as Role
-    }
-  }
-  return ROLES.NONE
-}
-
-const normalizeAssignedJobIds = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return []
-  return value.filter((id): id is string => typeof id === 'string')
+type FirebaseLikeError = Error & {
+  code?: string
 }
 
 let authInitPromise: Promise<void> | null = null
 let unsubscribeAuth: (() => void) | null = null
 let unsubscribeProfile: (() => void) | null = null
 
+function normalizeAssignedJobIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
+function normalizeUserProfile(uid: string, data: Record<string, unknown>): UserProfile {
+  return {
+    id: uid,
+    email: typeof data.email === 'string' ? data.email : null,
+    firstName: typeof data.firstName === 'string' ? data.firstName : null,
+    lastName: typeof data.lastName === 'string' ? data.lastName : null,
+    role: normalizeRoleKey(data.role),
+    active: data.active !== false,
+    assignedJobIds: normalizeAssignedJobIds(data.assignedJobIds),
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function isRetryableProfileError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const firebaseError = error as FirebaseLikeError
+  return (
+    firebaseError.code === 'firestore/permission-denied' ||
+    firebaseError.code === 'permission-denied' ||
+    firebaseError.code === 'firestore/unavailable'
+  )
+}
+
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
-  const role = ref<Role | null>(null)
-  const active = ref(true)
-  const assignedJobIds = ref<string[]>([])
+  const currentUser = ref<User | null>(null)
+  const profile = ref<UserProfile | null>(null)
   const ready = ref(false)
 
-  const applyProfileState = (data: Record<string, unknown>) => {
-    role.value = normalizeRoleValue(data.role)
-    active.value = data.active === true
-    assignedJobIds.value = normalizeAssignedJobIds(data.assignedJobIds)
-  }
+  const rawRole = computed<RawRoleKey>(() => profile.value?.role ?? 'none')
+  const roleKey = computed<RoleKey>(() => toEffectiveRole(rawRole.value))
+  const isAuthenticated = computed(() => currentUser.value !== null)
+  const hasWorkspaceAccess = computed(() => (
+    currentUser.value !== null
+    && (profile.value?.active ?? true)
+    && roleKey.value !== 'none'
+  ))
+  const isAdmin = computed(() => roleKey.value === 'admin')
+  const displayName = computed(() => {
+    const first = profile.value?.firstName?.trim() ?? ''
+    const last = profile.value?.lastName?.trim() ?? ''
+    const fullName = `${first} ${last}`.trim()
+    return fullName || currentUser.value?.displayName || currentUser.value?.email || ''
+  })
+  const assignedJobIds = computed(() => profile.value?.assignedJobIds ?? [])
 
-  const hydrateProfile = async (uid: string, authUser: User | null) => {
-    const profileRef = doc(db, 'users', uid)
-    const snap = await getDoc(profileRef)
-    if (snap.exists()) {
-      applyProfileState(snap.data())
-      return
-    }
-
-    // Create user document if it doesn't exist (for imported/external users)
-    await setDoc(profileRef, {
-      email: authUser?.email ?? null,
-      displayName: authUser?.displayName || null,
-      firstName: null,
-      lastName: null,
-      role: ROLES.NONE,
-      active: true,
-      assignedJobIds: [],
-      createdAt: serverTimestamp(),
-    })
-    role.value = ROLES.NONE
-    active.value = true
-    assignedJobIds.value = []
-  }
-
-  /**
-   * Set up a real-time listener on the user's profile document.
-   * Updates role and active status immediately when changed.
-   */
-  const setupProfileListener = (uid: string) => {
-    if (unsubscribeProfile) {
-      unsubscribeProfile()
-    }
-
-    const profileRef = doc(db, 'users', uid)
-    unsubscribeProfile = onSnapshot(
-      profileRef,
-      (snap) => {
-        if (!snap.exists()) {
-          // User document was deleted - sign out immediately.
-          void signOut()
-          return
-        }
-
-        applyProfileState(snap.data())
-
-        // If deactivated or role is removed, revoke access immediately.
-        if (!active.value || role.value === ROLES.NONE) {
-          void signOut()
-        }
-      },
-      (listenerError) => {
-        // Treat profile-listener failures as access loss (permissions revoked, doc inaccessible, etc).
-        logError('Auth Store', 'Profile listener failed; signing out', listenerError)
-        void signOut()
-      }
-    )
-  }
-
-  const clearProfileListener = () => {
+  function clearProfileListener() {
     if (!unsubscribeProfile) return
     unsubscribeProfile()
     unsubscribeProfile = null
   }
 
-  const init = () => {
+  function applyProfileState(uid: string, data: Record<string, unknown>) {
+    profile.value = normalizeUserProfile(uid, data)
+  }
+
+  async function hydrateProfile(uid: string, authUser: User | null) {
+    const { db } = requireFirebaseServices()
+    const profileRef = doc(db, 'users', uid)
+    const snapshot = await getDoc(profileRef)
+
+    if (snapshot.exists()) {
+      applyProfileState(snapshot.id, snapshot.data())
+      return
+    }
+
+    await setDoc(profileRef, {
+      email: authUser?.email ?? null,
+      displayName: authUser?.displayName || null,
+      firstName: null,
+      lastName: null,
+      role: 'none',
+      active: true,
+      assignedJobIds: [],
+      createdAt: serverTimestamp(),
+    })
+
+    profile.value = {
+      id: uid,
+      email: authUser?.email ?? null,
+      firstName: null,
+      lastName: null,
+      role: 'none',
+      active: true,
+      assignedJobIds: [],
+    }
+  }
+
+  async function hydrateProfileWithRetry(uid: string, authUser: User | null) {
+    const retryDelays = [0, 250, 800]
+    let lastError: unknown = null
+
+    for (const delay of retryDelays) {
+      if (delay > 0) {
+        await sleep(delay)
+      }
+
+      try {
+        await hydrateProfile(uid, authUser)
+        return
+      } catch (error) {
+        lastError = error
+        if (!isRetryableProfileError(error) || delay === retryDelays[retryDelays.length - 1]) {
+          throw error
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Failed to load user profile.')
+  }
+
+  function setupProfileListener(uid: string) {
+    const { db } = requireFirebaseServices()
+
+    clearProfileListener()
+
+    unsubscribeProfile = onSnapshot(
+      doc(db, 'users', uid),
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          void signOut()
+          return
+        }
+
+        applyProfileState(snapshot.id, snapshot.data())
+
+        if (profile.value && !profile.value.active) {
+          void signOut()
+        }
+      },
+      () => {
+        void signOut()
+      },
+    )
+  }
+
+  async function init() {
+    if (ready.value) return
     if (authInitPromise) return authInitPromise
 
+    if (!hasFirebaseConfig) {
+      ready.value = true
+      return
+    }
+
     authInitPromise = new Promise<void>((resolve) => {
-      let hasResolvedInit = false
+      let resolved = false
+
       const resolveInit = () => {
-        if (hasResolvedInit) return
-        hasResolvedInit = true
+        if (resolved) return
+        resolved = true
         ready.value = true
         resolve()
       }
@@ -129,23 +188,22 @@ export const useAuthStore = defineStore('auth', () => {
         return
       }
 
+      const { auth } = requireFirebaseServices()
+
       unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
-        user.value = nextUser
+        currentUser.value = nextUser
 
         if (!nextUser) {
-          role.value = null
-          active.value = true
-          assignedJobIds.value = []
+          profile.value = null
           clearProfileListener()
           resolveInit()
           return
         }
 
         try {
-          await hydrateProfile(nextUser.uid, nextUser)
+          await hydrateProfileWithRetry(nextUser.uid, nextUser)
           setupProfileListener(nextUser.uid)
-        } catch (error) {
-          logError('Auth Store', 'Failed to hydrate profile during init; signing out', error)
+        } catch {
           await signOut()
         }
 
@@ -156,70 +214,67 @@ export const useAuthStore = defineStore('auth', () => {
     return authInitPromise
   }
 
-  // Expected by Login.vue
-  const login = async (email: string, password: string) => {
-    const cred = await signInWithEmailAndPassword(auth, email, password)
-    user.value = cred.user
+  async function login(email: string, password: string) {
+    if (!hasFirebaseConfig) {
+      throw new Error('Firebase config is missing. Copy the v1 VITE_FIREBASE_* values into .env.local.')
+    }
+
+    const { auth } = requireFirebaseServices()
+    const credentials = await signInWithEmailAndPassword(auth, email.trim(), password)
+
+    currentUser.value = credentials.user
+
     if (!ready.value || !unsubscribeAuth) {
       await init()
     }
-    await hydrateProfile(cred.user.uid, cred.user)
-    setupProfileListener(cred.user.uid)
-    return cred
+
+    await hydrateProfileWithRetry(credentials.user.uid, credentials.user)
+    setupProfileListener(credentials.user.uid)
   }
 
-  const register = async (email: string, password: string) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, password)
-    user.value = cred.user
+  async function signOut() {
+    clearProfileListener()
 
-    // Create the Firestore user profile document with default role 'none'.
-    // SignUp component will add firstName and lastName.
-    if (cred.user) {
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        email: cred.user.email,
-        active: true,
-        role: ROLES.NONE,
-        createdAt: serverTimestamp(),
-      })
+    if (hasFirebaseConfig) {
+      const { auth } = requireFirebaseServices()
+      try {
+        await firebaseSignOut(auth)
+      } catch {
+        // Keep clearing local state even if Firebase sign-out throws.
+      }
     }
 
-    if (!ready.value) await init()
-    return cred
+    currentUser.value = null
+    profile.value = null
+    ready.value = true
+    useJobsStore().$reset()
   }
 
-  const signOut = async () => {
-    clearProfileListener()
-    try {
-      await fbSignOut(auth)
-    } finally {
-      user.value = null
-      role.value = null
-      active.value = true
-      assignedJobIds.value = []
-      resetNonAuthStores()
-    }
+  function canAccessJob(jobId: string) {
+    if (isAdmin.value) return true
+    return assignedJobIds.value.includes(jobId)
   }
 
-  const $reset = () => {
-    clearProfileListener()
-    user.value = null
-    role.value = null
-    active.value = true
-    assignedJobIds.value = []
-    ready.value = false
+  function getLoginErrorMessage(error: unknown) {
+    return normalizeError(error, 'Failed to sign in.')
   }
 
   return {
-    user,
-    role,
-    active,
-    assignedJobIds,
+    currentUser,
+    profile,
     ready,
+    rawRole,
+    roleKey,
+    isAuthenticated,
+    hasWorkspaceAccess,
+    isAdmin,
+    displayName,
+    assignedJobIds,
     init,
     login,
-    register,
     signOut,
-    $reset,
+    canAccessJob,
+    getLoginErrorMessage,
   }
 })
 

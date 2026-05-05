@@ -4,16 +4,17 @@
  */
 
 import axios from 'axios'
-import { defineSecret, defineBoolean } from 'firebase-functions/params'
 import { EMAIL, DEFAULTS, EMAIL_STYLES } from './constants'
+import {
+  emailEnabled,
+  getAppBaseUrl,
+  getGraphSecretExpirationDate,
+  graphClientId,
+  graphClientSecret,
+  graphTenantId,
+  outlookSenderEmail,
+} from './functionConfig'
 import { JobDetails } from './firestoreService'
-
-// Define secrets for Graph API credentials
-const graphClientId = defineSecret('GRAPH_CLIENT_ID')
-const graphTenantId = defineSecret('GRAPH_TENANT_ID')
-const graphClientSecret = defineSecret('GRAPH_CLIENT_SECRET')
-const outlookSenderEmail = defineSecret('OUTLOOK_SENDER_EMAIL')
-const emailEnabled = defineBoolean('EMAIL_ENABLED', { default: true })
 
 // Token cache
 let cachedToken: { token: string; expiresAt: number } | null = null
@@ -121,6 +122,7 @@ function formatAnyDate(value: any): string {
  * Build HTML template for welcome email
  */
 export function buildWelcomeEmail(firstName: string, resetLink: string): string {
+  const appUrl = getAppBaseUrl()
   return `
     ${EMAIL_STYLES}
     <div class="email-container">
@@ -143,11 +145,44 @@ export function buildWelcomeEmail(firstName: string, resetLink: string): string 
         </div>
         
         <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
-          <p style="margin: 0; color: #666;"><strong>Or visit us directly:</strong> <a href="https://phase2-website.web.app" style="color: #007bff; text-decoration: none;">https://phase2-website.web.app</a></p>
+          <p style="margin: 0; color: #666;"><strong>Or visit us directly:</strong> <a href="${appUrl}" style="color: #007bff; text-decoration: none;">${appUrl}</a></p>
         </div>
         
         <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not create this account, please ignore this email.</p>
         <p style="color: #999; font-size: 12px;"><strong>Note:</strong> This link expires in 7 days.</p>
+      </div>
+      <div class="footer">
+        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+      </div>
+    </div>
+  `
+}
+
+/**
+ * Build HTML template for password reset email
+ */
+export function buildPasswordResetEmail(displayName: string, resetLink: string): string {
+  const appUrl = getAppBaseUrl()
+  return `
+    ${EMAIL_STYLES}
+    <div class="email-container">
+      <div class="header">
+        <h1>Reset Your Password</h1>
+      </div>
+      <div class="content">
+        <p>Hello${displayName ? ` ${displayName}` : ''},</p>
+        <p>We received a request to reset your Phase 2 password.</p>
+        <p>If you made this request, use the button below to choose a new password.</p>
+
+        <div style="margin: 25px 0; text-align: center;">
+          <p style="margin-bottom: 15px;"><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Reset Password</a></p>
+        </div>
+
+        <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
+          <p style="margin: 0; color: #666;"><strong>Need to sign in after resetting?</strong> <a href="${appUrl}/login" style="color: #007bff; text-decoration: none;">Go to Phase 2 Login</a></p>
+        </div>
+
+        <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not request a password reset, you can ignore this email.</p>
       </div>
       <div class="footer">
         <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
@@ -865,7 +900,7 @@ export function buildSecretExpirationEmail(): string {
       </div>
       <div class="content">
         <p style="color: #d32f2f; font-weight: bold;">Your Azure AD client secret is expiring in 30 days.</p>
-        <p><strong>Expiration Date:</strong> ${EMAIL.SECRET_EXPIRATION_DATE}</p>
+        <p><strong>Expiration Date:</strong> ${getGraphSecretExpirationDate()}</p>
         <p>To avoid service disruption, please renew your client secret before the expiration date.</p>
         
         <h3>Steps to Renew:</h3>

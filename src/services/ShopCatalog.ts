@@ -1,282 +1,198 @@
-import { db } from '@/firebase'
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
-  getDoc,
-  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
-  where,
-  type Unsubscribe,
   type DocumentData,
+  type Unsubscribe,
 } from 'firebase/firestore'
-import { normalizeError } from './serviceUtils'
+import { requireFirebaseServices } from '@/firebase'
+import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
+import { normalizeError } from '@/utils/normalizeError'
 
-export type ShopCatalogItem = {
-  id: string
-  description: string
-  categoryId?: string
-  sku?: string
-  price?: number
-  active: boolean
-  createdAt?: unknown
-  updatedAt?: unknown
-}
-
-export type ShopCategory = {
-  id: string
+export interface CreateCategoryInput {
   name: string
   parentId: string | null
   active: boolean
-  createdAt?: unknown
-  updatedAt?: unknown
 }
 
-function normalize(id: string, data: DocumentData): ShopCatalogItem {
+export interface UpdateCategoryInput {
+  name: string
+  parentId: string | null
+  active: boolean
+}
+
+export interface CreateCatalogItemInput {
+  description: string
+  categoryId: string | null
+  sku: string | null
+  price: number | null
+  active: boolean
+}
+
+export interface UpdateCatalogItemInput {
+  description: string
+  categoryId: string | null
+  sku: string | null
+  price: number | null
+  active: boolean
+}
+
+function normalizePrice(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim().length) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function normalizeCategory(id: string, data: DocumentData): ShopCategoryRecord {
   return {
     id,
-    description: data.description ?? '',
-    categoryId: typeof data.categoryId === 'string' ? data.categoryId : undefined,
-    sku: typeof data.sku === 'string' ? data.sku : undefined,
-    price: typeof data.price === 'number' ? data.price : undefined,
-    active: data.active ?? true,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
+    name: typeof data.name === 'string' ? data.name : '',
+    parentId: typeof data.parentId === 'string' && data.parentId.trim().length ? data.parentId : null,
+    active: data.active !== false,
   }
 }
 
-function normalizeCategory(id: string, data: DocumentData): ShopCategory {
+function normalizeItem(id: string, data: DocumentData): ShopCatalogItemRecord {
   return {
     id,
-    name: data.name ?? '',
-    parentId: data.parentId ?? null,
-    active: data.active ?? true,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
+    description: typeof data.description === 'string' ? data.description : '',
+    categoryId: typeof data.categoryId === 'string' && data.categoryId.trim().length ? data.categoryId : null,
+    sku: typeof data.sku === 'string' && data.sku.trim().length ? data.sku : null,
+    price: normalizePrice(data.price),
+    active: data.active !== false,
   }
 }
 
-export async function listCatalog(activeOnly = true): Promise<ShopCatalogItem[]> {
-  try {
-    const q = buildCatalogQuery(activeOnly)
-
-    const snap = await getDocs(q)
-    return sortCatalogItemsByDescription(snap.docs.map((d) => normalize(d.id, d.data())))
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load catalog'))
-  }
+function sortCategories(categories: ShopCategoryRecord[]) {
+  return categories.slice().sort((left, right) => left.name.localeCompare(right.name))
 }
 
-export function subscribeCatalog(
-  activeOnly: boolean,
-  onUpdate: (items: ShopCatalogItem[]) => void,
-  onError?: (error: unknown) => void
+function sortItems(items: ShopCatalogItemRecord[]) {
+  return items.slice().sort((left, right) => left.description.localeCompare(right.description))
+}
+
+export function subscribeShopCategories(
+  onUpdate: (categories: ShopCategoryRecord[]) => void,
+  onError?: (error: unknown) => void,
 ): Unsubscribe {
+  const { db } = requireFirebaseServices()
+
   return onSnapshot(
-    buildCatalogQuery(activeOnly),
-    (snap) => {
-      onUpdate(sortCatalogItemsByDescription(snap.docs.map((d) => normalize(d.id, d.data()))))
+    query(collection(db, 'shopCategories')),
+    (snapshot) => {
+      onUpdate(sortCategories(snapshot.docs.map((item) => normalizeCategory(item.id, item.data()))))
     },
-    (err) => {
-      onError?.(err)
-    }
+    (error) => {
+      onError?.(error)
+    },
   )
 }
 
-export async function createCatalogItem(description: string, categoryId?: string, sku?: string, price?: number) {
-  try {
-    const ref = await addDoc(collection(db, 'shopCatalog'), {
-      description: description.trim(),
-      categoryId: categoryId || null,
-      sku: sku?.trim() || null,
-      price: price ?? null,
-      active: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-    return ref.id
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to create catalog item'))
-  }
-}
-
-export async function updateCatalogItem(
-  itemId: string,
-  updates: { description?: string; sku?: string | null; price?: number | null }
-) {
-  try {
-    const ref = doc(db, 'shopCatalog', itemId)
-    
-    // Filter out undefined values - Firestore doesn't accept undefined
-    const filteredUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([_, v]) => v !== undefined)
-    )
-    
-    await updateDoc(ref, {
-      ...filteredUpdates,
-      updatedAt: serverTimestamp(),
-    })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update catalog item'))
-  }
-}
-
-export async function setCatalogItemActive(itemId: string, active: boolean) {
-  try {
-    const ref = doc(db, 'shopCatalog', itemId)
-    await updateDoc(ref, {
-      active,
-      updatedAt: serverTimestamp(),
-    })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update catalog item'))
-  }
-}
-
-export async function deleteCatalogItem(itemId: string) {
-  try {
-    const ref = doc(db, 'shopCatalog', itemId)
-    await deleteDoc(ref)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to delete catalog item'))
-  }
-}
-
-/* ============= SHOP CATEGORIES ============= */
-
-export async function getAllCategories(): Promise<ShopCategory[]> {
-  try {
-    const q = query(collection(db, 'shopCategories'))
-    const snap = await getDocs(q)
-    return sortCategoriesByName(snap.docs.map((d) => normalizeCategory(d.id, d.data())))
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load categories'))
-  }
-}
-
-export function subscribeCategories(
-  onUpdate: (categories: ShopCategory[]) => void,
-  onError?: (error: unknown) => void
+export function subscribeShopCatalogItems(
+  onUpdate: (items: ShopCatalogItemRecord[]) => void,
+  onError?: (error: unknown) => void,
 ): Unsubscribe {
-  const q = query(collection(db, 'shopCategories'))
+  const { db } = requireFirebaseServices()
+
   return onSnapshot(
-    q,
-    (snap) => {
-      onUpdate(sortCategoriesByName(snap.docs.map((d) => normalizeCategory(d.id, d.data()))))
+    query(collection(db, 'shopCatalog')),
+    (snapshot) => {
+      onUpdate(sortItems(snapshot.docs.map((item) => normalizeItem(item.id, item.data()))))
     },
-    (err) => {
-      onError?.(err)
-    }
+    (error) => {
+      onError?.(error)
+    },
   )
 }
 
-export async function createCategory(
-  name: string,
-  parentId: string | null = null,
-): Promise<ShopCategory> {
+export async function createShopCategory(input: CreateCategoryInput): Promise<string> {
   try {
-    const ref = await addDoc(collection(db, 'shopCategories'), {
-      name: name.trim(),
-      parentId: parentId || null,
-      active: true,
+    const { db } = requireFirebaseServices()
+    const reference = await addDoc(collection(db, 'shopCategories'), {
+      name: input.name.trim(),
+      parentId: input.parentId,
+      active: input.active,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
-    
-    // Fetch the created document to get serverTimestamp values
-    const createdDoc = await getDoc(ref)
-    if (!createdDoc.exists()) {
-      throw new Error('Failed to load created category')
-    }
-    return normalizeCategory(createdDoc.id, createdDoc.data())
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to create category'))
+
+    return reference.id
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to create folder.'))
   }
 }
 
-function sortCatalogItemsByDescription(items: ShopCatalogItem[]): ShopCatalogItem[] {
-  return items.slice().sort((a, b) => a.description.localeCompare(b.description))
-}
-
-function sortCategoriesByName(categories: ShopCategory[]): ShopCategory[] {
-  return categories.slice().sort((a, b) => a.name.localeCompare(b.name))
-}
-
-function buildCatalogQuery(activeOnly: boolean) {
-  if (activeOnly) {
-    return query(collection(db, 'shopCatalog'), where('active', '==', true))
-  }
-  return query(collection(db, 'shopCatalog'))
-}
-
-export async function updateCategory(
-  categoryId: string,
-  updates: { name?: string; active?: boolean }
-): Promise<void> {
+export async function updateShopCategory(categoryId: string, input: UpdateCategoryInput): Promise<void> {
   try {
-    const ref = doc(db, 'shopCategories', categoryId)
-    const filteredUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([_, value]) => value !== undefined)
-    )
-    await updateDoc(ref, {
-      ...filteredUpdates,
+    const { db } = requireFirebaseServices()
+    await updateDoc(doc(db, 'shopCategories', categoryId), {
+      name: input.name.trim(),
+      parentId: input.parentId,
+      active: input.active,
       updatedAt: serverTimestamp(),
     })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update category'))
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to update folder.'))
   }
 }
 
-export async function archiveCategory(categoryId: string): Promise<void> {
+export async function deleteShopCategory(categoryId: string): Promise<void> {
   try {
-    const ref = doc(db, 'shopCategories', categoryId)
-    await updateDoc(ref, {
-      active: false,
+    const { db } = requireFirebaseServices()
+    await deleteDoc(doc(db, 'shopCategories', categoryId))
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to delete folder.'))
+  }
+}
+
+export async function createShopCatalogItem(input: CreateCatalogItemInput): Promise<string> {
+  try {
+    const { db } = requireFirebaseServices()
+    const reference = await addDoc(collection(db, 'shopCatalog'), {
+      description: input.description.trim(),
+      categoryId: input.categoryId,
+      sku: input.sku,
+      price: input.price,
+      active: input.active,
+      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to archive category'))
+
+    return reference.id
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to create catalog item.'))
   }
 }
 
-export async function reactivateCategory(categoryId: string): Promise<void> {
+export async function updateShopCatalogItem(itemId: string, input: UpdateCatalogItemInput): Promise<void> {
   try {
-    const ref = doc(db, 'shopCategories', categoryId)
-    await updateDoc(ref, {
-      active: true,
+    const { db } = requireFirebaseServices()
+    await updateDoc(doc(db, 'shopCatalog', itemId), {
+      description: input.description.trim(),
+      categoryId: input.categoryId,
+      sku: input.sku,
+      price: input.price,
+      active: input.active,
       updatedAt: serverTimestamp(),
     })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to reactivate category'))
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to update catalog item.'))
   }
 }
 
-export async function deleteCategory(categoryId: string): Promise<void> {
+export async function deleteShopCatalogItem(itemId: string): Promise<void> {
   try {
-    const ref = doc(db, 'shopCategories', categoryId)
-    await deleteDoc(ref)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to delete category'))
+    const { db } = requireFirebaseServices()
+    await deleteDoc(doc(db, 'shopCatalog', itemId))
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to delete catalog item.'))
   }
 }
-
-export const ShopCatalogService = {
-  listCatalog,
-  subscribeCatalog,
-  createCatalogItem,
-  updateCatalogItem,
-  setCatalogItemActive,
-  deleteCatalogItem,
-  getAllCategories,
-  subscribeCategories,
-  createCategory,
-  updateCategory,
-  archiveCategory,
-  reactivateCategory,
-  deleteCategory,
-}
-

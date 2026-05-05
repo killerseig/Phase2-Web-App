@@ -1,26 +1,7 @@
-import { sendPasswordResetEmail as sendPasswordResetEmailWithFirebase, updatePassword, updateProfile, type User } from 'firebase/auth'
-import { doc, updateDoc } from 'firebase/firestore'
+import { updatePassword } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
-import { auth, db, functions } from '@/firebase'
-import { normalizeError } from './serviceUtils'
-
-const assertInvitePayload = (data: InviteUserRequest) => {
-  if (!data.email || !data.email.includes('@')) {
-    throw new Error('A valid email is required to invite a user')
-  }
-}
-
-export interface InviteUserRequest {
-  email: string
-  displayName?: string
-  role?: string
-}
-
-export interface InviteUserResponse {
-  uid: string
-  email: string
-  message: string
-}
+import { requireFirebaseServices } from '@/firebase'
+import { normalizeError } from '@/utils/normalizeError'
 
 interface VerifySetupTokenRequest {
   uid: string
@@ -37,50 +18,23 @@ interface SetUserPasswordRequest {
   setupToken: string
 }
 
-/**
- * Call the inviteUser Cloud Function to provision a new user account.
- */
-export async function inviteUser(data: InviteUserRequest): Promise<InviteUserResponse> {
-  assertInvitePayload(data)
-  const callable = httpsCallable<InviteUserRequest, InviteUserResponse>(functions, 'inviteUser')
-  try {
-    const result = await callable(data)
-    return result.data
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to invite user'))
-  }
+interface RequestPasswordResetEmailRequest {
+  email: string
 }
 
 export async function sendPasswordResetEmail(email: string): Promise<void> {
   const sanitizedEmail = email.trim()
   if (!sanitizedEmail) {
-    throw new Error('Please enter your email')
+    throw new Error('Enter your email address first.')
   }
 
   try {
-    await sendPasswordResetEmailWithFirebase(auth, sanitizedEmail)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to send reset email'))
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<RequestPasswordResetEmailRequest, unknown>(functions, 'requestPasswordResetEmail')
+    await callable({ email: sanitizedEmail })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to send reset email.'))
   }
-}
-
-export async function finalizeRegisteredUserProfile(
-  user: User,
-  firstName: string,
-  lastName: string
-): Promise<void> {
-  const safeFirstName = firstName.trim()
-  const safeLastName = lastName.trim()
-  const displayName = `${safeFirstName} ${safeLastName}`.trim()
-
-  if (displayName) {
-    await updateProfile(user, { displayName })
-  }
-
-  await updateDoc(doc(db, 'users', user.uid), {
-    firstName: safeFirstName || null,
-    lastName: safeLastName || null,
-  })
 }
 
 export async function verifySetupToken(uid: string, setupToken: string): Promise<string> {
@@ -88,33 +42,41 @@ export async function verifySetupToken(uid: string, setupToken: string): Promise
     throw new Error('Invalid or expired password setup link.')
   }
 
-  const callable = httpsCallable<VerifySetupTokenRequest, VerifySetupTokenResponse>(functions, 'verifySetupToken')
   try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<VerifySetupTokenRequest, VerifySetupTokenResponse>(functions, 'verifySetupToken')
     const result = await callable({ uid, setupToken })
     return result.data.email || ''
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Invalid or expired password setup link.'))
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Invalid or expired password setup link.'))
   }
 }
 
 export async function setPasswordFromSetupLink(
   uid: string,
   password: string,
-  setupToken: string
+  setupToken: string,
 ): Promise<void> {
   if (!uid || !setupToken) {
     throw new Error('Invalid or expired password setup link.')
   }
+
   if (!password.trim()) {
-    throw new Error('Password is required')
+    throw new Error('Password is required.')
   }
 
-  const currentUser = auth.currentUser
-  if (currentUser && currentUser.uid === uid) {
-    await updatePassword(currentUser, password)
-    return
-  }
+  try {
+    const { auth, functions } = requireFirebaseServices()
+    const currentUser = auth.currentUser
 
-  const callable = httpsCallable<SetUserPasswordRequest, unknown>(functions, 'setUserPassword')
-  await callable({ uid, password, setupToken })
+    if (currentUser && currentUser.uid === uid) {
+      await updatePassword(currentUser, password)
+      return
+    }
+
+    const callable = httpsCallable<SetUserPasswordRequest, unknown>(functions, 'setUserPassword')
+    await callable({ uid, password, setupToken })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to set password.'))
+  }
 }

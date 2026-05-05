@@ -1,6 +1,6 @@
 /**
  * Application Constants
- * Centralized configuration for roles, collections, messages, etc.
+ * Centralized configuration for roles, collections, messages, and shared email styling.
  */
 export declare const VALID_ROLES: readonly ["admin", "controller", "foreman", "none"];
 export type UserRole = typeof VALID_ROLES[number];
@@ -15,24 +15,18 @@ export declare const COLLECTIONS: {
 export declare const EMAIL: {
     readonly SUBJECTS: {
         readonly WELCOME: "Create Your Phase 2 Account Password";
+        readonly PASSWORD_RESET: "Reset Your Phase 2 Password";
         readonly DAILY_LOG: "Daily Log Report";
         readonly DAILY_LOG_AUTO: "Daily Log (Auto-Submitted)";
         readonly TIMECARD: "Timecard Report";
         readonly SHOP_ORDER: "Shop Order";
-        readonly SECRET_EXPIRATION: "⚠️ Graph API Secret Expiring Soon - Action Required";
-    };
-    readonly URLS: {
-        readonly LOGIN: "https://phase2-website.web.app/login";
-        readonly BRAND_NAME: "Phase 2";
+        readonly SECRET_EXPIRATION: "Graph API Secret Expiring Soon - Action Required";
     };
     readonly GRAPH: {
         readonly SCOPE: "https://graph.microsoft.com/.default";
         readonly TOKEN_ENDPOINT_TEMPLATE: "https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
-        readonly SEND_MAIL_ENDPOINT: "https://graph.microsoft.com/v1.0/me/sendMail";
         readonly TOKEN_EXPIRATION_BUFFER_MS: 300000;
     };
-    readonly SENDER_EMAIL: "no-reply@phase2co.com";
-    readonly SECRET_EXPIRATION_DATE: "2027-02-09";
     readonly SECRET_NOTIFICATION_DAYS: 30;
 };
 export declare const ERROR_MESSAGES: {

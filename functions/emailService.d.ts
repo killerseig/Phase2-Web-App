@@ -16,6 +16,10 @@ export declare function getSenderEmail(): string;
  */
 export declare function buildWelcomeEmail(firstName: string, resetLink: string): string;
 /**
+ * Build HTML template for password reset email
+ */
+export declare function buildPasswordResetEmail(displayName: string, resetLink: string): string;
+/**
  * Build HTML template for daily log auto-submit email
  */
 export declare function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, logDate: string): string;

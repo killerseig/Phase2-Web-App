@@ -45,6 +45,7 @@ exports.getDailyLog = getDailyLog;
 exports.getTimecard = getTimecard;
 exports.getShopOrder = getShopOrder;
 exports.getEmailSettings = getEmailSettings;
+exports.getJobNotificationRecipients = getJobNotificationRecipients;
 const admin = __importStar(require("firebase-admin"));
 const constants_1 = require("./constants");
 // Lazy initialize db on first use
@@ -54,6 +55,22 @@ function getDb() {
         db = admin.firestore();
     }
     return db;
+}
+function normalizeRecipientList(value) {
+    if (!Array.isArray(value))
+        return [];
+    return Array.from(new Set(value
+        .filter((entry) => typeof entry === 'string')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean)));
+}
+function normalizeNotificationRecipients(value, legacyFallbacks) {
+    const data = typeof value === 'object' && value !== null ? value : {};
+    return {
+        dailyLogs: normalizeRecipientList(data.dailyLogs ?? legacyFallbacks?.dailyLogs),
+        timecards: normalizeRecipientList(data.timecards ?? legacyFallbacks?.timecards),
+        shopOrders: normalizeRecipientList(data.shopOrders ?? legacyFallbacks?.shopOrders),
+    };
 }
 /**
  * Get job details by ID
@@ -120,17 +137,24 @@ async function verifyAdminRole(uid) {
  * Get daily log by ID
  */
 async function getDailyLog(jobId, dailyLogId) {
-    const logSnap = await getDb()
-        .collection('jobs')
-        .doc(jobId)
-        .collection('dailyLogs')
-        .doc(dailyLogId)
-        .get();
+    const directLogSnap = await getDb().collection('dailyLogs').doc(dailyLogId).get();
+    if (directLogSnap.exists) {
+        const data = directLogSnap.data() || {};
+        if (String(data.jobId || '').trim() === String(jobId || '').trim()) {
+            return {
+                id: directLogSnap.id,
+                ...data,
+                additionalRecipients: normalizeRecipientList(data.additionalRecipients),
+            };
+        }
+    }
+    const logSnap = await getDb().collection('jobs').doc(jobId).collection('dailyLogs').doc(dailyLogId).get();
     if (!logSnap.exists)
         return null;
     return {
         id: logSnap.id,
         ...logSnap.data(),
+        additionalRecipients: normalizeRecipientList(logSnap.data()?.additionalRecipients),
     };
 }
 /**
@@ -184,13 +208,47 @@ async function getShopOrder(shopOrderId) {
  */
 async function getEmailSettings() {
     const settingsSnap = await getDb().collection('settings').doc('email').get();
-    if (!settingsSnap.exists)
-        return { timecardSubmitRecipients: [], shopOrderSubmitRecipients: [] };
+    if (!settingsSnap.exists) {
+        return {
+            timecardSubmitRecipients: [],
+            shopOrderSubmitRecipients: [],
+            dailyLogSubmitRecipients: [],
+            globalNotificationRecipients: {
+                dailyLogs: [],
+                timecards: [],
+                shopOrders: [],
+            },
+        };
+    }
     const data = settingsSnap.data() || {};
+    const timecardSubmitRecipients = normalizeRecipientList(data.timecardSubmitRecipients);
+    const shopOrderSubmitRecipients = normalizeRecipientList(data.shopOrderSubmitRecipients);
+    const dailyLogSubmitRecipients = normalizeRecipientList(data.dailyLogSubmitRecipients);
     return {
-        timecardSubmitRecipients: Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients : [],
-        shopOrderSubmitRecipients: Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients : [],
-        dailyLogSubmitRecipients: Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients : [],
+        timecardSubmitRecipients,
+        shopOrderSubmitRecipients,
+        dailyLogSubmitRecipients,
+        globalNotificationRecipients: normalizeNotificationRecipients(data.globalNotificationRecipients, {
+            dailyLogs: dailyLogSubmitRecipients,
+            timecards: timecardSubmitRecipients,
+            shopOrders: shopOrderSubmitRecipients,
+        }),
     };
+}
+async function getJobNotificationRecipients(jobId, moduleKey) {
+    const jobSnap = await getDb().collection(constants_1.COLLECTIONS.JOBS).doc(jobId).get();
+    if (!jobSnap.exists)
+        return [];
+    const data = jobSnap.data() || {};
+    const notificationRecipients = normalizeNotificationRecipients(data.notificationRecipients, {
+        dailyLogs: data.dailyLogRecipients,
+    });
+    const legacyOfficeDailyLogRecipients = moduleKey === 'dailyLogs'
+        ? normalizeRecipientList(data.adminDailyLogRecipients)
+        : [];
+    return Array.from(new Set([
+        ...notificationRecipients[moduleKey],
+        ...legacyOfficeDailyLogRecipients,
+    ]));
 }
 //# sourceMappingURL=firestoreService.js.map

@@ -1,7 +1,6 @@
 # Logs
 logs
 *.log
-firebase-debug.log*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -9,25 +8,35 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.DS_Store
 dist
 dist-ssr
+coverage
 *.local
-playwright-report
-test-results
-
-# Sensitive local data
-users.json
-.firebase/*.cache
-.firebase/hosting.*.cache
-/customer files/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+*.tsbuildinfo
+
+.eslintcache
+
+# Cypress
+/cypress/videos/
+/cypress/screenshots/
+
+# Vitest
+__screenshots__/
+
+# Vite
+*.timestamp-*-*.mjs
+
+test-results/
+playwright-report/

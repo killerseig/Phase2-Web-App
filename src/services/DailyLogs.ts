@@ -1,502 +1,463 @@
-import { db } from '@/firebase'
 import {
-  addDoc,
   collection,
-  getDoc,
-  getDocs,
-  doc,
-  limit,
-  orderBy,
   onSnapshot,
   query,
-  serverTimestamp,
-  updateDoc,
-  deleteDoc,
   where,
-  type Unsubscribe,
   type DocumentData,
-  type QueryConstraint,
+  type Unsubscribe,
 } from 'firebase/firestore'
-import { getActivePinia } from 'pinia'
-import { ROLES } from '@/constants/app'
-import type { Attachment, IndoorClimateReading, ManpowerLine } from '@/types/documents'
-import { useAuthStore } from '@/stores/auth'
-import { assertJobAccess, requireUser } from './serviceGuards'
-import { jobCollectionPath, jobDocumentPath } from './servicePaths'
-import { normalizeError } from './serviceUtils'
-import { formatDateTime, toMillis as toMillisFromUnknown } from '@/utils/datetime'
+import { httpsCallable } from 'firebase/functions'
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
+import { requireFirebaseServices } from '@/firebase'
+import {
+  createEmptyDailyLogPayload,
+  createEmptyIndoorClimateReading,
+  createEmptyManpowerLine,
+} from '@/features/dailyLogs/schema'
+import type {
+  DailyLogAttachmentRecord,
+  DailyLogAttachmentType,
+  DailyLogIndoorClimateReadingRecord,
+  DailyLogManpowerLineRecord,
+  DailyLogPayload,
+  DailyLogRecord,
+  DailyLogStatus,
+} from '@/types/domain'
+import { normalizeError } from '@/utils/normalizeError'
 
-export type DailyLogStatus = 'draft' | 'submitted'
-
-
-export function toMillis(ts: unknown): number {
-  return toMillisFromUnknown(ts)
-}
-
-export function formatTimestamp(ts: unknown): string {
-  return formatDateTime(ts)
-}
-
-export type DailyLog = {
-  id: string
+export interface CreateDailyLogInput {
   jobId: string
-  uid: string
-  status: DailyLogStatus
-  logDate: string // YYYY-MM-DD
-
-  jobSiteNumbers: string
-  foremanOnSite: string
-  siteForemanAssistant: string
-  projectName: string
-
-  manpower: string
-  weeklySchedule: string
-  manpowerAssessment: string
-  indoorClimateReadings?: IndoorClimateReading[]
-
-  manpowerLines?: ManpowerLine[]
-
-  safetyConcerns: string
-  ahaReviewed: string
-  scheduleConcerns: string
-  budgetConcerns: string
-
-  deliveriesReceived: string
-  deliveriesNeeded: string
-  newWorkAuthorizations: string
-  qcInspection?: string // Legacy field retained for backward compatibility
-  qcAssignedTo?: string
-  qcAreasInspected?: string
-  qcIssuesIdentified?: string
-  qcIssuesResolved?: string
-
-  notesCorrespondence: string
-  actionItems: string
-  commentsAboutShip?: string
-
-  attachments?: Attachment[]
-
-  createdAt?: unknown
-  updatedAt?: unknown
-  submittedAt?: unknown
+  jobCode: string | null
+  jobName: string | null
+  logDate: string
+  foremanUserId: string | null
+  foremanName: string | null
+  additionalRecipients?: string[]
+  payload: DailyLogPayload
 }
 
-// Draft input does NOT include logDate (we pass it separately)
-export type DailyLogDraftInput = Omit<
-  DailyLog,
-  'id' | 'uid' | 'jobId' | 'status' | 'logDate' | 'createdAt' | 'updatedAt' | 'submittedAt'
->
-
-function isAdminViewer(): boolean {
-  const pinia = getActivePinia()
-  if (!pinia) return false
-  return useAuthStore(pinia).role === ROLES.ADMIN
+export interface UpdateDailyLogInput {
+  payload?: DailyLogPayload
+  status?: DailyLogStatus
+  additionalRecipients?: string[]
 }
 
-function createDailyLogQuery(jobId: string, constraints: QueryConstraint[]) {
-  return query(collection(db, ...jobCollectionPath(jobId, 'dailyLogs')), ...constraints)
+export interface DailyLogActor {
+  userId: string | null
+  displayName: string | null
 }
 
-function getVisibleDailyLogQueries(jobId: string, uid: string, constraints: QueryConstraint[] = []) {
-  const submittedConstraints: QueryConstraint[] = [...constraints, where('status', '==', 'submitted')]
-  const draftConstraints: QueryConstraint[] = [...constraints, where('status', '==', 'draft')]
+function toNullableText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length ? value.trim() : null
+}
 
-  if (!isAdminViewer()) {
-    submittedConstraints.push(where('uid', '==', uid))
-    draftConstraints.push(where('uid', '==', uid))
+function normalizeRecipientList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return Array.from(
+    new Set(
+      value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  )
+}
+
+function sanitizeLineCount(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 0
+  return Math.max(0, Math.round(parsed))
+}
+
+function sanitizeAttachmentType(value: unknown): DailyLogAttachmentType {
+  return value === 'ptp' || value === 'qc' || value === 'other' ? value : 'photo'
+}
+
+function sanitizeManpowerLine(line: DailyLogManpowerLineRecord): DailyLogManpowerLineRecord {
+  return {
+    trade: line.trade.trim(),
+    count: sanitizeLineCount(line.count),
+    areas: line.areas.trim(),
+    addedByUserId: toNullableText(line.addedByUserId),
   }
+}
+
+function sanitizeIndoorClimateReading(reading: DailyLogIndoorClimateReadingRecord): DailyLogIndoorClimateReadingRecord {
+  return {
+    area: reading.area.trim(),
+    high: reading.high.trim(),
+    low: reading.low.trim(),
+    humidity: reading.humidity.trim(),
+  }
+}
+
+function sanitizeAttachment(attachment: DailyLogAttachmentRecord): DailyLogAttachmentRecord {
+  return {
+    name: attachment.name.trim(),
+    url: attachment.url.trim(),
+    path: attachment.path.trim(),
+    type: sanitizeAttachmentType(attachment.type),
+    description: attachment.description.trim(),
+    createdAt: attachment.createdAt,
+  }
+}
+
+function summarizeManpowerLines(lines: DailyLogManpowerLineRecord[]) {
+  const summary = lines
+    .filter((line) => line.trade.trim().length > 0 && sanitizeLineCount(line.count) > 0)
+    .map((line) => {
+      const trade = line.trade.trim()
+      const count = sanitizeLineCount(line.count)
+      const areas = line.areas.trim()
+      return areas ? `${trade}: ${count} (${areas})` : `${trade}: ${count}`
+    })
+
+  return summary.join('; ')
+}
+
+function sanitizePayload(payload: DailyLogPayload): DailyLogPayload {
+  const nextPayload = createEmptyDailyLogPayload(payload)
+  nextPayload.jobSiteNumbers = nextPayload.jobSiteNumbers.trim()
+  nextPayload.foremanOnSite = nextPayload.foremanOnSite.trim()
+  nextPayload.siteForemanAssistant = nextPayload.siteForemanAssistant.trim()
+  nextPayload.projectName = nextPayload.projectName.trim()
+  nextPayload.weeklySchedule = nextPayload.weeklySchedule.trim()
+  nextPayload.manpowerAssessment = nextPayload.manpowerAssessment.trim()
+  nextPayload.manpowerLines = nextPayload.manpowerLines.map((line) => sanitizeManpowerLine(line))
+  nextPayload.indoorClimateReadings = nextPayload.indoorClimateReadings.map((reading) => sanitizeIndoorClimateReading(reading))
+  nextPayload.safetyConcerns = nextPayload.safetyConcerns.trim()
+  nextPayload.ahaReviewed = nextPayload.ahaReviewed.trim()
+  nextPayload.scheduleConcerns = nextPayload.scheduleConcerns.trim()
+  nextPayload.budgetConcerns = nextPayload.budgetConcerns.trim()
+  nextPayload.deliveriesReceived = nextPayload.deliveriesReceived.trim()
+  nextPayload.deliveriesNeeded = nextPayload.deliveriesNeeded.trim()
+  nextPayload.newWorkAuthorizations = nextPayload.newWorkAuthorizations.trim()
+  nextPayload.qcAssignedTo = nextPayload.qcAssignedTo.trim()
+  nextPayload.qcAreasInspected = nextPayload.qcAreasInspected.trim()
+  nextPayload.qcIssuesIdentified = nextPayload.qcIssuesIdentified.trim()
+  nextPayload.qcIssuesResolved = nextPayload.qcIssuesResolved.trim()
+  nextPayload.notesCorrespondence = nextPayload.notesCorrespondence.trim()
+  nextPayload.actionItems = nextPayload.actionItems.trim()
+  nextPayload.attachments = nextPayload.attachments
+    .map((attachment) => sanitizeAttachment(attachment))
+    .filter((attachment) => attachment.name.length > 0 && attachment.path.length > 0 && attachment.url.length > 0)
+  nextPayload.manpower = summarizeManpowerLines(nextPayload.manpowerLines)
+  nextPayload.qcInspection = nextPayload.qcAreasInspected
+  return nextPayload
+}
+
+function serializeAttachmentCreatedAt(value: unknown): string | null {
+  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().toISOString()
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  return null
+}
+
+function serializePayloadForCallable(payload: DailyLogPayload) {
+  const sanitized = sanitizePayload(payload)
+  return {
+    ...sanitized,
+    attachments: sanitized.attachments.map((attachment) => ({
+      ...attachment,
+      createdAt: serializeAttachmentCreatedAt(attachment.createdAt),
+    })),
+  }
+}
+
+function normalizeManpowerLine(value: unknown): DailyLogManpowerLineRecord {
+  if (!value || typeof value !== 'object') {
+    return createEmptyManpowerLine()
+  }
+
+  const record = value as Record<string, unknown>
+  return {
+    trade: typeof record.trade === 'string' ? record.trade.trim() : '',
+    count: sanitizeLineCount(record.count),
+    areas: typeof record.areas === 'string' ? record.areas.trim() : '',
+    addedByUserId: toNullableText(record.addedByUserId),
+  }
+}
+
+function normalizeIndoorClimateReading(value: unknown): DailyLogIndoorClimateReadingRecord {
+  if (!value || typeof value !== 'object') {
+    return createEmptyIndoorClimateReading()
+  }
+
+  const record = value as Record<string, unknown>
+  return {
+    area: typeof record.area === 'string' ? record.area.trim() : '',
+    high: typeof record.high === 'string' ? record.high.trim() : '',
+    low: typeof record.low === 'string' ? record.low.trim() : '',
+    humidity: typeof record.humidity === 'string' ? record.humidity.trim() : '',
+  }
+}
+
+function normalizeAttachment(value: unknown): DailyLogAttachmentRecord | null {
+  if (!value || typeof value !== 'object') return null
+
+  const record = value as Record<string, unknown>
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  const url = typeof record.url === 'string' ? record.url.trim() : ''
+  const path = typeof record.path === 'string' ? record.path.trim() : ''
+
+  if (!name || !url || !path) return null
 
   return {
-    submittedQuery: createDailyLogQuery(jobId, submittedConstraints),
-    draftQuery: createDailyLogQuery(jobId, draftConstraints),
+    name,
+    url,
+    path,
+    type: sanitizeAttachmentType(record.type),
+    description: typeof record.description === 'string' ? record.description.trim() : '',
+    createdAt: record.createdAt,
   }
 }
 
-function normalize(id: string, data: DocumentData): DailyLog {
+function normalizePayload(data: DocumentData): DailyLogPayload {
+  const payloadSource = data.payload && typeof data.payload === 'object'
+    ? (data.payload as Record<string, unknown>)
+    : (data as Record<string, unknown>)
+
+  return sanitizePayload(createEmptyDailyLogPayload({
+    jobSiteNumbers: typeof payloadSource.jobSiteNumbers === 'string' ? payloadSource.jobSiteNumbers : '',
+    foremanOnSite: typeof payloadSource.foremanOnSite === 'string' ? payloadSource.foremanOnSite : '',
+    siteForemanAssistant: typeof payloadSource.siteForemanAssistant === 'string' ? payloadSource.siteForemanAssistant : '',
+    projectName: typeof payloadSource.projectName === 'string' ? payloadSource.projectName : '',
+    manpower: typeof payloadSource.manpower === 'string' ? payloadSource.manpower : '',
+    weeklySchedule: typeof payloadSource.weeklySchedule === 'string' ? payloadSource.weeklySchedule : '',
+    manpowerAssessment: typeof payloadSource.manpowerAssessment === 'string' ? payloadSource.manpowerAssessment : '',
+    indoorClimateReadings: Array.isArray(payloadSource.indoorClimateReadings)
+      ? payloadSource.indoorClimateReadings.map((entry) => normalizeIndoorClimateReading(entry))
+      : undefined,
+    manpowerLines: Array.isArray(payloadSource.manpowerLines)
+      ? payloadSource.manpowerLines.map((entry) => normalizeManpowerLine(entry))
+      : undefined,
+    safetyConcerns: typeof payloadSource.safetyConcerns === 'string' ? payloadSource.safetyConcerns : '',
+    ahaReviewed: typeof payloadSource.ahaReviewed === 'string' ? payloadSource.ahaReviewed : '',
+    scheduleConcerns: typeof payloadSource.scheduleConcerns === 'string' ? payloadSource.scheduleConcerns : '',
+    budgetConcerns: typeof payloadSource.budgetConcerns === 'string' ? payloadSource.budgetConcerns : '',
+    deliveriesReceived: typeof payloadSource.deliveriesReceived === 'string' ? payloadSource.deliveriesReceived : '',
+    deliveriesNeeded: typeof payloadSource.deliveriesNeeded === 'string' ? payloadSource.deliveriesNeeded : '',
+    newWorkAuthorizations: typeof payloadSource.newWorkAuthorizations === 'string' ? payloadSource.newWorkAuthorizations : '',
+    qcInspection: typeof payloadSource.qcInspection === 'string' ? payloadSource.qcInspection : '',
+    qcAssignedTo: typeof payloadSource.qcAssignedTo === 'string' ? payloadSource.qcAssignedTo : '',
+    qcAreasInspected: typeof payloadSource.qcAreasInspected === 'string' ? payloadSource.qcAreasInspected : '',
+    qcIssuesIdentified: typeof payloadSource.qcIssuesIdentified === 'string' ? payloadSource.qcIssuesIdentified : '',
+    qcIssuesResolved: typeof payloadSource.qcIssuesResolved === 'string' ? payloadSource.qcIssuesResolved : '',
+    notesCorrespondence: typeof payloadSource.notesCorrespondence === 'string' ? payloadSource.notesCorrespondence : '',
+    actionItems: typeof payloadSource.actionItems === 'string' ? payloadSource.actionItems : '',
+    attachments: Array.isArray(payloadSource.attachments)
+      ? payloadSource.attachments
+        .map((entry) => normalizeAttachment(entry))
+        .filter((entry): entry is DailyLogAttachmentRecord => entry !== null)
+      : undefined,
+  }))
+}
+
+function normalizeSequenceNumber(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 1) return 1
+  return Math.round(parsed)
+}
+
+function normalizeDailyLog(id: string, data: DocumentData): DailyLogRecord {
   return {
     id,
-    jobId: data.jobId,
-    uid: data.uid,
-    status: (data.status ?? 'draft') as DailyLogStatus,
-    logDate: data.logDate,
-
-    jobSiteNumbers: data.jobSiteNumbers ?? '',
-    foremanOnSite: data.foremanOnSite ?? '',
-    siteForemanAssistant: data.siteForemanAssistant ?? '',
-    projectName: data.projectName ?? '',
-
-    manpower: data.manpower ?? '',
-    weeklySchedule: data.weeklySchedule ?? '',
-    manpowerAssessment: data.manpowerAssessment ?? '',
-    indoorClimateReadings: Array.isArray(data.indoorClimateReadings) ? data.indoorClimateReadings : [],
-
-    manpowerLines: Array.isArray(data.manpowerLines) ? data.manpowerLines : [],
-
-    safetyConcerns: data.safetyConcerns ?? '',
-    ahaReviewed: data.ahaReviewed ?? '',
-    scheduleConcerns: data.scheduleConcerns ?? '',
-    budgetConcerns: data.budgetConcerns ?? '',
-
-    deliveriesReceived: data.deliveriesReceived ?? '',
-    deliveriesNeeded: data.deliveriesNeeded ?? '',
-    newWorkAuthorizations: data.newWorkAuthorizations ?? '',
-    qcInspection: data.qcInspection ?? '',
-    qcAssignedTo: data.qcAssignedTo ?? '',
-    qcAreasInspected: data.qcAreasInspected ?? '',
-    qcIssuesIdentified: data.qcIssuesIdentified ?? '',
-    qcIssuesResolved: data.qcIssuesResolved ?? '',
-
-    notesCorrespondence: data.notesCorrespondence ?? '',
-    actionItems: data.actionItems ?? '',
-    commentsAboutShip: data.commentsAboutShip ?? '',
-
-    attachments: Array.isArray(data.attachments) ? data.attachments : [],
-
+    jobId: typeof data.jobId === 'string' ? data.jobId : '',
+    jobCode: toNullableText(data.jobCode),
+    jobName: toNullableText(data.jobName),
+    logDate: typeof data.logDate === 'string' ? data.logDate : '',
+    sequenceNumber: normalizeSequenceNumber(data.sequenceNumber),
+    status: data.status === 'submitted' ? 'submitted' : 'draft',
+    foremanUserId: toNullableText(data.foremanUserId ?? data.uid),
+    foremanName: toNullableText(data.foremanName ?? data.foremanOnSite),
+    additionalRecipients: normalizeRecipientList(data.additionalRecipients),
+    payload: normalizePayload(data),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     submittedAt: data.submittedAt,
   }
 }
 
-export async function listMyDailyLogs(jobId: string, max = 25): Promise<DailyLog[]> {
-  try {
-    assertJobAccess(jobId)
-    const u = requireUser()
-
-    const q = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-      where('uid', '==', u.uid),
-      orderBy('logDate', 'desc'),
-      limit(max)
-    )
-
-    const snap = await getDocs(q)
-    return snap.docs.map((d) => normalize(d.id, d.data()))
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load daily logs'))
+function toMillis(value: unknown): number {
+  if (typeof (value as { toMillis?: () => number })?.toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis()
   }
+
+  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().getTime()
+  }
+
+  if (value instanceof Date) return value.getTime()
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime()
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  return 0
 }
 
-export async function listAllDailyLogs(jobId: string, max = 25): Promise<DailyLog[]> {
-  try {
-    assertJobAccess(jobId)
-    const u = requireUser()
-    const { submittedQuery, draftQuery } = getVisibleDailyLogQueries(jobId, u.uid)
+function sortDailyLogs(logs: DailyLogRecord[]) {
+  return logs
+    .slice()
+    .sort((left, right) => {
+      const rank = (status: string) => (status === 'submitted' ? 0 : 1)
+      if (rank(left.status) !== rank(right.status)) return rank(left.status) - rank(right.status)
 
-    const [submittedSnap, myDraftsSnap] = await Promise.all([
-      getDocs(submittedQuery),
-      getDocs(draftQuery)
-    ])
+      const rightTimestamp = toMillis(right.submittedAt) || toMillis(right.updatedAt) || toMillis(right.createdAt)
+      const leftTimestamp = toMillis(left.submittedAt) || toMillis(left.updatedAt) || toMillis(left.createdAt)
+      if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
 
-    // Combine and deduplicate by ID, then sort by date descending
-    const logsMap = new Map<string, DailyLog>()
-    submittedSnap.docs.forEach(d => logsMap.set(d.id, normalize(d.id, d.data())))
-    myDraftsSnap.docs.forEach(d => logsMap.set(d.id, normalize(d.id, d.data())))
-
-    return Array.from(logsMap.values())
-      .sort((a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime())
-      .slice(0, max)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load daily logs'))
-  }
-}
-
-export async function listDailyLogsForDate(jobId: string, logDate: string): Promise<DailyLog[]> {
-  try {
-    assertJobAccess(jobId)
-    const u = requireUser()
-    const { submittedQuery, draftQuery } = getVisibleDailyLogQueries(jobId, u.uid, [
-      where('logDate', '==', logDate),
-    ])
-
-    const [submittedSnap, draftsSnap] = await Promise.all([
-      getDocs(submittedQuery),
-      getDocs(draftQuery)
-    ])
-
-    const logsMap = new Map<string, DailyLog>()
-    submittedSnap.docs.forEach((d) => logsMap.set(d.id, normalize(d.id, d.data())))
-    draftsSnap.docs.forEach((d) => logsMap.set(d.id, normalize(d.id, d.data())))
-
-    const rank = (s: DailyLog['status']) => (s === 'submitted' ? 0 : 1)
-
-    return Array.from(logsMap.values()).sort((a, b) => {
-      if (rank(a.status) !== rank(b.status)) return rank(a.status) - rank(b.status)
-      const aTs = toMillis(a.submittedAt || a.updatedAt || a.createdAt)
-      const bTs = toMillis(b.submittedAt || b.updatedAt || b.createdAt)
-      return bTs - aTs
+      if (right.sequenceNumber !== left.sequenceNumber) return right.sequenceNumber - left.sequenceNumber
+      return right.id.localeCompare(left.id)
     })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load daily logs'))
-  }
 }
 
 export function subscribeDailyLogsForDate(
   jobId: string,
   logDate: string,
-  onData: (logs: DailyLog[]) => void,
-  onError?: (error: unknown) => void
+  onUpdate: (logs: DailyLogRecord[]) => void,
+  onError?: (error: unknown) => void,
 ): Unsubscribe {
-  assertJobAccess(jobId)
-  const u = requireUser()
-  const { submittedQuery, draftQuery } = getVisibleDailyLogQueries(jobId, u.uid, [
-    where('logDate', '==', logDate),
-  ])
+  const { db } = requireFirebaseServices()
 
-  const rank = (status: DailyLog['status']) => (status === 'submitted' ? 0 : 1)
-  const merged = new Map<string, DailyLog>()
-
-  const emit = () => {
-    const list = Array.from(merged.values()).sort((a, b) => {
-      if (rank(a.status) !== rank(b.status)) return rank(a.status) - rank(b.status)
-      const aTs = toMillis(a.submittedAt || a.updatedAt || a.createdAt)
-      const bTs = toMillis(b.submittedAt || b.updatedAt || b.createdAt)
-      return bTs - aTs
-    })
-    onData(list)
-  }
-
-  const syncFromSnapshot = (entries: DailyLog[], mode: 'submitted' | 'draft') => {
-    const expectedStatus = mode === 'submitted' ? 'submitted' : 'draft'
-    for (const [id, value] of merged.entries()) {
-      if (value.status === expectedStatus) {
-        merged.delete(id)
-      }
-    }
-    entries.forEach((entry) => {
-      merged.set(entry.id, entry)
-    })
-    emit()
-  }
-
-  const unsubSubmitted = onSnapshot(
-    submittedQuery,
-    (snap) => {
-      syncFromSnapshot(
-        snap.docs.map((d) => normalize(d.id, d.data())),
-        'submitted'
-      )
+  return onSnapshot(
+    query(collection(db, 'dailyLogs'), where('jobId', '==', jobId), where('logDate', '==', logDate)),
+    (snapshot) => {
+      onUpdate(sortDailyLogs(snapshot.docs.map((entry) => normalizeDailyLog(entry.id, entry.data()))))
     },
-    (err) => {
-      onError?.(err)
-    }
-  )
-
-  const unsubDrafts = onSnapshot(
-    draftQuery,
-    (snap) => {
-      syncFromSnapshot(
-        snap.docs.map((d) => normalize(d.id, d.data())),
-        'draft'
-      )
+    (error) => {
+      onError?.(error)
     },
-    (err) => {
-      onError?.(err)
-    }
   )
-
-  return () => {
-    unsubSubmitted()
-    unsubDrafts()
-  }
 }
 
-export async function getMyDailyLogByDate(jobId: string, logDate: string): Promise<DailyLog | null> {
+export async function createDailyLogRecord(input: CreateDailyLogInput): Promise<string> {
   try {
-    assertJobAccess(jobId)
-    const u = requireUser()
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<
+      CreateDailyLogInput,
+      { id: string }
+    >(functions, 'createDailyLogRecordCallable')
 
-    // Prefer draft for that date (most recent)
-    const draftQuery = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-      where('uid', '==', u.uid),
-      where('logDate', '==', logDate),
-      where('status', '==', 'draft')
-    )
-
-    const draftSnap = await getDocs(draftQuery)
-    if (!draftSnap.empty) {
-      // Pick latest by createdAt to avoid needing a composite index
-      const latestDraft = draftSnap.docs.reduce<
-        { doc: (typeof draftSnap.docs)[number]; ts: number } | null
-      >((latest, doc) => {
-        const ts = doc.data()?.createdAt?.toMillis?.() ?? 0
-        if (!latest || ts > latest.ts) return { doc, ts }
-        return latest
-      }, null)
-
-      const d = latestDraft?.doc ?? draftSnap.docs[0]
-      if (!d) return null
-      return normalize(d.id, d.data())
-    }
-
-    // Otherwise fall back to latest submitted for that date
-    const submittedQuery = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-      where('uid', '==', u.uid),
-      where('logDate', '==', logDate),
-      where('status', '==', 'submitted')
-    )
-
-    const submittedSnap = await getDocs(submittedQuery)
-    if (submittedSnap.empty) return null
-
-    const latestSubmitted = submittedSnap.docs.reduce<
-      { doc: (typeof submittedSnap.docs)[number]; ts: number } | null
-    >((latest, doc) => {
-      const ts = doc.data()?.submittedAt?.toMillis?.() ?? 0
-      if (!latest || ts > latest.ts) return { doc, ts }
-      return latest
-    }, null)
-
-    const d = latestSubmitted?.doc ?? submittedSnap.docs[0]
-    if (!d) return null
-    return normalize(d.id, d.data())
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to load daily log'))
-  }
-}
-
-export async function createDailyLog(jobId: string, logDate: string, input: DailyLogDraftInput) {
-  try {
-    assertJobAccess(jobId)
-    const u = requireUser()
-
-    const ref = await addDoc(collection(db, ...jobCollectionPath(jobId, 'dailyLogs')), {
-      jobId,
-      uid: u.uid,
-      status: 'draft',
+    const result = await callable({
       ...input,
-      logDate, // only set once
-
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      submittedAt: null,
+      additionalRecipients: normalizeRecipientList(input.additionalRecipients),
+      payload: serializePayloadForCallable(input.payload),
     })
 
-    return ref.id
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to create daily log'))
-  }
-}
-
-export async function updateDailyLog(jobId: string, dailyLogId: string, updates: Partial<DailyLogDraftInput>) {
-  try {
-    assertJobAccess(jobId)
-    requireUser()
-    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
-    await updateDoc(ref, {
-      ...updates,
-      updatedAt: serverTimestamp(),
-    })
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to update daily log'))
-  }
-}
-
-export async function submitDailyLog(jobId: string, dailyLogId: string) {
-  try {
-    assertJobAccess(jobId)
-    requireUser()
-    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
-
-    const snap = await getDoc(ref)
-    if (!snap.exists()) throw new Error('Daily log not found')
-
-    await updateDoc(ref, {
-      status: 'submitted',
-      submittedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-  } catch (err) {
-    if (err instanceof Error && err.message === 'Daily log not found') {
-      throw err
+    const id = String(result.data?.id || '').trim()
+    if (!id) {
+      throw new Error('Daily log did not return an id.')
     }
-    throw new Error(normalizeError(err, 'Failed to submit daily log'))
+
+    return id
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to create daily log.'))
   }
 }
 
-export async function deleteDailyLog(jobId: string, dailyLogId: string) {
+export async function updateDailyLogRecord(
+  dailyLogId: string,
+  input: UpdateDailyLogInput,
+  actor?: DailyLogActor,
+): Promise<void> {
   try {
-    assertJobAccess(jobId)
-    requireUser()
-    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
-    await deleteDoc(ref)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to delete daily log'))
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<
+      {
+        dailyLogId: string
+        payload?: DailyLogPayload
+        status?: DailyLogStatus
+        additionalRecipients?: string[]
+        actor?: DailyLogActor
+      },
+      { success: boolean }
+    >(functions, 'updateDailyLogRecordCallable')
+
+    await callable({
+      dailyLogId,
+      ...(input.payload ? { payload: serializePayloadForCallable(input.payload) } : {}),
+      ...(input.status ? { status: input.status } : {}),
+      ...('additionalRecipients' in input ? { additionalRecipients: normalizeRecipientList(input.additionalRecipients) } : {}),
+      ...(actor ? { actor } : {}),
+    })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to update daily log.'))
   }
 }
 
-export async function cleanupDeletedLogs(jobId: string) {
+export async function deleteDailyLogRecord(dailyLogId: string): Promise<void> {
   try {
-    assertJobAccess(jobId)
-    requireUser()
-    
-    const q = query(
-      collection(db, ...jobCollectionPath(jobId, 'dailyLogs')),
-      where('status', '==', 'deleted')
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<{ dailyLogId: string }, { success: boolean }>(
+      functions,
+      'deleteDailyLogRecordCallable',
     )
-    
-    const snap = await getDocs(q)
-    const batch = [];
-    for (const doc of snap.docs) {
-      batch.push(deleteDoc(doc.ref))
-    }
-    await Promise.all(batch)
-  } catch (err) {
-    throw new Error(normalizeError(err, 'Failed to cleanup daily logs'))
+    await callable({ dailyLogId })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to delete daily log.'))
   }
 }
 
-export async function getDailyLogById(jobId: string, dailyLogId: string): Promise<DailyLog | null> {
-  try {
-    assertJobAccess(jobId)
-    const u = requireUser()
-    const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
-    const snap = await getDoc(ref)
-    if (!snap.exists()) return null
-    
-    const log = normalize(snap.id, snap.data())
-    
-    // Admins can inspect drafts, foremen can only see their own.
-    if (log.status === 'draft' && !isAdminViewer() && log.uid !== u.uid) {
-      throw new Error('Access denied: This is a private draft')
-    }
-    
-    return log
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('Access denied')) {
-      throw err
-    }
-    throw new Error(normalizeError(err, 'Failed to load daily log'))
-  }
-}
-
-export function subscribeToDailyLog(
+export async function uploadDailyLogAttachment(
+  file: File,
   jobId: string,
   dailyLogId: string,
-  onData: (log: DailyLog) => void,
-  onError?: (error: unknown) => void
-) {
-  assertJobAccess(jobId)
-  const u = requireUser()
-  const ref = doc(db, ...jobDocumentPath(jobId, 'dailyLogs', dailyLogId))
-  return onSnapshot(
-    ref,
-    (snap) => {
-      if (!snap.exists()) return
-      const log = normalize(snap.id, snap.data())
+  type: DailyLogAttachmentType,
+  description: string,
+): Promise<DailyLogAttachmentRecord> {
+  try {
+    const { auth, storage } = requireFirebaseServices()
+    const currentUserId = auth.currentUser?.uid
+    if (!currentUserId) {
+      throw new Error('You must be signed in to upload attachments.')
+    }
 
-      // Admins can inspect drafts, foremen can only see their own.
-      if (log.status === 'draft' && !isAdminViewer() && log.uid !== u.uid) {
-        onError?.(new Error('Access denied: This is a private draft'))
-        return
-      }
+    const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+    const storagePath = `daily-logs/${dailyLogId}/${Date.now()}-${safeName}`
+    const reference = storageRef(storage, storagePath)
 
-      onData(log)
-    },
-    onError
-  )
+    await uploadBytes(reference, file, {
+      contentType: file.type || undefined,
+      customMetadata: {
+        jobId,
+        dailyLogId,
+        type,
+        description: description.trim(),
+        uploadedBy: currentUserId,
+        uploadedAt: new Date().toISOString(),
+      },
+    })
+
+    return {
+      name: file.name,
+      url: await getDownloadURL(reference),
+      path: storagePath,
+      type,
+      description: description.trim(),
+      createdAt: new Date(),
+    }
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to upload daily log attachment.'))
+  }
 }
 
-
+export async function deleteDailyLogAttachment(path: string): Promise<void> {
+  try {
+    const { storage } = requireFirebaseServices()
+    await deleteObject(storageRef(storage, path))
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to delete daily log attachment.'))
+  }
+}
