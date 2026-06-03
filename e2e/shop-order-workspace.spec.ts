@@ -42,6 +42,36 @@ test.describe('shop order workspace regressions', () => {
     await expect(page.getByTestId('shoporder-save-count')).toHaveText('1')
   })
 
+  test('catalog item quantity input is applied when adding an item to the order', async ({ page }) => {
+    await page.goto('/__e2e/shop-order-workspace')
+
+    await page.getByTestId('shoporder-quantity-item-box').fill('3')
+    await page.getByTestId('shoporder-add-item-box').click()
+
+    await expect(page.getByTestId('shoporder-order-item-qty-order-item-1')).toHaveValue('3')
+  })
+
+  test('Thursday delivery shortcut updates the delivery date and autosaves', async ({ page }) => {
+    await page.goto('/__e2e/shop-order-workspace')
+
+    await page.getByTestId('shoporder-shortcut').click()
+
+    await page.waitForTimeout(500)
+
+    await expect(page.getByTestId('shoporder-delivery-date')).toHaveValue('2026-05-07')
+    await expect(page.getByTestId('shoporder-save-count')).toHaveText('1')
+  })
+
+  test('removing the last item returns the empty state placeholder', async ({ page }) => {
+    await page.goto('/__e2e/shop-order-workspace')
+
+    await page.getByTestId('shoporder-add-item-box').click()
+    await page.getByTestId('shoporder-order-item-remove-order-item-1').click()
+
+    await expect(page.getByTestId('shoporder-empty')).toBeVisible()
+    await expect(page.getByTestId('shoporder-order-item-order-item-1')).toHaveCount(0)
+  })
+
   test('submitted orders render plain values instead of editable controls', async ({ page }) => {
     await page.goto('/__e2e/shop-order-workspace')
 

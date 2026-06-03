@@ -979,13 +979,13 @@ function makeEmployeeSeed(employee: EmployeeRecord): TimecardEmployeeSeed {
     lastName: employee.lastName,
     employeeNumber: employee.employeeNumber,
     occupation: employee.occupation,
-    wageRate: employee.wageRate,
+    wageRate: null,
     isContractor: employee.isContractor,
   }
 }
 
 function isEmployeeHeaderLocked(card: TimecardCardRecord) {
-  return card.sourceType !== 'custom' || isCardReadOnly(card.id)
+  return card.sourceType !== 'custom' && isCardReadOnly(card.id)
 }
 
 function isCardEditable(cardId: string) {

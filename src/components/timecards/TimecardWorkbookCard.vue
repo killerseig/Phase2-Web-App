@@ -130,8 +130,20 @@ function clearNumericDraft(key: string) {
   delete numericDrafts[key]
 }
 
+function sanitizeWageInputValue(value: string) {
+  return value.replace(/[^0-9.,]/g, '')
+}
+
+function filterWageKey(event: KeyboardEvent) {
+  const key = event.key
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (/^[0-9]$/.test(key) || key === '.' || key === ',') return
+  if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab', 'Enter', 'Escape'].includes(key)) return
+  event.preventDefault()
+}
+
 function parseNumericDraft(value: string): NumericDraftResult {
-  const trimmed = value.trim()
+  const trimmed = value.trim().replace(/[$,]/g, '')
   if (!trimmed) return { kind: 'empty' }
   if (trimmed === '.' || /^\d+\.$/.test(trimmed)) return { kind: 'incomplete' }
 
@@ -238,8 +250,10 @@ function setCardField(
 }
 
 function setWageRateField(value: string) {
-  numericDrafts['card:wageRate'] = value
-  const parsed = parseNumericDraft(value)
+  const sanitized = sanitizeWageInputValue(value)
+  numericDrafts['card:wageRate'] = sanitized
+  const parsed = parseNumericDraft(sanitized)
+
   if (parsed.kind === 'empty') {
     if (props.card.wageRate == null) return
     props.card.wageRate = null
@@ -254,19 +268,31 @@ function setWageRateField(value: string) {
 
 function commitWageRateField() {
   if (!hasNumericDraft('card:wageRate')) return
-  const draft = numericDrafts['card:wageRate'] ?? ''
+  const draft = sanitizeWageInputValue(numericDrafts['card:wageRate'] ?? '')
   clearNumericDraft('card:wageRate')
 
   const parsed = parseNumericDraft(draft)
-  if (parsed.kind === 'empty') {
-    if (props.card.wageRate == null) return
-    props.card.wageRate = null
-    emit('changed')
+  if (parsed.kind === 'value') {
+    if (!Object.is(props.card.wageRate, parsed.value)) {
+      props.card.wageRate = parsed.value
+      emit('changed')
+    }
     return
   }
 
-  if (parsed.kind !== 'value' || Object.is(props.card.wageRate, parsed.value)) return
-  props.card.wageRate = parsed.value
+  const normalized = draft.trim().replace(/[$,]/g, '')
+  const fallback = Number(normalized)
+  if (parsed.kind === 'incomplete' && Number.isFinite(fallback) && normalized !== '.' && normalized !== '') {
+    const value = Math.max(0, fallback)
+    if (!Object.is(props.card.wageRate, value)) {
+      props.card.wageRate = value
+      emit('changed')
+    }
+    return
+  }
+
+  if (props.card.wageRate == null) return
+  props.card.wageRate = null
   emit('changed')
 }
 
@@ -483,16 +509,18 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
         <span class="timecard-card__field-label timecard-card__field-label--wage">WAGE</span>
         <div class="timecard-card__field-value timecard-card__field-value--wage">
           <template v-if="showEmployeeWage">
-            <template v-if="employeeHeaderLocked">
-              {{ formatCurrency(card.wageRate) || '-' }}
+            <template v-if="readOnly">
+              <span data-testid="timecard-wage-display">{{ formatCurrency(card.wageRate) || '-' }}</span>
             </template>
             <input
               v-else
               class="timecard-card__header-input timecard-card__header-input--center"
+              data-testid="timecard-wage-input"
               :disabled="readOnly"
-              :value="getNumericFieldValue('card:wageRate', card.wageRate == null ? '' : String(card.wageRate))"
+              :value="getNumericFieldValue('card:wageRate', card.wageRate == null ? '' : formatCurrency(card.wageRate))"
               type="text"
               inputmode="decimal"
+              @keydown="filterWageKey"
               @input="setWageRateField(($event.target as HTMLInputElement).value)"
               @blur="commitWageRateField"
             />

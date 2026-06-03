@@ -16,7 +16,6 @@ interface EmployeeFormState {
   firstName: string
   lastName: string
   occupation: string
-  wageRate: string
   active: boolean
   isContractor: boolean
 }
@@ -43,7 +42,6 @@ const createForm = reactive<EmployeeFormState>({
   firstName: '',
   lastName: '',
   occupation: '',
-  wageRate: '',
   active: true,
   isContractor: false,
 })
@@ -53,7 +51,6 @@ const detailForm = reactive<EmployeeFormState>({
   firstName: '',
   lastName: '',
   occupation: '',
-  wageRate: '',
   active: true,
   isContractor: false,
 })
@@ -114,7 +111,6 @@ function resetCreateForm() {
   createForm.firstName = ''
   createForm.lastName = ''
   createForm.occupation = ''
-  createForm.wageRate = ''
   createForm.active = true
   createForm.isContractor = false
   createError.value = ''
@@ -130,7 +126,6 @@ function applySelectedEmployeeToForm(employee: EmployeeRecord | null) {
     detailForm.firstName = ''
     detailForm.lastName = ''
     detailForm.occupation = ''
-    detailForm.wageRate = ''
     detailForm.active = true
     detailForm.isContractor = false
     nextTick(() => {
@@ -143,7 +138,6 @@ function applySelectedEmployeeToForm(employee: EmployeeRecord | null) {
   detailForm.firstName = employee.firstName
   detailForm.lastName = employee.lastName
   detailForm.occupation = employee.occupation
-  detailForm.wageRate = employee.wageRate == null ? '' : formatWageInput(String(employee.wageRate))
   detailForm.active = employee.active
   detailForm.isContractor = employee.isContractor
   nextTick(() => {
@@ -151,32 +145,7 @@ function applySelectedEmployeeToForm(employee: EmployeeRecord | null) {
   })
 }
 
-function parseWageRate(value: string): number | null {
-  const trimmed = value.replaceAll('$', '').replaceAll(',', '').trim()
-  if (!trimmed) return null
-  const parsed = Number(trimmed)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function formatWageInput(value: string) {
-  const parsed = parseWageRate(value)
-  if (parsed === null) return value.replaceAll('$', '').trim()
-  return parsed.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
-function handleCreateWageBlur() {
-  createForm.wageRate = formatWageInput(createForm.wageRate)
-}
-
 async function handleDetailFieldBlur() {
-  await handleAutoSaveEmployee()
-}
-
-async function handleDetailWageBlur() {
-  detailForm.wageRate = formatWageInput(detailForm.wageRate)
   await handleAutoSaveEmployee()
 }
 
@@ -189,7 +158,6 @@ function validateEmployeeForm(form: EmployeeFormState) {
   if (!form.firstName.trim()) return 'Enter the first name.'
   if (!form.lastName.trim()) return 'Enter the last name.'
   if (!form.occupation.trim()) return 'Enter the occupation.'
-  if (parseWageRate(form.wageRate) === null) return 'Enter a wage amount.'
   return ''
 }
 
@@ -209,16 +177,6 @@ function getEmployeeCode(employee: Pick<EmployeeRecord, 'employeeNumber'>) {
   return employee.employeeNumber.trim() || 'No Number'
 }
 
-function formatWageLabel(wageRate: number | null) {
-  if (wageRate == null) return 'No Wage'
-  return wageRate.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
 function getSelectedEmployeeSnapshot(employee: EmployeeRecord | null) {
   if (!employee) return null
 
@@ -227,7 +185,6 @@ function getSelectedEmployeeSnapshot(employee: EmployeeRecord | null) {
     firstName: employee.firstName.trim(),
     lastName: employee.lastName.trim(),
     occupation: employee.occupation.trim(),
-    wageRate: employee.wageRate,
     active: employee.active,
     isContractor: employee.isContractor,
   }
@@ -239,7 +196,6 @@ function getDetailFormSnapshot() {
     firstName: detailForm.firstName.trim(),
     lastName: detailForm.lastName.trim(),
     occupation: detailForm.occupation.trim(),
-    wageRate: parseWageRate(detailForm.wageRate),
     active: detailForm.active,
     isContractor: detailForm.isContractor,
   }
@@ -256,7 +212,6 @@ function areDetailSnapshotsEqual(
     && left.firstName === right.firstName
     && left.lastName === right.lastName
     && left.occupation === right.occupation
-    && Object.is(left.wageRate, right.wageRate)
     && left.active === right.active
     && left.isContractor === right.isContractor
   )
@@ -298,7 +253,6 @@ async function handleCreateEmployee() {
       firstName: createForm.firstName,
       lastName: createForm.lastName,
       occupation: createForm.occupation,
-      wageRate: parseWageRate(createForm.wageRate),
       active: createForm.active,
       isContractor: createForm.isContractor,
     })
@@ -338,7 +292,6 @@ async function handleAutoSaveEmployee() {
       firstName: detailForm.firstName,
       lastName: detailForm.lastName,
       occupation: detailForm.occupation,
-      wageRate: parseWageRate(detailForm.wageRate),
       active: detailForm.active,
       isContractor: detailForm.isContractor,
     })
@@ -531,18 +484,6 @@ onBeforeUnmount(() => {
                   <input v-model="createForm.employeeNumber" type="text" autocomplete="off" />
                 </label>
                 <label class="employees-form__field">
-                  <span>Wage</span>
-                  <div class="employees-form__currency-input">
-                    <input
-                      v-model="createForm.wageRate"
-                      type="text"
-                      inputmode="decimal"
-                      placeholder="0.00"
-                      @blur="handleCreateWageBlur"
-                    />
-                  </div>
-                </label>
-                <label class="employees-form__field">
                   <span>First Name</span>
                   <input v-model="createForm.firstName" type="text" autocomplete="given-name" />
                 </label>
@@ -624,19 +565,6 @@ onBeforeUnmount(() => {
                   />
                 </label>
                 <label class="employees-form__field">
-                  <span>Wage</span>
-                  <div class="employees-form__currency-input">
-                    <input
-                      v-model="detailForm.wageRate"
-                      :disabled="saveLoading"
-                      type="text"
-                      inputmode="decimal"
-                      placeholder="0.00"
-                      @blur="handleDetailWageBlur"
-                    />
-                  </div>
-                </label>
-                <label class="employees-form__field">
                   <span>First Name</span>
                   <input
                     v-model="detailForm.firstName"
@@ -697,7 +625,6 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="employees-settings-panel__meta">
-                  <span>Current Wage: {{ formatWageLabel(selectedEmployee.wageRate) }}</span>
                   <span>Type: {{ getEmployeeTypeLabel(selectedEmployee) }}</span>
                 </div>
               </section>

@@ -54,6 +54,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/__e2e/daily-log-typing',
+      name: 'e2e-daily-log-typing',
+      component: () => import('@/views/E2EDailyLogTypingView.vue'),
+      meta: {
+        requiresAuth: false,
+        title: 'E2E Daily Log Typing',
+      },
+    },
+    {
       path: '/__e2e/shop-order-workspace',
       name: 'e2e-shop-order-workspace',
       component: () => import('@/views/E2EShopOrderWorkspaceView.vue'),

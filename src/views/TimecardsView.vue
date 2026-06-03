@@ -288,6 +288,7 @@ function subscribeWeeksForJob() {
       weeksLoading.value = false
       setPageError(error, 'Failed to load timecard weeks.')
     },
+    auth.isAdmin ? null : auth.currentUser?.uid ?? null,
   )
 }
 
@@ -415,7 +416,7 @@ function makeEmployeeSeed(employee: EmployeeRecord): TimecardEmployeeSeed {
     lastName: employee.lastName,
     employeeNumber: employee.employeeNumber,
     occupation: employee.occupation,
-    wageRate: employee.wageRate,
+    wageRate: null,
     isContractor: employee.isContractor,
   }
 }
@@ -506,9 +507,7 @@ function toggleCardCompact(cardId: string) {
 }
 
 function isCardEditable(cardId: string) {
-  if (!canEditWeek.value) return false
-  if (!auth.isAdmin) return true
-  return adminCardEditStates[cardId] === true
+  return canEditWeek.value
 }
 
 function isCardReadOnly(cardId: string) {
@@ -642,9 +641,11 @@ function validateCustomCardForm() {
   if (!customCardForm.lastName.trim()) return 'Enter the last name.'
   if (!customCardForm.employeeNumber.trim()) return 'Enter the employee number.'
   if (!customCardForm.occupation.trim()) return 'Enter the occupation.'
-  if (!auth.isAdmin) return ''
-  const wage = Number(customCardForm.wageRate.trim())
-  if (!Number.isFinite(wage) || Number.isNaN(wage) || wage < 0) return 'Enter a wage amount.'
+  const wageText = customCardForm.wageRate.trim()
+  if (wageText) {
+    const wage = Number(wageText)
+    if (!Number.isFinite(wage) || Number.isNaN(wage) || wage < 0) return 'Enter a valid wage amount.'
+  }
   return ''
 }
 
@@ -663,16 +664,16 @@ async function handleAddCustomCard() {
     const cardId = await createTimecardCard(
       selectedWeek.value.id,
       selectedWeekStartDate.value,
-        {
-          firstName: customCardForm.firstName,
-          lastName: customCardForm.lastName,
-          employeeNumber: customCardForm.employeeNumber,
-          occupation: customCardForm.occupation,
-          wageRate: auth.isAdmin ? Number(customCardForm.wageRate.trim()) : null,
-          isContractor: customCardForm.isContractor,
-        },
-        getNextSortIndex(),
-        linkedJobNumber.value,
+      {
+        firstName: customCardForm.firstName,
+        lastName: customCardForm.lastName,
+        employeeNumber: customCardForm.employeeNumber,
+        occupation: customCardForm.occupation,
+        wageRate: customCardForm.wageRate.trim() ? Number(customCardForm.wageRate.trim()) : null,
+        isContractor: customCardForm.isContractor,
+      },
+      getNextSortIndex(),
+      linkedJobNumber.value,
     )
     compactCardStates[cardId] = false
     selectedCardId.value = cardId
@@ -1152,7 +1153,7 @@ onBeforeUnmount(() => {
                   :disabled="actionLoading || !canEditWeek"
                 />
               </label>
-              <label v-if="auth.isAdmin" class="timecards-toolbar__search">
+              <label class="timecards-toolbar__search">
                 <span>Wage</span>
                 <input
                   v-model="customCardForm.wageRate"
@@ -1164,9 +1165,6 @@ onBeforeUnmount(() => {
                   :disabled="actionLoading || !canEditWeek"
                 />
               </label>
-              <div v-else class="timecards-create__restricted-note">
-                Wage hidden for foremen
-              </div>
               <div class="timecards-toolbar__search">
                 <span>Type</span>
                 <label class="timecards-create__checkbox">
@@ -1264,8 +1262,8 @@ onBeforeUnmount(() => {
                       :week-end-date="selectedWeekEndDate"
                       :burden="burdenValue"
                       :read-only="isCardReadOnly(card.id)"
-                      :employee-header-locked="card.sourceType !== 'custom' || isCardReadOnly(card.id)"
-                      :show-employee-wage="auth.isAdmin"
+                      :employee-header-locked="card.sourceType !== 'custom' && ( !auth.isAdmin || isCardReadOnly(card.id) )"
+                      :show-employee-wage="true"
                       @changed="handleWorkbookChanged(card)"
                     />
                   </div>

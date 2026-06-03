@@ -25,6 +25,70 @@ test.describe('timecard workbook regressions', () => {
     await expect(page.getByTestId('job-number-summary')).toHaveText('123|565|456|456')
   })
 
+  test('new card creation uses the current linked job number for all initial rows', async ({ page }) => {
+    await page.goto('/__e2e/timecard-workbook')
+
+    await page.getByTestId('linked-job-number').fill('9988')
+    await page.getByTestId('create-card').click()
+
+    await expect(page.getByTestId('job-number-summary')).toHaveText('9988|9988|9988|9988')
+    await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('9988')
+    await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('9988')
+  })
+
+  test('blank wage value stays blank after blur', async ({ page }) => {
+    await page.goto('/__e2e/timecard-workbook')
+
+    const wageInput = page.getByTestId('timecard-wage-input')
+    await wageInput.fill('')
+    await wageInput.blur()
+
+    await expect(wageInput).toHaveValue('')
+  })
+
+  test('invalid wage value clears on blur', async ({ page }) => {
+    await page.goto('/__e2e/timecard-workbook')
+
+    const wageInput = page.getByTestId('timecard-wage-input')
+    await wageInput.fill('abc')
+    await wageInput.blur()
+
+    await expect(wageInput).toHaveValue('')
+  })
+
+  test('incomplete numeric wage commits a valid number on blur', async ({ page }) => {
+    await page.goto('/__e2e/timecard-workbook')
+
+    const wageInput = page.getByTestId('timecard-wage-input')
+    await wageInput.fill('1.')
+    await wageInput.blur()
+
+    await expect(wageInput).toHaveValue('$1.00')
+  })
+
+  test('non-numeric wage characters are stripped to digits', async ({ page }) => {
+    await page.goto('/__e2e/timecard-workbook')
+
+    const wageInput = page.getByTestId('timecard-wage-input')
+    await wageInput.fill('a1b2.3c')
+    await wageInput.blur()
+
+    await expect(wageInput).toHaveValue('$12.30')
+  })
+
+  test('valid wage values format to currency on blur', async ({ page }) => {
+    await page.goto('/__e2e/timecard-workbook')
+
+    const wageInput = page.getByTestId('timecard-wage-input')
+    await wageInput.fill('20')
+    await wageInput.blur()
+    await expect(wageInput).toHaveValue('$20.00')
+
+    await wageInput.fill('2.5')
+    await wageInput.blur()
+    await expect(wageInput).toHaveValue('$2.50')
+  })
+
   test('the full H / P / C row structure stays visible', async ({ page }) => {
     await page.goto('/__e2e/timecard-workbook')
 

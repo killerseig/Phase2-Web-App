@@ -810,10 +810,11 @@ export function buildShopOrderEmail(
   const hasTotalAmount = Number.isFinite(totalAmount)
   const orderIdentifier = getShopOrderDisplayNumber(order)
   const orderDate = formatOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt)
-  const requestedDeliveryDate = String(order?.requestedDeliveryDate || '').trim()
-  const requestedDeliveryDateLabel = requestedDeliveryDate
-    ? formatOrderEmailDate(requestedDeliveryDate)
+  const deliveryDate = String(order?.deliveryDate || '').trim()
+  const deliveryDateLabel = deliveryDate
+    ? formatOrderEmailDate(deliveryDate)
     : 'Not requested'
+  const comments = String(order?.comments || '').trim()
 
   const itemsHtml = items.length > 0 ? `
     <h3>Order Items:</h3>
@@ -874,9 +875,10 @@ export function buildShopOrderEmail(
       <div class="content">
         <p><strong>Order Number:</strong> ${orderIdentifier}</p>
         <p><strong>Order Date:</strong> ${orderDate}</p>
-        <p><strong>Requested Delivery Date:</strong> ${requestedDeliveryDateLabel}</p>
+        <p><strong>Delivery Date:</strong> ${deliveryDateLabel}</p>
         ${hasTotalAmount ? `<p><strong>Total Amount:</strong> $${totalAmount.toFixed(2)}</p>` : ''}
         <p><strong>Status:</strong> ${getShopOrderStatusLabel(order?.status)}</p>
+        ${comments ? `<p><strong>Comments:</strong> ${comments}</p>` : ''}
         ${itemsHtml}
         ${signOffHtml}
         <p>A shop order has been submitted. Please review the Phase 2 application for full details.</p>

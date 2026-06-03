@@ -56,7 +56,6 @@ export interface EmployeeRecord {
   firstName: string
   lastName: string
   occupation: string
-  wageRate: number | null
   active: boolean
   isContractor: boolean
   jobId: string | null

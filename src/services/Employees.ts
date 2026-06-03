@@ -24,18 +24,8 @@ export interface EmployeeInput {
   firstName: string
   lastName: string
   occupation: string
-  wageRate: number | null
   active: boolean
   isContractor: boolean
-}
-
-function normalizeWageRate(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim().length) {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
 }
 
 function normalizeEmployee(id: string, data: DocumentData): EmployeeRecord {
@@ -45,7 +35,6 @@ function normalizeEmployee(id: string, data: DocumentData): EmployeeRecord {
     firstName: typeof data.firstName === 'string' ? data.firstName : '',
     lastName: typeof data.lastName === 'string' ? data.lastName : '',
     occupation: typeof data.occupation === 'string' ? data.occupation : '',
-    wageRate: normalizeWageRate(data.wageRate),
     active: data.active !== false,
     isContractor: data.isContractor === true,
     jobId: typeof data.jobId === 'string' && data.jobId.trim().length ? data.jobId : null,
@@ -107,7 +96,6 @@ async function syncCurrentWeekDraftEmployeeCards(employeeId: string, input: Empl
         || card.lastName !== trimmedLastName
         || card.employeeNumber !== trimmedEmployeeNumber
         || card.occupation !== trimmedOccupation
-        || !Object.is(card.wageRate, input.wageRate)
         || card.isContractor !== input.isContractor
       )
 
@@ -117,7 +105,6 @@ async function syncCurrentWeekDraftEmployeeCards(employeeId: string, input: Empl
       card.lastName = trimmedLastName
       card.employeeNumber = trimmedEmployeeNumber
       card.occupation = trimmedOccupation
-      card.wageRate = input.wageRate
       card.isContractor = input.isContractor
 
       batch.update(
@@ -182,7 +169,6 @@ export async function createEmployeeRecord(input: EmployeeInput): Promise<string
       firstName: input.firstName.trim(),
       lastName: input.lastName.trim(),
       occupation: input.occupation.trim(),
-      wageRate: input.wageRate,
       active: input.active,
       isContractor: input.isContractor,
       updatedAt: serverTimestamp(),
@@ -205,7 +191,6 @@ export async function updateEmployeeRecord(employeeId: string, input: EmployeeIn
       firstName: input.firstName.trim(),
       lastName: input.lastName.trim(),
       occupation: input.occupation.trim(),
-      wageRate: input.wageRate,
       active: input.active,
       isContractor: input.isContractor,
       updatedAt: serverTimestamp(),

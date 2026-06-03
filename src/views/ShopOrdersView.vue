@@ -820,9 +820,17 @@ async function persistOrderItems(
   }
 }
 
-async function createDraftOrder(successMessage?: string) {
+async function createDraftOrder(successMessage?: string, deliveryDate?: string) {
   if (!jobId.value || !job.value) {
     actionError.value = 'Load the job first before creating a shop order.'
+    actionInfo.value = ''
+    return null
+  }
+
+  const dateToUse = deliveryDate || getTodayDateString()
+  const dateValidationMessage = getDeliveryDateValidationMessage(dateToUse)
+  if (dateValidationMessage) {
+    actionError.value = dateValidationMessage
     actionInfo.value = ''
     return null
   }
@@ -837,7 +845,7 @@ async function createDraftOrder(successMessage?: string) {
       jobName: job.value.name,
       foremanUserId: auth.currentUser?.uid ?? null,
       foremanName: auth.displayName || auth.currentUser?.email || null,
-      deliveryDate: getTodayDateString(),
+      deliveryDate: dateToUse,
     })
 
     selectedOrderId.value = orderId
@@ -856,6 +864,12 @@ async function createDraftOrder(successMessage?: string) {
 
 async function ensureDraftOrderTarget() {
   if (selectedOrder.value?.status === 'draft') {
+    const validationMessage = getDeliveryDateValidationMessage(orderMetaForm.deliveryDate)
+    if (validationMessage) {
+      actionError.value = validationMessage
+      actionInfo.value = ''
+      return null
+    }
     return {
       orderId: selectedOrder.value.id,
       items: cloneOrderItems(selectedOrder.value),
@@ -871,17 +885,27 @@ async function ensureDraftOrderTarget() {
     }
   }
 
-  const orderId = await createDraftOrder()
-  if (!orderId) return null
-
-  return {
-    orderId,
-    items: [] as ShopOrderItemRecord[],
-  }
+  // Don't auto-create an order; require explicit creation via the "New Order" button
+  actionError.value = 'Create a new order with a delivery date before adding items.'
+  actionInfo.value = ''
+  return null
 }
 
 async function handleCreateOrder() {
-  await createDraftOrder('New order started.')
+  if (selectedOrder.value?.status === 'draft') {
+    actionError.value = 'You already have a draft order. Select it or delete it to start a new one.'
+    actionInfo.value = ''
+    return
+  }
+
+  const dateValidationMessage = getDeliveryDateValidationMessage(orderMetaForm.deliveryDate)
+  if (dateValidationMessage) {
+    actionError.value = dateValidationMessage
+    actionInfo.value = ''
+    return
+  }
+
+  await createDraftOrder('New order started.', orderMetaForm.deliveryDate)
 }
 
 async function addCatalogItemToOrder(item: ShopCatalogItemRecord) {
@@ -1016,6 +1040,13 @@ async function handleDeleteSelectedOrder() {
 
 async function handleSubmitSelectedOrder() {
   if (!selectedOrder.value || !canEditSelectedOrder.value) return
+
+  const validationMessage = getDeliveryDateValidationMessage(orderMetaForm.deliveryDate)
+  if (validationMessage) {
+    actionError.value = validationMessage
+    actionInfo.value = ''
+    return
+  }
 
   if (selectedOrder.value.items.length === 0) {
     actionError.value = 'Add at least one item before submitting the order.'
@@ -1476,9 +1507,10 @@ onBeforeUnmount(() => {
               {{ createOrderLoading ? 'Creating...' : 'New Order' }}
             </button>
             <button
+              v-if="canEditSelectedOrder"
               type="button"
               class="app-button"
-              :disabled="!canEditSelectedOrder || itemActionLoading || createOrderLoading"
+              :disabled="itemActionLoading || createOrderLoading"
               @click="handleSubmitSelectedOrder"
             >
               Submit Order

@@ -117,6 +117,16 @@ function assertCanWriteJob(user: AuthorizedTimecardUser, jobId: string) {
   throw new HttpsError('permission-denied', 'You are not assigned to this job.')
 }
 
+function getOwnerForemanUserId(user: AuthorizedTimecardUser, inputOwnerId: unknown) {
+  if (user.role === 'foreman') return user.uid
+  return textOrNull(inputOwnerId ?? user.uid)
+}
+
+function getOwnerForemanName(user: AuthorizedTimecardUser, inputOwnerName: unknown) {
+  if (user.role === 'foreman') return user.displayName
+  return textOrNull(inputOwnerName ?? user.displayName)
+}
+
 function sanitizeDay(day: any, index: number, weekDates: string[]) {
   return {
     date: text(day?.date) || weekDates[index] || '',
@@ -170,7 +180,7 @@ function sanitizeCardPayload(card: any, weekStartDate: string, sortIndexFallback
     footerSecondAccount: text(card?.footerSecondAccount),
     footerSecondOffice: text(card?.footerSecondOffice),
     footerSecondAmount: text(card?.footerSecondAmount),
-    notes: text(card?.notes),
+    notes: card?.notes == null ? '' : String(card.notes),
     regularHoursOverride: numberOrNull(card?.regularHoursOverride),
     overtimeHoursOverride: numberOrNull(card?.overtimeHoursOverride),
     totals: {
@@ -286,12 +296,14 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
   }
 
   const weekStartDate = getWeekStartFromSaturday(weekEndDate)
+  const ownerForemanUserId = getOwnerForemanUserId(user, input?.ownerForemanUserId)
+  const ownerForemanName = getOwnerForemanName(user, input?.ownerForemanName)
   const createdRef = await db.collection('timecardWeeks').add({
     jobId,
     jobCode: textOrNull(input?.jobCode),
     jobName: textOrNull(input?.jobName),
-    ownerForemanUserId: textOrNull(input?.ownerForemanUserId ?? request.auth.uid),
-    ownerForemanName: textOrNull(input?.ownerForemanName ?? user.displayName),
+    ownerForemanUserId,
+    ownerForemanName,
     weekStartDate,
     weekEndDate,
     status: 'draft',
@@ -313,6 +325,11 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
 
   const previousWeekDoc = previousWeekSnap.docs[0]
   if (!previousWeekDoc) {
+    return { id: createdRef.id }
+  }
+
+  const previousWeek = previousWeekDoc.data() || {}
+  if (textOrNull(previousWeek.ownerForemanUserId) !== ownerForemanUserId) {
     return { id: createdRef.id }
   }
 

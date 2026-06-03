@@ -1,8 +1,13 @@
 import {
+  addDoc,
   collection,
+  doc,
   getDocs,
+  increment,
   onSnapshot,
   query,
+  serverTimestamp,
+  updateDoc,
   where,
   type DocumentData,
   type Unsubscribe,
@@ -167,7 +172,7 @@ export function sanitizeTimecardCardPayload(
     footerSecondAccount: snapshot.footerSecondAccount.trim(),
     footerSecondOffice: snapshot.footerSecondOffice.trim(),
     footerSecondAmount: snapshot.footerSecondAmount.trim(),
-    notes: snapshot.notes.trim(),
+    notes: typeof snapshot.notes === 'string' ? snapshot.notes : '',
     regularHoursOverride: snapshot.regularHoursOverride == null ? null : toSafeNumber(snapshot.regularHoursOverride),
     overtimeHoursOverride: snapshot.overtimeHoursOverride == null ? null : toSafeNumber(snapshot.overtimeHoursOverride),
     totals: snapshot.totals,
@@ -184,11 +189,16 @@ export function subscribeTimecardWeeks(
   jobId: string,
   onUpdate: (weeks: TimecardWeekRecord[]) => void,
   onError?: (error: unknown) => void,
+  ownerForemanUserId: string | null = null,
 ): Unsubscribe {
   const { db } = requireFirebaseServices()
+  const weekCollection = collection(db, 'timecardWeeks')
+  const weekQuery = ownerForemanUserId
+    ? query(weekCollection, where('jobId', '==', jobId), where('ownerForemanUserId', '==', ownerForemanUserId))
+    : query(weekCollection, where('jobId', '==', jobId))
 
   return onSnapshot(
-    query(collection(db, 'timecardWeeks'), where('jobId', '==', jobId)),
+    weekQuery,
     (snapshot) => {
       onUpdate(sortWeeks(snapshot.docs.map((entry) => normalizeWeek(entry.id, entry.data()))))
     },
@@ -259,29 +269,22 @@ export async function createTimecardCard(
   linkedJobNumber?: string | null,
 ): Promise<string> {
   try {
-    const { functions } = requireFirebaseServices()
+    const { auth, db } = requireFirebaseServices()
     const card = buildEmployeeCard(employee, getWeekEndDateFromStart(weekStartDate), sortIndex, linkedJobNumber ?? '')
-    const callable = httpsCallable<
-      {
-        weekId: string
-        weekStartDate: string
-        card: Record<string, unknown>
-      },
-      { id: string }
-    >(functions, 'createTimecardCardRecord')
-
-    const result = await callable({
-      weekId,
-      weekStartDate,
-      card: sanitizeTimecardCardPayload(card, weekStartDate, DEFAULT_TIMECARD_BURDEN, { includeUpdatedAt: false }),
-    })
-
-    const id = String(result.data?.id || '').trim()
-    if (!id) {
-      throw new Error('Timecard card did not return an id.')
+    const payload = {
+      ...sanitizeTimecardCardPayload(card, weekStartDate, DEFAULT_TIMECARD_BURDEN, { includeUpdatedAt: false }),
+      createdAt: serverTimestamp(),
     }
 
-    return id
+    const cardRef = await addDoc(collection(db, 'timecardWeeks', weekId, 'cards'), payload)
+
+    await updateDoc(doc(db, 'timecardWeeks', weekId), {
+      employeeCardCount: increment(1),
+      updatedAt: serverTimestamp(),
+      updatedByUserId: auth.currentUser?.uid ?? null,
+    })
+
+    return cardRef.id
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to add the employee card.'))
   }
