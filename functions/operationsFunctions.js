@@ -107,6 +107,15 @@ function assertAdminOrAssignedForeman(user, jobId, errorMessage) {
     }
     return authorizedUser;
 }
+function assertAdminControllerOrAssignedForeman(user, jobId, errorMessage) {
+    const authorizedUser = assertActiveRoleUser(user, ['admin', 'controller', 'foreman'], errorMessage);
+    if (authorizedUser.role === 'admin' || authorizedUser.role === 'controller')
+        return authorizedUser;
+    if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
+        throw new https_2.HttpsError('permission-denied', errorMessage);
+    }
+    return authorizedUser;
+}
 function normalizeTimecardStaffingEmployee(docId, data) {
     return {
         id: docId,
@@ -966,7 +975,7 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
     }
     try {
         const user = await (0, firestoreService_1.getUserProfile)(callerUid);
-        const authorizedUser = assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can send daily log emails');
+        const authorizedUser = assertAdminControllerOrAssignedForeman(user, jobId, 'Only admins, controllers, or assigned foremen can send daily log emails');
         if (!(0, emailService_1.isEmailEnabled)()) {
             console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.');
             return { success: true, message: 'Email sending disabled. Skipped.' };
@@ -978,7 +987,8 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
         if (String(log?.status || '').trim().toLowerCase() !== 'submitted') {
             throw new https_2.HttpsError('failed-precondition', 'Only submitted daily logs can be emailed');
         }
-        if (authorizedUser.role === 'foreman' && String(log?.uid || '').trim() !== callerUid) {
+        const logOwnerUserId = String(log?.foremanUserId || log?.uid || log?.createdByUserId || '').trim();
+        if (authorizedUser.role === 'foreman' && logOwnerUserId !== callerUid) {
             throw new https_2.HttpsError('permission-denied', 'Foremen can only email their own daily logs');
         }
         const settings = await (0, firestoreService_1.getEmailSettings)();
@@ -2516,14 +2526,26 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1
             throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
         let order = null;
-        // Primary: job-scoped collection (jobs/{jobId}/shop_orders/{shopOrderId})
+        const rootOrder = await (0, firestoreService_1.getShopOrder)(shopOrderId);
+        // Prefer the job-scoped record when it exists, but fill missing fields from
+        // the current root record so legacy partial docs do not hide newer metadata.
         const jobOrderSnap = await runtime_1.db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get();
         if (jobOrderSnap.exists) {
-            order = { id: jobOrderSnap.id, ...jobOrderSnap.data(), jobId };
+            const jobOrderData = jobOrderSnap.data() || {};
+            const rootDeliveryDate = String(rootOrder?.deliveryDate || '').trim();
+            const jobDeliveryDate = String(jobOrderData.deliveryDate || '').trim();
+            order = {
+                ...(rootOrder || {}),
+                id: jobOrderSnap.id,
+                ...jobOrderData,
+                jobId,
+            };
+            if (!jobDeliveryDate && rootDeliveryDate) {
+                order.deliveryDate = rootDeliveryDate;
+            }
         }
         else {
-            // Fallback to legacy root collection (shopOrders)
-            order = await (0, firestoreService_1.getShopOrder)(shopOrderId);
+            order = rootOrder;
         }
         if (!order) {
             throw new Error(constants_1.ERROR_MESSAGES.SHOP_ORDER_NOT_FOUND);

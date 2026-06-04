@@ -124,6 +124,16 @@ function assertCanWriteJob(user, jobId) {
         return;
     throw new https_1.HttpsError('permission-denied', 'You are not assigned to this job.');
 }
+function getOwnerForemanUserId(user, inputOwnerId) {
+    if (user.role === 'foreman')
+        return user.uid;
+    return textOrNull(inputOwnerId ?? user.uid);
+}
+function getOwnerForemanName(user, inputOwnerName) {
+    if (user.role === 'foreman')
+        return user.displayName;
+    return textOrNull(inputOwnerName ?? user.displayName);
+}
 function sanitizeDay(day, index, weekDates) {
     return {
         date: text(day?.date) || weekDates[index] || '',
@@ -174,7 +184,7 @@ function sanitizeCardPayload(card, weekStartDate, sortIndexFallback = 0) {
         footerSecondAccount: text(card?.footerSecondAccount),
         footerSecondOffice: text(card?.footerSecondOffice),
         footerSecondAmount: text(card?.footerSecondAmount),
-        notes: text(card?.notes),
+        notes: card?.notes == null ? '' : String(card.notes),
         regularHoursOverride: numberOrNull(card?.regularHoursOverride),
         overtimeHoursOverride: numberOrNull(card?.overtimeHoursOverride),
         totals: {
@@ -281,12 +291,14 @@ exports.ensureTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
         return { id: existingDoc.id };
     }
     const weekStartDate = getWeekStartFromSaturday(weekEndDate);
+    const ownerForemanUserId = getOwnerForemanUserId(user, input?.ownerForemanUserId);
+    const ownerForemanName = getOwnerForemanName(user, input?.ownerForemanName);
     const createdRef = await runtime_1.db.collection('timecardWeeks').add({
         jobId,
         jobCode: textOrNull(input?.jobCode),
         jobName: textOrNull(input?.jobName),
-        ownerForemanUserId: textOrNull(input?.ownerForemanUserId ?? request.auth.uid),
-        ownerForemanName: textOrNull(input?.ownerForemanName ?? user.displayName),
+        ownerForemanUserId,
+        ownerForemanName,
         weekStartDate,
         weekEndDate,
         status: 'draft',
@@ -306,6 +318,10 @@ exports.ensureTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
         .get();
     const previousWeekDoc = previousWeekSnap.docs[0];
     if (!previousWeekDoc) {
+        return { id: createdRef.id };
+    }
+    const previousWeek = previousWeekDoc.data() || {};
+    if (textOrNull(previousWeek.ownerForemanUserId) !== ownerForemanUserId) {
         return { id: createdRef.id };
     }
     const previousCardsSnap = await runtime_1.db

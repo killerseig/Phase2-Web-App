@@ -9,6 +9,7 @@ import {
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import { hasFirebaseConfig, requireFirebaseServices } from '@/firebase'
 import { useJobsStore } from '@/stores/jobs'
+import { getE2EAuthState, isE2EActive } from '@/testing/e2eRuntime'
 import type { RoleKey, RawRoleKey, UserProfile } from '@/types/domain'
 import { normalizeRoleKey, toEffectiveRole } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
@@ -168,6 +169,20 @@ export const useAuthStore = defineStore('auth', () => {
     if (ready.value) return
     if (authInitPromise) return authInitPromise
 
+    if (isE2EActive()) {
+      const e2eAuthState = getE2EAuthState()
+      currentUser.value = e2eAuthState
+        ? ({
+            uid: e2eAuthState.user.uid,
+            email: e2eAuthState.user.email,
+            displayName: e2eAuthState.user.displayName,
+          } as User)
+        : null
+      profile.value = e2eAuthState?.profile ?? null
+      ready.value = true
+      return
+    }
+
     if (!hasFirebaseConfig) {
       ready.value = true
       return
@@ -235,7 +250,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function signOut() {
     clearProfileListener()
 
-    if (hasFirebaseConfig) {
+    if (hasFirebaseConfig && !isE2EActive()) {
       const { auth } = requireFirebaseServices()
       try {
         await firebaseSignOut(auth)

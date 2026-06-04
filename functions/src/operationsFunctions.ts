@@ -104,6 +104,17 @@ function assertAdminOrAssignedForeman(user: any, jobId: string, errorMessage: st
   return authorizedUser
 }
 
+function assertAdminControllerOrAssignedForeman(user: any, jobId: string, errorMessage: string) {
+  const authorizedUser = assertActiveRoleUser(user, ['admin', 'controller', 'foreman'], errorMessage)
+  if (authorizedUser.role === 'admin' || authorizedUser.role === 'controller') return authorizedUser
+
+  if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
+    throw new HttpsError('permission-denied', errorMessage)
+  }
+
+  return authorizedUser
+}
+
 function normalizeTimecardStaffingEmployee(docId: string, data: any) {
   return {
     id: docId,
@@ -1072,10 +1083,10 @@ export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, asy
 
   try {
     const user = await getUserProfile(callerUid)
-    const authorizedUser = assertAdminOrAssignedForeman(
+    const authorizedUser = assertAdminControllerOrAssignedForeman(
       user,
       jobId,
-      'Only admins or assigned foremen can send daily log emails'
+      'Only admins, controllers, or assigned foremen can send daily log emails'
     )
 
     if (!isEmailEnabled()) {
@@ -1090,7 +1101,8 @@ export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, asy
     if (String(log?.status || '').trim().toLowerCase() !== 'submitted') {
       throw new HttpsError('failed-precondition', 'Only submitted daily logs can be emailed')
     }
-    if (authorizedUser.role === 'foreman' && String(log?.uid || '').trim() !== callerUid) {
+    const logOwnerUserId = String(log?.foremanUserId || log?.uid || log?.createdByUserId || '').trim()
+    if (authorizedUser.role === 'foreman' && logOwnerUserId !== callerUid) {
       throw new HttpsError('permission-denied', 'Foremen can only email their own daily logs')
     }
 
@@ -2960,13 +2972,28 @@ export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, as
 
     let order: any = null
 
-    // Primary: job-scoped collection (jobs/{jobId}/shop_orders/{shopOrderId})
+    const rootOrder = await getShopOrder(shopOrderId)
+
+    // Prefer the job-scoped record when it exists, but fill missing fields from
+    // the current root record so legacy partial docs do not hide newer metadata.
     const jobOrderSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get()
     if (jobOrderSnap.exists) {
-      order = { id: jobOrderSnap.id, ...jobOrderSnap.data(), jobId }
+      const jobOrderData = jobOrderSnap.data() || {}
+      const rootDeliveryDate = String(rootOrder?.deliveryDate || '').trim()
+      const jobDeliveryDate = String(jobOrderData.deliveryDate || '').trim()
+
+      order = {
+        ...(rootOrder || {}),
+        id: jobOrderSnap.id,
+        ...jobOrderData,
+        jobId,
+      }
+
+      if (!jobDeliveryDate && rootDeliveryDate) {
+        order.deliveryDate = rootDeliveryDate
+      }
     } else {
-      // Fallback to legacy root collection (shopOrders)
-      order = await getShopOrder(shopOrderId)
+      order = rootOrder
     }
 
     if (!order) {

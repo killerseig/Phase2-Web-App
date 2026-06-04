@@ -11,6 +11,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { requireFirebaseServices } from '@/firebase'
+import { isE2EActive, subscribeE2EShopCatalogItems, subscribeE2EShopCategories } from '@/testing/e2eRuntime'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -83,6 +84,10 @@ export function subscribeShopCategories(
   onUpdate: (categories: ShopCategoryRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EShopCategories(onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(
@@ -100,6 +105,10 @@ export function subscribeShopCatalogItems(
   onUpdate: (items: ShopCatalogItemRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EShopCatalogItems(onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(

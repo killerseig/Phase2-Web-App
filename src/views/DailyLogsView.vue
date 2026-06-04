@@ -19,6 +19,7 @@ import {
   createDailyLogRecord,
   deleteDailyLogAttachment,
   deleteDailyLogRecord,
+  sendDailyLogEmail,
   subscribeDailyLogsForDate,
   updateDailyLogRecord,
   uploadDailyLogAttachment,
@@ -561,8 +562,10 @@ async function handleSubmit() {
   actionError.value = ''
 
   try {
+    const submittedLogId = selectedLog.value.id
+    const submittedJobId = jobId.value
     await updateDailyLogRecord(
-      selectedLog.value.id,
+      submittedLogId,
       {
         payload: preparedPayload,
         status: 'submitted',
@@ -570,7 +573,23 @@ async function handleSubmit() {
       getActor(),
     )
     lastSavedSignature.value = JSON.stringify(preparedPayload)
-    setActionInfo('Daily log submitted.')
+
+    if (!submittedJobId) {
+      setActionInfo('Daily log submitted.')
+      return
+    }
+
+    try {
+      const emailMessage = await sendDailyLogEmail(submittedJobId, submittedLogId)
+      if (emailMessage.toLowerCase().includes('skipped')) {
+        setActionInfo('Daily log submitted.')
+        return
+      }
+
+      setActionInfo('Daily log submitted and emailed.')
+    } catch (emailError) {
+      setActionError(`Daily log submitted, but email failed. ${normalizeError(emailError, 'Failed to send the daily log email.')}`)
+    }
   } catch (error) {
     setActionError(normalizeError(error, 'Failed to submit the daily log.'))
   } finally {

@@ -63,12 +63,21 @@ const router = createRouter({
       },
     },
     {
-      path: '/__e2e/shop-order-workspace',
-      name: 'e2e-shop-order-workspace',
-      component: () => import('@/views/E2EShopOrderWorkspaceView.vue'),
+      path: '/__e2e/job-dashboard',
+      name: 'e2e-job-dashboard',
+      component: () => import('@/views/E2EJobDashboardView.vue'),
       meta: {
         requiresAuth: false,
-        title: 'E2E Shop Order Workspace',
+        title: 'E2E Job Dashboard',
+      },
+    },
+    {
+      path: '/__e2e/jobs',
+      name: 'e2e-jobs',
+      component: () => import('@/views/E2EJobsView.vue'),
+      meta: {
+        requiresAuth: false,
+        title: 'E2E Jobs',
       },
     },
     {

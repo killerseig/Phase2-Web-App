@@ -20,7 +20,9 @@ import type {
   ShopOrderItemRecord,
   ShopOrderRecord,
 } from '@/types/domain'
+import { getE2ENowValue } from '@/testing/e2eRuntime'
 import { normalizeError } from '@/utils/normalizeError'
+import { getShopOrderDisplayNumber } from '@/utils/shopOrders'
 
 type TreeNode =
   | {
@@ -97,7 +99,7 @@ const contextMenu = reactive({
 })
 
 const orderMetaForm = reactive<OrderMetaFormState>({
-  deliveryDate: '',
+  deliveryDate: getDefaultDeliveryDateString(),
   comments: '',
 })
 
@@ -232,16 +234,27 @@ function formatDateInput(value: Date) {
   return `${year}-${month}-${day}`
 }
 
+function getRuntimeNow() {
+  return getE2ENowValue() ?? new Date()
+}
+
 function getTodayDateString() {
-  return formatDateInput(new Date())
+  return formatDateInput(getRuntimeNow())
 }
 
 function getNextThursdayDateString() {
-  const nextDate = new Date()
+  const nextDate = new Date(getRuntimeNow())
   const day = nextDate.getDay()
-  const daysUntilThursday = (4 - day + 7) % 7
+  let daysUntilThursday = (4 - day + 7) % 7
+  if (daysUntilThursday === 0) {
+    daysUntilThursday = 7
+  }
   nextDate.setDate(nextDate.getDate() + daysUntilThursday)
   return formatDateInput(nextDate)
+}
+
+function getDefaultDeliveryDateString() {
+  return getNextThursdayDateString()
 }
 
 function toMillis(value: unknown): number {
@@ -296,12 +309,11 @@ function getOrderItemDisplayName(item: Pick<ShopOrderItemRecord, 'description' |
   const itemName = item.description.trim() || 'Untitled Item'
 
   if (item.sourceType !== 'catalog') return itemName
-
-  const categoryPath = getCategoryPath(item.categoryId)
-  if (categoryPath === 'Top Level') return itemName
-  if (itemName.startsWith(`${categoryPath} / `)) return itemName
-
-  return `${categoryPath} / ${itemName}`
+  return itemName
+    .split(' / ')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .at(-1) || itemName
 }
 
 function getCategoryPath(categoryId: string | null) {
@@ -669,6 +681,10 @@ function getOrderDisplayLabel(order: ShopOrderRecord) {
   return `${getOrderStatusLabel(order)} / ${createdLabel}`
 }
 
+function getOrderNumberLabel(order: ShopOrderRecord) {
+  return `Order #${getShopOrderDisplayNumber(order)}`
+}
+
 function isThursdayDeliveryValue(value: string | null | undefined) {
   if (!value) return false
   const [year, month, day] = value.split('-').map(Number)
@@ -707,14 +723,14 @@ function applySelectedOrderToForm(order: ShopOrderRecord | null) {
   lastHydratedOrderId.value = order?.id ?? null
 
   if (!order) {
-    orderMetaForm.deliveryDate = getTodayDateString()
+    orderMetaForm.deliveryDate = getDefaultDeliveryDateString()
     orderMetaForm.comments = ''
     lastSavedOrderMetaSignature.value = serializeOrderMetaForm(orderMetaForm)
     hydratingOrderMetaForm.value = false
     return
   }
 
-  orderMetaForm.deliveryDate = order.deliveryDate ?? getTodayDateString()
+  orderMetaForm.deliveryDate = order.deliveryDate ?? getDefaultDeliveryDateString()
   orderMetaForm.comments = order.comments
   lastSavedOrderMetaSignature.value = serializeOrderMetaForm(orderMetaForm)
   hydratingOrderMetaForm.value = false
@@ -827,7 +843,7 @@ async function createDraftOrder(successMessage?: string, deliveryDate?: string) 
     return null
   }
 
-  const dateToUse = deliveryDate || getTodayDateString()
+  const dateToUse = deliveryDate || getDefaultDeliveryDateString()
   const dateValidationMessage = getDeliveryDateValidationMessage(dateToUse)
   if (dateValidationMessage) {
     actionError.value = dateValidationMessage
@@ -898,14 +914,15 @@ async function handleCreateOrder() {
     return
   }
 
-  const dateValidationMessage = getDeliveryDateValidationMessage(orderMetaForm.deliveryDate)
+  const defaultDeliveryDate = getDefaultDeliveryDateString()
+  const dateValidationMessage = getDeliveryDateValidationMessage(defaultDeliveryDate)
   if (dateValidationMessage) {
     actionError.value = dateValidationMessage
     actionInfo.value = ''
     return
   }
 
-  await createDraftOrder('New order started.', orderMetaForm.deliveryDate)
+  await createDraftOrder('New order started.', defaultDeliveryDate)
 }
 
 async function addCatalogItemToOrder(item: ShopCatalogItemRecord) {
@@ -1294,6 +1311,7 @@ onBeforeUnmount(() => {
             <div
               class="shop-orders-tree-node shop-orders-tree-node--root"
               :class="{ 'shop-orders-tree-node--active': activeFolderId === null && !selectedCatalogItemId }"
+              data-testid="shoporder-root-row"
               role="button"
               tabindex="0"
               @click="selectRoot(); toggleRootBucketExpanded()"
@@ -1306,6 +1324,8 @@ onBeforeUnmount(() => {
                 type="button"
                 class="shop-orders-tree-node__twist"
                 :class="{ 'shop-orders-tree-node__twist--open': rootBucketExpanded }"
+                data-testid="shoporder-root-toggle"
+                :data-state="rootBucketExpanded ? 'expanded' : 'collapsed'"
                 @click.stop="toggleRootBucketExpanded"
                 @keydown.enter.prevent.stop="toggleRootBucketExpanded"
                 @keydown.space.prevent.stop="toggleRootBucketExpanded"
@@ -1343,6 +1363,7 @@ onBeforeUnmount(() => {
                     ? activeFolderId === node.id && !selectedCatalogItemId
                     : selectedCatalogItemId === node.id,
                 }"
+                :data-testid="node.kind === 'category' ? `shoporder-category-${node.id}` : `shoporder-item-${node.id}`"
                 role="button"
                 tabindex="0"
                 @click="handleTreeNodeSelection(node)"
@@ -1388,6 +1409,7 @@ onBeforeUnmount(() => {
                 >
                   <input
                     :value="catalogItemQuantities[node.id] ?? '1'"
+                    :data-testid="`shoporder-quantity-${node.id}`"
                     type="number"
                     min="1"
                     step="1"
@@ -1399,6 +1421,7 @@ onBeforeUnmount(() => {
                   <button
                     type="button"
                     class="app-button app-button--primary shop-orders-tree-node__add"
+                    :data-testid="`shoporder-add-${node.id}`"
                     :disabled="orderMutationDisabled"
                     aria-label="Add item to order"
                     @click.stop="handleTreeItemAdd(node.id)"
@@ -1470,6 +1493,7 @@ onBeforeUnmount(() => {
       <div
         v-if="contextMenu.visible"
         class="shop-orders-context-menu"
+        data-testid="shoporder-context-menu"
         :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
         @pointerdown.stop
         @click.stop
@@ -1480,6 +1504,7 @@ onBeforeUnmount(() => {
           :key="action.key"
           type="button"
           class="shop-orders-context-menu__item"
+          :data-testid="`shoporder-context-${action.key}`"
           :disabled="action.disabled"
           @pointerdown.stop.prevent
           @click.stop.prevent="handleContextMenuAction(action)"
@@ -1501,6 +1526,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="app-button app-button--primary"
+              data-testid="shoporder-new-order"
               :disabled="createOrderLoading || !jobId || !job"
               @click="handleCreateOrder"
             >
@@ -1510,6 +1536,7 @@ onBeforeUnmount(() => {
               v-if="canEditSelectedOrder"
               type="button"
               class="app-button"
+              data-testid="shoporder-submit"
               :disabled="itemActionLoading || createOrderLoading"
               @click="handleSubmitSelectedOrder"
             >
@@ -1518,10 +1545,18 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <div class="shop-orders-workspace-pane__body">
+        <div
+          class="shop-orders-workspace-pane__body"
+          :class="{ 'shop-orders-workspace-pane__body--has-selected-order': selectedOrder }"
+        >
           <section v-if="selectedOrder" class="shop-orders-workspace-strip">
             <header class="shop-orders-workspace-strip__header shop-orders-workspace-strip__header--compact">
-              <strong class="shop-orders-workspace-strip__label">{{ getOrderDisplayLabel(selectedOrder) }}</strong>
+              <div class="shop-orders-workspace-strip__identity">
+                <span class="shop-orders-pane__eyebrow shop-orders-workspace-strip__eyebrow">
+                  {{ getOrderNumberLabel(selectedOrder) }}
+                </span>
+                <strong class="shop-orders-workspace-strip__label">{{ getOrderDisplayLabel(selectedOrder) }}</strong>
+              </div>
 
               <div class="shop-orders-workspace-strip__status">
                 <span class="shop-orders-badge">{{ getOrderStatusLabel(selectedOrder) }}</span>
@@ -1536,11 +1571,12 @@ onBeforeUnmount(() => {
                 <input
                   v-if="canEditSelectedOrder"
                   v-model="orderMetaForm.deliveryDate"
+                  data-testid="shoporder-delivery-date"
                   type="date"
                   :min="getTodayDateString()"
                   :disabled="!canEditSelectedOrder"
                 />
-                <div v-else class="shop-orders-readonly-value">
+                <div v-else class="shop-orders-readonly-value" data-testid="shoporder-delivery-date-readonly">
                   {{ selectedOrder.deliveryDate || 'No delivery date' }}
                 </div>
               </label>
@@ -1551,12 +1587,13 @@ onBeforeUnmount(() => {
                   v-if="canEditSelectedOrder"
                   type="button"
                   class="shop-orders-selected-order__shortcut-button"
+                  data-testid="shoporder-shortcut"
                   :disabled="!canEditSelectedOrder"
                   @click="applyThursdayDelivery"
                 >
                   Thursday Delivery
                 </button>
-                <div v-else class="shop-orders-readonly-value">
+                <div v-else class="shop-orders-readonly-value" data-testid="shoporder-shortcut-readonly">
                   {{ isThursdayDeliveryValue(selectedOrder.deliveryDate) ? 'Thursday Delivery' : '—' }}
                 </div>
               </div>
@@ -1566,11 +1603,16 @@ onBeforeUnmount(() => {
                 <input
                   v-if="canEditSelectedOrder"
                   v-model="orderMetaForm.comments"
+                  data-testid="shoporder-comments"
                   type="text"
                   :disabled="!canEditSelectedOrder"
                   placeholder="Add delivery notes or special instructions."
                 />
-                <div v-else class="shop-orders-readonly-value shop-orders-readonly-value--multiline">
+                <div
+                  v-else
+                  class="shop-orders-readonly-value shop-orders-readonly-value--multiline"
+                  data-testid="shoporder-comments-readonly"
+                >
                   {{ selectedOrder.comments || 'No comments' }}
                 </div>
               </label>
@@ -1592,15 +1634,17 @@ onBeforeUnmount(() => {
               </div>
             </header>
 
+            <div class="shop-orders-workspace-section__body">
+
             <div v-if="ordersLoading && orders.length === 0" class="shop-orders-pane__empty">
               Loading orders...
             </div>
 
-            <div v-else-if="!selectedOrder" class="shop-orders-pane__empty">
+            <div v-else-if="!selectedOrder" class="shop-orders-pane__empty" data-testid="shoporder-empty">
               Add a catalog item or custom item to start a new order.
             </div>
 
-            <div v-else-if="selectedOrder.items.length === 0" class="shop-orders-pane__empty">
+            <div v-else-if="selectedOrder.items.length === 0" class="shop-orders-pane__empty" data-testid="shoporder-empty">
               Nothing has been added to this order yet. Use the catalog browser or custom item form to build it.
             </div>
 
@@ -1619,6 +1663,7 @@ onBeforeUnmount(() => {
                 v-for="item in selectedOrder.items"
                 :key="item.id"
                 class="shop-orders-item-card shop-orders-item-card--line"
+                :data-testid="`shoporder-order-item-${item.catalogItemId || item.id}`"
                 :class="{ 'shop-orders-item-card--readonly': !canEditSelectedOrder }"
               >
                 <div class="shop-orders-item-card__main">
@@ -1637,6 +1682,7 @@ onBeforeUnmount(() => {
                   v-if="canEditSelectedOrder"
                   class="shop-orders-item-card__qty-input"
                   :value="String(item.quantity ?? 1)"
+                  :data-testid="`shoporder-order-item-qty-${item.catalogItemId || item.id}`"
                   type="number"
                   min="1"
                   step="1"
@@ -1645,7 +1691,11 @@ onBeforeUnmount(() => {
                   :disabled="!canEditSelectedOrder"
                   @change="updateOrderItemQuantity(item.id, readTextInputValue($event))"
                 />
-                <div v-else class="shop-orders-readonly-value shop-orders-readonly-value--centered">
+                <div
+                  v-else
+                  class="shop-orders-readonly-value shop-orders-readonly-value--centered"
+                  :data-testid="`shoporder-order-item-qty-readonly-${item.catalogItemId || item.id}`"
+                >
                   {{ item.quantity ?? 1 }}
                 </div>
 
@@ -1653,6 +1703,7 @@ onBeforeUnmount(() => {
                   v-if="canEditSelectedOrder"
                   class="shop-orders-item-card__note-input"
                   :value="item.note"
+                  :data-testid="`shoporder-order-item-note-${item.catalogItemId || item.id}`"
                   type="text"
                   autocomplete="off"
                   aria-label="Note"
@@ -1660,7 +1711,11 @@ onBeforeUnmount(() => {
                   placeholder="Optional note"
                   @change="updateOrderItemNote(item.id, readTextInputValue($event))"
                 />
-                <div v-else class="shop-orders-readonly-value shop-orders-readonly-value--multiline">
+                <div
+                  v-else
+                  class="shop-orders-readonly-value shop-orders-readonly-value--multiline"
+                  :data-testid="`shoporder-order-item-note-readonly-${item.catalogItemId || item.id}`"
+                >
                   {{ item.note || '—' }}
                 </div>
 
@@ -1668,6 +1723,7 @@ onBeforeUnmount(() => {
                   v-if="canEditSelectedOrder"
                   type="button"
                   class="app-button shop-orders-item-card__danger"
+                  :data-testid="`shoporder-order-item-remove-${item.catalogItemId || item.id}`"
                   aria-label="Remove item"
                   title="Remove item"
                   :disabled="!canEditSelectedOrder || itemActionLoading"
@@ -1676,6 +1732,7 @@ onBeforeUnmount(() => {
                   X
                 </button>
               </article>
+            </div>
             </div>
           </section>
 
@@ -1701,6 +1758,8 @@ onBeforeUnmount(() => {
               </div>
             </header>
 
+            <div class="shop-orders-workspace-section__body">
+
             <div v-if="orders.length === 0" class="shop-orders-pane__empty shop-orders-pane__empty--compact">
               No shop orders exist for this job yet.
             </div>
@@ -1717,6 +1776,7 @@ onBeforeUnmount(() => {
                 <div class="shop-orders-history-row__main">
                   <strong>{{ getOrderDisplayLabel(order) }}</strong>
                   <div class="shop-orders-history-row__meta">
+                    <span>{{ getOrderNumberLabel(order) }}</span>
                     <span>{{ formatOrderTimestamp(order.submittedAt || order.updatedAt || order.createdAt) }}</span>
                     <span>{{ order.items.length }} items</span>
                     <span>{{ order.deliveryDate || 'No delivery date' }}</span>
@@ -1724,6 +1784,7 @@ onBeforeUnmount(() => {
                 </div>
                 <span class="shop-orders-badge">{{ getOrderStatusLabel(order) }}</span>
               </button>
+            </div>
             </div>
           </section>
         </div>
@@ -1772,7 +1833,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 0.6rem;
   min-height: 0;
-  align-content: start;
+  overflow: hidden;
 }
 
 .shop-orders-tree-pane__body {
@@ -1782,8 +1843,12 @@ onBeforeUnmount(() => {
 }
 
 .shop-orders-workspace-pane__body {
-  overflow: auto;
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
   padding-right: 0.15rem;
+}
+
+.shop-orders-workspace-pane__body--has-selected-order {
+  grid-template-rows: auto minmax(0, 2fr) minmax(0, 1fr);
 }
 
 .shop-orders-pane__header {
@@ -2290,6 +2355,7 @@ onBeforeUnmount(() => {
 .shop-orders-workspace-strip {
   display: grid;
   gap: 0.32rem;
+  min-height: 0;
   padding: 0 0 0.32rem;
   border-bottom: 1px solid var(--shop-line-soft);
 }
@@ -2303,6 +2369,16 @@ onBeforeUnmount(() => {
 
 .shop-orders-workspace-strip__header--compact {
   min-height: 1.4rem;
+}
+
+.shop-orders-workspace-strip__identity {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.shop-orders-workspace-strip__eyebrow {
+  display: inline-flex;
 }
 
 .shop-orders-workspace-strip__label {
@@ -2382,9 +2458,12 @@ onBeforeUnmount(() => {
 
 .shop-orders-workspace-section {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.14rem;
+  min-height: 0;
   padding: 0.4rem 0 0;
   border-top: 1px solid var(--shop-line-soft);
+  overflow: hidden;
 }
 
 .shop-orders-workspace-section .shop-orders-workspace-card__header {
@@ -2405,6 +2484,16 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 0.4rem 0.55rem;
+}
+
+.shop-orders-workspace-section__body {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shop-orders-workspace-section__body > * {
+  min-height: 0;
 }
 
 .shop-orders-items-head {
@@ -2533,9 +2622,14 @@ onBeforeUnmount(() => {
 }
 
 .shop-orders-history-list {
+  align-content: start;
   gap: 0;
   padding-right: 0;
   border-top: 1px solid var(--shop-line-soft);
+}
+
+.shop-orders-items-list {
+  align-content: start;
 }
 
 .shop-orders-history-row {

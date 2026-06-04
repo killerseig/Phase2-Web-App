@@ -646,27 +646,61 @@ function buildTimecardEmail(employeeName, weekEnding) {
     </div>
   `;
 }
-function formatOrderEmailDate(value) {
+function resolveOrderEmailDate(value) {
     try {
         if (!value)
-            return 'N/A';
+            return null;
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+            if (match) {
+                const year = Number(match[1]);
+                const month = Number(match[2]) - 1;
+                const day = Number(match[3]);
+                return new Date(year, month, day, 12, 0, 0, 0);
+            }
+        }
         const dateValue = typeof value?.toDate === 'function'
             ? value.toDate()
             : value instanceof Date
                 ? value
                 : new Date(value);
-        if (Number.isNaN(dateValue.getTime()))
-            return 'N/A';
-        return dateValue.toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-        });
+        return Number.isNaN(dateValue.getTime()) ? null : dateValue;
     }
     catch {
-        return 'N/A';
+        return null;
     }
+}
+function formatOrderEmailDate(value) {
+    const dateValue = resolveOrderEmailDate(value);
+    if (!dateValue)
+        return 'N/A';
+    return dateValue.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+}
+function getNextThursdayDateValue(reference) {
+    const referenceDate = resolveOrderEmailDate(reference);
+    if (!referenceDate)
+        return '';
+    const nextDate = new Date(referenceDate);
+    nextDate.setHours(12, 0, 0, 0);
+    const day = nextDate.getDay();
+    let daysUntilThursday = (4 - day + 7) % 7;
+    if (daysUntilThursday === 0) {
+        daysUntilThursday = 7;
+    }
+    nextDate.setDate(nextDate.getDate() + daysUntilThursday);
+    return nextDate.toISOString().slice(0, 10);
+}
+function getShopOrderRequestedDeliveryDateValue(order) {
+    const explicitDeliveryDate = String(order?.deliveryDate || '').trim();
+    if (explicitDeliveryDate)
+        return explicitDeliveryDate;
+    return getNextThursdayDateValue(order?.orderDate || order?.createdAt || order?.updatedAt);
 }
 function normalizeShopOrderNumber(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -754,84 +788,229 @@ function getShopOrderStatusLabel(status) {
         return 'Received';
     return 'Draft';
 }
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+function renderEmailText(value, fallback = 'N/A') {
+    const text = String(value ?? '').trim();
+    return escapeHtml(text || fallback);
+}
+function renderOptionalEmailText(value) {
+    const text = String(value ?? '').trim();
+    return text ? escapeHtml(text) : '&nbsp;';
+}
+function normalizeRootFolderLabel(value) {
+    return value
+        .toLowerCase()
+        .replace(/[\u2019']/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+function getShopOrderDescriptionSegments(description) {
+    return String(description || '')
+        .split(' / ')
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+}
+function isShopTransferRootLabel(rootLabel) {
+    if (!rootLabel)
+        return false;
+    const normalized = normalizeRootFolderLabel(rootLabel);
+    return normalized === 'shop' || normalized.startsWith('shop ');
+}
+function shouldStripControlRootLabel(rootLabel) {
+    if (!rootLabel)
+        return false;
+    const normalized = normalizeRootFolderLabel(rootLabel);
+    return (normalized === 'shop'
+        || normalized.startsWith('shop ')
+        || normalized === 'pm'
+        || normalized === 'pms'
+        || normalized === 'project manager'
+        || normalized === 'project managers');
+}
+function getJobDisplayLabel(order) {
+    const jobCode = String(order?.jobCode || '').trim();
+    const jobName = String(order?.jobName || '').trim();
+    if (jobCode && jobName)
+        return `${jobName} - ${jobCode}`;
+    return jobCode || jobName || 'Phase 2 Job';
+}
+function formatCompactOrderEmailDate(value) {
+    const dateValue = resolveOrderEmailDate(value);
+    if (!dateValue)
+        return 'N/A';
+    return dateValue.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+    });
+}
+function renderPrintedOrderMetaField(label, value, align = 'left') {
+    return `
+    <div style="font-size: 14px; color: #202020; text-align: ${align};">
+      <strong>${escapeHtml(label)}:</strong> ${renderEmailText(value)}
+    </div>
+  `;
+}
+function renderPrintedOrderPlainField(value, align = 'left') {
+    return `
+    <div style="font-size: 14px; color: #202020; text-align: ${align};">
+      ${renderEmailText(value)}
+    </div>
+  `;
+}
+function renderPrintedShopOrderSection(orderIdentifier, orderBy, orderDate, deliveryDateLabel, jobLabel, comments, items) {
+    if (!items.length)
+        return '';
+    return `
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 24px;">
+      <tbody>
+        <tr>
+          <td style="border: none; padding: 20px 20px 18px;">
+            <table role="presentation" style="width: 100%; border: none; margin: 0 0 12px;">
+              <tbody>
+                <tr>
+                  <td style="border: none; padding: 0 0 8px; vertical-align: top; text-align: center;">
+                    <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.04em; color: #111111; text-align: center;">
+                      Online Shop Order
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <table role="presentation" style="width: 100%; border: none; margin: 0 0 10px;">
+              <tbody>
+                <tr>
+                  <td style="border: none; width: 50%; padding: 0 16px 8px 0; vertical-align: top;">
+                    ${renderPrintedOrderPlainField(orderBy || 'Phase 2 Foreman')}
+                  </td>
+                  <td style="border: none; width: 50%; padding: 0 0 8px 16px; vertical-align: top;">
+                    ${renderPrintedOrderMetaField('Date Ordered', orderDate, 'right')}
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="border: none; padding: 0 0 8px; vertical-align: top;">
+                    ${renderPrintedOrderMetaField('Desired Delivery Date', deliveryDateLabel)}
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="border: none; padding: 0 0 8px; vertical-align: top;">
+                    ${renderPrintedOrderMetaField('Job', jobLabel)}
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="border: none; padding: 0 0 8px; vertical-align: top;">
+                    ${renderPrintedOrderMetaField('Order #', orderIdentifier)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            ${comments
+        ? `
+                <div style="margin-top: 10px; font-size: 14px; color: #222222;">
+                  <strong>Comments:</strong> ${renderEmailText(comments)}
+                </div>
+              `
+        : ''}
+
+            <table role="presentation" style="width: 100%; border-collapse: collapse; margin-top: 16px; border: 1px solid #d8d8d8;">
+              <thead>
+                <tr>
+                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 58px;">Pulled<br>By</th>
+                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 62px;">Verified<br>By</th>
+                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 68px;">133/513</th>
+                  <th style="padding: 8px 8px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: left;">Item Name</th>
+                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 80px;">Quantity</th>
+                  <th style="padding: 8px 8px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: left; width: 180px;">Notes</th>
+                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 52px;">&nbsp;</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map((item) => `
+                  <tr>
+                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
+                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
+                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
+                    <td style="height: 38px; padding: 8px 8px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 14px; line-height: 1.35;">${renderEmailText(item.displayDescription, 'Untitled Item')}</td>
+                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 14px;">${item.orderedQuantity}</td>
+                    <td style="height: 38px; padding: 8px 8px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; color: #333333;">${renderOptionalEmailText(item.note)}</td>
+                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
 /**
  * Build HTML template for shop order email
  */
 function buildShopOrderEmail(order, costCodesByCatalogItemId = {}) {
+    void costCodesByCatalogItemId;
     const items = order?.items || [];
     const totalAmount = Number(order?.totalAmount);
     const hasTotalAmount = Number.isFinite(totalAmount);
     const orderIdentifier = getShopOrderDisplayNumber(order);
-    const orderDate = formatOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
-    const requestedDeliveryDate = String(order?.requestedDeliveryDate || '').trim();
-    const requestedDeliveryDateLabel = requestedDeliveryDate
-        ? formatOrderEmailDate(requestedDeliveryDate)
-        : 'Not requested';
-    const itemsHtml = items.length > 0 ? `
-    <h3>Order Items:</h3>
-    <table style="width: 100%; border-collapse: collapse;">
-      <thead>
-        <tr style="background-color: #f0f0f0; border-bottom: 2px solid #333;">
-          <th style="text-align: center; padding: 8px; border-right: 1px solid #ddd;">#</th>
-          <th style="text-align: left; padding: 8px; border-right: 1px solid #ddd;">Item Description</th>
-          <th style="text-align: center; padding: 8px;">Quantity</th>
-          <th style="text-align: center; padding: 8px; border-left: 1px solid #ddd;">Received</th>
-          <th style="text-align: center; padding: 8px;">Backordered</th>
-          <th style="text-align: center; padding: 8px;">Pending</th>
-          <th style="text-align: left; padding: 8px; border-left: 1px solid #ddd;">Cost Code</th>
-          <th style="text-align: left; padding: 8px;">Notes</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${items.map((item, index) => `
-          <tr style="border-bottom: 1px solid #ddd;">
-            <td style="text-align: center; padding: 8px; border-right: 1px solid #ddd;">${index + 1}</td>
-            <td style="padding: 8px; border-right: 1px solid #ddd;">${item.description || 'N/A'}</td>
-            <td style="text-align: center; padding: 8px;">${normalizeShopOrderQuantity(item.quantity)}</td>
-            <td style="text-align: center; padding: 8px; border-left: 1px solid #ddd;">${getShopOrderItemReceivedQuantity(item)}</td>
-            <td style="text-align: center; padding: 8px;">${getShopOrderItemBackorderedQuantity(item)}</td>
-            <td style="text-align: center; padding: 8px;">${getShopOrderItemPendingQuantity(item)}</td>
-            <td style="padding: 8px; border-left: 1px solid #ddd;">${getShopOrderItemCostCode(item, costCodesByCatalogItemId)}</td>
-            <td style="padding: 8px;">${item.note || item.notes || '-'}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  ` : '<p><em>No items in this order</em></p>';
-    const signOffHtml = `
-    <div style="margin-top: 28px;">
-      <h3>Sign-Off</h3>
-      <table role="presentation" style="width: 100%; border: none; margin-top: 16px;">
-        <tbody>
-          <tr>
-            <td style="width: 50%; border: none; padding: 24px 18px 0 0;">
-              <div style="border-top: 1px solid #333; padding-top: 6px;">Ordered By</div>
-            </td>
-            <td style="width: 50%; border: none; padding: 24px 0 0 18px;">
-              <div style="border-top: 1px solid #333; padding-top: 6px;">Approved By</div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    const orderDate = formatCompactOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
+    const deliveryDate = getShopOrderRequestedDeliveryDateValue(order);
+    const deliveryDateLabel = deliveryDate
+        ? formatCompactOrderEmailDate(deliveryDate)
+        : 'N/A';
+    const jobLabel = getJobDisplayLabel(order);
+    const comments = String(order?.comments || '').trim();
+    const orderBy = String(order?.foremanName || order?.submittedByName || '').trim();
+    const emailLines = items.map((item) => {
+        const descriptionSegments = getShopOrderDescriptionSegments(item?.description);
+        const rootLabel = descriptionSegments[0] || null;
+        const remainingSegments = shouldStripControlRootLabel(rootLabel)
+            ? descriptionSegments.slice(1)
+            : descriptionSegments;
+        const fallbackDescription = String(item?.description || '').trim() || 'Untitled Item';
+        const displayDescription = remainingSegments.at(-1) || descriptionSegments.at(-1) || fallbackDescription;
+        return {
+            bucket: isShopTransferRootLabel(rootLabel) ? 'shop' : 'pm',
+            displayDescription,
+            note: String(item?.note || item?.notes || '').trim(),
+            orderedQuantity: normalizeShopOrderQuantity(item?.quantity),
+            pendingQuantity: getShopOrderItemPendingQuantity(item),
+            receivedQuantity: getShopOrderItemReceivedQuantity(item),
+            backorderedQuantity: getShopOrderItemBackorderedQuantity(item),
+        };
+    });
+    const shopLines = emailLines.filter((item) => item.bucket === 'shop');
+    const pmLines = emailLines.filter((item) => item.bucket === 'pm');
+    const shopComments = shopLines.length ? comments : '';
+    const pmComments = shopLines.length ? '' : comments;
+    const shopItemsHtml = renderPrintedShopOrderSection(orderIdentifier, orderBy || 'Phase 2 Foreman', orderDate, deliveryDateLabel, jobLabel, shopComments, shopLines);
+    const pmItemsHtml = renderPrintedShopOrderSection(orderIdentifier, orderBy || 'Phase 2 Foreman', orderDate, deliveryDateLabel, jobLabel, pmComments, pmLines);
+    const itemsHtml = shopItemsHtml || pmItemsHtml
+        ? `${shopItemsHtml}${pmItemsHtml}`
+        : '<p style="margin: 16px 0 0;"><em>No items in this order.</em></p>';
+    const endOfOrderHtml = `
+    <div style="margin-top: 18px; padding: 0 18px; font-size: 16px; color: #303030;">
+      End of Order
     </div>
   `;
     return `
     ${constants_1.EMAIL_STYLES}
-    <div class="email-container">
-      <div class="header">
-        <h1>Shop Order Submitted</h1>
-      </div>
-      <div class="content">
-        <p><strong>Order Number:</strong> ${orderIdentifier}</p>
-        <p><strong>Order Date:</strong> ${orderDate}</p>
-        <p><strong>Requested Delivery Date:</strong> ${requestedDeliveryDateLabel}</p>
-        ${hasTotalAmount ? `<p><strong>Total Amount:</strong> $${totalAmount.toFixed(2)}</p>` : ''}
-        <p><strong>Status:</strong> ${getShopOrderStatusLabel(order?.status)}</p>
+    <div class="email-container" style="font-family: Arial, sans-serif; background-color: #efefef; padding: 20px;">
+      <div class="content" style="background-color: #ffffff; padding: 18px; line-height: 1.6; color: #222222;">
+        ${hasTotalAmount ? `<div style="margin-bottom: 10px; font-size: 14px; color: #333333;"><strong>Estimated Total:</strong> $${totalAmount.toFixed(2)}</div>` : ''}
         ${itemsHtml}
-        ${signOffHtml}
-        <p>A shop order has been submitted. Please review the Phase 2 application for full details.</p>
+        ${endOfOrderHtml}
       </div>
-      <div class="footer">
+      <div class="footer" style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666666; border-radius: 0 0 4px 4px;">
         <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>

@@ -13,3 +13,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+interface Window {
+  __PHASE2_E2E__?: import('@/testing/e2eRuntime').Phase2E2EState
+}

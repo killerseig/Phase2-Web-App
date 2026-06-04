@@ -2,6 +2,7 @@ import { acceptHMRUpdate, defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { subscribeJob as subscribeJobService, subscribeVisibleJobs as subscribeVisibleJobsService } from '@/services/jobs'
 import { useAuthStore } from '@/stores/auth'
+import { isE2EActive, subscribeE2EJob, subscribeE2EVisibleJobs } from '@/testing/e2eRuntime'
 import type { JobRecord } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -58,6 +59,14 @@ export const useJobsStore = defineStore('jobs', () => {
           ? { assignedJobIds }
           : { assignedOnlyForUid: auth.currentUser.uid }
 
+      if (isE2EActive()) {
+        unsubscribeJobs = subscribeE2EVisibleJobs(options, (nextJobs) => {
+          jobs.value = nextJobs
+          loading.value = false
+        })
+        return
+      }
+
       unsubscribeJobs = subscribeVisibleJobsService(
         options,
         (nextJobs) => {
@@ -89,6 +98,24 @@ export const useJobsStore = defineStore('jobs', () => {
     stopCurrentJobSubscription()
     loading.value = true
     error.value = null
+
+    if (isE2EActive()) {
+      unsubscribeCurrentJob = subscribeE2EJob(jobId, (job) => {
+        currentJob.value = job
+
+        if (job) {
+          const index = jobs.value.findIndex((entry) => entry.id === job.id)
+          if (index === -1) {
+            jobs.value.push(job)
+          } else {
+            jobs.value[index] = job
+          }
+        }
+
+        loading.value = false
+      })
+      return
+    }
 
     unsubscribeCurrentJob = subscribeJobService(
       jobId,

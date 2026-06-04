@@ -8,6 +8,14 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
+import {
+  createE2EShopOrder,
+  deleteE2EShopOrder,
+  isE2EActive,
+  sendE2EShopOrderSubmissionEmail,
+  subscribeE2EShopOrders,
+  updateE2EShopOrder,
+} from '@/testing/e2eRuntime'
 import type { ShopOrderItemRecord, ShopOrderRecord, ShopOrderStatus } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -118,6 +126,8 @@ function normalizeShopOrder(id: string, data: DocumentData): ShopOrderRecord {
     jobId: typeof data.jobId === 'string' ? data.jobId : '',
     jobCode: toNullableText(data.jobCode),
     jobName: toNullableText(data.jobName),
+    orderNumber: toNullableText(data.orderNumber),
+    orderDate: data.orderDate,
     deliveryDate: toNullableText(data.deliveryDate),
     status: data.status === 'submitted' ? 'submitted' : 'draft',
     comments: typeof data.comments === 'string' ? data.comments.trim() : '',
@@ -153,6 +163,10 @@ export function subscribeShopOrders(
   onUpdate: (orders: ShopOrderRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EShopOrders(jobId, onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(
@@ -168,6 +182,10 @@ export function subscribeShopOrders(
 
 export async function createShopOrderRecord(input: CreateShopOrderInput): Promise<string> {
   try {
+    if (isE2EActive()) {
+      return await createE2EShopOrder(input)
+    }
+
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<CreateShopOrderInput, { id: string }>(
       functions,
@@ -192,6 +210,11 @@ export async function updateShopOrderRecord(
   actor?: ShopOrderActor,
 ): Promise<void> {
   try {
+    if (isE2EActive()) {
+      await updateE2EShopOrder(orderId, input, actor)
+      return
+    }
+
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
       {
@@ -220,6 +243,11 @@ export async function updateShopOrderRecord(
 
 export async function deleteShopOrderRecord(orderId: string): Promise<void> {
   try {
+    if (isE2EActive()) {
+      await deleteE2EShopOrder(orderId)
+      return
+    }
+
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<{ orderId: string }, { success: boolean }>(
       functions,
@@ -233,6 +261,11 @@ export async function deleteShopOrderRecord(orderId: string): Promise<void> {
 
 export async function sendShopOrderSubmissionEmail(jobId: string, shopOrderId: string): Promise<void> {
   try {
+    if (isE2EActive()) {
+      await sendE2EShopOrderSubmissionEmail()
+      return
+    }
+
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
       { jobId: string; shopOrderId: string },

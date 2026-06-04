@@ -8,7 +8,9 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "preview:shop-order-email": "npm run build && node scripts/preview-shop-order-email.cjs",
+    "smoke:shop-order-email": "npm run build && node scripts/smoke-shop-order-email.cjs"
   },
   "dependencies": {
     "@types/pdfkit": "^0.17.5",

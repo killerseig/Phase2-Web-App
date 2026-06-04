@@ -95,6 +95,8 @@ export interface ShopOrderRecord {
   jobId: string
   jobCode: string | null
   jobName: string | null
+  orderNumber?: string | null
+  orderDate?: unknown
   deliveryDate: string | null
   status: ShopOrderStatus | string
   comments: string

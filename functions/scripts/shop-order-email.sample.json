@@ -1,0 +1,26 @@
+{
+  "jobCode": "1A",
+  "jobName": "Phase 2 Company Acoustical remodel",
+  "orderDate": "2026-06-04",
+  "createdAt": "2026-06-04T09:00:00Z",
+  "deliveryDate": "2026-06-11",
+  "status": "submitted",
+  "foremanName": "Chris (CJ) Larsen",
+  "comments": "Preview the current shop order email without sending a real message.",
+  "items": [
+    {
+      "description": "./ *Start Up / Job Posters",
+      "quantity": 2,
+      "receivedQuantity": 0,
+      "backorderedQuantity": 0,
+      "note": ""
+    },
+    {
+      "description": "./ *Start Up / Foreman Book",
+      "quantity": 1,
+      "receivedQuantity": 0,
+      "backorderedQuantity": 0,
+      "note": ""
+    }
+  ]
+}

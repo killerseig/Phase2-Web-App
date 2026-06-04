@@ -397,6 +397,21 @@ export async function updateDailyLogRecord(
   }
 }
 
+export async function sendDailyLogEmail(jobId: string, dailyLogId: string): Promise<string> {
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<
+      { jobId: string; dailyLogId: string },
+      { success: boolean; message?: string }
+    >(functions, 'sendDailyLogEmail')
+
+    const result = await callable({ jobId, dailyLogId })
+    return String(result.data?.message || '').trim() || 'Email sent successfully'
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to send the daily log email.'))
+  }
+}
+
 export async function deleteDailyLogRecord(dailyLogId: string): Promise<void> {
   try {
     const { functions } = requireFirebaseServices()
