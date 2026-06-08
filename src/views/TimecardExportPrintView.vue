@@ -56,7 +56,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="timecard-print-view">
+  <div class="timecard-print-view" data-testid="timecard-export-print-page">
     <header v-if="payload" class="timecard-print-view__screen-toolbar">
       <div class="timecard-print-view__screen-copy">
         <strong>{{ payload.title }}</strong>
@@ -72,7 +72,7 @@ onMounted(async () => {
       {{ loadError }}
     </div>
 
-    <main v-else-if="payload" class="timecard-print-view__document">
+    <main v-else-if="payload" class="timecard-print-view__document" data-testid="timecard-export-print-document">
       <article
         v-for="(pageCards, pageIndex) in pagedCards"
         :key="`${payload.exportId}-page-${pageIndex}`"
@@ -83,6 +83,7 @@ onMounted(async () => {
             v-for="card in pageCards"
             :key="`${payload.exportId}-${card.id}`"
             class="timecard-print-view__card-shell"
+            :data-testid="`timecard-export-print-card-${card.id}`"
           >
             <TimecardPrintCard
               class="timecard-print-view__workbook-card"

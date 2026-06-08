@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db } from './runtime'
 
-type ShopOrderRole = 'admin' | 'controller' | 'foreman' | 'none'
+type ShopOrderRole = 'admin' | 'foreman' | 'none'
 type ShopOrderStatus = 'draft' | 'submitted'
 
 interface AuthorizedShopOrderUser {
@@ -24,7 +24,7 @@ function textOrNull(value: unknown) {
 
 function normalizeRole(value: unknown): ShopOrderRole {
   const role = text(value).toLowerCase()
-  if (role === 'admin' || role === 'controller' || role === 'foreman') return role
+  if (role === 'admin' || role === 'foreman') return role
   return 'none'
 }
 
@@ -87,7 +87,7 @@ async function getAuthorizedUser(uid: string): Promise<AuthorizedShopOrderUser> 
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!['admin', 'controller', 'foreman'].includes(role)) {
+  if (!['admin', 'foreman'].includes(role)) {
     throw new HttpsError('permission-denied', 'Your account does not have access to shop orders.')
   }
 
@@ -101,7 +101,7 @@ async function getAuthorizedUser(uid: string): Promise<AuthorizedShopOrderUser> 
 }
 
 function assertCanWriteJob(user: AuthorizedShopOrderUser, jobId: string) {
-  if (user.role === 'admin' || user.role === 'controller') return
+  if (user.role === 'admin') return
   if (user.role === 'foreman' && user.assignedJobIds.includes(jobId)) return
   throw new HttpsError('permission-denied', 'You are not assigned to this job.')
 }

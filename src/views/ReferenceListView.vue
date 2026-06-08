@@ -16,14 +16,16 @@ const title = computed(() => {
 
 <template>
   <AppShell>
-    <PagePanel
-      eyebrow="Admin"
-      :title="title"
-      description="These fixed lists are managed by admins and reused throughout jobs, employees, and workflow forms."
-    >
-      <div class="catalog-tree-preview">
-        <div class="catalog-tree-preview__node">List management scaffold</div>
-      </div>
-    </PagePanel>
+    <div data-testid="reference-list-page">
+      <PagePanel
+        eyebrow="Admin"
+        :title="title"
+        description="These fixed lists are managed by admins and reused throughout jobs, employees, and workflow forms."
+      >
+        <div class="catalog-tree-preview">
+          <div class="catalog-tree-preview__node">List management scaffold</div>
+        </div>
+      </PagePanel>
+    </div>
   </AppShell>
 </template>

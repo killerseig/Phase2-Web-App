@@ -46,7 +46,7 @@ function textOrNull(value) {
 }
 function normalizeRole(value) {
     const role = text(value).toLowerCase();
-    if (role === 'admin' || role === 'controller' || role === 'foreman')
+    if (role === 'admin' || role === 'foreman')
         return role;
     return 'none';
 }
@@ -99,7 +99,7 @@ async function getAuthorizedUser(uid) {
     if (!active) {
         throw new https_1.HttpsError('permission-denied', 'Your account is inactive.');
     }
-    if (!['admin', 'controller', 'foreman'].includes(role)) {
+    if (!['admin', 'foreman'].includes(role)) {
         throw new https_1.HttpsError('permission-denied', 'Your account does not have access to shop orders.');
     }
     return {
@@ -111,7 +111,7 @@ async function getAuthorizedUser(uid) {
     };
 }
 function assertCanWriteJob(user, jobId) {
-    if (user.role === 'admin' || user.role === 'controller')
+    if (user.role === 'admin')
         return;
     if (user.role === 'foreman' && user.assignedJobIds.includes(jobId))
         return;

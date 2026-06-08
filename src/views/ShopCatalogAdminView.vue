@@ -1937,6 +1937,7 @@ onBeforeUnmount(() => {
   <AppShell>
     <div
       class="catalog-explorer"
+      data-testid="shop-catalog-page"
       :class="{
         'catalog-explorer--mobile-catalog': activeMobilePanel === 'catalog',
         'catalog-explorer--mobile-inspector': activeMobilePanel === 'inspector',
@@ -1975,7 +1976,12 @@ onBeforeUnmount(() => {
 
         <div class="catalog-tree-pane__body">
           <div class="catalog-pane__search">
-            <input v-model="treeSearch" type="search" placeholder="Find folder" />
+            <input
+              v-model="treeSearch"
+              data-testid="shop-catalog-search"
+              type="search"
+              placeholder="Find folder"
+            />
           </div>
 
           <label class="catalog-toggle-row catalog-toggle-row--compact">
@@ -2007,6 +2013,7 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="catalog-tree-node catalog-tree-node--root"
+                  data-testid="shop-catalog-root-row"
                   :class="{
                     'catalog-tree-node--active': selectedInspectorKey === 'root',
                     'catalog-tree-node--drop-target': dragState.overKey === 'root',
@@ -2045,6 +2052,7 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="catalog-tree-node"
+                  :data-testid="node.kind === 'category' ? `shop-catalog-category-${node.id}` : `shop-catalog-item-${node.id}`"
                   :class="{
                     'catalog-tree-node--active': selectedInspectorKey === node.key || createState.key === node.key,
                     'catalog-tree-node--dragging': dragState.sourceKey === node.key,

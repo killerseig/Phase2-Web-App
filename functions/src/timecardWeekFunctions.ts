@@ -1,8 +1,19 @@
 import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
+import { EMAIL } from './constants'
+import { buildTimecardsEmail, isEmailEnabled, sendEmail } from './emailService'
+import { getEmailSettings, getJobDetails, getJobNotificationRecipients } from './firestoreService'
+import { getGraphEmailSecrets } from './functionConfig'
+import {
+  buildTimecardCsv,
+  buildTimecardCsvFilename,
+  buildTimecardPdfBuffer,
+  buildTimecardPdfFilename,
+  normalizeTimecardForEmail,
+} from './operationsFunctions'
 import { db } from './runtime'
 
-type TimecardRole = 'admin' | 'controller' | 'foreman' | 'none'
+type TimecardRole = 'admin' | 'foreman' | 'none'
 
 interface AuthorizedTimecardUser {
   uid: string
@@ -21,6 +32,12 @@ interface EnsureTimecardWeekInput {
   weekEndDate: string
 }
 
+interface SubmitTimecardWeekResponse {
+  success: boolean
+  emailSent: boolean
+  emailMessage: string
+}
+
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -28,6 +45,14 @@ function text(value: unknown) {
 function textOrNull(value: unknown) {
   const normalized = text(value)
   return normalized || null
+}
+
+function normalizeRecipients(...groups: unknown[]): string[] {
+  const merged = groups.flatMap((group) => (Array.isArray(group) ? group : []))
+  const cleaned = merged
+    .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+    .filter(Boolean)
+  return Array.from(new Set(cleaned))
 }
 
 function numberOrZero(value: unknown) {
@@ -45,7 +70,7 @@ function numberOrNull(value: unknown) {
 
 function normalizeRole(value: unknown): TimecardRole {
   const role = text(value).toLowerCase()
-  if (role === 'admin' || role === 'controller' || role === 'foreman') return role
+  if (role === 'admin' || role === 'foreman') return role
   return 'none'
 }
 
@@ -98,7 +123,7 @@ async function getAuthorizedUser(uid: string): Promise<AuthorizedTimecardUser> {
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!['admin', 'controller', 'foreman'].includes(role)) {
+  if (!['admin', 'foreman'].includes(role)) {
     throw new HttpsError('permission-denied', 'Your account does not have access to timecards.')
   }
 
@@ -112,7 +137,7 @@ async function getAuthorizedUser(uid: string): Promise<AuthorizedTimecardUser> {
 }
 
 function assertCanWriteJob(user: AuthorizedTimecardUser, jobId: string) {
-  if (user.role === 'admin' || user.role === 'controller') return
+  if (user.role === 'admin') return
   if (user.role === 'foreman' && user.assignedJobIds.includes(jobId)) return
   throw new HttpsError('permission-denied', 'You are not assigned to this job.')
 }
@@ -267,6 +292,117 @@ async function getWeekDoc(weekId: string) {
   }
 
   return { weekRef, weekSnap, week, jobId }
+}
+
+async function listWeekCards(weekId: string): Promise<any[]> {
+  const cardsSnap = await db.collection('timecardWeeks').doc(weekId).collection('cards').get()
+  return cardsSnap.docs
+    .map((doc): any => ({ id: doc.id, ...(doc.data() || {}) }))
+    .sort((left, right) => numberOrZero(left.sortIndex) - numberOrZero(right.sortIndex))
+}
+
+async function sendSubmittedWeekEmail(
+  weekId: string,
+  week: any,
+  jobId: string,
+  submittedByName: string | null,
+): Promise<SubmitTimecardWeekResponse> {
+  if (!isEmailEnabled()) {
+    return {
+      success: true,
+      emailSent: false,
+      emailMessage: 'Week submitted. Notification email is disabled in system settings.',
+    }
+  }
+
+  const settings = await getEmailSettings()
+  const recipients = normalizeRecipients(
+    settings.globalNotificationRecipients.timecards,
+    await getJobNotificationRecipients(jobId, 'timecards'),
+  )
+
+  if (!recipients.length) {
+    return {
+      success: true,
+      emailSent: false,
+      emailMessage: 'Week submitted. No timecard email recipients are configured.',
+    }
+  }
+
+  const cards = await listWeekCards(weekId)
+  if (!cards.length) {
+    return {
+      success: true,
+      emailSent: false,
+      emailMessage: 'Week submitted. No timecard cards were available to include in the notification email.',
+    }
+  }
+
+  const job = await getJobDetails(jobId)
+  const weekStart = text(week.weekStartDate)
+  const weekEnd = text(week.weekEndDate)
+  const jobNumber = text(job?.number || week?.jobCode)
+  const jobName = text(job?.name || week?.jobName)
+  const productionBurden = job?.productionBurden
+  const submittedBy = submittedByName || textOrNull(week?.submittedByName) || 'Phase 2 Foreman'
+
+  const normalizedTimecards = cards.map((card) => normalizeTimecardForEmail({
+    ...card,
+    weekStartDate: weekStart,
+    weekEndingDate: weekEnd,
+    jobCode: jobNumber,
+    __jobCode: jobNumber,
+    employeeWage: card?.wageRate ?? null,
+    wage: card?.wageRate ?? null,
+    productionBurden,
+    status: 'submitted',
+  }))
+
+  const html = buildTimecardsEmail({
+    jobName,
+    jobNumber,
+    submittedBy,
+    weekStart,
+    timecards: normalizedTimecards,
+  })
+
+  const csvAttachment = buildTimecardCsv(normalizedTimecards, weekStart, jobNumber || undefined)
+  const csvFileName = buildTimecardCsvFilename(weekStart, undefined, jobNumber || undefined)
+  const pdfFileName = buildTimecardPdfFilename(weekStart, undefined, jobNumber || undefined)
+  const pdfBuffer = await buildTimecardPdfBuffer({
+    jobName,
+    jobNumber,
+    submittedBy,
+    weekStart,
+    timecards: normalizedTimecards,
+  })
+
+  const attachments: Array<{ name: string; contentType?: string; contentBytes: string }> = []
+  if (csvAttachment) {
+    attachments.push({
+      name: csvFileName,
+      contentType: 'text/csv',
+      contentBytes: Buffer.from(csvAttachment, 'utf-8').toString('base64'),
+    })
+  }
+  attachments.push({
+    name: pdfFileName,
+    contentType: 'application/pdf',
+    contentBytes: pdfBuffer.toString('base64'),
+  })
+
+  await sendEmail({
+    to: recipients,
+    subject: `${EMAIL.SUBJECTS.TIMECARD} - ${normalizedTimecards.length} timecard(s) - Week of ${weekStart}`,
+    html,
+    attachments,
+  })
+
+  return {
+    success: true,
+    emailSent: true,
+    emailMessage: `Week submitted and emailed to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}.`,
+  }
 }
 
 export const ensureTimecardWeekRecord = onCall(async (request) => {
@@ -469,7 +605,7 @@ export const deleteTimecardCardRecord = onCall(async (request) => {
   return { success: true }
 })
 
-export const submitTimecardWeekRecord = onCall(async (request) => {
+export const submitTimecardWeekRecord = onCall({ secrets: getGraphEmailSecrets() }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be signed in.')
   }
@@ -477,18 +613,51 @@ export const submitTimecardWeekRecord = onCall(async (request) => {
   const weekId = text(request.data?.weekId)
   if (!weekId) throw new HttpsError('invalid-argument', 'weekId is required')
 
-  const { weekRef, jobId } = await getWeekDoc(weekId)
+  const { weekRef, week, jobId } = await getWeekDoc(weekId)
   const user = await getAuthorizedUser(request.auth.uid)
   assertCanWriteJob(user, jobId)
+
+  const submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid)
+  const submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName)
 
   await weekRef.update({
     status: 'submitted',
     submittedAt: admin.firestore.FieldValue.serverTimestamp(),
-    submittedByUserId: textOrNull(request.data?.actor?.userId ?? request.auth.uid),
-    submittedByName: textOrNull(request.data?.actor?.displayName ?? user.displayName),
+    submittedByUserId,
+    submittedByName,
     updatedByUserId: request.auth.uid,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
 
-  return { success: true }
+  try {
+    const emailResult = await sendSubmittedWeekEmail(weekId, {
+      ...week,
+      submittedByUserId,
+      submittedByName,
+      status: 'submitted',
+    }, jobId, submittedByName)
+
+    await weekRef.update({
+      submittedEmailAttemptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      submittedEmailSentAt: emailResult.emailSent ? admin.firestore.FieldValue.serverTimestamp() : null,
+      submittedEmailError: emailResult.emailSent ? admin.firestore.FieldValue.delete() : emailResult.emailMessage,
+    })
+
+    return emailResult
+  } catch (error: any) {
+    const emailMessage = `Week submitted, but the notification email failed: ${error?.message || 'Unknown error'}`
+    console.error('[submitTimecardWeekRecord] Notification email failed', { weekId, jobId, error })
+
+    await weekRef.update({
+      submittedEmailAttemptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      submittedEmailSentAt: null,
+      submittedEmailError: emailMessage,
+    })
+
+    return {
+      success: true,
+      emailSent: false,
+      emailMessage,
+    }
+  }
 })

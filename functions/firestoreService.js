@@ -84,6 +84,7 @@ async function getJobDetails(jobId) {
         id: jobSnap.id,
         name: data?.name || constants_1.DEFAULTS.JOB_NAME,
         number: data?.number || data?.code || '',
+        productionBurden: typeof data?.productionBurden === 'number' ? data.productionBurden : null,
     };
 }
 /**
@@ -184,11 +185,34 @@ async function getTimecard(jobId, weekStart, timecardId) {
         .collection(constants_1.COLLECTIONS.TIMECARDS)
         .doc(timecardId);
     const legacySnap = await legacyRef.get();
-    if (!legacySnap.exists)
+    if (legacySnap.exists) {
+        return {
+            id: legacySnap.id,
+            ...legacySnap.data(),
+        };
+    }
+    const timecardWeeksSnap = await db
+        .collection('timecardWeeks')
+        .where('jobId', '==', jobId)
+        .where('weekStartDate', '==', weekStart)
+        .limit(1)
+        .get();
+    const activeWeekDoc = timecardWeeksSnap.docs[0];
+    if (!activeWeekDoc)
+        return null;
+    const activeWeek = activeWeekDoc.data() || {};
+    const cardSnap = await activeWeekDoc.ref.collection('cards').doc(timecardId).get();
+    if (!cardSnap.exists)
         return null;
     return {
-        id: legacySnap.id,
-        ...legacySnap.data(),
+        id: cardSnap.id,
+        ...cardSnap.data(),
+        jobId,
+        weekStartDate: activeWeek.weekStartDate || weekStart,
+        weekEndingDate: activeWeek.weekEndDate || '',
+        jobCode: activeWeek.jobCode || '',
+        status: activeWeek.status || 'draft',
+        createdByUid: activeWeek.ownerForemanUserId || activeWeek.createdByUserId || null,
     };
 }
 /**

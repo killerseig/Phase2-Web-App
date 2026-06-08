@@ -25,7 +25,7 @@ service cloud.firestore {
     }
 
     function roleCanUseApp() {
-      return userRole() in ['admin', 'controller', 'foreman'];
+      return userRole() in ['admin', 'foreman'];
     }
 
     function activeAppUser() {
@@ -39,7 +39,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return activeAppUser() && userRole() in ['admin', 'controller'];
+      return activeAppUser() && userRole() == 'admin';
     }
 
     function isForemanAssigned(jobId) {
@@ -60,10 +60,6 @@ service cloud.firestore {
         isAdmin() ||
         isForemanAssigned(jobId)
       );
-    }
-
-    function isAdminOrController() {
-      return activeAppUser() && userRole() in ['admin', 'controller'];
     }
 
     function isAssignedForemanToJob(jobId) {
@@ -197,10 +193,10 @@ service cloud.firestore {
 
     match /timecardWeeks/{weekId} {
       allow read: if hasJobReadAccess(resource.data.jobId) &&
-                    (isAdminOrController() || foremanCanAccessWeek(resource.data));
+                    (isAdmin() || foremanCanAccessWeek(resource.data));
       allow create: if hasJobWriteAccess(request.resource.data.jobId) &&
-                     (isAdminOrController() || request.resource.data.ownerForemanUserId == request.auth.uid);
-      allow update: if isAdminOrController() ||
+                     (isAdmin() || request.resource.data.ownerForemanUserId == request.auth.uid);
+      allow update: if isAdmin() ||
                     (hasJobWriteAccess(resource.data.jobId) &&
                      resource.data.status == 'draft' &&
                      resource.data.ownerForemanUserId == request.auth.uid &&
@@ -213,7 +209,7 @@ service cloud.firestore {
                        'submittedByUserId',
                        'submittedByName'
                      ]));
-      allow delete: if isAdminOrController() ||
+      allow delete: if isAdmin() ||
                     (hasJobWriteAccess(resource.data.jobId) &&
                      resource.data.status == 'draft' &&
                      resource.data.ownerForemanUserId == request.auth.uid);
@@ -221,15 +217,15 @@ service cloud.firestore {
       match /cards/{cardId} {
         allow read: if timecardWeekExists(weekId) &&
                      hasJobReadAccess(timecardWeekJobId(weekId)) &&
-                     (isAdminOrController() || foremanOwnsWeek(timecardWeekDoc(weekId).data));
+                     (isAdmin() || foremanOwnsWeek(timecardWeekDoc(weekId).data));
         allow create: if timecardWeekExists(weekId) &&
                        hasJobWriteAccess(timecardWeekJobId(weekId)) &&
-                       (isAdminOrController() || timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid) &&
-                       (!timecardWeekIsSubmitted(weekId) || isAdminOrController());
+                       (isAdmin() || timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid) &&
+                       (!timecardWeekIsSubmitted(weekId) || isAdmin());
         allow update, delete: if timecardWeekExists(weekId) &&
                               hasJobWriteAccess(timecardWeekJobId(weekId)) &&
-                              (isAdminOrController() || timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid) &&
-                              (!timecardWeekIsSubmitted(weekId) || isAdminOrController());
+                              (isAdmin() || timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid) &&
+                              (!timecardWeekIsSubmitted(weekId) || isAdmin());
       }
     }
 

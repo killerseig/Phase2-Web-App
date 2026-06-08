@@ -60,9 +60,9 @@
 - The first version should use only two built-in roles:
   - `Admin`
   - `Foreman`
-- For the first version, the old controller workflow should be handled through `Admin` access.
+- For the first version, the old timecard review workflow should be handled through `Admin` access.
 - The system should be designed so foremen can later be moved into custom non-admin roles.
-- A future custom `Controller` role should be possible, but it is not needed in the first version.
+- A future custom timecard review role should be possible, but it is not needed in the first version.
 - The `Admin` role should always keep full access and should not be part of the customizable role system.
 
 ## Devices

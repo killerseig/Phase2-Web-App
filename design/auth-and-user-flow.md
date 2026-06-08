@@ -34,7 +34,7 @@ V1 should use only:
 
 Notes:
 
-- do not carry forward a built-in `Controller` role in `v1`
+- do not carry forward any separate timecard review role in `v1`
 - do not carry forward a built-in `None` role in `v1`
 - use `inactive` status when a user should no longer have access
 
@@ -321,5 +321,5 @@ These `v1` behaviors should stay close to the old app:
 These parts should change:
 
 - built-in roles become only `Admin` and `Foreman`
-- old controller behavior is handled by `Admin`
+- old timecard review behavior is handled by `Admin`
 - future custom roles can be added later without changing the built-in auth flow

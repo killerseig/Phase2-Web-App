@@ -37,6 +37,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendShopOrderEmail = exports.downloadTimecardsForWeek = exports.listTimecardsForWeek = exports.submitForemanTimecardsForWeek = exports.saveForemanTimecard = exports.getForemanTimecardWorkspace = exports.addEmployeeToTimecardRoster = exports.listTimecardStaffingEmployees = exports.sendTimecardEmail = exports.sendDailyLogEmail = void 0;
+exports.normalizeTimecardForEmail = normalizeTimecardForEmail;
+exports.buildTimecardCsv = buildTimecardCsv;
+exports.buildTimecardCsvFilename = buildTimecardCsvFilename;
+exports.buildTimecardPdfFilename = buildTimecardPdfFilename;
+exports.buildTimecardPdfBuffer = buildTimecardPdfBuffer;
 const admin = __importStar(require("firebase-admin"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const https_1 = require("firebase-functions/v2/https");
@@ -101,15 +106,6 @@ function assertActiveRoleUser(user, allowedRoles, errorMessage) {
 function assertAdminOrAssignedForeman(user, jobId, errorMessage) {
     const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman'], errorMessage);
     if (authorizedUser.role === 'admin')
-        return authorizedUser;
-    if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
-        throw new https_2.HttpsError('permission-denied', errorMessage);
-    }
-    return authorizedUser;
-}
-function assertAdminControllerOrAssignedForeman(user, jobId, errorMessage) {
-    const authorizedUser = assertActiveRoleUser(user, ['admin', 'controller', 'foreman'], errorMessage);
-    if (authorizedUser.role === 'admin' || authorizedUser.role === 'controller')
         return authorizedUser;
     if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
         throw new https_2.HttpsError('permission-denied', errorMessage);
@@ -975,7 +971,7 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
     }
     try {
         const user = await (0, firestoreService_1.getUserProfile)(callerUid);
-        const authorizedUser = assertAdminControllerOrAssignedForeman(user, jobId, 'Only admins, controllers, or assigned foremen can send daily log emails');
+        const authorizedUser = assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can send daily log emails');
         if (!(0, emailService_1.isEmailEnabled)()) {
             console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.');
             return { success: true, message: 'Email sending disabled. Skipped.' };
@@ -1274,7 +1270,7 @@ async function resolveCreatorNames(timecards) {
     }
     return names;
 }
-function toControllerTimecardRow(tc, fallbackWeekStart, fallbackWeekEnding, creatorNames) {
+function toTimecardExportRow(tc, fallbackWeekStart, fallbackWeekEnding, creatorNames) {
     const submittedAtIso = toIsoString(tc?.submittedAt);
     const nameParts = deriveEmployeeNameParts(tc);
     const weekStart = String(tc?.weekStartDate || '').trim() || getWeekStartFromWeekEnding(String(tc?.weekEndingDate || '').trim()) || fallbackWeekStart;
@@ -1304,7 +1300,7 @@ function toControllerTimecardRow(tc, fallbackWeekStart, fallbackWeekEnding, crea
         submittedAtMs: submittedAtIso ? Date.parse(submittedAtIso) : null,
     };
 }
-function parseControllerTimecardFilters(data) {
+function parseTimecardExportFilters(data) {
     const startWeek = String(data?.startWeek || data?.weekStart || '').trim();
     const endWeek = String(data?.endWeek || startWeek).trim() || startWeek;
     const startDate = parseDateOnly(startWeek);
@@ -1342,7 +1338,7 @@ function parseControllerTimecardFilters(data) {
         status: status,
     };
 }
-function rowMatchesControllerFilters(row, filters) {
+function rowMatchesTimecardExportFilters(row, filters) {
     const tradeNeedle = filters.trade.toLowerCase();
     const firstNameNeedle = filters.firstName.toLowerCase();
     const lastNameNeedle = filters.lastName.toLowerCase();
@@ -1362,7 +1358,7 @@ function rowMatchesControllerFilters(row, filters) {
         return false;
     return true;
 }
-function sortControllerTimecardRows(a, b) {
+function sortTimecardExportRows(a, b) {
     const weekCompare = String(a.weekStart || '').localeCompare(String(b.weekStart || ''));
     if (weekCompare !== 0)
         return weekCompare;
@@ -1374,7 +1370,7 @@ function sortControllerTimecardRows(a, b) {
         return employeeCompare;
     return String(a.employeeNumber || '').localeCompare(String(b.employeeNumber || ''));
 }
-async function resolveControllerTargetJobs(jobId) {
+async function resolveTimecardExportTargetJobs(jobId) {
     if (jobId) {
         const jobSnap = await runtime_1.db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).get();
         if (!jobSnap.exists) {
@@ -1397,8 +1393,8 @@ async function resolveControllerTargetJobs(jobId) {
         };
     });
 }
-async function queryControllerTimecards(filters) {
-    const targetJobs = await resolveControllerTargetJobs(filters.jobId);
+async function queryTimecardExportRows(filters) {
+    const targetJobs = await resolveTimecardExportTargetJobs(filters.jobId);
     if (!targetJobs.length) {
         return {
             ...filters,
@@ -1422,10 +1418,10 @@ async function queryControllerTimecards(filters) {
         .flat()
         .map((tc) => ({
         source: tc,
-        row: toControllerTimecardRow(tc, filters.startWeek, filters.endWeekEnding, creatorNames),
+        row: toTimecardExportRow(tc, filters.startWeek, filters.endWeekEnding, creatorNames),
     }))
-        .filter((entry) => rowMatchesControllerFilters(entry.row, filters))
-        .sort((left, right) => sortControllerTimecardRows(left.row, right.row));
+        .filter((entry) => rowMatchesTimecardExportFilters(entry.row, filters))
+        .sort((left, right) => sortTimecardExportRows(left.row, right.row));
     const resolvedJob = filters.jobId ? targetJobs[0] : null;
     return {
         ...filters,
@@ -1447,10 +1443,6 @@ async function queryControllerTimecards(filters) {
         })),
     };
 }
-/**
- * List filtered weekly timecards across jobs for controller review.
- * Access: admin and controller roles
- */
 exports.listTimecardStaffingEmployees = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
@@ -1707,10 +1699,10 @@ exports.listTimecardsForWeek = (0, https_1.onCall)(async (request) => {
         throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
     const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
-    assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action');
-    const filters = parseControllerTimecardFilters(request.data);
+    assertActiveRoleUser(user, ['admin'], 'Only active admins can perform this action');
+    const filters = parseTimecardExportFilters(request.data);
     try {
-        const result = await queryControllerTimecards(filters);
+        const result = await queryTimecardExportRows(filters);
         const rows = result.rows;
         return {
             success: true,
@@ -1744,21 +1736,21 @@ exports.listTimecardsForWeek = (0, https_1.onCall)(async (request) => {
 });
 /**
  * Download filtered timecards as CSV or PDF.
- * Access: admin and controller roles
+ * Access: admin role
  */
 exports.downloadTimecardsForWeek = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_2.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
     const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
-    assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action');
-    const filters = parseControllerTimecardFilters(request.data);
+    assertActiveRoleUser(user, ['admin'], 'Only active admins can perform this action');
+    const filters = parseTimecardExportFilters(request.data);
     const format = String(request.data?.format || '').trim().toLowerCase();
     if (format !== 'csv' && format !== 'pdf') {
         throw new https_2.HttpsError('invalid-argument', 'format must be either "csv" or "pdf"');
     }
     try {
-        const result = await queryControllerTimecards(filters);
+        const result = await queryTimecardExportRows(filters);
         if (!result.exportTimecards.length) {
             throw new https_2.HttpsError('not-found', 'No timecards found for the selected filters');
         }

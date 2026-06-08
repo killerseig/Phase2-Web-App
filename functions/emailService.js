@@ -869,15 +869,15 @@ function renderPrintedShopOrderSection(orderIdentifier, orderBy, orderDate, deli
     if (!items.length)
         return '';
     return `
-    <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 24px;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; page-break-inside: auto;">
       <tbody>
         <tr>
-          <td style="border: none; padding: 20px 20px 18px;">
-            <table role="presentation" style="width: 100%; border: none; margin: 0 0 12px;">
+          <td style="border: none; padding: 14px 14px 12px;">
+            <table role="presentation" style="width: 100%; border: none; margin: 0 0 8px;">
               <tbody>
                 <tr>
-                  <td style="border: none; padding: 0 0 8px; vertical-align: top; text-align: center;">
-                    <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.04em; color: #111111; text-align: center;">
+                  <td style="border: none; padding: 0 0 4px; vertical-align: top; text-align: center;">
+                    <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 25px; font-weight: 700; letter-spacing: 0.03em; color: #111111; text-align: center;">
                       Online Shop Order
                     </div>
                   </td>
@@ -885,28 +885,28 @@ function renderPrintedShopOrderSection(orderIdentifier, orderBy, orderDate, deli
               </tbody>
             </table>
 
-            <table role="presentation" style="width: 100%; border: none; margin: 0 0 10px;">
+            <table role="presentation" style="width: 100%; border: none; margin: 0 0 6px;">
               <tbody>
                 <tr>
-                  <td style="border: none; width: 50%; padding: 0 16px 8px 0; vertical-align: top;">
+                  <td style="border: none; width: 50%; padding: 0 12px 5px 0; vertical-align: top;">
                     ${renderPrintedOrderPlainField(orderBy || 'Phase 2 Foreman')}
                   </td>
-                  <td style="border: none; width: 50%; padding: 0 0 8px 16px; vertical-align: top;">
+                  <td style="border: none; width: 50%; padding: 0 0 5px 12px; vertical-align: top;">
                     ${renderPrintedOrderMetaField('Date Ordered', orderDate, 'right')}
                   </td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 8px; vertical-align: top;">
+                  <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
                     ${renderPrintedOrderMetaField('Desired Delivery Date', deliveryDateLabel)}
                   </td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 8px; vertical-align: top;">
+                  <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
                     ${renderPrintedOrderMetaField('Job', jobLabel)}
                   </td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 8px; vertical-align: top;">
+                  <td colspan="2" style="border: none; padding: 0 0 4px; vertical-align: top;">
                     ${renderPrintedOrderMetaField('Order #', orderIdentifier)}
                   </td>
                 </tr>
@@ -915,34 +915,34 @@ function renderPrintedShopOrderSection(orderIdentifier, orderBy, orderDate, deli
 
             ${comments
         ? `
-                <div style="margin-top: 10px; font-size: 14px; color: #222222;">
+                <div style="margin-top: 6px; font-size: 13px; line-height: 1.35; color: #222222;">
                   <strong>Comments:</strong> ${renderEmailText(comments)}
                 </div>
               `
         : ''}
 
-            <table role="presentation" style="width: 100%; border-collapse: collapse; margin-top: 16px; border: 1px solid #d8d8d8;">
-              <thead>
+            <table role="presentation" style="width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #d8d8d8; page-break-inside: auto;">
+              <thead style="display: table-header-group;">
                 <tr>
-                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 58px;">Pulled<br>By</th>
-                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 62px;">Verified<br>By</th>
-                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 68px;">133/513</th>
-                  <th style="padding: 8px 8px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: left;">Item Name</th>
-                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 80px;">Quantity</th>
-                  <th style="padding: 8px 8px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: left; width: 180px;">Notes</th>
-                  <th style="padding: 8px 6px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; width: 52px;">&nbsp;</th>
+                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 54px;">Pulled<br>By</th>
+                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 58px;">Verified<br>By</th>
+                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 62px;">133/513</th>
+                  <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left;">Item Name</th>
+                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 70px;">Quantity</th>
+                  <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; width: 150px;">Notes</th>
+                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 46px;">&nbsp;</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody style="display: table-row-group;">
                 ${items.map((item) => `
-                  <tr>
-                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
-                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
-                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
-                    <td style="height: 38px; padding: 8px 8px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 14px; line-height: 1.35;">${renderEmailText(item.displayDescription, 'Untitled Item')}</td>
-                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 14px;">${item.orderedQuantity}</td>
-                    <td style="height: 38px; padding: 8px 8px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; color: #333333;">${renderOptionalEmailText(item.note)}</td>
-                    <td style="height: 38px; padding: 8px 6px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px;">&nbsp;</td>
+                  <tr style="page-break-inside: avoid; break-inside: avoid;">
+                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+                    <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; line-height: 1.25;">${renderEmailText(item.displayDescription, 'Untitled Item')}</td>
+                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">${item.orderedQuantity}</td>
+                    <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333;">${renderOptionalEmailText(item.note)}</td>
+                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -998,14 +998,14 @@ function buildShopOrderEmail(order, costCodesByCatalogItemId = {}) {
         ? `${shopItemsHtml}${pmItemsHtml}`
         : '<p style="margin: 16px 0 0;"><em>No items in this order.</em></p>';
     const endOfOrderHtml = `
-    <div style="margin-top: 18px; padding: 0 18px; font-size: 16px; color: #303030;">
+    <div style="margin-top: 12px; padding: 0 12px; font-size: 15px; color: #303030;">
       End of Order
     </div>
   `;
     return `
     ${constants_1.EMAIL_STYLES}
-    <div class="email-container" style="font-family: Arial, sans-serif; background-color: #efefef; padding: 20px;">
-      <div class="content" style="background-color: #ffffff; padding: 18px; line-height: 1.6; color: #222222;">
+    <div class="email-container" style="font-family: Arial, sans-serif; background-color: #efefef; padding: 16px;">
+      <div class="content" style="background-color: #ffffff; padding: 14px; line-height: 1.45; color: #222222;">
         ${hasTotalAmount ? `<div style="margin-bottom: 10px; font-size: 14px; color: #333333;"><strong>Estimated Total:</strong> $${totalAmount.toFixed(2)}</div>` : ''}
         ${itemsHtml}
         ${endOfOrderHtml}

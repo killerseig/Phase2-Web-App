@@ -1,4 +1,4 @@
-export type RawRoleKey = 'admin' | 'controller' | 'foreman' | 'none'
+export type RawRoleKey = 'admin' | 'foreman' | 'none'
 export type RoleKey = 'admin' | 'foreman' | 'none'
 
 export interface UserProfile {
@@ -261,7 +261,7 @@ export function normalizeRoleKey(value: unknown): RawRoleKey {
   if (typeof value !== 'string') return 'none'
 
   const normalized = value.trim().toLowerCase()
-  if (normalized === 'admin' || normalized === 'controller' || normalized === 'foreman') {
+  if (normalized === 'admin' || normalized === 'foreman') {
     return normalized
   }
 
@@ -269,7 +269,7 @@ export function normalizeRoleKey(value: unknown): RawRoleKey {
 }
 
 export function toEffectiveRole(value: RawRoleKey): RoleKey {
-  if (value === 'admin' || value === 'controller') return 'admin'
+  if (value === 'admin') return 'admin'
   if (value === 'foreman') return 'foreman'
   return 'none'
 }

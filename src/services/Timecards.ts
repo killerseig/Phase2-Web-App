@@ -27,6 +27,17 @@ import type {
   TimecardWeekRecord,
   TimecardWeekStatus,
 } from '@/types/domain'
+import {
+  createE2ETimecardCard,
+  deleteE2ETimecardCard,
+  ensureE2ETimecardWeek,
+  isE2EActive,
+  subscribeE2EAllTimecardWeeks,
+  subscribeE2ETimecardCards,
+  subscribeE2ETimecardWeeks,
+  submitE2ETimecardWeek,
+  updateE2ETimecardCard,
+} from '@/testing/e2eRuntime'
 import { normalizeError } from '@/utils/normalizeError'
 
 export interface EnsureTimecardWeekInput {
@@ -41,6 +52,12 @@ export interface EnsureTimecardWeekInput {
 export interface TimecardWeekActor {
   userId: string | null
   displayName: string | null
+}
+
+export interface SubmitTimecardWeekResult {
+  success: boolean
+  emailSent: boolean
+  emailMessage: string
 }
 
 function toNullableText(value: unknown): string | null {
@@ -191,6 +208,10 @@ export function subscribeTimecardWeeks(
   onError?: (error: unknown) => void,
   ownerForemanUserId: string | null = null,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2ETimecardWeeks(jobId, ownerForemanUserId, onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
   const weekCollection = collection(db, 'timecardWeeks')
   const weekQuery = ownerForemanUserId
@@ -212,6 +233,10 @@ export function subscribeAllTimecardWeeks(
   onUpdate: (weeks: TimecardWeekRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EAllTimecardWeeks(onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(
@@ -232,6 +257,10 @@ export function subscribeTimecardCards(
   onUpdate: (cards: TimecardCardRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2ETimecardCards(weekId, weekStartDate, burden, onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(
@@ -246,6 +275,10 @@ export function subscribeTimecardCards(
 }
 
 export async function ensureTimecardWeek(input: EnsureTimecardWeekInput): Promise<string> {
+  if (isE2EActive()) {
+    return ensureE2ETimecardWeek(input)
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<EnsureTimecardWeekInput, { id: string }>(functions, 'ensureTimecardWeekRecord')
@@ -268,6 +301,10 @@ export async function createTimecardCard(
   sortIndex: number,
   linkedJobNumber?: string | null,
 ): Promise<string> {
+  if (isE2EActive()) {
+    return createE2ETimecardCard(weekId, weekStartDate, employee, sortIndex, linkedJobNumber)
+  }
+
   try {
     const { auth, db } = requireFirebaseServices()
     const card = buildEmployeeCard(employee, getWeekEndDateFromStart(weekStartDate), sortIndex, linkedJobNumber ?? '')
@@ -306,6 +343,11 @@ export async function updateTimecardCard(
   card: TimecardCardRecord,
   burden = DEFAULT_TIMECARD_BURDEN,
 ): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2ETimecardCard(weekId, cardId, weekStartDate, card, burden)
+    return
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
@@ -330,6 +372,11 @@ export async function updateTimecardCard(
 }
 
 export async function deleteTimecardCard(weekId: string, cardId: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2ETimecardCard(weekId, cardId)
+    return
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<{ weekId: string; cardId: string }, { success: boolean }>(
@@ -345,18 +392,23 @@ export async function deleteTimecardCard(weekId: string, cardId: string): Promis
 export async function submitTimecardWeek(
   weekId: string,
   actor?: TimecardWeekActor,
-): Promise<void> {
+): Promise<SubmitTimecardWeekResult> {
+  if (isE2EActive()) {
+    return submitE2ETimecardWeek(weekId, actor)
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
       { weekId: string; actor?: TimecardWeekActor },
-      { success: boolean }
+      SubmitTimecardWeekResult
     >(functions, 'submitTimecardWeekRecord')
 
-    await callable({
+    const result = await callable({
       weekId,
       actor,
     })
+    return result.data
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to submit the timecard week.'))
   }

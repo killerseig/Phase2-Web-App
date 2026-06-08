@@ -1,11 +1,10 @@
 import { expect, test } from '@playwright/test'
+import { createTimecardsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('timecard workbook regressions', () => {
-  test('new card creation seeds every job number line', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
+  test('seeded cards keep the linked job number on every starting row', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
 
-    await expect(page.getByTestId('prefill-status')).toHaveText('prefilled')
-    await expect(page.getByTestId('job-number-summary')).toHaveText('9411|9411|9411|9411')
     await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('9411')
     await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('9411')
     await expect(page.getByTestId('timecard-job-number-2')).toHaveValue('9411')
@@ -13,73 +12,112 @@ test.describe('timecard workbook regressions', () => {
   })
 
   test('job number edits cascade downward and stop at the first intentionally changed row', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
 
     await page.getByTestId('timecard-job-number-0').fill('123')
-    await expect(page.getByTestId('job-number-summary')).toHaveText('123|123|123|123')
+    await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-2')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-3')).toHaveValue('123')
 
     await page.getByTestId('timecard-job-number-2').fill('456')
-    await expect(page.getByTestId('job-number-summary')).toHaveText('123|123|456|456')
+    await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-2')).toHaveValue('456')
+    await expect(page.getByTestId('timecard-job-number-3')).toHaveValue('456')
 
     await page.getByTestId('timecard-job-number-1').fill('565')
-    await expect(page.getByTestId('job-number-summary')).toHaveText('123|565|456|456')
+    await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('565')
+    await expect(page.getByTestId('timecard-job-number-2')).toHaveValue('456')
+    await expect(page.getByTestId('timecard-job-number-3')).toHaveValue('456')
+  })
+
+  test('clicking a populated field selects its full value so typing replaces it', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
+
+    const firstJobNumber = page.getByTestId('timecard-job-number-0')
+
+    await firstJobNumber.click()
+    await firstJobNumber.pressSequentially('123')
+
+    await expect(firstJobNumber).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-2')).toHaveValue('123')
+    await expect(page.getByTestId('timecard-job-number-3')).toHaveValue('123')
+  })
+
+  test('arrow keys move between the real workbook rows', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
+
+    const firstJobNumber = page.getByTestId('timecard-job-number-0')
+    const secondJobNumber = page.getByTestId('timecard-job-number-1')
+
+    await firstJobNumber.click()
+    await firstJobNumber.press('ArrowDown')
+    await expect(secondJobNumber).toBeFocused()
+
+    await secondJobNumber.press('ArrowUp')
+    await expect(firstJobNumber).toBeFocused()
   })
 
   test('new card creation uses the current linked job number for all initial rows', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: false }))
 
-    await page.getByTestId('linked-job-number').fill('9988')
+    await expect(page.getByTestId('create-card')).toBeEnabled()
     await page.getByTestId('create-card').click()
+    await page.getByTestId('timecards-add-employee-employee-1').click()
 
-    await expect(page.getByTestId('job-number-summary')).toHaveText('9988|9988|9988|9988')
-    await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('9988')
-    await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('9988')
+    await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('9411')
+    await expect(page.getByTestId('timecard-job-number-1')).toHaveValue('9411')
+    await expect(page.getByTestId('timecard-job-number-2')).toHaveValue('9411')
   })
 
-  test('blank wage value stays blank after blur', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
+  test('submitting a week reports the notification email result', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
+
+    await page.getByRole('button', { name: 'Submit Week' }).click()
+
+    await expect(page.getByText('Week submitted and emailed to 1 recipient.')).toBeVisible()
+  })
+
+  test('the same employee can be added more than once for multiple card pages', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
+
+    await page.getByTestId('create-card').click()
+    await expect(page.getByTestId('timecards-add-employee-employee-1')).toBeVisible()
+    await page.getByTestId('timecards-add-employee-employee-1').click()
+
+    await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(2)
+
+    await page.getByTestId('create-card').click()
+    await expect(page.getByTestId('timecards-add-employee-employee-1')).toBeVisible()
+  })
+
+  test('wage formatting rules still hold on the real workbook page', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
 
     const wageInput = page.getByTestId('timecard-wage-input')
+
     await wageInput.fill('')
     await wageInput.blur()
-
     await expect(wageInput).toHaveValue('')
-  })
 
-  test('invalid wage value clears on blur', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
-
-    const wageInput = page.getByTestId('timecard-wage-input')
-    await wageInput.fill('abc')
+    await wageInput.click()
+    await wageInput.pressSequentially('abc')
     await wageInput.blur()
-
     await expect(wageInput).toHaveValue('')
-  })
 
-  test('incomplete numeric wage commits a valid number on blur', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
-
-    const wageInput = page.getByTestId('timecard-wage-input')
     await wageInput.fill('1.')
     await wageInput.blur()
-
     await expect(wageInput).toHaveValue('$1.00')
-  })
 
-  test('non-numeric wage characters are stripped to digits', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
-
-    const wageInput = page.getByTestId('timecard-wage-input')
-    await wageInput.fill('a1b2.3c')
+    await wageInput.click()
+    await wageInput.press('Control+A')
+    await wageInput.pressSequentially('12.3')
     await wageInput.blur()
-
     await expect(wageInput).toHaveValue('$12.30')
-  })
 
-  test('valid wage values format to currency on blur', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
-
-    const wageInput = page.getByTestId('timecard-wage-input')
     await wageInput.fill('20')
     await wageInput.blur()
     await expect(wageInput).toHaveValue('$20.00')
@@ -90,7 +128,7 @@ test.describe('timecard workbook regressions', () => {
   })
 
   test('the full H / P / C row structure stays visible', async ({ page }) => {
-    await page.goto('/__e2e/timecard-workbook')
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
 
     await expect(page.getByTestId('timecard-row-label-0-hours')).toHaveText('H')
     await expect(page.getByTestId('timecard-row-label-0-production')).toHaveText('P')

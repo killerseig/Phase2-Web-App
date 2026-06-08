@@ -104,17 +104,6 @@ function assertAdminOrAssignedForeman(user: any, jobId: string, errorMessage: st
   return authorizedUser
 }
 
-function assertAdminControllerOrAssignedForeman(user: any, jobId: string, errorMessage: string) {
-  const authorizedUser = assertActiveRoleUser(user, ['admin', 'controller', 'foreman'], errorMessage)
-  if (authorizedUser.role === 'admin' || authorizedUser.role === 'controller') return authorizedUser
-
-  if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
-    throw new HttpsError('permission-denied', errorMessage)
-  }
-
-  return authorizedUser
-}
-
 function normalizeTimecardStaffingEmployee(docId: string, data: any) {
   return {
     id: docId,
@@ -902,7 +891,7 @@ async function loadDailyLogAttachments(log: any) {
   return attachments
 }
 
-function normalizeTimecardForEmail(tc: any) {
+export function normalizeTimecardForEmail(tc: any) {
   const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage)
   const sourceLines = Array.isArray(tc?.lines) && tc.lines.length
     ? tc.lines
@@ -1083,10 +1072,10 @@ export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, asy
 
   try {
     const user = await getUserProfile(callerUid)
-    const authorizedUser = assertAdminControllerOrAssignedForeman(
+    const authorizedUser = assertAdminOrAssignedForeman(
       user,
       jobId,
-      'Only admins, controllers, or assigned foremen can send daily log emails'
+      'Only admins or assigned foremen can send daily log emails'
     )
 
     if (!isEmailEnabled()) {
@@ -1447,7 +1436,7 @@ async function resolveCreatorNames(timecards: any[]): Promise<Record<string, str
   return names
 }
 
-function toControllerTimecardRow(
+function toTimecardExportRow(
   tc: any,
   fallbackWeekStart: string,
   fallbackWeekEnding: string,
@@ -1484,7 +1473,7 @@ function toControllerTimecardRow(
   }
 }
 
-function parseControllerTimecardFilters(data: any) {
+function parseTimecardExportFilters(data: any) {
   const startWeek = String(data?.startWeek || data?.weekStart || '').trim()
   const endWeek = String(data?.endWeek || startWeek).trim() || startWeek
   const startDate = parseDateOnly(startWeek)
@@ -1527,7 +1516,7 @@ function parseControllerTimecardFilters(data: any) {
   }
 }
 
-function rowMatchesControllerFilters(row: any, filters: ReturnType<typeof parseControllerTimecardFilters>) {
+function rowMatchesTimecardExportFilters(row: any, filters: ReturnType<typeof parseTimecardExportFilters>) {
   const tradeNeedle = filters.trade.toLowerCase()
   const firstNameNeedle = filters.firstName.toLowerCase()
   const lastNameNeedle = filters.lastName.toLowerCase()
@@ -1542,7 +1531,7 @@ function rowMatchesControllerFilters(row: any, filters: ReturnType<typeof parseC
   return true
 }
 
-function sortControllerTimecardRows(a: any, b: any) {
+function sortTimecardExportRows(a: any, b: any) {
   const weekCompare = String(a.weekStart || '').localeCompare(String(b.weekStart || ''))
   if (weekCompare !== 0) return weekCompare
   const jobCompare = String(a.jobName || '').localeCompare(String(b.jobName || ''))
@@ -1552,7 +1541,7 @@ function sortControllerTimecardRows(a: any, b: any) {
   return String(a.employeeNumber || '').localeCompare(String(b.employeeNumber || ''))
 }
 
-async function resolveControllerTargetJobs(jobId: string): Promise<Array<{ id: string; name: string; code: string }>> {
+async function resolveTimecardExportTargetJobs(jobId: string): Promise<Array<{ id: string; name: string; code: string }>> {
   if (jobId) {
     const jobSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).get()
     if (!jobSnap.exists) {
@@ -1577,8 +1566,8 @@ async function resolveControllerTargetJobs(jobId: string): Promise<Array<{ id: s
   })
 }
 
-async function queryControllerTimecards(filters: ReturnType<typeof parseControllerTimecardFilters>) {
-  const targetJobs = await resolveControllerTargetJobs(filters.jobId)
+async function queryTimecardExportRows(filters: ReturnType<typeof parseTimecardExportFilters>) {
+  const targetJobs = await resolveTimecardExportTargetJobs(filters.jobId)
 
   if (!targetJobs.length) {
     return {
@@ -1608,10 +1597,10 @@ async function queryControllerTimecards(filters: ReturnType<typeof parseControll
     .flat()
     .map((tc) => ({
       source: tc,
-      row: toControllerTimecardRow(tc, filters.startWeek, filters.endWeekEnding, creatorNames),
+      row: toTimecardExportRow(tc, filters.startWeek, filters.endWeekEnding, creatorNames),
     }))
-    .filter((entry) => rowMatchesControllerFilters(entry.row, filters))
-    .sort((left, right) => sortControllerTimecardRows(left.row, right.row))
+    .filter((entry) => rowMatchesTimecardExportFilters(entry.row, filters))
+    .sort((left, right) => sortTimecardExportRows(left.row, right.row))
 
   const resolvedJob = filters.jobId ? targetJobs[0] : null
 
@@ -1636,10 +1625,6 @@ async function queryControllerTimecards(filters: ReturnType<typeof parseControll
   }
 }
 
-/**
- * List filtered weekly timecards across jobs for controller review.
- * Access: admin and controller roles
- */
 export const listTimecardStaffingEmployees = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', ERROR_MESSAGES.NOT_SIGNED_IN)
@@ -1926,12 +1911,12 @@ export const listTimecardsForWeek = onCall(async (request) => {
   }
 
   const user = await getUserProfile(request.auth.uid)
-  assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action')
+  assertActiveRoleUser(user, ['admin'], 'Only active admins can perform this action')
 
-  const filters = parseControllerTimecardFilters(request.data)
+  const filters = parseTimecardExportFilters(request.data)
 
   try {
-    const result = await queryControllerTimecards(filters)
+    const result = await queryTimecardExportRows(filters)
     const rows = result.rows
 
     return {
@@ -1965,7 +1950,7 @@ export const listTimecardsForWeek = onCall(async (request) => {
 
 /**
  * Download filtered timecards as CSV or PDF.
- * Access: admin and controller roles
+ * Access: admin role
  */
 export const downloadTimecardsForWeek = onCall(async (request) => {
   if (!request.auth) {
@@ -1973,16 +1958,16 @@ export const downloadTimecardsForWeek = onCall(async (request) => {
   }
 
   const user = await getUserProfile(request.auth.uid)
-  assertActiveRoleUser(user, ['admin', 'controller'], 'Only active admins or controllers can perform this action')
+  assertActiveRoleUser(user, ['admin'], 'Only active admins can perform this action')
 
-  const filters = parseControllerTimecardFilters(request.data)
+  const filters = parseTimecardExportFilters(request.data)
   const format = String(request.data?.format || '').trim().toLowerCase()
   if (format !== 'csv' && format !== 'pdf') {
     throw new HttpsError('invalid-argument', 'format must be either "csv" or "pdf"')
   }
 
   try {
-    const result = await queryControllerTimecards(filters)
+    const result = await queryTimecardExportRows(filters)
     if (!result.exportTimecards.length) {
       throw new HttpsError('not-found', 'No timecards found for the selected filters')
     }
@@ -2054,7 +2039,7 @@ export const downloadTimecardsForWeek = onCall(async (request) => {
   }
 })
 
-function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: string): string {
+export function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: string): string {
   const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', '']
   const fixedDataRowCount = 108
   const blankRow = Array(headers.length).fill('')
@@ -2126,19 +2111,19 @@ function buildTimecardExportPeriodLabel(startWeek: string, endWeek?: string): st
     : `${normalizedStartWeek || 'start'}_to_${normalizedEndWeek || 'end'}`
 }
 
-function buildTimecardCsvFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
+export function buildTimecardCsvFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
   const periodLabel = buildTimecardExportPeriodLabel(startWeek, endWeek)
   const normalizedJobCode = String(jobCode || '').trim()
   return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.csv` : `${periodLabel}.csv`
 }
 
-function buildTimecardPdfFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
+export function buildTimecardPdfFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
   const periodLabel = buildTimecardExportPeriodLabel(startWeek, endWeek)
   const normalizedJobCode = String(jobCode || '').trim()
   return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.pdf` : `${periodLabel}.pdf`
 }
 
-async function buildTimecardPdfBuffer(payload: {
+export async function buildTimecardPdfBuffer(payload: {
   jobName?: string
   jobNumber?: string
   submittedBy?: string

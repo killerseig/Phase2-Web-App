@@ -16,6 +16,7 @@ import {
 import { requireFirebaseServices } from '@/firebase'
 import { getTodayIsoDate, getWeekStartFromSaturday, snapToSaturday } from '@/features/timecards/workbook'
 import { normalizeTimecardCardData, sanitizeTimecardCardPayload } from '@/services/timecards'
+import { isE2EActive, subscribeE2EEmployees } from '@/testing/e2eRuntime'
 import type { EmployeeRecord } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -146,6 +147,10 @@ export function subscribeEmployees(
   onUpdate: (employees: EmployeeRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EEmployees(onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(

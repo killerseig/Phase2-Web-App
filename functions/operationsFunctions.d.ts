@@ -1,3 +1,4 @@
+export declare function normalizeTimecardForEmail(tc: any): any;
 /**
  * Send Daily Log via email
  */
@@ -12,10 +13,6 @@ export declare const sendTimecardEmail: import("firebase-functions/v2/https").Ca
     success: boolean;
     message: string;
 }>, unknown>;
-/**
- * List filtered weekly timecards across jobs for controller review.
- * Access: admin and controller roles
- */
 export declare const listTimecardStaffingEmployees: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
     employees: {
@@ -163,7 +160,7 @@ export declare const listTimecardsForWeek: import("firebase-functions/v2/https")
 }>, unknown>;
 /**
  * Download filtered timecards as CSV or PDF.
- * Access: admin and controller roles
+ * Access: admin role
  */
 export declare const downloadTimecardsForWeek: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
@@ -179,6 +176,16 @@ export declare const downloadTimecardsForWeek: import("firebase-functions/v2/htt
     endWeekEnding: string;
     timecardCount: number;
 }>, unknown>;
+export declare function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: string): string;
+export declare function buildTimecardCsvFilename(startWeek: string, endWeek?: string, jobCode?: string): string;
+export declare function buildTimecardPdfFilename(startWeek: string, endWeek?: string, jobCode?: string): string;
+export declare function buildTimecardPdfBuffer(payload: {
+    jobName?: string;
+    jobNumber?: string;
+    submittedBy?: string;
+    weekStart?: string;
+    timecards: any[];
+}): Promise<Buffer>;
 /**
  * Send Shop Order via email
  */

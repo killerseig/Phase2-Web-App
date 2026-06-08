@@ -23,6 +23,14 @@ import type {
   DailyLogRecord,
   DailyLogStatus,
 } from '@/types/domain'
+import {
+  createE2EDailyLog,
+  deleteE2EDailyLog,
+  isE2EActive,
+  sendE2EDailyLogEmail,
+  subscribeE2EDailyLogsForDate,
+  updateE2EDailyLog,
+} from '@/testing/e2eRuntime'
 import { normalizeError } from '@/utils/normalizeError'
 
 export interface CreateDailyLogInput {
@@ -329,6 +337,10 @@ export function subscribeDailyLogsForDate(
   onUpdate: (logs: DailyLogRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EDailyLogsForDate(jobId, logDate, onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(
@@ -343,6 +355,10 @@ export function subscribeDailyLogsForDate(
 }
 
 export async function createDailyLogRecord(input: CreateDailyLogInput): Promise<string> {
+  if (isE2EActive()) {
+    return createE2EDailyLog(input)
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
@@ -372,6 +388,11 @@ export async function updateDailyLogRecord(
   input: UpdateDailyLogInput,
   actor?: DailyLogActor,
 ): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2EDailyLog(dailyLogId, input, actor)
+    return
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
@@ -398,6 +419,10 @@ export async function updateDailyLogRecord(
 }
 
 export async function sendDailyLogEmail(jobId: string, dailyLogId: string): Promise<string> {
+  if (isE2EActive()) {
+    return sendE2EDailyLogEmail()
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
@@ -413,6 +438,11 @@ export async function sendDailyLogEmail(jobId: string, dailyLogId: string): Prom
 }
 
 export async function deleteDailyLogRecord(dailyLogId: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2EDailyLog(dailyLogId)
+    return
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<{ dailyLogId: string }, { success: boolean }>(

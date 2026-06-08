@@ -1,9 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
-import { gotoShopOrderApp } from './helpers/shopOrderAppFixture.js'
+import { createShopOrdersFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 async function expandAllCatalogFolders(page: Page) {
   await page.getByTestId('shoporder-root-row').click({ button: 'right' })
   await page.getByTestId('shoporder-context-expand-all').click()
+}
+
+async function gotoShopOrderApp(page: Page) {
+  await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', createShopOrdersFixture())
 }
 
 test.describe('shop order workspace regressions', () => {
@@ -65,6 +69,34 @@ test.describe('shop order workspace regressions', () => {
     await page.waitForTimeout(700)
 
     await expect(comments).toHaveValue(text)
+  })
+
+  test('item notes autosave while typing without waiting for blur', async ({ page }) => {
+    const fixture = createShopOrdersFixture()
+    fixture.delays = { shopOrderUpdateMs: 250 }
+
+    await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', fixture)
+
+    await expandAllCatalogFolders(page)
+    await page.getByTestId('shoporder-add-item-box').click()
+
+    const noteInput = page.getByTestId('shoporder-order-item-note-item-box')
+    const noteText = 'Leave at north dock Friday AM'
+
+    await noteInput.click()
+    await noteInput.pressSequentially(noteText, { delay: 20 })
+    await page.waitForTimeout(1100)
+
+    await expect(noteInput).toHaveValue(noteText)
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          shopOrders?: Array<{ id: string; items?: Array<{ note?: string | null }> }>
+        }
+        const draftOrder = state.shopOrders?.find((order) => order.id === 'order-draft')
+        return draftOrder?.items?.[0]?.note ?? ''
+      }))
+      .toBe(noteText)
   })
 
   test('catalog item quantity input is applied when adding an item to the order', async ({ page }) => {

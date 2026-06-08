@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
+import { isE2EActive, subscribeE2EUsers } from '@/testing/e2eRuntime'
 import type { RoleKey, UserProfile } from '@/types/domain'
 import { normalizeRoleKey, toEffectiveRole } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
@@ -128,6 +129,10 @@ export function subscribeUsers(
   onUpdate: (users: UserProfile[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EUsers(onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(

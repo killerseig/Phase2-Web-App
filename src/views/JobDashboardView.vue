@@ -53,7 +53,7 @@ onUnmounted(() => {
 
 <template>
   <AppShell>
-    <div class="workspace-grid">
+    <div class="workspace-grid" data-testid="job-dashboard-page">
       <PagePanel
         eyebrow="Job"
         :title="job ? `${job.code || 'No Job #'} · ${job.name}` : 'Job not found'"
@@ -74,6 +74,7 @@ onUnmounted(() => {
           :key="module.label"
           :to="`/jobs/${route.params.jobId}/${module.to}`"
           class="module-launcher"
+          :data-testid="`job-dashboard-module-${module.to}`"
         >
           <span class="module-launcher__eyebrow">{{ module.label }}</span>
           <strong>{{ module.label }}</strong>

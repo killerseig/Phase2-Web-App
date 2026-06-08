@@ -116,6 +116,7 @@ let unsubscribeGlobalNotificationRecipients: (() => void) | null = null
 let detailAutosaveTimer: ReturnType<typeof setTimeout> | null = null
 
 const hydratingDetailForm = ref(false)
+const lastHydratedJobId = ref<string | null>(null)
 const lastSavedDetailSignature = ref('')
 
 const allJobs = computed(() => jobsStore.jobs)
@@ -242,6 +243,7 @@ function applySelectedJobToForm(job: JobRecord | null) {
   detailError.value = ''
   detailInfo.value = ''
   hydratingDetailForm.value = true
+  lastHydratedJobId.value = job?.id ?? null
 
   if (!job) {
     detailForm.name = ''
@@ -331,6 +333,20 @@ function serializeJobForm(form: JobFormState) {
     finishDate: form.finishDate.trim(),
     productionBurden: form.productionBurden.trim(),
     assignedForemanIds: [...form.assignedForemanIds].slice().sort(),
+  })
+}
+
+function serializeJobRecord(job: JobRecord | null) {
+  return JSON.stringify({
+    name: job?.name ?? '',
+    code: job?.code ?? '',
+    type: String(job?.type ?? 'general'),
+    gc: job?.gc ?? '',
+    jobAddress: job?.jobAddress ?? '',
+    startDate: job?.startDate ?? '',
+    finishDate: job?.finishDate ?? '',
+    productionBurden: job?.productionBurden == null ? '0.33' : String(job.productionBurden),
+    assignedForemanIds: [...(job?.assignedForemanIds ?? [])].slice().sort(),
   })
 }
 
@@ -450,6 +466,7 @@ async function handleCreateJob() {
 async function handleSaveJob() {
   if (!selectedJob.value) return
 
+  clearDetailAutosaveTimer()
   detailError.value = ''
   detailInfo.value = ''
 
@@ -468,6 +485,7 @@ async function handleSaveJob() {
       active: selectedJob.value.active,
     })
 
+    lastSavedDetailSignature.value = serializeJobForm(detailForm)
     detailInfo.value = 'Job updated.'
   } catch (error) {
     detailError.value = normalizeError(error, 'Failed to update job.')
@@ -629,14 +647,40 @@ async function handleDeleteJob() {
   }
 }
 
-watch(selectedJob, (job) => {
-  if (!job) {
-    applySelectedJobToForm(null)
-    return
-  }
+watch(
+  selectedJob,
+  (job, previousJob) => {
+    if (!job) {
+      clearDetailAutosaveTimer()
+      applySelectedJobToForm(null)
+      return
+    }
 
-  applySelectedJobToForm(job)
-})
+    const nextJobId = job.id
+    const previousJobId = previousJob?.id ?? null
+    const selectionChanged = nextJobId !== previousJobId || nextJobId !== lastHydratedJobId.value
+
+    if (selectionChanged) {
+      clearDetailAutosaveTimer()
+      applySelectedJobToForm(job)
+      return
+    }
+
+    const localSignature = serializeJobForm(detailForm)
+    const incomingSignature = serializeJobRecord(job)
+    const hasUnsavedLocalChanges =
+      auth.isAdmin
+      && editDrawerOpen.value
+      && !isCreateMode.value
+      && localSignature !== lastSavedDetailSignature.value
+
+    if (hasUnsavedLocalChanges) return
+    if (incomingSignature === lastSavedDetailSignature.value) return
+
+    applySelectedJobToForm(job)
+  },
+  { immediate: true },
+)
 
 watch(
   visibleJobs,
@@ -737,6 +781,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="app-button app-button--primary app-shell__topbar-button"
+        data-testid="jobs-edit-mode"
         @click="editDrawerOpen ? closeEditDrawer() : openEditDrawer()"
       >
         {{ editDrawerOpen ? 'Done Editing' : 'Edit Mode' }}
@@ -757,6 +802,7 @@ onBeforeUnmount(() => {
             v-if="auth.isAdmin && editDrawerOpen"
             class="app-button app-button--primary"
             type="button"
+            data-testid="jobs-new-button"
             @click="openCreateMode"
           >
             New Job
@@ -765,7 +811,7 @@ onBeforeUnmount(() => {
 
         <div class="jobs-browser__body">
           <div class="jobs-browser__search">
-            <input v-model="searchTerm" type="search" placeholder="Search jobs" />
+            <input v-model="searchTerm" data-testid="jobs-search" type="search" placeholder="Search jobs" />
           </div>
 
           <div class="jobs-browser__filters">
@@ -804,6 +850,7 @@ onBeforeUnmount(() => {
               type="button"
               class="jobs-browser__row"
               :class="{ 'jobs-browser__row--active': auth.isAdmin && editDrawerOpen && selectedJobId === job.id }"
+              :data-testid="`job-card-${getJobCode(job)}`"
               @click="handleJobPrimaryAction(job)"
             >
               <div class="jobs-browser__row-main">
@@ -813,7 +860,7 @@ onBeforeUnmount(() => {
               </div>
             </button>
 
-            <div v-if="!jobsStore.loading && visibleJobs.length === 0" class="jobs-browser__empty">
+            <div v-if="!jobsStore.loading && visibleJobs.length === 0" data-testid="jobs-empty" class="jobs-browser__empty">
               No jobs match this view.
             </div>
           </div>
@@ -837,7 +884,7 @@ onBeforeUnmount(() => {
               <div class="jobs-form__grid">
                 <label class="jobs-form__field">
                   <span>Job Number</span>
-                  <input v-model="createForm.code" type="text" autocomplete="off" />
+                  <input v-model="createForm.code" data-testid="jobs-create-code" type="text" autocomplete="off" />
                 </label>
                 <label class="jobs-form__field">
                   <span>Job Type</span>
@@ -849,11 +896,11 @@ onBeforeUnmount(() => {
                 </label>
                 <label class="jobs-form__field jobs-form__field--full">
                   <span>Job Name</span>
-                  <input v-model="createForm.name" type="text" autocomplete="off" />
+                  <input v-model="createForm.name" data-testid="jobs-create-name" type="text" autocomplete="off" />
                 </label>
                 <label class="jobs-form__field">
                   <span>GC</span>
-                  <input v-model="createForm.gc" type="text" list="job-gc-options" autocomplete="off" />
+                  <input v-model="createForm.gc" data-testid="jobs-create-gc" type="text" list="job-gc-options" autocomplete="off" />
                 </label>
                 <label class="jobs-form__field">
                   <span>Burden</span>
@@ -869,7 +916,7 @@ onBeforeUnmount(() => {
                 </label>
                 <label class="jobs-form__field jobs-form__field--full">
                   <span>Job Address</span>
-                  <input v-model="createForm.jobAddress" type="text" autocomplete="street-address" />
+                  <input v-model="createForm.jobAddress" data-testid="jobs-create-address" type="text" autocomplete="street-address" />
                 </label>
               </div>
 
@@ -885,7 +932,12 @@ onBeforeUnmount(() => {
 
                 <div v-if="usersLoading" class="jobs-browser__empty">Loading foremen...</div>
                 <div v-else class="jobs-foremen-grid">
-                  <label v-for="user in filteredForemen" :key="user.id" class="jobs-foreman-toggle">
+                  <label
+                    v-for="user in filteredForemen"
+                    :key="user.id"
+                    class="jobs-foreman-toggle"
+                    :data-testid="`jobs-foreman-${user.id}`"
+                  >
                     <input
                       :checked="createForm.assignedForemanIds.includes(user.id)"
                       type="checkbox"
@@ -968,7 +1020,7 @@ onBeforeUnmount(() => {
               </section>
 
               <div class="jobs-detail__actions">
-                <button class="app-button app-button--primary" :disabled="createLoading" type="submit">
+                <button class="app-button app-button--primary" :disabled="createLoading" data-testid="jobs-create-button" type="submit">
                   {{ createLoading ? 'Creating...' : 'Create Job' }}
                 </button>
               </div>

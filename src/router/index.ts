@@ -36,51 +36,6 @@ const router = createRouter({
       },
     },
     {
-      path: '/__e2e/timecard-workbook',
-      name: 'e2e-timecard-workbook',
-      component: () => import('@/views/E2ETimecardWorkbookView.vue'),
-      meta: {
-        requiresAuth: false,
-        title: 'E2E Timecard Workbook',
-      },
-    },
-    {
-      path: '/__e2e/daily-log-draft',
-      name: 'e2e-daily-log-draft',
-      component: () => import('@/views/E2EDailyLogDraftView.vue'),
-      meta: {
-        requiresAuth: false,
-        title: 'E2E Daily Log Draft',
-      },
-    },
-    {
-      path: '/__e2e/daily-log-typing',
-      name: 'e2e-daily-log-typing',
-      component: () => import('@/views/E2EDailyLogTypingView.vue'),
-      meta: {
-        requiresAuth: false,
-        title: 'E2E Daily Log Typing',
-      },
-    },
-    {
-      path: '/__e2e/job-dashboard',
-      name: 'e2e-job-dashboard',
-      component: () => import('@/views/E2EJobDashboardView.vue'),
-      meta: {
-        requiresAuth: false,
-        title: 'E2E Job Dashboard',
-      },
-    },
-    {
-      path: '/__e2e/jobs',
-      name: 'e2e-jobs',
-      component: () => import('@/views/E2EJobsView.vue'),
-      meta: {
-        requiresAuth: false,
-        title: 'E2E Jobs',
-      },
-    },
-    {
       path: '/jobs',
       name: 'jobs',
       component: () => import('@/views/JobsView.vue'),

@@ -46,6 +46,7 @@ export interface JobDetails {
   id: string
   name: string
   number: string
+  productionBurden?: number | null
 }
 
 export type NotificationModuleKey = 'dailyLogs' | 'timecards' | 'shopOrders'
@@ -86,6 +87,7 @@ export async function getJobDetails(jobId: string): Promise<JobDetails | null> {
     id: jobSnap.id,
     name: data?.name || DEFAULTS.JOB_NAME,
     number: data?.number || data?.code || '',
+    productionBurden: typeof data?.productionBurden === 'number' ? data.productionBurden : null,
   }
 }
 
@@ -193,11 +195,36 @@ export async function getTimecard(jobId: string, weekStart: string, timecardId: 
     .collection(COLLECTIONS.TIMECARDS)
     .doc(timecardId)
   const legacySnap = await legacyRef.get()
-  if (!legacySnap.exists) return null
+  if (legacySnap.exists) {
+    return {
+      id: legacySnap.id,
+      ...legacySnap.data(),
+    }
+  }
+
+  const timecardWeeksSnap = await db
+    .collection('timecardWeeks')
+    .where('jobId', '==', jobId)
+    .where('weekStartDate', '==', weekStart)
+    .limit(1)
+    .get()
+
+  const activeWeekDoc = timecardWeeksSnap.docs[0]
+  if (!activeWeekDoc) return null
+
+  const activeWeek = activeWeekDoc.data() || {}
+  const cardSnap = await activeWeekDoc.ref.collection('cards').doc(timecardId).get()
+  if (!cardSnap.exists) return null
 
   return {
-    id: legacySnap.id,
-    ...legacySnap.data(),
+    id: cardSnap.id,
+    ...cardSnap.data(),
+    jobId,
+    weekStartDate: activeWeek.weekStartDate || weekStart,
+    weekEndingDate: activeWeek.weekEndDate || '',
+    jobCode: activeWeek.jobCode || '',
+    status: activeWeek.status || 'draft',
+    createdByUid: activeWeek.ownerForemanUserId || activeWeek.createdByUserId || null,
   }
 }
 

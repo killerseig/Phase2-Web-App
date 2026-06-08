@@ -127,6 +127,7 @@ const compactCardStates = reactive<Record<string, boolean>>({})
 const adminCardEditStates = reactive<Record<string, boolean>>({})
 const scheduledSaveIds = reactive<Record<string, boolean>>({})
 const savingIds = reactive<Record<string, boolean>>({})
+const queuedSaveIds = reactive<Record<string, boolean>>({})
 const cardShellWidths = reactive<Record<string, number>>({})
 const cardContentSizes = reactive<Record<string, { width: number; height: number }>>({})
 const cardsByWeekId = reactive<Record<string, ArchiveTimecardCardRecord[]>>({})
@@ -227,12 +228,10 @@ const activeCreateWeekCards = computed(() => {
   return cardsByWeekId[week.id] ?? []
 })
 const availableEmployees = computed(() => {
-  const usedIds = new Set(activeCreateWeekCards.value.map((card) => card.employeeId).filter((value): value is string => !!value))
   const query = employeeSearchTerm.value.trim().toLowerCase()
 
   return employees.value
     .filter((employee) => employee.active)
-    .filter((employee) => !usedIds.has(employee.id))
     .filter((employee) => {
       if (!query) return true
       const displayName = `${employee.firstName} ${employee.lastName}`.trim().toLowerCase()
@@ -736,6 +735,10 @@ function syncCardUiState(nextCards: TimecardCardRecord[]) {
     if (!validIds.has(cardId)) delete savingIds[cardId]
   })
 
+  Object.keys(queuedSaveIds).forEach((cardId) => {
+    if (!validIds.has(cardId)) delete queuedSaveIds[cardId]
+  })
+
   Object.keys(compactCardStates).forEach((cardId) => {
     if (!validIds.has(cardId)) delete compactCardStates[cardId]
   })
@@ -850,7 +853,10 @@ function syncCardsForFilteredWeeks() {
       week.weekStartDate,
       getWeekBurden(week),
       (nextCards) => {
-        cardsByWeekId[week.id] = decorateArchiveCards(week, nextCards)
+        cardsByWeekId[week.id] = mergeRemoteArchiveCardsWithLocalState(
+          week.id,
+          decorateArchiveCards(week, nextCards),
+        )
         delete pendingCardWeekIds[week.id]
         rebuildArchiveCards()
         syncCardsLoadingState()
@@ -869,6 +875,18 @@ function syncCardsForFilteredWeeks() {
   syncCardsLoadingState()
 }
 
+function mergeRemoteArchiveCardsWithLocalState(weekId: string, nextCards: ArchiveTimecardCardRecord[]) {
+  const localCardsById = new Map((cardsByWeekId[weekId] ?? []).map((card) => [card.id, card]))
+
+  return nextCards.map((nextCard) => {
+    if (!scheduledSaveIds[nextCard.id] && !savingIds[nextCard.id] && !queuedSaveIds[nextCard.id]) {
+      return nextCard
+    }
+
+    return localCardsById.get(nextCard.id) ?? nextCard
+  })
+}
+
 function clearSaveTimer(cardId: string) {
   const timer = saveTimers.get(cardId)
   if (timer) clearTimeout(timer)
@@ -881,7 +899,11 @@ async function persistCard(card: ArchiveTimecardCardRecord) {
 
   const existingSave = savePromises.get(card.id)
   if (existingSave) {
+    queuedSaveIds[card.id] = true
     await existingSave
+    if (!queuedSaveIds[card.id]) return
+    delete queuedSaveIds[card.id]
+    await persistCard(card)
     return
   }
 
@@ -925,7 +947,7 @@ function scheduleCardSave(card: ArchiveTimecardCardRecord) {
   saveError.value = ''
   saveTimers.set(card.id, setTimeout(() => {
     void persistCard(card)
-  }, 450))
+  }, 900))
 }
 
 async function flushPendingSaves() {
@@ -1506,7 +1528,7 @@ onBeforeUnmount(() => {
 
 <template>
   <AppShell>
-    <div class="timecards-page">
+    <div class="timecards-page" data-testid="timecard-export-page">
       <section class="timecards-workbook">
         <section class="timecards-toolbar">
           <div class="timecards-toolbar__tabs" role="tablist" aria-label="Timecard export tools">
@@ -1538,6 +1560,7 @@ onBeforeUnmount(() => {
               <span>Search Weeks</span>
               <input
                 v-model="filters.weekSearch"
+                data-testid="timecard-export-week-search"
                 type="search"
                 placeholder="Job, foreman, or date"
               />
@@ -1744,6 +1767,7 @@ onBeforeUnmount(() => {
                 v-for="week in filteredWeeks"
                 :key="week.id"
                 class="timecards-sidebar__history-row"
+                :data-testid="`timecard-export-week-${week.id}`"
               >
                 <strong>{{ formatWorkbookDate(week.weekEndDate) }}</strong>
                 <span>{{ formatWeekRowSubtitle(week) }}</span>

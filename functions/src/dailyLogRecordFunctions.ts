@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db } from './runtime'
 
-type DailyLogRole = 'admin' | 'controller' | 'foreman' | 'none'
+type DailyLogRole = 'admin' | 'foreman' | 'none'
 type DailyLogStatus = 'draft' | 'submitted'
 type DailyLogAttachmentType = 'photo' | 'ptp' | 'qc' | 'other'
 
@@ -38,7 +38,7 @@ function normalizeRecipientList(value: unknown): string[] {
 
 function normalizeRole(value: unknown): DailyLogRole {
   const role = text(value).toLowerCase()
-  if (role === 'admin' || role === 'controller' || role === 'foreman') return role
+  if (role === 'admin' || role === 'foreman') return role
   return 'none'
 }
 
@@ -145,7 +145,7 @@ async function getAuthorizedUser(uid: string): Promise<AuthorizedDailyLogUser> {
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!['admin', 'controller', 'foreman'].includes(role)) {
+  if (!['admin', 'foreman'].includes(role)) {
     throw new HttpsError('permission-denied', 'Your account does not have access to daily logs.')
   }
 
@@ -159,7 +159,7 @@ async function getAuthorizedUser(uid: string): Promise<AuthorizedDailyLogUser> {
 }
 
 function assertCanWriteJob(user: AuthorizedDailyLogUser, jobId: string) {
-  if (user.role === 'admin' || user.role === 'controller') return
+  if (user.role === 'admin') return
   if (user.role === 'foreman' && user.assignedJobIds.includes(jobId)) return
   throw new HttpsError('permission-denied', 'You are not assigned to this job.')
 }

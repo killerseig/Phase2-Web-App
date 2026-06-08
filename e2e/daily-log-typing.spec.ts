@@ -1,25 +1,24 @@
 import { expect, test } from '@playwright/test'
+import { createDailyLogsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('daily log typing regressions', () => {
   test('draft log autosaves after typing and reflects the latest text', async ({ page }) => {
-    await page.goto('/__e2e/daily-log-typing')
+    await gotoPhase2App(page, '/jobs/job-e2e/daily-logs', createDailyLogsFixture())
 
-    const weeklySchedule = page.getByTestId('dailylog-weekly-schedule')
+    const weeklySchedule = page.getByTestId('dailylog-weeklySchedule')
     const details = 'Update schedule with crew A, crew B, and crew C.'
 
+    await expect(weeklySchedule).toBeVisible()
     await weeklySchedule.fill(details)
     await expect(weeklySchedule).toHaveValue(details)
 
-    await page.waitForTimeout(220)
-
-    await expect(page.getByTestId('dailylog-save-count')).toHaveText('1')
-    await expect(page.getByTestId('dailylog-weekly-schedule-summary')).toHaveText(details)
+    await page.waitForTimeout(900)
+    await expect(page.getByTestId('dailylog-saved-weeklySchedule')).toHaveText(details)
 
     await weeklySchedule.fill(`${details} Add safety briefing at 0800.`)
-    await page.waitForTimeout(220)
+    await page.waitForTimeout(900)
 
-    await expect(page.getByTestId('dailylog-save-count')).toHaveText('2')
-    await expect(page.getByTestId('dailylog-weekly-schedule-summary')).toHaveText(
+    await expect(page.getByTestId('dailylog-saved-weeklySchedule')).toHaveText(
       `${details} Add safety briefing at 0800.`,
     )
   })

@@ -4,6 +4,7 @@ import type {
   TimecardCardTotalsRecord,
   TimecardWorkbookLineRecord,
 } from '@/types/domain'
+import { getE2ENowValue } from '@/testing/e2eRuntime'
 
 export const DEFAULT_TIMECARD_BURDEN = 0.33
 export const LEGACY_TIMECARD_BURDEN = 0.294
@@ -95,8 +96,12 @@ export function formatIsoDate(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+function getReferenceToday() {
+  return getE2ENowValue() ?? new Date()
+}
+
 export function getTodayIsoDate() {
-  return formatIsoDate(new Date())
+  return formatIsoDate(getReferenceToday())
 }
 
 export function snapToSaturday(dateValue: string) {

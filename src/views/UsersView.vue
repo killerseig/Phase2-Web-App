@@ -499,6 +499,7 @@ onBeforeUnmount(() => {
   <AppShell>
     <div
       class="users-workspace"
+      data-testid="users-page"
       :class="{
         'users-workspace--mobile-directory': activeMobilePanel === 'directory',
         'users-workspace--mobile-editor': activeMobilePanel === 'editor',
@@ -563,7 +564,7 @@ onBeforeUnmount(() => {
 
         <div class="users-browser__body">
           <div class="users-browser__search">
-            <input v-model="searchTerm" type="search" placeholder="Search users" />
+            <input v-model="searchTerm" data-testid="users-search" type="search" placeholder="Search users" />
           </div>
 
           <div class="users-browser__list">
@@ -575,6 +576,7 @@ onBeforeUnmount(() => {
               :key="user.id"
               type="button"
               class="users-browser__row"
+              :data-testid="`users-row-${user.id}`"
               :class="{ 'users-browser__row--active': selectedUserId === user.id }"
               @click="selectUser(user.id)"
             >

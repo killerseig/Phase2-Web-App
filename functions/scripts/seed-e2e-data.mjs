@@ -102,7 +102,11 @@ async function upsertAuthUser(user) {
 }
 
 export async function seedE2eData() {
-  await Promise.all(Object.values(seededUsers).map((user) => upsertAuthUser(user)))
+  await Promise.all(
+    Object.values(seededUsers)
+      .filter((user) => user.role === 'admin' || user.role === 'foreman')
+      .map((user) => upsertAuthUser(user)),
+  )
 
   const batch = db.batch()
 
@@ -113,17 +117,6 @@ export async function seedE2eData() {
       firstName: seededUsers.admin.firstName,
       lastName: seededUsers.admin.lastName,
       role: seededUsers.admin.role,
-      active: true,
-      assignedJobIds: [],
-      createdAt: seededCreatedAt,
-      lastLoginAt: seededUpdatedAt,
-    },
-    [seededUsers.controller.uid]: {
-      email: seededUsers.controller.email,
-      displayName: `${seededUsers.controller.firstName} ${seededUsers.controller.lastName}`,
-      firstName: seededUsers.controller.firstName,
-      lastName: seededUsers.controller.lastName,
-      role: seededUsers.controller.role,
       active: true,
       assignedJobIds: [],
       createdAt: seededCreatedAt,

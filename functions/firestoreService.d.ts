@@ -6,6 +6,7 @@ export interface JobDetails {
     id: string;
     name: string;
     number: string;
+    productionBurden?: number | null;
 }
 export type NotificationModuleKey = 'dailyLogs' | 'timecards' | 'shopOrders';
 export interface NotificationRecipients {

@@ -1,4 +1,14 @@
 import {
+  createE2EJob,
+  deleteE2EJob,
+  isE2EActive,
+  setE2EJobActive,
+  subscribeE2EGlobalNotificationRecipients,
+  updateE2EGlobalNotificationRecipients,
+  updateE2EJob,
+  updateE2EJobNotificationRecipients,
+} from '@/testing/e2eRuntime'
+import {
   addDoc,
   collection,
   deleteDoc,
@@ -306,6 +316,10 @@ export function subscribeGlobalNotificationRecipients(
   onUpdate: (recipients: NotificationRecipients) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EGlobalNotificationRecipients(onUpdate)
+  }
+
   const { db } = requireFirebaseServices()
 
   return onSnapshot(
@@ -330,6 +344,10 @@ export function subscribeGlobalNotificationRecipients(
 }
 
 export async function createJobRecord(input: JobUpsertInput): Promise<string> {
+  if (isE2EActive()) {
+    return createE2EJob(input)
+  }
+
   try {
     const { db } = requireFirebaseServices()
     const payload = sanitizeJobPayload(input)
@@ -367,6 +385,11 @@ export async function createJobRecord(input: JobUpsertInput): Promise<string> {
 }
 
 export async function updateJobRecord(jobId: string, input: JobUpsertInput): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2EJob(jobId, input)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     const payload = sanitizeJobPayload(input)
@@ -393,6 +416,11 @@ export async function updateJobRecord(jobId: string, input: JobUpsertInput): Pro
 }
 
 export async function setJobActive(jobId: string, active: boolean): Promise<void> {
+  if (isE2EActive()) {
+    await setE2EJobActive(jobId, active)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await updateDoc(doc(db, 'jobs', jobId), {
@@ -405,6 +433,11 @@ export async function setJobActive(jobId: string, active: boolean): Promise<void
 }
 
 export async function deleteJobRecord(jobId: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2EJob(jobId)
+    return
+  }
+
   try {
     await removeJobAssignments(jobId)
     const { db } = requireFirebaseServices()
@@ -442,6 +475,11 @@ export async function updateJobNotificationRecipients(
   moduleKey: NotificationModuleKey,
   recipients: string[],
 ): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2EJobNotificationRecipients(jobId, moduleKey, recipients)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     const sanitized = sanitizeRecipientList(recipients)
@@ -463,6 +501,11 @@ export async function updateGlobalNotificationRecipients(
   moduleKey: NotificationModuleKey,
   recipients: string[],
 ): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2EGlobalNotificationRecipients(moduleKey, recipients)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     const sanitized = sanitizeRecipientList(recipients)

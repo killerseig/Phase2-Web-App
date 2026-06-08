@@ -91,6 +91,9 @@ const itemActionLoading = ref(false)
 const hydratingOrderMetaForm = ref(false)
 const lastHydratedOrderId = ref<string | null>(null)
 const lastSavedOrderMetaSignature = ref('')
+const orderItemNoteDrafts = reactive<Record<string, string>>({})
+const savingOrderItemNoteIds = reactive<Record<string, boolean>>({})
+const queuedOrderItemNoteSaveIds = reactive<Record<string, boolean>>({})
 const contextMenu = reactive({
   visible: false,
   x: 0,
@@ -116,6 +119,7 @@ let unsubscribeCatalogItems: (() => void) | null = null
 let unsubscribeOrders: (() => void) | null = null
 let orderMetaSaveTimer: ReturnType<typeof setTimeout> | null = null
 let treeInitialized = false
+const orderItemNoteSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const jobId = computed(() => String(route.params.jobId ?? ''))
 const job = computed<JobRecord | null>(() => {
@@ -703,6 +707,10 @@ function readQuantity(value: string | number | null | undefined) {
   return Math.round(parsed)
 }
 
+function normalizeOrderItemNoteValue(value: string | null | undefined) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function serializeOrderMetaForm(form: OrderMetaFormState) {
   return JSON.stringify({
     deliveryDate: form.deliveryDate.trim(),
@@ -740,6 +748,73 @@ function clearOrderMetaSaveTimer() {
   if (!orderMetaSaveTimer) return
   clearTimeout(orderMetaSaveTimer)
   orderMetaSaveTimer = null
+}
+
+function clearOrderItemNoteSaveTimer(orderItemId: string) {
+  const timer = orderItemNoteSaveTimers.get(orderItemId)
+  if (timer) {
+    clearTimeout(timer)
+  }
+  orderItemNoteSaveTimers.delete(orderItemId)
+}
+
+function clearQueuedOrderItemNoteSaveIds(validIds?: Set<string>) {
+  for (const orderItemId of Object.keys(queuedOrderItemNoteSaveIds)) {
+    if (!validIds || !validIds.has(orderItemId)) {
+      delete queuedOrderItemNoteSaveIds[orderItemId]
+    }
+  }
+}
+
+function clearOrderItemNoteDrafts() {
+  orderItemNoteSaveTimers.forEach((timer) => {
+    clearTimeout(timer)
+  })
+  orderItemNoteSaveTimers.clear()
+  clearQueuedOrderItemNoteSaveIds()
+
+  for (const orderItemId of Object.keys(orderItemNoteDrafts)) {
+    delete orderItemNoteDrafts[orderItemId]
+  }
+}
+
+function syncOrderItemNoteDrafts(order: ShopOrderRecord | null, force = false) {
+  if (!order) {
+    clearOrderItemNoteDrafts()
+    return
+  }
+
+  const validIds = new Set(order.items.map((item) => item.id))
+  clearQueuedOrderItemNoteSaveIds(validIds)
+
+  for (const orderItemId of Array.from(orderItemNoteSaveTimers.keys())) {
+    if (validIds.has(orderItemId)) continue
+    clearOrderItemNoteSaveTimer(orderItemId)
+  }
+
+  for (const orderItemId of Object.keys(orderItemNoteDrafts)) {
+    if (!validIds.has(orderItemId)) {
+      delete orderItemNoteDrafts[orderItemId]
+    }
+  }
+
+  for (const item of order.items) {
+    const incomingNote = item.note ?? ''
+    const draftNote = orderItemNoteDrafts[item.id] ?? incomingNote
+    const hasPendingSave =
+      orderItemNoteSaveTimers.has(item.id)
+      || !!savingOrderItemNoteIds[item.id]
+      || !!queuedOrderItemNoteSaveIds[item.id]
+    const hasUnsavedLocalChanges = normalizeOrderItemNoteValue(draftNote) !== normalizeOrderItemNoteValue(incomingNote)
+
+    if (force || (!hasPendingSave && !hasUnsavedLocalChanges)) {
+      orderItemNoteDrafts[item.id] = incomingNote
+    }
+  }
+}
+
+function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
+  return orderItemNoteDrafts[item.id] ?? item.note ?? ''
 }
 
 function getDeliveryDateValidationMessage(value: string) {
@@ -802,7 +877,7 @@ function queueOrderMetaSave() {
   clearOrderMetaSaveTimer()
   orderMetaSaveTimer = setTimeout(() => {
     void saveOrderMetaImmediately()
-  }, 450)
+  }, 700)
 }
 
 function cloneOrderItems(order: ShopOrderRecord | null = selectedOrder.value) {
@@ -1006,15 +1081,71 @@ async function updateOrderItemQuantity(orderItemId: string, rawValue: string) {
   await persistOrderItems(selectedOrder.value.id, nextItems, 'Order quantity updated.')
 }
 
-async function updateOrderItemNote(orderItemId: string, rawValue: string) {
+function queueOrderItemNoteSave(orderItemId: string) {
   if (!selectedOrder.value || selectedOrder.value.status !== 'draft') return
+
+  const selectedItem = selectedOrder.value.items.find((item) => item.id === orderItemId)
+  if (!selectedItem) return
+
+  const draftValue = orderItemNoteDrafts[orderItemId] ?? selectedItem.note ?? ''
+  if (normalizeOrderItemNoteValue(draftValue) === normalizeOrderItemNoteValue(selectedItem.note)) {
+    clearOrderItemNoteSaveTimer(orderItemId)
+    return
+  }
+
+  clearOrderItemNoteSaveTimer(orderItemId)
+  orderItemNoteSaveTimers.set(orderItemId, setTimeout(() => {
+    void saveOrderItemNote(orderItemId)
+  }, 700))
+}
+
+async function saveOrderItemNote(orderItemId: string) {
+  if (!selectedOrder.value || selectedOrder.value.status !== 'draft') return
+
+  const selectedItem = selectedOrder.value.items.find((item) => item.id === orderItemId)
+  if (!selectedItem) return
+
+  const draftValue = orderItemNoteDrafts[orderItemId] ?? selectedItem.note ?? ''
+  if (normalizeOrderItemNoteValue(draftValue) === normalizeOrderItemNoteValue(selectedItem.note)) {
+    clearOrderItemNoteSaveTimer(orderItemId)
+    return
+  }
+
+  if (savingOrderItemNoteIds[orderItemId]) {
+    queuedOrderItemNoteSaveIds[orderItemId] = true
+    return
+  }
+
+  clearOrderItemNoteSaveTimer(orderItemId)
 
   const nextItems = cloneOrderItems(selectedOrder.value)
   const targetItem = nextItems.find((item) => item.id === orderItemId)
   if (!targetItem) return
 
-  targetItem.note = rawValue.trim()
-  await persistOrderItems(selectedOrder.value.id, nextItems, 'Order note updated.')
+  targetItem.note = draftValue
+  savingOrderItemNoteIds[orderItemId] = true
+
+  try {
+    await persistOrderItems(selectedOrder.value.id, nextItems, 'Order note updated.')
+  } finally {
+    delete savingOrderItemNoteIds[orderItemId]
+  }
+
+  if (queuedOrderItemNoteSaveIds[orderItemId]) {
+    delete queuedOrderItemNoteSaveIds[orderItemId]
+    await saveOrderItemNote(orderItemId)
+  }
+}
+
+function handleOrderItemNoteInput(orderItemId: string, rawValue: string) {
+  if (!selectedOrder.value || selectedOrder.value.status !== 'draft') return
+  orderItemNoteDrafts[orderItemId] = rawValue
+  queueOrderItemNoteSave(orderItemId)
+}
+
+async function handleOrderItemNoteBlur(orderItemId: string) {
+  clearOrderItemNoteSaveTimer(orderItemId)
+  await saveOrderItemNote(orderItemId)
 }
 
 async function removeOrderItem(orderItemId: string) {
@@ -1209,6 +1340,8 @@ watch(
   selectedOrder,
   (order, previousOrder) => {
     if (!order) {
+      clearOrderMetaSaveTimer()
+      clearOrderItemNoteDrafts()
       applySelectedOrderToForm(null)
       return
     }
@@ -1219,9 +1352,13 @@ watch(
 
     if (selectionChanged) {
       clearOrderMetaSaveTimer()
+      clearOrderItemNoteDrafts()
       applySelectedOrderToForm(order)
+      syncOrderItemNoteDrafts(order, true)
       return
     }
+
+    syncOrderItemNoteDrafts(order)
 
     const localSignature = serializeOrderMetaForm(orderMetaForm)
     const incomingSignature = serializeOrderMetaRecord(order)
@@ -1247,6 +1384,8 @@ watch(
   () => jobId.value,
   (nextJobId, previousJobId) => {
     if (!nextJobId || nextJobId === previousJobId) return
+    clearOrderMetaSaveTimer()
+    clearOrderItemNoteDrafts()
     syncJobSubscription()
     subscribeCatalog()
     subscribeOrders()
@@ -1275,6 +1414,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearOrderMetaSaveTimer()
+  clearOrderItemNoteDrafts()
   stopCatalogSubscriptions()
   stopOrderSubscription()
   jobsStore.stopCurrentJobSubscription()
@@ -1702,14 +1842,15 @@ onBeforeUnmount(() => {
                 <input
                   v-if="canEditSelectedOrder"
                   class="shop-orders-item-card__note-input"
-                  :value="item.note"
+                  :value="getOrderItemNoteInputValue(item)"
                   :data-testid="`shoporder-order-item-note-${item.catalogItemId || item.id}`"
                   type="text"
                   autocomplete="off"
                   aria-label="Note"
                   :disabled="!canEditSelectedOrder"
                   placeholder="Optional note"
-                  @change="updateOrderItemNote(item.id, readTextInputValue($event))"
+                  @input="handleOrderItemNoteInput(item.id, readTextInputValue($event))"
+                  @blur="handleOrderItemNoteBlur(item.id)"
                 />
                 <div
                   v-else

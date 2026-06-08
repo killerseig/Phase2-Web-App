@@ -52,7 +52,7 @@ The goal is to rebuild Phase 2 as a `Vue + Firebase` application that:
 
 - The permission system should be data-driven from the start.
 - Future custom non-admin roles should be possible.
-- The old `Controller` workflow is handled by `Admin` in v1.
+- The old timecard review workflow is handled by `Admin` in v1.
 - The `Admin` role should stay fixed and always retain full access.
 
 ## Primary User Flow

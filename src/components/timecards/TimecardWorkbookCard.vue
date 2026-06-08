@@ -50,6 +50,13 @@ type NumericDraftResult =
   | { kind: 'incomplete' }
   | { kind: 'invalid' }
   | { kind: 'value'; value: number }
+type NavigableInputElement = HTMLInputElement | HTMLTextAreaElement
+type NavigationDirection = 'up' | 'down' | 'left' | 'right'
+type GridInputMeta = {
+  rowStart: number
+  rowEnd: number
+  col: number
+}
 
 const visibleHoursByDay = computed(() => visibleDayIndexes.map((dayIndex) => Number(props.card.totals.hoursByDay[dayIndex] ?? 0)))
 const visibleProductionByDay = computed(() => visibleDayIndexes.map((dayIndex) => Number(props.card.totals.productionByDay[dayIndex] ?? 0)))
@@ -59,6 +66,14 @@ const hoursBreakdown = computed(() => calculateRegularAndOvertimeHours(
   props.card.overtimeHoursOverride,
 ))
 const numericDrafts = reactive<Record<string, string>>({})
+const timecardNavigableInputSelector = [
+  '.timecard-card__inline-input',
+  '.timecard-card__header-input',
+  '.timecard-card__footer-input',
+  '.timecard-card__notes-input',
+  '.timecard-grid__input',
+].join(', ')
+const pendingMouseSelectInputs = new WeakSet<NavigableInputElement>()
 
 function formatWeekEnding(value: string) {
   const parsed = new Date(`${value}T00:00:00`)
@@ -162,6 +177,18 @@ function lineOffDraftKey(lineIndex: number, field: LineOffField) {
 
 function lineDayDraftKey(lineIndex: number, dayIndex: number, field: LineDayField) {
   return `line:${lineIndex}:day:${dayIndex}:${field}`
+}
+
+function lineRowStart(lineIndex: number) {
+  return lineIndex * visibleLineRowKinds.value.length
+}
+
+function lineRowEnd(lineIndex: number) {
+  return lineRowStart(lineIndex) + visibleLineRowKinds.value.length - 1
+}
+
+function lineRowPosition(lineIndex: number, rowKindIndex: number) {
+  return lineRowStart(lineIndex) + rowKindIndex
 }
 
 function lineHoursTotal(lineIndex: number) {
@@ -440,11 +467,240 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
   day[field] = parsed.value
   emit('changed')
 }
+
+function isNavigableInput(target: EventTarget | null): target is NavigableInputElement {
+  return (
+    (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+    && target.matches(timecardNavigableInputSelector)
+  )
+}
+
+function focusAndSelectInput(input: NavigableInputElement) {
+  if (input.disabled || input.readOnly) return
+  if (document.activeElement !== input) {
+    input.focus()
+  }
+  if (document.activeElement !== input) return
+  input.select()
+}
+
+function getNavigationDirection(key: string): NavigationDirection | null {
+  if (key === 'ArrowUp') return 'up'
+  if (key === 'ArrowDown') return 'down'
+  if (key === 'ArrowLeft') return 'left'
+  if (key === 'ArrowRight') return 'right'
+  return null
+}
+
+function rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
+  return startA <= endB && startB <= endA
+}
+
+function getRangeGap(startA: number, endA: number, startB: number, endB: number) {
+  if (rangesOverlap(startA, endA, startB, endB)) return 0
+  if (endB < startA) return startA - endB
+  return startB - endA
+}
+
+function getGridInputMeta(input: NavigableInputElement): GridInputMeta | null {
+  const rowStart = Number(input.dataset.navRowStart)
+  const rowEnd = Number(input.dataset.navRowEnd)
+  const col = Number(input.dataset.navCol)
+
+  if (!Number.isFinite(rowStart) || !Number.isFinite(rowEnd) || !Number.isFinite(col)) {
+    return null
+  }
+
+  return { rowStart, rowEnd, col }
+}
+
+function shouldUseHorizontalNavigation(input: NavigableInputElement, direction: 'left' | 'right') {
+  const selectionStart = input.selectionStart
+  const selectionEnd = input.selectionEnd
+  if (selectionStart == null || selectionEnd == null) return true
+
+  const valueLength = input.value.length
+  const fullySelected = selectionStart === 0 && selectionEnd === valueLength
+  if (fullySelected) return true
+
+  if (direction === 'left') {
+    return selectionStart === 0 && selectionEnd === 0
+  }
+
+  return selectionStart === valueLength && selectionEnd === valueLength
+}
+
+function findNextGridInput(
+  current: NavigableInputElement,
+  direction: NavigationDirection,
+): NavigableInputElement | null {
+  const currentMeta = getGridInputMeta(current)
+  if (!currentMeta) return null
+
+  const sheet = current.closest('.timecard-card__sheet')
+  if (!(sheet instanceof HTMLElement)) return null
+
+  const candidates = Array.from(sheet.querySelectorAll<NavigableInputElement>(timecardNavigableInputSelector))
+    .filter((input) => input !== current && !input.disabled)
+    .map((input) => {
+      const meta = getGridInputMeta(input)
+      return meta ? { input, meta } : null
+    })
+    .filter((candidate): candidate is { input: NavigableInputElement; meta: GridInputMeta } => candidate !== null)
+
+  const scoredCandidates = candidates
+    .map((candidate) => {
+      if (direction === 'up') {
+        if (candidate.meta.rowEnd >= currentMeta.rowStart) return null
+        return {
+          ...candidate,
+          axisPenalty: candidate.meta.col === currentMeta.col ? 0 : 1,
+          primaryDistance: currentMeta.rowStart - candidate.meta.rowEnd,
+          secondaryDistance: Math.abs(candidate.meta.col - currentMeta.col),
+        }
+      }
+
+      if (direction === 'down') {
+        if (candidate.meta.rowStart <= currentMeta.rowEnd) return null
+        return {
+          ...candidate,
+          axisPenalty: candidate.meta.col === currentMeta.col ? 0 : 1,
+          primaryDistance: candidate.meta.rowStart - currentMeta.rowEnd,
+          secondaryDistance: Math.abs(candidate.meta.col - currentMeta.col),
+        }
+      }
+
+      if (direction === 'left') {
+        if (candidate.meta.col >= currentMeta.col) return null
+        if (!rangesOverlap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd)) return null
+        return {
+          ...candidate,
+          axisPenalty: 0,
+          primaryDistance: currentMeta.col - candidate.meta.col,
+          secondaryDistance: getRangeGap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd),
+        }
+      }
+
+      if (candidate.meta.col <= currentMeta.col) return null
+      if (!rangesOverlap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd)) return null
+      return {
+        ...candidate,
+        axisPenalty: 0,
+        primaryDistance: candidate.meta.col - currentMeta.col,
+        secondaryDistance: getRangeGap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd),
+      }
+    })
+    .filter((
+      candidate,
+    ): candidate is {
+      input: NavigableInputElement
+      meta: GridInputMeta
+      axisPenalty: number
+      primaryDistance: number
+      secondaryDistance: number
+    } => candidate !== null)
+
+  scoredCandidates.sort((left, right) => (
+    left.axisPenalty - right.axisPenalty
+    || left.primaryDistance - right.primaryDistance
+    || left.secondaryDistance - right.secondaryDistance
+  ))
+
+  return scoredCandidates[0]?.input ?? null
+}
+
+function findNextInputByGeometry(
+  current: NavigableInputElement,
+  direction: NavigationDirection,
+): NavigableInputElement | null {
+  const sheet = current.closest('.timecard-card__sheet')
+  if (!(sheet instanceof HTMLElement)) return null
+
+  const currentRect = current.getBoundingClientRect()
+  const currentCenterX = currentRect.left + currentRect.width / 2
+  const currentCenterY = currentRect.top + currentRect.height / 2
+
+  const candidates = Array.from(sheet.querySelectorAll<NavigableInputElement>(timecardNavigableInputSelector))
+    .filter((input) => input !== current && !input.disabled)
+    .map((input) => {
+      const rect = input.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+
+      if (direction === 'up' && centerY >= currentCenterY) return null
+      if (direction === 'down' && centerY <= currentCenterY) return null
+      if (direction === 'left' && centerX >= currentCenterX) return null
+      if (direction === 'right' && centerX <= currentCenterX) return null
+
+      return {
+        input,
+        primaryDistance: direction === 'up' || direction === 'down'
+          ? Math.abs(centerY - currentCenterY)
+          : Math.abs(centerX - currentCenterX),
+        secondaryDistance: direction === 'up' || direction === 'down'
+          ? Math.abs(centerX - currentCenterX)
+          : Math.abs(centerY - currentCenterY),
+      }
+    })
+    .filter((
+      candidate,
+    ): candidate is { input: NavigableInputElement; primaryDistance: number; secondaryDistance: number } => candidate !== null)
+
+  candidates.sort((left, right) => (
+    left.primaryDistance - right.primaryDistance
+    || left.secondaryDistance - right.secondaryDistance
+  ))
+
+  return candidates[0]?.input ?? null
+}
+
+function handleSheetMouseDown(event: MouseEvent) {
+  if (props.readOnly || event.button !== 0 || !isNavigableInput(event.target)) return
+  pendingMouseSelectInputs.add(event.target)
+}
+
+function handleSheetMouseUp(event: MouseEvent) {
+  if (!isNavigableInput(event.target) || !pendingMouseSelectInputs.has(event.target)) return
+  pendingMouseSelectInputs.delete(event.target)
+  if (props.readOnly) return
+  if (event.cancelable) {
+    event.preventDefault()
+  }
+  focusAndSelectInput(event.target)
+}
+
+function handleSheetFocusIn(event: FocusEvent) {
+  if (props.readOnly || !isNavigableInput(event.target)) return
+  focusAndSelectInput(event.target)
+}
+
+function handleSheetKeydown(event: KeyboardEvent) {
+  if (props.readOnly || event.ctrlKey || event.metaKey || event.altKey || !isNavigableInput(event.target)) return
+
+  const direction = getNavigationDirection(event.key)
+  if (!direction) return
+
+  if ((direction === 'left' || direction === 'right') && !shouldUseHorizontalNavigation(event.target, direction)) {
+    return
+  }
+
+  const nextInput = findNextGridInput(event.target, direction) ?? findNextInputByGeometry(event.target, direction)
+  if (!nextInput) return
+
+  event.preventDefault()
+  focusAndSelectInput(nextInput)
+}
 </script>
 
 <template>
   <div class="timecard-card">
-    <div class="timecard-card__sheet">
+    <div
+      class="timecard-card__sheet"
+      @focusin.capture="handleSheetFocusIn"
+      @keydown.capture="handleSheetKeydown"
+      @mousedown.capture="handleSheetMouseDown"
+      @mouseup.capture="handleSheetMouseUp"
+    >
       <div class="timecard-card__brand">PHASE 2 COMPANY</div>
 
       <div class="timecard-card__field-row timecard-card__field-row--name">
@@ -592,6 +848,9 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
                     <input
                       class="timecard-grid__input"
                       :data-testid="`timecard-job-number-${lineIndex}`"
+                      :data-nav-row-start="lineRowStart(lineIndex)"
+                      :data-nav-row-end="lineRowEnd(lineIndex)"
+                      data-nav-col="0"
                       :disabled="readOnly"
                       :value="line.jobNumber"
                       type="text"
@@ -601,6 +860,9 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
                   <td v-if="rowKindIndex === 0" :rowspan="visibleLineRowKinds.length" class="timecard-grid__rowspan-cell">
                     <input
                       class="timecard-grid__input"
+                      :data-nav-row-start="lineRowStart(lineIndex)"
+                      :data-nav-row-end="lineRowEnd(lineIndex)"
+                      data-nav-col="1"
                       :disabled="readOnly"
                       :value="line.subsectionArea"
                       type="text"
@@ -611,6 +873,9 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
                   <td v-if="rowKindIndex === 0" :rowspan="visibleLineRowKinds.length" class="timecard-grid__rowspan-cell">
                     <input
                       class="timecard-grid__input"
+                      :data-nav-row-start="lineRowStart(lineIndex)"
+                      :data-nav-row-end="lineRowEnd(lineIndex)"
+                      data-nav-col="2"
                       :disabled="readOnly"
                       :value="line.account"
                       type="text"
@@ -620,6 +885,9 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
                   <td class="timecard-grid__diff-cell">
                     <input
                       class="timecard-grid__input"
+                      :data-nav-row-start="lineRowPosition(lineIndex, rowKindIndex)"
+                      :data-nav-row-end="lineRowPosition(lineIndex, rowKindIndex)"
+                      data-nav-col="3"
                       :disabled="readOnly"
                       :value="lineDiffValue(lineIndex, rowKind.key)"
                       type="text"
@@ -638,6 +906,9 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
                   >
                     <input
                       class="timecard-grid__input"
+                      :data-nav-row-start="lineRowPosition(lineIndex, rowKindIndex)"
+                      :data-nav-row-end="lineRowPosition(lineIndex, rowKindIndex)"
+                      :data-nav-col="4 + dayOffset"
                       :disabled="readOnly"
                       :value="lineDayValue(lineIndex, rowKind.key, dayIndex)"
                       type="text"
@@ -678,6 +949,9 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
                   <td class="timecard-grid__off-cell">
                     <input
                       class="timecard-grid__input"
+                      :data-nav-row-start="lineRowPosition(lineIndex, rowKindIndex)"
+                      :data-nav-row-end="lineRowPosition(lineIndex, rowKindIndex)"
+                      data-nav-col="11"
                       :disabled="readOnly"
                       :value="lineOffValue(lineIndex, rowKind.key)"
                       type="text"

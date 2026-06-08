@@ -28,11 +28,11 @@ service firebase.storage {
       return signedIn() &&
              userDocExists() &&
              userIsActive() &&
-             userRole() in ['admin', 'controller', 'foreman'];
+             userRole() in ['admin', 'foreman'];
     }
 
     function isAdmin() {
-      return activeAppUser() && userRole() in ['admin', 'controller'];
+      return activeAppUser() && userRole() == 'admin';
     }
 
     function dailyLogDoc(logId) {

@@ -35,6 +35,7 @@ import type {
   JobRecord,
   NotificationRecipients,
 } from '@/types/domain'
+import { getE2ENowValue } from '@/testing/e2eRuntime'
 import { normalizeError } from '@/utils/normalizeError'
 
 interface SiteInfoDisplay {
@@ -47,6 +48,14 @@ interface SiteInfoDisplay {
 }
 
 type AttachmentSectionKey = 'photo' | 'ptp' | 'qc'
+type SavedDailyLogFieldKey = 'weeklySchedule' | 'safetyConcerns' | 'budgetConcerns' | 'deliveriesNeeded'
+
+const savedDailyLogFieldKeys: SavedDailyLogFieldKey[] = [
+  'weeklySchedule',
+  'safetyConcerns',
+  'budgetConcerns',
+  'deliveriesNeeded',
+]
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -159,11 +168,15 @@ useToastMessages([
 ])
 
 function getTodayDateString() {
-  const now = new Date()
+  const now = getE2ENowValue() ?? new Date()
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function getSavedFieldValue(fieldKey: SavedDailyLogFieldKey) {
+  return String(selectedLog.value?.payload[fieldKey] ?? '')
 }
 
 function toMillis(value: unknown): number {
@@ -835,7 +848,7 @@ onBeforeUnmount(() => {
 
 <template>
   <AppShell>
-    <div class="daily-logs-page">
+    <div class="daily-logs-page" data-testid="daily-logs-page">
       <header class="daily-logs-header">
         <div>
           <span class="daily-logs-eyebrow">Daily Logs</span>
@@ -982,6 +995,7 @@ onBeforeUnmount(() => {
                 <span>{{ field.label }}</span>
                 <textarea
                   v-model="form[field.key]"
+                  :data-testid="`dailylog-${field.key}`"
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
@@ -1063,6 +1077,7 @@ onBeforeUnmount(() => {
                 <span>{{ field.label }}</span>
                 <textarea
                   v-model="form[field.key]"
+                  :data-testid="`dailylog-${field.key}`"
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
@@ -1134,6 +1149,7 @@ onBeforeUnmount(() => {
                 <span>{{ field.label }}</span>
                 <textarea
                   v-model="form[field.key]"
+                  :data-testid="`dailylog-${field.key}`"
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
@@ -1159,6 +1175,7 @@ onBeforeUnmount(() => {
                 <span>{{ field.label }}</span>
                 <textarea
                   v-model="form[field.key]"
+                  :data-testid="`dailylog-${field.key}`"
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
@@ -1207,6 +1224,7 @@ onBeforeUnmount(() => {
                 <span>{{ field.label }}</span>
                 <textarea
                   v-model="form[field.key]"
+                  :data-testid="`dailylog-${field.key}`"
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
@@ -1224,6 +1242,16 @@ onBeforeUnmount(() => {
             >
               {{ submittingLog ? 'Submitting...' : 'Submit Daily Log' }}
             </button>
+          </div>
+
+          <div v-if="selectedLog" class="sr-only" aria-hidden="true">
+            <div
+              v-for="fieldKey in savedDailyLogFieldKeys"
+              :key="fieldKey"
+              :data-testid="`dailylog-saved-${fieldKey}`"
+            >
+              {{ getSavedFieldValue(fieldKey) }}
+            </div>
           </div>
         </section>
 
@@ -1353,7 +1381,7 @@ onBeforeUnmount(() => {
             <div class="daily-logs-history-tools">
               <label class="daily-logs-field">
                 <span>Calendar Search</span>
-                <input v-model="selectedDate" type="date" />
+                <input v-model="selectedDate" data-testid="dailylog-date-search" type="date" />
               </label>
 
               <button
@@ -1381,6 +1409,7 @@ onBeforeUnmount(() => {
                 type="button"
                 class="daily-logs-history-row"
                 :class="{ 'daily-logs-history-row--active': selectedLogId === log.id }"
+                :data-testid="`dailylog-history-${log.id}`"
                 @click="selectedLogId = log.id"
               >
                 <div class="daily-logs-history-row__main">
