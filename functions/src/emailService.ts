@@ -374,222 +374,484 @@ export function buildTimecardsEmail(payload: {
   weekStart?: string
   timecards: any[]
 }): string {
-  const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
-  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const fmtNum = (val: any, digits = 2) => (Number(val) || 0).toFixed(digits)
-  const fmtCell = (val: any) => {
-    const n = Number(val) || 0
-    return Number.isInteger(n) ? String(n) : n.toFixed(2)
+  const visibleDayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+  const visibleDayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+  const columnWidthPercents = [
+    '7.33', '3.49', '3.49', '8.96', '4.35',
+    '7.33', '7.33', '7.33', '7.33', '7.33', '7.33',
+    '9.46', '9.46', '9.46',
+  ]
+  const cardColgroupHtml = columnWidthPercents.map((percent) => `<col style="width:${percent}%;" />`).join('')
+
+  const formatDateOnly = (value: any): string => {
+    if (!value) return ''
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      const matched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed)
+      if (matched) {
+        return `${Number(matched[2])}/${Number(matched[3])}/${matched[1]}`
+      }
+    }
+
+    const parsed = typeof value?.toDate === 'function'
+      ? value.toDate()
+      : value instanceof Date
+        ? value
+        : new Date(value)
+
+    if (Number.isNaN(parsed.getTime())) return ''
+    return `${parsed.getMonth() + 1}/${parsed.getDate()}/${parsed.getFullYear()}`
   }
-  const fmtMoney = (val: any) => `$${(Number(val) || 0).toFixed(2)}`
-  const start = payload.weekStart ? new Date(payload.weekStart) : null
-  const end = start && !Number.isNaN(start.getTime()) ? new Date(start) : null
-  if (end) end.setUTCDate(end.getUTCDate() + 6)
-  const weekLabel = start && end
-    ? `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
+
+  const formatFixedNumber = (value: any, decimals = 2, blankWhenZero = false): string => {
+    const numeric = Number(value ?? 0)
+    if (!Number.isFinite(numeric) || Number.isNaN(numeric)) return blankWhenZero ? '' : (0).toFixed(decimals)
+    if (blankWhenZero && numeric === 0) return ''
+    return numeric.toFixed(decimals)
+  }
+
+  const formatTrimmedNumber = (value: any, decimals = 2, blankWhenZero = false): string => {
+    const fixed = formatFixedNumber(value, decimals, blankWhenZero)
+    if (!fixed) return ''
+    return fixed.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+  }
+
+  const formatHours = (value: any, blankWhenZero = false): string => (
+    formatFixedNumber(value, 1, blankWhenZero)
+  )
+
+  const displayText = (value: any, fallback = ''): string => {
+    const text = String(value ?? '').trim()
+    return escapeHtml(text || fallback)
+  }
+
+  const renderOptionalText = (value: any): string => {
+    const text = String(value ?? '').trim()
+    return text ? escapeHtml(text) : '&nbsp;'
+  }
+
+  const renderAlignedValue = (value: any, align: 'left' | 'center' | 'right' = 'center'): string => {
+    const text = String(value ?? '').trim()
+    return `<span style="display:block; text-align:${align};">${text ? escapeHtml(text) : '&nbsp;'}</span>`
+  }
+
+  const renderField = (
+    label: string,
+    value: any,
+    align: 'left' | 'center' | 'right' = 'left',
+    valueFontSize = '0.105in',
+    labelFontSize = '0.09in',
+  ): string => `
+    <table role="presentation" style="width:100%; border-collapse:collapse; border:0; margin:0;">
+      <tr>
+        <td style="border:0; padding:0 0.03in 0.02in 0; white-space:nowrap; font-size:${labelFontSize}; font-style:italic; line-height:1; color:#111111; vertical-align:bottom;">${label ? escapeHtml(label) : '&nbsp;'}</td>
+        <td style="width:100%; border:0; border-bottom:1px solid #111111; padding:0 0.03in 0.02in; font-size:${valueFontSize}; font-weight:700; line-height:1; color:#111111; text-align:${align}; vertical-align:bottom;">${renderOptionalText(value)}</td>
+      </tr>
+    </table>
+  `
+
+  const isMeaningfulLine = (line: any): boolean => {
+    if (!line) return false
+
+    const textFields = [
+      line?.jobNumber,
+      line?.subsectionArea,
+      line?.area,
+      line?.account,
+      line?.acct,
+      line?.activityCode,
+      line?.difH,
+      line?.difP,
+      line?.difC,
+      line?.costCode,
+    ]
+    if (textFields.some((value) => String(value ?? '').trim().length > 0)) {
+      return true
+    }
+
+    if (visibleDayKeys.some((key) => Number(line?.[key]) || Number(line?.production?.[key]) || Number(line?.unitCost?.[key]))) {
+      return true
+    }
+
+    return Boolean(
+      Number(line?.offHours)
+      || Number(line?.offProduction)
+      || Number(line?.offCost)
+      || Number(line?.totals?.hours)
+      || Number(line?.totals?.production)
+      || Number(line?.totals?.lineTotal)
+    )
+  }
+
+  const getEmployeeName = (tc: any): string => {
+    const firstName = String(tc?.firstName || '').trim()
+    const lastName = String(tc?.lastName || '').trim()
+    const fullName = String(tc?.fullName || tc?.employeeName || '').trim()
+
+    if (lastName && firstName) return `${lastName}, ${firstName}`
+    if (lastName || firstName) return lastName || firstName
+    return fullName
+  }
+
+  const getWeekEndingLabel = (tc: any): string => {
+    const directWeekEnding = formatDateOnly(tc?.weekEndingDate)
+    if (directWeekEnding) return directWeekEnding
+
+    const cardWeekStart = String(tc?.weekStartDate || payload.weekStart || '').trim()
+    const matched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cardWeekStart)
+    if (!matched) return ''
+
+    const nextDate = new Date(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3]), 12, 0, 0, 0)
+    if (Number.isNaN(nextDate.getTime())) return ''
+
+    nextDate.setDate(nextDate.getDate() + 6)
+    return `${nextDate.getMonth() + 1}/${nextDate.getDate()}/${nextDate.getFullYear()}`
+  }
+
+  const getWageLabel = (tc: any): string => {
+    const numeric = Number(tc?.employeeWage ?? tc?.wageRate ?? tc?.wage)
+    if (Number.isFinite(numeric) && !Number.isNaN(numeric) && numeric !== 0) {
+      return `$${numeric.toFixed(2)}`
+    }
+
+    return String(tc?.employeeWage ?? tc?.wageRate ?? tc?.wage ?? '').trim()
+  }
+
+  const getRegularAndOvertime = (tc: any, hoursTotal: number): { regular: number; overtime: number } => {
+    const regularOverride = Number(tc?.regularHoursOverride)
+    const overtimeOverride = Number(tc?.overtimeHoursOverride)
+
+    if (Number.isFinite(regularOverride) && Number.isFinite(overtimeOverride)) {
+      return {
+        regular: Math.max(0, regularOverride),
+        overtime: Math.max(0, overtimeOverride),
+      }
+    }
+
+    return {
+      regular: Math.min(hoursTotal, 40),
+      overtime: Math.max(hoursTotal - 40, 0),
+    }
+  }
+
+  const summaryStart = payload.weekStart ? new Date(`${payload.weekStart}T00:00:00`) : null
+  const summaryEnd = summaryStart && !Number.isNaN(summaryStart.getTime()) ? new Date(summaryStart) : null
+  if (summaryEnd) summaryEnd.setDate(summaryEnd.getDate() + 6)
+  const weekLabel = summaryStart && summaryEnd
+    ? `${summaryStart.getMonth() + 1}/${summaryStart.getDate()}/${summaryStart.getFullYear()} - ${summaryEnd.getMonth() + 1}/${summaryEnd.getDate()}/${summaryEnd.getFullYear()}`
     : 'N/A'
+  const lineRowKinds = [
+    { key: 'hours', label: 'H', diffField: 'difH' },
+    { key: 'production', label: 'P', diffField: 'difP' },
+    { key: 'cost', label: 'C', diffField: 'difC' },
+  ] as const
+  const cardWidth = '5.078in'
 
   const cardMarkupList = (Array.isArray(payload.timecards) ? payload.timecards : []).map((tc) => {
-    const lines = Array.isArray(tc?.lines) ? tc.lines : []
+    const lines = (Array.isArray(tc?.lines) ? tc.lines : []).filter((line: any) => isMeaningfulLine(line))
 
-    const totalHoursByDay: Record<string, number> = {}
-    dayKeys.forEach((key) => {
-      totalHoursByDay[key] = lines.reduce((sum: number, line: any) => sum + (Number(line?.[key]) || 0), 0)
-    })
+    const totalHoursByDay = visibleDayKeys.map((key) => (
+      lines.reduce((sum: number, line: any) => sum + (Number(line?.[key]) || 0), 0)
+    ))
+    const computedHoursTotal = totalHoursByDay.reduce((sum, value) => sum + value, 0)
+    const hoursTotal = Number(tc?.totals?.hoursTotal) || computedHoursTotal
+    const productionTotal = Number(tc?.totals?.productionTotal) || lines.reduce((sum: number, line: any) => (
+      sum + (
+        Number(line?.totals?.production)
+        || visibleDayKeys.reduce((lineSum, key) => lineSum + (Number(line?.production?.[key]) || 0), 0)
+      )
+    ), 0)
+    const { regular, overtime } = getRegularAndOvertime(tc, hoursTotal)
 
-    const accountSummaryMap = new Map<string, { job: string; acct: string; office: string; amt: number }>()
-    lines.forEach((line: any) => {
-      const job = displayValue(line?.jobNumber)
-      const acct = displayValue(line?.account)
-      const office = displayValue(line?.area)
-      const amt = Number(line?.totals?.lineTotal) || 0
-      const key = `${job}|${acct}|${office}`
-      const existing = accountSummaryMap.get(key)
-      if (existing) {
-        existing.amt += amt
-      } else {
-        accountSummaryMap.set(key, { job, acct, office, amt })
-      }
-    })
+    const thinBorder = '1px solid #111111'
+    const thickBorder = '1.5px solid #111111'
+    const brandHeight = '21.853pt'
+    const headerRowHeight = '11.849pt'
+    const headerGapHeight = '9.8pt'
+    const gridHeaderHeight = '12.15pt'
+    const gridBodyHeight = '8.03pt'
+    const gridTotalHeight = '16.01pt'
+    const footerLabelRowHeight = '13.079pt'
+    const footerBoxRowHeight = '15.539pt'
+    const footerAuxRowHeight = '13.079pt'
+    const bottomSpacerHeight = '10.2pt'
+    const blankCell = 'border:0; padding:0; font-size:0; line-height:1;'
+    const baseCell = `border:${thinBorder}; padding:0; height:${gridBodyHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:0.098in;`
+    const headerCell = `border:${thinBorder}; padding:0; height:${gridHeaderHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:0.086in; font-style:italic; font-weight:400;`
+    const totalCell = `border:${thinBorder}; padding:0; height:${gridTotalHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:0.105in; font-weight:700;`
+    const formLabelCell = `border:0; height:${headerRowHeight}; padding:0 0.03in 0.02in 0; white-space:nowrap; text-align:right; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-style:italic; font-weight:400; line-height:1;`
+    const renderFormValueCell = (align: 'left' | 'center' | 'right' = 'left', fontSize = '0.105in') => (
+      `border:0; border-bottom:1px solid #111111; height:${headerRowHeight}; padding:0 0.03in 0.02in; text-align:${align}; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${fontSize}; font-weight:700; line-height:1;`
+    )
+    const footerLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
+    const footerStatLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
+    const footerStatValueCell = `border:0; border-bottom:1px solid #111111; height:${footerLabelRowHeight}; padding:0 0 0.01in; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.1in; font-weight:700; line-height:1;`
+    const footerStatLabelRowTwoCell = `border:0; height:${footerBoxRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
+    const footerStatValueRowTwoCell = `border:0; border-bottom:1px solid #111111; height:${footerBoxRowHeight}; padding:0 0 0.01in; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.1in; font-weight:700; line-height:1;`
+    const footerBoxCell = `border:${thinBorder}; height:${footerBoxRowHeight}; padding:0.01in 0.02in; text-align:center; vertical-align:middle; font-family:'Times New Roman', Times, serif; font-size:0.095in; font-weight:700; line-height:1;`
+    const footerAuxBoxCell = `border:${thinBorder}; height:${footerAuxRowHeight}; padding:0.01in 0.02in; text-align:center; vertical-align:middle; font-family:'Times New Roman', Times, serif; font-size:0.095in; font-weight:700; line-height:1;`
+    const notesLabelCell = `border:0; height:${footerAuxRowHeight}; padding:0 0.02in 0 0; text-align:right; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
+    const notesLineCell = `border:0; border-bottom:1px solid #111111; height:${footerAuxRowHeight}; padding:0 0 0.01in; text-align:left; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.095in; line-height:1;`
+    const maxLineGroups = 13
+    const employeeName = displayText(getEmployeeName(tc), '-')
+    const employeeNumber = displayText(tc?.employeeNumber || tc?.employeeId, '-')
+    const occupation = displayText(tc?.occupation, '-')
+    const wageLabel = displayText(getWageLabel(tc), '-')
+    const weekEndingLabel = displayText(getWeekEndingLabel(tc), '-')
+    const overtimeLabel = formatTrimmedNumber(overtime, 1)
+    const regularLabel = formatTrimmedNumber(regular, 1)
+    const lineRows = Array.from({ length: maxLineGroups }, (_, lineIndex) => {
+      const line = lines[lineIndex]
+      const hasLine = Boolean(line)
+      const lineHoursTotal = hasLine
+        ? Number(line?.totals?.hours)
+          || visibleDayKeys.reduce((sum, key) => sum + (Number(line?.[key]) || 0), 0)
+        : 0
+      const lineProductionTotal = hasLine
+        ? Number(line?.totals?.production)
+          || visibleDayKeys.reduce((sum, key) => sum + (Number(line?.production?.[key]) || 0), 0)
+        : 0
+      const lineCostTotal = hasLine
+        ? Number(line?.totals?.lineTotal)
+          || visibleDayKeys.reduce((sum, key) => {
+            const production = Number(line?.production?.[key]) || 0
+            const unitCost = Number(line?.unitCost?.[key]) || 0
+            return sum + (production * unitCost)
+          }, 0)
+        : 0
 
-    const accountRows = Array.from(accountSummaryMap.values())
-      .map((row) => `
-        <tr>
-          <td style="padding: 4px 6px; border: 1px solid #222;">${row.job}</td>
-          <td style="padding: 4px 6px; border: 1px solid #222;">${row.acct}</td>
-          <td style="padding: 4px 6px; border: 1px solid #222;">${row.office}</td>
-          <td style="padding: 4px 6px; border: 1px solid #222; text-align: right;">${fmtMoney(row.amt)}</td>
-        </tr>
-      `)
-      .join('')
+      return lineRowKinds.map((rowKind, rowKindIndex) => {
+        const diffValue = hasLine ? line?.[rowKind.diffField] : ''
+        const productionCell = rowKind.key === 'hours'
+          ? ''
+          : rowKind.key === 'production'
+            ? formatTrimmedNumber(lineProductionTotal, 3, false)
+            : formatFixedNumber(lineCostTotal, 3, true)
+        const offCell = hasLine
+          ? rowKind.key === 'hours'
+            ? formatTrimmedNumber(line?.offHours, 2, true)
+            : rowKind.key === 'production'
+              ? formatTrimmedNumber(line?.offProduction, 2, true)
+              : formatTrimmedNumber(line?.offCost, 2, true)
+          : ''
+        const topBorder = rowKind.key === 'hours' ? thickBorder : '0'
+        const bottomBorder = rowKind.key === 'hours' ? '0' : rowKind.key === 'production' ? '0' : thinBorder
 
-    const hoursTotal = Number(tc?.totals?.hoursTotal) || 0
-    const regularHours = Math.min(hoursTotal, 40)
-    const overtimeHours = Math.max(hoursTotal - 40, 0)
+        const detailStyle = `${baseCell} border-top:${topBorder}; border-bottom:${bottomBorder};`
+        const labelStyle = `${baseCell} font-weight:700; border-top:${rowKind.key === 'hours' ? thickBorder : rowKind.key === 'production' ? thinBorder : '0'}; border-bottom:${rowKind.key === 'hours' ? '0' : thinBorder};`
 
-    const lineRows = lines.length
-      ? lines.map((line: any) => {
-          const hoursRow = dayKeys.map((key) => `<td>${fmtCell(line?.[key])}</td>`).join('')
-          const prodRow = dayKeys.map((key) => `<td>${fmtCell(line?.production?.[key])}</td>`).join('')
-          const costRow = dayKeys.map((key) => `<td>${fmtMoney(line?.unitCost?.[key])}</td>`).join('')
-          return `
-            <tr>
-              <td rowspan="3">${displayValue(line?.jobNumber)}</td>
-              <td rowspan="3">${displayValue(line?.account)}</td>
-              <td rowspan="3">${displayValue(line?.difH || line?.difP || line?.difC || line?.costCode)}</td>
-              <td>H</td>
-              ${hoursRow}
-              <td>${fmtNum(line?.totals?.hours)}</td>
-              <td></td>
-              <td></td>
-            </tr>
-            <tr>
-              <td style="border-top: 1px dashed #777;">P</td>
-              ${prodRow}
-              <td></td>
-              <td>${fmtNum(line?.totals?.production)}</td>
-              <td></td>
-            </tr>
-            <tr>
-              <td style="border-top: 1px dashed #777;">C</td>
-              ${costRow}
-              <td>${fmtMoney(line?.totals?.lineTotal)}</td>
-              <td></td>
-              <td></td>
-            </tr>
-          `
-        }).join('')
-      : '<tr><td colspan="14" style="text-align:center;">No entries</td></tr>'
+        return `
+          <tr>
+            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? line?.jobNumber : '')}</td>` : ''}
+            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? (line?.subsectionArea || line?.area) : '')}</td>` : ''}
+            <td style="${labelStyle}">${rowKind.label}</td>
+            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? (line?.account || line?.acct || line?.activityCode) : '')}</td>` : ''}
+            <td style="${detailStyle}">${renderOptionalText(diffValue)}</td>
+            ${visibleDayKeys.map((key) => {
+              const dayValue = hasLine
+                ? rowKind.key === 'hours'
+                  ? formatFixedNumber(line?.[key], 2, true)
+                  : rowKind.key === 'production'
+                    ? formatFixedNumber(line?.production?.[key], 2, true)
+                    : formatFixedNumber(line?.unitCost?.[key], 2, true)
+                : ''
+              return `<td style="${detailStyle}">${renderOptionalText(dayValue)}</td>`
+            }).join('')}
+            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:top; padding-top:0.015in; font-weight:700;">${renderOptionalText(hasLine ? formatHours(lineHoursTotal) : '')}</td>` : ''}
+            <td style="${detailStyle}">${renderOptionalText(productionCell)}</td>
+            <td style="${detailStyle}">${renderOptionalText(offCell)}</td>
+          </tr>
+        `
+      }).join('')
+    }).join('')
 
     return `
-      <div class="tc-card-wrap" style="border: 2px solid #111; padding: 8px; margin: 4px 0; background:#fff; font-size:11px;">
-      <div style="text-align:center; font-weight:700; font-size:16px; margin-bottom:6px;">PHASE 2 COMPANY</div>
-      <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+      <table role="presentation" class="tc-card-wrap" style="width:${cardWidth}; border-collapse:collapse; table-layout:fixed; margin:0; border:1px solid #111111; background:#ffffff; color:#111111; font-family:'Times New Roman', Times, serif;">
         <tr>
-          <td style="width:55%; padding:4px 6px; border-bottom:1px solid #222;"><strong>EMP. NAME:</strong> ${displayValue(tc?.employeeName)}</td>
-          <td style="width:20%; padding:4px 6px; border-bottom:1px solid #222;"><strong>EMPLOYEE #:</strong> ${displayValue(tc?.employeeNumber || tc?.employeeId)}</td>
-          <td style="width:25%; padding:4px 6px; border-bottom:1px solid #222;"><strong>WEEK ENDING:</strong> ${displayValue(end ? end.toLocaleDateString() : '')}</td>
+          <td style="height:${brandHeight}; padding:0 0.08in; border:0; text-align:center; vertical-align:middle; font-family:Arial, Helvetica, sans-serif; font-size:0.18in; font-weight:700; line-height:1;">PHASE 2 COMPANY</td>
         </tr>
         <tr>
-          <td style="padding:4px 6px;"><strong>OCCUPATION:</strong> ${displayValue(tc?.occupation)}</td>
-          <td style="padding:4px 6px;"><strong>WAGE:</strong> ${displayValue(tc?.wage)}</td>
-          <td style="padding:4px 6px;"><strong>STATUS:</strong> ${displayValue(tc?.status)}</td>
+          <td style="padding:0; border:0;">
+              <table role="presentation" style="width:100%; border-collapse:collapse; border:0; margin:0;">
+                <tr>
+                  <td style="border:0; padding:0 0.08in;">
+                    <table role="presentation" style="width:100%; border-collapse:collapse; table-layout:fixed; border:0; margin:0;">
+                      <colgroup>${cardColgroupHtml}</colgroup>
+                      <tr>
+                        <td colspan="3" style="${formLabelCell}">EMP. NAME:</td>
+                        <td colspan="7" style="${renderFormValueCell('left', '0.105in')}">${renderOptionalText(employeeName)}</td>
+                        <td style="${blankCell} height:${headerRowHeight};">&nbsp;</td>
+                        <td style="${formLabelCell}">EMPLOYEE#</td>
+                        <td colspan="2" style="${renderFormValueCell('center', '0.115in')}">${renderOptionalText(employeeNumber)}</td>
+                      </tr>
+                      <tr>
+                        <td colspan="3" style="${formLabelCell}">OCCUPATION:</td>
+                        <td colspan="7" style="${renderFormValueCell('left', '0.105in')}">${renderOptionalText(occupation)}</td>
+                        <td style="${blankCell} height:${headerRowHeight};">&nbsp;</td>
+                        <td style="${formLabelCell}">WAGE</td>
+                        <td colspan="2" style="${renderFormValueCell('center', '0.115in')}">${renderOptionalText(wageLabel)}</td>
+                      </tr>
+                      <tr>
+                        <td colspan="11" style="${blankCell} height:${headerRowHeight};">&nbsp;</td>
+                        <td style="${formLabelCell}">WEEK ENDING</td>
+                        <td colspan="2" style="${renderFormValueCell('center', '0.105in')}">${renderOptionalText(weekEndingLabel)}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+          </td>
         </tr>
-      </table>
-      <table style="width: 100%; border-collapse: collapse; margin: 8px 0; font-size:11px; table-layout: fixed;">
-        <thead>
-          <tr>
-            <th style="border:1px solid #222;">JOB #</th>
-            <th style="border:1px solid #222;">ACCT</th>
-            <th style="border:1px solid #222;">DIF</th>
-            <th style="border:1px solid #222;">TYPE</th>
-            ${dayLabels.map((day) => `<th>${day}</th>`).join('')}
-            <th style="border:1px solid #222;">TOTAL</th>
-            <th style="border:1px solid #222;">PROD</th>
-            <th style="border:1px solid #222;">OFF</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${lineRows}
-        </tbody>
-        <tfoot>
-          <tr style="font-weight:700;">
-            <td colspan="4" style="border:1px solid #222; padding:4px 6px;">TOTAL HOURS</td>
-            ${dayKeys.map((key) => `<td style="border:1px solid #222; text-align:center;">${fmtCell(totalHoursByDay[key])}</td>`).join('')}
-            <td style="border:1px solid #222; text-align:center;">${fmtNum(hoursTotal)}</td>
-            <td style="border:1px solid #222; text-align:center;">${fmtNum(tc?.totals?.productionTotal)}</td>
-            <td style="border:1px solid #222;"></td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <table style="width:100%; border-collapse:collapse; margin-top:6px;">
         <tr>
-        <td style="width:68%; vertical-align:top; padding-right:8px;">
-        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-          <thead>
-            <tr>
-              <th style="border:1px solid #222; padding:4px 6px; text-align:left;">JOB or GL</th>
-              <th style="border:1px solid #222; padding:4px 6px; text-align:left;">ACCT</th>
-              <th style="border:1px solid #222; padding:4px 6px; text-align:left;">OFFICE</th>
-              <th style="border:1px solid #222; padding:4px 6px; text-align:right;">AMT</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${accountRows || '<tr><td colspan="4" style="border:1px solid #222; padding:4px 6px; text-align:center;">N/A</td></tr>'}
-          </tbody>
-        </table>
-        </td>
-        <td style="width:32%; vertical-align:top;">
-        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-          <tbody>
-            <tr>
-              <td style="padding:4px 6px;"><strong>OT</strong></td>
-              <td style="padding:4px 6px; text-align:right;">${fmtNum(overtimeHours)}</td>
-            </tr>
-            <tr>
-              <td style="padding:4px 6px;"><strong>REG</strong></td>
-              <td style="padding:4px 6px; text-align:right;">${fmtNum(regularHours)}</td>
-            </tr>
-            <tr>
-              <td style="padding:4px 6px;"><strong>SUBCONTRACTED</strong></td>
-              <td style="padding:4px 6px; text-align:right;">${tc?.subcontractedEmployee ? 'YES' : 'NO'}</td>
-            </tr>
-          </tbody>
-        </table>
-        </td>
+          <td style="height:${headerGapHeight}; padding:0; border:0; font-size:0; line-height:${headerGapHeight};">&nbsp;</td>
+        </tr>
+        <tr>
+          <td style="padding:0; border:0; vertical-align:top;">
+              <table role="presentation" style="width:100%; border-collapse:collapse; table-layout:fixed; margin:0; border:${thinBorder};">
+                <colgroup>${cardColgroupHtml}</colgroup>
+                <thead>
+                  <tr>
+                    <th style="${headerCell}">JOB #</th>
+                    <th style="${headerCell}">1</th>
+                    <th style="${headerCell}">&nbsp;</th>
+                    <th style="${headerCell}">ACCT</th>
+                    <th style="${headerCell}">DIF</th>
+                    ${visibleDayLabels.map((label) => `<th style="${headerCell}">${label}</th>`).join('')}
+                    <th style="${headerCell}">TOTAL</th>
+                    <th style="${headerCell}">PROD</th>
+                    <th style="${headerCell}">OFF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${lineRows}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="5" style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder}; text-align:right; padding-right:0.08in;">TOTAL HOURS</td>
+                    ${totalHoursByDay.map((value) => `<td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatHours(value))}</td>`).join('')}
+                    <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatHours(hoursTotal))}</td>
+                    <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatTrimmedNumber(productionTotal, 3, false))}</td>
+                    <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">&nbsp;</td>
+                  </tr>
+                </tfoot>
+              </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0; border:0; vertical-align:top;">
+              <table role="presentation" style="width:100%; border-collapse:collapse; table-layout:fixed; margin:0; border:0;">
+                <colgroup>${cardColgroupHtml}</colgroup>
+                <tr>
+                  <td colspan="3" style="${footerLabelCell}">JOB or GL</td>
+                  <td colspan="2" style="${footerLabelCell}">ACCT</td>
+                  <td colspan="2" style="${footerLabelCell}">OFFICE</td>
+                  <td colspan="2" style="${footerLabelCell}">AMT</td>
+                  <td style="${blankCell} height:${footerLabelRowHeight};">&nbsp;</td>
+                  <td style="${footerStatLabelCell}">OT</td>
+                  <td style="${footerStatValueCell}">${renderOptionalText(overtimeLabel)}</td>
+                  <td colspan="2" style="${blankCell} height:${footerLabelRowHeight};">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td colspan="3" style="${footerBoxCell}">${renderOptionalText(tc?.footerJobOrGl)}</td>
+                  <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerAccount)}</td>
+                  <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerOffice)}</td>
+                  <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerAmount)}</td>
+                  <td style="${blankCell} height:${footerBoxRowHeight};">&nbsp;</td>
+                  <td style="${footerStatLabelRowTwoCell}">REG</td>
+                  <td style="${footerStatValueRowTwoCell}">${renderOptionalText(regularLabel)}</td>
+                  <td colspan="2" style="${blankCell} height:${footerBoxRowHeight};">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td colspan="3" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondJobOrGl)}</td>
+                  <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondAccount)}</td>
+                  <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondOffice)}</td>
+                  <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondAmount)}</td>
+                  <td colspan="5" style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                  <td colspan="2" style="${notesLabelCell}">NOTES:</td>
+                  <td colspan="10" style="${notesLineCell}">${renderOptionalText(tc?.notes)}</td>
+                  <td style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td colspan="14" style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                </tr>
+              </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="height:${bottomSpacerHeight}; padding:0; border:0; font-size:0; line-height:${bottomSpacerHeight};">&nbsp;</td>
         </tr>
       </table>
-
-      <p style="margin-top:8px;"><strong>NOTES:</strong> ${displayValue(tc?.notes)}</p>
-      </div>
     `
   })
 
   const cardsHtml = cardMarkupList.length
     ? `
-      <table role="presentation" class="tc-pair-table" style="width:100%; border-collapse:collapse; table-layout:fixed;">
-        ${Array.from({ length: Math.ceil(cardMarkupList.length / 2) }, (_, pairIndex) => {
-          const left = cardMarkupList[pairIndex * 2] || ''
-          const right = cardMarkupList[pairIndex * 2 + 1] || ''
-          return `
-            <tr class="tc-card-pair">
-              <td class="tc-card-cell" style="width:50%; vertical-align:top; padding-right:6px;">${left}</td>
-              <td class="tc-card-cell" style="width:50%; vertical-align:top; padding-left:6px;">${right || '&nbsp;'}</td>
+      ${Array.from({ length: Math.ceil(cardMarkupList.length / 2) }, (_, pairIndex) => {
+        const left = cardMarkupList[pairIndex * 2] || ''
+        const right = cardMarkupList[pairIndex * 2 + 1] || ''
+
+        return `
+          <table role="presentation" class="tc-sheet" style="width:100%; border-collapse:collapse; table-layout:fixed; border:0.75px solid #111111; margin:0 0 18px; font-family:Arial, Helvetica, sans-serif;">
+            <tr>
+              <td colspan="2" style="padding:14px 16px 12px; border-bottom:0.75px solid #111111; text-align:center; font-size:24px; font-weight:700; letter-spacing:0.02em;">Timecards Submitted</td>
             </tr>
-          `
-        }).join('')}
-      </table>
+            <tr>
+              <td style="width:60%; padding:4px 8px; border-right:0.75px solid #111111; border-bottom:0.75px solid #111111; font-size:13px; line-height:1.35;"><strong>Job:</strong> ${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}</td>
+              <td style="width:40%; padding:4px 8px; border-bottom:0.75px solid #111111; font-size:13px; line-height:1.35; text-align:right;"><strong>Week:</strong> ${escapeHtml(weekLabel)}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:4px 8px; border-bottom:0.75px solid #111111; font-size:13px; line-height:1.35;"><strong>Submitted by:</strong> ${escapeHtml(displayValue(payload.submittedBy))}</td>
+            </tr>
+            <tr>
+              <td style="width:50%; vertical-align:top; padding:12px 18px 12px 12px; border:0;">${left}</td>
+              <td style="width:50%; vertical-align:top; padding:12px 12px 12px 18px; border:0;">${right || '&nbsp;'}</td>
+            </tr>
+          </table>
+        `
+      }).join('')}
     `
-    : '<p>No timecards found.</p>'
+    : '<p style="margin:0; font-size:13px;">No timecards found.</p>'
+
+  return `
+    <div style="background:#ffffff; padding:8px; color:#111111; font-family:Arial, Helvetica, sans-serif;">
+      ${cardsHtml}
+    </div>
+  `
 
   return `
     ${EMAIL_STYLES}
     <style>
-      .tc-print .email-container {
-        background: #ffffff !important;
-        padding: 8px !important;
-        color: #111111 !important;
+      .tc-print {
+        background:#ffffff !important;
+        padding:8px !important;
+        color:#111111 !important;
       }
-      .tc-print .header {
+      .tc-print .tc-email-body {
+        width: 10.95in !important;
+        max-width: 10.95in !important;
+        margin: 0 auto !important;
+      }
+      .tc-print .email-container {
+        width: 10.95in !important;
+        max-width: 10.95in !important;
+        margin: 0 auto !important;
         background: #ffffff !important;
-        color: #111111 !important;
-        border: 1px solid #111111 !important;
-        border-bottom: 0 !important;
-        padding: 10px !important;
+        padding: 0 !important;
       }
       .tc-print .content {
         background: #ffffff !important;
-        border: 1px solid #111111 !important;
-        border-top: 0 !important;
-        padding: 10px !important;
+        border: 0 !important;
+        padding: 0 !important;
+        line-height: normal !important;
       }
-      .tc-print .footer {
-        background: #ffffff !important;
-        color: #333333 !important;
-        border: 1px solid #111111 !important;
-        border-top: 0 !important;
-        padding: 8px !important;
+      .tc-print .header,
+      .tc-print .footer,
+      .tc-print .tc-summary-table {
+        display: none !important;
       }
       .tc-print table,
       .tc-print th,
@@ -598,42 +860,49 @@ export function buildTimecardsEmail(payload: {
         background: #ffffff !important;
         border-color: #111111 !important;
       }
+      .tc-print table {
+        margin: 0 !important;
+        border-spacing: 0 !important;
+      }
       .tc-print tr {
         background: #ffffff !important;
       }
       .tc-print .tc-card-wrap,
-      .tc-print .tc-card-cell,
-      .tc-print .tc-card-pair {
+      .tc-print .tc-sheet {
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
       }
-      .tc-print .tc-card-pair {
-        page-break-before: auto !important;
-        page-break-after: auto !important;
+      .tc-print .tc-card-wrap {
+        width: 5.078in !important;
+        max-width: 5.078in !important;
+        box-sizing: border-box !important;
+        margin: 0 auto !important;
       }
       @media print {
         .tc-print {
           margin: 0 !important;
           padding: 0 !important;
         }
-        .tc-print .email-container,
-        .tc-print .content {
-          padding: 6px !important;
-        }
-        .tc-print .tc-card-wrap {
-          margin: 2px 0 !important;
+        .tc-print .tc-email-body {
+          max-width: none !important;
         }
       }
     </style>
     <div class="tc-print">
     <div class="email-container">
       <div class="header">
-        <h1>Timecards Submitted</h1>
+        <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:0.02em;">Timecards Submitted</h1>
       </div>
       <div class="content">
-        <p><strong>Job:</strong> ${displayValue(payload.jobName)} ${payload.jobNumber ? `(#${payload.jobNumber})` : ''}</p>
-        <p><strong>Week:</strong> ${weekLabel}</p>
-        <p><strong>Submitted by:</strong> ${displayValue(payload.submittedBy)}</p>
+        <table role="presentation" class="tc-summary-table" style="width:100%; border-collapse:collapse; margin:0 0 12px; border:1px solid #111111;">
+          <tr>
+            <td style="width:60%; padding:4px 8px; font-size:13px; line-height:1.35; border:1px solid #111111;"><strong>Job:</strong> ${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}</td>
+            <td style="width:40%; padding:4px 8px; font-size:13px; line-height:1.35; text-align:right; border:1px solid #111111;"><strong>Week:</strong> ${escapeHtml(weekLabel)}</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="padding:4px 8px; font-size:13px; line-height:1.35; border:1px solid #111111;"><strong>Submitted by:</strong> ${escapeHtml(displayValue(payload.submittedBy))}</td>
+          </tr>
+        </table>
         ${cardsHtml}
       </div>
       <div class="footer">

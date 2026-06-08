@@ -963,6 +963,7 @@ async function flushPendingSaves() {
 
 function handleWorkbookChanged(card: ArchiveTimecardCardRecord) {
   selectCard(card.id)
+  recalculateCardTotals(card, card.archiveWeekStartDate, card.archiveBurden)
   scheduleCardSave(card)
 }
 

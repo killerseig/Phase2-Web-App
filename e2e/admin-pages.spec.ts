@@ -54,6 +54,7 @@ test.describe('admin page coverage', () => {
     await expect(page.getByTestId('timecard-export-page')).toBeVisible()
     await expect(page.getByTestId('timecard-export-week-week-e2e')).toBeVisible()
     await expect(page.getByTestId('timecard-export-week-week-admin-2')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Edit Card' }).first()).toBeVisible()
 
     await page.getByTestId('timecard-export-week-search').fill('sam')
 

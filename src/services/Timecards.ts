@@ -1,13 +1,8 @@
 import {
-  addDoc,
   collection,
-  doc,
   getDocs,
-  increment,
   onSnapshot,
   query,
-  serverTimestamp,
-  updateDoc,
   where,
   type DocumentData,
   type Unsubscribe,
@@ -306,22 +301,29 @@ export async function createTimecardCard(
   }
 
   try {
-    const { auth, db } = requireFirebaseServices()
+    const { functions } = requireFirebaseServices()
     const card = buildEmployeeCard(employee, getWeekEndDateFromStart(weekStartDate), sortIndex, linkedJobNumber ?? '')
-    const payload = {
-      ...sanitizeTimecardCardPayload(card, weekStartDate, DEFAULT_TIMECARD_BURDEN, { includeUpdatedAt: false }),
-      createdAt: serverTimestamp(),
-    }
+    const callable = httpsCallable<
+      {
+        weekId: string
+        weekStartDate: string
+        card: Record<string, unknown>
+      },
+      { id: string }
+    >(functions, 'createTimecardCardRecord')
 
-    const cardRef = await addDoc(collection(db, 'timecardWeeks', weekId, 'cards'), payload)
-
-    await updateDoc(doc(db, 'timecardWeeks', weekId), {
-      employeeCardCount: increment(1),
-      updatedAt: serverTimestamp(),
-      updatedByUserId: auth.currentUser?.uid ?? null,
+    const result = await callable({
+      weekId,
+      weekStartDate,
+      card: sanitizeTimecardCardPayload(card, weekStartDate, DEFAULT_TIMECARD_BURDEN, { includeUpdatedAt: false }),
     })
 
-    return cardRef.id
+    const cardId = String(result.data?.id || '').trim()
+    if (!cardId) {
+      throw new Error('Timecard card did not return an id.')
+    }
+
+    return cardId
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to add the employee card.'))
   }

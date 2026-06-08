@@ -10,6 +10,7 @@ import {
   formatWeekRange,
   getTodayIsoDate,
   getWeekStartFromSaturday,
+  recalculateCardTotals,
   snapToSaturday,
   type TimecardEmployeeSeed,
 } from '@/features/timecards/workbook'
@@ -85,7 +86,6 @@ const customCardForm = reactive<CustomCardFormState>({
 })
 
 const compactCardStates = reactive<Record<string, boolean>>({})
-const adminCardEditStates = reactive<Record<string, boolean>>({})
 const scheduledSaveIds = reactive<Record<string, boolean>>({})
 const savingIds = reactive<Record<string, boolean>>({})
 const queuedSaveIds = reactive<Record<string, boolean>>({})
@@ -209,7 +209,6 @@ function resetCardWorkspaceState() {
   saveTimers.clear()
   savePromises.clear()
   clearStateMap(compactCardStates)
-  clearStateMap(adminCardEditStates)
   clearStateMap(scheduledSaveIds)
   clearStateMap(savingIds)
   clearStateMap(queuedSaveIds)
@@ -315,10 +314,6 @@ function syncCardUiState(nextCards: TimecardCardRecord[]) {
 
   Object.keys(compactCardStates).forEach((cardId) => {
     if (!validIds.has(cardId)) delete compactCardStates[cardId]
-  })
-
-  Object.keys(adminCardEditStates).forEach((cardId) => {
-    if (!validIds.has(cardId)) delete adminCardEditStates[cardId]
   })
 
   Object.keys(cardShellWidths).forEach((cardId) => {
@@ -526,17 +521,8 @@ function toggleCardCompact(cardId: string) {
   compactCardStates[cardId] = !compactCardStates[cardId]
 }
 
-function isCardEditable(cardId: string) {
-  return canEditWeek.value
-}
-
 function isCardReadOnly(cardId: string) {
-  return !isCardEditable(cardId)
-}
-
-function toggleCardEditMode(cardId: string) {
-  if (!canEditWeek.value || !auth.isAdmin) return
-  adminCardEditStates[cardId] = !adminCardEditStates[cardId]
+  return !canEditWeek.value
 }
 
 function setAllCardsCompact(compact: boolean) {
@@ -628,6 +614,7 @@ function getCardScaleStyle(cardId: string) {
 
 function handleWorkbookChanged(card: TimecardCardRecord) {
   selectCard(card.id)
+  recalculateCardTotals(card, selectedWeekStartDate.value, burdenValue.value)
   scheduleCardSave(card)
 }
 
@@ -1260,15 +1247,6 @@ onBeforeUnmount(() => {
                     </span>
                   </button>
 
-                  <button
-                    v-if="auth.isAdmin && canEditWeek"
-                    class="timecards-canvas__item-header-button timecards-canvas__item-header-button--edit"
-                    :class="{ 'timecards-canvas__item-header-button--active': isCardEditable(card.id) }"
-                    type="button"
-                    @click.stop="toggleCardEditMode(card.id)"
-                  >
-                    {{ isCardEditable(card.id) ? 'Lock Card' : 'Edit Card' }}
-                  </button>
                 </div>
 
                 <div

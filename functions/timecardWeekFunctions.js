@@ -42,6 +42,7 @@ const firestoreService_1 = require("./firestoreService");
 const functionConfig_1 = require("./functionConfig");
 const operationsFunctions_1 = require("./operationsFunctions");
 const runtime_1 = require("./runtime");
+const SUBMITTED_WEEK_LOCKED_MESSAGE = 'Week has already been submitted and can no longer be changed.';
 function text(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
@@ -469,7 +470,7 @@ exports.createTimecardCardRecord = (0, https_1.onCall)(async (request) => {
     const user = await getAuthorizedUser(request.auth.uid);
     assertCanWriteJob(user, jobId);
     if (text(week.status) === 'submitted' && user.role === 'foreman') {
-        throw new https_1.HttpsError('failed-precondition', 'Submitted weeks cannot be changed by foremen.');
+        throw new https_1.HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE);
     }
     const createdRef = runtime_1.db.collection('timecardWeeks').doc(weekId).collection('cards').doc();
     await createdRef.set({
@@ -503,7 +504,7 @@ exports.updateTimecardCardRecord = (0, https_1.onCall)(async (request) => {
     const user = await getAuthorizedUser(request.auth.uid);
     assertCanWriteJob(user, jobId);
     if (text(week.status) === 'submitted' && user.role === 'foreman') {
-        throw new https_1.HttpsError('failed-precondition', 'Submitted weeks cannot be changed by foremen.');
+        throw new https_1.HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE);
     }
     const cardRef = runtime_1.db.collection('timecardWeeks').doc(weekId).collection('cards').doc(cardId);
     const cardSnap = await cardRef.get();
@@ -531,7 +532,7 @@ exports.deleteTimecardCardRecord = (0, https_1.onCall)(async (request) => {
     const user = await getAuthorizedUser(request.auth.uid);
     assertCanWriteJob(user, jobId);
     if (text(week.status) === 'submitted' && user.role === 'foreman') {
-        throw new https_1.HttpsError('failed-precondition', 'Submitted weeks cannot be changed by foremen.');
+        throw new https_1.HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE);
     }
     const cardRef = runtime_1.db.collection('timecardWeeks').doc(weekId).collection('cards').doc(cardId);
     const cardSnap = await cardRef.get();

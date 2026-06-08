@@ -983,11 +983,12 @@ function handleSheetKeydown(event: KeyboardEvent) {
                 <td
                   v-for="(value, index) in visibleHoursByDay"
                   :key="`hours-${index}`"
+                  :data-testid="`timecard-total-hours-day-${index}`"
                   class="timecard-grid__total-day"
                 >
                   {{ formatHours(value) }}
                 </td>
-                <td>{{ formatHours(card.totals.hoursTotal) }}</td>
+                <td data-testid="timecard-total-hours">{{ formatHours(card.totals.hoursTotal) }}</td>
                 <td></td>
                 <td></td>
               </tr>
@@ -1003,11 +1004,11 @@ function handleSheetKeydown(event: KeyboardEvent) {
           <div class="timecard-card__footer-label timecard-card__footer-label--amt">AMT</div>
           <div class="timecard-card__footer-stat-label timecard-card__footer-stat-label--ot">OT</div>
           <div class="timecard-card__footer-stat-line timecard-card__footer-stat-line--ot">
-            <span class="timecard-card__footer-stat-value">{{ formatTrimmedNumber(hoursBreakdown.overtimeHours, 1) }}</span>
+            <span class="timecard-card__footer-stat-value" data-testid="timecard-overtime-hours">{{ formatTrimmedNumber(hoursBreakdown.overtimeHours, 1) }}</span>
           </div>
           <div class="timecard-card__footer-stat-label timecard-card__footer-stat-label--reg">REG</div>
           <div class="timecard-card__footer-stat-line timecard-card__footer-stat-line--reg">
-            <span class="timecard-card__footer-stat-value">{{ formatTrimmedNumber(hoursBreakdown.regularHours, 1) }}</span>
+            <span class="timecard-card__footer-stat-value" data-testid="timecard-regular-hours">{{ formatTrimmedNumber(hoursBreakdown.regularHours, 1) }}</span>
           </div>
 
           <div class="timecard-card__footer-box timecard-card__footer-box--job">

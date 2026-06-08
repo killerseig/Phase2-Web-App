@@ -38,6 +38,8 @@ interface SubmitTimecardWeekResponse {
   emailMessage: string
 }
 
+const SUBMITTED_WEEK_LOCKED_MESSAGE = 'Week has already been submitted and can no longer be changed.'
+
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -516,7 +518,7 @@ export const createTimecardCardRecord = onCall(async (request) => {
   assertCanWriteJob(user, jobId)
 
   if (text(week.status) === 'submitted' && user.role === 'foreman') {
-    throw new HttpsError('failed-precondition', 'Submitted weeks cannot be changed by foremen.')
+    throw new HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE)
   }
 
   const createdRef = db.collection('timecardWeeks').doc(weekId).collection('cards').doc()
@@ -553,7 +555,7 @@ export const updateTimecardCardRecord = onCall(async (request) => {
   assertCanWriteJob(user, jobId)
 
   if (text(week.status) === 'submitted' && user.role === 'foreman') {
-    throw new HttpsError('failed-precondition', 'Submitted weeks cannot be changed by foremen.')
+    throw new HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE)
   }
 
   const cardRef = db.collection('timecardWeeks').doc(weekId).collection('cards').doc(cardId)
@@ -586,7 +588,7 @@ export const deleteTimecardCardRecord = onCall(async (request) => {
   assertCanWriteJob(user, jobId)
 
   if (text(week.status) === 'submitted' && user.role === 'foreman') {
-    throw new HttpsError('failed-precondition', 'Submitted weeks cannot be changed by foremen.')
+    throw new HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE)
   }
 
   const cardRef = db.collection('timecardWeeks').doc(weekId).collection('cards').doc(cardId)

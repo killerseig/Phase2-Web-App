@@ -2,6 +2,13 @@ import { expect, test } from '@playwright/test'
 import { createTimecardsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('timecard workbook regressions', () => {
+  test('job timecard page does not show lock card controls', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
+
+    await expect(page.getByRole('button', { name: 'Lock Card' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Edit Card' })).toHaveCount(0)
+  })
+
   test('seeded cards keep the linked job number on every starting row', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
 
@@ -59,6 +66,26 @@ test.describe('timecard workbook regressions', () => {
 
     await secondJobNumber.press('ArrowUp')
     await expect(firstJobNumber).toBeFocused()
+  })
+
+  test('total hours, REG, and OT update immediately while typing hours', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
+
+    const mondayHours = page.locator('.timecard-grid__body-row--hours .timecard-grid__day-cell input').first()
+
+    await expect(page.getByTestId('timecard-total-hours')).toHaveText('0.0')
+    await expect(page.getByTestId('timecard-regular-hours')).toHaveText('0')
+    await expect(page.getByTestId('timecard-overtime-hours')).toHaveText('0')
+
+    await mondayHours.fill('8')
+    await expect(page.getByTestId('timecard-total-hours')).toHaveText('8.0')
+    await expect(page.getByTestId('timecard-regular-hours')).toHaveText('8')
+    await expect(page.getByTestId('timecard-overtime-hours')).toHaveText('0')
+
+    await mondayHours.fill('45')
+    await expect(page.getByTestId('timecard-total-hours')).toHaveText('45.0')
+    await expect(page.getByTestId('timecard-regular-hours')).toHaveText('40')
+    await expect(page.getByTestId('timecard-overtime-hours')).toHaveText('5')
   })
 
   test('new card creation uses the current linked job number for all initial rows', async ({ page }) => {
