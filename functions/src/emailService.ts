@@ -374,6 +374,36 @@ export function buildTimecardsEmail(payload: {
   weekStart?: string
   timecards: any[]
 }): string {
+  const emailSummaryStart = payload.weekStart ? new Date(`${payload.weekStart}T00:00:00`) : null
+  const emailSummaryEnd = emailSummaryStart && !Number.isNaN(emailSummaryStart.getTime()) ? new Date(emailSummaryStart) : null
+  if (emailSummaryEnd) emailSummaryEnd.setDate(emailSummaryEnd.getDate() + 6)
+
+  const emailWeekLabel = emailSummaryStart && emailSummaryEnd
+    ? `${emailSummaryStart.getMonth() + 1}/${emailSummaryStart.getDate()}/${emailSummaryStart.getFullYear()} - ${emailSummaryEnd.getMonth() + 1}/${emailSummaryEnd.getDate()}/${emailSummaryEnd.getFullYear()}`
+    : 'N/A'
+
+  const timecardCount = Array.isArray(payload.timecards) ? payload.timecards.length : 0
+  const jobHeading = `${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}`
+
+  return `
+    ${EMAIL_STYLES}
+    <div class="email-container">
+      <div class="header">
+        <h1>Timecards Submitted</h1>
+      </div>
+      <div class="content">
+        <h2 style="color:#333333; font-size:18px; margin:0 0 12px;">${jobHeading}</h2>
+        <p><strong>Week:</strong> ${escapeHtml(emailWeekLabel)}</p>
+        <p><strong>Submitted by:</strong> ${escapeHtml(displayValue(payload.submittedBy))}</p>
+        <p><strong>Timecards:</strong> ${timecardCount}</p>
+        <p>The timecard PDF is attached to this email.</p>
+        <p>Please review the attached PDF for the full timecard layout and details.</p>
+      </div>
+    </div>
+  `
+
+  const totalTimecards = Array.isArray(payload.timecards) ? payload.timecards.length : 0
+  const cardScale = totalTimecards === 1 ? 1.18 : 1
   const visibleDayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
   const visibleDayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
   const columnWidthPercents = [
@@ -382,6 +412,12 @@ export function buildTimecardsEmail(payload: {
     '9.46', '9.46', '9.46',
   ]
   const cardColgroupHtml = columnWidthPercents.map((percent) => `<col style="width:${percent}%;" />`).join('')
+  const scaleLength = (value: string): string => {
+    const matched = /^(-?\d*\.?\d+)([a-zA-Z%]+)$/.exec(value.trim())
+    if (!matched) return value
+    const scaled = Number((Number(matched[1]) * cardScale).toFixed(4))
+    return `${scaled}${matched[2]}`
+  }
 
   const formatDateOnly = (value: any): string => {
     if (!value) return ''
@@ -536,18 +572,20 @@ export function buildTimecardsEmail(payload: {
   }
 
   const summaryStart = payload.weekStart ? new Date(`${payload.weekStart}T00:00:00`) : null
-  const summaryEnd = summaryStart && !Number.isNaN(summaryStart.getTime()) ? new Date(summaryStart) : null
-  if (summaryEnd) summaryEnd.setDate(summaryEnd.getDate() + 6)
-  const weekLabel = summaryStart && summaryEnd
-    ? `${summaryStart.getMonth() + 1}/${summaryStart.getDate()}/${summaryStart.getFullYear()} - ${summaryEnd.getMonth() + 1}/${summaryEnd.getDate()}/${summaryEnd.getFullYear()}`
+  const validSummaryStart = summaryStart instanceof Date && !Number.isNaN(summaryStart!.getTime()) ? summaryStart : null
+  const summaryEnd = validSummaryStart !== null ? new Date(validSummaryStart!.getTime()) : null
+  if (summaryEnd !== null) summaryEnd!.setDate(summaryEnd!.getDate() + 6)
+  const weekLabel = validSummaryStart !== null && summaryEnd !== null
+    ? `${validSummaryStart!.getMonth() + 1}/${validSummaryStart!.getDate()}/${validSummaryStart!.getFullYear()} - ${summaryEnd!.getMonth() + 1}/${summaryEnd!.getDate()}/${summaryEnd!.getFullYear()}`
     : 'N/A'
   const lineRowKinds = [
     { key: 'hours', label: 'H', diffField: 'difH' },
     { key: 'production', label: 'P', diffField: 'difP' },
     { key: 'cost', label: 'C', diffField: 'difC' },
   ] as const
-  const cardWidth = '5.078in'
-
+  const cardWidth = scaleLength('5.078in')
+  const singleSheetWidth = scaleLength('5.4in')
+  const doubleSheetWidth = '10.95in'
   const cardMarkupList = (Array.isArray(payload.timecards) ? payload.timecards : []).map((tc) => {
     const lines = (Array.isArray(tc?.lines) ? tc.lines : []).filter((line: any) => isMeaningfulLine(line))
 
@@ -566,33 +604,49 @@ export function buildTimecardsEmail(payload: {
 
     const thinBorder = '1px solid #111111'
     const thickBorder = '1.5px solid #111111'
-    const brandHeight = '21.853pt'
-    const headerRowHeight = '11.849pt'
-    const headerGapHeight = '9.8pt'
-    const gridHeaderHeight = '12.15pt'
-    const gridBodyHeight = '8.03pt'
-    const gridTotalHeight = '16.01pt'
-    const footerLabelRowHeight = '13.079pt'
-    const footerBoxRowHeight = '15.539pt'
-    const footerAuxRowHeight = '13.079pt'
-    const bottomSpacerHeight = '10.2pt'
+    const brandHeight = scaleLength('21.853pt')
+    const headerRowHeight = scaleLength('11.849pt')
+    const headerGapHeight = scaleLength('9.8pt')
+    const gridHeaderHeight = scaleLength('12.15pt')
+    const gridBodyHeight = scaleLength('8.03pt')
+    const gridTotalHeight = scaleLength('16.01pt')
+    const footerLabelRowHeight = scaleLength('13.079pt')
+    const footerBoxRowHeight = scaleLength('15.539pt')
+    const footerAuxRowHeight = scaleLength('13.079pt')
+    const bottomSpacerHeight = scaleLength('10.2pt')
+    const brandFontSize = scaleLength('0.18in')
+    const bodyFontSize = scaleLength('0.098in')
+    const headerFontSize = scaleLength('0.086in')
+    const totalFontSize = scaleLength('0.105in')
+    const labelFontSize = scaleLength('0.09in')
+    const valueFontSize = scaleLength('0.105in')
+    const valueFontLarge = scaleLength('0.115in')
+    const footerValueFontSize = scaleLength('0.1in')
+    const footerBoxFontSize = scaleLength('0.095in')
+    const fieldPadX = scaleLength('0.03in')
+    const fieldPadBottom = scaleLength('0.02in')
+    const rightPad = scaleLength('0.08in')
+    const summaryPadTop = scaleLength('0.015in')
+    const footerBoxPadY = scaleLength('0.01in')
+    const footerBoxPadX = scaleLength('0.02in')
+    const footerValuePadBottom = scaleLength('0.01in')
     const blankCell = 'border:0; padding:0; font-size:0; line-height:1;'
-    const baseCell = `border:${thinBorder}; padding:0; height:${gridBodyHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:0.098in;`
-    const headerCell = `border:${thinBorder}; padding:0; height:${gridHeaderHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:0.086in; font-style:italic; font-weight:400;`
-    const totalCell = `border:${thinBorder}; padding:0; height:${gridTotalHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:0.105in; font-weight:700;`
-    const formLabelCell = `border:0; height:${headerRowHeight}; padding:0 0.03in 0.02in 0; white-space:nowrap; text-align:right; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-style:italic; font-weight:400; line-height:1;`
+    const baseCell = `border:${thinBorder}; padding:0; height:${gridBodyHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:${bodyFontSize};`
+    const headerCell = `border:${thinBorder}; padding:0; height:${gridHeaderHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:${headerFontSize}; font-style:italic; font-weight:400;`
+    const totalCell = `border:${thinBorder}; padding:0; height:${gridTotalHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:${totalFontSize}; font-weight:700;`
+    const formLabelCell = `border:0; height:${headerRowHeight}; padding:0 ${fieldPadX} ${fieldPadBottom} 0; white-space:nowrap; text-align:right; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-style:italic; font-weight:400; line-height:1;`
     const renderFormValueCell = (align: 'left' | 'center' | 'right' = 'left', fontSize = '0.105in') => (
-      `border:0; border-bottom:1px solid #111111; height:${headerRowHeight}; padding:0 0.03in 0.02in; text-align:${align}; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${fontSize}; font-weight:700; line-height:1;`
+      `border:0; border-bottom:1px solid #111111; height:${headerRowHeight}; padding:0 ${fieldPadX} ${fieldPadBottom}; text-align:${align}; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${scaleLength(fontSize)}; font-weight:700; line-height:1;`
     )
-    const footerLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
-    const footerStatLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
-    const footerStatValueCell = `border:0; border-bottom:1px solid #111111; height:${footerLabelRowHeight}; padding:0 0 0.01in; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.1in; font-weight:700; line-height:1;`
-    const footerStatLabelRowTwoCell = `border:0; height:${footerBoxRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
-    const footerStatValueRowTwoCell = `border:0; border-bottom:1px solid #111111; height:${footerBoxRowHeight}; padding:0 0 0.01in; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.1in; font-weight:700; line-height:1;`
-    const footerBoxCell = `border:${thinBorder}; height:${footerBoxRowHeight}; padding:0.01in 0.02in; text-align:center; vertical-align:middle; font-family:'Times New Roman', Times, serif; font-size:0.095in; font-weight:700; line-height:1;`
-    const footerAuxBoxCell = `border:${thinBorder}; height:${footerAuxRowHeight}; padding:0.01in 0.02in; text-align:center; vertical-align:middle; font-family:'Times New Roman', Times, serif; font-size:0.095in; font-weight:700; line-height:1;`
-    const notesLabelCell = `border:0; height:${footerAuxRowHeight}; padding:0 0.02in 0 0; text-align:right; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.09in; font-weight:400; line-height:1;`
-    const notesLineCell = `border:0; border-bottom:1px solid #111111; height:${footerAuxRowHeight}; padding:0 0 0.01in; text-align:left; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:0.095in; line-height:1;`
+    const footerLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-weight:400; line-height:1;`
+    const footerStatLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-weight:400; line-height:1;`
+    const footerStatValueCell = `border:0; border-bottom:1px solid #111111; height:${footerLabelRowHeight}; padding:0 0 ${footerValuePadBottom}; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${footerValueFontSize}; font-weight:700; line-height:1;`
+    const footerStatLabelRowTwoCell = `border:0; height:${footerBoxRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-weight:400; line-height:1;`
+    const footerStatValueRowTwoCell = `border:0; border-bottom:1px solid #111111; height:${footerBoxRowHeight}; padding:0 0 ${footerValuePadBottom}; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${footerValueFontSize}; font-weight:700; line-height:1;`
+    const footerBoxCell = `border:${thinBorder}; height:${footerBoxRowHeight}; padding:${footerBoxPadY} ${footerBoxPadX}; text-align:center; vertical-align:middle; font-family:'Times New Roman', Times, serif; font-size:${footerBoxFontSize}; font-weight:700; line-height:1;`
+    const footerAuxBoxCell = `border:${thinBorder}; height:${footerAuxRowHeight}; padding:${footerBoxPadY} ${footerBoxPadX}; text-align:center; vertical-align:middle; font-family:'Times New Roman', Times, serif; font-size:${footerBoxFontSize}; font-weight:700; line-height:1;`
+    const notesLabelCell = `border:0; height:${footerAuxRowHeight}; padding:0 ${footerBoxPadX} 0 0; text-align:right; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-weight:400; line-height:1;`
+    const notesLineCell = `border:0; border-bottom:1px solid #111111; height:${footerAuxRowHeight}; padding:0 0 ${footerValuePadBottom}; text-align:left; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${footerBoxFontSize}; line-height:1;`
     const maxLineGroups = 13
     const employeeName = displayText(getEmployeeName(tc), '-')
     const employeeNumber = displayText(tc?.employeeNumber || tc?.employeeId, '-')
@@ -626,7 +680,7 @@ export function buildTimecardsEmail(payload: {
         const productionCell = rowKind.key === 'hours'
           ? ''
           : rowKind.key === 'production'
-            ? formatTrimmedNumber(lineProductionTotal, 3, false)
+            ? formatTrimmedNumber(lineProductionTotal, 3, true)
             : formatFixedNumber(lineCostTotal, 3, true)
         const offCell = hasLine
           ? rowKind.key === 'hours'
@@ -658,7 +712,7 @@ export function buildTimecardsEmail(payload: {
                 : ''
               return `<td style="${detailStyle}">${renderOptionalText(dayValue)}</td>`
             }).join('')}
-            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:top; padding-top:0.015in; font-weight:700;">${renderOptionalText(hasLine ? formatHours(lineHoursTotal) : '')}</td>` : ''}
+            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:top; padding-top:${summaryPadTop}; font-weight:700;">${renderOptionalText(hasLine ? formatHours(lineHoursTotal, true) : '')}</td>` : ''}
             <td style="${detailStyle}">${renderOptionalText(productionCell)}</td>
             <td style="${detailStyle}">${renderOptionalText(offCell)}</td>
           </tr>
@@ -669,13 +723,13 @@ export function buildTimecardsEmail(payload: {
     return `
       <table role="presentation" class="tc-card-wrap" style="width:${cardWidth}; border-collapse:collapse; table-layout:fixed; margin:0; border:1px solid #111111; background:#ffffff; color:#111111; font-family:'Times New Roman', Times, serif;">
         <tr>
-          <td style="height:${brandHeight}; padding:0 0.08in; border:0; text-align:center; vertical-align:middle; font-family:Arial, Helvetica, sans-serif; font-size:0.18in; font-weight:700; line-height:1;">PHASE 2 COMPANY</td>
+          <td style="height:${brandHeight}; padding:0 ${rightPad}; border:0; text-align:center; vertical-align:middle; font-family:Arial, Helvetica, sans-serif; font-size:${brandFontSize}; font-weight:700; line-height:1;">PHASE 2 COMPANY</td>
         </tr>
         <tr>
           <td style="padding:0; border:0;">
               <table role="presentation" style="width:100%; border-collapse:collapse; border:0; margin:0;">
                 <tr>
-                  <td style="border:0; padding:0 0.08in;">
+                  <td style="border:0; padding:0 ${rightPad};">
                     <table role="presentation" style="width:100%; border-collapse:collapse; table-layout:fixed; border:0; margin:0;">
                       <colgroup>${cardColgroupHtml}</colgroup>
                       <tr>
@@ -728,56 +782,49 @@ export function buildTimecardsEmail(payload: {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colspan="5" style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder}; text-align:right; padding-right:0.08in;">TOTAL HOURS</td>
+                    <td colspan="5" style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder}; text-align:right; padding-right:${rightPad};">TOTAL HOURS</td>
                     ${totalHoursByDay.map((value) => `<td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatHours(value))}</td>`).join('')}
-                    <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatHours(hoursTotal))}</td>
-                    <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatTrimmedNumber(productionTotal, 3, false))}</td>
+                    <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatHours(hoursTotal, true))}</td>
+                    <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">${renderOptionalText(formatTrimmedNumber(productionTotal, 3, true))}</td>
                     <td style="${totalCell} border-top:${thickBorder}; border-bottom:${thickBorder};">&nbsp;</td>
                   </tr>
+                  <tr>
+                    <td colspan="3" style="${footerLabelCell}">JOB or GL</td>
+                    <td colspan="2" style="${footerLabelCell}">ACCT</td>
+                    <td colspan="2" style="${footerLabelCell}">OFFICE</td>
+                    <td colspan="2" style="${footerLabelCell}">AMT</td>
+                    <td style="${blankCell} height:${footerLabelRowHeight};">&nbsp;</td>
+                    <td style="${footerStatLabelCell}">OT</td>
+                    <td style="${footerStatValueCell}">${renderOptionalText(overtimeLabel)}</td>
+                    <td colspan="2" style="${blankCell} height:${footerLabelRowHeight};">&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td colspan="3" style="${footerBoxCell}">${renderOptionalText(tc?.footerJobOrGl)}</td>
+                    <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerAccount)}</td>
+                    <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerOffice)}</td>
+                    <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerAmount)}</td>
+                    <td style="${blankCell} height:${footerBoxRowHeight};">&nbsp;</td>
+                    <td style="${footerStatLabelRowTwoCell}">REG</td>
+                    <td style="${footerStatValueRowTwoCell}">${renderOptionalText(regularLabel)}</td>
+                    <td colspan="2" style="${blankCell} height:${footerBoxRowHeight};">&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td colspan="3" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondJobOrGl)}</td>
+                    <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondAccount)}</td>
+                    <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondOffice)}</td>
+                    <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondAmount)}</td>
+                    <td colspan="5" style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                    <td colspan="2" style="${notesLabelCell}">NOTES:</td>
+                    <td colspan="10" style="${notesLineCell}">${renderOptionalText(tc?.notes)}</td>
+                    <td style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td colspan="14" style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
+                  </tr>
                 </tfoot>
-              </table>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:0; border:0; vertical-align:top;">
-              <table role="presentation" style="width:100%; border-collapse:collapse; table-layout:fixed; margin:0; border:0;">
-                <colgroup>${cardColgroupHtml}</colgroup>
-                <tr>
-                  <td colspan="3" style="${footerLabelCell}">JOB or GL</td>
-                  <td colspan="2" style="${footerLabelCell}">ACCT</td>
-                  <td colspan="2" style="${footerLabelCell}">OFFICE</td>
-                  <td colspan="2" style="${footerLabelCell}">AMT</td>
-                  <td style="${blankCell} height:${footerLabelRowHeight};">&nbsp;</td>
-                  <td style="${footerStatLabelCell}">OT</td>
-                  <td style="${footerStatValueCell}">${renderOptionalText(overtimeLabel)}</td>
-                  <td colspan="2" style="${blankCell} height:${footerLabelRowHeight};">&nbsp;</td>
-                </tr>
-                <tr>
-                  <td colspan="3" style="${footerBoxCell}">${renderOptionalText(tc?.footerJobOrGl)}</td>
-                  <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerAccount)}</td>
-                  <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerOffice)}</td>
-                  <td colspan="2" style="${footerBoxCell}">${renderOptionalText(tc?.footerAmount)}</td>
-                  <td style="${blankCell} height:${footerBoxRowHeight};">&nbsp;</td>
-                  <td style="${footerStatLabelRowTwoCell}">REG</td>
-                  <td style="${footerStatValueRowTwoCell}">${renderOptionalText(regularLabel)}</td>
-                  <td colspan="2" style="${blankCell} height:${footerBoxRowHeight};">&nbsp;</td>
-                </tr>
-                <tr>
-                  <td colspan="3" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondJobOrGl)}</td>
-                  <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondAccount)}</td>
-                  <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondOffice)}</td>
-                  <td colspan="2" style="${footerAuxBoxCell}">${renderOptionalText(tc?.footerSecondAmount)}</td>
-                  <td colspan="5" style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
-                </tr>
-                <tr>
-                  <td style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
-                  <td colspan="2" style="${notesLabelCell}">NOTES:</td>
-                  <td colspan="10" style="${notesLineCell}">${renderOptionalText(tc?.notes)}</td>
-                  <td style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
-                </tr>
-                <tr>
-                  <td colspan="14" style="${blankCell} height:${footerAuxRowHeight};">&nbsp;</td>
-                </tr>
               </table>
           </td>
         </tr>
@@ -793,22 +840,35 @@ export function buildTimecardsEmail(payload: {
       ${Array.from({ length: Math.ceil(cardMarkupList.length / 2) }, (_, pairIndex) => {
         const left = cardMarkupList[pairIndex * 2] || ''
         const right = cardMarkupList[pairIndex * 2 + 1] || ''
+        const jobHeading = `${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}`
+
+        const pageWidth = right ? '11in' : '8.5in'
+        const leftCellWidth = right ? '50%' : cardWidth
+        const rightCellHtml = right
+          ? `<td style="width:50%; vertical-align:top; padding:0 0 0 0.16in; border:0; text-align:left;">${right}</td>`
+          : '<td style="padding:0; border:0; vertical-align:top;">&nbsp;</td>'
 
         return `
-          <table role="presentation" class="tc-sheet" style="width:100%; border-collapse:collapse; table-layout:fixed; border:0.75px solid #111111; margin:0 0 18px; font-family:Arial, Helvetica, sans-serif;">
+          <table role="presentation" class="tc-sheet" style="width:${pageWidth}; max-width:100%; border-collapse:collapse; table-layout:fixed; border:1px solid #111111; margin:0 auto 18px; background:#ffffff; color:#111111; font-family:Arial, Helvetica, sans-serif;">
             <tr>
-              <td colspan="2" style="padding:14px 16px 12px; border-bottom:0.75px solid #111111; text-align:center; font-size:24px; font-weight:700; letter-spacing:0.02em;">Timecards Submitted</td>
+              <td colspan="2" style="padding:14px 18px; border-bottom:1px solid #111111; text-align:center; font-size:24px; font-weight:700; line-height:1.1;">Timecards Submitted</td>
             </tr>
             <tr>
-              <td style="width:60%; padding:4px 8px; border-right:0.75px solid #111111; border-bottom:0.75px solid #111111; font-size:13px; line-height:1.35;"><strong>Job:</strong> ${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}</td>
-              <td style="width:40%; padding:4px 8px; border-bottom:0.75px solid #111111; font-size:13px; line-height:1.35; text-align:right;"><strong>Week:</strong> ${escapeHtml(weekLabel)}</td>
+              <td style="padding:6px 12px; border-right:1px solid #111111; border-bottom:1px solid #111111; font-size:14px; line-height:1.25; text-align:left; vertical-align:top;"><strong>Job:</strong> ${jobHeading}</td>
+              <td style="padding:6px 12px; border-bottom:1px solid #111111; font-size:14px; line-height:1.25; text-align:right; vertical-align:top;"><strong>Week:</strong> ${escapeHtml(weekLabel)}</td>
             </tr>
             <tr>
-              <td colspan="2" style="padding:4px 8px; border-bottom:0.75px solid #111111; font-size:13px; line-height:1.35;"><strong>Submitted by:</strong> ${escapeHtml(displayValue(payload.submittedBy))}</td>
+              <td colspan="2" style="padding:6px 12px; border-bottom:1px solid #111111; font-size:14px; line-height:1.25; text-align:left; vertical-align:top;"><strong>Submitted by:</strong> ${escapeHtml(displayValue(payload.submittedBy))}</td>
             </tr>
             <tr>
-              <td style="width:50%; vertical-align:top; padding:12px 18px 12px 12px; border:0;">${left}</td>
-              <td style="width:50%; vertical-align:top; padding:12px 12px 12px 18px; border:0;">${right || '&nbsp;'}</td>
+              <td colspan="2" style="padding:10px 12px 12px; border:0; vertical-align:top;">
+                <table role="presentation" style="width:100%; border-collapse:collapse; table-layout:fixed; margin:0; border:0;">
+                  <tr>
+                    <td style="width:${leftCellWidth}; vertical-align:top; padding:0; border:0; text-align:left;">${left}</td>
+                    ${rightCellHtml}
+                  </tr>
+                </table>
+              </td>
             </tr>
           </table>
         `
@@ -817,100 +877,17 @@ export function buildTimecardsEmail(payload: {
     : '<p style="margin:0; font-size:13px;">No timecards found.</p>'
 
   return `
-    <div style="background:#ffffff; padding:8px; color:#111111; font-family:Arial, Helvetica, sans-serif;">
+    <div style="background:#ffffff; padding:0; color:#111111; font-family:Arial, Helvetica, sans-serif;">
       ${cardsHtml}
     </div>
   `
-
-  return `
-    ${EMAIL_STYLES}
-    <style>
-      .tc-print {
-        background:#ffffff !important;
-        padding:8px !important;
-        color:#111111 !important;
-      }
-      .tc-print .tc-email-body {
-        width: 10.95in !important;
-        max-width: 10.95in !important;
-        margin: 0 auto !important;
-      }
-      .tc-print .email-container {
-        width: 10.95in !important;
-        max-width: 10.95in !important;
-        margin: 0 auto !important;
-        background: #ffffff !important;
-        padding: 0 !important;
-      }
-      .tc-print .content {
-        background: #ffffff !important;
-        border: 0 !important;
-        padding: 0 !important;
-        line-height: normal !important;
-      }
-      .tc-print .header,
-      .tc-print .footer,
-      .tc-print .tc-summary-table {
-        display: none !important;
-      }
-      .tc-print table,
-      .tc-print th,
-      .tc-print td {
-        color: #111111 !important;
-        background: #ffffff !important;
-        border-color: #111111 !important;
-      }
-      .tc-print table {
-        margin: 0 !important;
-        border-spacing: 0 !important;
-      }
-      .tc-print tr {
-        background: #ffffff !important;
-      }
-      .tc-print .tc-card-wrap,
-      .tc-print .tc-sheet {
-        page-break-inside: avoid !important;
-        break-inside: avoid-page !important;
-      }
-      .tc-print .tc-card-wrap {
-        width: 5.078in !important;
-        max-width: 5.078in !important;
-        box-sizing: border-box !important;
-        margin: 0 auto !important;
-      }
-      @media print {
-        .tc-print {
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        .tc-print .tc-email-body {
-          max-width: none !important;
-        }
-      }
-    </style>
-    <div class="tc-print">
-    <div class="email-container">
-      <div class="header">
-        <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:0.02em;">Timecards Submitted</h1>
-      </div>
-      <div class="content">
-        <table role="presentation" class="tc-summary-table" style="width:100%; border-collapse:collapse; margin:0 0 12px; border:1px solid #111111;">
-          <tr>
-            <td style="width:60%; padding:4px 8px; font-size:13px; line-height:1.35; border:1px solid #111111;"><strong>Job:</strong> ${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}</td>
-            <td style="width:40%; padding:4px 8px; font-size:13px; line-height:1.35; text-align:right; border:1px solid #111111;"><strong>Week:</strong> ${escapeHtml(weekLabel)}</td>
-          </tr>
-          <tr>
-            <td colspan="2" style="padding:4px 8px; font-size:13px; line-height:1.35; border:1px solid #111111;"><strong>Submitted by:</strong> ${escapeHtml(displayValue(payload.submittedBy))}</td>
-          </tr>
-        </table>
-        ${cardsHtml}
-      </div>
+/*      </div>
       <div class="footer">
         <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>
     </div>
-  `
+  `*/
 }
 
 /**

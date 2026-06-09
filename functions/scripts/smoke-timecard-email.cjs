@@ -68,12 +68,12 @@ async function main() {
 
   assert.equal(html.includes('Timecards Submitted'), true, 'email should include the submitted heading')
   assert.equal(html.includes('Chris (CJ) Larsen'), true, 'email should include the submitter name')
-  assert.equal(html.includes('9411'), true, 'email should include the job number from the workbook row')
-  assert.equal(html.includes('EMP. NAME:'), true, 'email should include the print-style employee label')
-  assert.equal(html.includes('Larsen, Chris'), true, 'email should render the print-style employee name')
-  assert.equal(html.includes('WEEK ENDING'), true, 'email should include the print-style week ending field')
-  assert.equal(html.includes('JOB or GL'), true, 'email should include the print-style footer fields')
-  assert.equal(html.includes('MON'), true, 'email should use the Mon-Sat print header')
+  assert.equal(html.includes('Phase 2 Company Acoustical remodel (#1A)'), true, 'email should include the job heading')
+  assert.equal(html.includes('6/1/2026 - 6/7/2026'), true, 'email should include the week range')
+  assert.equal(html.includes('The timecard PDF is attached to this email.'), true, 'email should tell recipients to use the PDF attachment')
+  assert.equal(html.includes('Please review the attached PDF for the full timecard layout and details.'), true, 'email should point readers to the attached PDF')
+  assert.equal(html.includes('EMP. NAME:'), false, 'email should not inline the print-style timecard anymore')
+  assert.equal(html.includes('JOB or GL'), false, 'email should not inline the print-style footer fields anymore')
   assert.equal(html.includes('STATUS:'), false, 'email should not include the legacy status field')
 
   const csv = buildTimecardCsv([normalized], '2026-06-01', '1A')
