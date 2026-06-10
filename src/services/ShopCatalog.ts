@@ -11,7 +11,17 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { requireFirebaseServices } from '@/firebase'
-import { isE2EActive, subscribeE2EShopCatalogItems, subscribeE2EShopCategories } from '@/testing/e2eRuntime'
+import {
+  createE2EShopCatalogItem,
+  createE2EShopCategory,
+  deleteE2EShopCatalogItem,
+  deleteE2EShopCategory,
+  isE2EActive,
+  subscribeE2EShopCatalogItems,
+  subscribeE2EShopCategories,
+  updateE2EShopCatalogItem,
+  updateE2EShopCategory,
+} from '@/testing/e2eRuntime'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -123,6 +133,10 @@ export function subscribeShopCatalogItems(
 }
 
 export async function createShopCategory(input: CreateCategoryInput): Promise<string> {
+  if (isE2EActive()) {
+    return createE2EShopCategory(input)
+  }
+
   try {
     const { db } = requireFirebaseServices()
     const reference = await addDoc(collection(db, 'shopCategories'), {
@@ -140,6 +154,11 @@ export async function createShopCategory(input: CreateCategoryInput): Promise<st
 }
 
 export async function updateShopCategory(categoryId: string, input: UpdateCategoryInput): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2EShopCategory(categoryId, input)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await updateDoc(doc(db, 'shopCategories', categoryId), {
@@ -154,6 +173,11 @@ export async function updateShopCategory(categoryId: string, input: UpdateCatego
 }
 
 export async function deleteShopCategory(categoryId: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2EShopCategory(categoryId)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await deleteDoc(doc(db, 'shopCategories', categoryId))
@@ -163,6 +187,10 @@ export async function deleteShopCategory(categoryId: string): Promise<void> {
 }
 
 export async function createShopCatalogItem(input: CreateCatalogItemInput): Promise<string> {
+  if (isE2EActive()) {
+    return createE2EShopCatalogItem(input)
+  }
+
   try {
     const { db } = requireFirebaseServices()
     const reference = await addDoc(collection(db, 'shopCatalog'), {
@@ -182,6 +210,11 @@ export async function createShopCatalogItem(input: CreateCatalogItemInput): Prom
 }
 
 export async function updateShopCatalogItem(itemId: string, input: UpdateCatalogItemInput): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2EShopCatalogItem(itemId, input)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await updateDoc(doc(db, 'shopCatalog', itemId), {
@@ -198,6 +231,11 @@ export async function updateShopCatalogItem(itemId: string, input: UpdateCatalog
 }
 
 export async function deleteShopCatalogItem(itemId: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2EShopCatalogItem(itemId)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await deleteDoc(doc(db, 'shopCatalog', itemId))

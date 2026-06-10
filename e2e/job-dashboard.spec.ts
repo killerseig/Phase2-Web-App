@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './helpers/test.js'
 import { createJobDashboardFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('job dashboard navigation', () => {

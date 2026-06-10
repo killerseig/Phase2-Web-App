@@ -8,6 +8,8 @@ import {
 } from '@/features/timecards/workbook'
 import type {
   DailyLogPayload,
+  DailyLogAttachmentRecord,
+  DailyLogAttachmentType,
   DailyLogRecord,
   EmployeeRecord,
   JobRecord,
@@ -140,6 +142,24 @@ function normalizeNotificationRecipients(value: unknown): NotificationRecipients
       ? source.shopOrders.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim().toLowerCase()).filter(Boolean)
       : [],
   }
+}
+
+function normalizeEmailAddress(value: unknown) {
+  if (typeof value !== 'string') return ''
+  return value.trim().toLowerCase()
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return Array.from(
+    new Set(
+      value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  )
 }
 
 function normalizeState(state: Phase2E2EState): Phase2E2EState {
@@ -373,6 +393,13 @@ function notifyEmployeeListeners() {
   }
 }
 
+function notifyAssignedJobsChanged(changedJobIds: string[]) {
+  notifyVisibleJobsListeners()
+  for (const jobId of changedJobIds) {
+    notifyJobListeners(jobId)
+  }
+}
+
 function notifyGlobalRecipientsListeners() {
   const recipients = cloneValue(requireState().globalNotificationRecipients ?? normalizeNotificationRecipients(null))
   for (const listener of globalRecipientsListeners) {
@@ -516,6 +543,22 @@ function normalizeQuantity(value: unknown): number | null {
   return Math.round(parsed)
 }
 
+function normalizePrice(value: unknown): number | null {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return parsed
+}
+
+function normalizeNullableText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length ? trimmed : null
+}
+
+function sanitizeAttachmentType(value: unknown): DailyLogAttachmentType {
+  return value === 'ptp' || value === 'qc' || value === 'other' ? value : 'photo'
+}
+
 function normalizeItems(items: ShopOrderItemRecord[]): ShopOrderItemRecord[] {
   return items
     .map((item): ShopOrderItemRecord => ({
@@ -556,6 +599,49 @@ function updateUserAssignments(jobId: string, nextAssignedForemanIds: string[]) 
       assignedJobIds: Array.from(nextAssignedJobIds),
     }
   })
+}
+
+function syncE2EUserJobAssignments(
+  uid: string,
+  role: Exclude<UserProfile['role'], 'none'>,
+  nextAssignedJobIds: string[],
+) {
+  const state = requireState()
+  const effectiveAssignedJobIds = role === 'foreman' ? normalizeStringList(nextAssignedJobIds) : []
+  const changedJobIds: string[] = []
+
+  state.jobs = state.jobs.map((job) => {
+    const nextAssignedForemanIds = new Set(job.assignedForemanIds)
+    const hadUser = nextAssignedForemanIds.has(uid)
+    const shouldHaveUser = role === 'foreman' && effectiveAssignedJobIds.includes(job.id)
+
+    if (shouldHaveUser) {
+      nextAssignedForemanIds.add(uid)
+    } else {
+      nextAssignedForemanIds.delete(uid)
+    }
+
+    const nextIds = Array.from(nextAssignedForemanIds)
+    const changed = hadUser !== shouldHaveUser || nextIds.length !== job.assignedForemanIds.length
+    if (changed) {
+      changedJobIds.push(job.id)
+      return {
+        ...job,
+        assignedForemanIds: nextIds,
+      }
+    }
+
+    return job
+  })
+
+  return effectiveAssignedJobIds.length ? Array.from(new Set([...changedJobIds, ...effectiveAssignedJobIds])) : changedJobIds
+}
+
+function getCurrentE2EWeekEndDate() {
+  const current = getNowValue()
+  const offset = (6 - current.getDay() + 7) % 7
+  current.setDate(current.getDate() + offset)
+  return formatIsoDate(current)
 }
 
 export function isE2EActive() {
@@ -647,6 +733,127 @@ export function subscribeE2EShopCatalogItems(onUpdate: CatalogItemsListener) {
   return () => {
     catalogItemListeners.delete(onUpdate)
   }
+}
+
+export async function createE2EShopCategory(input: {
+  name: string
+  parentId: string | null
+  active: boolean
+}) {
+  const state = requireState()
+  const categoryId = makeId('shop-category')
+
+  state.shopCategories.push({
+    id: categoryId,
+    name: input.name.trim(),
+    parentId: normalizeNullableText(input.parentId),
+    active: input.active,
+  })
+
+  notifyCategoryListeners()
+  return categoryId
+}
+
+export async function updateE2EShopCategory(
+  categoryId: string,
+  input: {
+    name: string
+    parentId: string | null
+    active: boolean
+  },
+) {
+  const state = requireState()
+  const index = state.shopCategories.findIndex((category) => category.id === categoryId)
+  if (index === -1) {
+    throw new Error('Folder not found.')
+  }
+
+  state.shopCategories[index] = {
+    ...state.shopCategories[index]!,
+    name: input.name.trim(),
+    parentId: normalizeNullableText(input.parentId),
+    active: input.active,
+  }
+
+  notifyCategoryListeners()
+}
+
+export async function deleteE2EShopCategory(categoryId: string) {
+  const state = requireState()
+  const exists = state.shopCategories.some((category) => category.id === categoryId)
+  if (!exists) {
+    throw new Error('Folder not found.')
+  }
+
+  state.shopCategories = state.shopCategories.filter((category) => category.id !== categoryId)
+  state.shopCatalogItems = state.shopCatalogItems.map((item) => (
+    item.categoryId === categoryId ? { ...item, categoryId: null } : item
+  ))
+
+  notifyCategoryListeners()
+  notifyCatalogItemListeners()
+}
+
+export async function createE2EShopCatalogItem(input: {
+  description: string
+  categoryId: string | null
+  sku: string | null
+  price: number | null
+  active: boolean
+}) {
+  const state = requireState()
+  const itemId = makeId('shop-item')
+
+  state.shopCatalogItems.push({
+    id: itemId,
+    description: input.description.trim(),
+    categoryId: normalizeNullableText(input.categoryId),
+    sku: normalizeNullableText(input.sku),
+    price: normalizePrice(input.price),
+    active: input.active,
+  })
+
+  notifyCatalogItemListeners()
+  return itemId
+}
+
+export async function updateE2EShopCatalogItem(
+  itemId: string,
+  input: {
+    description: string
+    categoryId: string | null
+    sku: string | null
+    price: number | null
+    active: boolean
+  },
+) {
+  const state = requireState()
+  const index = state.shopCatalogItems.findIndex((item) => item.id === itemId)
+  if (index === -1) {
+    throw new Error('Catalog item not found.')
+  }
+
+  state.shopCatalogItems[index] = {
+    ...state.shopCatalogItems[index]!,
+    description: input.description.trim(),
+    categoryId: normalizeNullableText(input.categoryId),
+    sku: normalizeNullableText(input.sku),
+    price: normalizePrice(input.price),
+    active: input.active,
+  }
+
+  notifyCatalogItemListeners()
+}
+
+export async function deleteE2EShopCatalogItem(itemId: string) {
+  const state = requireState()
+  const exists = state.shopCatalogItems.some((item) => item.id === itemId)
+  if (!exists) {
+    throw new Error('Catalog item not found.')
+  }
+
+  state.shopCatalogItems = state.shopCatalogItems.filter((item) => item.id !== itemId)
+  notifyCatalogItemListeners()
 }
 
 export function subscribeE2EShopOrders(jobId: string, onUpdate: ShopOrdersListener) {
@@ -868,6 +1075,254 @@ export async function updateE2EGlobalNotificationRecipients(
   notifyGlobalRecipientsListeners()
 }
 
+export async function createE2EUser(input: {
+  email: string
+  firstName: string
+  lastName: string
+  role: 'admin' | 'foreman'
+  assignedJobIds?: string[]
+  sendInvite?: boolean
+}) {
+  const state = requireState()
+  state.users ??= []
+
+  const email = normalizeEmailAddress(input.email)
+  if (!email) {
+    throw new Error('Enter the email, first name, and last name.')
+  }
+
+  const duplicate = state.users.find((user) => normalizeEmailAddress(user.email) === email)
+  if (duplicate) {
+    throw new Error('A user with that email already exists.')
+  }
+
+  const uid = makeId('user')
+  const role = input.role === 'admin' ? 'admin' : 'foreman'
+  const assignedJobIds = role === 'foreman' ? normalizeStringList(input.assignedJobIds) : []
+  const inviteSent = input.sendInvite === true
+  const now = getNowValue().toISOString()
+
+  state.users.push({
+    id: uid,
+    email,
+    firstName: input.firstName.trim(),
+    lastName: input.lastName.trim(),
+    role,
+    active: true,
+    assignedJobIds,
+    inviteStatus: inviteSent ? 'sent' : 'pending',
+    inviteSentAt: inviteSent ? now : null,
+  })
+
+  const changedJobIds = syncE2EUserJobAssignments(uid, role, assignedJobIds)
+  notifyUserListeners()
+  notifyAssignedJobsChanged(changedJobIds)
+
+  return {
+    success: true,
+    uid,
+    message: inviteSent ? 'User created. Invite sent.' : 'User created. Invite queued.',
+  }
+}
+
+export async function updateE2EUser(
+  uid: string,
+  input: {
+    firstName: string
+    lastName: string
+    role: 'admin' | 'foreman'
+    active: boolean
+    assignedJobIds?: string[]
+  },
+) {
+  const state = requireState()
+  const index = state.users?.findIndex((user) => user.id === uid) ?? -1
+  if (index === -1 || !state.users) {
+    throw new Error('User not found.')
+  }
+
+  const existingUser = state.users[index]!
+  const role = input.role === 'admin' ? 'admin' : 'foreman'
+  const assignedJobIds = role === 'foreman' ? normalizeStringList(input.assignedJobIds) : []
+
+  state.users[index] = {
+    ...existingUser,
+    firstName: input.firstName.trim(),
+    lastName: input.lastName.trim(),
+    role,
+    active: input.active,
+    assignedJobIds,
+  }
+
+  const changedJobIds = syncE2EUserJobAssignments(uid, role, assignedJobIds)
+  notifyUserListeners()
+  notifyAssignedJobsChanged(changedJobIds)
+}
+
+export async function deleteE2EUser(uid: string) {
+  const state = requireState()
+  const existingUser = state.users?.find((user) => user.id === uid)
+  if (!existingUser || !state.users) {
+    throw new Error('User not found.')
+  }
+
+  state.users = state.users.filter((user) => user.id !== uid)
+  const changedJobIds = syncE2EUserJobAssignments(uid, 'admin', [])
+  notifyUserListeners()
+  notifyAssignedJobsChanged(changedJobIds)
+
+  return {
+    success: true,
+    message: 'User deleted.',
+    removedFromRecipientLists: false,
+    updatedJobCount: changedJobIds.length,
+  }
+}
+
+export async function sendE2EPendingUserInvites() {
+  const state = requireState()
+  state.users ??= []
+
+  const now = getNowValue().toISOString()
+  let sentCount = 0
+
+  state.users = state.users.map((user) => {
+    if (user.inviteStatus !== 'pending' || !user.active || !normalizeEmailAddress(user.email)) {
+      return user
+    }
+
+    sentCount += 1
+    return {
+      ...user,
+      inviteStatus: 'sent',
+      inviteSentAt: now,
+    }
+  })
+
+  notifyUserListeners()
+
+  return {
+    success: true,
+    sentCount,
+    skippedCount: 0,
+    message: sentCount === 1 ? 'Sent 1 pending invite.' : `Sent ${sentCount} pending invites.`,
+  }
+}
+
+export async function createE2EEmployee(input: {
+  employeeNumber: string
+  firstName: string
+  lastName: string
+  occupation: string
+  active: boolean
+  isContractor: boolean
+}) {
+  const state = requireState()
+  state.employees ??= []
+
+  const employeeNumber = String(input.employeeNumber).trim()
+  if (state.employees.some((employee) => employee.employeeNumber.trim() === employeeNumber)) {
+    throw new Error(`Employee number ${employeeNumber} already exists.`)
+  }
+
+  const employeeId = makeId('employee')
+  state.employees.push({
+    id: employeeId,
+    employeeNumber,
+    firstName: input.firstName.trim(),
+    lastName: input.lastName.trim(),
+    occupation: input.occupation.trim(),
+    active: input.active,
+    isContractor: input.isContractor,
+    jobId: null,
+  })
+
+  notifyEmployeeListeners()
+  return employeeId
+}
+
+export async function updateE2EEmployee(
+  employeeId: string,
+  input: {
+    employeeNumber: string
+    firstName: string
+    lastName: string
+    occupation: string
+    active: boolean
+    isContractor: boolean
+  },
+) {
+  const state = requireState()
+  const index = state.employees?.findIndex((employee) => employee.id === employeeId) ?? -1
+  if (index === -1 || !state.employees) {
+    throw new Error('Employee not found.')
+  }
+
+  const employeeNumber = String(input.employeeNumber).trim()
+  const duplicate = state.employees.find((employee) => employee.id !== employeeId && employee.employeeNumber.trim() === employeeNumber)
+  if (duplicate) {
+    throw new Error(`Employee number ${employeeNumber} already exists.`)
+  }
+
+  state.employees[index] = {
+    ...state.employees[index]!,
+    employeeNumber,
+    firstName: input.firstName.trim(),
+    lastName: input.lastName.trim(),
+    occupation: input.occupation.trim(),
+    active: input.active,
+    isContractor: input.isContractor,
+  }
+
+  const currentWeekEndDate = getCurrentE2EWeekEndDate()
+  const changedWeeks = new Set<string>()
+
+  state.timecardCards = (state.timecardCards ?? []).map((card) => {
+    if (card.employeeId !== employeeId || card.sourceType === 'custom') {
+      return card
+    }
+
+    const week = state.timecardWeeks?.find((entry) => entry.id === card.weekId)
+    if (!week || week.status === 'submitted' || week.weekEndDate !== currentWeekEndDate) {
+      return card
+    }
+
+    changedWeeks.add(week.id)
+    return {
+      ...card,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      fullName: buildCardDisplayName({
+        ...card,
+        firstName: input.firstName.trim(),
+        lastName: input.lastName.trim(),
+      }),
+      employeeNumber,
+      occupation: input.occupation.trim(),
+      isContractor: input.isContractor,
+      updatedAt: getNowValue().toISOString(),
+    }
+  })
+
+  notifyEmployeeListeners()
+  for (const weekId of changedWeeks) {
+    const week = state.timecardWeeks?.find((entry) => entry.id === weekId)
+    if (!week) continue
+    notifyTimecardsChanged(week.jobId, weekId)
+  }
+}
+
+export async function deleteE2EEmployee(employeeId: string) {
+  const state = requireState()
+  const existingEmployee = state.employees?.find((employee) => employee.id === employeeId)
+  if (!existingEmployee || !state.employees) {
+    throw new Error('Employee not found.')
+  }
+
+  state.employees = state.employees.filter((employee) => employee.id !== employeeId)
+  notifyEmployeeListeners()
+}
+
 export async function createE2EShopOrder(input: {
   jobId: string
   jobCode: string | null
@@ -1061,6 +1516,31 @@ export async function deleteE2EDailyLog(dailyLogId: string) {
 
 export async function sendE2EDailyLogEmail() {
   return 'Email sent successfully'
+}
+
+export async function uploadE2EDailyLogAttachment(
+  file: File,
+  dailyLogId: string,
+  type: DailyLogAttachmentType,
+  description: string,
+): Promise<DailyLogAttachmentRecord> {
+  const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+  const attachmentPath = `e2e/daily-logs/${dailyLogId}/${makeId('attachment')}-${safeName}`
+
+  return {
+    name: file.name,
+    url: typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+      ? URL.createObjectURL(file)
+      : `data:${file.type || 'application/octet-stream'},`,
+    path: attachmentPath,
+    type: sanitizeAttachmentType(type),
+    description: description.trim(),
+    createdAt: getNowValue().toISOString(),
+  }
+}
+
+export async function deleteE2EDailyLogAttachment(_path: string): Promise<void> {
+  return
 }
 
 export async function ensureE2ETimecardWeek(input: {

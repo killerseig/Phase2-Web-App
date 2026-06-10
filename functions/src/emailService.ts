@@ -1183,6 +1183,91 @@ function renderPrintedOrderPlainField(value: string, align: 'left' | 'right' = '
   `
 }
 
+const SHOP_ORDER_EMAIL_PRINT_STYLES = `
+  <style>
+    .shop-order-email__items-table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+      table-layout: fixed !important;
+    }
+    .shop-order-email__items-table thead {
+      display: table-header-group !important;
+    }
+    .shop-order-email__items-table tbody {
+      display: table-row-group !important;
+    }
+    .shop-order-email__items-table tfoot {
+      display: table-footer-group !important;
+    }
+    .shop-order-email__items-table tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid-page !important;
+    }
+    @media print {
+      .shop-order-email__items-table {
+        width: 100% !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+      }
+      .shop-order-email__items-table thead {
+        display: table-header-group !important;
+      }
+      .shop-order-email__items-table tbody {
+        display: table-row-group !important;
+      }
+      .shop-order-email__items-table tfoot {
+        display: table-footer-group !important;
+      }
+      .shop-order-email__items-table tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+      }
+    }
+  </style>
+` as const
+const SHOP_ORDER_ITEMS_PER_PRINT_PAGE = 20
+
+function chunkShopOrderEmailLines(items: ShopOrderEmailLine[]) {
+  const chunks: ShopOrderEmailLine[][] = []
+  for (let index = 0; index < items.length; index += SHOP_ORDER_ITEMS_PER_PRINT_PAGE) {
+    chunks.push(items.slice(index, index + SHOP_ORDER_ITEMS_PER_PRINT_PAGE))
+  }
+  return chunks
+}
+
+function renderPrintedShopOrderItemsTable(items: ShopOrderEmailLine[], marginTop = 10) {
+  return `
+    <table class="shop-order-email__items-table" style="width: 100%; border-collapse: collapse; margin-top: ${marginTop}px; border: 1px solid #d8d8d8; page-break-inside: auto; break-inside: auto; table-layout: fixed;">
+      <thead style="display: table-header-group !important;">
+        <tr>
+          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 54px;">Pulled<br>By</th>
+          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 58px;">Verified<br>By</th>
+          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 62px;">133/513</th>
+          <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left;">Item Name</th>
+          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 70px;">Quantity</th>
+          <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; width: 150px;">Notes</th>
+          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 46px;">&nbsp;</th>
+        </tr>
+      </thead>
+      <tbody style="display: table-row-group !important;">
+        ${items.map((item) => `
+          <tr style="page-break-inside: avoid !important; break-inside: avoid-page !important;">
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; line-height: 1.25;">${renderEmailText(item.displayDescription, 'Untitled Item')}</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">${item.orderedQuantity}</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333;">${renderOptionalEmailText(item.note)}</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+}
+
 function renderPrintedShopOrderSection(
   orderIdentifier: string,
   orderBy: string,
@@ -1193,6 +1278,7 @@ function renderPrintedShopOrderSection(
   items: ShopOrderEmailLine[],
 ) {
   if (!items.length) return ''
+  const [firstItemPage, ...continuedItemPages] = chunkShopOrderEmailLines(items)
 
   return `
     <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; page-break-inside: auto;">
@@ -1247,36 +1333,22 @@ function renderPrintedShopOrderSection(
               `
               : ''}
 
-            <table role="presentation" style="width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #d8d8d8; page-break-inside: auto;">
-              <thead style="display: table-header-group;">
-                <tr>
-                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 54px;">Pulled<br>By</th>
-                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 58px;">Verified<br>By</th>
-                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 62px;">133/513</th>
-                  <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left;">Item Name</th>
-                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 70px;">Quantity</th>
-                  <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; width: 150px;">Notes</th>
-                  <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 46px;">&nbsp;</th>
-                </tr>
-              </thead>
-              <tbody style="display: table-row-group;">
-                ${items.map((item) => `
-                  <tr style="page-break-inside: avoid; break-inside: avoid;">
-                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-                    <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; line-height: 1.25;">${renderEmailText(item.displayDescription, 'Untitled Item')}</td>
-                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">${item.orderedQuantity}</td>
-                    <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333;">${renderOptionalEmailText(item.note)}</td>
-                    <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+            ${renderPrintedShopOrderItemsTable(firstItemPage)}
           </td>
         </tr>
       </tbody>
     </table>
+    ${continuedItemPages.map((itemPage) => `
+      <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; page-break-before: always; break-before: page;">
+        <tbody>
+          <tr>
+            <td style="border: none; padding: 14px 14px 12px;">
+              ${renderPrintedShopOrderItemsTable(itemPage, 0)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `).join('')}
   `
 }
 
@@ -1355,6 +1427,7 @@ export function buildShopOrderEmail(
 
   return `
     ${EMAIL_STYLES}
+    ${SHOP_ORDER_EMAIL_PRINT_STYLES}
     <div class="email-container" style="font-family: Arial, sans-serif; background-color: #efefef; padding: 16px;">
       <div class="content" style="background-color: #ffffff; padding: 14px; line-height: 1.45; color: #222222;">
         ${hasTotalAmount ? `<div style="margin-bottom: 10px; font-size: 14px; color: #333333;"><strong>Estimated Total:</strong> $${totalAmount.toFixed(2)}</div>` : ''}

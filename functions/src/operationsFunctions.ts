@@ -340,7 +340,7 @@ function formatPlexxisEmployeeName(timecard: any): string {
   if (lastNameRaw) return lastNameRaw
   if (firstNameRaw) return firstNameRaw
 
-  const employeeName = String(timecard?.employeeName || '').trim()
+  const employeeName = String(timecard?.fullName || timecard?.employeeName || '').trim()
   if (!employeeName) return ''
   if (employeeName.includes(',')) return employeeName
 
@@ -351,6 +351,146 @@ function formatPlexxisEmployeeName(timecard: any): string {
     return `${last}, ${first}`
   }
   return employeeName
+}
+
+function getTimecardDisplayEmployeeCode(timecard: any): string {
+  return String(timecard?.employeeNumber || timecard?.employeeCode || '').trim()
+}
+
+function toNullableNumber(value: any): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) return null
+  return numeric
+}
+
+async function hydrateTimecardIdentityFields(timecards: any[]): Promise<any[]> {
+  const entries = Array.isArray(timecards) ? timecards : []
+  if (!entries.length) return []
+
+  const employeeIds = Array.from(new Set(
+    entries
+      .map((timecard) => String(timecard?.employeeId || '').trim())
+      .filter(Boolean),
+  ))
+
+  const rosterKeys = Array.from(new Set(
+    entries
+      .map((timecard) => {
+        const jobId = String(timecard?.jobId || timecard?.__jobId || '').trim()
+        const rosterId = String(timecard?.employeeRosterId || '').trim()
+        return jobId && rosterId ? `${jobId}:${rosterId}` : ''
+      })
+      .filter(Boolean),
+  ))
+
+  const employeeDirectory = new Map<string, any>()
+  const rosterDirectory = new Map<string, any>()
+
+  if (employeeIds.length) {
+    const employeeSnapshots = await Promise.all(
+      employeeIds.map(async (employeeId) => ({
+        employeeId,
+        snap: await db.collection('employees').doc(employeeId).get(),
+      })),
+    )
+
+    employeeSnapshots.forEach(({ employeeId, snap }) => {
+      if (snap.exists) {
+        employeeDirectory.set(employeeId, snap.data() || {})
+      }
+    })
+  }
+
+  if (rosterKeys.length) {
+    const rosterSnapshots = await Promise.all(
+      rosterKeys.map(async (key) => {
+        const separatorIndex = key.indexOf(':')
+        const jobId = key.slice(0, separatorIndex)
+        const rosterId = key.slice(separatorIndex + 1)
+        return {
+          key,
+          snap: await db.collection(COLLECTIONS.JOBS).doc(jobId).collection('roster').doc(rosterId).get(),
+        }
+      }),
+    )
+
+    rosterSnapshots.forEach(({ key, snap }) => {
+      if (snap.exists) {
+        rosterDirectory.set(key, snap.data() || {})
+      }
+    })
+  }
+
+  return entries.map((timecard) => {
+    const employeeId = String(timecard?.employeeId || '').trim()
+    const jobId = String(timecard?.jobId || timecard?.__jobId || '').trim()
+    const rosterId = String(timecard?.employeeRosterId || '').trim()
+    const rosterKey = jobId && rosterId ? `${jobId}:${rosterId}` : ''
+    const employeeRecord = employeeDirectory.get(employeeId) || {}
+    const rosterRecord = rosterKey ? (rosterDirectory.get(rosterKey) || {}) : {}
+
+    const firstName = String(
+      timecard?.firstName
+      || employeeRecord?.firstName
+      || rosterRecord?.firstName
+      || '',
+    ).trim()
+    const lastName = String(
+      timecard?.lastName
+      || employeeRecord?.lastName
+      || rosterRecord?.lastName
+      || '',
+    ).trim()
+    const fallbackFullName = [firstName, lastName].filter(Boolean).join(' ').trim()
+    const fullName = String(
+      timecard?.fullName
+      || timecard?.employeeName
+      || fallbackFullName
+      || [employeeRecord?.firstName, employeeRecord?.lastName].filter(Boolean).join(' ')
+      || [rosterRecord?.firstName, rosterRecord?.lastName].filter(Boolean).join(' ')
+      || '',
+    ).trim()
+    const employeeName = String(timecard?.employeeName || fullName).trim()
+    const employeeNumber = String(
+      timecard?.employeeNumber
+      || timecard?.employeeCode
+      || employeeRecord?.employeeNumber
+      || rosterRecord?.employeeNumber
+      || '',
+    ).trim()
+    const occupation = String(
+      timecard?.occupation
+      || employeeRecord?.occupation
+      || rosterRecord?.occupation
+      || '',
+    ).trim()
+    const wageRate = toNullableNumber(
+      timecard?.wageRate
+      ?? timecard?.employeeWage
+      ?? timecard?.wage
+      ?? employeeRecord?.wageRate
+      ?? rosterRecord?.wageRate,
+    )
+
+    return {
+      ...timecard,
+      firstName,
+      lastName,
+      fullName,
+      employeeName,
+      employeeNumber,
+      occupation,
+      wageRate,
+      employeeWage: timecard?.employeeWage ?? wageRate,
+      wage: timecard?.wage ?? wageRate,
+    }
+  })
+}
+
+export async function prepareTimecardsForPdfCsvExport(timecards: any[]): Promise<any[]> {
+  const hydratedTimecards = await hydrateTimecardIdentityFields(timecards)
+  return hydratedTimecards.map(normalizeTimecardForEmail)
 }
 
 function getLineDaySum(line: any, key: 'hours' | 'production', dayKey: typeof DAY_KEYS[number]): number {
@@ -833,7 +973,7 @@ function validatePdfCsvHourParity(timecards: any[]): void {
       .reduce((sum: number, line: any) => sum + getLineTotalHoursForForm(line), 0)
 
     if (Math.abs(roundToHundredths(pdfHours) - roundToHundredths(csvHours)) > 0.001) {
-      const employeeName = String(tc?.employeeName || tc?.employeeCode || tc?.employeeNumber || 'Unknown employee').trim()
+      const employeeName = formatPlexxisEmployeeName(tc) || getTimecardDisplayEmployeeCode(tc) || 'Unknown employee'
       mismatches.push(`${employeeName}: PDF ${roundToHundredths(pdfHours)} vs CSV ${roundToHundredths(csvHours)}`)
     }
   }
@@ -1211,7 +1351,7 @@ export const sendTimecardEmail = onCall({ secrets: getGraphEmailSecrets() }, asy
       throw new HttpsError('failed-precondition', 'Only submitted timecards can be emailed')
     }
 
-    const normalizedTimecards = timecards.map(normalizeTimecardForEmail)
+    const normalizedTimecards = await prepareTimecardsForPdfCsvExport(timecards)
 
     const job = await getJobDetails(jobId)
     const userName = await getUserDisplayName(request.auth.uid, request.auth.token.email)
@@ -1972,8 +2112,7 @@ export const downloadTimecardsForWeek = onCall(async (request) => {
       throw new HttpsError('not-found', 'No timecards found for the selected filters')
     }
 
-    const normalizedTimecards = result.exportTimecards
-      .map(normalizeTimecardForEmail)
+    const normalizedTimecards = (await prepareTimecardsForPdfCsvExport(result.exportTimecards))
       .filter((tc: any) => hasMeaningfulTimecard(tc))
       .sort((a: any, b: any) => {
         const weekCompare = String(a?.weekStartDate || '').localeCompare(String(b?.weekStartDate || ''))
@@ -2049,13 +2188,13 @@ export function buildTimecardCsv(timecards: any[], weekStart: string, defaultJob
   for (const tc of Array.isArray(timecards) ? timecards : []) {
     const lines = Array.isArray(tc?.lines) && tc.lines.length ? tc.lines : []
     const employeeName = formatPlexxisEmployeeName(tc)
-    const employeeCode = String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim()
+    const employeeCode = getTimecardDisplayEmployeeCode(tc)
 
     for (const line of lines) {
       const subSection = getLineSubSection(line)
       const activityCode = sanitizeActivityCode(getLineActivityCode(line), line, [
         String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim(),
-        String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim(),
+        getTimecardDisplayEmployeeCode(tc),
       ])
       const costCode = getLineCostCode(line)
       const rowJobCode = String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim()
@@ -2459,8 +2598,8 @@ export async function buildTimecardPdfBuffer(payload: {
         .text('PHASE 2 COMPANY', innerX, cursorY, { width: innerWidth, align: 'center' })
       cursorY += 14
 
-      const employeeName = renderBlankTemplate ? '' : String(tc?.employeeName || '').trim()
-      const employeeCode = renderBlankTemplate ? '' : String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim()
+      const employeeName = renderBlankTemplate ? '' : formatPlexxisEmployeeName(tc)
+      const employeeCode = renderBlankTemplate ? '' : getTimecardDisplayEmployeeCode(tc)
       const occupation = renderBlankTemplate ? '' : String(tc?.occupation || '').trim()
       const wageNumeric = toNumber(tc?.employeeWage ?? tc?.wage)
       const wageSource = tc?.employeeWage ?? tc?.wage ?? ''
@@ -2530,7 +2669,7 @@ export async function buildTimecardPdfBuffer(payload: {
         const account = hasLine
           ? sanitizeActivityCode(getLineActivityCode(line), line, [
             jobCode,
-            String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim(),
+            getTimecardDisplayEmployeeCode(tc),
           ])
           : ''
         const lineHoursTotal = hasLine ? getLineTotalHoursForForm(line) : 0

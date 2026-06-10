@@ -1,3 +1,4 @@
+export declare function prepareTimecardsForPdfCsvExport(timecards: any[]): Promise<any[]>;
 export declare function normalizeTimecardForEmail(tc: any): any;
 /**
  * Send Daily Log via email

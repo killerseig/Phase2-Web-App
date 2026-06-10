@@ -12,7 +12,14 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
-import { isE2EActive, subscribeE2EUsers } from '@/testing/e2eRuntime'
+import {
+  createE2EUser,
+  deleteE2EUser,
+  isE2EActive,
+  sendE2EPendingUserInvites,
+  subscribeE2EUsers,
+  updateE2EUser,
+} from '@/testing/e2eRuntime'
 import type { RoleKey, UserProfile } from '@/types/domain'
 import { normalizeRoleKey, toEffectiveRole } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
@@ -147,6 +154,18 @@ export function subscribeUsers(
 }
 
 export async function createUserByAdmin(input: CreateUserInput): Promise<CreateUserByAdminResponse> {
+  if (isE2EActive()) {
+    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    return createE2EUser({
+      email: input.email,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      role: sanitizedRole,
+      assignedJobIds: sanitizedRole === 'foreman' ? normalizeAssignedJobIds(input.assignedJobIds) : [],
+      sendInvite: input.sendInvite === true,
+    })
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<CreateUserInput, CreateUserByAdminResponse>(functions, 'createUserByAdmin')
@@ -180,6 +199,18 @@ export async function createUserByAdmin(input: CreateUserInput): Promise<CreateU
 }
 
 export async function updateUser(uid: string, input: UpdateUserInput): Promise<void> {
+  if (isE2EActive()) {
+    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    await updateE2EUser(uid, {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      role: sanitizedRole,
+      active: input.active,
+      assignedJobIds: sanitizedRole === 'foreman' ? normalizeAssignedJobIds(input.assignedJobIds) : [],
+    })
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
@@ -199,6 +230,10 @@ export async function updateUser(uid: string, input: UpdateUserInput): Promise<v
 }
 
 export async function deleteUserByAdmin(uid: string): Promise<DeleteUserResult> {
+  if (isE2EActive()) {
+    return deleteE2EUser(uid)
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<{ uid: string }, DeleteUserResult>(functions, 'deleteUser')
@@ -210,6 +245,10 @@ export async function deleteUserByAdmin(uid: string): Promise<DeleteUserResult> 
 }
 
 export async function sendPendingInvitesByAdmin(): Promise<SendPendingUserInvitesResult> {
+  if (isE2EActive()) {
+    return sendE2EPendingUserInvites()
+  }
+
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<Record<string, never>, SendPendingUserInvitesResult>(functions, 'sendPendingUserInvites')

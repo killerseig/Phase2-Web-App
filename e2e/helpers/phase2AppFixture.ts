@@ -1,12 +1,25 @@
 import type { Page } from '@playwright/test'
+import type {
+  DailyLogRecord,
+  EmployeeRecord,
+  NotificationRecipients,
+  ShopCatalogItemRecord,
+  ShopCategoryRecord,
+  ShopOrderRecord,
+  TimecardCardRecord,
+  TimecardWeekRecord,
+  UserProfile,
+} from '../../src/types/domain.js'
 
 declare global {
   interface Window {
     __PHASE2_E2E__?: unknown
+    __PHASE2_E2E_STATE__?: unknown
   }
 }
 
 type FixtureAuthKind = 'admin' | 'foreman'
+type FixtureTimecardCard = TimecardCardRecord & { weekId: string }
 
 const FIXTURE_NOW = '2026-06-04T09:00:00-06:00'
 const JOB_ID = 'job-e2e'
@@ -206,20 +219,20 @@ function createBaseFixture(authKind: FixtureAuthKind, assignedJobIds = [JOB_ID])
         active: true,
         assignedJobIds,
       },
-    ],
+    ] as UserProfile[],
     jobs: [createJob()],
-    employees: [],
-    shopCategories: [],
-    shopCatalogItems: [],
-    shopOrders: [],
-    dailyLogs: [],
-    timecardWeeks: [],
-    timecardCards: [],
+    employees: [] as EmployeeRecord[],
+    shopCategories: [] as ShopCategoryRecord[],
+    shopCatalogItems: [] as ShopCatalogItemRecord[],
+    shopOrders: [] as ShopOrderRecord[],
+    dailyLogs: [] as DailyLogRecord[],
+    timecardWeeks: [] as TimecardWeekRecord[],
+    timecardCards: [] as FixtureTimecardCard[],
     globalNotificationRecipients: {
       dailyLogs: [],
       timecards: [],
       shopOrders: [],
-    },
+    } as NotificationRecipients,
   }
 }
 

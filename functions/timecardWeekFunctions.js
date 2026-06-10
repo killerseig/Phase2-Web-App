@@ -318,7 +318,7 @@ async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName) {
     const jobName = text(job?.name || week?.jobName);
     const productionBurden = job?.productionBurden;
     const submittedBy = submittedByName || textOrNull(week?.submittedByName) || 'Phase 2 Foreman';
-    const normalizedTimecards = cards.map((card) => (0, operationsFunctions_1.normalizeTimecardForEmail)({
+    const normalizedTimecards = await (0, operationsFunctions_1.prepareTimecardsForPdfCsvExport)(cards.map((card) => ({
         ...card,
         weekStartDate: weekStart,
         weekEndingDate: weekEnd,
@@ -328,7 +328,7 @@ async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName) {
         wage: card?.wageRate ?? null,
         productionBurden,
         status: 'submitted',
-    }));
+    })));
     const html = (0, emailService_1.buildTimecardsEmail)({
         jobName,
         jobNumber,

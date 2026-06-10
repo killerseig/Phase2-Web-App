@@ -26,10 +26,12 @@ import type {
 import {
   createE2EDailyLog,
   deleteE2EDailyLog,
+  deleteE2EDailyLogAttachment,
   isE2EActive,
   sendE2EDailyLogEmail,
   subscribeE2EDailyLogsForDate,
   updateE2EDailyLog,
+  uploadE2EDailyLogAttachment,
 } from '@/testing/e2eRuntime'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -462,6 +464,10 @@ export async function uploadDailyLogAttachment(
   type: DailyLogAttachmentType,
   description: string,
 ): Promise<DailyLogAttachmentRecord> {
+  if (isE2EActive()) {
+    return uploadE2EDailyLogAttachment(file, dailyLogId, type, description)
+  }
+
   try {
     const { auth, storage } = requireFirebaseServices()
     const currentUserId = auth.currentUser?.uid
@@ -499,6 +505,11 @@ export async function uploadDailyLogAttachment(
 }
 
 export async function deleteDailyLogAttachment(path: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2EDailyLogAttachment(path)
+    return
+  }
+
   try {
     const { storage } = requireFirebaseServices()
     await deleteObject(storageRef(storage, path))

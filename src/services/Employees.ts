@@ -16,7 +16,13 @@ import {
 import { requireFirebaseServices } from '@/firebase'
 import { getTodayIsoDate, getWeekStartFromSaturday, snapToSaturday } from '@/features/timecards/workbook'
 import { normalizeTimecardCardData, sanitizeTimecardCardPayload } from '@/services/timecards'
-import { isE2EActive, subscribeE2EEmployees } from '@/testing/e2eRuntime'
+import {
+  createE2EEmployee,
+  deleteE2EEmployee,
+  isE2EActive,
+  subscribeE2EEmployees,
+  updateE2EEmployee,
+} from '@/testing/e2eRuntime'
 import type { EmployeeRecord } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -165,6 +171,10 @@ export function subscribeEmployees(
 }
 
 export async function createEmployeeRecord(input: EmployeeInput): Promise<string> {
+  if (isE2EActive()) {
+    return createE2EEmployee(input)
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await assertUniqueEmployeeNumber(input.employeeNumber)
@@ -187,6 +197,11 @@ export async function createEmployeeRecord(input: EmployeeInput): Promise<string
 }
 
 export async function updateEmployeeRecord(employeeId: string, input: EmployeeInput): Promise<void> {
+  if (isE2EActive()) {
+    await updateE2EEmployee(employeeId, input)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await assertUniqueEmployeeNumber(input.employeeNumber, employeeId)
@@ -208,6 +223,11 @@ export async function updateEmployeeRecord(employeeId: string, input: EmployeeIn
 }
 
 export async function deleteEmployeeRecord(employeeId: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2EEmployee(employeeId)
+    return
+  }
+
   try {
     const { db } = requireFirebaseServices()
     await deleteDoc(doc(db, 'employees', employeeId))

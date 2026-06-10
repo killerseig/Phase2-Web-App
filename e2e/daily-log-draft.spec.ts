@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './helpers/test.js'
 import { createDailyLogsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('daily log draft regressions', () => {
@@ -11,8 +11,6 @@ test.describe('daily log draft regressions', () => {
     await expect(weeklySchedule).toBeVisible()
     await weeklySchedule.fill(text)
     await expect(weeklySchedule).toHaveValue(text)
-
-    await page.waitForTimeout(900)
 
     await expect(weeklySchedule).toHaveValue(text)
     await expect(page.getByTestId('dailylog-saved-weeklySchedule')).toHaveText(text)
@@ -28,8 +26,6 @@ test.describe('daily log draft regressions', () => {
     await page.getByTestId('dailylog-safetyConcerns').fill(safety)
     await page.getByTestId('dailylog-budgetConcerns').fill(budget)
     await page.getByTestId('dailylog-deliveriesNeeded').fill(deliveries)
-
-    await page.waitForTimeout(900)
 
     await expect(page.getByTestId('dailylog-safetyConcerns')).toHaveValue(safety)
     await expect(page.getByTestId('dailylog-budgetConcerns')).toHaveValue(budget)

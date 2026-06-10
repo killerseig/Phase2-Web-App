@@ -9,7 +9,7 @@ import {
   buildTimecardCsvFilename,
   buildTimecardPdfBuffer,
   buildTimecardPdfFilename,
-  normalizeTimecardForEmail,
+  prepareTimecardsForPdfCsvExport,
 } from './operationsFunctions'
 import { db } from './runtime'
 
@@ -348,7 +348,7 @@ async function sendSubmittedWeekEmail(
   const productionBurden = job?.productionBurden
   const submittedBy = submittedByName || textOrNull(week?.submittedByName) || 'Phase 2 Foreman'
 
-  const normalizedTimecards = cards.map((card) => normalizeTimecardForEmail({
+  const normalizedTimecards = await prepareTimecardsForPdfCsvExport(cards.map((card) => ({
     ...card,
     weekStartDate: weekStart,
     weekEndingDate: weekEnd,
@@ -358,7 +358,7 @@ async function sendSubmittedWeekEmail(
     wage: card?.wageRate ?? null,
     productionBurden,
     status: 'submitted',
-  }))
+  })))
 
   const html = buildTimecardsEmail({
     jobName,

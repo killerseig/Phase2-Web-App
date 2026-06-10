@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './helpers/test.js'
 import { createTimecardsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('timecard workbook regressions', () => {
@@ -119,6 +119,40 @@ test.describe('timecard workbook regressions', () => {
 
     await page.getByTestId('create-card').click()
     await expect(page.getByTestId('timecards-add-employee-employee-1')).toBeVisible()
+  })
+
+  test('deleting the last card returns the empty weekly workspace state', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
+
+    await expect(page.getByTestId('timecards-card-card-e2e')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Delete Card' }).click()
+
+    await expect(page.getByText('Removed the timecard.')).toBeVisible()
+    await expect(page.getByTestId('timecards-card-card-e2e')).toHaveCount(0)
+    await expect(page.getByText('Create a card to start this week.')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardCards?: unknown[]
+        }
+        return state.timecardCards?.length ?? -1
+      }))
+      .toBe(0)
+  })
+
+  test('submitted weeks stay read only on the job timecard page', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: true })
+    fixture.timecardWeeks[0].status = 'submitted'
+    fixture.timecardWeeks[0].submittedAt = '2026-06-04T12:30:00.000Z'
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+
+    await expect(page.getByTestId('create-card')).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Submit Week' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Delete Card' })).toHaveCount(0)
+    await expect(page.locator('.timecards-signal').filter({ hasText: 'Read Only' })).toBeVisible()
+    await expect(page.locator('.timecard-grid__body-row--hours .timecard-grid__day-cell input').first()).toBeDisabled()
   })
 
   test('wage formatting rules still hold on the real workbook page', async ({ page }) => {

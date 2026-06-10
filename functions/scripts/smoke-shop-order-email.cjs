@@ -9,6 +9,10 @@ function extractInlineField(html, label) {
   return match ? match[1].trim() : null
 }
 
+function countMatches(html, text) {
+  return html.split(text).length - 1
+}
+
 function runScenario(name, order, expectedDeliveryDate) {
   const html = buildShopOrderEmail(order)
 
@@ -32,8 +36,9 @@ function runScenario(name, order, expectedDeliveryDate) {
   assert.equal(html.includes('133/513'), true, `${name}: email should include the 133/513 column`)
   assert.equal(html.includes('Item Name'), true, `${name}: email should use the item name column heading`)
   assert.equal(html.includes('End of Order'), true, `${name}: email should include the end of order marker`)
-  assert.equal(html.includes('display: table-header-group;'), true, `${name}: printed table headers should repeat on new pages`)
-  assert.equal(html.includes('page-break-inside: avoid; break-inside: avoid;'), true, `${name}: item rows should avoid splitting across printed pages`)
+  assert.equal(html.includes('shop-order-email__items-table'), true, `${name}: email should include the print-safe shop order items table class`)
+  assert.equal(html.includes('display: table-header-group !important;'), true, `${name}: printed table headers should be forced for paged print layouts`)
+  assert.equal(html.includes('page-break-inside: avoid !important; break-inside: avoid-page !important;'), true, `${name}: item rows should avoid splitting across printed pages`)
   assert.equal(html.includes('height: 30px;'), true, `${name}: row height should stay compact for printing`)
   assert.equal(html.includes('Standard Items:'), false, `${name}: email should not include the standard items heading`)
   assert.equal(html.includes('./ *Start Up / Foreman Book'), false, `${name}: email should not include folder paths in item names`)
@@ -100,6 +105,30 @@ runScenario(
     status: 'submitted',
   },
   '6/11/2026',
+)
+
+const longOrderHtml = buildShopOrderEmail({
+  ...sharedOrderFields,
+  deliveryDate: '2026-06-11',
+  status: 'submitted',
+  items: Array.from({ length: 45 }, (_, index) => ({
+    description: `./ Adhesive / Long Print Item ${index + 1}`,
+    quantity: 1,
+    receivedQuantity: 0,
+    backorderedQuantity: 0,
+    note: '',
+  })),
+})
+
+assert.equal(
+  countMatches(longOrderHtml, 'Pulled<br>By') >= 3,
+  true,
+  'long order: visible item table header should be repeated in the email body for print reliability',
+)
+assert.equal(
+  longOrderHtml.includes('page-break-before: always; break-before: page;'),
+  true,
+  'long order: continued item tables should request a printed page break',
 )
 
 console.log('Shop order email smoke test passed.')
