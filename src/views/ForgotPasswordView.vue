@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { hasFirebaseConfig } from '@/firebase'
@@ -83,9 +84,15 @@ async function handleSubmit() {
             />
           </div>
 
-          <button class="app-button app-button--primary auth-card__button" :disabled="loading || !hasFirebaseConfig">
-            {{ loading ? 'Sending Reset...' : 'Send Reset Link' }}
-          </button>
+          <AppLoadingButton
+            class="auth-card__button"
+            type="submit"
+            variant="primary"
+            label="Send Reset Link"
+            loading-label="Sending Reset..."
+            :loading="loading"
+            :disabled="!hasFirebaseConfig"
+          />
         </form>
 
         <RouterLink class="auth-card__link" to="/login">

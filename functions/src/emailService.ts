@@ -890,35 +890,6 @@ export function buildTimecardsEmail(payload: {
   `*/
 }
 
-/**
- * Build HTML template for timecard email
- */
-export function buildTimecardEmail(employeeName: string, weekEnding: string): string {
-  const formattedDate = new Date(weekEnding).toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-
-  return `
-    ${EMAIL_STYLES}
-    <div class="email-container">
-      <div class="header">
-        <h1>Timecard Submitted</h1>
-      </div>
-      <div class="content">
-        <p><strong>Employee:</strong> ${employeeName}</p>
-        <p><strong>Week Ending:</strong> ${formattedDate}</p>
-        <p>A timecard has been submitted. Please review the Phase 2 application for full details.</p>
-      </div>
-      <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
-      </div>
-    </div>
-  `
-}
-
 function resolveOrderEmailDate(value: any): Date | null {
   try {
     if (!value) return null
@@ -1606,22 +1577,6 @@ export async function sendDailyLogEmailNotification(
   await sendEmail({
     to: recipients,
     subject: `${EMAIL.SUBJECTS.DAILY_LOG} - ${jobDetails.name || 'Job'} - ${logDate}`,
-    html,
-  })
-}
-
-/**
- * Send timecard email notification
- */
-export async function sendTimecardEmailNotification(
-  recipients: string[],
-  employeeName: string,
-  weekEnding: string
-): Promise<void> {
-  const html = buildTimecardEmail(employeeName, weekEnding)
-  await sendEmail({
-    to: recipients,
-    subject: `${EMAIL.SUBJECTS.TIMECARD} - ${employeeName}`,
     html,
   })
 }

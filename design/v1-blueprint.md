@@ -97,12 +97,31 @@ Use the networking app as the shell reference:
 - Normal runtime view first
 - `Edit mode` layered onto the same page
 - Context-aware panels and drawers instead of separate admin versions of the same workflow
+- Pages should orchestrate workflows; reusable components should own common UI tasks.
+- Shared components should be props/events driven so they are easy to stub in tests.
 - Prefer `auto-save` for routine edits instead of requiring manual `Save Changes` buttons
 - Auto-save should run on simple commit-style events such as:
   - button clicks and toggle changes
   - selection changes
   - leaving or deselecting a text box or input field
 - Pages should show lightweight save state feedback rather than depending on manual save actions
+
+### Component architecture
+
+The refactor should follow:
+
+- `frontend-architecture.md`
+- `component-architecture.md`
+- `firebase-architecture.md`
+- `refactor-playbook.md`
+
+The app needs three component layers:
+
+- shared app primitives for repeated basic tasks
+- shared workflow components for common patterns such as recipients, confirmations, autosave state, and split workspaces
+- feature components for jobs, users, employees, timecards, daily logs, shop orders, and shop catalog administration
+
+The purpose is not to create a generic design system for its own sake. The purpose is to reduce repeated page logic, make workflows easier to test, and keep real e2e tests focused on user pages.
 
 ### Module styling
 
@@ -454,6 +473,8 @@ Use one reusable recipient-management pattern for:
 ## Data Model Direction
 
 This is not the final schema, but it is the recommended v1 structure.
+
+Firebase implementation should follow `firebase-architecture.md`, especially around Security Rules, query-driven indexes, submitted snapshots, and Cloud Functions for privileged operations.
 
 ### `users`
 

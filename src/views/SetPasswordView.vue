@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { useRoute, useRouter } from 'vue-router'
 import { hasFirebaseConfig } from '@/firebase'
@@ -149,9 +150,14 @@ onMounted(() => {
           />
         </div>
 
-        <button class="app-button app-button--primary auth-card__button" :disabled="loading" @click="handleSubmit">
-          {{ loading ? 'Creating Password...' : 'Create Password & Login' }}
-        </button>
+        <AppLoadingButton
+          class="auth-card__button"
+          variant="primary"
+          label="Create Password & Login"
+          loading-label="Creating Password..."
+          :loading="loading"
+          @click="handleSubmit"
+        />
       </template>
     </div>
   </div>

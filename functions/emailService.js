@@ -14,12 +14,10 @@ exports.buildPasswordResetEmail = buildPasswordResetEmail;
 exports.buildDailyLogAutoSubmitEmail = buildDailyLogAutoSubmitEmail;
 exports.buildDailyLogEmail = buildDailyLogEmail;
 exports.buildTimecardsEmail = buildTimecardsEmail;
-exports.buildTimecardEmail = buildTimecardEmail;
 exports.buildShopOrderEmail = buildShopOrderEmail;
 exports.buildSecretExpirationEmail = buildSecretExpirationEmail;
 exports.sendEmail = sendEmail;
 exports.sendDailyLogEmailNotification = sendDailyLogEmailNotification;
-exports.sendTimecardEmailNotification = sendTimecardEmailNotification;
 exports.sendShopOrderEmailNotification = sendShopOrderEmailNotification;
 exports.sendSecretExpirationWarning = sendSecretExpirationWarning;
 const axios_1 = __importDefault(require("axios"));
@@ -827,33 +825,6 @@ function buildTimecardsEmail(payload) {
         </div>
       `*/
 }
-/**
- * Build HTML template for timecard email
- */
-function buildTimecardEmail(employeeName, weekEnding) {
-    const formattedDate = new Date(weekEnding).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    });
-    return `
-    ${constants_1.EMAIL_STYLES}
-    <div class="email-container">
-      <div class="header">
-        <h1>Timecard Submitted</h1>
-      </div>
-      <div class="content">
-        <p><strong>Employee:</strong> ${employeeName}</p>
-        <p><strong>Week Ending:</strong> ${formattedDate}</p>
-        <p>A timecard has been submitted. Please review the Phase 2 application for full details.</p>
-      </div>
-      <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
-      </div>
-    </div>
-  `;
-}
 function resolveOrderEmailDate(value) {
     try {
         if (!value)
@@ -1428,17 +1399,6 @@ async function sendDailyLogEmailNotification(recipients, jobDetails, logDate, da
     await sendEmail({
         to: recipients,
         subject: `${constants_1.EMAIL.SUBJECTS.DAILY_LOG} - ${jobDetails.name || 'Job'} - ${logDate}`,
-        html,
-    });
-}
-/**
- * Send timecard email notification
- */
-async function sendTimecardEmailNotification(recipients, employeeName, weekEnding) {
-    const html = buildTimecardEmail(employeeName, weekEnding);
-    await sendEmail({
-        to: recipients,
-        subject: `${constants_1.EMAIL.SUBJECTS.TIMECARD} - ${employeeName}`,
         html,
     });
 }

@@ -12,6 +12,8 @@ This document takes the `v1` blueprint and turns it into a recommended:
 
 This is the structure I would build against unless we discover a company rule that forces a change.
 
+Firebase implementation details, including Security Rules, indexes, Storage, Cloud Functions, and emulator testing, should follow `firebase-architecture.md`.
+
 ## Design choices
 
 ### Main choices

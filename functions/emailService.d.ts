@@ -35,10 +35,6 @@ export declare function buildTimecardsEmail(payload: {
     timecards: any[];
 }): string;
 /**
- * Build HTML template for timecard email
- */
-export declare function buildTimecardEmail(employeeName: string, weekEnding: string): string;
-/**
  * Build HTML template for shop order email
  */
 export declare function buildShopOrderEmail(order: any, costCodesByCatalogItemId?: Record<string, string>): string;
@@ -63,10 +59,6 @@ export declare function sendEmail(options: {
  * Send daily log email notification
  */
 export declare function sendDailyLogEmailNotification(recipients: string[], jobDetails: JobDetails, logDate: string, dailyLog?: any): Promise<void>;
-/**
- * Send timecard email notification
- */
-export declare function sendTimecardEmailNotification(recipients: string[], employeeName: string, weekEnding: string): Promise<void>;
 /**
  * Send shop order email notification
  */

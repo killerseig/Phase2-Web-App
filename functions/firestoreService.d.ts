@@ -52,10 +52,6 @@ export declare function verifyAdminRole(uid: string): Promise<void>;
  */
 export declare function getDailyLog(jobId: string, dailyLogId: string): Promise<any>;
 /**
- * Get timecard by path
- */
-export declare function getTimecard(jobId: string, weekStart: string, timecardId: string): Promise<any>;
-/**
  * Get shop order by ID
  */
 export declare function getShopOrder(shopOrderId: string): Promise<any>;

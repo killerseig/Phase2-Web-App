@@ -354,10 +354,22 @@ Based on the workbook structure and formulas:
 
 ## Shared Component Direction
 
+- The refactor should introduce a stronger component layer before large workflow rewrites.
+- Pages should mainly orchestrate route context, permissions, service subscriptions, and feature composition.
+- Shared components should handle common repeated UI tasks such as:
+  - loading buttons
+  - empty states
+  - status messages
+  - save state
+  - confirmation actions
+  - split-pane browser/detail layouts
+  - recipient editing
+- Feature components should isolate major workflow sections so they can be tested and stubbed without needing fake e2e-only pages.
 - Shared recipient-management components should be built for reuse across:
   - daily logs
   - shop orders
   - future modules that need the same pattern
+- The detailed component plan lives in `component-architecture.md`.
 
 ## Audit Trail Direction
 

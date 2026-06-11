@@ -12,6 +12,24 @@ Files:
   Recommended Firestore collections, document fields, routes, pages, indexes, and security direction.
 - `auth-and-user-flow.md`
   Login, password setup, user creation, activation, deletion, role handling, and access flow for v1.
+- `component-architecture.md`
+  Component strategy for the refactor, including shared primitives, feature components, composables, and stubbing boundaries.
+- `frontend-architecture.md`
+  Target Vue architecture for pages, components, composables, services, stores, styling, and testing.
+- `ui-modernization.md`
+  Visual direction for a cleaner, more professional, modern operations UI without breaking dense workflows or print output.
+- `firebase-architecture.md`
+  Firebase best-practice direction for Firestore, Security Rules, Storage, Functions, Hosting, Emulator Suite, and App Check.
+- `testing-strategy.md`
+  Test layers, workflow coverage matrix, refactor gates, smoke previews, and future test additions.
+- `cleanup-and-deprecation.md`
+  Rules for removing migration scripts, legacy fields, old functions, compatibility paths, and unused code.
+- `module-contracts.md`
+  Ownership boundaries for pages, components, composables, services, stores, Cloud Functions, and each app module.
+- `decision-log.md`
+  Short record of important refactor and architecture decisions.
+- `refactor-playbook.md`
+  Step-by-step refactor rules, test gates, phase order, and stop conditions.
 - `reference-notes.md`
   Notes from the source materials, old app, Excel tools, and reference app.
 - `questions-for-company.md`

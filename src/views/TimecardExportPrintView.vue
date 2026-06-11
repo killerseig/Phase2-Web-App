@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import TimecardPrintCard from '@/components/timecards/TimecardPrintCard.vue'
 import {
   loadTimecardPdfExportPayload,
@@ -68,9 +69,9 @@ onMounted(async () => {
       </button>
     </header>
 
-    <div v-if="loadError" class="timecard-print-view__empty">
+    <AppEmptyState v-if="loadError" class="timecard-print-view__empty">
       {{ loadError }}
-    </div>
+    </AppEmptyState>
 
     <main v-else-if="payload" class="timecard-print-view__document" data-testid="timecard-export-print-document">
       <article

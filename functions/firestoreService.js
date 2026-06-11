@@ -42,7 +42,6 @@ exports.getUserProfile = getUserProfile;
 exports.getUserDisplayName = getUserDisplayName;
 exports.verifyAdminRole = verifyAdminRole;
 exports.getDailyLog = getDailyLog;
-exports.getTimecard = getTimecard;
 exports.getShopOrder = getShopOrder;
 exports.getEmailSettings = getEmailSettings;
 exports.getJobNotificationRecipients = getJobNotificationRecipients;
@@ -156,63 +155,6 @@ async function getDailyLog(jobId, dailyLogId) {
         id: logSnap.id,
         ...logSnap.data(),
         additionalRecipients: normalizeRecipientList(logSnap.data()?.additionalRecipients),
-    };
-}
-/**
- * Get timecard by path
- */
-async function getTimecard(jobId, weekStart, timecardId) {
-    const db = getDb();
-    // Phase 3 timecards live directly under jobs/{jobId}/timecards
-    const directRef = db
-        .collection(constants_1.COLLECTIONS.JOBS)
-        .doc(jobId)
-        .collection('timecards')
-        .doc(timecardId);
-    const directSnap = await directRef.get();
-    if (directSnap.exists) {
-        return {
-            id: directSnap.id,
-            ...directSnap.data(),
-        };
-    }
-    // Fallback for legacy Phase 2 structure jobs/{jobId}/weeks/{weekStart}/timecards
-    const legacyRef = db
-        .collection(constants_1.COLLECTIONS.JOBS)
-        .doc(jobId)
-        .collection(constants_1.COLLECTIONS.WEEKS)
-        .doc(weekStart)
-        .collection(constants_1.COLLECTIONS.TIMECARDS)
-        .doc(timecardId);
-    const legacySnap = await legacyRef.get();
-    if (legacySnap.exists) {
-        return {
-            id: legacySnap.id,
-            ...legacySnap.data(),
-        };
-    }
-    const timecardWeeksSnap = await db
-        .collection('timecardWeeks')
-        .where('jobId', '==', jobId)
-        .where('weekStartDate', '==', weekStart)
-        .limit(1)
-        .get();
-    const activeWeekDoc = timecardWeeksSnap.docs[0];
-    if (!activeWeekDoc)
-        return null;
-    const activeWeek = activeWeekDoc.data() || {};
-    const cardSnap = await activeWeekDoc.ref.collection('cards').doc(timecardId).get();
-    if (!cardSnap.exists)
-        return null;
-    return {
-        id: cardSnap.id,
-        ...cardSnap.data(),
-        jobId,
-        weekStartDate: activeWeek.weekStartDate || weekStart,
-        weekEndingDate: activeWeek.weekEndDate || '',
-        jobCode: activeWeek.jobCode || '',
-        status: activeWeek.status || 'draft',
-        createdByUid: activeWeek.ownerForemanUserId || activeWeek.createdByUserId || null,
     };
 }
 /**

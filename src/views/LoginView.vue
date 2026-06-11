@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { hasFirebaseConfig } from '@/firebase'
@@ -108,9 +109,14 @@ async function handleLogin() {
           />
         </div>
 
-        <button class="app-button app-button--primary auth-card__button" :disabled="loading">
-          {{ loading ? 'Signing In...' : 'Login' }}
-        </button>
+        <AppLoadingButton
+          class="auth-card__button"
+          type="submit"
+          variant="primary"
+          label="Login"
+          loading-label="Signing In..."
+          :loading="loading"
+        />
 
         <RouterLink class="auth-card__link" :to="forgotPasswordTarget">
           Forgot Password?
