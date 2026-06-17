@@ -8,6 +8,7 @@ The app now has enough e2e coverage to protect major behavior. The next risk is 
 
 Use alongside:
 
+- `overall-refactor-plan.md` for the broad refactor map and documentation protocol
 - `testing-strategy.md` for test gates and workflow coverage
 - `module-contracts.md` for ownership boundaries
 - `cleanup-and-deprecation.md` for removing old code, fields, and functions
@@ -141,7 +142,7 @@ npm run test:e2e:all-browsers
 Use this for:
 
 - timecard workbook layout/input
-- shop order print/email table behavior
+- shop order print/email/PDF table behavior
 - responsive shell/layout changes
 - anything involving drag, resize, print, or browser-specific form behavior
 
@@ -231,6 +232,7 @@ Targets:
 - order item list
 - history list
 - order workflow composables
+- shop order email/PDF output boundary
 
 Important tests:
 
@@ -239,7 +241,17 @@ Important tests:
 - item notes
 - order number display
 - submitted read-only behavior
+- catalog and custom items stay in one submitted order
+- long shop order PDF spans pages with a table header at the top of continuation pages
+- email body keeps the forced paper width and single item table
 - print/email smoke where relevant
+
+Refactor notes:
+
+- Keep `ShopOrdersView.vue` workflow extraction separate from shop order email/PDF renderer changes.
+- Extract the GUI into components before changing shop order persistence or Cloud Function behavior.
+- Do not move PDF table pagination into a frontend component; PDF rendering belongs in functions/export code.
+- Preserve the item-list density and no-horizontal-scroll behavior from the pre-refactor GUI cleanup.
 
 ## Phase 5: Daily Logs
 
@@ -329,10 +341,13 @@ Important rule:
 Before extracting:
 
 - Is the current behavior covered by e2e?
+- Is there an existing component with the same visual pattern?
+- Is there an existing composable/service helper with the same behavior?
 - Does the new component need to call services?
 - Can it be props/events only?
 - Are there existing `data-testid` values to preserve?
 - Is this component shared app-level or feature-specific?
+- Are we sharing the smallest stable piece instead of building a too-flexible component?
 - Does it need a component test?
 
 After extracting:
@@ -348,6 +363,7 @@ After extracting:
 Before extracting:
 
 - Is the behavior repeated?
+- Does an existing composable already solve part of this?
 - Is it independent of DOM markup?
 - Does it have clear inputs/outputs?
 - Can it be tested without rendering a full page?
@@ -404,6 +420,7 @@ Pause and reassess if:
 - e2e failures are unclear
 - a component starts importing services unexpectedly
 - a supposedly shared component needs too many feature-specific props
+- duplicated components/composables are being created without a reuse review
 - timecard layout or email/PDF output changes unintentionally
 
 That is not failure. That is the app telling us the seam is wrong.

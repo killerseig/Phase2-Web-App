@@ -14,7 +14,10 @@ import {
   sendEmail,
   buildDailyLogEmail,
   buildDailyLogAutoSubmitEmail,
+  normalizeDailyLogEmailPayload,
   buildShopOrderEmail,
+  buildShopOrderPdfBuffer,
+  buildShopOrderPdfFilename,
   isEmailEnabled,
 } from './emailService'
 import {
@@ -665,7 +668,8 @@ function validatePdfCsvHourParity(timecards: any[]): void {
 
 async function loadDailyLogAttachments(log: any) {
   const attachments: Array<{ name: string; contentType?: string; contentBytes: string }> = []
-  const files = Array.isArray(log?.attachments) ? log.attachments : []
+  const dailyLogPayload = normalizeDailyLogEmailPayload(log)
+  const files = Array.isArray(dailyLogPayload.attachments) ? dailyLogPayload.attachments : []
   let totalBytes = 0
 
   for (const att of files) {
@@ -1899,6 +1903,7 @@ export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, as
     const job = await getJobDetails(resolvedJobId || jobId)
     const costCodesByCatalogItemId = await getShopOrderCostCodesByCatalogItemId(order?.items)
     const emailHtml = buildShopOrderEmail(order, costCodesByCatalogItemId)
+    const pdfBuffer = await buildShopOrderPdfBuffer(order, costCodesByCatalogItemId)
 
     const orderDateLabel = formatEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt)
 
@@ -1906,6 +1911,13 @@ export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, as
       to: recipients,
       subject: `${EMAIL.SUBJECTS.SHOP_ORDER} - ${job?.name || 'Job'} - ${orderDateLabel}`,
       html: emailHtml,
+      attachments: [
+        {
+          name: buildShopOrderPdfFilename(order),
+          contentType: 'application/pdf',
+          contentBytes: pdfBuffer.toString('base64'),
+        },
+      ],
     })
 
     console.log(`Shop order ${shopOrderId} emailed to ${recipients.join(', ')}`)

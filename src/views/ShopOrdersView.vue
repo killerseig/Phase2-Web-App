@@ -79,7 +79,9 @@ const activeFolderId = ref<string | null>(null)
 const selectedCatalogItemId = ref<string | null>(null)
 const selectedOrderId = ref<string | null>(null)
 const rootBucketExpanded = ref(true)
+const rootBucketCollapsedDuringSearch = ref(false)
 const expandedCategoryIds = ref<string[]>([])
+const collapsedCategoryIdsDuringSearch = ref<string[]>([])
 const catalogLoading = ref(true)
 const ordersLoading = ref(true)
 const catalogError = ref('')
@@ -165,6 +167,10 @@ const childItemsByParent = computed(() => {
 })
 
 const normalizedTreeSearch = computed(() => normalizeSearch(treeSearch.value))
+const isTreeSearchActive = computed(() => normalizedTreeSearch.value.length > 0)
+const rootBucketEffectivelyExpanded = computed(() =>
+  isTreeSearchActive.value ? !rootBucketCollapsedDuringSearch.value : rootBucketExpanded.value,
+)
 const selectedCatalogItem = computed(() =>
   selectedCatalogItemId.value
     ? catalogItems.value.find((item) => item.id === selectedCatalogItemId.value) ?? null
@@ -212,10 +218,10 @@ const rootBucketSummary = computed(() =>
   ),
 )
 const treeListCollapsed = computed(
-  () => !catalogLoading.value && !normalizedTreeSearch.value && !rootBucketExpanded.value && treeNodes.value.length === 0,
+  () => !catalogLoading.value && !rootBucketEffectivelyExpanded.value && treeNodes.value.length === 0,
 )
 const treeNodes = computed<TreeNode[]>(() => {
-  if (!normalizedTreeSearch.value && !rootBucketExpanded.value) return []
+  if (!rootBucketEffectivelyExpanded.value) return []
   return buildTreeNodes(null, 1)
 })
 
@@ -415,7 +421,7 @@ function buildTreeNodes(parentId: string | null, depth: number): TreeNode[] {
       hasChildren: hasVisibleChildren(category.id),
     })
 
-    if (normalizedTreeSearch.value || isCategoryExpanded(category.id)) {
+    if (isCategoryEffectivelyExpanded(category.id)) {
       nodes.push(...buildTreeNodes(category.id, depth + 1))
     }
   }
@@ -439,6 +445,18 @@ function isCategoryExpanded(categoryId: string) {
   return expandedCategoryIds.value.includes(categoryId)
 }
 
+function isCategoryCollapsedDuringSearch(categoryId: string) {
+  return collapsedCategoryIdsDuringSearch.value.includes(categoryId)
+}
+
+function isCategoryEffectivelyExpanded(categoryId: string) {
+  if (isTreeSearchActive.value) {
+    return !isCategoryCollapsedDuringSearch(categoryId)
+  }
+
+  return isCategoryExpanded(categoryId)
+}
+
 function ensureExpandedToCategory(categoryId: string | null) {
   let currentId = categoryId
   const nextExpanded = new Set(expandedCategoryIds.value)
@@ -452,6 +470,16 @@ function ensureExpandedToCategory(categoryId: string | null) {
 }
 
 function toggleCategoryExpanded(categoryId: string) {
+  if (isTreeSearchActive.value) {
+    if (isCategoryCollapsedDuringSearch(categoryId)) {
+      collapsedCategoryIdsDuringSearch.value = collapsedCategoryIdsDuringSearch.value.filter((id) => id !== categoryId)
+      return
+    }
+
+    collapsedCategoryIdsDuringSearch.value = [...collapsedCategoryIdsDuringSearch.value, categoryId]
+    return
+  }
+
   if (isCategoryExpanded(categoryId)) {
     expandedCategoryIds.value = expandedCategoryIds.value.filter((id) => id !== categoryId)
     return
@@ -461,6 +489,11 @@ function toggleCategoryExpanded(categoryId: string) {
 }
 
 function toggleRootBucketExpanded() {
+  if (isTreeSearchActive.value) {
+    rootBucketCollapsedDuringSearch.value = !rootBucketCollapsedDuringSearch.value
+    return
+  }
+
   rootBucketExpanded.value = !rootBucketExpanded.value
 }
 
@@ -511,11 +544,20 @@ function getVisibleCategoryIds() {
 
 function expandAllCategories() {
   rootBucketExpanded.value = true
+  rootBucketCollapsedDuringSearch.value = false
   expandedCategoryIds.value = getVisibleCategoryIds()
+  collapsedCategoryIdsDuringSearch.value = []
   closeContextMenu()
 }
 
 function collapseAllCategories() {
+  if (isTreeSearchActive.value) {
+    rootBucketCollapsedDuringSearch.value = true
+    collapsedCategoryIdsDuringSearch.value = getVisibleCategoryIds()
+    closeContextMenu()
+    return
+  }
+
   rootBucketExpanded.value = false
   expandedCategoryIds.value = []
   closeContextMenu()
@@ -580,9 +622,11 @@ const contextMenuActions = computed<ContextMenuAction[]>(() => {
   const visibleCategoryIds = getVisibleCategoryIds()
   const hasVisibleCategories = visibleCategoryIds.length > 0
   const allVisibleCategoriesExpanded =
-    rootBucketExpanded.value
-    && (!hasVisibleCategories || visibleCategoryIds.every((categoryId) => expandedCategoryIds.value.includes(categoryId)))
-  const anyFoldersExpanded = rootBucketExpanded.value || expandedCategoryIds.value.length > 0
+    rootBucketEffectivelyExpanded.value
+    && (!hasVisibleCategories || visibleCategoryIds.every((categoryId) => isCategoryEffectivelyExpanded(categoryId)))
+  const anyFoldersExpanded =
+    rootBucketEffectivelyExpanded.value
+    || visibleCategoryIds.some((categoryId) => isCategoryEffectivelyExpanded(categoryId))
 
   if (target.kind === 'root') {
     return [
@@ -1381,6 +1425,14 @@ watch(
 )
 
 watch(
+  () => normalizedTreeSearch.value,
+  () => {
+    rootBucketCollapsedDuringSearch.value = false
+    collapsedCategoryIdsDuringSearch.value = []
+  },
+)
+
+watch(
   () => jobId.value,
   (nextJobId, previousJobId) => {
     if (!nextJobId || nextJobId === previousJobId) return
@@ -1441,7 +1493,12 @@ onBeforeUnmount(() => {
         <div class="shop-orders-tree-pane__body">
           <label class="shop-orders-pane__search">
             <span>Find catalog entries</span>
-            <input v-model="treeSearch" type="search" placeholder="Search folders or items" />
+            <input
+              v-model="treeSearch"
+              data-testid="shoporder-catalog-search"
+              type="search"
+              placeholder="Search folders or items"
+            />
           </label>
 
           <div
@@ -1463,9 +1520,9 @@ onBeforeUnmount(() => {
                 v-if="rootBucketHasChildren"
                 type="button"
                 class="shop-orders-tree-node__twist"
-                :class="{ 'shop-orders-tree-node__twist--open': rootBucketExpanded }"
+                :class="{ 'shop-orders-tree-node__twist--open': rootBucketEffectivelyExpanded }"
                 data-testid="shoporder-root-toggle"
-                :data-state="rootBucketExpanded ? 'expanded' : 'collapsed'"
+                :data-state="rootBucketEffectivelyExpanded ? 'expanded' : 'collapsed'"
                 @click.stop="toggleRootBucketExpanded"
                 @keydown.enter.prevent.stop="toggleRootBucketExpanded"
                 @keydown.space.prevent.stop="toggleRootBucketExpanded"
@@ -1515,7 +1572,8 @@ onBeforeUnmount(() => {
                   v-if="node.kind === 'category' && node.hasChildren"
                   type="button"
                   class="shop-orders-tree-node__twist"
-                  :class="{ 'shop-orders-tree-node__twist--open': isCategoryExpanded(node.id) }"
+                  :class="{ 'shop-orders-tree-node__twist--open': isCategoryEffectivelyExpanded(node.id) }"
+                  :data-state="isCategoryEffectivelyExpanded(node.id) ? 'expanded' : 'collapsed'"
                   @click.stop="toggleCategoryExpanded(node.id)"
                   @keydown.enter.prevent.stop="toggleCategoryExpanded(node.id)"
                   @keydown.space.prevent.stop="toggleCategoryExpanded(node.id)"
@@ -1936,36 +1994,42 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .shop-orders-explorer {
-  --shop-line: rgba(140, 162, 186, 0.12);
-  --shop-line-soft: rgba(140, 162, 186, 0.05);
-  --shop-surface: rgba(255, 255, 255, 0.012);
-  --shop-surface-soft: rgba(255, 255, 255, 0.02);
-  --shop-field: rgba(255, 255, 255, 0.03);
+  --shop-line: rgba(168, 190, 209, 0.16);
+  --shop-line-soft: rgba(168, 190, 209, 0.08);
+  --shop-surface: rgba(255, 255, 255, 0.018);
+  --shop-surface-soft: rgba(255, 255, 255, 0.035);
+  --shop-field: rgba(237, 245, 248, 0.052);
   --shop-radius-md: 10px;
   --shop-radius-lg: 12px;
-  --shop-control-height: 2rem;
+  --shop-control-height: 1.9rem;
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1.1fr);
-  gap: 0.9rem;
+  grid-template-columns: minmax(340px, 0.92fr) minmax(540px, 1.08fr);
+  gap: 0.75rem;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.shop-orders-explorer > * {
+  min-width: 0;
 }
 
 .shop-orders-tree-pane,
 .shop-orders-workspace-pane {
   display: grid;
   gap: 0.65rem;
+  min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  padding: 0.9rem;
+  padding: 0.75rem;
   border: 1px solid var(--shop-line);
   border-radius: var(--radius);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.005)),
-    rgba(27, 35, 45, 0.9);
-  box-shadow: 0 14px 28px rgba(7, 12, 18, 0.16);
+    radial-gradient(circle at top right, rgba(99, 199, 230, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006)),
+    rgba(24, 36, 48, 0.9);
+  box-shadow: var(--shadow-soft);
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -1973,6 +2037,7 @@ onBeforeUnmount(() => {
 .shop-orders-workspace-pane__body {
   display: grid;
   gap: 0.6rem;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -1985,11 +2050,11 @@ onBeforeUnmount(() => {
 
 .shop-orders-workspace-pane__body {
   grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
-  padding-right: 0.15rem;
+  padding-right: 0;
 }
 
 .shop-orders-workspace-pane__body--has-selected-order {
-  grid-template-rows: auto minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(14rem, 2fr) minmax(9.5rem, 0.9fr);
 }
 
 .shop-orders-pane__header {
@@ -1997,6 +2062,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  min-width: 0;
   padding-bottom: 0.32rem;
   border-bottom: 1px solid var(--shop-line-soft);
 }
@@ -2016,6 +2082,8 @@ onBeforeUnmount(() => {
   margin: 0.18rem 0 0;
   font-size: 1.08rem;
   letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shop-orders-tree-pane__summary,
@@ -2058,7 +2126,9 @@ onBeforeUnmount(() => {
   border-radius: var(--shop-radius-md);
   background: var(--shop-field);
   color: var(--text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 5px 12px rgba(3, 10, 16, 0.08);
 }
 
 .shop-orders-form__field textarea {
@@ -2108,8 +2178,10 @@ onBeforeUnmount(() => {
 .shop-orders-history-list {
   display: grid;
   gap: 0;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 0.15rem;
 }
 
@@ -2137,6 +2209,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 0.35rem;
   width: 100%;
+  min-width: 0;
   min-height: 2.25rem;
   padding: 0 0.5rem;
   border: 1px solid transparent;
@@ -2152,8 +2225,10 @@ onBeforeUnmount(() => {
 
 .shop-orders-tree-node:hover,
 .shop-orders-tree-node--active {
-  border-color: rgba(88, 186, 233, 0.16);
-  background: rgba(30, 73, 97, 0.16);
+  border-color: rgba(145, 220, 255, 0.22);
+  background:
+    linear-gradient(90deg, rgba(99, 199, 230, 0.13), rgba(99, 199, 230, 0.035)),
+    rgba(255, 255, 255, 0.012);
 }
 
 .shop-orders-tree-node__indent {
@@ -2214,9 +2289,9 @@ onBeforeUnmount(() => {
   top: 0.18rem;
   width: 0.95rem;
   height: 0.58rem;
-  border: 1px solid rgba(123, 197, 241, 0.55);
+  border: 1px solid rgba(145, 220, 255, 0.58);
   border-radius: 0.18rem;
-  background: rgba(50, 108, 145, 0.18);
+  background: rgba(50, 125, 153, 0.18);
 }
 
 .shop-orders-node-icon--folder::after {
@@ -2224,10 +2299,10 @@ onBeforeUnmount(() => {
   top: 0;
   width: 0.38rem;
   height: 0.24rem;
-  border: 1px solid rgba(123, 197, 241, 0.55);
+  border: 1px solid rgba(145, 220, 255, 0.58);
   border-bottom: none;
   border-radius: 0.18rem 0.18rem 0 0;
-  background: rgba(50, 108, 145, 0.18);
+  background: rgba(50, 125, 153, 0.18);
 }
 
 .shop-orders-node-icon--item::before {
@@ -2255,7 +2330,10 @@ onBeforeUnmount(() => {
 }
 
 .shop-orders-tree-node__meta {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-soft);
   font-size: 0.78rem;
   white-space: nowrap;
@@ -2264,17 +2342,19 @@ onBeforeUnmount(() => {
 .shop-orders-badge {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   min-height: 1.55rem;
   padding: 0 0.5rem;
   border-radius: 999px;
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .shop-orders-badge {
-  border: 1px solid rgba(88, 186, 233, 0.22);
-  background: rgba(38, 74, 96, 0.28);
+  border: 1px solid rgba(99, 199, 230, 0.25);
+  background: rgba(30, 83, 100, 0.3);
   color: var(--accent);
 }
 
@@ -2285,19 +2365,19 @@ onBeforeUnmount(() => {
 .shop-orders-tree-node__actions {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   margin-left: auto;
   flex: 0 0 auto;
 }
 
 .shop-orders-tree-node__actions input {
-  width: 4rem;
+  width: 3.5rem;
   min-height: var(--shop-control-height);
   padding: 0 0.65rem;
 }
 
 .shop-orders-tree-node__add {
-  min-width: 2.3rem;
+  min-width: 2.05rem;
   min-height: var(--shop-control-height);
   padding: 0;
   font-size: 1.1rem;
@@ -2314,7 +2394,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   border-radius: 12px;
   background:
-    linear-gradient(180deg, rgba(36, 46, 58, 0.98), rgba(26, 33, 43, 0.98)),
+    linear-gradient(180deg, rgba(33, 48, 61, 0.98), rgba(18, 28, 38, 0.98)),
     rgba(18, 24, 33, 0.96);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
 }
@@ -2334,7 +2414,7 @@ onBeforeUnmount(() => {
 }
 
 .shop-orders-context-menu__item:hover:not(:disabled) {
-  background: rgba(88, 186, 233, 0.14);
+  background: rgba(99, 199, 230, 0.14);
 }
 
 .shop-orders-context-menu__item:disabled {
@@ -2389,7 +2469,9 @@ onBeforeUnmount(() => {
   padding: 0.58rem 0.7rem;
   border: 1px solid var(--shop-line-soft);
   border-radius: var(--shop-radius-md);
-  background: var(--shop-surface);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
+    var(--shop-surface);
   color: var(--text);
   text-align: left;
   transition:
@@ -2414,9 +2496,9 @@ onBeforeUnmount(() => {
 .shop-orders-browser-entry--active,
 .shop-orders-history-row:hover,
 .shop-orders-history-row--active {
-  border-color: rgba(88, 186, 233, 0.14);
+  border-color: rgba(145, 220, 255, 0.22);
   background:
-    linear-gradient(180deg, rgba(49, 83, 105, 0.18), rgba(33, 49, 62, 0.12)),
+    linear-gradient(180deg, rgba(54, 94, 115, 0.2), rgba(33, 52, 65, 0.14)),
     var(--shop-surface-soft);
   transform: translateY(-0.5px);
 }
@@ -2458,6 +2540,11 @@ onBeforeUnmount(() => {
   gap: 0.6rem;
 }
 
+.shop-orders-workspace-pane__actions {
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
 .shop-orders-browser-entry__actions {
   align-items: center;
 }
@@ -2495,9 +2582,10 @@ onBeforeUnmount(() => {
 
 .shop-orders-workspace-strip {
   display: grid;
-  gap: 0.32rem;
+  gap: 0.28rem;
+  min-width: 0;
   min-height: 0;
-  padding: 0 0 0.32rem;
+  padding: 0.05rem 0 0.32rem;
   border-bottom: 1px solid var(--shop-line-soft);
 }
 
@@ -2505,6 +2593,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
@@ -2532,12 +2621,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .shop-orders-selected-order__controls {
   display: grid;
-  grid-template-columns: minmax(10.5rem, 11.5rem) minmax(10rem, 11rem) minmax(18rem, 1fr);
-  gap: 0.55rem;
+  grid-template-columns: minmax(9rem, 10.5rem) minmax(9rem, 10.5rem) minmax(12rem, 1fr);
+  gap: 0.45rem;
   align-items: center;
 }
 
@@ -2556,7 +2647,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.18rem 0.7rem;
-  padding: 0.12rem 0 0;
+  padding: 0.08rem 0 0;
   border-top: 1px solid var(--shop-line-soft);
 }
 
@@ -2577,7 +2668,9 @@ onBeforeUnmount(() => {
   border-radius: var(--shop-radius-md);
   background: var(--shop-field);
   color: var(--text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 5px 12px rgba(3, 10, 16, 0.08);
   font-weight: 500;
   font-size: 0.95rem;
   line-height: 1;
@@ -2588,7 +2681,7 @@ onBeforeUnmount(() => {
 }
 
 .shop-orders-selected-order__shortcut-button:hover:not(:disabled) {
-  border-color: rgba(88, 186, 233, 0.18);
+  border-color: rgba(145, 220, 255, 0.28);
   background: var(--shop-surface-soft);
   transform: none;
 }
@@ -2601,8 +2694,9 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0.14rem;
+  min-width: 0;
   min-height: 0;
-  padding: 0.4rem 0 0;
+  padding: 0.34rem 0 0;
   border-top: 1px solid var(--shop-line-soft);
   overflow: hidden;
 }
@@ -2617,6 +2711,7 @@ onBeforeUnmount(() => {
 
 .shop-orders-workspace-section--history .shop-orders-workspace-card__header {
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .shop-orders-workspace-section__header-meta {
@@ -2624,11 +2719,19 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.4rem 0.55rem;
+  gap: 0.35rem 0.45rem;
+  min-width: 0;
+}
+
+.shop-orders-workspace-section__header-meta .shop-orders-item-card__danger {
+  min-height: 1.75rem;
+  padding: 0 0.55rem;
+  font-size: 0.82rem;
 }
 
 .shop-orders-workspace-section__body {
   display: grid;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -2639,19 +2742,20 @@ onBeforeUnmount(() => {
 
 .shop-orders-items-head {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) 4.5rem minmax(12rem, 1fr) 2.8rem;
+  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr) 2.55rem;
   align-items: center;
-  gap: 0.34rem;
-  padding: 0 0.2rem 0.22rem;
+  gap: 0.3rem;
+  padding: 0 0.15rem 0.18rem;
   border-bottom: 1px solid var(--shop-line-soft);
   color: var(--text-soft);
-  font-size: 0.66rem;
+  font-size: 0.68rem;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .shop-orders-items-head--readonly {
-  grid-template-columns: minmax(0, 1.45fr) 4.5rem minmax(12rem, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr);
 }
 
 .shop-orders-items-head span:nth-child(2),
@@ -2661,13 +2765,13 @@ onBeforeUnmount(() => {
 
 .shop-orders-item-card {
   gap: 0.18rem;
-  padding: 0.38rem 0.2rem;
+  padding: 0.3rem 0.15rem;
 }
 
 .shop-orders-item-card--line {
-  grid-template-columns: minmax(0, 1.45fr) 4.5rem minmax(12rem, 1fr) 2.8rem;
+  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr) 2.55rem;
   align-items: center;
-  gap: 0.34rem;
+  gap: 0.3rem;
   border: 0;
   border-bottom: 1px solid rgba(140, 162, 186, 0.05);
   border-radius: 0;
@@ -2675,7 +2779,7 @@ onBeforeUnmount(() => {
 }
 
 .shop-orders-item-card--readonly {
-  grid-template-columns: minmax(0, 1.45fr) 4.5rem minmax(12rem, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr);
 }
 
 .shop-orders-item-card__main {
@@ -2688,7 +2792,7 @@ onBeforeUnmount(() => {
 
 .shop-orders-item-card__main strong {
   line-height: 1.2;
-  font-size: 0.9rem;
+  font-size: 0.87rem;
 }
 
 .shop-orders-item-card__name {
@@ -2709,11 +2813,12 @@ onBeforeUnmount(() => {
 .shop-orders-item-card__note-input {
   width: 100%;
   min-height: var(--shop-control-height);
-  padding: 0 0.65rem;
+  padding: 0 0.6rem;
   border: 1px solid var(--shop-line);
   border-radius: var(--shop-radius-md);
   background: var(--shop-field);
   color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .shop-orders-item-card__qty-input {
@@ -2722,7 +2827,7 @@ onBeforeUnmount(() => {
 
 .shop-orders-item-card__danger {
   min-height: var(--shop-control-height);
-  padding: 0 0.72rem;
+  padding: 0 0.62rem;
   border-radius: var(--shop-radius-md);
   font-size: 0.92rem;
 }
@@ -2775,7 +2880,7 @@ onBeforeUnmount(() => {
 
 .shop-orders-history-row {
   gap: 0.4rem;
-  padding: 0.5rem 0.2rem;
+  padding: 0.42rem 0.15rem;
   border: 0;
   border-bottom: 1px solid var(--shop-line-soft);
   border-radius: 0;
@@ -2785,7 +2890,7 @@ onBeforeUnmount(() => {
 .shop-orders-history-row:hover,
 .shop-orders-history-row--active {
   border-color: rgba(140, 162, 186, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.026);
   transform: none;
 }
 
@@ -2809,7 +2914,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1440px) {
   .shop-orders-explorer {
-    grid-template-columns: minmax(360px, 1fr) minmax(380px, 1fr);
+    grid-template-columns: minmax(320px, 0.88fr) minmax(480px, 1.12fr);
   }
 }
 

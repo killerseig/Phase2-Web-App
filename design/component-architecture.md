@@ -27,6 +27,27 @@ The refactor should move the app toward a component system where pages orchestra
 
 ## Component Rules
 
+### Reuse Before Rebuild
+
+Before creating a new component or composable, compare it against existing patterns.
+
+Ask:
+
+- Is this the same visual pattern with different data?
+- Is this the same workflow behavior with different labels?
+- Can a shared primitive solve the common part while feature components own the domain-specific part?
+- Would sharing this require too many feature-specific props?
+- Would sharing this hide permission, validation, or workflow differences?
+
+Prefer:
+
+- shared components for stable visual patterns
+- shared composables for repeated behavior
+- feature components for domain-specific workflow sections
+- small primitives over one overly flexible mega-component
+
+Intentionally keeping similar-looking components separate is acceptable when the workflows are meaningfully different. Document that choice if future-us might wonder why.
+
 ### Pages
 
 Pages should:
@@ -176,6 +197,9 @@ These are common workflow helpers.
 - `SaveStatusIndicator`
   - displays saving, saved, pending, or error state
   - should support the timecard save queue and admin detail autosave pages
+- `PendingActionButton`
+  - button-level pending state without disabling an entire pane
+  - useful for add item, create draft, submit, delete, archive, and send actions
 - `ConfirmAction`
   - replaces direct `window.confirm` calls over time
   - should support message, confirm label, destructive styling, and test-friendly behavior
@@ -421,6 +445,15 @@ Needed composables:
   - note drafts and queued saves
 - `useShopOrderWorkflow`
   - create draft, add item, submit, delete
+- `useShopOrderOptimisticDraft`
+  - local pending draft/items so create/add interactions feel immediate
+
+Output boundary:
+
+- Shop order email and PDF rendering should stay out of Vue components.
+- Component extraction should preserve the dense workspace layout, forced no-horizontal-overflow behavior, order number visibility, and submitted read-only states.
+- Component extraction should preserve localized pending states instead of greying out the whole workspace during normal adds/saves.
+- PDF pagination, repeated table headers, and attached PDF generation belong in Cloud Functions/export code with preview/smoke coverage.
 
 Recommended extraction order:
 
@@ -666,4 +699,3 @@ Targets:
 - Prefer props/events over child components importing services.
 - Keep exact print/email/PDF rendering isolated and regression-tested.
 - Do not genericize the timecard workbook grid just because it is large.
-

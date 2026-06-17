@@ -308,13 +308,12 @@ function filterVisibleJobs(
   options: { assignedOnlyForUid?: string; assignedJobIds?: string[] } | undefined,
 ) {
   const assignedJobIds = Array.isArray(options?.assignedJobIds) ? options.assignedJobIds : []
-  if (assignedJobIds.length > 0) {
-    return jobs.filter((job) => assignedJobIds.includes(job.id))
-  }
-
   const assignedOnlyForUid = options?.assignedOnlyForUid
-  if (assignedOnlyForUid) {
-    return jobs.filter((job) => job.assignedForemanIds.includes(assignedOnlyForUid))
+  if (assignedJobIds.length > 0 || assignedOnlyForUid) {
+    return jobs.filter((job) => (
+      assignedJobIds.includes(job.id)
+      || (!!assignedOnlyForUid && job.assignedForemanIds.includes(assignedOnlyForUid))
+    ))
   }
 
   return jobs
@@ -1566,11 +1565,12 @@ export async function ensureE2ETimecardWeek(input: {
 
   const now = getNowValue().toISOString()
   const weekId = makeId('week')
+  const job = state.jobs.find((entry) => entry.id === input.jobId)
   state.timecardWeeks.push({
     id: weekId,
     jobId: input.jobId,
-    jobCode: input.jobCode,
-    jobName: input.jobName,
+    jobCode: input.jobCode ?? job?.code ?? null,
+    jobName: input.jobName ?? job?.name ?? null,
     ownerForemanUserId: input.ownerForemanUserId ?? null,
     ownerForemanName: input.ownerForemanName ?? null,
     weekStartDate: getWeekStartFromSaturday(input.weekEndDate),

@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios'
+import PDFDocument from 'pdfkit'
 import { EMAIL, DEFAULTS, EMAIL_STYLES } from './constants'
 import {
   emailEnabled,
@@ -111,6 +112,26 @@ function formatAnyDate(value: any): string {
     })
   } catch {
     return 'N/A'
+  }
+}
+
+function objectRecord(value: any): Record<string, any> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
+export function normalizeDailyLogEmailPayload(dailyLog: any): Record<string, any> {
+  const root = objectRecord(dailyLog)
+  const payload = objectRecord(root.payload)
+  const attachments = Array.isArray(payload.attachments)
+    ? payload.attachments
+    : Array.isArray(root.attachments)
+      ? root.attachments
+      : []
+
+  return {
+    ...root,
+    ...payload,
+    attachments,
   }
 }
 
@@ -225,9 +246,10 @@ export function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, logDate: st
  */
 export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dailyLog: any): string {
   const formattedDate = formatAnyDate(logDate)
+  const dailyLogPayload = normalizeDailyLogEmailPayload(dailyLog)
 
-  const manpowerLines = (Array.isArray(dailyLog?.manpowerLines) && dailyLog.manpowerLines.length
-    ? dailyLog.manpowerLines
+  const manpowerLines = (Array.isArray(dailyLogPayload.manpowerLines) && dailyLogPayload.manpowerLines.length
+    ? dailyLogPayload.manpowerLines
     : [{ trade: '', count: 0, areas: '' }])
     .map((line: any) => `
     <tr>
@@ -237,8 +259,8 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
     </tr>
   `).join('')
 
-  const indoorClimateRows = (Array.isArray(dailyLog?.indoorClimateReadings) && dailyLog.indoorClimateReadings.length
-    ? dailyLog.indoorClimateReadings
+  const indoorClimateRows = (Array.isArray(dailyLogPayload.indoorClimateReadings) && dailyLogPayload.indoorClimateReadings.length
+    ? dailyLogPayload.indoorClimateReadings
     : [{ area: '', high: '', low: '', humidity: '' }])
     .map((reading: any) => `
     <tr>
@@ -249,7 +271,7 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
     </tr>
   `).join('')
 
-  const attachments = (dailyLog?.attachments || [])
+  const attachments = (dailyLogPayload.attachments || [])
     .map((att: any) => {
       const label = att?.type === 'ptp'
         ? 'PTP Photo'
@@ -285,17 +307,17 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
         <p><strong>Date:</strong> ${formattedDate}</p>
 
         <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Site Information</h3>
-        <p><strong>Project Name:</strong> ${displayValue(dailyLog?.projectName)}</p>
-        <p><strong>Job Number:</strong> ${displayValue(dailyLog?.jobSiteNumbers || jobDetails?.number)}</p>
-        <p><strong>Foreman:</strong> ${displayValue(dailyLog?.foremanOnSite)}</p>
-        <p><strong>Project Manager:</strong> ${displayValue(dailyLog?.siteForemanAssistant)}</p>
+        <p><strong>Project Name:</strong> ${displayValue(dailyLogPayload.projectName)}</p>
+        <p><strong>Job Number:</strong> ${displayValue(dailyLogPayload.jobSiteNumbers || jobDetails?.number)}</p>
+        <p><strong>Foreman:</strong> ${displayValue(dailyLogPayload.foremanOnSite)}</p>
+        <p><strong>Project Manager:</strong> ${displayValue(dailyLogPayload.siteForemanAssistant)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Manpower</h3>
-        <p><strong>Manpower Summary:</strong> ${displayValue(dailyLog?.manpower)}</p>
-        <p><strong>Weekly Schedule:</strong> ${displayValue(dailyLog?.weeklySchedule)}</p>
-        <p><strong>Manpower Assessment:</strong> ${displayValue(dailyLog?.manpowerAssessment)}</p>
+        <p><strong>Manpower Summary:</strong> ${displayValue(dailyLogPayload.manpower)}</p>
+        <p><strong>Weekly Schedule:</strong> ${displayValue(dailyLogPayload.weeklySchedule)}</p>
+        <p><strong>Manpower Assessment:</strong> ${displayValue(dailyLogPayload.manpowerAssessment)}</p>
 
         <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
           <thead>
@@ -328,31 +350,31 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Safety & Concerns</h3>
-        <p><strong>Safety Concerns:</strong> ${displayValue(dailyLog?.safetyConcerns)}</p>
-        <p><strong>AHA Reviewed:</strong> ${displayValue(dailyLog?.ahaReviewed)}</p>
-        <p><strong>Schedule Concerns:</strong> ${displayValue(dailyLog?.scheduleConcerns)}</p>
-        <p><strong>Budget Concerns:</strong> ${displayValue(dailyLog?.budgetConcerns)}</p>
+        <p><strong>Safety Concerns:</strong> ${displayValue(dailyLogPayload.safetyConcerns)}</p>
+        <p><strong>AHA Reviewed:</strong> ${displayValue(dailyLogPayload.ahaReviewed)}</p>
+        <p><strong>Schedule Concerns:</strong> ${displayValue(dailyLogPayload.scheduleConcerns)}</p>
+        <p><strong>Budget Concerns:</strong> ${displayValue(dailyLogPayload.budgetConcerns)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Deliveries & Materials</h3>
-        <p><strong>Deliveries Received:</strong> ${displayValue(dailyLog?.deliveriesReceived)}</p>
-        <p><strong>Deliveries Needed:</strong> ${displayValue(dailyLog?.deliveriesNeeded)}</p>
-        <p><strong>New Work Authorizations:</strong> ${displayValue(dailyLog?.newWorkAuthorizations)}</p>
+        <p><strong>Deliveries Received:</strong> ${displayValue(dailyLogPayload.deliveriesReceived)}</p>
+        <p><strong>Deliveries Needed:</strong> ${displayValue(dailyLogPayload.deliveriesNeeded)}</p>
+        <p><strong>New Work Authorizations:</strong> ${displayValue(dailyLogPayload.newWorkAuthorizations)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Quality Control</h3>
-        <p><strong>Who is assigned to do QC?</strong> ${displayValue(dailyLog?.qcAssignedTo)}</p>
-        <p><strong>What areas were inspected?</strong> ${displayValue(dailyLog?.qcAreasInspected ?? dailyLog?.qcInspection)}</p>
-        <p><strong>What issues were identified?</strong> ${displayValue(dailyLog?.qcIssuesIdentified)}</p>
-        <p><strong>What was done to fix the issues?</strong> ${displayValue(dailyLog?.qcIssuesResolved)}</p>
+        <p><strong>Who is assigned to do QC?</strong> ${displayValue(dailyLogPayload.qcAssignedTo)}</p>
+        <p><strong>What areas were inspected?</strong> ${displayValue(dailyLogPayload.qcAreasInspected ?? dailyLogPayload.qcInspection)}</p>
+        <p><strong>What issues were identified?</strong> ${displayValue(dailyLogPayload.qcIssuesIdentified)}</p>
+        <p><strong>What was done to fix the issues?</strong> ${displayValue(dailyLogPayload.qcIssuesResolved)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Notes & Action Items</h3>
-        <p><strong>Notes & Correspondence:</strong> ${displayValue(dailyLog?.notesCorrespondence)}</p>
-        <p><strong>Action Items:</strong> ${displayValue(dailyLog?.actionItems)}</p>
+        <p><strong>Notes & Correspondence:</strong> ${displayValue(dailyLogPayload.notesCorrespondence)}</p>
+        <p><strong>Action Items:</strong> ${displayValue(dailyLogPayload.actionItems)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Attachments</h3>
@@ -1089,12 +1111,6 @@ function getShopOrderDescriptionSegments(description: any): string[] {
     .filter(Boolean)
 }
 
-function isShopTransferRootLabel(rootLabel: string | null): boolean {
-  if (!rootLabel) return false
-  const normalized = normalizeRootFolderLabel(rootLabel)
-  return normalized === 'shop' || normalized.startsWith('shop ')
-}
-
 function shouldStripControlRootLabel(rootLabel: string | null): boolean {
   if (!rootLabel) return false
   const normalized = normalizeRootFolderLabel(rootLabel)
@@ -1115,16 +1131,24 @@ function getJobDisplayLabel(order: any): string {
   return jobCode || jobName || 'Phase 2 Job'
 }
 
-type ShopOrderEmailBucket = 'shop' | 'pm'
-
 interface ShopOrderEmailLine {
-  bucket: ShopOrderEmailBucket
   displayDescription: string
   note: string
   orderedQuantity: number
   pendingQuantity: number
   receivedQuantity: number
   backorderedQuantity: number
+}
+
+interface ShopOrderDocumentModel {
+  orderIdentifier: string
+  orderBy: string
+  orderDate: string
+  deliveryDateLabel: string
+  jobLabel: string
+  comments: string
+  lines: ShopOrderEmailLine[]
+  totalAmount: number | null
 }
 
 function formatCompactOrderEmailDate(value: any): string {
@@ -1154,14 +1178,49 @@ function renderPrintedOrderPlainField(value: string, align: 'left' | 'right' = '
   `
 }
 
+const SHOP_ORDER_DOCUMENT_WIDTH = 980
+const SHOP_ORDER_DOCUMENT_PADDING = 14
+const SHOP_ORDER_TABLE_WIDTH = SHOP_ORDER_DOCUMENT_WIDTH - (SHOP_ORDER_DOCUMENT_PADDING * 2)
+const SHOP_ORDER_TABLE_BORDER = '#9b9b9b'
+const SHOP_ORDER_EMAIL_COLUMN_WIDTHS = {
+  pulledBy: 54,
+  verifiedBy: 58,
+  code: 64,
+  partNumber: 80,
+  itemName: 486,
+  quantity: 76,
+  notes: 108,
+  check: 26,
+} as const
+
 const SHOP_ORDER_EMAIL_PRINT_STYLES = `
   <style>
+    .shop-order-email__document {
+      width: ${SHOP_ORDER_DOCUMENT_WIDTH}px !important;
+      min-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px !important;
+      max-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px !important;
+    }
+    .shop-order-email__paper {
+      width: ${SHOP_ORDER_DOCUMENT_WIDTH}px !important;
+      min-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px !important;
+      max-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px !important;
+      overflow: visible !important;
+    }
+    .shop-order-email__print-section {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+      overflow: visible !important;
+    }
     .shop-order-email__items-table {
-      width: 100% !important;
+      width: ${SHOP_ORDER_TABLE_WIDTH}px !important;
+      min-width: ${SHOP_ORDER_TABLE_WIDTH}px !important;
+      max-width: ${SHOP_ORDER_TABLE_WIDTH}px !important;
       border-collapse: collapse !important;
       page-break-inside: auto !important;
       break-inside: auto !important;
       table-layout: fixed !important;
+      word-break: normal !important;
+      overflow-wrap: normal !important;
     }
     .shop-order-email__items-table thead {
       display: table-header-group !important;
@@ -1177,8 +1236,13 @@ const SHOP_ORDER_EMAIL_PRINT_STYLES = `
       break-inside: avoid-page !important;
     }
     @media print {
+      .shop-order-email__print-section {
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+        overflow: visible !important;
+      }
       .shop-order-email__items-table {
-        width: 100% !important;
+        width: ${SHOP_ORDER_TABLE_WIDTH}px !important;
         page-break-inside: auto !important;
         break-inside: auto !important;
       }
@@ -1198,40 +1262,43 @@ const SHOP_ORDER_EMAIL_PRINT_STYLES = `
     }
   </style>
 ` as const
-const SHOP_ORDER_ITEMS_PER_PRINT_PAGE = 20
-
-function chunkShopOrderEmailLines(items: ShopOrderEmailLine[]) {
-  const chunks: ShopOrderEmailLine[][] = []
-  for (let index = 0; index < items.length; index += SHOP_ORDER_ITEMS_PER_PRINT_PAGE) {
-    chunks.push(items.slice(index, index + SHOP_ORDER_ITEMS_PER_PRINT_PAGE))
-  }
-  return chunks
-}
 
 function renderPrintedShopOrderItemsTable(items: ShopOrderEmailLine[], marginTop = 10) {
   return `
-    <table class="shop-order-email__items-table" style="width: 100%; border-collapse: collapse; margin-top: ${marginTop}px; border: 1px solid #d8d8d8; page-break-inside: auto; break-inside: auto; table-layout: fixed;">
+    <table class="shop-order-email__items-table" width="${SHOP_ORDER_TABLE_WIDTH}" style="width: ${SHOP_ORDER_TABLE_WIDTH}px; min-width: ${SHOP_ORDER_TABLE_WIDTH}px; max-width: ${SHOP_ORDER_TABLE_WIDTH}px; border-collapse: collapse; margin-top: ${marginTop}px; border: 2px solid ${SHOP_ORDER_TABLE_BORDER}; page-break-inside: auto; break-inside: auto; table-layout: fixed; word-break: normal; overflow-wrap: normal;">
+      <colgroup>
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px;" />
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px;" />
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px;" />
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px;" />
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px;" />
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.quantity}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.quantity}px;" />
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.notes}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.notes}px;" />
+        <col width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.check}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.check}px;" />
+      </colgroup>
       <thead style="display: table-header-group !important;">
         <tr>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 54px;">Pulled<br>By</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 58px;">Verified<br>By</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 62px;">133/513</th>
-          <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left;">Item Name</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 70px;">Quantity</th>
-          <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; width: 150px;">Notes</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 46px;">&nbsp;</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Pulled<br>By</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Verified<br>By</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">133/513</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Part#</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; padding: 6px 7px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Item Name</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.quantity}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.quantity}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.quantity}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.quantity}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Quantity</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.notes}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.notes}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.notes}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.notes}px; padding: 6px 7px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Notes</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.check}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.check}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.check}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.check}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">&nbsp;</th>
         </tr>
       </thead>
       <tbody style="display: table-row-group !important;">
         ${items.map((item) => `
           <tr style="page-break-inside: avoid !important; break-inside: avoid-page !important;">
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; line-height: 1.25;">${renderEmailText(item.displayDescription, 'Untitled Item')}</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">${item.orderedQuantity}</td>
-            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333;">${renderOptionalEmailText(item.note)}</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; vertical-align: middle; font-size: 13px; line-height: 1.25; word-break: normal; overflow-wrap: break-word;">${renderEmailText(item.displayDescription, 'Untitled Item')}</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">${item.orderedQuantity}</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333; word-break: normal; overflow-wrap: break-word;">${renderOptionalEmailText(item.note)}</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
           </tr>
         `).join('')}
       </tbody>
@@ -1249,91 +1316,69 @@ function renderPrintedShopOrderSection(
   items: ShopOrderEmailLine[],
 ) {
   if (!items.length) return ''
-  const [firstItemPage, ...continuedItemPages] = chunkShopOrderEmailLines(items)
 
   return `
-    <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; page-break-inside: auto;">
-      <tbody>
-        <tr>
-          <td style="border: none; padding: 14px 14px 12px;">
-            <table role="presentation" style="width: 100%; border: none; margin: 0 0 8px;">
-              <tbody>
-                <tr>
-                  <td style="border: none; padding: 0 0 4px; vertical-align: top; text-align: center;">
-                    <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 25px; font-weight: 700; letter-spacing: 0.03em; color: #111111; text-align: center;">
-                      Online Shop Order
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            <table role="presentation" style="width: 100%; border: none; margin: 0 0 6px;">
-              <tbody>
-                <tr>
-                  <td style="border: none; width: 50%; padding: 0 12px 5px 0; vertical-align: top;">
-                    ${renderPrintedOrderPlainField(orderBy || 'Phase 2 Foreman')}
-                  </td>
-                  <td style="border: none; width: 50%; padding: 0 0 5px 12px; vertical-align: top;">
-                    ${renderPrintedOrderMetaField('Date Ordered', orderDate, 'right')}
-                  </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
-                    ${renderPrintedOrderMetaField('Desired Delivery Date', deliveryDateLabel)}
-                  </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
-                    ${renderPrintedOrderMetaField('Job', jobLabel)}
-                  </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 4px; vertical-align: top;">
-                    ${renderPrintedOrderMetaField('Order #', orderIdentifier)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            ${comments
-              ? `
-                <div style="margin-top: 6px; font-size: 13px; line-height: 1.35; color: #222222;">
-                  <strong>Comments:</strong> ${renderEmailText(comments)}
-                </div>
-              `
-              : ''}
-
-            ${renderPrintedShopOrderItemsTable(firstItemPage)}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    ${continuedItemPages.map((itemPage) => `
-      <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; page-break-before: always; break-before: page;">
+    <div class="shop-order-email__print-section" style="display: block; width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; padding: 14px 14px 12px; page-break-inside: auto; break-inside: auto; overflow: visible;">
+      <table role="presentation" style="width: 100%; border: none; margin: 0 0 8px;">
         <tbody>
           <tr>
-            <td style="border: none; padding: 14px 14px 12px;">
-              ${renderPrintedShopOrderItemsTable(itemPage, 0)}
+            <td style="border: none; padding: 0 0 4px; vertical-align: top; text-align: center;">
+              <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 25px; font-weight: 700; letter-spacing: 0.03em; color: #111111; text-align: center;">
+                Online Shop Order
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
-    `).join('')}
+
+      <table role="presentation" style="width: 100%; border: none; margin: 0 0 6px;">
+        <tbody>
+          <tr>
+            <td style="border: none; width: 50%; padding: 0 12px 5px 0; vertical-align: top;">
+              ${renderPrintedOrderPlainField(orderBy || 'Phase 2 Foreman')}
+            </td>
+            <td style="border: none; width: 50%; padding: 0 0 5px 12px; vertical-align: top;">
+              ${renderPrintedOrderMetaField('Date Ordered', orderDate, 'right')}
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
+              ${renderPrintedOrderMetaField('Desired Delivery Date', deliveryDateLabel)}
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
+              ${renderPrintedOrderMetaField('Job', jobLabel)}
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="border: none; padding: 0 0 4px; vertical-align: top;">
+              ${renderPrintedOrderMetaField('Order #', orderIdentifier)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      ${comments
+        ? `
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.35; color: #222222;">
+            <strong>Comments:</strong> ${renderEmailText(comments)}
+          </div>
+        `
+        : ''}
+
+      ${renderPrintedShopOrderItemsTable(items)}
+    </div>
   `
 }
 
-/**
- * Build HTML template for shop order email
- */
-export function buildShopOrderEmail(
+function buildShopOrderDocumentModel(
   order: any,
   costCodesByCatalogItemId: Record<string, string> = {},
-): string {
+): ShopOrderDocumentModel {
   void costCodesByCatalogItemId
-  const items = order?.items || []
+  const items = Array.isArray(order?.items) ? order.items : []
   const totalAmount = Number(order?.totalAmount)
-  const hasTotalAmount = Number.isFinite(totalAmount)
   const orderIdentifier = getShopOrderDisplayNumber(order)
   const orderDate = formatCompactOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt)
   const deliveryDate = getShopOrderRequestedDeliveryDateValue(order)
@@ -1342,9 +1387,9 @@ export function buildShopOrderEmail(
     : 'N/A'
   const jobLabel = getJobDisplayLabel(order)
   const comments = String(order?.comments || '').trim()
-  const orderBy = String(order?.foremanName || order?.submittedByName || '').trim()
+  const orderBy = String(order?.foremanName || order?.submittedByName || '').trim() || 'Phase 2 Foreman'
 
-  const emailLines: ShopOrderEmailLine[] = items.map((item: any) => {
+  const lines: ShopOrderEmailLine[] = items.map((item: any) => {
     const descriptionSegments = getShopOrderDescriptionSegments(item?.description)
     const rootLabel = descriptionSegments[0] || null
     const remainingSegments = shouldStripControlRootLabel(rootLabel)
@@ -1354,7 +1399,6 @@ export function buildShopOrderEmail(
     const displayDescription = remainingSegments.at(-1) || descriptionSegments.at(-1) || fallbackDescription
 
     return {
-      bucket: isShopTransferRootLabel(rootLabel) ? 'shop' : 'pm',
       displayDescription,
       note: String(item?.note || item?.notes || '').trim(),
       orderedQuantity: normalizeShopOrderQuantity(item?.quantity),
@@ -1364,31 +1408,36 @@ export function buildShopOrderEmail(
     }
   })
 
-  const shopLines = emailLines.filter((item) => item.bucket === 'shop')
-  const pmLines = emailLines.filter((item) => item.bucket === 'pm')
-  const shopComments = shopLines.length ? comments : ''
-  const pmComments = shopLines.length ? '' : comments
+  return {
+    orderIdentifier,
+    orderBy,
+    orderDate,
+    deliveryDateLabel,
+    jobLabel,
+    comments,
+    lines,
+    totalAmount: Number.isFinite(totalAmount) ? totalAmount : null,
+  }
+}
 
-  const shopItemsHtml = renderPrintedShopOrderSection(
-    orderIdentifier,
-    orderBy || 'Phase 2 Foreman',
-    orderDate,
-    deliveryDateLabel,
-    jobLabel,
-    shopComments,
-    shopLines,
-  )
-  const pmItemsHtml = renderPrintedShopOrderSection(
-    orderIdentifier,
-    orderBy || 'Phase 2 Foreman',
-    orderDate,
-    deliveryDateLabel,
-    jobLabel,
-    pmComments,
-    pmLines,
-  )
-  const itemsHtml = shopItemsHtml || pmItemsHtml
-    ? `${shopItemsHtml}${pmItemsHtml}`
+/**
+ * Build HTML template for shop order email
+ */
+export function buildShopOrderEmail(
+  order: any,
+  costCodesByCatalogItemId: Record<string, string> = {},
+): string {
+  const model = buildShopOrderDocumentModel(order, costCodesByCatalogItemId)
+  const itemsHtml = model.lines.length
+    ? renderPrintedShopOrderSection(
+      model.orderIdentifier,
+      model.orderBy,
+      model.orderDate,
+      model.deliveryDateLabel,
+      model.jobLabel,
+      model.comments,
+      model.lines,
+    )
     : '<p style="margin: 16px 0 0;"><em>No items in this order.</em></p>'
   const endOfOrderHtml = `
     <div style="margin-top: 12px; padding: 0 12px; font-size: 15px; color: #303030;">
@@ -1399,17 +1448,200 @@ export function buildShopOrderEmail(
   return `
     ${EMAIL_STYLES}
     ${SHOP_ORDER_EMAIL_PRINT_STYLES}
-    <div class="email-container" style="font-family: Arial, sans-serif; background-color: #efefef; padding: 16px;">
-      <div class="content" style="background-color: #ffffff; padding: 14px; line-height: 1.45; color: #222222;">
-        ${hasTotalAmount ? `<div style="margin-bottom: 10px; font-size: 14px; color: #333333;"><strong>Estimated Total:</strong> $${totalAmount.toFixed(2)}</div>` : ''}
+    <div class="email-container shop-order-email__document" style="width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; min-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; max-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; font-family: Arial, sans-serif; background-color: #efefef; padding: 16px;">
+      <div class="content shop-order-email__paper" style="width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; min-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; max-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; background-color: #ffffff; padding: 14px; line-height: 1.45; color: #222222;">
+        ${model.totalAmount !== null ? `<div style="margin-bottom: 10px; font-size: 14px; color: #333333;"><strong>Estimated Total:</strong> $${model.totalAmount.toFixed(2)}</div>` : ''}
         ${itemsHtml}
         ${endOfOrderHtml}
       </div>
-      <div class="footer" style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666666; border-radius: 0 0 4px 4px;">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
-      </div>
     </div>
   `
+}
+
+function sanitizeShopOrderPdfFilenamePart(value: any): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 80)
+}
+
+export function buildShopOrderPdfFilename(order: any): string {
+  const orderIdentifier = sanitizeShopOrderPdfFilenamePart(getShopOrderDisplayNumber(order)) || 'Unnumbered'
+  return `Online Shop Order ${orderIdentifier}.pdf`
+}
+
+export async function buildShopOrderPdfBuffer(
+  order: any,
+  costCodesByCatalogItemId: Record<string, string> = {},
+): Promise<Buffer> {
+  const model = buildShopOrderDocumentModel(order, costCodesByCatalogItemId)
+  const doc = new PDFDocument({ margin: 28, size: 'LETTER' })
+  const chunks: Buffer[] = []
+
+  const pageMargin = 28
+  const pageTop = 28
+  const pageBottom = doc.page.height - pageMargin
+  const tableX = pageMargin
+  const tableWidth = doc.page.width - (pageMargin * 2)
+  const colWidths = [42, 46, 52, 58, 254, 52, 70, 18]
+  const tableScale = tableWidth / colWidths.reduce((sum, width) => sum + width, 0)
+  const scaledColWidths = colWidths.map((width) => width * tableScale)
+  const borderColor = '#111111'
+
+  const pdfText = (value: any, fallback = '') => {
+    const text = String(value ?? '').trim()
+    return text || fallback
+  }
+
+  const sumWidths = (start: number, end: number) => (
+    scaledColWidths.slice(start, end).reduce((sum, width) => sum + width, 0)
+  )
+
+  const columnX = (index: number) => tableX + sumWidths(0, index)
+
+  await new Promise<void>((resolve, reject) => {
+    doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+    doc.on('end', () => resolve())
+    doc.on('error', (err) => reject(err))
+
+    const drawCell = (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      text: string,
+      options?: {
+        bold?: boolean
+        align?: 'left' | 'center' | 'right'
+        fontSize?: number
+        paddingX?: number
+        paddingY?: number
+      },
+    ) => {
+      const fontSize = options?.fontSize ?? 9
+      const paddingX = options?.paddingX ?? 4
+      const paddingY = options?.paddingY ?? 4
+      doc.lineWidth(0.9).strokeColor(borderColor).rect(x, y, width, height).stroke()
+      doc
+        .font(options?.bold ? 'Helvetica-Bold' : 'Helvetica')
+        .fontSize(fontSize)
+        .fillColor('#111111')
+        .text(text, x + paddingX, y + paddingY, {
+          width: Math.max(width - (paddingX * 2), 0),
+          height: Math.max(height - (paddingY * 2), 0),
+          align: options?.align ?? 'left',
+        })
+    }
+
+    const drawTableHeader = (y: number) => {
+      const headerHeight = 32
+      const headers = ['Pulled\nBy', 'Verified\nBy', '133/513', 'Part#', 'Item Name', 'Quantity', 'Notes', '']
+      headers.forEach((header, index) => {
+        drawCell(columnX(index), y, scaledColWidths[index] || 0, headerHeight, header, {
+          bold: true,
+          align: index === 4 || index === 6 ? 'left' : 'center',
+          fontSize: 10,
+          paddingX: index === 4 || index === 6 ? 5 : 3,
+          paddingY: 7,
+        })
+      })
+      return y + headerHeight
+    }
+
+    const drawDocumentHeader = (includeTableHeader = true) => {
+      let y = pageTop
+      doc
+        .font('Times-Bold')
+        .fontSize(22)
+        .fillColor('#111111')
+        .text('Online Shop Order', pageMargin, y, {
+          width: tableWidth,
+          align: 'center',
+        })
+      y += 36
+
+      doc.font('Helvetica').fontSize(11)
+      doc.text(pdfText(model.orderBy, 'Phase 2 Foreman'), pageMargin, y, { width: tableWidth / 2, align: 'left' })
+      doc.font('Helvetica-Bold').text('Date Ordered:', pageMargin + (tableWidth / 2), y, { width: tableWidth / 4, align: 'right' })
+      doc.font('Helvetica').text(model.orderDate, pageMargin + (tableWidth * 0.75) + 4, y, { width: (tableWidth / 4) - 4, align: 'left' })
+      y += 18
+
+      const metaLines = [
+        ['Desired Delivery Date', model.deliveryDateLabel],
+        ['Job', model.jobLabel],
+        ['Order #', model.orderIdentifier],
+      ]
+
+      metaLines.forEach(([label, value]) => {
+        doc.font('Helvetica-Bold').fontSize(11).text(`${label}:`, pageMargin, y, { continued: true })
+        doc.font('Helvetica').text(` ${pdfText(value)}`)
+        y += 18
+      })
+
+      if (model.comments) {
+        doc.font('Helvetica-Bold').fontSize(11).text('Comments:', pageMargin, y, { continued: true })
+        doc.font('Helvetica').text(` ${model.comments}`, { width: tableWidth })
+        y += Math.max(18, doc.heightOfString(model.comments, { width: tableWidth - 70 }) + 4)
+      }
+
+      const nextY = y + 6
+      return includeTableHeader ? drawTableHeader(nextY) : nextY
+    }
+
+    let cursorY = drawDocumentHeader()
+
+    const ensureSpace = (height: number) => {
+      if (cursorY + height <= pageBottom - 24) return
+      doc.addPage()
+      cursorY = drawTableHeader(pageTop)
+    }
+
+    const ensureEndMarkerSpace = (height: number) => {
+      if (cursorY + height <= pageBottom - 24) return
+      doc.addPage()
+      cursorY = pageTop
+    }
+
+    if (!model.lines.length) {
+      ensureSpace(28)
+      drawCell(tableX, cursorY, tableWidth, 28, 'No items in this order.', { fontSize: 10, paddingX: 6 })
+      cursorY += 28
+    }
+
+    model.lines.forEach((line) => {
+      const itemWidth = scaledColWidths[4] - 10
+      const notesWidth = scaledColWidths[6] - 10
+      doc.font('Helvetica').fontSize(10)
+      const itemHeight = doc.heightOfString(pdfText(line.displayDescription, 'Untitled Item'), { width: itemWidth })
+      const noteHeight = line.note ? doc.heightOfString(line.note, { width: notesWidth }) : 0
+      const rowHeight = Math.max(30, itemHeight + 10, noteHeight + 10)
+
+      ensureSpace(rowHeight)
+
+      drawCell(columnX(0), cursorY, scaledColWidths[0] || 0, rowHeight, '', { align: 'center' })
+      drawCell(columnX(1), cursorY, scaledColWidths[1] || 0, rowHeight, '', { align: 'center' })
+      drawCell(columnX(2), cursorY, scaledColWidths[2] || 0, rowHeight, '', { align: 'center' })
+      drawCell(columnX(3), cursorY, scaledColWidths[3] || 0, rowHeight, '', { align: 'center' })
+      drawCell(columnX(4), cursorY, scaledColWidths[4] || 0, rowHeight, pdfText(line.displayDescription, 'Untitled Item'), { fontSize: 10, paddingX: 5, paddingY: 5 })
+      drawCell(columnX(5), cursorY, scaledColWidths[5] || 0, rowHeight, String(line.orderedQuantity), { align: 'center', fontSize: 10, paddingY: 5 })
+      drawCell(columnX(6), cursorY, scaledColWidths[6] || 0, rowHeight, line.note, { fontSize: 9, paddingX: 5, paddingY: 5 })
+      drawCell(columnX(7), cursorY, scaledColWidths[7] || 0, rowHeight, '', { align: 'center' })
+      cursorY += rowHeight
+    })
+
+    ensureEndMarkerSpace(42)
+    cursorY += 12
+    doc
+      .font('Helvetica')
+      .fontSize(13)
+      .fillColor('#111111')
+      .text('End of Order', pageMargin, cursorY)
+
+    doc.end()
+  })
+
+  return Buffer.concat(chunks)
 }
 
 /**
@@ -1590,10 +1822,18 @@ export async function sendShopOrderEmailNotification(
 ): Promise<void> {
   const orderIdentifier = getShopOrderDisplayNumber(order)
   const html = buildShopOrderEmail(order)
+  const pdfBuffer = await buildShopOrderPdfBuffer(order)
   await sendEmail({
     to: recipients,
     subject: `${EMAIL.SUBJECTS.SHOP_ORDER} - Order #${orderIdentifier}`,
     html,
+    attachments: [
+      {
+        name: buildShopOrderPdfFilename(order),
+        contentType: 'application/pdf',
+        contentBytes: pdfBuffer.toString('base64'),
+      },
+    ],
   })
 }
 

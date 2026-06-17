@@ -38,20 +38,42 @@ service cloud.firestore {
         : [];
     }
 
+    function jobDoc(jobId) {
+      return get(/databases/$(database)/documents/jobs/$(jobId));
+    }
+
+    function foremanAssignedInJobData(jobData) {
+      return jobData.assignedForemanIds is list &&
+             jobData.assignedForemanIds.hasAny([request.auth.uid]);
+    }
+
     function isAdmin() {
       return activeAppUser() && userRole() == 'admin';
+    }
+
+    function canUseTimecards() {
+      return activeAppUser() && (isAdmin() || userRole() == 'foreman');
     }
 
     function isForemanAssigned(jobId) {
       return activeAppUser() &&
         userRole() == 'foreman' &&
-        userAssignedJobs().hasAny([jobId]);
+        (userAssignedJobs().hasAny([jobId]) ||
+         (jobDoc(jobId).data != null && foremanAssignedInJobData(jobDoc(jobId).data)));
     }
 
     function hasJobReadAccess(jobId) {
       return activeAppUser() && (
         isAdmin() ||
         isForemanAssigned(jobId)
+      );
+    }
+
+    function hasJobReadAccessFromJobData(jobId, jobData) {
+      return activeAppUser() && (
+        isAdmin() ||
+        (userRole() == 'foreman' &&
+         (userAssignedJobs().hasAny([jobId]) || foremanAssignedInJobData(jobData)))
       );
     }
 
@@ -71,7 +93,7 @@ service cloud.firestore {
     }
 
     function foremanCanAccessWeek(weekData) {
-      return isAssignedForemanToJob(weekData.jobId) && foremanOwnsWeek(weekData);
+      return canUseTimecards() && foremanOwnsWeek(weekData);
     }
 
     function isSelf(uid) {
@@ -145,20 +167,6 @@ service cloud.firestore {
       return timecardWeekExists(weekId) && timecardWeekDoc(weekId).data.status == 'submitted';
     }
 
-    function foremanCanUpdateTimecardWeek() {
-      return hasJobWriteAccess(resource.data.jobId) &&
-             resource.data.status == 'draft' &&
-             request.resource.data.diff(resource.data).changedKeys().hasOnly([
-               'status',
-               'employeeCardCount',
-               'submittedAt',
-               'updatedAt',
-               'updatedByUserId',
-               'submittedByUserId',
-               'submittedByName'
-             ]);
-    }
-
     match /users/{uid} {
       allow get: if signedIn() && (isSelf(uid) || isAdmin());
       allow list: if isAdmin();
@@ -173,7 +181,7 @@ service cloud.firestore {
     }
 
     match /jobs/{jobId} {
-      allow read: if hasJobReadAccess(jobId);
+      allow read: if hasJobReadAccessFromJobData(jobId, resource.data);
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || foremanCanUpdateDailyLogRecipients(jobId);
     }
@@ -192,12 +200,11 @@ service cloud.firestore {
     }
 
     match /timecardWeeks/{weekId} {
-      allow read: if hasJobReadAccess(resource.data.jobId) &&
-                    (isAdmin() || foremanCanAccessWeek(resource.data));
-      allow create: if hasJobWriteAccess(request.resource.data.jobId) &&
+      allow read: if isAdmin() || foremanCanAccessWeek(resource.data);
+      allow create: if canUseTimecards() &&
                      (isAdmin() || request.resource.data.ownerForemanUserId == request.auth.uid);
       allow update: if isAdmin() ||
-                    (hasJobWriteAccess(resource.data.jobId) &&
+                    (canUseTimecards() &&
                      resource.data.status == 'draft' &&
                      resource.data.ownerForemanUserId == request.auth.uid &&
                      request.resource.data.diff(resource.data).changedKeys().hasOnly([
@@ -210,21 +217,20 @@ service cloud.firestore {
                        'submittedByName'
                      ]));
       allow delete: if isAdmin() ||
-                    (hasJobWriteAccess(resource.data.jobId) &&
+                    (canUseTimecards() &&
                      resource.data.status == 'draft' &&
                      resource.data.ownerForemanUserId == request.auth.uid);
 
       match /cards/{cardId} {
         allow read: if timecardWeekExists(weekId) &&
-                     hasJobReadAccess(timecardWeekJobId(weekId)) &&
-                     (isAdmin() || foremanOwnsWeek(timecardWeekDoc(weekId).data));
+                     (isAdmin() || foremanCanAccessWeek(timecardWeekDoc(weekId).data));
         allow create: if timecardWeekExists(weekId) &&
-                       hasJobWriteAccess(timecardWeekJobId(weekId)) &&
-                       (isAdmin() || timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid) &&
+                       (isAdmin() ||
+                        (canUseTimecards() && timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid)) &&
                        (!timecardWeekIsSubmitted(weekId) || isAdmin());
         allow update, delete: if timecardWeekExists(weekId) &&
-                              hasJobWriteAccess(timecardWeekJobId(weekId)) &&
-                              (isAdmin() || timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid) &&
+                              (isAdmin() ||
+                               (canUseTimecards() && timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid)) &&
                               (!timecardWeekIsSubmitted(weekId) || isAdmin());
       }
     }

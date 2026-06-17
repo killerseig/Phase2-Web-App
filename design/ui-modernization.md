@@ -205,7 +205,7 @@ Priorities:
 - compact order item rows
 - readable history
 - clear submitted/read-only state
-- email/print layout remains practical for paper
+- email/PDF/print output remains practical for paper
 
 ### Timecards
 
@@ -227,7 +227,8 @@ Rules:
 
 - Exact paper output wins over app theme consistency.
 - Timecard email should attach the same PDF output used by admin export.
-- Shop order email/print should prioritize printed readability and page breaks.
+- Shop order email/PDF output should prioritize printed readability and page breaks.
+- Shop order PDF is the reliable print surface when email clients ignore print CSS.
 - Do not redesign print/PDF output as part of general app beautification.
 - Use smoke tests and manual previews for every visual output change.
 
@@ -312,4 +313,3 @@ Stop and reassess if:
 - a shared component needs too many feature-specific props
 - density changes make field workflows slower
 - the app starts looking generic instead of operational
-

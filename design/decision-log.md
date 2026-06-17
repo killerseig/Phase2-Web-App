@@ -97,3 +97,75 @@ Implications:
 - Compatibility fields that are still read/written require their own cleanup plan.
 - Deleted Firebase function exports need deploy-time attention so old deployed functions are removed intentionally.
 
+## 2026-06-17 - Shop Order PDF Is The Reliable Print Artifact
+
+Decision:
+
+- Shop order emails may keep an HTML body for quick viewing, but the attached PDF is the reliable print artifact.
+- The shop order PDF generator must manually repeat the table column header at the top of continuation pages.
+
+Why:
+
+- Email clients do not consistently honor print CSS, repeated table headers, or fixed-width layout behavior.
+- The shop needs printed orders to remain readable across page breaks.
+
+Implications:
+
+- Do not rely on the email body alone for exact printed shop order output.
+- Keep shop order email HTML, PDF generation, and send orchestration isolated enough to test independently.
+- Preview/smoke tests must cover long orders that span multiple PDF pages.
+
+## 2026-06-17 - Overall Refactor Needs A Living Master Plan
+
+Decision:
+
+- Maintain `overall-refactor-plan.md` as the umbrella plan for the broad app refactor.
+- Keep specialized docs for detailed rules, but use the master plan to coordinate sequencing and cross-cutting guardrails.
+
+Why:
+
+- The refactor affects nearly every part of the app: Vue structure, Firebase boundaries, tests, output rendering, cleanup, and GUI modernization.
+- Without one high-level map, it is too easy to optimize one module while accidentally breaking another.
+
+Implications:
+
+- Update the master plan when refactor sequencing, guardrails, or major themes change.
+- Record durable decisions in this decision log.
+- Keep detailed implementation rules in the focused design docs.
+
+## 2026-06-17 - Normal Workflow Actions Should Feel Local-First
+
+Decision:
+
+- Create/add/edit interactions should update the UI immediately where it is safe.
+- Firebase writes should usually happen in the background with localized pending state.
+- Avoid greying out full panes or blocking unrelated controls during normal saves.
+
+Why:
+
+- Field users need the app to feel fast and predictable.
+- Waiting for remote writes or subscription echoes makes workflows feel clunky even when the backend is working correctly.
+
+Implications:
+
+- Refactors should introduce optimistic workflow helpers and pending-action components.
+- Tests should protect typing, add-item, and create-draft behavior under pending/slow-save conditions.
+- Final actions such as submit/delete can still use stronger pending states because they intentionally change workflow status.
+
+## 2026-06-17 - Reuse Similar Patterns Intentionally
+
+Decision:
+
+- Before adding new components, composables, services, or style patterns, perform a reuse review.
+- Share stable visual patterns and repeated behavior, but avoid over-generalized mega-components.
+
+Why:
+
+- The refactor should make the app smaller and more consistent, not create parallel versions of the same idea.
+- Forced reuse can be just as harmful as duplication when workflows have different permissions or business rules.
+
+Implications:
+
+- Prefer shared primitives plus feature-specific wrappers when workflows are similar but not identical.
+- Add checklist items to catch duplication during component/composable extraction.
+- Document intentionally separate components when the reason may not be obvious later.

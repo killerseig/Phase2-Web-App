@@ -157,6 +157,8 @@ const weekStatusLabel = computed(() => {
 const weekRangeLabel = computed(() => formatWeekRange(selectedWeekStartDate.value, selectedWeekEndDate.value))
 const burdenValue = computed(() => job.value?.productionBurden ?? DEFAULT_TIMECARD_BURDEN)
 const recentWeeks = computed(() => weeks.value.slice(0, 10))
+const displayJobCode = computed(() => job.value?.code || selectedWeek.value?.jobCode || 'No Job #')
+const displayJobName = computed(() => job.value?.name || selectedWeek.value?.jobName || 'Select a Job')
 const linkedJobNumber = computed(() => {
   const explicitWeekJobCode = String(selectedWeek.value?.jobCode ?? '').trim()
   if (explicitWeekJobCode) return explicitWeekJobCode
@@ -390,7 +392,7 @@ function mergeRemoteCardsWithLocalState(nextCards: TimecardCardRecord[]) {
 }
 
 async function maybeEnsureSelectedWeek() {
-  if (!jobId.value || !job.value) return
+  if (!jobId.value) return
   if (weeksLoading.value) return
   if (selectedWeek.value) return
 
@@ -402,8 +404,8 @@ async function maybeEnsureSelectedWeek() {
   try {
     await ensureTimecardWeek({
       jobId: jobId.value,
-      jobCode: job.value.code ?? null,
-      jobName: job.value.name ?? null,
+      jobCode: job.value?.code ?? null,
+      jobName: job.value?.name ?? null,
       ownerForemanUserId: auth.currentUser?.uid ?? null,
       ownerForemanName: auth.displayName ?? null,
       weekEndDate: selectedWeekEndDate.value,
@@ -915,13 +917,13 @@ onBeforeUnmount(() => {
               <label class="timecards-toolbar__search">
                 <span>Job Number</span>
                 <div class="timecards-toolbar__display-field">
-                  <span class="timecards-toolbar__display">{{ job?.code || 'No Job #' }}</span>
+                  <span class="timecards-toolbar__display">{{ displayJobCode }}</span>
                 </div>
               </label>
               <label class="timecards-toolbar__search">
                 <span>Job Name</span>
                 <div class="timecards-toolbar__display-field">
-                  <span class="timecards-toolbar__display">{{ job?.name || 'Select a Job' }}</span>
+                  <span class="timecards-toolbar__display">{{ displayJobName }}</span>
                 </div>
               </label>
               <label class="timecards-toolbar__search">

@@ -1,5 +1,10 @@
 import { expect, test } from './helpers/test.js'
-import { createAdminWorkspaceFixture, createJobDashboardFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
+import {
+  createAdminWorkspaceFixture,
+  createJobDashboardFixture,
+  createTimecardsFixture,
+  gotoPhase2App,
+} from './helpers/phase2AppFixture.js'
 
 test.describe('route access control', () => {
   test('foremen are redirected away from admin-only routes', async ({ page }) => {
@@ -15,6 +20,40 @@ test.describe('route access control', () => {
     await expect(page).toHaveURL(/\/jobs$/)
     await expect(page.getByTestId('job-card-1A')).toBeVisible()
     await expect(page.getByTestId('daily-logs-page')).toHaveCount(0)
+  })
+
+  test('foremen can see jobs assigned on the job record when profile assignments are stale', async ({ page }) => {
+    const fixture = createJobDashboardFixture()
+    fixture.auth.profile.assignedJobIds = []
+    fixture.users = fixture.users.map((user) => (
+      user.id === 'foreman-e2e'
+        ? { ...user, assignedJobIds: [] }
+        : user
+    ))
+    fixture.jobs[0].assignedForemanIds = ['foreman-e2e']
+
+    await gotoPhase2App(page, '/jobs', fixture)
+
+    await expect(page.getByTestId('job-card-1A')).toBeVisible()
+  })
+
+  test('foremen can use timecards when job record assignment exists but profile assignments are stale', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: false })
+    fixture.auth.profile.assignedJobIds = []
+    fixture.users = fixture.users.map((user) => (
+      user.id === 'foreman-e2e'
+        ? { ...user, assignedJobIds: [] }
+        : user
+    ))
+    fixture.jobs[0].assignedForemanIds = ['foreman-e2e']
+    fixture.timecardWeeks = []
+    fixture.timecardCards = []
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+
+    await expect(page.getByTestId('timecards-page')).toBeVisible()
+    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
   })
 
   test('admins can open job routes even when the job is not assigned to them', async ({ page }) => {

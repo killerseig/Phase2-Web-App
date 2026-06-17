@@ -569,7 +569,8 @@ function validatePdfCsvHourParity(timecards) {
 }
 async function loadDailyLogAttachments(log) {
     const attachments = [];
-    const files = Array.isArray(log?.attachments) ? log.attachments : [];
+    const dailyLogPayload = (0, emailService_1.normalizeDailyLogEmailPayload)(log);
+    const files = Array.isArray(dailyLogPayload.attachments) ? dailyLogPayload.attachments : [];
     let totalBytes = 0;
     for (const att of files) {
         if (!att?.path)
@@ -1535,11 +1536,19 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1
         const job = await (0, firestoreService_1.getJobDetails)(resolvedJobId || jobId);
         const costCodesByCatalogItemId = await getShopOrderCostCodesByCatalogItemId(order?.items);
         const emailHtml = (0, emailService_1.buildShopOrderEmail)(order, costCodesByCatalogItemId);
+        const pdfBuffer = await (0, emailService_1.buildShopOrderPdfBuffer)(order, costCodesByCatalogItemId);
         const orderDateLabel = formatEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
         await (0, emailService_1.sendEmail)({
             to: recipients,
             subject: `${constants_1.EMAIL.SUBJECTS.SHOP_ORDER} - ${job?.name || 'Job'} - ${orderDateLabel}`,
             html: emailHtml,
+            attachments: [
+                {
+                    name: (0, emailService_1.buildShopOrderPdfFilename)(order),
+                    contentType: 'application/pdf',
+                    contentBytes: pdfBuffer.toString('base64'),
+                },
+            ],
         });
         console.log(`Shop order ${shopOrderId} emailed to ${recipients.join(', ')}`);
         return { success: true, message: 'Email sent successfully' };

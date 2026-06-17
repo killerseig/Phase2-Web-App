@@ -335,8 +335,11 @@ Rules:
 - draft delivery date defaults to next Thursday
 - item names shown in added items should not include folder paths
 - submitted orders are read-only
-- email/print layout changes require preview/smoke checks
-- printable table headers must repeat across pages when possible
+- email/PDF layout changes require preview/smoke checks
+- the email body should keep one item table and a forced paper width for quick viewing
+- the attached PDF is the reliable print artifact
+- PDF table headers must repeat at the top of continuation pages
+- frontend components should not own PDF pagination logic
 
 ### Shop Catalog Admin
 
@@ -413,4 +416,3 @@ After changing a module:
 - run targeted e2e
 - run function build/smoke if functions or output changed
 - update this contract if ownership changed
-

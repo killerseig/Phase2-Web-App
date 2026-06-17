@@ -52,12 +52,32 @@
 
     
   <style>
+    .shop-order-email__document {
+      width: 980px !important;
+      min-width: 980px !important;
+      max-width: 980px !important;
+    }
+    .shop-order-email__paper {
+      width: 980px !important;
+      min-width: 980px !important;
+      max-width: 980px !important;
+      overflow: visible !important;
+    }
+    .shop-order-email__print-section {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+      overflow: visible !important;
+    }
     .shop-order-email__items-table {
-      width: 100% !important;
+      width: 952px !important;
+      min-width: 952px !important;
+      max-width: 952px !important;
       border-collapse: collapse !important;
       page-break-inside: auto !important;
       break-inside: auto !important;
       table-layout: fixed !important;
+      word-break: normal !important;
+      overflow-wrap: normal !important;
     }
     .shop-order-email__items-table thead {
       display: table-header-group !important;
@@ -73,8 +93,13 @@
       break-inside: avoid-page !important;
     }
     @media print {
+      .shop-order-email__print-section {
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+        overflow: visible !important;
+      }
       .shop-order-email__items-table {
-        width: 100% !important;
+        width: 952px !important;
         page-break-inside: auto !important;
         break-inside: auto !important;
       }
@@ -94,132 +119,146 @@
     }
   </style>
 
-    <div class="email-container" style="font-family: Arial, sans-serif; background-color: #efefef; padding: 16px;">
-      <div class="content" style="background-color: #ffffff; padding: 14px; line-height: 1.45; color: #222222;">
+    <div class="email-container shop-order-email__document" style="width: 980px; min-width: 980px; max-width: 980px; font-family: Arial, sans-serif; background-color: #efefef; padding: 16px;">
+      <div class="content shop-order-email__paper" style="width: 980px; min-width: 980px; max-width: 980px; background-color: #ffffff; padding: 14px; line-height: 1.45; color: #222222;">
         
         
-    <table role="presentation" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; page-break-inside: auto;">
-      <tbody>
-        <tr>
-          <td style="border: none; padding: 14px 14px 12px;">
-            <table role="presentation" style="width: 100%; border: none; margin: 0 0 8px;">
-              <tbody>
-                <tr>
-                  <td style="border: none; padding: 0 0 4px; vertical-align: top; text-align: center;">
-                    <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 25px; font-weight: 700; letter-spacing: 0.03em; color: #111111; text-align: center;">
-                      Online Shop Order
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+    <div class="shop-order-email__print-section" style="display: block; width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid #d4d4d4; margin-top: 18px; padding: 14px 14px 12px; page-break-inside: auto; break-inside: auto; overflow: visible;">
+      <table role="presentation" style="width: 100%; border: none; margin: 0 0 8px;">
+        <tbody>
+          <tr>
+            <td style="border: none; padding: 0 0 4px; vertical-align: top; text-align: center;">
+              <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 25px; font-weight: 700; letter-spacing: 0.03em; color: #111111; text-align: center;">
+                Online Shop Order
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-            <table role="presentation" style="width: 100%; border: none; margin: 0 0 6px;">
-              <tbody>
-                <tr>
-                  <td style="border: none; width: 50%; padding: 0 12px 5px 0; vertical-align: top;">
-                    
+      <table role="presentation" style="width: 100%; border: none; margin: 0 0 6px;">
+        <tbody>
+          <tr>
+            <td style="border: none; width: 50%; padding: 0 12px 5px 0; vertical-align: top;">
+              
     <div style="font-size: 14px; color: #202020; text-align: left;">
       Chris (CJ) Larsen
     </div>
   
-                  </td>
-                  <td style="border: none; width: 50%; padding: 0 0 5px 12px; vertical-align: top;">
-                    
+            </td>
+            <td style="border: none; width: 50%; padding: 0 0 5px 12px; vertical-align: top;">
+              
     <div style="font-size: 14px; color: #202020; text-align: right;">
       <strong>Date Ordered:</strong> 6/4/2026
     </div>
   
-                  </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
-                    
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
+              
     <div style="font-size: 14px; color: #202020; text-align: left;">
       <strong>Desired Delivery Date:</strong> 6/11/2026
     </div>
   
-                  </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
-                    
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="border: none; padding: 0 0 5px; vertical-align: top;">
+              
     <div style="font-size: 14px; color: #202020; text-align: left;">
       <strong>Job:</strong> Phase 2 Company Acoustical remodel - 1A
     </div>
   
-                  </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="border: none; padding: 0 0 4px; vertical-align: top;">
-                    
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="border: none; padding: 0 0 4px; vertical-align: top;">
+              
     <div style="font-size: 14px; color: #202020; text-align: left;">
       <strong>Order #:</strong> 20260604000000
     </div>
   
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-            
-                <div style="margin-top: 6px; font-size: 13px; line-height: 1.35; color: #222222;">
-                  <strong>Comments:</strong> Preview the current shop order email without sending a real message.
-                </div>
-              
+      
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.35; color: #222222;">
+            <strong>Comments:</strong> Preview the current shop order email without sending a real message.
+          </div>
+        
 
-            
-    <table class="shop-order-email__items-table" style="width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #d8d8d8; page-break-inside: auto; break-inside: auto; table-layout: fixed;">
+      
+    <table class="shop-order-email__items-table" width="952" style="width: 952px; min-width: 952px; max-width: 952px; border-collapse: collapse; margin-top: 10px; border: 2px solid #9b9b9b; page-break-inside: auto; break-inside: auto; table-layout: fixed; word-break: normal; overflow-wrap: normal;">
+      <colgroup>
+        <col width="54" style="width: 54px;" />
+        <col width="58" style="width: 58px;" />
+        <col width="64" style="width: 64px;" />
+        <col width="80" style="width: 80px;" />
+        <col width="486" style="width: 486px;" />
+        <col width="76" style="width: 76px;" />
+        <col width="108" style="width: 108px;" />
+        <col width="26" style="width: 26px;" />
+      </colgroup>
       <thead style="display: table-header-group !important;">
         <tr>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 54px;">Pulled<br>By</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 58px;">Verified<br>By</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 62px;">133/513</th>
-          <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left;">Item Name</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 70px;">Quantity</th>
-          <th style="padding: 6px 7px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; width: 150px;">Notes</th>
-          <th style="padding: 6px 5px; border: 1px solid #d8d8d8; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; width: 46px;">&nbsp;</th>
+          <th width="54" style="width: 54px; min-width: 54px; max-width: 54px; padding: 6px 5px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Pulled<br>By</th>
+          <th width="58" style="width: 58px; min-width: 58px; max-width: 58px; padding: 6px 5px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Verified<br>By</th>
+          <th width="64" style="width: 64px; min-width: 64px; max-width: 64px; padding: 6px 5px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">133/513</th>
+          <th width="80" style="width: 80px; min-width: 80px; max-width: 80px; padding: 6px 5px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Part#</th>
+          <th width="486" style="width: 486px; min-width: 486px; max-width: 486px; padding: 6px 7px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Item Name</th>
+          <th width="76" style="width: 76px; min-width: 76px; max-width: 76px; padding: 6px 5px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Quantity</th>
+          <th width="108" style="width: 108px; min-width: 108px; max-width: 108px; padding: 6px 7px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Notes</th>
+          <th width="26" style="width: 26px; min-width: 26px; max-width: 26px; padding: 6px 5px; border: 1px solid #9b9b9b; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">&nbsp;</th>
         </tr>
       </thead>
       <tbody style="display: table-row-group !important;">
         
           <tr style="page-break-inside: avoid !important; break-inside: avoid-page !important;">
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; line-height: 1.25;">Job Posters</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">2</td>
-            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #9b9b9b; vertical-align: middle; font-size: 13px; line-height: 1.25; word-break: normal; overflow-wrap: break-word;">Job Posters</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">2</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #9b9b9b; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333; word-break: normal; overflow-wrap: break-word;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
           </tr>
         
           <tr style="page-break-inside: avoid !important; break-inside: avoid-page !important;">
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 13px; line-height: 1.25;">Foreman Book</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">1</td>
-            <td style="height: 30px; padding: 5px 7px; border: 1px solid #d8d8d8; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333;">&nbsp;</td>
-            <td style="height: 30px; padding: 5px 5px; border: 1px solid #d8d8d8; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #9b9b9b; vertical-align: middle; font-size: 13px; line-height: 1.25; word-break: normal; overflow-wrap: break-word;">Foreman Book</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">1</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #9b9b9b; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333; word-break: normal; overflow-wrap: break-word;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+          </tr>
+        
+          <tr style="page-break-inside: avoid !important; break-inside: avoid-page !important;">
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #9b9b9b; vertical-align: middle; font-size: 13px; line-height: 1.25; word-break: normal; overflow-wrap: break-word;">Special order bottled water</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.2;">5</td>
+            <td style="height: 30px; padding: 5px 7px; border: 1px solid #9b9b9b; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333; word-break: normal; overflow-wrap: break-word;">Special item preview</td>
+            <td style="height: 30px; padding: 5px 5px; border: 1px solid #9b9b9b; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
           </tr>
         
       </tbody>
     </table>
   
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    
+    </div>
   
         
     <div style="margin-top: 12px; padding: 0 12px; font-size: 15px; color: #303030;">
       End of Order
     </div>
   
-      </div>
-      <div class="footer" style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666666; border-radius: 0 0 4px 4px;">
-        <p>© 2026 Phase 2. All rights reserved.</p>
       </div>
     </div>
   

@@ -165,6 +165,7 @@ Protected behavior:
 - autosave typing behavior
 - validation before submit
 - submit and email success reporting
+- submitted email values match the submitted form values and do not fall back to `N/A` unless the user entered `N/A`
 - photo upload/description/remove
 - submitted read-only state
 - starting another draft
@@ -182,8 +183,12 @@ Protected behavior:
 - catalog tree controls
 - added item names
 - custom items
+- normal and custom items render in one continuous print/PDF table
+- fixed paper-width email/PDF layout does not collapse item text into vertical columns on mobile
 - quantity and notes
 - autosave echo safety
+- add/create interactions stay usable while saves are pending
+- normal item adds do not globally disable the whole workspace
 - submitted read-only state
 - order number visibility in header/history
 - catalog admin create/edit/archive/delete
@@ -192,7 +197,9 @@ Manual/smoke protection:
 
 - `npm --prefix functions run preview:shop-order-email`
 - `npm --prefix functions run smoke:shop-order-email`
-- print check when table headers or page breaks are changed
+- preview/smoke checks should cover both the email body and attached PDF
+- long-order PDF smoke should prove the PDF spans multiple pages so continuation table headers are exercised
+- manual print check when table headers, page breaks, paper width, or row density are changed
 
 ### Timecards
 
@@ -204,6 +211,7 @@ Specs:
 Protected behavior:
 
 - no lock controls on job timecard page
+- foremen can create current-week draft timecards for assigned jobs
 - job number cascade behavior
 - click-to-select input replacement
 - arrow key navigation
@@ -250,9 +258,22 @@ Good first composable tests:
 
 - autosave queue behavior
 - dirty snapshot guard
+- optimistic list behavior
+- pending action state that only disables the affected control
 - recipient normalization
 - shop order tree construction
 - timecard keyboard navigation helpers
+
+### Responsiveness Regression Tests
+
+Add focused tests when optimistic workflow helpers exist:
+
+- slow save still leaves text inputs editable
+- adding an item shows the item locally before remote confirmation
+- a pending item/action disables only the matching button or row
+- failed save keeps the user's entered data visible
+- remote subscription echo does not overwrite locally dirty text
+- submit/delete workflows can block final action controls without freezing unrelated browsing/history controls
 
 ## Stop Conditions
 
@@ -263,4 +284,4 @@ Stop and reassess if:
 - a visual output change cannot be previewed locally
 - a failing test is unclear and the refactor would hide the failure
 - a component extraction requires changing Firestore writes at the same time
-
+- a workflow refactor makes normal create/add/edit actions feel slower or more blocking

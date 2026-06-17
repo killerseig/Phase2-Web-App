@@ -100,6 +100,97 @@ test.describe('timecard workbook regressions', () => {
     await expect(page.getByTestId('timecard-job-number-2')).toHaveValue('9411')
   })
 
+  test('foremen can create a timecard when no week exists yet', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: false })
+    fixture.timecardWeeks = []
+    fixture.timecardCards = []
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+
+    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await page.getByTestId('create-card').click()
+    await page.getByTestId('timecards-add-employee-employee-1').click()
+
+    await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(1)
+    await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('9411')
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ ownerForemanUserId?: string | null }>
+          timecardCards?: unknown[]
+        }
+        return {
+          currentForemanWeeks: state.timecardWeeks?.filter((week) => week.ownerForemanUserId === 'foreman-e2e').length ?? 0,
+          cardCount: state.timecardCards?.length ?? 0,
+        }
+      }))
+      .toEqual({
+        currentForemanWeeks: 1,
+        cardCount: 1,
+      })
+  })
+
+  test('foremen can create and submit timecards without a job assignment', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: false })
+    fixture.auth.profile.assignedJobIds = []
+    fixture.users = fixture.users.map((user) => (
+      user.id === 'foreman-e2e'
+        ? { ...user, assignedJobIds: [] }
+        : user
+    ))
+    fixture.jobs = fixture.jobs.map((job) => ({ ...job, assignedForemanIds: [] }))
+    fixture.timecardWeeks = []
+    fixture.timecardCards = []
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+
+    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await page.getByTestId('create-card').click()
+    await page.getByTestId('timecards-add-employee-employee-1').click()
+
+    await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Submit Week' }).click()
+
+    await expect(page.getByText('Week submitted and emailed to 1 recipient.')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ ownerForemanUserId?: string | null; status?: string | null }>
+        }
+        return state.timecardWeeks?.find((week) => week.ownerForemanUserId === 'foreman-e2e')?.status ?? null
+      }))
+      .toBe('submitted')
+  })
+
+  test('foremen can create their own timecard when another foreman has the same job week', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: false })
+    fixture.timecardWeeks = [
+      {
+        ...fixture.timecardWeeks[0],
+        id: 'week-other-foreman',
+        ownerForemanUserId: 'foreman-other',
+        ownerForemanName: 'Sam Foreman',
+      },
+    ]
+    fixture.timecardCards = []
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+
+    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await page.getByTestId('create-card').click()
+    await page.getByTestId('timecards-add-employee-employee-1').click()
+
+    await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(1)
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ ownerForemanUserId?: string | null }>
+        }
+        return state.timecardWeeks?.filter((week) => week.ownerForemanUserId === 'foreman-e2e').length ?? 0
+      }))
+      .toBe(1)
+  })
+
   test('submitting a week reports the notification email result', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
 

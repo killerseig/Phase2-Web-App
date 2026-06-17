@@ -269,6 +269,37 @@ Needed composables:
 - `useDirtySnapshotGuard`
   - for preventing stale subscription snapshots from replacing newer local input
 
+## Responsiveness And Optimistic UI
+
+The app should feel like it is running in real time, even when Firebase writes or callable functions take a moment.
+
+Target interaction rules:
+
+- Safe local edits should update the UI immediately.
+- Remote writes should usually happen in the background.
+- Normal create/add/edit actions should not gray out an entire page or pane.
+- Disable only the specific control that could duplicate the same action.
+- Use per-row, per-field, or per-record pending indicators instead of global blocking states.
+- Subscription snapshots should reconcile with local optimistic state instead of replacing it abruptly.
+- If a write fails, keep the user's local data visible and show a retry/error state near the affected control.
+- Final workflow actions such as submit/delete can use stronger pending states because they intentionally lock or remove records.
+
+Shop order examples:
+
+- `New Order` can create a local pending draft immediately, then reconcile when Firestore returns the real id/order number.
+- `Add item` can add a local pending item row immediately, then clear the pending state when the draft save succeeds.
+- Item note/comment typing should remain local-first and never wait on a save.
+- Submitting an order can block submit/delete controls, but should not make the rest of the page feel broken.
+
+Needed composables:
+
+- `usePendingAction`
+  - for button-level or row-level pending state
+- `useOptimisticList`
+  - for local add/remove/update behavior before a remote confirmation
+- `useDirtySnapshotGuard`
+  - shared with autosave to prevent remote echo from clobbering local edits
+
 ## Confirmation Architecture
 
 Direct `window.confirm` calls are easy, but they are not ideal long-term.
@@ -335,7 +366,8 @@ Rules:
 
 - PDF rendering belongs in functions/export logic.
 - Timecard email should attach the real generated PDF rather than reimplement a fragile HTML clone.
-- Shop order email HTML can remain HTML-first because that is the current fulfillment surface.
+- Shop order email HTML can remain useful for quick viewing, but the attached PDF is the reliable print surface.
+- Shop order PDF pagination should be owned by the PDF renderer, including repeated table headers on continuation pages.
 - Email templates should have smoke tests and preview scripts.
 - Avoid duplicating timecard layout logic in multiple places.
 

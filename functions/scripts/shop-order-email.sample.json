@@ -21,6 +21,13 @@
       "receivedQuantity": 0,
       "backorderedQuantity": 0,
       "note": ""
+    },
+    {
+      "description": "Special order bottled water",
+      "quantity": 5,
+      "receivedQuantity": 0,
+      "backorderedQuantity": 0,
+      "note": "Special item preview"
     }
   ]
 }

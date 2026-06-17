@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useJobsStore } from '@/stores/jobs'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -143,6 +144,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  const jobs = useJobsStore()
   await auth.init()
 
   const requiresAuth = to.meta.requiresAuth ?? true
@@ -161,7 +163,16 @@ router.beforeEach(async (to) => {
     return { name: 'jobs' }
   }
 
-  if (typeof to.params.jobId === 'string' && !auth.canAccessJob(to.params.jobId)) {
+  const isTimecardRoute = to.name === 'timecards'
+  const canOpenUnassignedTimecardRoute = isTimecardRoute && auth.roleKey === 'foreman'
+  const routeJobId = typeof to.params.jobId === 'string' ? to.params.jobId : ''
+  const currentUid = auth.currentUser?.uid ?? ''
+  const canAccessVisibleAssignedJob = !!routeJobId
+    && auth.roleKey === 'foreman'
+    && !!currentUid
+    && jobs.jobs.some((job) => job.id === routeJobId && job.assignedForemanIds.includes(currentUid))
+
+  if (routeJobId && !auth.canAccessJob(routeJobId) && !canAccessVisibleAssignedJob && !canOpenUnassignedTimecardRoute) {
     return { name: 'jobs' }
   }
 

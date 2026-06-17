@@ -447,11 +447,12 @@ Shop orders should keep the fast Excel request flow while improving catalog navi
 
 V1 does not need a separate shop fulfillment view.
 
-The current shop workflow remains email-driven:
+The current shop workflow remains email-driven with an attached PDF print artifact:
 
 - the shop receives the order email
+- the attached PDF is the reliable print copy when page breaks matter
 - the shop calls if changes are needed
-- the shop fulfills from the email
+- the shop fulfills from the email/PDF package
 
 ## Shared Recipient System
 
@@ -631,7 +632,8 @@ Shared records for:
 - custom role builder UI
 - direct custom-employee-to-global conversion
 - extra timecard statuses beyond `draft` and `submitted`
-- PDF generation for daily logs or shop orders
+- PDF generation for daily logs
+- advanced shop order PDF/export workflows beyond the attached print copy
 
 ## Open Items
 

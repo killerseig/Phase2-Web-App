@@ -4,6 +4,8 @@ This folder keeps the rebuild planning in a few simple files so we can work thro
 
 Files:
 
+- `overall-refactor-plan.md`
+  Living master plan for the broad refactor, including goals, tracks, sequencing, guardrails, and documentation protocol.
 - `current-understanding.md`
   Working summary of what we believe is true right now.
 - `v1-blueprint.md`

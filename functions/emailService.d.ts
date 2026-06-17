@@ -11,6 +11,7 @@ export declare function isEmailEnabled(): boolean;
  * Get sender email address
  */
 export declare function getSenderEmail(): string;
+export declare function normalizeDailyLogEmailPayload(dailyLog: any): Record<string, any>;
 /**
  * Build HTML template for welcome email
  */
@@ -38,6 +39,8 @@ export declare function buildTimecardsEmail(payload: {
  * Build HTML template for shop order email
  */
 export declare function buildShopOrderEmail(order: any, costCodesByCatalogItemId?: Record<string, string>): string;
+export declare function buildShopOrderPdfFilename(order: any): string;
+export declare function buildShopOrderPdfBuffer(order: any, costCodesByCatalogItemId?: Record<string, string>): Promise<Buffer>;
 /**
  * Build HTML template for client secret expiration notification
  */

@@ -93,7 +93,8 @@
 - The Excel timecard behavior is more important than the current web timecard behavior.
 - The current web timecard flow is not acceptable because it does not match the Excel mental model closely enough.
 - Timecards are weekly records that cover `Sunday to Saturday`.
-- Timecards are the only module that needs PDF output.
+- Timecards are the strictest PDF workflow and must match the Excel output exactly.
+- Shop orders also need attached PDF output for reliable printing, but their PDF is less exacting than timecards.
 - Timecards should export as one combined PDF for the whole week.
 - The weekly timecard PDF needs to match the Excel sheet layout exactly.
 - That includes keeping the same two-cards-per-page print layout as the Excel file.
@@ -139,6 +140,8 @@
 - Starting a new week should reuse the previous week's employee roster, but not duplicate the previous week's filled-in card body.
 - If a foreman removes an employee card from the current week, that removal should carry forward into the next week's roster.
 - Custom employees added to the current week's crew should also carry forward into the next week's roster.
+- Foremen must be able to create current-week draft timecards for jobs they are assigned to.
+- A job can have multiple timecard cards/pages for the same employee when the employee needs more lines.
 - Foremen can edit current draft timecards until submission.
 - Foremen can delete draft timecards before submission.
 - Admins should be able to help foremen with current draft timecards when needed.
@@ -274,7 +277,11 @@ Based on the workbook structure and formulas:
 - Shop orders are tied to a single delivery date.
 - Shop orders should only allow `today` or future delivery dates.
 - The Excel workflow includes a quick `Thursday delivery` action, and that shortcut is worth preserving in the rebuild.
-- Shop orders do not need PDF output.
+- Shop orders now need an attached PDF output for reliable printing.
+- The shop order email body can remain useful for quick viewing, but the PDF is the preferred print artifact when page headers and page breaks matter.
+- If a shop order item table spans multiple PDF pages, the table column header should appear at the top of each continuation page.
+- Normal catalog items and custom one-off items should print in one continuous order table, not separate tables.
+- Shop order email/PDF output should use a fixed paper-width layout that scales down on small screens instead of letting email clients crush table columns vertically.
 - The shop catalog should behave like a file system:
   - folders can contain folders
   - folders can contain items
@@ -302,10 +309,11 @@ Based on the workbook structure and formulas:
 - Shop orders should keep a visible history of submitted records.
 - Foremen should be able to see all submitted shop order records for jobs they are assigned to for now.
 - The shop does not need a separate fulfillment view in the first version.
-- For now, the shop workflow is email-driven:
-  - the shop receives the email
+- For now, the shop workflow is email-driven with an attached PDF print artifact:
+  - the shop receives the order email
+  - the attached PDF is used when they need a reliable print copy
   - they call if changes are needed
-  - they fulfill from the email they received
+  - they fulfill from the email/PDF package they received
 - A separate shop fulfillment view may be added later.
 
 ## Daily Logs
@@ -316,6 +324,7 @@ Based on the workbook structure and formulas:
 - Daily logs are tied to a specific day/date.
 - Every daily log field should be required before submission.
 - Users should have to actively fill every field, even if the value is `N/A`.
+- Daily log emails should render the submitted field values exactly; the system should not replace populated text with `N/A`.
 - Foremen can submit multiple daily logs for the same job on the same date if needed.
 - Foremen can only submit daily logs for the current day.
 - Foremen should not be able to submit daily logs for past or future dates.

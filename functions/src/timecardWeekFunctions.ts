@@ -138,10 +138,10 @@ async function getAuthorizedUser(uid: string): Promise<AuthorizedTimecardUser> {
   }
 }
 
-function assertCanWriteJob(user: AuthorizedTimecardUser, jobId: string) {
+function assertCanAccessWeek(user: AuthorizedTimecardUser, week: any) {
   if (user.role === 'admin') return
-  if (user.role === 'foreman' && user.assignedJobIds.includes(jobId)) return
-  throw new HttpsError('permission-denied', 'You are not assigned to this job.')
+  if (textOrNull(week?.ownerForemanUserId) === user.uid) return
+  throw new HttpsError('permission-denied', 'You can only change your own timecard week.')
 }
 
 function getOwnerForemanUserId(user: AuthorizedTimecardUser, inputOwnerId: unknown) {
@@ -419,14 +419,27 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
   if (!weekEndDate) throw new HttpsError('invalid-argument', 'weekEndDate is required')
 
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  const ownerForemanUserId = getOwnerForemanUserId(user, input?.ownerForemanUserId)
+  const ownerForemanName = getOwnerForemanName(user, input?.ownerForemanName)
+  let jobCode = textOrNull(input?.jobCode)
+  let jobName = textOrNull(input?.jobName)
 
-  const existingSnap = await db
+  if (!jobCode || !jobName) {
+    const jobDetails = await getJobDetails(jobId)
+    jobCode = jobCode || textOrNull(jobDetails?.number)
+    jobName = jobName || textOrNull(jobDetails?.name)
+  }
+
+  let existingQuery = db
     .collection('timecardWeeks')
     .where('jobId', '==', jobId)
     .where('weekEndDate', '==', weekEndDate)
-    .limit(1)
-    .get()
+
+  if (user.role === 'foreman') {
+    existingQuery = existingQuery.where('ownerForemanUserId', '==', ownerForemanUserId)
+  }
+
+  const existingSnap = await existingQuery.limit(1).get()
 
   const existingDoc = existingSnap.docs[0]
   if (existingDoc) {
@@ -434,12 +447,10 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
   }
 
   const weekStartDate = getWeekStartFromSaturday(weekEndDate)
-  const ownerForemanUserId = getOwnerForemanUserId(user, input?.ownerForemanUserId)
-  const ownerForemanName = getOwnerForemanName(user, input?.ownerForemanName)
   const createdRef = await db.collection('timecardWeeks').add({
     jobId,
-    jobCode: textOrNull(input?.jobCode),
-    jobName: textOrNull(input?.jobName),
+    jobCode,
+    jobName,
     ownerForemanUserId,
     ownerForemanName,
     weekStartDate,
@@ -454,20 +465,19 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
 
-  const previousWeekSnap = await db
+  let previousWeekQuery = db
     .collection('timecardWeeks')
     .where('jobId', '==', jobId)
     .where('weekEndDate', '==', getPreviousSaturday(weekEndDate))
-    .limit(1)
-    .get()
+
+  if (ownerForemanUserId) {
+    previousWeekQuery = previousWeekQuery.where('ownerForemanUserId', '==', ownerForemanUserId)
+  }
+
+  const previousWeekSnap = await previousWeekQuery.limit(1).get()
 
   const previousWeekDoc = previousWeekSnap.docs[0]
   if (!previousWeekDoc) {
-    return { id: createdRef.id }
-  }
-
-  const previousWeek = previousWeekDoc.data() || {}
-  if (textOrNull(previousWeek.ownerForemanUserId) !== ownerForemanUserId) {
     return { id: createdRef.id }
   }
 
@@ -513,9 +523,9 @@ export const createTimecardCardRecord = onCall(async (request) => {
   if (!weekStartDate) throw new HttpsError('invalid-argument', 'weekStartDate is required')
   if (!card || typeof card !== 'object') throw new HttpsError('invalid-argument', 'card is required')
 
-  const { weekRef, week, jobId } = await getWeekDoc(weekId)
+  const { weekRef, week } = await getWeekDoc(weekId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  assertCanAccessWeek(user, week)
 
   if (text(week.status) === 'submitted' && user.role === 'foreman') {
     throw new HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE)
@@ -550,9 +560,9 @@ export const updateTimecardCardRecord = onCall(async (request) => {
   if (!weekStartDate) throw new HttpsError('invalid-argument', 'weekStartDate is required')
   if (!card || typeof card !== 'object') throw new HttpsError('invalid-argument', 'card is required')
 
-  const { weekRef, week, jobId } = await getWeekDoc(weekId)
+  const { weekRef, week } = await getWeekDoc(weekId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  assertCanAccessWeek(user, week)
 
   if (text(week.status) === 'submitted' && user.role === 'foreman') {
     throw new HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE)
@@ -583,9 +593,9 @@ export const deleteTimecardCardRecord = onCall(async (request) => {
   if (!weekId) throw new HttpsError('invalid-argument', 'weekId is required')
   if (!cardId) throw new HttpsError('invalid-argument', 'cardId is required')
 
-  const { weekRef, week, jobId } = await getWeekDoc(weekId)
+  const { weekRef, week } = await getWeekDoc(weekId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  assertCanAccessWeek(user, week)
 
   if (text(week.status) === 'submitted' && user.role === 'foreman') {
     throw new HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE)
@@ -617,7 +627,7 @@ export const submitTimecardWeekRecord = onCall({ secrets: getGraphEmailSecrets()
 
   const { weekRef, week, jobId } = await getWeekDoc(weekId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  assertCanAccessWeek(user, week)
 
   const submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid)
   const submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName)

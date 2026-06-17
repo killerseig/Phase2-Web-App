@@ -55,13 +55,15 @@ export const useJobsStore = defineStore('jobs', () => {
       const assignedJobIds = auth.assignedJobIds.slice()
       const options = auth.isAdmin
         ? undefined
-        : assignedJobIds.length
-          ? { assignedJobIds }
-          : { assignedOnlyForUid: auth.currentUser.uid }
+        : {
+            assignedJobIds,
+            assignedOnlyForUid: auth.currentUser.uid,
+          }
 
       if (isE2EActive()) {
         unsubscribeJobs = subscribeE2EVisibleJobs(options, (nextJobs) => {
           jobs.value = nextJobs
+          error.value = null
           loading.value = false
         })
         return
@@ -71,6 +73,7 @@ export const useJobsStore = defineStore('jobs', () => {
         options,
         (nextJobs) => {
           jobs.value = nextJobs
+          error.value = null
           loading.value = false
         },
         (nextError) => {

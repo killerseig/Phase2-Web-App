@@ -241,26 +241,52 @@ export function subscribeVisibleJobs(
   onError?: (error: unknown) => void,
 ): Unsubscribe {
   const normalizedAssignedJobIds = normalizeAssignedIds(options?.assignedJobIds)
-  if (normalizedAssignedJobIds.length > 0) {
+  const assignedOnlyForUid = options?.assignedOnlyForUid
+  if (normalizedAssignedJobIds.length > 0 || assignedOnlyForUid) {
     const { db } = requireFirebaseServices()
     const chunkedJobIds = chunkJobIds(normalizedAssignedJobIds)
-    const chunkResults: JobRecord[][] = Array.from({ length: chunkedJobIds.length }, () => [])
-    const unsubscribes = chunkedJobIds.map((jobIdChunk, chunkIndex) =>
-      onSnapshot(
+    const resultSets: JobRecord[][] = []
+    const unsubscribes: Unsubscribe[] = []
+
+    const emitVisibleJobs = () => {
+      const merged = new Map<string, JobRecord>()
+      resultSets.flat().forEach((job) => {
+        merged.set(job.id, job)
+      })
+      onUpdate(sortJobs(Array.from(merged.values())))
+    }
+
+    chunkedJobIds.forEach((jobIdChunk) => {
+      const resultIndex = resultSets.push([]) - 1
+      unsubscribes.push(onSnapshot(
         query(collection(db, 'jobs'), where(documentId(), 'in', jobIdChunk)),
         (snapshot) => {
-          chunkResults[chunkIndex] = snapshot.docs.map((item) => normalizeJob(item.id, item.data()))
-          onUpdate(sortJobs(chunkResults.flat()))
+          resultSets[resultIndex] = snapshot.docs.map((item) => normalizeJob(item.id, item.data()))
+          emitVisibleJobs()
         },
         (error) => {
           onError?.(error)
         },
-      ),
-    )
+      ))
+    })
 
-    if (chunkedJobIds.length === 0) {
-      onUpdate([])
+    if (assignedOnlyForUid) {
+      const resultIndex = resultSets.push([]) - 1
+      unsubscribes.push(onSnapshot(
+        buildJobsQuery(assignedOnlyForUid),
+        (snapshot) => {
+          resultSets[resultIndex] = snapshot.docs.map((item) => normalizeJob(item.id, item.data()))
+          emitVisibleJobs()
+        },
+        (error) => {
+          if (normalizedAssignedJobIds.length === 0) {
+            onError?.(error)
+          }
+        },
+      ))
     }
+
+    emitVisibleJobs()
 
     return () => {
       unsubscribes.forEach((unsubscribe) => unsubscribe())

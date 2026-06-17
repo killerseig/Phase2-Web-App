@@ -46,6 +46,27 @@ test.describe('shop order workspace regressions', () => {
     await expect(page.getByTestId('shoporder-category-cat-all-purpose')).toBeVisible()
   })
 
+  test('folders can be collapsed and expanded while catalog search is active', async ({ page }) => {
+    await gotoShopOrderApp(page)
+
+    await page.getByTestId('shoporder-catalog-search').fill('mud')
+
+    await expect(page.getByTestId('shoporder-category-cat-drywall')).toBeVisible()
+    await expect(page.getByTestId('shoporder-category-cat-all-purpose')).toBeVisible()
+    await expect(page.getByTestId('shoporder-item-item-box')).toBeVisible()
+
+    await page.getByTestId('shoporder-category-cat-drywall').click()
+
+    await expect(page.getByTestId('shoporder-category-cat-drywall')).toBeVisible()
+    await expect(page.getByTestId('shoporder-category-cat-all-purpose')).toHaveCount(0)
+    await expect(page.getByTestId('shoporder-item-item-box')).toHaveCount(0)
+
+    await page.getByTestId('shoporder-category-cat-drywall').click()
+
+    await expect(page.getByTestId('shoporder-category-cat-all-purpose')).toBeVisible()
+    await expect(page.getByTestId('shoporder-item-item-box')).toBeVisible()
+  })
+
   test('catalog item rows show only the item name when added to the order', async ({ page }) => {
     await gotoShopOrderApp(page)
 
@@ -60,10 +81,11 @@ test.describe('shop order workspace regressions', () => {
   test('custom items can be added from the real custom item form', async ({ page }) => {
     await gotoShopOrderApp(page)
 
-    await page.getByLabel('Description').fill('Lift Rental')
-    await page.getByLabel('Quantity').fill('2')
-    await page.getByLabel('Note').fill('North dock delivery')
-    await page.getByRole('button', { name: 'Add Custom Item' }).click()
+    const customItemForm = page.locator('form.shop-orders-form__grid')
+    await customItemForm.getByLabel('Description').fill('Lift Rental')
+    await customItemForm.getByLabel('Quantity').fill('2')
+    await customItemForm.getByLabel('Note').fill('North dock delivery')
+    await customItemForm.getByRole('button', { name: 'Add Custom Item' }).click()
 
     await expect(page.locator('.shop-orders-items-list')).toContainText('Lift Rental')
     await expect
@@ -82,6 +104,53 @@ test.describe('shop order workspace regressions', () => {
         quantity: 2,
         note: 'North dock delivery',
         sourceType: 'custom',
+      })
+  })
+
+  test('catalog and custom items submit together in one order', async ({ page }) => {
+    await gotoShopOrderApp(page)
+
+    await expandAllCatalogFolders(page)
+    await page.getByTestId('shoporder-add-item-box').click()
+    const customItemForm = page.locator('form.shop-orders-form__grid')
+    await customItemForm.getByLabel('Description').fill('Special order bottled water')
+    await customItemForm.getByLabel('Quantity').fill('5')
+    await customItemForm.getByLabel('Note').fill('Special item')
+    await customItemForm.getByRole('button', { name: 'Add Custom Item' }).click()
+
+    const itemsList = page.locator('.shop-orders-items-list')
+    await expect(itemsList).toContainText('Box')
+    await expect(itemsList).toContainText('Special order bottled water')
+
+    await page.getByTestId('shoporder-submit').click()
+
+    await expect(page.getByTestId('shoporder-comments')).toHaveCount(0)
+    await expect(itemsList).toContainText('Box')
+    await expect(itemsList).toContainText('Special order bottled water')
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          shopOrders?: Array<{
+            id: string
+            status?: string
+            items?: Array<{ description?: string; sourceType?: string }>
+          }>
+        }
+        const submittedOrder = state.shopOrders?.find((order) => order.id === 'order-draft')
+        return {
+          status: submittedOrder?.status ?? '',
+          itemCount: submittedOrder?.items?.length ?? 0,
+          customCount: submittedOrder?.items?.filter((item) => item.sourceType === 'custom').length ?? 0,
+          hasCatalog: submittedOrder?.items?.some((item) => item.sourceType === 'catalog' && item.description?.includes('Box')) ?? false,
+          hasCustom: submittedOrder?.items?.some((item) => item.sourceType === 'custom' && item.description === 'Special order bottled water') ?? false,
+        }
+      }))
+      .toEqual({
+        status: 'submitted',
+        itemCount: 2,
+        customCount: 1,
+        hasCatalog: true,
+        hasCustom: true,
       })
   })
 
