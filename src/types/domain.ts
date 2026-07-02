@@ -1,5 +1,6 @@
-export type RawRoleKey = 'admin' | 'foreman' | 'none'
-export type RoleKey = 'admin' | 'foreman' | 'none'
+export type RawRoleKey = 'admin' | 'foreman' | 'project-manager' | 'none'
+export type EffectiveRoleKey = 'admin' | 'foreman' | 'none'
+export type RoleKey = RawRoleKey
 
 export interface UserProfile {
   id: string
@@ -261,17 +262,21 @@ export function normalizeRoleKey(value: unknown): RawRoleKey {
   if (typeof value !== 'string') return 'none'
 
   const normalized = value.trim().toLowerCase()
-  if (normalized === 'admin' || normalized === 'foreman') {
+  if (normalized === 'admin' || normalized === 'foreman' || normalized === 'project-manager') {
     return normalized
   }
 
   return 'none'
 }
 
-export function toEffectiveRole(value: RawRoleKey): RoleKey {
+export function toEffectiveRole(value: RawRoleKey): EffectiveRoleKey {
   if (value === 'admin') return 'admin'
-  if (value === 'foreman') return 'foreman'
+  if (value === 'foreman' || value === 'project-manager') return 'foreman'
   return 'none'
+}
+
+export function roleCanBeAssignedJobs(value: RawRoleKey): boolean {
+  return toEffectiveRole(value) === 'foreman'
 }
 
 export function formatJobTypeLabel(value: string | null | undefined): string {

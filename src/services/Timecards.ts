@@ -25,6 +25,7 @@ import type {
 import {
   createE2ETimecardCard,
   deleteE2ETimecardCard,
+  deleteE2ETimecardWeek,
   ensureE2ETimecardWeek,
   isE2EActive,
   subscribeE2EAllTimecardWeeks,
@@ -388,6 +389,24 @@ export async function deleteTimecardCard(weekId: string, cardId: string): Promis
     await callable({ weekId, cardId })
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to remove the timecard card.'))
+  }
+}
+
+export async function deleteTimecardWeek(weekId: string): Promise<void> {
+  if (isE2EActive()) {
+    await deleteE2ETimecardWeek(weekId)
+    return
+  }
+
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<{ weekId: string }, { success: boolean }>(
+      functions,
+      'deleteTimecardWeekRecord',
+    )
+    await callable({ weekId })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to delete the timecard week.'))
   }
 }
 

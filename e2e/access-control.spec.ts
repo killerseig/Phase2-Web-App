@@ -6,6 +6,30 @@ import {
   gotoPhase2App,
 } from './helpers/phase2AppFixture.js'
 
+function createProjectManagerDashboardFixture() {
+  const fixture = createJobDashboardFixture()
+
+  fixture.auth.user.email = 'pm@example.com'
+  fixture.auth.user.displayName = 'Pat Project Manager'
+  fixture.auth.profile.email = 'pm@example.com'
+  fixture.auth.profile.firstName = 'Pat'
+  fixture.auth.profile.lastName = 'Project Manager'
+  fixture.auth.profile.role = 'project-manager'
+  fixture.users = fixture.users.map((user) => (
+    user.id === 'foreman-e2e'
+      ? {
+          ...user,
+          email: 'pm@example.com',
+          firstName: 'Pat',
+          lastName: 'Project Manager',
+          role: 'project-manager',
+        }
+      : user
+  ))
+
+  return fixture
+}
+
 test.describe('route access control', () => {
   test('foremen are redirected away from admin-only routes', async ({ page }) => {
     await gotoPhase2App(page, '/users', createJobDashboardFixture())
@@ -52,7 +76,29 @@ test.describe('route access control', () => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
 
     await expect(page.getByTestId('timecards-page')).toBeVisible()
+    await page.getByTestId('timecards-week-ending').fill('2026-06-06')
+    await page.getByTestId('timecards-week-ending').dispatchEvent('change')
     await expect(page.getByTestId('create-card')).toBeEnabled()
+    await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
+  })
+
+  test('project managers can use assigned job workflows like foremen for now', async ({ page }) => {
+    const fixture = createProjectManagerDashboardFixture()
+
+    await gotoPhase2App(page, '/jobs', fixture)
+
+    await expect(page.getByTestId('job-card-1A')).toBeVisible()
+
+    await page.goto('/jobs/job-e2e/timecards')
+    await expect(page.getByTestId('timecards-page')).toBeVisible()
+    await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
+
+    await page.goto('/jobs/job-e2e/daily-logs')
+    await expect(page.getByTestId('daily-logs-page')).toBeVisible()
+    await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
+
+    await page.goto('/jobs/job-e2e/shop-orders')
+    await expect(page.getByTestId('shop-orders-page')).toBeVisible()
     await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
   })
 

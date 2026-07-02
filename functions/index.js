@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateShopOrderRecordCallable = exports.deleteShopOrderRecordCallable = exports.createShopOrderRecordCallable = exports.updateDailyLogRecordCallable = exports.deleteDailyLogRecordCallable = exports.createDailyLogRecordCallable = exports.updateTimecardCardRecord = exports.submitTimecardWeekRecord = exports.ensureTimecardWeekRecord = exports.deleteTimecardCardRecord = exports.createTimecardCardRecord = exports.notifySecretExpiration = exports.verifySetupToken = exports.setUserPassword = exports.sendPendingUserInvites = exports.requestPasswordResetEmail = exports.removeEmailFromAllRecipientLists = exports.handleUserAccessRevocationCleanup = exports.deleteUser = exports.createUserByAdmin = exports.sendShopOrderEmail = exports.sendDailyLogEmail = void 0;
+exports.updateShopOrderRecordCallable = exports.deleteShopOrderRecordCallable = exports.createShopOrderRecordCallable = exports.updateDailyLogRecordCallable = exports.deleteDailyLogRecordCallable = exports.createDailyLogRecordCallable = exports.updateTimecardCardRecord = exports.submitTimecardWeekRecord = exports.ensureTimecardWeekRecord = exports.deleteTimecardWeekRecord = exports.deleteTimecardCardRecord = exports.createTimecardCardRecord = exports.notifySecretExpiration = exports.verifySetupToken = exports.setUserPassword = exports.sendPendingUserInvites = exports.requestPasswordResetEmail = exports.removeEmailFromAllRecipientLists = exports.handleUserAccessRevocationCleanup = exports.deleteUser = exports.createUserByAdmin = exports.sendShopOrderEmail = exports.sendDailyLogEmail = void 0;
 var operationsFunctions_1 = require("./operationsFunctions");
 Object.defineProperty(exports, "sendDailyLogEmail", { enumerable: true, get: function () { return operationsFunctions_1.sendDailyLogEmail; } });
 Object.defineProperty(exports, "sendShopOrderEmail", { enumerable: true, get: function () { return operationsFunctions_1.sendShopOrderEmail; } });
@@ -18,6 +18,7 @@ Object.defineProperty(exports, "notifySecretExpiration", { enumerable: true, get
 var timecardWeekFunctions_1 = require("./timecardWeekFunctions");
 Object.defineProperty(exports, "createTimecardCardRecord", { enumerable: true, get: function () { return timecardWeekFunctions_1.createTimecardCardRecord; } });
 Object.defineProperty(exports, "deleteTimecardCardRecord", { enumerable: true, get: function () { return timecardWeekFunctions_1.deleteTimecardCardRecord; } });
+Object.defineProperty(exports, "deleteTimecardWeekRecord", { enumerable: true, get: function () { return timecardWeekFunctions_1.deleteTimecardWeekRecord; } });
 Object.defineProperty(exports, "ensureTimecardWeekRecord", { enumerable: true, get: function () { return timecardWeekFunctions_1.ensureTimecardWeekRecord; } });
 Object.defineProperty(exports, "submitTimecardWeekRecord", { enumerable: true, get: function () { return timecardWeekFunctions_1.submitTimecardWeekRecord; } });
 Object.defineProperty(exports, "updateTimecardCardRecord", { enumerable: true, get: function () { return timecardWeekFunctions_1.updateTimecardCardRecord; } });

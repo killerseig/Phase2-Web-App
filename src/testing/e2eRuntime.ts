@@ -2,6 +2,7 @@ import {
   DEFAULT_TIMECARD_BURDEN,
   buildCardDisplayName,
   buildEmployeeCard,
+  createWeekDays,
   getWeekStartFromSaturday,
   recalculateCardTotals,
   type TimecardEmployeeSeed,
@@ -24,6 +25,7 @@ import type {
   TimecardWeekRecord,
   UserProfile,
 } from '@/types/domain'
+import { roleCanBeAssignedJobs } from '@/types/domain'
 
 declare global {
   interface Window {
@@ -123,7 +125,12 @@ const timecardCardListeners = new Set<{
 
 function cloneValue<T>(value: T): T {
   if (typeof globalThis.structuredClone === 'function') {
-    return globalThis.structuredClone(value)
+    try {
+      return globalThis.structuredClone(value)
+    } catch {
+      // Vue proxies cannot always cross the structuredClone boundary in-browser.
+      // JSON cloning keeps the E2E runtime close to Firebase's plain data shape.
+    }
   }
 
   return JSON.parse(JSON.stringify(value)) as T
@@ -536,6 +543,12 @@ function getWeekEndDateFromStart(weekStartDate: string) {
   return formatIsoDate(start)
 }
 
+function getPreviousWeekEndDate(weekEndDate: string) {
+  const end = new Date(`${weekEndDate}T00:00:00`)
+  end.setDate(end.getDate() - 7)
+  return formatIsoDate(end)
+}
+
 function normalizeQuantity(value: unknown): number | null {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed < 1) return null
@@ -584,7 +597,7 @@ function updateUserAssignments(jobId: string, nextAssignedForemanIds: string[]) 
   if (!state.users) return
 
   state.users = state.users.map((user) => {
-    if (user.role !== 'foreman') return user
+    if (!roleCanBeAssignedJobs(user.role)) return user
 
     const nextAssignedJobIds = new Set(user.assignedJobIds)
     if (nextAssignedForemanIds.includes(user.id)) {
@@ -606,13 +619,13 @@ function syncE2EUserJobAssignments(
   nextAssignedJobIds: string[],
 ) {
   const state = requireState()
-  const effectiveAssignedJobIds = role === 'foreman' ? normalizeStringList(nextAssignedJobIds) : []
+  const effectiveAssignedJobIds = roleCanBeAssignedJobs(role) ? normalizeStringList(nextAssignedJobIds) : []
   const changedJobIds: string[] = []
 
   state.jobs = state.jobs.map((job) => {
     const nextAssignedForemanIds = new Set(job.assignedForemanIds)
     const hadUser = nextAssignedForemanIds.has(uid)
-    const shouldHaveUser = role === 'foreman' && effectiveAssignedJobIds.includes(job.id)
+    const shouldHaveUser = roleCanBeAssignedJobs(role) && effectiveAssignedJobIds.includes(job.id)
 
     if (shouldHaveUser) {
       nextAssignedForemanIds.add(uid)
@@ -1078,7 +1091,7 @@ export async function createE2EUser(input: {
   email: string
   firstName: string
   lastName: string
-  role: 'admin' | 'foreman'
+  role: Exclude<UserProfile['role'], 'none'>
   assignedJobIds?: string[]
   sendInvite?: boolean
 }) {
@@ -1096,8 +1109,8 @@ export async function createE2EUser(input: {
   }
 
   const uid = makeId('user')
-  const role = input.role === 'admin' ? 'admin' : 'foreman'
-  const assignedJobIds = role === 'foreman' ? normalizeStringList(input.assignedJobIds) : []
+  const role = input.role === 'admin' ? 'admin' : input.role === 'project-manager' ? 'project-manager' : 'foreman'
+  const assignedJobIds = roleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
   const inviteSent = input.sendInvite === true
   const now = getNowValue().toISOString()
 
@@ -1129,7 +1142,7 @@ export async function updateE2EUser(
   input: {
     firstName: string
     lastName: string
-    role: 'admin' | 'foreman'
+    role: Exclude<UserProfile['role'], 'none'>
     active: boolean
     assignedJobIds?: string[]
   },
@@ -1141,8 +1154,8 @@ export async function updateE2EUser(
   }
 
   const existingUser = state.users[index]!
-  const role = input.role === 'admin' ? 'admin' : 'foreman'
-  const assignedJobIds = role === 'foreman' ? normalizeStringList(input.assignedJobIds) : []
+  const role = input.role === 'admin' ? 'admin' : input.role === 'project-manager' ? 'project-manager' : 'foreman'
+  const assignedJobIds = roleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
 
   state.users[index] = {
     ...existingUser,
@@ -1460,6 +1473,7 @@ export async function updateE2EDailyLog(
   dailyLogId: string,
   input: {
     payload?: DailyLogPayload
+    payloadFields?: Partial<Record<string, string>>
     status?: 'draft' | 'submitted'
     additionalRecipients?: string[]
   },
@@ -1482,6 +1496,17 @@ export async function updateE2EDailyLog(
 
   if ('payload' in input && input.payload) {
     nextLog.payload = cloneValue(input.payload)
+  }
+
+  if ('payloadFields' in input && input.payloadFields) {
+    nextLog.payload = {
+      ...nextLog.payload,
+      ...input.payloadFields,
+    }
+
+    if (typeof input.payloadFields.qcAreasInspected === 'string') {
+      nextLog.payload.qcInspection = input.payloadFields.qcAreasInspected
+    }
   }
 
   if ('additionalRecipients' in input && Array.isArray(input.additionalRecipients)) {
@@ -1542,6 +1567,81 @@ export async function deleteE2EDailyLogAttachment(_path: string): Promise<void> 
   return
 }
 
+function copyPreviousE2ETimecardCardsIntoDraft(
+  state: Phase2E2EState,
+  targetWeek: TimecardWeekRecord,
+  weekStartDate: string,
+) {
+  state.timecardCards ??= []
+
+  const targetHasCards = state.timecardCards.some((card) => card.weekId === targetWeek.id)
+  if (targetHasCards) return 0
+
+  const previousWeek = state.timecardWeeks?.find((week) => (
+    week.jobId === targetWeek.jobId
+    && week.weekEndDate === getPreviousWeekEndDate(targetWeek.weekEndDate)
+    && week.ownerForemanUserId === (targetWeek.ownerForemanUserId ?? null)
+  ))
+  if (!previousWeek) return 0
+
+  const now = getNowValue().toISOString()
+  const previousCards = state.timecardCards
+    .filter((card) => card.weekId === previousWeek.id)
+    .sort((left, right) => left.sortIndex - right.sortIndex)
+
+  previousCards.forEach((sourceCard, index) => {
+    state.timecardCards?.push({
+      ...cloneValue(sourceCard),
+      weekId: targetWeek.id,
+      id: makeId('timecard-card'),
+      sortIndex: index,
+      lines: sourceCard.lines.map((line) => ({
+        jobNumber: line.jobNumber,
+        subsectionArea: line.subsectionArea,
+        account: '',
+        difH: line.difH,
+        difP: line.difP,
+        difC: line.difC,
+        offHours: 0,
+        offProduction: 0,
+        offCost: 0,
+        days: createWeekDays(weekStartDate),
+      })),
+      footerJobOrGl: '',
+      footerAccount: '',
+      footerOffice: '',
+      footerAmount: '',
+      footerSecondJobOrGl: '',
+      footerSecondAccount: '',
+      footerSecondOffice: '',
+      footerSecondAmount: '',
+      notes: '',
+      regularHoursOverride: null,
+      overtimeHoursOverride: null,
+      totals: {
+        hoursByDay: Array(7).fill(0),
+        productionByDay: Array(7).fill(0),
+        hoursTotal: 0,
+        productionTotal: 0,
+        lineTotal: 0,
+      },
+      createdAt: now,
+      updatedAt: now,
+    })
+  })
+
+  const targetIndex = state.timecardWeeks?.findIndex((week) => week.id === targetWeek.id) ?? -1
+  if (targetIndex !== -1 && state.timecardWeeks) {
+    state.timecardWeeks[targetIndex] = {
+      ...targetWeek,
+      employeeCardCount: previousCards.length,
+      updatedAt: now,
+    }
+  }
+
+  return previousCards.length
+}
+
 export async function ensureE2ETimecardWeek(input: {
   jobId: string
   jobCode: string | null
@@ -1552,6 +1652,7 @@ export async function ensureE2ETimecardWeek(input: {
 }) {
   const state = requireState()
   state.timecardWeeks ??= []
+  state.timecardCards ??= []
 
   const existingWeek = state.timecardWeeks.find((week) => (
     week.jobId === input.jobId
@@ -1560,12 +1661,24 @@ export async function ensureE2ETimecardWeek(input: {
   ))
 
   if (existingWeek) {
+    if (existingWeek.status !== 'submitted') {
+      const copiedCount = copyPreviousE2ETimecardCardsIntoDraft(
+        state,
+        existingWeek,
+        existingWeek.weekStartDate || getWeekStartFromSaturday(existingWeek.weekEndDate),
+      )
+      if (copiedCount > 0) {
+        notifyTimecardsChanged(input.jobId, existingWeek.id)
+      }
+    }
+
     return existingWeek.id
   }
 
   const now = getNowValue().toISOString()
   const weekId = makeId('week')
   const job = state.jobs.find((entry) => entry.id === input.jobId)
+  const weekStartDate = getWeekStartFromSaturday(input.weekEndDate)
   state.timecardWeeks.push({
     id: weekId,
     jobId: input.jobId,
@@ -1573,7 +1686,7 @@ export async function ensureE2ETimecardWeek(input: {
     jobName: input.jobName ?? job?.name ?? null,
     ownerForemanUserId: input.ownerForemanUserId ?? null,
     ownerForemanName: input.ownerForemanName ?? null,
-    weekStartDate: getWeekStartFromSaturday(input.weekEndDate),
+    weekStartDate,
     weekEndDate: input.weekEndDate,
     status: 'draft',
     employeeCardCount: 0,
@@ -1581,6 +1694,11 @@ export async function ensureE2ETimecardWeek(input: {
     createdAt: now,
     updatedAt: now,
   })
+
+  const createdWeek = state.timecardWeeks.find((week) => week.id === weekId)
+  if (createdWeek) {
+    copyPreviousE2ETimecardCardsIntoDraft(state, createdWeek, weekStartDate)
+  }
 
   notifyTimecardsChanged(input.jobId, weekId)
   return weekId
@@ -1680,6 +1798,23 @@ export async function deleteE2ETimecardCard(weekId: string, cardId: string) {
     employeeCardCount: Math.max(0, (week.employeeCardCount ?? 0) - 1),
     updatedAt: getNowValue().toISOString(),
   }
+
+  notifyTimecardsChanged(week.jobId, weekId)
+}
+
+export async function deleteE2ETimecardWeek(weekId: string) {
+  const state = requireState()
+  const week = state.timecardWeeks?.find((entry) => entry.id === weekId)
+  if (!week || !state.timecardWeeks) {
+    throw new Error('Timecard week not found.')
+  }
+
+  if (week.status === 'submitted') {
+    throw new Error('Submitted weeks cannot be deleted.')
+  }
+
+  state.timecardWeeks = state.timecardWeeks.filter((entry) => entry.id !== weekId)
+  state.timecardCards = (state.timecardCards ?? []).filter((entry) => entry.weekId !== weekId)
 
   notifyTimecardsChanged(week.jobId, weekId)
 }

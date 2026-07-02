@@ -18,7 +18,8 @@ Firebase implementation details, including Security Rules, indexes, Storage, Clo
 
 ### Main choices
 
-- Keep `Admin` and `Foreman` as the only built-in roles in `v1`.
+- Keep `Admin`, `Foreman`, and transitional `Project Manager` as built-in stored roles in `v1`.
+- Treat `Project Manager` as foreman-equivalent for assigned-job workflows until the role refactor defines separate permissions.
 - Use the same main pages for both roles.
 - Keep `edit mode` as page state, not a separate page tree.
 - Store `submitted` records in the same collections as `draft` records, using status fields and audit trails.
@@ -51,7 +52,7 @@ type UserDoc = {
   displayName: string
   firstName: string
   lastName: string
-  roleKey: 'admin' | 'foreman'
+  roleKey: 'admin' | 'foreman' | 'project-manager'
   customRoleId: string | null
   isActive: boolean
   assignedJobIds: string[]

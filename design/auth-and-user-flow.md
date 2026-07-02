@@ -27,13 +27,16 @@ It follows the parts of the old app that already worked well:
 
 ## Built-in roles in v1
 
-V1 should use only:
+V1 currently uses these built-in stored roles:
 
 - `Admin`
 - `Foreman`
+- `Project Manager`
 
 Notes:
 
+- `Project Manager` is currently a transitional stored role.
+- Until the role refactor defines separate permissions, Project Manager is intentionally treated as foreman-equivalent for assigned-job workflows.
 - do not carry forward any separate timecard review role in `v1`
 - do not carry forward a built-in `None` role in `v1`
 - use `inactive` status when a user should no longer have access
@@ -64,6 +67,7 @@ Role options in `v1`:
 
 - `Admin`
 - `Foreman`
+- `Project Manager`
 
 What happens:
 
@@ -140,7 +144,7 @@ type UserDoc = {
   displayName: string
   firstName: string
   lastName: string
-  roleKey: 'admin' | 'foreman'
+  roleKey: 'admin' | 'foreman' | 'project-manager'
   customRoleId: string | null
   isActive: boolean
   assignedJobIds: string[]
@@ -167,7 +171,7 @@ If any of those fail:
 
 ### Job access gate
 
-`Foreman` users can only access jobs in `assignedJobIds`.
+`Foreman` and transitional `Project Manager` users can only access jobs in `assignedJobIds`.
 
 `Admin` users can access all jobs, including archived jobs.
 
@@ -176,7 +180,7 @@ If any of those fail:
 ### Admin can create
 
 - create new users
-- choose `Admin` or `Foreman`
+- choose `Admin`, `Foreman`, or transitional `Project Manager`
 
 ### Admin can edit
 
@@ -237,11 +241,11 @@ Outputs:
 - access changes take effect in realtime
 - profile edits should auto-save on simple commit events like role changes, job assignment clicks, or when the admin leaves a text field
 
-### Assign foreman jobs
+### Assign field users to jobs
 
 Inputs:
 
-- selected foreman
+- selected Foreman or Project Manager
 - selected jobs
 
 Outputs:
@@ -320,6 +324,6 @@ These `v1` behaviors should stay close to the old app:
 
 These parts should change:
 
-- built-in roles become only `Admin` and `Foreman`
+- built-in roles become `Admin`, `Foreman`, and transitional `Project Manager`
 - old timecard review behavior is handled by `Admin`
-- future custom roles can be added later without changing the built-in auth flow
+- future custom roles and final Project Manager permissions can be added later without changing the built-in auth flow

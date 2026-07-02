@@ -19,6 +19,7 @@ export { notifySecretExpiration } from './secretMonitoring'
 export {
   createTimecardCardRecord,
   deleteTimecardCardRecord,
+  deleteTimecardWeekRecord,
   ensureTimecardWeekRecord,
   submitTimecardWeekRecord,
   updateTimecardCardRecord,

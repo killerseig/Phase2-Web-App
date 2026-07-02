@@ -5,6 +5,22 @@ import { db } from './runtime'
 type DailyLogRole = 'admin' | 'foreman' | 'none'
 type DailyLogStatus = 'draft' | 'submitted'
 type DailyLogAttachmentType = 'photo' | 'ptp' | 'qc' | 'other'
+type DailyLogTextFieldKey =
+  | 'weeklySchedule'
+  | 'manpowerAssessment'
+  | 'safetyConcerns'
+  | 'ahaReviewed'
+  | 'scheduleConcerns'
+  | 'budgetConcerns'
+  | 'deliveriesReceived'
+  | 'deliveriesNeeded'
+  | 'newWorkAuthorizations'
+  | 'qcAssignedTo'
+  | 'qcAreasInspected'
+  | 'qcIssuesIdentified'
+  | 'qcIssuesResolved'
+  | 'notesCorrespondence'
+  | 'actionItems'
 
 interface AuthorizedDailyLogUser {
   uid: string
@@ -13,6 +29,24 @@ interface AuthorizedDailyLogUser {
   assignedJobIds: string[]
   displayName: string | null
 }
+
+const dailyLogTextFieldKeys = new Set<DailyLogTextFieldKey>([
+  'weeklySchedule',
+  'manpowerAssessment',
+  'safetyConcerns',
+  'ahaReviewed',
+  'scheduleConcerns',
+  'budgetConcerns',
+  'deliveriesReceived',
+  'deliveriesNeeded',
+  'newWorkAuthorizations',
+  'qcAssignedTo',
+  'qcAreasInspected',
+  'qcIssuesIdentified',
+  'qcIssuesResolved',
+  'notesCorrespondence',
+  'actionItems',
+])
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -39,6 +73,7 @@ function normalizeRecipientList(value: unknown): string[] {
 function normalizeRole(value: unknown): DailyLogRole {
   const role = text(value).toLowerCase()
   if (role === 'admin' || role === 'foreman') return role
+  if (role === 'project-manager') return 'foreman'
   return 'none'
 }
 
@@ -255,6 +290,24 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
 
   if ('payload' in request.data && request.data?.payload) {
     payload.payload = sanitizePayload(request.data.payload)
+  }
+
+  if ('payloadFields' in request.data && request.data?.payloadFields) {
+    if (typeof request.data.payloadFields !== 'object' || Array.isArray(request.data.payloadFields)) {
+      throw new HttpsError('invalid-argument', 'payloadFields must be an object.')
+    }
+
+    for (const [fieldKey, fieldValue] of Object.entries(request.data.payloadFields)) {
+      if (!dailyLogTextFieldKeys.has(fieldKey as DailyLogTextFieldKey)) {
+        throw new HttpsError('invalid-argument', `Unsupported daily log field: ${fieldKey}`)
+      }
+
+      payload[`payload.${fieldKey}`] = text(fieldValue)
+
+      if (fieldKey === 'qcAreasInspected') {
+        payload['payload.qcInspection'] = text(fieldValue)
+      }
+    }
   }
 
   if ('additionalRecipients' in request.data) {

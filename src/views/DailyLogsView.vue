@@ -14,6 +14,7 @@ import {
   createEmptyIndoorClimateReading,
   createEmptyManpowerLine,
   getDailyLogTextSection,
+  type DailyLogTextFieldKey,
 } from '@/features/dailyLogs/schema'
 import {
   createDailyLogRecord,
@@ -76,6 +77,7 @@ const submittingLog = ref(false)
 const recipientSaving = ref(false)
 const activeAttachmentSection = ref<AttachmentSectionKey | null>(null)
 const hydratingForm = ref(false)
+const lastSavedPayload = ref<DailyLogPayload>(createEmptyDailyLogPayload())
 const lastSavedSignature = ref('')
 const lastHydratedLogId = ref<string | null>(null)
 const recipientInput = ref('')
@@ -87,7 +89,6 @@ const globalNotificationRecipients = ref<NotificationRecipients>({
 
 let unsubscribeLogs: (() => void) | null = null
 let unsubscribeGlobalNotificationRecipients: (() => void) | null = null
-let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 let ensuringTodayDraft = false
 
 const scheduleSection = getDailyLogTextSection('schedule-assessment')
@@ -159,6 +160,10 @@ const adminDailyLogRecipients = computed(() => {
 const additionalDailyLogRecipients = computed(() => {
   const adminRecipients = new Set(adminDailyLogRecipients.value)
   return (selectedLog.value?.additionalRecipients ?? []).filter((email) => !adminRecipients.has(email))
+})
+const hasUnsavedDraftChanges = computed(() => {
+  if (!canEditSelectedLog.value || hydratingForm.value) return false
+  return serializePayload(form.value) !== lastSavedSignature.value
 })
 
 useToastMessages([
@@ -261,18 +266,18 @@ function serializePayload(payload: DailyLogPayload = form.value) {
   return JSON.stringify(prepared)
 }
 
+function setSavedPayloadSnapshot(payload: DailyLogPayload = form.value) {
+  const prepared = clonePreparedPayload(payload)
+  lastSavedPayload.value = cloneDailyLogPayload(prepared)
+  lastSavedSignature.value = JSON.stringify(prepared)
+}
+
 function resetForm(log: DailyLogRecord | null = null) {
   hydratingForm.value = true
   form.value = log ? cloneDailyLogPayload(log.payload) : createEmptyDailyLogPayload()
-  lastSavedSignature.value = serializePayload(form.value)
+  setSavedPayloadSnapshot(form.value)
   lastHydratedLogId.value = log?.id ?? null
   hydratingForm.value = false
-}
-
-function clearAutoSaveTimer() {
-  if (!autoSaveTimer) return
-  clearTimeout(autoSaveTimer)
-  autoSaveTimer = null
 }
 
 function applyJobSnapshotFieldsToDraft() {
@@ -327,12 +332,6 @@ function updateAttachmentDescription(path: string, description: string) {
   const target = form.value.attachments.find((attachment) => attachment.path === path)
   if (!target) return
   target.description = description
-}
-
-async function handleAttachmentDescriptionBlur() {
-  if (!canEditSelectedLog.value || activeAttachmentSection.value) return
-  clearAutoSaveTimer()
-  await saveDraftImmediately()
 }
 
 async function uploadAttachmentFiles(
@@ -487,7 +486,7 @@ async function handleCreateDraft(silent = false) {
     selectedLogId.value = createdId
     resetForm()
     form.value = draftPayload
-    lastSavedSignature.value = serializePayload(draftPayload)
+    setSavedPayloadSnapshot(draftPayload)
 
     if (!silent) {
       setActionInfo('Daily log draft created.')
@@ -502,14 +501,16 @@ async function handleCreateDraft(silent = false) {
 async function saveDraftImmediately() {
   if (!selectedLog.value || !canEditSelectedLog.value) return true
 
-  const nextSignature = serializePayload(form.value)
+  const nextPayload = clonePreparedPayload(form.value)
+  const nextSignature = JSON.stringify(nextPayload)
   if (nextSignature === lastSavedSignature.value) return true
 
   savingDraft.value = true
   actionError.value = ''
 
   try {
-    await updateDailyLogRecord(selectedLog.value.id, { payload: clonePreparedPayload(form.value) }, getActor())
+    await updateDailyLogRecord(selectedLog.value.id, { payload: nextPayload }, getActor())
+    lastSavedPayload.value = cloneDailyLogPayload(nextPayload)
     lastSavedSignature.value = nextSignature
     return true
   } catch (error) {
@@ -520,16 +521,45 @@ async function saveDraftImmediately() {
   }
 }
 
-function queueAutoSave() {
-  if (!canEditSelectedLog.value || hydratingForm.value) return
+async function saveDailyLogTextField(fieldKey: DailyLogTextFieldKey) {
+  if (!selectedLog.value || !canEditSelectedLog.value) return true
 
-  const nextSignature = serializePayload(form.value)
-  if (nextSignature === lastSavedSignature.value) return
+  const nextPayload = clonePreparedPayload(form.value)
+  const nextValue = String(nextPayload[fieldKey] ?? '')
+  const savedValue = String(lastSavedPayload.value[fieldKey] ?? '')
+  if (nextValue === savedValue) return true
 
-  clearAutoSaveTimer()
-  autoSaveTimer = setTimeout(() => {
-    void saveDraftImmediately()
-  }, 700)
+  savingDraft.value = true
+  actionError.value = ''
+
+  try {
+    await updateDailyLogRecord(selectedLog.value.id, { payloadFields: { [fieldKey]: nextValue } }, getActor())
+    lastSavedPayload.value[fieldKey] = nextValue
+
+    if (fieldKey === 'qcAreasInspected') {
+      lastSavedPayload.value.qcInspection = nextValue
+    }
+
+    lastSavedSignature.value = JSON.stringify(lastSavedPayload.value)
+    return true
+  } catch (error) {
+    setActionError(normalizeError(error, 'Failed to save the daily log field.'))
+    return false
+  } finally {
+    savingDraft.value = false
+  }
+}
+
+async function handleDailyLogTextFieldBlur(fieldKey: DailyLogTextFieldKey) {
+  await saveDailyLogTextField(fieldKey)
+}
+
+async function handleSaveDraft() {
+  const hadUnsavedChanges = hasUnsavedDraftChanges.value
+  const saved = await saveDraftImmediately()
+  if (!saved) return
+
+  setActionInfo(hadUnsavedChanges ? 'Daily log draft saved.' : 'Daily log draft is already saved.')
 }
 
 function validateForSubmit(payload: DailyLogPayload) {
@@ -561,8 +591,6 @@ async function handleSubmit() {
     setActionError('Only your current draft for today can be submitted.')
     return
   }
-
-  clearAutoSaveTimer()
 
   const preparedPayload = clonePreparedPayload(form.value)
   const validationMessage = validateForSubmit(preparedPayload)
@@ -760,7 +788,6 @@ watch(
   () => jobId.value,
   (nextJobId, previousJobId) => {
     if (!nextJobId || nextJobId === previousJobId) return
-    clearAutoSaveTimer()
     stopLogsSubscription()
     jobsStore.subscribeJob(nextJobId)
     selectedDate.value = getTodayDateString()
@@ -775,7 +802,6 @@ watch(
   () => selectedDate.value,
   (nextDate, previousDate) => {
     if (nextDate === previousDate) return
-    clearAutoSaveTimer()
     selectedLogId.value = null
     logs.value = []
     resetForm()
@@ -797,7 +823,6 @@ watch(
     const selectionChanged = nextLogId !== previousLogId || nextLogId !== lastHydratedLogId.value
 
     if (selectionChanged) {
-      clearAutoSaveTimer()
       recipientInput.value = ''
       resetForm(log)
       return
@@ -829,16 +854,7 @@ watch(
   },
 )
 
-watch(
-  form,
-  () => {
-    queueAutoSave()
-  },
-  { deep: true },
-)
-
 onBeforeUnmount(() => {
-  clearAutoSaveTimer()
   stopLogsSubscription()
   unsubscribeGlobalNotificationRecipients?.()
   unsubscribeGlobalNotificationRecipients = null
@@ -857,6 +873,16 @@ onBeforeUnmount(() => {
 
         <div class="daily-logs-header__actions">
           <button
+            v-if="canEditSelectedLog"
+            type="button"
+            class="app-button"
+            :disabled="savingDraft || submittingLog || deletingDraft || !hasUnsavedDraftChanges"
+            @click="handleSaveDraft"
+          >
+            {{ savingDraft ? 'Saving...' : 'Save Draft' }}
+          </button>
+
+          <button
             v-if="canCreateAnotherLogForToday"
             type="button"
             class="app-button app-button--primary"
@@ -872,6 +898,9 @@ onBeforeUnmount(() => {
         <span class="daily-logs-badge">{{ getSelectedLogLabel(selectedLog) }}</span>
         <span class="daily-logs-badge">{{ visibleLogs.length }} logs for {{ selectedDate }}</span>
         <span v-if="savingDraft" class="daily-logs-badge">Saving draft...</span>
+        <span v-else-if="hasUnsavedDraftChanges" class="daily-logs-badge daily-logs-badge--warning">
+          Unsaved changes
+        </span>
       </div>
 
       <div
@@ -999,6 +1028,7 @@ onBeforeUnmount(() => {
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
+                  @blur="handleDailyLogTextFieldBlur(field.key)"
                 ></textarea>
               </label>
             </div>
@@ -1081,6 +1111,7 @@ onBeforeUnmount(() => {
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
+                  @blur="handleDailyLogTextFieldBlur(field.key)"
                 ></textarea>
               </label>
             </div>
@@ -1098,13 +1129,12 @@ onBeforeUnmount(() => {
               choose-label="Choose Photos"
               description-label="Description"
               empty-label="Drag and drop photos here to upload."
-              helper-text="Choose one or more photos. They save to the draft right away, and you can use the image button again anytime to add more."
+              helper-text="Choose one or more photos. Photos upload right away. Click Save Draft after editing descriptions."
               :attachments="photoAttachments"
               :disabled="!canEditSelectedLog"
               :busy="photoAttachmentBusy"
               :upload-handler="uploadPhotoAttachments"
               @update-description="handleAttachmentDescriptionUpdate"
-              @commit-description="handleAttachmentDescriptionBlur"
               @remove="handleDeleteAttachment"
             />
           </article>
@@ -1121,13 +1151,12 @@ onBeforeUnmount(() => {
               choose-label="Choose PTP Photos"
               description-label="Note"
               empty-label="Drag and drop PTP photos here to upload."
-              helper-text="Choose one or more PTP photos. They save to the draft right away, and you can use the image button again anytime to add more."
+              helper-text="Choose one or more PTP photos. Photos upload right away. Click Save Draft after editing notes."
               :attachments="ptpAttachments"
               :disabled="!canEditSelectedLog"
               :busy="ptpAttachmentBusy"
               :upload-handler="uploadPtpAttachments"
               @update-description="handleAttachmentDescriptionUpdate"
-              @commit-description="handleAttachmentDescriptionBlur"
               @remove="handleDeleteAttachment"
             />
           </article>
@@ -1153,6 +1182,7 @@ onBeforeUnmount(() => {
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
+                  @blur="handleDailyLogTextFieldBlur(field.key)"
                 ></textarea>
               </label>
             </div>
@@ -1179,6 +1209,7 @@ onBeforeUnmount(() => {
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
+                  @blur="handleDailyLogTextFieldBlur(field.key)"
                 ></textarea>
               </label>
             </div>
@@ -1196,13 +1227,12 @@ onBeforeUnmount(() => {
               choose-label="Choose QC Photos"
               description-label="Description"
               empty-label="Drag and drop QC photos here to upload."
-              helper-text="Choose one or more QC photos. They save to the draft right away, and you can use the image button again anytime to add more."
+              helper-text="Choose one or more QC photos. Photos upload right away. Click Save Draft after editing descriptions."
               :attachments="qcAttachments"
               :disabled="!canEditSelectedLog"
               :busy="qcAttachmentBusy"
               :upload-handler="uploadQcAttachments"
               @update-description="handleAttachmentDescriptionUpdate"
-              @commit-description="handleAttachmentDescriptionBlur"
               @remove="handleDeleteAttachment"
             />
           </article>
@@ -1228,6 +1258,7 @@ onBeforeUnmount(() => {
                   :rows="field.rows"
                   :disabled="!canEditSelectedLog"
                   :placeholder="field.placeholder || ''"
+                  @blur="handleDailyLogTextFieldBlur(field.key)"
                 ></textarea>
               </label>
             </div>
@@ -1529,6 +1560,12 @@ onBeforeUnmount(() => {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.daily-logs-badge--warning {
+  border-color: rgba(245, 185, 90, 0.38);
+  background: rgba(245, 185, 90, 0.12);
+  color: #f8c878;
 }
 
 .daily-logs-message {

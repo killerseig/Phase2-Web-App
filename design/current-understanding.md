@@ -56,12 +56,16 @@
 - `Foreman`
   - works inside assigned jobs
   - fills out timecards, daily logs, and shop orders
+- `Project Manager`
+  - currently stored as its own role
+  - intentionally uses Foreman-equivalent assigned-job access until the role refactor
 - Multiple foremen can be assigned to the same job.
-- The first version should use only two built-in roles:
+- The first version currently uses these built-in stored roles:
   - `Admin`
   - `Foreman`
+  - `Project Manager`
 - For the first version, the old timecard review workflow should be handled through `Admin` access.
-- The system should be designed so foremen can later be moved into custom non-admin roles.
+- The system should be designed so foremen and project managers can later be moved into custom non-admin roles.
 - A future custom timecard review role should be possible, but it is not needed in the first version.
 - The `Admin` role should always keep full access and should not be part of the customizable role system.
 

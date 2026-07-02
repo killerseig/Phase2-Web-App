@@ -37,6 +37,23 @@ exports.deleteDailyLogRecordCallable = exports.updateDailyLogRecordCallable = ex
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const runtime_1 = require("./runtime");
+const dailyLogTextFieldKeys = new Set([
+    'weeklySchedule',
+    'manpowerAssessment',
+    'safetyConcerns',
+    'ahaReviewed',
+    'scheduleConcerns',
+    'budgetConcerns',
+    'deliveriesReceived',
+    'deliveriesNeeded',
+    'newWorkAuthorizations',
+    'qcAssignedTo',
+    'qcAreasInspected',
+    'qcIssuesIdentified',
+    'qcIssuesResolved',
+    'notesCorrespondence',
+    'actionItems',
+]);
 function text(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
@@ -56,6 +73,8 @@ function normalizeRole(value) {
     const role = text(value).toLowerCase();
     if (role === 'admin' || role === 'foreman')
         return role;
+    if (role === 'project-manager')
+        return 'foreman';
     return 'none';
 }
 function toStatus(value) {
@@ -246,6 +265,20 @@ exports.updateDailyLogRecordCallable = (0, https_1.onCall)(async (request) => {
     };
     if ('payload' in request.data && request.data?.payload) {
         payload.payload = sanitizePayload(request.data.payload);
+    }
+    if ('payloadFields' in request.data && request.data?.payloadFields) {
+        if (typeof request.data.payloadFields !== 'object' || Array.isArray(request.data.payloadFields)) {
+            throw new https_1.HttpsError('invalid-argument', 'payloadFields must be an object.');
+        }
+        for (const [fieldKey, fieldValue] of Object.entries(request.data.payloadFields)) {
+            if (!dailyLogTextFieldKeys.has(fieldKey)) {
+                throw new https_1.HttpsError('invalid-argument', `Unsupported daily log field: ${fieldKey}`);
+            }
+            payload[`payload.${fieldKey}`] = text(fieldValue);
+            if (fieldKey === 'qcAreasInspected') {
+                payload['payload.qcInspection'] = text(fieldValue);
+            }
+        }
     }
     if ('additionalRecipients' in request.data) {
         payload.additionalRecipients = normalizeRecipientList(request.data?.additionalRecipients);

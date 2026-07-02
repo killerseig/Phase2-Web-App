@@ -23,6 +23,7 @@ import { subscribeUsers } from '@/services/users'
 import {
   createTimecardCard,
   deleteTimecardCard,
+  deleteTimecardWeek,
   ensureTimecardWeek,
   subscribeAllTimecardWeeks,
   subscribeTimecardCards,
@@ -1274,6 +1275,31 @@ async function handleRemoveCard(card: ArchiveTimecardCardRecord) {
   }
 }
 
+async function handleDeleteWeek(week: TimecardWeekRecord) {
+  if (!auth.isAdmin || week.status !== 'draft') return
+
+  const confirmed = window.confirm(`Delete draft week ending ${formatWorkbookDate(week.weekEndDate)} for ${formatWeekRowSubtitle(week)}?`)
+  if (!confirmed) return
+
+  actionLoading.value = true
+  resetMessages()
+  try {
+    await flushPendingSaves()
+    await deleteTimecardWeek(week.id)
+    delete cardsByWeekId[week.id]
+    delete pendingCardWeekIds[week.id]
+    rebuildArchiveCards()
+    if (selectedCardId.value && !cards.value.some((card) => card.id === selectedCardId.value)) {
+      selectedCardId.value = null
+    }
+    setPageInfo('Draft week deleted.')
+  } catch (error) {
+    setPageError(error, 'Failed to delete the draft week.')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
 function buildPdfExportSubtitle() {
   return [
     visibleWeekHeading.value,
@@ -1773,6 +1799,16 @@ onBeforeUnmount(() => {
                 <strong>{{ formatWorkbookDate(week.weekEndDate) }}</strong>
                 <span>{{ formatWeekRowSubtitle(week) }}</span>
                 <span>{{ week.status === 'submitted' ? 'Submitted' : 'Draft' }}</span>
+                <button
+                  v-if="auth.isAdmin && week.status === 'draft'"
+                  class="timecards-sidebar__history-action"
+                  type="button"
+                  :disabled="actionLoading"
+                  :data-testid="`timecard-export-delete-week-${week.id}`"
+                  @click="handleDeleteWeek(week)"
+                >
+                  Delete Draft
+                </button>
               </div>
 
               <div v-if="!filteredWeeks.length && !weeksLoading" class="timecards-sidebar__empty">
@@ -3154,6 +3190,29 @@ onBeforeUnmount(() => {
 .timecards-sidebar__empty {
   color: rgba(38, 43, 23, 0.76);
   font-size: 0.76rem;
+}
+
+.timecards-sidebar__history-action {
+  justify-self: start;
+  margin-top: 0.35rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid rgba(142, 48, 39, 0.42);
+  border-radius: var(--timecards-toolbar-control-radius);
+  background: rgba(255, 246, 243, 0.95);
+  color: #8f3027;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.timecards-sidebar__history-action:hover:not(:disabled) {
+  border-color: rgba(142, 48, 39, 0.62);
+  background: rgba(255, 237, 232, 0.98);
+}
+
+.timecards-sidebar__history-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .timecards-summary-panel {

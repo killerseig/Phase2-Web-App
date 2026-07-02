@@ -169,3 +169,22 @@ Implications:
 - Prefer shared primitives plus feature-specific wrappers when workflows are similar but not identical.
 - Add checklist items to catch duplication during component/composable extraction.
 - Document intentionally separate components when the reason may not be obvious later.
+
+## 2026-06-24 - Project Manager Is Temporarily Foreman-Equivalent
+
+Decision:
+
+- Add `Project Manager` as a stored user role.
+- Treat Project Manager as foreman-equivalent for assigned-job workflows until the broader role refactor.
+- Show assignable Foremen and Project Managers together in job assignment UI as assigned field users.
+
+Why:
+
+- The client needs Project Managers available in user setup now.
+- Final Project Manager permissions are still being refined and should not be rushed into bug-fix work.
+
+Implications:
+
+- Firebase rules and Cloud Functions should keep mapping Project Manager to field/foreman-equivalent access for now.
+- E2E coverage should protect Project Manager access to assigned job workflows.
+- The role refactor should revisit the stored role, effective role, UI wording, and final permission boundaries before training/live rollout.

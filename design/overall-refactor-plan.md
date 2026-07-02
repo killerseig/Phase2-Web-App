@@ -505,6 +505,7 @@ After a refactor slice:
 - Which shared controls are worth building first versus wrapping later?
 - Should shop order email eventually become mostly a cover note plus PDF attachment?
 - How much role/permission configuration should be data-driven in the first refactor pass?
+- Should `Project Manager` remain foreman-equivalent, or split into explicit permissions for jobs, timecards, daily logs, and shop orders?
 - Which component tests should be introduced before larger page extractions?
 - Which migration/compatibility fields are now safe to remove?
 - Which workflows should be optimistic immediately, and which should wait for server confirmation?

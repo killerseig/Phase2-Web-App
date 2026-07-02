@@ -2,21 +2,24 @@ import { expect, test } from './helpers/test.js'
 import { createDailyLogsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('daily log draft regressions', () => {
-  test('typing in weekly schedule survives autosave echo', async ({ page }) => {
+  test('typing in weekly schedule stays stable until the field blurs', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/daily-logs', createDailyLogsFixture())
 
     const weeklySchedule = page.getByTestId('dailylog-weeklySchedule')
+    const manpowerAssessment = page.getByTestId('dailylog-manpowerAssessment')
     const text = 'Week 1 schedule 123 with spaces between crews'
 
     await expect(weeklySchedule).toBeVisible()
     await weeklySchedule.fill(text)
     await expect(weeklySchedule).toHaveValue(text)
+    await expect(page.getByText('Unsaved changes')).toBeVisible()
+    await expect(page.getByTestId('dailylog-saved-weeklySchedule')).not.toHaveText(text)
 
-    await expect(weeklySchedule).toHaveValue(text)
+    await manpowerAssessment.focus()
     await expect(page.getByTestId('dailylog-saved-weeklySchedule')).toHaveText(text)
   })
 
-  test('safety, budget, and deliveries text keep numbers and spaces while autosaving', async ({ page }) => {
+  test('safety, budget, and deliveries text keep numbers and spaces while fields save on blur', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/daily-logs', createDailyLogsFixture())
 
     const safety = 'Lift 2 needs guard rail 44 and spotter'
@@ -30,7 +33,12 @@ test.describe('daily log draft regressions', () => {
     await expect(page.getByTestId('dailylog-safetyConcerns')).toHaveValue(safety)
     await expect(page.getByTestId('dailylog-budgetConcerns')).toHaveValue(budget)
     await expect(page.getByTestId('dailylog-deliveriesNeeded')).toHaveValue(deliveries)
+    await expect(page.getByText('Unsaved changes')).toBeVisible()
+    await expect(page.getByTestId('dailylog-saved-safetyConcerns')).toHaveText(safety)
+    await expect(page.getByTestId('dailylog-saved-budgetConcerns')).toHaveText(budget)
+    await expect(page.getByTestId('dailylog-saved-deliveriesNeeded')).not.toHaveText(deliveries)
 
+    await page.getByTestId('dailylog-newWorkAuthorizations').focus()
     await expect(page.getByTestId('dailylog-saved-safetyConcerns')).toHaveText(safety)
     await expect(page.getByTestId('dailylog-saved-budgetConcerns')).toHaveText(budget)
     await expect(page.getByTestId('dailylog-saved-deliveriesNeeded')).toHaveText(deliveries)

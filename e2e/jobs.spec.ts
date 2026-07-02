@@ -26,12 +26,20 @@ test.describe('jobs page regressions', () => {
     await page.getByTestId('jobs-create-code').fill('4D')
     await page.getByTestId('jobs-create-gc').fill('Capstone')
     await page.getByTestId('jobs-create-address').fill('321 Elm St')
-    await page.locator('[data-testid="jobs-foreman-foreman-e2e"] input').check()
     await page.getByTestId('jobs-create-button').click()
 
     await expect(page.getByTestId('job-card-4D')).toBeVisible()
     await expect(page.getByTestId('job-card-4D')).toContainText('Ceiling Repair')
     await expect(page.getByTestId('job-card-4D')).toContainText('Capstone')
+    await expect(page.getByText('Assign at least one foreman.')).toHaveCount(0)
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          jobs?: Array<{ code?: string | null; assignedForemanIds?: string[] }>
+        }
+        return state.jobs?.find((job) => job.code === '4D')?.assignedForemanIds ?? null
+      }))
+      .toEqual([])
   })
 
   test('job detail keeps the latest typed text while autosave responses arrive late', async ({ page }) => {
@@ -44,24 +52,50 @@ test.describe('jobs page regressions', () => {
     await page.getByTestId('job-card-1A').click()
 
     const jobName = page.getByLabel('Job Name')
+    const startDate = page.getByLabel('Start Date')
+    const burden = page.getByLabel('Burden')
     const nextName = 'Phase 2 South Buildout'
+    const nextStartDate = '2026-08-15'
+    const nextBurden = '0.45'
 
     await expect(jobName).toHaveValue('Acoustical Remodel')
 
     await jobName.fill('Phase')
     await expect(page.getByText('Saving...')).toBeVisible()
+    await startDate.fill(nextStartDate)
+    await burden.fill(nextBurden)
     await jobName.fill(nextName)
 
     await expect(jobName).toHaveValue(nextName)
+    await expect(startDate).toHaveValue(nextStartDate)
+    await expect(burden).toHaveValue(nextBurden)
     await expect
       .poll(async () => page.evaluate(() => {
         const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ id?: string; name?: string | null }>
+          jobs?: Array<{
+            id?: string
+            name?: string | null
+            startDate?: string | null
+            productionBurden?: number | null
+          }>
         }
-        return state.jobs?.find((job) => job.id === 'job-1')?.name ?? null
+        const job = state.jobs?.find((entry) => entry.id === 'job-1')
+        return job
+          ? {
+              name: job.name ?? null,
+              startDate: job.startDate ?? null,
+              productionBurden: job.productionBurden ?? null,
+            }
+          : null
       }))
-      .toBe(nextName)
+      .toEqual({
+        name: nextName,
+        startDate: nextStartDate,
+        productionBurden: 0.45,
+      })
     await expect(jobName).toHaveValue(nextName)
+    await expect(startDate).toHaveValue(nextStartDate)
+    await expect(burden).toHaveValue(nextBurden)
   })
 
   test('job editor saves module-specific email recipients for the selected job', async ({ page }) => {
@@ -126,11 +160,13 @@ test.describe('jobs page regressions', () => {
       }))
       .toBe(false)
 
-    await page.getByLabel('Show Archived').check()
+    await page.getByTestId('jobs-status-filter').selectOption('inactive')
     await page.getByTestId('job-card-3C').click()
     await detailPanel.getByRole('button', { name: 'Restore Job' }).click()
+    await page.getByTestId('jobs-status-filter').selectOption('active')
 
     await expect(page.getByTestId('job-card-3C')).toBeVisible()
+    await page.getByTestId('job-card-3C').click()
     await expect
       .poll(async () => page.evaluate(() => {
         const state = window.__PHASE2_E2E_STATE__ as {

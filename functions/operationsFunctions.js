@@ -57,7 +57,8 @@ function assertActiveRoleUser(user, allowedRoles, errorMessage) {
     if (!user) {
         throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.USER_PROFILE_NOT_FOUND);
     }
-    const role = String(user?.role || 'none').trim().toLowerCase();
+    const rawRole = String(user?.role || 'none').trim().toLowerCase();
+    const role = rawRole === 'project-manager' ? 'foreman' : rawRole;
     if (user?.active !== true) {
         throw new https_2.HttpsError('permission-denied', 'Your account is inactive');
     }

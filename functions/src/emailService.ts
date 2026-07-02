@@ -1183,13 +1183,13 @@ const SHOP_ORDER_DOCUMENT_PADDING = 14
 const SHOP_ORDER_TABLE_WIDTH = SHOP_ORDER_DOCUMENT_WIDTH - (SHOP_ORDER_DOCUMENT_PADDING * 2)
 const SHOP_ORDER_TABLE_BORDER = '#9b9b9b'
 const SHOP_ORDER_EMAIL_COLUMN_WIDTHS = {
-  pulledBy: 54,
-  verifiedBy: 58,
+  pulledBy: 60,
+  verifiedBy: 70,
   code: 64,
-  partNumber: 80,
-  itemName: 486,
+  partNumber: 160,
+  itemName: 361,
   quantity: 76,
-  notes: 108,
+  notes: 135,
   check: 26,
 } as const
 
@@ -1278,8 +1278,8 @@ function renderPrintedShopOrderItemsTable(items: ShopOrderEmailLine[], marginTop
       </colgroup>
       <thead style="display: table-header-group !important;">
         <tr>
-          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Pulled<br>By</th>
-          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Verified<br>By</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; padding: 6px 2px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 14px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Pulled</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; padding: 6px 2px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 14px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Verified</th>
           <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">133/513</th>
           <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Part#</th>
           <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; padding: 6px 7px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Item Name</th>
@@ -1484,7 +1484,7 @@ export async function buildShopOrderPdfBuffer(
   const pageBottom = doc.page.height - pageMargin
   const tableX = pageMargin
   const tableWidth = doc.page.width - (pageMargin * 2)
-  const colWidths = [42, 46, 52, 58, 254, 52, 70, 18]
+  const colWidths = [46, 54, 50, 116, 172, 48, 88, 18]
   const tableScale = tableWidth / colWidths.reduce((sum, width) => sum + width, 0)
   const scaledColWidths = colWidths.map((width) => width * tableScale)
   const borderColor = '#111111'
@@ -1536,13 +1536,13 @@ export async function buildShopOrderPdfBuffer(
 
     const drawTableHeader = (y: number) => {
       const headerHeight = 32
-      const headers = ['Pulled\nBy', 'Verified\nBy', '133/513', 'Part#', 'Item Name', 'Quantity', 'Notes', '']
+      const headers = ['Pulled', 'Verified', '133/513', 'Part#', 'Item Name', 'Quantity', 'Notes', '']
       headers.forEach((header, index) => {
         drawCell(columnX(index), y, scaledColWidths[index] || 0, headerHeight, header, {
           bold: true,
           align: index === 4 || index === 6 ? 'left' : 'center',
           fontSize: 10,
-          paddingX: index === 4 || index === 6 ? 5 : 3,
+          paddingX: index === 4 || index === 6 ? 5 : 2,
           paddingY: 7,
         })
       })

@@ -8,7 +8,6 @@ import {
   buildAccountsSummary,
   buildCardDisplayName,
   formatWeekRange,
-  getTodayIsoDate,
   getWeekStartFromSaturday,
   recalculateCardTotals,
   snapToSaturday,
@@ -61,7 +60,7 @@ const cards = ref<TimecardCardRecord[]>([])
 const employees = ref<EmployeeRecord[]>([])
 const cardSearchTerm = ref('')
 const employeeSearchTerm = ref('')
-const selectedWeekEndDate = ref(snapToSaturday(getTodayIsoDate()))
+const selectedWeekEndDate = ref('')
 const selectedCardId = ref<string | null>(null)
 const weeksLoading = ref(true)
 const cardsLoading = ref(false)
@@ -110,7 +109,10 @@ const job = computed<JobRecord | null>(() => {
 const selectedWeek = computed(() => (
   weeks.value.find((week) => week.weekEndDate === selectedWeekEndDate.value) ?? null
 ))
-const selectedWeekStartDate = computed(() => selectedWeek.value?.weekStartDate ?? getWeekStartFromSaturday(selectedWeekEndDate.value))
+const selectedWeekStartDate = computed(() => (
+  selectedWeek.value?.weekStartDate
+  ?? (selectedWeekEndDate.value ? getWeekStartFromSaturday(selectedWeekEndDate.value) : '')
+))
 const filteredCards = computed(() => {
   const query = cardSearchTerm.value.trim().toLowerCase()
   if (!query) return cards.value
@@ -154,7 +156,11 @@ const weekStatusLabel = computed(() => {
   if (!selectedWeek.value) return 'No Week'
   return selectedWeek.value.status === 'submitted' ? 'Submitted' : 'Draft'
 })
-const weekRangeLabel = computed(() => formatWeekRange(selectedWeekStartDate.value, selectedWeekEndDate.value))
+const weekRangeLabel = computed(() => (
+  selectedWeekEndDate.value
+    ? formatWeekRange(selectedWeekStartDate.value, selectedWeekEndDate.value)
+    : 'Choose Week'
+))
 const burdenValue = computed(() => job.value?.productionBurden ?? DEFAULT_TIMECARD_BURDEN)
 const recentWeeks = computed(() => weeks.value.slice(0, 10))
 const displayJobCode = computed(() => job.value?.code || selectedWeek.value?.jobCode || 'No Job #')
@@ -172,6 +178,7 @@ const saveStateLabel = computed(() => {
   return 'Ready'
 })
 const emptyCanvasMessage = computed(() => {
+  if (!selectedWeekEndDate.value) return 'Choose a week ending date to start.'
   if (cards.value.length) return 'No cards match this search.'
   if (!canEditWeek.value) return 'No timecards were saved for this week.'
   return 'Create a card to start this week.'
@@ -393,8 +400,17 @@ function mergeRemoteCardsWithLocalState(nextCards: TimecardCardRecord[]) {
 
 async function maybeEnsureSelectedWeek() {
   if (!jobId.value) return
+  if (!selectedWeekEndDate.value) return
   if (weeksLoading.value) return
-  if (selectedWeek.value) return
+  const currentWeek = selectedWeek.value
+  if (
+    currentWeek
+    && (
+      currentWeek.status !== 'draft'
+      || currentWeek.employeeCardCount > 0
+      || cards.value.length > 0
+    )
+  ) return
 
   const key = `${jobId.value}|${selectedWeekEndDate.value}`
   if (ensuringWeek.value || ensureKeyInFlight === key) return
@@ -716,21 +732,34 @@ async function handleRemoveCard(card: TimecardCardRecord) {
   }
 }
 
+function getCardLastNameSortKey(card: TimecardCardRecord) {
+  const lastName = card.lastName.trim()
+  if (lastName) return lastName
+
+  return buildCardDisplayName(card).trim()
+}
+
+function compareCardsByEmployeeName(left: TimecardCardRecord, right: TimecardCardRecord) {
+  return (
+    collator.compare(getCardLastNameSortKey(left), getCardLastNameSortKey(right))
+    || collator.compare(left.firstName.trim(), right.firstName.trim())
+    || collator.compare(buildCardDisplayName(left), buildCardDisplayName(right))
+    || collator.compare(left.employeeNumber, right.employeeNumber)
+    || left.id.localeCompare(right.id)
+  )
+}
+
 function sortCardsForMode(nextCards: TimecardCardRecord[], mode: WorkbookSortMode) {
   return nextCards.slice().sort((left, right) => {
     if (mode === 'number') {
       return (
         collator.compare(left.employeeNumber, right.employeeNumber)
-        || collator.compare(buildCardDisplayName(left), buildCardDisplayName(right))
+        || compareCardsByEmployeeName(left, right)
         || left.id.localeCompare(right.id)
       )
     }
 
-    return (
-      collator.compare(buildCardDisplayName(left), buildCardDisplayName(right))
-      || collator.compare(left.employeeNumber, right.employeeNumber)
-      || left.id.localeCompare(right.id)
-    )
+    return compareCardsByEmployeeName(left, right)
   })
 }
 
@@ -790,7 +819,8 @@ async function handleSelectWeek(weekEndDate: string) {
 }
 
 async function handleWeekEndingInput(event: Event) {
-  const nextValue = snapToSaturday((event.target as HTMLInputElement).value || getTodayIsoDate())
+  const rawValue = (event.target as HTMLInputElement).value
+  const nextValue = rawValue ? snapToSaturday(rawValue) : ''
   if (nextValue === selectedWeekEndDate.value) return
   await flushPendingSaves()
   showCreateTray.value = false

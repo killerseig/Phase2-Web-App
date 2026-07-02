@@ -70,7 +70,6 @@ const timecardNavigableInputSelector = [
   '.timecard-card__inline-input',
   '.timecard-card__header-input',
   '.timecard-card__footer-input',
-  '.timecard-card__notes-input',
   '.timecard-grid__input',
 ].join(', ')
 const pendingMouseSelectInputs = new WeakSet<NavigableInputElement>()
@@ -873,6 +872,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                   <td v-if="rowKindIndex === 0" :rowspan="visibleLineRowKinds.length" class="timecard-grid__rowspan-cell">
                     <input
                       class="timecard-grid__input"
+                      :data-testid="`timecard-account-${lineIndex}`"
                       :data-nav-row-start="lineRowStart(lineIndex)"
                       :data-nav-row-end="lineRowEnd(lineIndex)"
                       data-nav-col="2"
@@ -1089,6 +1089,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
           <div class="timecard-card__notes-line">
             <input
               class="timecard-card__notes-input"
+              data-testid="timecard-notes-input"
               :disabled="readOnly"
               :value="card.notes"
               type="text"

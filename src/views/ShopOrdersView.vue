@@ -1477,7 +1477,7 @@ onBeforeUnmount(() => {
 
 <template>
   <AppShell>
-    <div class="shop-orders-explorer">
+    <div class="shop-orders-explorer" data-testid="shop-orders-page">
       <section class="shop-orders-tree-pane">
         <header class="shop-orders-pane__header shop-orders-tree-pane__header">
           <div>

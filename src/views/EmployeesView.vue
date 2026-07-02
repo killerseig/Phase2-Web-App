@@ -21,9 +21,11 @@ interface EmployeeFormState {
 }
 
 type MobileEmployeesPanel = 'directory' | 'editor'
+type DirectoryStatusFilter = 'active' | 'inactive' | 'both'
 
 const employees = ref<EmployeeRecord[]>([])
 const searchTerm = ref('')
+const statusFilter = ref<DirectoryStatusFilter>('active')
 const selectedEmployeeId = ref<string | 'new'>('new')
 const activeMobilePanel = ref<MobileEmployeesPanel>('directory')
 const employeesLoading = ref(true)
@@ -59,9 +61,14 @@ let unsubscribeEmployees: (() => void) | null = null
 
 const filteredEmployees = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
-  if (!query) return employees.value
+  const statusMatches = (employee: EmployeeRecord) => (
+    statusFilter.value === 'both'
+    || (statusFilter.value === 'active' ? employee.active : !employee.active)
+  )
+  const statusFiltered = employees.value.filter(statusMatches)
+  if (!query) return statusFiltered
 
-  return employees.value.filter((employee) => {
+  return statusFiltered.filter((employee) => {
     const name = `${employee.firstName} ${employee.lastName}`.trim().toLowerCase()
     return (
       name.includes(query)
@@ -77,6 +84,7 @@ const selectedEmployee = computed(() =>
 
 const isCreateMode = computed(() => selectedEmployeeId.value === 'new')
 const activeEmployeesCount = computed(() => employees.value.filter((employee) => employee.active).length)
+const inactiveEmployeesCount = computed(() => employees.value.filter((employee) => !employee.active).length)
 const occupationSuggestions = computed(() => {
   const unique = new Set(
     employees.value
@@ -421,6 +429,15 @@ onBeforeUnmount(() => {
             <input v-model="searchTerm" data-testid="employees-search" type="search" placeholder="Search employees" />
           </div>
 
+          <label class="employees-browser__filter">
+            <span>Status</span>
+            <select v-model="statusFilter" class="app-select" data-testid="employees-status-filter">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+
           <div class="employees-browser__list">
             <button
               type="button"
@@ -513,7 +530,7 @@ onBeforeUnmount(() => {
               <section class="employees-settings-panel">
                 <div class="employees-settings-panel__header">
                   <strong>Directory Settings</strong>
-                  <span>{{ activeEmployeesCount }} active employees</span>
+                  <span>{{ activeEmployeesCount }} active / {{ inactiveEmployeesCount }} inactive</span>
                 </div>
 
                 <div class="employees-toggle-group">
@@ -776,6 +793,7 @@ onBeforeUnmount(() => {
 }
 
 .employees-browser__search input,
+.employees-browser__filter .app-select,
 .employees-form__field input {
   width: 100%;
   min-height: 2.8rem;
@@ -784,6 +802,23 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.045);
   color: var(--text);
+}
+
+.employees-browser__filter {
+  display: grid;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.employees-browser__filter .app-select {
+  --app-select-min-height: 2.8rem;
+  --app-select-padding-x: 0.9rem;
+  --app-select-background: rgba(255, 255, 255, 0.045);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .employees-form__currency-input {

@@ -21,16 +21,39 @@ function createExportActionsFixture() {
 
 test.describe('admin page coverage', () => {
   test('users page filters the real directory', async ({ page }) => {
-    await gotoPhase2App(page, '/users', createAdminWorkspaceFixture())
+    const fixture = createAdminWorkspaceFixture()
+    fixture.users?.push({
+      id: 'inactive-user',
+      email: 'inactive@example.com',
+      firstName: 'Inactive',
+      lastName: 'User',
+      role: 'foreman',
+      active: false,
+      assignedJobIds: [],
+    })
+
+    await gotoPhase2App(page, '/users', fixture)
 
     await expect(page.getByTestId('users-page')).toBeVisible()
     await expect(page.getByTestId('users-row-foreman-e2e')).toBeVisible()
     await expect(page.getByTestId('users-row-user-pending')).toBeVisible()
+    await expect(page.getByTestId('users-row-inactive-user')).toHaveCount(0)
 
     await page.getByTestId('users-search').fill('pending')
 
     await expect(page.getByTestId('users-row-user-pending')).toBeVisible()
     await expect(page.getByTestId('users-row-foreman-e2e')).toHaveCount(0)
+
+    await page.getByTestId('users-search').clear()
+    await page.getByTestId('users-status-filter').selectOption('inactive')
+
+    await expect(page.getByTestId('users-row-inactive-user')).toBeVisible()
+    await expect(page.getByTestId('users-row-foreman-e2e')).toHaveCount(0)
+
+    await page.getByTestId('users-status-filter').selectOption('both')
+
+    await expect(page.getByTestId('users-row-inactive-user')).toBeVisible()
+    await expect(page.getByTestId('users-row-foreman-e2e')).toBeVisible()
   })
 
   test('employees page filters the live directory', async ({ page }) => {
@@ -39,11 +62,61 @@ test.describe('admin page coverage', () => {
     await expect(page.getByTestId('employees-page')).toBeVisible()
     await expect(page.getByTestId('employee-row-employee-1')).toBeVisible()
     await expect(page.getByTestId('employee-row-employee-2')).toBeVisible()
+    await expect(page.getByTestId('employee-row-employee-3')).toHaveCount(0)
 
     await page.getByTestId('employees-search').fill('installer')
 
     await expect(page.getByTestId('employee-row-employee-2')).toBeVisible()
     await expect(page.getByTestId('employee-row-employee-1')).toHaveCount(0)
+
+    await page.getByTestId('employees-search').clear()
+    await page.getByTestId('employees-status-filter').selectOption('inactive')
+
+    await expect(page.getByTestId('employee-row-employee-3')).toBeVisible()
+    await expect(page.getByTestId('employee-row-employee-1')).toHaveCount(0)
+
+    await page.getByTestId('employees-status-filter').selectOption('both')
+
+    await expect(page.getByTestId('employee-row-employee-3')).toBeVisible()
+    await expect(page.getByTestId('employee-row-employee-1')).toBeVisible()
+  })
+
+  test('users page creates project managers with job assignments', async ({ page }) => {
+    await gotoPhase2App(page, '/users', createAdminWorkspaceFixture())
+
+    await page.getByRole('button', { name: 'New User' }).click()
+    await page.getByLabel('Email').fill('pm@example.com')
+    await page.getByLabel('Role').selectOption('project-manager')
+    await page.getByLabel('First Name').fill('Paige')
+    await page.getByLabel('Last Name').fill('Manager')
+
+    await expect(page.locator('.users-jobs-panel')).toBeVisible()
+    await page.locator('.users-job-toggle', { hasText: 'Phase 2 Company Acoustical remodel' }).getByRole('checkbox').check()
+    await page.getByRole('button', { name: "Create User, Don't Send Invite" }).click()
+
+    const projectManagerRow = page.locator('.users-browser__row', { hasText: 'pm@example.com' })
+    await expect(projectManagerRow).toBeVisible()
+    await expect(projectManagerRow).toContainText('Project Manager')
+
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          users?: Array<{ id?: string; email?: string | null; role?: string | null; assignedJobIds?: string[] }>
+          jobs?: Array<{ id?: string; assignedForemanIds?: string[] }>
+        }
+        const user = state.users?.find((entry) => entry.email === 'pm@example.com')
+        const job = state.jobs?.find((entry) => entry.id === 'job-e2e')
+        return {
+          role: user?.role ?? null,
+          assignedJobIds: user?.assignedJobIds ?? [],
+          jobHasUser: user?.id ? job?.assignedForemanIds?.includes(user.id) ?? false : false,
+        }
+      }))
+      .toEqual({
+        role: 'project-manager',
+        assignedJobIds: ['job-e2e'],
+        jobHasUser: true,
+      })
   })
 
   test('reference list page renders through the real admin route', async ({ page }) => {
@@ -139,6 +212,39 @@ test.describe('admin page coverage', () => {
 
     await expect(page.getByTestId('timecard-export-week-week-admin-2')).toBeVisible()
     await expect(page.getByTestId('timecard-export-week-week-e2e')).toHaveCount(0)
+  })
+
+  test('timecard export lets admins delete draft weeks only', async ({ page }) => {
+    await gotoPhase2App(page, '/exports/timecards', createAdminWorkspaceFixture())
+
+    await expect(page.getByTestId('timecard-export-week-week-e2e')).toBeVisible()
+    await expect(page.getByTestId('timecard-export-week-week-admin-2')).toBeVisible()
+    await expect(page.getByTestId('timecard-export-delete-week-week-e2e')).toBeVisible()
+    await expect(page.getByTestId('timecard-export-delete-week-week-admin-2')).toHaveCount(0)
+
+    await page.getByTestId('timecard-export-delete-week-week-e2e').click()
+
+    await expect(page.getByText('Draft week deleted.')).toBeVisible()
+    await expect(page.getByTestId('timecard-export-week-week-e2e')).toHaveCount(0)
+    await expect(page.getByTestId('timecard-export-week-week-admin-2')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ id?: string }>
+          timecardCards?: Array<{ weekId?: string }>
+        }
+
+        return {
+          draftWeekExists: state.timecardWeeks?.some((week) => week.id === 'week-e2e') ?? true,
+          draftCardsExist: state.timecardCards?.some((card) => card.weekId === 'week-e2e') ?? true,
+          submittedWeekExists: state.timecardWeeks?.some((week) => week.id === 'week-admin-2') ?? false,
+        }
+      }))
+      .toEqual({
+        draftWeekExists: false,
+        draftCardsExist: false,
+        submittedWeekExists: true,
+      })
   })
 
   test('timecard export csv downloads the filtered package from the real export page', async ({ page }) => {

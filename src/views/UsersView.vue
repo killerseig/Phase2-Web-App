@@ -13,16 +13,18 @@ import {
 } from '@/services/users'
 import { useAuthStore } from '@/stores/auth'
 import type { JobRecord, RoleKey, UserProfile } from '@/types/domain'
-import { toEffectiveRole } from '@/types/domain'
+import { roleCanBeAssignedJobs } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
 type MobileUsersPanel = 'directory' | 'editor'
+type DirectoryStatusFilter = 'active' | 'inactive' | 'both'
 
 const auth = useAuthStore()
 
 const users = ref<UserProfile[]>([])
 const jobs = ref<JobRecord[]>([])
 const searchTerm = ref('')
+const statusFilter = ref<DirectoryStatusFilter>('active')
 const selectedUserId = ref<string | 'new' | null>(null)
 const activeMobilePanel = ref<MobileUsersPanel>('directory')
 const usersLoading = ref(true)
@@ -64,9 +66,13 @@ let detailSaveTimer: number | null = null
 
 const filteredUsers = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
-  if (!query) return users.value
+  const statusFiltered = users.value.filter((user) => (
+    statusFilter.value === 'both'
+    || (statusFilter.value === 'active' ? user.active : !user.active)
+  ))
+  if (!query) return statusFiltered
 
-  return users.value.filter((user) => {
+  return statusFiltered.filter((user) => {
     const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim().toLowerCase()
     const email = (user.email ?? '').toLowerCase()
     const role = getRoleBadgeLabel(user.role).toLowerCase()
@@ -156,7 +162,11 @@ async function applySelectedUserToForm(user: UserProfile | null) {
   } else {
     detailForm.firstName = user.firstName ?? ''
     detailForm.lastName = user.lastName ?? ''
-    detailForm.role = toEffectiveRole(user.role) === 'admin' ? 'admin' : 'foreman'
+    detailForm.role = user.role === 'admin'
+      ? 'admin'
+      : user.role === 'project-manager'
+        ? 'project-manager'
+        : 'foreman'
     detailForm.active = user.active
     detailForm.assignedJobIds = [...user.assignedJobIds]
   }
@@ -222,24 +232,28 @@ function normalizeAssignedJobIds(jobIds: string[]) {
 function getSelectedUserSnapshot(user: UserProfile | null) {
   if (!user) return null
 
-  const role = toEffectiveRole(user.role) === 'admin' ? 'admin' : 'foreman'
+  const role = user.role === 'admin' ? 'admin' : user.role === 'project-manager' ? 'project-manager' : 'foreman'
   return {
     firstName: (user.firstName ?? '').trim(),
     lastName: (user.lastName ?? '').trim(),
     role,
     active: user.active,
-    assignedJobIds: role === 'foreman' ? normalizeAssignedJobIds(user.assignedJobIds) : [],
+    assignedJobIds: roleCanBeAssignedJobs(role) ? normalizeAssignedJobIds(user.assignedJobIds) : [],
   }
 }
 
 function getDetailFormSnapshot() {
-  const role = detailForm.role === 'admin' ? 'admin' : 'foreman'
+  const role = detailForm.role === 'admin'
+    ? 'admin'
+    : detailForm.role === 'project-manager'
+      ? 'project-manager'
+      : 'foreman'
   return {
     firstName: detailForm.firstName.trim(),
     lastName: detailForm.lastName.trim(),
     role,
     active: detailForm.active,
-    assignedJobIds: role === 'foreman' ? normalizeAssignedJobIds(detailForm.assignedJobIds) : [],
+    assignedJobIds: roleCanBeAssignedJobs(role) ? normalizeAssignedJobIds(detailForm.assignedJobIds) : [],
   }
 }
 
@@ -322,7 +336,7 @@ async function handleCreateUser(sendInvite: boolean) {
       firstName: createForm.firstName,
       lastName: createForm.lastName,
       role: createForm.role,
-      assignedJobIds: createForm.role === 'foreman' ? createForm.assignedJobIds : [],
+      assignedJobIds: roleCanBeAssignedJobs(createForm.role) ? createForm.assignedJobIds : [],
       sendInvite,
     })
 
@@ -375,7 +389,7 @@ async function handleAutoSaveUser() {
       lastName: detailForm.lastName,
       role: detailForm.role,
       active: detailForm.active,
-      assignedJobIds: detailForm.role === 'foreman' ? detailForm.assignedJobIds : [],
+      assignedJobIds: roleCanBeAssignedJobs(detailForm.role) ? detailForm.assignedJobIds : [],
     })
 
     detailInfo.value = 'All changes saved.'
@@ -567,6 +581,15 @@ onBeforeUnmount(() => {
             <input v-model="searchTerm" data-testid="users-search" type="search" placeholder="Search users" />
           </div>
 
+          <label class="users-browser__filter">
+            <span>Status</span>
+            <select v-model="statusFilter" class="app-select" data-testid="users-status-filter">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+
           <div class="users-browser__list">
             <div v-if="usersLoading" class="users-browser__empty">Loading users...</div>
 
@@ -625,6 +648,7 @@ onBeforeUnmount(() => {
                   <span>Role</span>
                   <select v-model="createForm.role" class="app-select">
                     <option value="foreman">Foreman</option>
+                    <option value="project-manager">Project Manager</option>
                     <option value="admin">Admin</option>
                   </select>
                 </label>
@@ -657,7 +681,7 @@ onBeforeUnmount(() => {
                 </button>
               </div>
 
-              <section v-if="createForm.role === 'foreman'" class="users-jobs-panel">
+              <section v-if="roleCanBeAssignedJobs(createForm.role)" class="users-jobs-panel">
                 <div class="users-jobs-panel__header">
                   <strong>Assigned Jobs</strong>
                   <span>{{ createForm.assignedJobIds.length }} selected</span>
@@ -729,6 +753,7 @@ onBeforeUnmount(() => {
                     :aria-disabled="editingSelf ? 'true' : undefined"
                   >
                     <option value="foreman">Foreman</option>
+                    <option value="project-manager">Project Manager</option>
                     <option value="admin">Admin</option>
                   </select>
                 </label>
@@ -754,7 +779,7 @@ onBeforeUnmount(() => {
                 <span>Active User</span>
               </label>
 
-              <section v-if="detailForm.role === 'foreman'" class="users-jobs-panel">
+              <section v-if="roleCanBeAssignedJobs(detailForm.role)" class="users-jobs-panel">
                 <div class="users-jobs-panel__header">
                   <strong>Assigned Jobs</strong>
                   <span>{{ detailForm.assignedJobIds.length }} selected</span>
@@ -987,6 +1012,7 @@ onBeforeUnmount(() => {
 }
 
 .users-browser__search input,
+.users-browser__filter .app-select,
 .users-jobs-panel__search input,
 .users-form__field input {
   width: 100%;
@@ -996,6 +1022,23 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.045);
   color: var(--text);
+}
+
+.users-browser__filter {
+  display: grid;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.users-browser__filter .app-select {
+  --app-select-min-height: 2.8rem;
+  --app-select-padding-x: 0.9rem;
+  --app-select-background: rgba(255, 255, 255, 0.045);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .users-form__field .app-select {

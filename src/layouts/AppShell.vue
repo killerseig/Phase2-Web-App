@@ -27,6 +27,7 @@ const adminNavigationItems = computed<NavigationItem[]>(() => [
 
 const roleLabel = computed(() => {
   if (auth.isAdmin) return 'Admin'
+  if (auth.profile?.role === 'project-manager') return 'Project Manager'
   if (auth.roleKey === 'foreman') return 'Foreman'
   return 'Workspace'
 })

@@ -5,7 +5,7 @@
 
 // User Roles
 // Keep backend role validation aligned with frontend roles.
-export const VALID_ROLES = ['admin', 'foreman', 'none'] as const
+export const VALID_ROLES = ['admin', 'foreman', 'project-manager', 'none'] as const
 export type UserRole = typeof VALID_ROLES[number]
 
 // Firestore Collections

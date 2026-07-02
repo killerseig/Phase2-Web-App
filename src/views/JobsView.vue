@@ -34,6 +34,7 @@ interface JobFormState {
 }
 
 const ALL_JOBS_ID = '__all_jobs__'
+type JobStatusFilter = 'active' | 'inactive' | 'both'
 
 const NOTIFICATION_MODULES: Array<{ key: NotificationModuleKey; label: string }> = [
   { key: 'dailyLogs', label: 'Daily Logs' },
@@ -65,7 +66,7 @@ const toast = useAppToast()
 const users = ref<UserProfile[]>([])
 const searchTerm = ref('')
 const foremanSearchTerm = ref('')
-const showArchived = ref(false)
+const jobStatusFilter = ref<JobStatusFilter>('active')
 const editDrawerOpen = ref(false)
 const selectedJobId = ref<string | 'new' | typeof ALL_JOBS_ID | null>(null)
 const usersLoading = ref(false)
@@ -122,7 +123,10 @@ const lastSavedDetailSignature = ref('')
 const allJobs = computed(() => jobsStore.jobs)
 const visibleJobs = computed(() => {
   const source = auth.isAdmin
-    ? allJobs.value.filter((job) => showArchived.value || job.active)
+    ? allJobs.value.filter((job) => (
+        jobStatusFilter.value === 'both'
+        || (jobStatusFilter.value === 'active' ? job.active : !job.active)
+      ))
     : jobsStore.activeJobs
 
   const query = searchTerm.value.trim().toLowerCase()
@@ -310,7 +314,6 @@ function validateJobForm(form: JobFormState) {
   if (!form.code.trim()) return 'Enter the job number.'
   if (!form.name.trim()) return 'Enter the job name.'
   if (!String(form.type).trim()) return 'Select the job type.'
-  if (form.assignedForemanIds.length === 0) return 'Assign at least one foreman.'
   return ''
 }
 
@@ -322,16 +325,21 @@ function getNotificationModuleLabel(moduleKey: NotificationModuleKey) {
   return NOTIFICATION_MODULES.find((module) => module.key === moduleKey)?.label ?? moduleKey
 }
 
+function normalizeFormText(value: unknown) {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
 function serializeJobForm(form: JobFormState) {
   return JSON.stringify({
-    name: form.name.trim(),
-    code: form.code.trim(),
-    type: String(form.type).trim(),
-    gc: form.gc.trim(),
-    jobAddress: form.jobAddress.trim(),
-    startDate: form.startDate.trim(),
-    finishDate: form.finishDate.trim(),
-    productionBurden: form.productionBurden.trim(),
+    name: normalizeFormText(form.name),
+    code: normalizeFormText(form.code),
+    type: normalizeFormText(form.type),
+    gc: normalizeFormText(form.gc),
+    jobAddress: normalizeFormText(form.jobAddress),
+    startDate: normalizeFormText(form.startDate),
+    finishDate: normalizeFormText(form.finishDate),
+    productionBurden: normalizeFormText(form.productionBurden),
     assignedForemanIds: [...form.assignedForemanIds].slice().sort(),
   })
 }
@@ -384,6 +392,7 @@ function queueDetailAutosave() {
     try {
       await updateJobRecord(selectedJob.value.id, {
         ...detailForm,
+        productionBurden: normalizeFormText(detailForm.productionBurden),
         assignedForemanIds: [...detailForm.assignedForemanIds],
         notificationRecipients: detailNotificationRecipients,
         active: selectedJob.value.active,
@@ -449,6 +458,7 @@ async function handleCreateJob() {
   try {
     const jobId = await createJobRecord({
       ...createForm,
+      productionBurden: normalizeFormText(createForm.productionBurden),
       assignedForemanIds: [...createForm.assignedForemanIds],
       notificationRecipients: createNotificationRecipients,
       active: true,
@@ -480,6 +490,7 @@ async function handleSaveJob() {
   try {
     await updateJobRecord(selectedJob.value.id, {
       ...detailForm,
+      productionBurden: normalizeFormText(detailForm.productionBurden),
       assignedForemanIds: [...detailForm.assignedForemanIds],
       notificationRecipients: detailNotificationRecipients,
       active: selectedJob.value.active,
@@ -629,7 +640,7 @@ async function handleDeleteJob() {
   if (!selectedJob.value) return
 
   const confirmed = window.confirm(
-    `Delete ${getJobDisplayName(selectedJob.value)}? This removes the job record and clears its foreman assignments.`,
+    `Delete ${getJobDisplayName(selectedJob.value)}? This removes the job record and clears its field-user assignments.`,
   )
   if (!confirmed) return
 
@@ -676,6 +687,7 @@ watch(
 
     if (hasUnsavedLocalChanges) return
     if (incomingSignature === lastSavedDetailSignature.value) return
+    if (editDrawerOpen.value && !isCreateMode.value && localSignature !== incomingSignature) return
 
     applySelectedJobToForm(job)
   },
@@ -751,7 +763,7 @@ onMounted(() => {
         usersLoading.value = false
       },
       (error) => {
-        usersError.value = normalizeError(error, 'Failed to load foremen.')
+        usersError.value = normalizeError(error, 'Failed to load assignable users.')
         usersLoading.value = false
       },
     )
@@ -821,9 +833,13 @@ onBeforeUnmount(() => {
               <span>{{ visibleJobs.length }} visible</span>
             </div>
 
-            <label v-if="auth.isAdmin && editDrawerOpen" class="jobs-browser__toggle">
-              <input v-model="showArchived" type="checkbox" />
-              <span>Show Archived</span>
+            <label v-if="auth.isAdmin && editDrawerOpen" class="jobs-browser__filter">
+              <span>Status</span>
+              <select v-model="jobStatusFilter" class="app-select" data-testid="jobs-status-filter">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="both">Both</option>
+              </select>
             </label>
           </div>
 
@@ -922,15 +938,15 @@ onBeforeUnmount(() => {
 
               <section class="jobs-foremen-panel">
                 <div class="jobs-foremen-panel__header">
-                  <strong>Assigned Foremen</strong>
+                  <strong>Assigned Field Users</strong>
                   <span>{{ createForm.assignedForemanIds.length }} selected</span>
                 </div>
 
                 <div class="jobs-foremen-panel__search">
-                  <input v-model="foremanSearchTerm" type="search" placeholder="Search foremen" />
+                  <input v-model="foremanSearchTerm" type="search" placeholder="Search foremen or project managers" />
                 </div>
 
-                <div v-if="usersLoading" class="jobs-browser__empty">Loading foremen...</div>
+                <div v-if="usersLoading" class="jobs-browser__empty">Loading assignable users...</div>
                 <div v-else class="jobs-foremen-grid">
                   <label
                     v-for="user in filteredForemen"
@@ -951,7 +967,7 @@ onBeforeUnmount(() => {
                     </span>
                   </label>
                   <div v-if="filteredForemen.length === 0" class="jobs-browser__empty jobs-browser__empty--compact">
-                    No foremen match your search.
+                    No assignable users match your search.
                   </div>
                 </div>
               </section>
@@ -1164,15 +1180,15 @@ onBeforeUnmount(() => {
 
               <section class="jobs-foremen-panel">
                 <div class="jobs-foremen-panel__header">
-                  <strong>Assigned Foremen</strong>
+                  <strong>Assigned Field Users</strong>
                   <span>{{ detailForm.assignedForemanIds.length }} selected</span>
                 </div>
 
                 <div class="jobs-foremen-panel__search">
-                  <input v-model="foremanSearchTerm" type="search" placeholder="Search foremen" />
+                  <input v-model="foremanSearchTerm" type="search" placeholder="Search foremen or project managers" />
                 </div>
 
-                <div v-if="usersLoading" class="jobs-browser__empty">Loading foremen...</div>
+                <div v-if="usersLoading" class="jobs-browser__empty">Loading assignable users...</div>
                 <div v-else class="jobs-foremen-grid">
                   <label v-for="user in filteredForemen" :key="user.id" class="jobs-foreman-toggle">
                     <input
@@ -1188,7 +1204,7 @@ onBeforeUnmount(() => {
                     </span>
                   </label>
                   <div v-if="filteredForemen.length === 0" class="jobs-browser__empty jobs-browser__empty--compact">
-                    No foremen match your search.
+                    No assignable users match your search.
                   </div>
                 </div>
               </section>
@@ -1350,6 +1366,12 @@ onBeforeUnmount(() => {
   padding-right: 0.15rem;
 }
 
+.jobs-detail__body > .jobs-notifications-panel {
+  max-height: 100%;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
 .jobs-browser__header,
 .jobs-detail__header {
   display: flex;
@@ -1372,6 +1394,7 @@ onBeforeUnmount(() => {
 }
 
 .jobs-browser__search input,
+.jobs-browser__filter .app-select,
 .jobs-foremen-panel__search input,
 .jobs-form__field input {
   width: 100%;
@@ -1397,14 +1420,23 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
-.jobs-browser__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
+.jobs-browser__filter {
+  display: grid;
+  gap: 0.45rem;
   color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.jobs-browser__toggle input,
+.jobs-browser__filter .app-select {
+  --app-select-min-height: 2.4rem;
+  --app-select-padding-x: 0.8rem;
+  --app-select-background: rgba(255, 255, 255, 0.045);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .jobs-foreman-toggle input {
   margin-top: 0.1rem;
   accent-color: var(--accent-strong);
@@ -1557,8 +1589,11 @@ onBeforeUnmount(() => {
 .jobs-notifications-panel {
   display: grid;
   gap: 0.85rem;
+  align-content: start;
+  min-width: 0;
   min-height: 0;
   padding: 1rem;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.03);
@@ -1587,6 +1622,7 @@ onBeforeUnmount(() => {
 .jobs-recipient-section {
   display: grid;
   gap: 0.75rem;
+  min-width: 0;
   padding-top: 0.85rem;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -1623,7 +1659,9 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: stretch;
   gap: 0.6rem;
+  width: min(100%, 28rem);
   max-width: 28rem;
+  min-width: 0;
 }
 
 .jobs-inline-input .app-button {
@@ -1650,7 +1688,8 @@ onBeforeUnmount(() => {
 
 .jobs-recipient-list,
 .jobs-browser__empty--compact {
-  max-width: 42rem;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .jobs-browser__empty--compact {
@@ -1661,6 +1700,7 @@ onBeforeUnmount(() => {
 .jobs-recipient-list {
   display: grid;
   gap: 0.55rem;
+  width: min(100%, 42rem);
 }
 
 .jobs-recipient-row {

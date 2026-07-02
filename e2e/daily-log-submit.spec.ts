@@ -102,7 +102,8 @@ test.describe('daily log submit workflows', () => {
       .toBe(1)
 
     await photosCard.getByPlaceholder('Description').fill('North corridor progress photo')
-    await photosCard.getByPlaceholder('Description').press('Tab')
+    await expect(page.getByText('Unsaved changes')).toBeVisible()
+    await page.getByRole('button', { name: 'Save Draft' }).click()
 
     await expect
       .poll(async () => page.evaluate(() => {

@@ -25,7 +25,7 @@ service cloud.firestore {
     }
 
     function roleCanUseApp() {
-      return userRole() in ['admin', 'foreman'];
+      return userRole() in ['admin', 'foreman', 'project-manager'];
     }
 
     function activeAppUser() {
@@ -52,12 +52,12 @@ service cloud.firestore {
     }
 
     function canUseTimecards() {
-      return activeAppUser() && (isAdmin() || userRole() == 'foreman');
+      return activeAppUser() && (isAdmin() || (userRole() in ['foreman', 'project-manager']));
     }
 
     function isForemanAssigned(jobId) {
       return activeAppUser() &&
-        userRole() == 'foreman' &&
+        (userRole() in ['foreman', 'project-manager']) &&
         (userAssignedJobs().hasAny([jobId]) ||
          (jobDoc(jobId).data != null && foremanAssignedInJobData(jobDoc(jobId).data)));
     }
@@ -72,7 +72,7 @@ service cloud.firestore {
     function hasJobReadAccessFromJobData(jobId, jobData) {
       return activeAppUser() && (
         isAdmin() ||
-        (userRole() == 'foreman' &&
+        ((userRole() in ['foreman', 'project-manager']) &&
          (userAssignedJobs().hasAny([jobId]) || foremanAssignedInJobData(jobData)))
       );
     }
@@ -85,11 +85,11 @@ service cloud.firestore {
     }
 
     function isAssignedForemanToJob(jobId) {
-      return activeAppUser() && userRole() == 'foreman' && userAssignedJobs().hasAny([jobId]);
+      return activeAppUser() && (userRole() in ['foreman', 'project-manager']) && userAssignedJobs().hasAny([jobId]);
     }
 
     function foremanOwnsWeek(weekData) {
-      return userRole() == 'foreman' && weekData.ownerForemanUserId == request.auth.uid;
+      return (userRole() in ['foreman', 'project-manager']) && weekData.ownerForemanUserId == request.auth.uid;
     }
 
     function foremanCanAccessWeek(weekData) {

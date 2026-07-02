@@ -3,6 +3,7 @@ import {
   deleteE2EJob,
   isE2EActive,
   setE2EJobActive,
+  subscribeE2EVisibleJobs,
   subscribeE2EGlobalNotificationRecipients,
   updateE2EGlobalNotificationRecipients,
   updateE2EJob,
@@ -240,6 +241,10 @@ export function subscribeVisibleJobs(
   onUpdate: (jobs: JobRecord[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
+  if (isE2EActive()) {
+    return subscribeE2EVisibleJobs(options, onUpdate)
+  }
+
   const normalizedAssignedJobIds = normalizeAssignedIds(options?.assignedJobIds)
   const assignedOnlyForUid = options?.assignedOnlyForUid
   if (normalizedAssignedJobIds.length > 0 || assignedOnlyForUid) {

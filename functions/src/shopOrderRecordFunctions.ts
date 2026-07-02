@@ -25,6 +25,7 @@ function textOrNull(value: unknown) {
 function normalizeRole(value: unknown): ShopOrderRole {
   const role = text(value).toLowerCase()
   if (role === 'admin' || role === 'foreman') return role
+  if (role === 'project-manager') return 'foreman'
   return 'none'
 }
 

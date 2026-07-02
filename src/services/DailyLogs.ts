@@ -13,6 +13,7 @@ import {
   createEmptyDailyLogPayload,
   createEmptyIndoorClimateReading,
   createEmptyManpowerLine,
+  type DailyLogTextFieldKey,
 } from '@/features/dailyLogs/schema'
 import type {
   DailyLogAttachmentRecord,
@@ -48,6 +49,7 @@ export interface CreateDailyLogInput {
 
 export interface UpdateDailyLogInput {
   payload?: DailyLogPayload
+  payloadFields?: Partial<Record<DailyLogTextFieldKey, string>>
   status?: DailyLogStatus
   additionalRecipients?: string[]
 }
@@ -401,6 +403,7 @@ export async function updateDailyLogRecord(
       {
         dailyLogId: string
         payload?: DailyLogPayload
+        payloadFields?: Partial<Record<DailyLogTextFieldKey, string>>
         status?: DailyLogStatus
         additionalRecipients?: string[]
         actor?: DailyLogActor
@@ -411,6 +414,7 @@ export async function updateDailyLogRecord(
     await callable({
       dailyLogId,
       ...(input.payload ? { payload: serializePayloadForCallable(input.payload) } : {}),
+      ...(input.payloadFields ? { payloadFields: input.payloadFields } : {}),
       ...(input.status ? { status: input.status } : {}),
       ...('additionalRecipients' in input ? { additionalRecipients: normalizeRecipientList(input.additionalRecipients) } : {}),
       ...(actor ? { actor } : {}),

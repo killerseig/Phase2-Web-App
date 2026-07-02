@@ -47,6 +47,9 @@ The goal is to rebuild Phase 2 as a `Vue + Firebase` application that:
 - `Foreman`
   - works inside assigned jobs
   - creates and submits timecards, daily logs, and shop orders
+- `Project Manager`
+  - currently stored as its own role
+  - intentionally uses Foreman-equivalent assigned-job access until the role refactor
 
 ### Role direction after v1
 

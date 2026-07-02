@@ -48,6 +48,8 @@ function normalizeRole(value) {
     const role = text(value).toLowerCase();
     if (role === 'admin' || role === 'foreman')
         return role;
+    if (role === 'project-manager')
+        return 'foreman';
     return 'none';
 }
 function toStatus(value) {

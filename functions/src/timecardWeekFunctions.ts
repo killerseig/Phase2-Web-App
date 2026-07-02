@@ -73,6 +73,7 @@ function numberOrNull(value: unknown) {
 function normalizeRole(value: unknown): TimecardRole {
   const role = text(value).toLowerCase()
   if (role === 'admin' || role === 'foreman') return role
+  if (role === 'project-manager') return 'foreman'
   return 'none'
 }
 
@@ -225,7 +226,7 @@ function cloneLineForNewWeek(line: any, weekDates: string[]) {
   return {
     jobNumber: text(line?.jobNumber),
     subsectionArea: text(line?.subsectionArea),
-    account: text(line?.account),
+    account: '',
     difH: text(line?.difH),
     difP: text(line?.difP),
     difC: text(line?.difC),
@@ -301,6 +302,64 @@ async function listWeekCards(weekId: string): Promise<any[]> {
   return cardsSnap.docs
     .map((doc): any => ({ id: doc.id, ...(doc.data() || {}) }))
     .sort((left, right) => numberOrZero(left.sortIndex) - numberOrZero(right.sortIndex))
+}
+
+async function copyPreviousWeekCardsIntoDraft(input: {
+  targetWeekId: string
+  targetWeekRef: admin.firestore.DocumentReference
+  jobId: string
+  weekEndDate: string
+  weekStartDate: string
+  ownerForemanUserId: string | null
+}) {
+  const targetCardsSnap = await db
+    .collection('timecardWeeks')
+    .doc(input.targetWeekId)
+    .collection('cards')
+    .limit(1)
+    .get()
+
+  if (!targetCardsSnap.empty) return 0
+
+  let previousWeekQuery = db
+    .collection('timecardWeeks')
+    .where('jobId', '==', input.jobId)
+    .where('weekEndDate', '==', getPreviousSaturday(input.weekEndDate))
+
+  if (input.ownerForemanUserId) {
+    previousWeekQuery = previousWeekQuery.where('ownerForemanUserId', '==', input.ownerForemanUserId)
+  }
+
+  const previousWeekSnap = await previousWeekQuery.limit(1).get()
+  const previousWeekDoc = previousWeekSnap.docs[0]
+  if (!previousWeekDoc) return 0
+
+  const previousCardsSnap = await db
+    .collection('timecardWeeks')
+    .doc(previousWeekDoc.id)
+    .collection('cards')
+    .get()
+
+  if (previousCardsSnap.empty) return 0
+
+  const batch = db.batch()
+  previousCardsSnap.docs
+    .sort((left, right) => numberOrZero(left.data()?.sortIndex) - numberOrZero(right.data()?.sortIndex))
+    .forEach((cardDoc, index) => {
+      const nextCardRef = db.collection('timecardWeeks').doc(input.targetWeekId).collection('cards').doc()
+      batch.set(nextCardRef, {
+        ...sanitizeCardPayload(cloneCardForNewWeek(cardDoc.data(), input.weekStartDate), input.weekStartDate, index),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+    })
+
+  batch.update(input.targetWeekRef, {
+    employeeCardCount: previousCardsSnap.size,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+
+  await batch.commit()
+  return previousCardsSnap.size
 }
 
 async function sendSubmittedWeekEmail(
@@ -443,6 +502,19 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
 
   const existingDoc = existingSnap.docs[0]
   if (existingDoc) {
+    const existingData = existingDoc.data() || {}
+    if (text(existingData.status) !== 'submitted') {
+      const weekStartDate = text(existingData.weekStartDate) || getWeekStartFromSaturday(weekEndDate)
+      await copyPreviousWeekCardsIntoDraft({
+        targetWeekId: existingDoc.id,
+        targetWeekRef: existingDoc.ref,
+        jobId,
+        weekEndDate,
+        weekStartDate,
+        ownerForemanUserId,
+      })
+    }
+
     return { id: existingDoc.id }
   }
 
@@ -465,49 +537,14 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
 
-  let previousWeekQuery = db
-    .collection('timecardWeeks')
-    .where('jobId', '==', jobId)
-    .where('weekEndDate', '==', getPreviousSaturday(weekEndDate))
-
-  if (ownerForemanUserId) {
-    previousWeekQuery = previousWeekQuery.where('ownerForemanUserId', '==', ownerForemanUserId)
-  }
-
-  const previousWeekSnap = await previousWeekQuery.limit(1).get()
-
-  const previousWeekDoc = previousWeekSnap.docs[0]
-  if (!previousWeekDoc) {
-    return { id: createdRef.id }
-  }
-
-  const previousCardsSnap = await db
-    .collection('timecardWeeks')
-    .doc(previousWeekDoc.id)
-    .collection('cards')
-    .get()
-
-  if (previousCardsSnap.empty) {
-    return { id: createdRef.id }
-  }
-
-  const batch = db.batch()
-  previousCardsSnap.docs
-    .sort((left, right) => numberOrZero(left.data()?.sortIndex) - numberOrZero(right.data()?.sortIndex))
-    .forEach((cardDoc, index) => {
-      const nextCardRef = db.collection('timecardWeeks').doc(createdRef.id).collection('cards').doc()
-      batch.set(nextCardRef, {
-        ...sanitizeCardPayload(cloneCardForNewWeek(cardDoc.data(), weekStartDate), weekStartDate, index),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      })
-    })
-
-  batch.update(createdRef, {
-    employeeCardCount: previousCardsSnap.size,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  await copyPreviousWeekCardsIntoDraft({
+    targetWeekId: createdRef.id,
+    targetWeekRef: createdRef,
+    jobId,
+    weekEndDate,
+    weekStartDate,
+    ownerForemanUserId,
   })
-
-  await batch.commit()
   return { id: createdRef.id }
 })
 
@@ -613,6 +650,35 @@ export const deleteTimecardCardRecord = onCall(async (request) => {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedByUserId: request.auth.uid,
   })
+
+  return { success: true }
+})
+
+export const deleteTimecardWeekRecord = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be signed in.')
+  }
+
+  const weekId = text(request.data?.weekId)
+  if (!weekId) throw new HttpsError('invalid-argument', 'weekId is required')
+
+  const { weekRef, week } = await getWeekDoc(weekId)
+  const user = await getAuthorizedUser(request.auth.uid)
+  if (user.role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Only admins can delete timecard weeks.')
+  }
+
+  if (text(week.status) === 'submitted') {
+    throw new HttpsError('failed-precondition', 'Submitted weeks cannot be deleted.')
+  }
+
+  const cardsSnap = await db.collection('timecardWeeks').doc(weekId).collection('cards').get()
+  const batch = db.batch()
+  cardsSnap.docs.forEach((cardDoc) => {
+    batch.delete(cardDoc.ref)
+  })
+  batch.delete(weekRef)
+  await batch.commit()
 
   return { success: true }
 })

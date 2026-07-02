@@ -21,7 +21,7 @@ import {
   updateE2EUser,
 } from '@/testing/e2eRuntime'
 import type { RoleKey, UserProfile } from '@/types/domain'
-import { normalizeRoleKey, toEffectiveRole } from '@/types/domain'
+import { normalizeRoleKey, roleCanBeAssignedJobs, toEffectiveRole } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
 export interface CreateUserInput {
@@ -69,6 +69,12 @@ function normalizeAssignedJobIds(value: unknown): string[] {
   )
 }
 
+function sanitizeEditableRole(role: Exclude<RoleKey, 'none'>): Exclude<RoleKey, 'none'> {
+  if (role === 'admin') return 'admin'
+  if (role === 'project-manager') return 'project-manager'
+  return 'foreman'
+}
+
 function normalizeUser(id: string, data: DocumentData): UserProfile {
   return {
     id,
@@ -106,7 +112,7 @@ async function syncUserJobAssignments(uid: string, role: Exclude<RoleKey, 'none'
   }
 
   const previousAssignedJobIds = normalizeAssignedJobIds(userSnapshot.data().assignedJobIds)
-  const effectiveAssignedJobIds = role === 'foreman' ? nextAssignedJobIds : []
+  const effectiveAssignedJobIds = roleCanBeAssignedJobs(role) ? nextAssignedJobIds : []
   const changedJobIds = Array.from(new Set([...previousAssignedJobIds, ...effectiveAssignedJobIds]))
 
   const batch = writeBatch(db)
@@ -120,7 +126,7 @@ async function syncUserJobAssignments(uid: string, role: Exclude<RoleKey, 'none'
     const currentAssignedForemanIds = normalizeAssignedJobIds(jobSnapshot.data().assignedForemanIds)
     const nextAssignedForemanIds = new Set(currentAssignedForemanIds)
 
-    if (effectiveAssignedJobIds.includes(jobId) && role === 'foreman') {
+    if (effectiveAssignedJobIds.includes(jobId) && roleCanBeAssignedJobs(role)) {
       nextAssignedForemanIds.add(uid)
     } else {
       nextAssignedForemanIds.delete(uid)
@@ -155,13 +161,13 @@ export function subscribeUsers(
 
 export async function createUserByAdmin(input: CreateUserInput): Promise<CreateUserByAdminResponse> {
   if (isE2EActive()) {
-    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    const sanitizedRole = sanitizeEditableRole(input.role)
     return createE2EUser({
       email: input.email,
       firstName: input.firstName,
       lastName: input.lastName,
       role: sanitizedRole,
-      assignedJobIds: sanitizedRole === 'foreman' ? normalizeAssignedJobIds(input.assignedJobIds) : [],
+      assignedJobIds: roleCanBeAssignedJobs(sanitizedRole) ? normalizeAssignedJobIds(input.assignedJobIds) : [],
       sendInvite: input.sendInvite === true,
     })
   }
@@ -169,7 +175,7 @@ export async function createUserByAdmin(input: CreateUserInput): Promise<CreateU
   try {
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<CreateUserInput, CreateUserByAdminResponse>(functions, 'createUserByAdmin')
-    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    const sanitizedRole = sanitizeEditableRole(input.role)
     const sanitizedAssignedJobIds = normalizeAssignedJobIds(input.assignedJobIds)
     const result = await callable({
       email: input.email.trim(),
@@ -179,7 +185,7 @@ export async function createUserByAdmin(input: CreateUserInput): Promise<CreateU
       sendInvite: input.sendInvite === true,
     })
 
-    if (sanitizedRole === 'foreman' && sanitizedAssignedJobIds.length) {
+    if (roleCanBeAssignedJobs(sanitizedRole) && sanitizedAssignedJobIds.length) {
       try {
         await syncUserJobAssignments(result.data.uid, sanitizedRole, sanitizedAssignedJobIds)
       } catch (error) {
@@ -200,20 +206,20 @@ export async function createUserByAdmin(input: CreateUserInput): Promise<CreateU
 
 export async function updateUser(uid: string, input: UpdateUserInput): Promise<void> {
   if (isE2EActive()) {
-    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    const sanitizedRole = sanitizeEditableRole(input.role)
     await updateE2EUser(uid, {
       firstName: input.firstName,
       lastName: input.lastName,
       role: sanitizedRole,
       active: input.active,
-      assignedJobIds: sanitizedRole === 'foreman' ? normalizeAssignedJobIds(input.assignedJobIds) : [],
+      assignedJobIds: roleCanBeAssignedJobs(sanitizedRole) ? normalizeAssignedJobIds(input.assignedJobIds) : [],
     })
     return
   }
 
   try {
     const { db } = requireFirebaseServices()
-    const sanitizedRole = input.role === 'admin' ? 'admin' : 'foreman'
+    const sanitizedRole = sanitizeEditableRole(input.role)
     const sanitizedAssignedJobIds = normalizeAssignedJobIds(input.assignedJobIds)
 
     await updateDoc(doc(db, 'users', uid), {
@@ -260,6 +266,7 @@ export async function sendPendingInvitesByAdmin(): Promise<SendPendingUserInvite
 }
 
 export function getRoleBadgeLabel(role: UserProfile['role']): string {
+  if (role === 'project-manager') return 'Project Manager'
   const effectiveRole = toEffectiveRole(role)
   if (effectiveRole === 'admin') return 'Admin'
   if (effectiveRole === 'foreman') return 'Foreman'
