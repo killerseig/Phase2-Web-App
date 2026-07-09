@@ -16,19 +16,23 @@
 
 ## App Structure
 
-- Admins should use the same core pages that foremen use.
-- Admin capabilities should appear through `edit mode` on those same pages rather than through a separate admin-only page set.
+- The app should use role-specific landing dashboards plus shared job workspaces.
+- Role dashboards answer: `What matters to me today?`
+- Job dashboards answer: `What is happening on this specific job?`
+- Users should normally flow:
+  - log in
+  - land on their role dashboard
+  - open a role-specific module or drill into a job
+  - use the shared job dashboard/workspace for that job
+- Admins should still be able to use the same core job pages that field users use.
+- Admin capabilities should appear through `edit mode` on shared job pages where that keeps context clear, rather than through unrelated duplicate pages.
 - Through edit mode, admins should be able to do things like:
   - create jobs
   - edit jobs
   - archive jobs
   - delete jobs
-- The Jobs Dashboard is primarily for foremen, but admins should still be able to enter it and edit when needed.
-- Foreman flow should be:
-  - log into the app
-  - choose a job
-  - open that job's dashboard
-  - choose the module they want to use
+- The Job Dashboard should be the shared job home base for timecards, daily logs, shop orders, job details, and job-specific history.
+- The visible cards/actions on the Job Dashboard should be permission-driven.
 - Users should not be able to create accounts through a normal public sign-up flow.
 - Account creation should only happen through the admin-created email setup flow.
 - The rebuild should keep using the same working email-based setup system as `v1`.
@@ -44,28 +48,54 @@
   - `Saving...`
   - `Saved`
   - clear error feedback if a save fails
+- Viewing, filtering, changing dates, changing weeks, opening history, or subscribing to data must not create records.
+- New records should be created only from an explicit user action such as `Create Card`, `Create Week`, `New Daily Log`, `New Order`, or `Add Item`.
+- This applies to daily logs, timecards, and shop orders so browsing a workflow is always safe.
 
 ## Roles
 
 - `Admin`
   - full access
-  - can create jobs, employees, and users
-  - can do anything in the application
-  - should see the same base workflow and screens that a foreman sees
-  - should enter an explicit `edit mode` when admin-only changes are needed
+  - can create, edit, delete, and archive jobs
+  - can create and manage employees and users
+  - can access all job dashboards and admin areas
+  - should enter explicit `edit mode` when admin-only changes are needed on shared pages
+- `Payroll`
+  - can access Employees List
+  - can access Timecard Export
+  - can create jobs
+  - can view all jobs as read-only lookup context
+  - cannot delete or archive jobs
+  - job edit scope after creation still needs final confirmation
+  - should not access shop order forms or daily log/job workflow editing unless later requested
+- `Shop Foreman`
+  - can manage Shop Catalog
+  - can view all jobs as read-only lookup context
+  - can use Job Dashboard modules for the `Shop` job
+  - can use timecards, daily logs, and shop orders for the `Shop` job
+  - other job access should remain read-only unless the company explicitly assigns additional workflow access
+  - cannot edit, delete, or archive jobs
+- `Project Manager`
+  - can view all jobs as lookup context
+  - can edit only jobs they are assigned to
+  - cannot delete or archive jobs
+  - can use Job Dashboard modules for assigned jobs only
+  - can see submitted timecards for assigned jobs for billing
+  - should always receive Daily Log and Shop Order emails for assigned jobs
 - `Foreman`
   - works inside assigned jobs
   - fills out timecards, daily logs, and shop orders
-- `Project Manager`
-  - currently stored as its own role
-  - intentionally uses Foreman-equivalent assigned-job access until the role refactor
+  - should always receive Daily Log and Shop Order emails for assigned jobs
 - Multiple foremen can be assigned to the same job.
-- The first version currently uses these built-in stored roles:
+- Multiple project managers can be assigned to the same job if the business needs it.
+- The target built-in stored roles are:
   - `Admin`
-  - `Foreman`
+  - `Payroll`
+  - `Shop Foreman`
   - `Project Manager`
-- For the first version, the old timecard review workflow should be handled through `Admin` access.
-- The system should be designed so foremen and project managers can later be moved into custom non-admin roles.
+  - `Foreman`
+- The old timecard review workflow should be handled through `Admin` and `Payroll` timecard export access.
+- The system should be designed so non-admin roles can later be moved into custom permission sets.
 - A future custom timecard review role should be possible, but it is not needed in the first version.
 - The `Admin` role should always keep full access and should not be part of the customizable role system.
 
@@ -105,8 +135,9 @@
 - The timecard PDF should match the provided example output exactly.
 - The company needs to print timecards each week for documentation.
 - The weekly printed output is a core reason the timecard layout must remain exact.
-- The app should also support a filtered timecard export workspace for office/admin use.
-- The filtered timecard export workspace should be `Admin` only in the first version.
+- The app should support a filtered timecard export workspace for office/payroll/admin use.
+- `Admin` and `Payroll` should have full timecard export access.
+- `Project Manager` should have read-only submitted-timecard reporting for assigned jobs only.
 - The filtered timecard export workspace should mainly target `submitted` timecards.
 - Admins should also have an option to include `draft` timecards when needed.
 - That export workflow should allow filtering by things like:
@@ -142,6 +173,13 @@
   - employee information stays
   - weekly entry cells reset blank
 - Starting a new week should reuse the previous week's employee roster, but not duplicate the previous week's filled-in card body.
+- Starting a new week should also clear editable entry fields such as `ACCT`.
+- Browsing a week must not automatically create a draft week or draft cards.
+- If a submitted week exists, the timecard workspace should show the submitted week by default.
+- Users may intentionally create a new draft for the selected week when permissions allow it.
+- If both an accidental blank draft and a submitted/card-containing week exist for the same period, the submitted/card-containing week should win as the default display.
+- Rollover should copy from the most recent prior week that has meaningful cards, prioritizing submitted weeks and ignoring accidental blank draft weeks.
+- When a timecard row's `Job #` is changed, blank rows below it should keep the existing cascade behavior so repeated job numbers can be filled quickly.
 - If a foreman removes an employee card from the current week, that removal should carry forward into the next week's roster.
 - Custom employees added to the current week's crew should also carry forward into the next week's roster.
 - Foremen must be able to create current-week draft timecards for jobs they are assigned to.
@@ -159,6 +197,7 @@
   - all later changes to that submitted record should be tracked
 - Timecards should keep a visible history of submitted records.
 - Foremen should be able to see all submitted timecard records for jobs they are assigned to for now.
+- Project Managers need to see submitted timecard records for assigned jobs because they use them for billing.
 - Past submitted weeks:
   - are viewable later
   - are editable by `Admin`
@@ -195,6 +234,10 @@ Based on the workbook structure and formulas:
 
 - Jobs should have a dashboard or configuration area for job-level settings.
 - That dashboard should allow admins to create or edit job settings such as `Burden`.
+- Project Managers should be able to edit assigned jobs only.
+- Payroll users should be able to create jobs and view all active jobs after creation.
+- Shop Foreman users should be able to view all active jobs and use workflow modules for the `Shop` job.
+- Regular Foremen should only see assigned jobs.
 - The Jobs Dashboard should act as the main hub for job-level modules such as timecards.
 - The Jobs Dashboard is the main job workspace that foremen use after selecting a job.
 - Archived jobs should only be visible to admins.
@@ -202,8 +245,8 @@ Based on the workbook structure and formulas:
 - Job creation/editing should support these required fields:
   - `Job Number`
   - `Job Name`
-  - `Foremen assigned to job`
   - `Job Type`
+- Assigned Foremen/Project Managers should not be required at job creation because the company often assigns them closer to the start date.
 - Job creation/editing should also support these extra fields:
   - `GC`
   - `Start Date`
@@ -303,12 +346,17 @@ Based on the workbook structure and formulas:
 - That means:
   - admin-managed recipients can be global and per-job
   - foreman-managed recipients are per-job
+  - assigned Foremen, Shop Foremen, and Project Managers should be included automatically for assigned jobs
   - foremen cannot remove or modify admin-managed entries
 - Foremen can edit shop order drafts until submission.
 - Foremen can delete shop order drafts before submission.
 - Once submitted, shop orders are locked for foremen.
 - Foremen should be able to reopen submitted shop orders for viewing.
 - Reopening a submitted shop order should not let a foreman edit the submitted record.
+- Opening the shop order workspace, catalog browser, or order history must not automatically create a draft order.
+- Existing drafts and submitted orders should be shown first, with `New Order` as the explicit action for creating another order.
+- Catalog browsing should be read-only until the user explicitly adds an item to the active draft.
+- Adding a catalog item or custom item is an explicit write action and should never happen as a side effect of browsing/searching.
 - That reopen behavior should be implemented in a way that can be tightened later if the company changes direction.
 - Shop orders should keep a visible history of submitted records.
 - Foremen should be able to see all submitted shop order records for jobs they are assigned to for now.
@@ -342,13 +390,19 @@ Based on the workbook structure and formulas:
 - Once submitted, daily logs are locked for foremen.
 - Foremen should be able to reopen submitted daily logs for viewing.
 - Reopening a submitted daily log should not let a foreman edit the submitted record.
+- Opening a daily-log date must not automatically create a new draft.
+- If submitted logs exist for the selected date, the workspace should show the submitted logs by default and offer a clear action to create another log when allowed.
+- Draft daily logs should exist only after an explicit `New Daily Log` or equivalent user action.
+- Draft history should not become cluttered by records created merely from browsing dates.
 - Daily logs should keep a visible history of submitted records.
 - Foremen should be able to see all submitted daily log records for jobs they are assigned to for now.
+- Project Managers should be able to browse submitted daily log history for assigned jobs and see counts by job/foreman.
 
 ## Daily Log Recipients
 
 - Admins should be able to add email recipients.
 - Foremen should also be able to add email recipients.
+- Assigned Foremen, Shop Foremen, and Project Managers should automatically receive Daily Log emails for assigned jobs.
 - Admin-managed daily log recipients should support:
   - global recipients
   - per-job recipients
@@ -394,12 +448,20 @@ Based on the workbook structure and formulas:
 ## Role Management Direction
 
 - The app should be designed so non-admin permissions are data-driven and expandable.
-- The first version should keep built-in roles simple:
+- The target built-in roles are:
   - `Admin`
+  - `Payroll`
+  - `Shop Foreman`
+  - `Project Manager`
   - `Foreman`
 - Admins may later need to:
   - create custom non-admin roles
   - delete custom non-admin roles
   - manage a permissions table for what each custom role can do
-- Foremen should be able to be transferred into those future custom roles.
+- Non-admin users should be able to be transferred into future custom roles.
 - The `Admin` role should stay fixed and always keep full access.
+
+## Future Dashboard And Widget Backlog
+
+- Future dashboard customization is outside the current refactor scope, but the architecture should not block it.
+- Future widget ideas, file storage, announcements, analytics, and dashboard customization notes live in `future-dashboard-widgets.md`.

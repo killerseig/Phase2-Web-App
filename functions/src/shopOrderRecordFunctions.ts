@@ -50,6 +50,11 @@ function makeItemId() {
   return `item-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+const shopOrderItemCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+})
+
 function sanitizeItem(item: any) {
   return {
     id: text(item?.id) || makeItemId(),
@@ -63,8 +68,34 @@ function sanitizeItem(item: any) {
   }
 }
 
+function getShopOrderItemDisplayName(item: any) {
+  const description = text(item?.description) || 'Untitled Item'
+  if (text(item?.sourceType) !== 'catalog') return description
+
+  return description
+    .split(' / ')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .at(-1) || description
+}
+
+function sortShopOrderItems<T extends { description: string; id?: string; sourceType?: string }>(items: T[]) {
+  return items.slice().sort((left, right) => {
+    const displayComparison = shopOrderItemCollator.compare(
+      getShopOrderItemDisplayName(left),
+      getShopOrderItemDisplayName(right),
+    )
+    if (displayComparison !== 0) return displayComparison
+
+    const descriptionComparison = shopOrderItemCollator.compare(text(left.description), text(right.description))
+    if (descriptionComparison !== 0) return descriptionComparison
+
+    return text(left.id).localeCompare(text(right.id))
+  })
+}
+
 function sanitizeItems(items: any[]) {
-  return items.map((item) => sanitizeItem(item)).filter((item) => item.description.length > 0)
+  return sortShopOrderItems(items.map((item) => sanitizeItem(item)).filter((item) => item.description.length > 0))
 }
 
 async function getAuthorizedUser(uid: string): Promise<AuthorizedShopOrderUser> {

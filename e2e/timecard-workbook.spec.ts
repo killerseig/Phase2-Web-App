@@ -16,6 +16,13 @@ async function selectWeekEnding(page: Page, weekEndDate = DEFAULT_WEEK_END_DATE)
   await expect(input).toHaveValue(weekEndDate)
 }
 
+async function createSelectedWeek(page: Page) {
+  await expect(page.getByTestId('create-week')).toBeVisible()
+  await expect(page.getByTestId('create-card')).toBeDisabled()
+  await page.getByTestId('create-week').click()
+  await expect(page.getByTestId('create-card')).toBeEnabled()
+}
+
 test.describe('timecard workbook regressions', () => {
   test('timecards require the foreman to choose a week ending date before creating a week', async ({ page }) => {
     const fixture = createTimecardsFixture({ seededCard: false })
@@ -39,7 +46,27 @@ test.describe('timecard workbook regressions', () => {
 
     await selectWeekEnding(page)
 
-    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await expect(page.getByTestId('create-week')).toBeEnabled()
+    await expect(page.getByTestId('create-card')).toBeDisabled()
+    await expect(page.getByText('No timecard week exists for this date yet. Create a week to start.')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: unknown[]
+        }
+        return state.timecardWeeks?.length ?? -1
+      }))
+      .toBe(0)
+
+    await createSelectedWeek(page)
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: unknown[]
+        }
+        return state.timecardWeeks?.length ?? -1
+      }))
+      .toBe(1)
   })
 
   test('job timecard page does not show lock card controls', async ({ page }) => {
@@ -234,7 +261,7 @@ test.describe('timecard workbook regressions', () => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
     await selectWeekEnding(page)
 
-    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await createSelectedWeek(page)
     await page.getByTestId('create-card').click()
     await page.getByTestId('timecards-add-employee-employee-1').click()
 
@@ -257,14 +284,23 @@ test.describe('timecard workbook regressions', () => {
       })
   })
 
-  test('timecard rollover clears copied ACCT values along with hours and production', async ({ page }) => {
+  test('timecard rollover copies from the submitted prior week and clears ACCT, hours, and production', async ({ page }) => {
     const fixture = createTimecardsFixture({ seededCard: true })
+    fixture.timecardWeeks[0].status = 'submitted'
+    fixture.timecardWeeks.push({
+      ...cloneRecord(fixture.timecardWeeks[0]),
+      id: 'week-blank-previous-draft',
+      status: 'draft',
+      employeeCardCount: 0,
+      submittedAt: null,
+    })
     fixture.timecardCards[0].lines[0].account = '4001'
     fixture.timecardCards[0].lines[0].days[1].hours = 8
     fixture.timecardCards[0].lines[0].days[1].production = 12
 
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
     await selectWeekEnding(page, NEXT_WEEK_END_DATE)
+    await createSelectedWeek(page)
 
     await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(1)
     await expect(page.getByTestId('timecard-job-number-0')).toHaveValue('9411')
@@ -351,7 +387,7 @@ test.describe('timecard workbook regressions', () => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
     await selectWeekEnding(page)
 
-    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await createSelectedWeek(page)
     await page.getByTestId('create-card').click()
     await page.getByTestId('timecards-add-employee-employee-1').click()
 
@@ -384,7 +420,7 @@ test.describe('timecard workbook regressions', () => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
     await selectWeekEnding(page)
 
-    await expect(page.getByTestId('create-card')).toBeEnabled()
+    await createSelectedWeek(page)
     await page.getByTestId('create-card').click()
     await page.getByTestId('timecards-add-employee-employee-1').click()
 
@@ -456,6 +492,35 @@ test.describe('timecard workbook regressions', () => {
     await expect(page.getByRole('button', { name: 'Delete Card' })).toHaveCount(0)
     await expect(page.locator('.timecards-signal').filter({ hasText: 'Read Only' })).toBeVisible()
     await expect(page.locator('.timecard-grid__body-row--hours .timecard-grid__day-cell input').first()).toBeDisabled()
+  })
+
+  test('submitted week is shown before an accidental blank draft for the same date', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: true })
+    fixture.timecardWeeks[0].status = 'submitted'
+    fixture.timecardWeeks[0].submittedAt = '2026-06-04T12:30:00.000Z'
+    fixture.timecardWeeks.push({
+      ...cloneRecord(fixture.timecardWeeks[0]),
+      id: 'week-blank-same-date',
+      status: 'draft',
+      employeeCardCount: 0,
+      submittedAt: null,
+    })
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+    await selectWeekEnding(page)
+
+    await expect(page.locator('.timecards-signal').filter({ hasText: 'Submitted' })).toBeVisible()
+    await expect(page.locator('.timecards-signal').filter({ hasText: 'Read Only' })).toBeVisible()
+    await expect(page.getByTestId('create-week')).toHaveCount(0)
+    await expect(page.getByTestId('timecards-card-card-e2e')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ weekEndDate?: string }>
+        }
+        return state.timecardWeeks?.filter((week) => week.weekEndDate === '2026-06-06').length ?? -1
+      }))
+      .toBe(2)
   })
 
   test('wage formatting rules still hold on the real workbook page', async ({ page }) => {

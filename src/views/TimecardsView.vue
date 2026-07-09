@@ -61,6 +61,7 @@ const employees = ref<EmployeeRecord[]>([])
 const cardSearchTerm = ref('')
 const employeeSearchTerm = ref('')
 const selectedWeekEndDate = ref('')
+const selectedWeekId = ref<string | null>(null)
 const selectedCardId = ref<string | null>(null)
 const weeksLoading = ref(true)
 const cardsLoading = ref(false)
@@ -106,9 +107,25 @@ const job = computed<JobRecord | null>(() => {
   if (jobsStore.currentJob?.id === jobId.value) return jobsStore.currentJob
   return jobsStore.jobs.find((entry) => entry.id === jobId.value) ?? null
 })
-const selectedWeek = computed(() => (
-  weeks.value.find((week) => week.weekEndDate === selectedWeekEndDate.value) ?? null
+function preferDisplayWeek(weekList: TimecardWeekRecord[]) {
+  return weekList.slice().sort((left, right) => (
+    Number(right.status === 'submitted') - Number(left.status === 'submitted')
+    || Number(right.employeeCardCount ?? 0) - Number(left.employeeCardCount ?? 0)
+    || right.id.localeCompare(left.id)
+  ))[0] ?? null
+}
+
+const weeksForSelectedDate = computed(() => (
+  weeks.value.filter((week) => week.weekEndDate === selectedWeekEndDate.value)
 ))
+const selectedWeek = computed(() => {
+  if (selectedWeekId.value) {
+    const exactWeek = weeks.value.find((week) => week.id === selectedWeekId.value)
+    if (exactWeek && exactWeek.weekEndDate === selectedWeekEndDate.value) return exactWeek
+  }
+
+  return preferDisplayWeek(weeksForSelectedDate.value)
+})
 const selectedWeekStartDate = computed(() => (
   selectedWeek.value?.weekStartDate
   ?? (selectedWeekEndDate.value ? getWeekStartFromSaturday(selectedWeekEndDate.value) : '')
@@ -147,12 +164,20 @@ const canEditWeek = computed(() => {
   if (!selectedWeek.value) return false
   return selectedWeek.value.status !== 'submitted' || auth.isAdmin
 })
+const canCreateSelectedWeek = computed(() => (
+  !!jobId.value
+  && !!selectedWeekEndDate.value
+  && !selectedWeek.value
+  && !weeksLoading.value
+  && !ensuringWeek.value
+))
 const pendingSaveCount = computed(() => Object.keys(scheduledSaveIds).length)
 const activeSaveCount = computed(() => Object.keys(savingIds).length)
 const totalHours = computed(() => cards.value.reduce((sum, card) => sum + Number(card.totals.hoursTotal ?? 0), 0))
 const totalProduction = computed(() => cards.value.reduce((sum, card) => sum + Number(card.totals.productionTotal ?? 0), 0))
 const weekStatusLabel = computed(() => {
   if (ensuringWeek.value && !selectedWeek.value) return 'Opening Week'
+  if (selectedWeekEndDate.value && !selectedWeek.value) return 'Not Created'
   if (!selectedWeek.value) return 'No Week'
   return selectedWeek.value.status === 'submitted' ? 'Submitted' : 'Draft'
 })
@@ -179,6 +204,7 @@ const saveStateLabel = computed(() => {
 })
 const emptyCanvasMessage = computed(() => {
   if (!selectedWeekEndDate.value) return 'Choose a week ending date to start.'
+  if (!selectedWeek.value) return 'No timecard week exists for this date yet. Create a week to start.'
   if (cards.value.length) return 'No cards match this search.'
   if (!canEditWeek.value) return 'No timecards were saved for this week.'
   return 'Create a card to start this week.'
@@ -290,7 +316,7 @@ function subscribeWeeksForJob() {
     (nextWeeks) => {
       weeks.value = nextWeeks
       weeksLoading.value = false
-      void maybeEnsureSelectedWeek()
+      void maybeBackfillSelectedDraftWeek()
     },
     (error) => {
       weeksLoading.value = false
@@ -398,11 +424,12 @@ function mergeRemoteCardsWithLocalState(nextCards: TimecardCardRecord[]) {
   })
 }
 
-async function maybeEnsureSelectedWeek() {
+async function maybeBackfillSelectedDraftWeek() {
   if (!jobId.value) return
   if (!selectedWeekEndDate.value) return
   if (weeksLoading.value) return
   const currentWeek = selectedWeek.value
+  if (!currentWeek) return
   if (
     currentWeek
     && (
@@ -426,6 +453,44 @@ async function maybeEnsureSelectedWeek() {
       ownerForemanName: auth.displayName ?? null,
       weekEndDate: selectedWeekEndDate.value,
     })
+  } catch (error) {
+    setPageError(error, 'Failed to roll over the timecard week.')
+  } finally {
+    ensuringWeek.value = false
+    ensureKeyInFlight = ''
+  }
+}
+
+async function handleCreateWeek() {
+  if (!jobId.value || !selectedWeekEndDate.value) {
+    setPageError('Choose a week ending date before creating a week.', 'Choose a week ending date before creating a week.')
+    return
+  }
+
+  if (selectedWeek.value) {
+    selectedWeekId.value = selectedWeek.value.id
+    return
+  }
+
+  const key = `${jobId.value}|${selectedWeekEndDate.value}`
+  if (ensuringWeek.value || ensureKeyInFlight === key) return
+
+  await flushPendingSaves()
+  showCreateTray.value = false
+  ensuringWeek.value = true
+  ensureKeyInFlight = key
+  resetMessages()
+  try {
+    const weekId = await ensureTimecardWeek({
+      jobId: jobId.value,
+      jobCode: job.value?.code ?? null,
+      jobName: job.value?.name ?? null,
+      ownerForemanUserId: auth.currentUser?.uid ?? null,
+      ownerForemanName: auth.displayName ?? null,
+      weekEndDate: selectedWeekEndDate.value,
+    })
+    selectedWeekId.value = weekId
+    setPageInfo('Timecard week opened.')
   } catch (error) {
     setPageError(error, 'Failed to open the timecard week.')
   } finally {
@@ -811,19 +876,21 @@ async function handleSubmitWeek() {
   }
 }
 
-async function handleSelectWeek(weekEndDate: string) {
-  if (selectedWeekEndDate.value === weekEndDate) return
+async function handleSelectWeek(week: TimecardWeekRecord) {
+  if (selectedWeekId.value === week.id) return
   await flushPendingSaves()
   showCreateTray.value = false
-  selectedWeekEndDate.value = weekEndDate
+  selectedWeekId.value = week.id
+  selectedWeekEndDate.value = week.weekEndDate
 }
 
 async function handleWeekEndingInput(event: Event) {
   const rawValue = (event.target as HTMLInputElement).value
   const nextValue = rawValue ? snapToSaturday(rawValue) : ''
-  if (nextValue === selectedWeekEndDate.value) return
+  if (nextValue === selectedWeekEndDate.value && !selectedWeekId.value) return
   await flushPendingSaves()
   showCreateTray.value = false
+  selectedWeekId.value = null
   selectedWeekEndDate.value = nextValue
 }
 
@@ -841,6 +908,8 @@ function handleWeekEndingPickerOpen(event: Event) {
 watch(
   () => selectedWeek.value?.id,
   () => {
+    resetCardWorkspaceState()
+    cards.value = []
     subscribeCardsForWeek()
   },
 )
@@ -850,8 +919,7 @@ watch(
   () => {
     resetCardWorkspaceState()
     cards.value = []
-    subscribeCardsForWeek()
-    void maybeEnsureSelectedWeek()
+    void maybeBackfillSelectedDraftWeek()
   },
 )
 
@@ -860,6 +928,7 @@ watch(
   () => {
     resetMessages()
     resetCardWorkspaceState()
+    selectedWeekId.value = null
     weeks.value = []
     cards.value = []
     subscribeJob()
@@ -870,7 +939,7 @@ watch(
 watch(
   () => job.value?.id,
   () => {
-    void maybeEnsureSelectedWeek()
+    void maybeBackfillSelectedDraftWeek()
   },
 )
 
@@ -995,10 +1064,20 @@ onBeforeUnmount(() => {
             <div class="timecards-toolbar__controls">
               <div class="timecards-toolbar__matrix">
                 <button
+                  v-if="canCreateSelectedWeek"
+                  class="timecards-button timecards-button--primary"
+                  type="button"
+                  data-testid="create-week"
+                  :disabled="actionLoading || ensuringWeek"
+                  @click="handleCreateWeek"
+                >
+                  {{ ensuringWeek ? 'Opening Week' : 'Create Week' }}
+                </button>
+                <button
                   class="timecards-button"
                   type="button"
                   data-testid="create-card"
-                  :disabled="actionLoading || !canEditWeek"
+                  :disabled="actionLoading || !canEditWeek || !selectedWeek"
                   @click="showCreateTray = !showCreateTray"
                 >
                   {{ showCreateTray ? 'Close Create' : 'Create Card' }}
@@ -1076,10 +1155,10 @@ onBeforeUnmount(() => {
                 v-for="week in recentWeeks"
                 :key="week.id"
                 class="timecards-sidebar__history-row"
-                :class="{ 'timecards-sidebar__history-row--active': week.weekEndDate === selectedWeekEndDate }"
+                :class="{ 'timecards-sidebar__history-row--active': week.id === selectedWeek?.id }"
                 type="button"
                 :data-testid="`timecards-history-${week.id}`"
-                @click="handleSelectWeek(week.weekEndDate)"
+                @click="handleSelectWeek(week)"
               >
                 <strong>{{ formatWorkbookDate(week.weekEndDate) }}</strong>
                 <span>{{ week.status === 'submitted' ? 'Submitted' : 'Draft' }}</span>

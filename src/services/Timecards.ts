@@ -137,6 +137,8 @@ export function normalizeTimecardCardData(
 function sortWeeks(weeks: TimecardWeekRecord[]) {
   return weeks.slice().sort((left, right) => (
     right.weekEndDate.localeCompare(left.weekEndDate)
+    || Number(right.status === 'submitted') - Number(left.status === 'submitted')
+    || Number(right.employeeCardCount ?? 0) - Number(left.employeeCardCount ?? 0)
     || right.id.localeCompare(left.id)
   ))
 }

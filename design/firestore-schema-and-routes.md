@@ -18,9 +18,9 @@ Firebase implementation details, including Security Rules, indexes, Storage, Clo
 
 ### Main choices
 
-- Keep `Admin`, `Foreman`, and transitional `Project Manager` as built-in stored roles in `v1`.
-- Treat `Project Manager` as foreman-equivalent for assigned-job workflows until the role refactor defines separate permissions.
-- Use the same main pages for both roles.
+- Keep `Admin`, `Payroll`, `Shop Foreman`, `Project Manager`, and `Foreman` as target built-in stored roles.
+- Use explicit role capabilities rather than treating `Project Manager` as foreman-equivalent.
+- Use role dashboards for each user's command center and shared job dashboards for job-specific work.
 - Keep `edit mode` as page state, not a separate page tree.
 - Store `submitted` records in the same collections as `draft` records, using status fields and audit trails.
 - Keep exact-print timecard data in Firestore in a way that can reproduce the Excel layout.
@@ -52,7 +52,7 @@ type UserDoc = {
   displayName: string
   firstName: string
   lastName: string
-  roleKey: 'admin' | 'foreman' | 'project-manager'
+  roleKey: 'admin' | 'payroll' | 'shop-foreman' | 'project-manager' | 'foreman' | 'none'
   customRoleId: string | null
   isActive: boolean
   assignedJobIds: string[]
@@ -64,7 +64,8 @@ type UserDoc = {
 
 Notes:
 - `customRoleId` stays `null` in `v1`.
-- `assignedJobIds` is a denormalized convenience field and should match job assignments.
+- `assignedJobIds` is a denormalized convenience field and should match job assignments for Foreman, Shop Foreman, and Project Manager users.
+- Payroll users can view jobs as lookup context without being assigned to each job.
 
 ### `jobs/{jobId}`
 
@@ -96,6 +97,8 @@ type JobDoc = {
   kjic: string | null
   assignedForemanIds: string[]
   assignedForemanNames: string[]
+  assignedProjectManagerIds: string[]
+  assignedProjectManagerNames: string[]
   isArchived: boolean
   archivedAt: Timestamp | null
   createdByUserId: string
@@ -107,7 +110,11 @@ type JobDoc = {
 
 Rules:
 - default `burden` to `0.33` when blank in the UI or during save
-- only admins can archive/unarchive jobs
+- admins can create/edit/archive/unarchive/delete jobs
+- project managers can edit assigned jobs only
+- payroll users can create jobs and view all active jobs as read-only lookup context after creation
+- shop foreman users can view all active jobs as read-only lookup context
+- regular foremen can view assigned jobs only
 - archived jobs remain queryable by admins
 
 ### `employees/{employeeId}`
@@ -205,8 +212,8 @@ Recommended fields:
 ```ts
 type ModuleRecipientDoc = {
   moduleType: 'dailyLog' | 'shopOrder'
-  scopeType: 'global' | 'job'
-  ownerType: 'admin' | 'foreman'
+  scopeType: 'global' | 'job' | 'assignment'
+  ownerType: 'admin' | 'field-user' | 'system-assignment'
   ownerUserId: string
   jobId: string | null
   email: string
@@ -219,6 +226,7 @@ type ModuleRecipientDoc = {
 
 Rules:
 - if `ownerType === 'admin'`, foremen cannot edit or delete it
+- assignment recipients should be derived from assigned Foremen, Shop Foremen, and Project Managers rather than manually maintained when possible
 - `jobId` is `null` for global recipients
 
 ### `timecardWeeks/{timecardWeekId}`
@@ -437,20 +445,31 @@ type ShopOrderItemDoc = {
   - `jobId`
   - `ownerForemanUserId`
   - `weekEndDate`
+- week lookup/subscription must be read-only and must not create draft weeks or cards
+- explicit create actions should create draft weeks/cards when permissions allow it
+- submitted/card-containing weeks should be preferred over accidental blank drafts for default display and rollover source selection
 - when a week is submitted:
   - keep the submitted record
   - start the next week from the carried-forward roster
   - do not clone the prior card bodies
+  - clear editable entry fields such as hours, production, and `ACCT`
+  - preserve `Job #` cascade behavior for blank rows when users edit the new draft
 
 ### Daily logs
 
 - `logDate` must equal the app's current local date for create/edit/submit
 - no backdating
 - no future dating
+- date lookup/subscription must be read-only and must not create draft logs
+- if submitted logs exist for a selected date, show them by default and require an explicit create action for another log
 
 ### Shop orders
 
 - `deliveryDate` must be `today` or later
+- order lookup/subscription must be read-only and must not create draft orders
+- catalog lookup/search must be read-only and must not create order items
+- draft orders should be created only by explicit `New Order` intent
+- order items should be created only by explicit catalog/custom item add intent
 
 ## Recommended route map
 
@@ -461,12 +480,17 @@ type ShopOrderItemDoc = {
 
 ### Authenticated core routes
 
+- `/dashboard`
+  - role-specific landing dashboard
+  - modules depend on role/capabilities
 - `/jobs`
   - jobs list
-  - active jobs for foremen
+  - assigned jobs for foremen
+  - read-only active job lookup for payroll, shop foreman, and project manager
   - active plus archived sections for admins
 - `/jobs/:jobId`
   - job dashboard
+  - shared job workspace with modules gated by capability
 
 ### Timecard routes
 
@@ -476,7 +500,8 @@ type ShopOrderItemDoc = {
 - `/jobs/:jobId/timecards/:timecardWeekId`
   - explicit draft or submitted package view
 - `/exports/timecards`
-  - admin-only filtered export page
+  - admin/payroll filtered export page
+  - project manager assigned-job submitted-timecard reporting may reuse this view in read-only scoped mode or use a separate dashboard module
 
 ### Daily log routes
 
@@ -495,7 +520,7 @@ type ShopOrderItemDoc = {
 ### Admin/support routes
 
 - `/employees`
-  - admin-managed global employee list
+  - admin/payroll-managed global employee list
 - `/settings/lists/job-types`
   - admin-managed job types
 - `/settings/lists/gcs`
@@ -503,17 +528,19 @@ type ShopOrderItemDoc = {
 - `/settings/lists/occupations`
   - admin-managed occupation list
 - `/settings/shop-catalog`
-  - admin-managed shop tree
+  - admin/shop-foreman shop tree management, enforced by role capability
 
 ## Page map
 
 ### `JobsPage`
 
 Responsibilities:
-- show assigned jobs
+- show assigned jobs or read-only job lookup depending on role
 - show archived section for admins
-- create job in edit mode
+- create job in edit mode for admin and payroll where allowed
 - edit/archive/delete job in edit mode
+- allow project managers to edit assigned jobs only
+- prevent payroll from delete/archive and keep post-create edit scope behind final company confirmation
 
 ### `JobDashboardPage`
 
@@ -522,6 +549,16 @@ Responsibilities:
 - show module launcher cards
 - show job metadata
 - allow admin edits in edit mode
+- allow project manager edits for assigned jobs only
+- gate module cards by capability and assignment
+
+### `RoleDashboardPage`
+
+Responsibilities:
+- show modules for the current user's role
+- provide direct action cards for role-specific work
+- provide job drill-down into shared job dashboards
+- keep dashboard cards reusable instead of building separate unrelated dashboards per role
 
 ### `TimecardsPage`
 
@@ -537,7 +574,8 @@ Responsibilities:
 ### `TimecardExportPage`
 
 Responsibilities:
-- admin-only filters
+- admin/payroll filters
+- project manager assigned-job submitted-timecard reporting if this view is reused in scoped read-only mode
 - result set preview
 - export exact PDF
 - export exact CSV
@@ -545,7 +583,8 @@ Responsibilities:
 ### `DailyLogsPage`
 
 Responsibilities:
-- create current-day drafts
+- show current-day/submitted history without creating drafts on page load or date selection
+- create current-day drafts only from explicit user action
 - enforce required fields
 - submit same-day logs only
 - manage module recipients
@@ -581,6 +620,7 @@ Responsibilities:
 - add items
 - drag/drop move nodes
 - archive or deactivate nodes
+- allow Admin and Shop Foreman catalog management according to capability checks
 
 ## Edit mode recommendation
 
@@ -651,11 +691,18 @@ These will likely be needed early.
 Require admin enforcement for:
 
 - job archive/delete
-- employee management
+- user management
 - fixed-list management
-- shop catalog management
-- timecard export page data access
 - edits to submitted timecards
+
+Require admin or payroll enforcement for:
+
+- employee management
+- full timecard export page data access
+
+Require final role capability enforcement for:
+
+- shop catalog management
 
 ### Foreman restrictions
 
@@ -663,6 +710,31 @@ Require admin enforcement for:
 - foremen cannot edit submitted records
 - foremen cannot change admin-owned recipients
 - foremen cannot create/edit daily logs for past/future dates
+
+### Project Manager restrictions
+
+- project managers can view all active jobs as lookup context
+- project managers can edit assigned jobs only
+- project managers cannot delete or archive jobs
+- project managers can open job dashboard workflows for assigned jobs only
+- project managers can see submitted timecards and daily log history for assigned jobs for billing/oversight
+
+### Payroll restrictions
+
+- payroll can view all active jobs as lookup context
+- payroll can manage employees and use timecard export
+- payroll can create jobs
+- payroll cannot delete/archive jobs
+- exact payroll edit rights after creation still need company confirmation
+- payroll should not access daily log, shop order, or job timecard workflow editing unless later requested
+
+### Shop Foreman restrictions
+
+- shop foreman can view all active jobs as lookup context
+- shop foreman can access shop catalog
+- shop foreman can open job dashboard workflows for the `Shop` job
+- non-Shop job workflow access should stay read-only unless explicitly assigned/confirmed later
+- shop foreman cannot edit/delete/archive jobs
 
 ### Export generation
 

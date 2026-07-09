@@ -64,6 +64,8 @@ Required:
 - `npm run type-check`
 - targeted component/unit test if one exists
 - targeted e2e if the component is visible on a real route
+- accessibility spot check for labels, focus, and keyboard behavior when the component is interactive
+- CSS ownership check if styles move between global CSS, shared components, and scoped feature styles
 
 ### Workflow Slice
 
@@ -74,6 +76,8 @@ Required:
 - `npm run type-check`
 - targeted e2e for the touched workflow
 - related function smoke test if email/export behavior is touched
+- view-first regression coverage if the workflow opens dates, weeks, history, or catalogs
+- typing/focus regression coverage if the workflow touches form input behavior
 
 ### Firebase Rules Or Functions Slice
 
@@ -86,6 +90,9 @@ Required:
 - relevant e2e workflow
 - relevant smoke test
 - manual preview for exact-print/email output when visual layout matters
+- runtime validation coverage for changed callable/function payloads
+- release-order note when rules, indexes, functions, and frontend behavior must deploy together
+- support/status verification when the slice touches submit/email/export workflows
 
 Future required gate:
 
@@ -101,6 +108,14 @@ Required:
 
 Use `npm run test:e2e:all-browsers` before merging broad layout, routing, print, or browser-sensitive changes.
 
+Before merging a meaningful milestone, also verify:
+
+- no new broad collection reads or client-only filtering for large lists
+- no new component imports Firebase/services directly
+- shared components have documented props/events where practical
+- user-facing workflows still have accessible labels and keyboard/focus behavior
+- `src/styles/main.css` is moving toward tokens/base/utilities/vendor overrides, not accumulating more page-specific CSS
+
 ## Current Coverage Matrix
 
 ### Access And Routing
@@ -114,6 +129,9 @@ Specs:
 Protected behavior:
 
 - foreman/admin route restrictions
+- payroll route restrictions, job creation access, and read-only job lookup after creation
+- shop foreman catalog access, read-only all-job lookup, and `Shop` job workflow access
+- project manager assigned-job edit/reporting access
 - assigned-job restrictions
 - signed-out public routes
 - authenticated redirect behavior
@@ -168,6 +186,9 @@ Protected behavior:
 - submitted email values match the submitted form values and do not fall back to `N/A` unless the user entered `N/A`
 - photo upload/description/remove
 - submitted read-only state
+- opening a date with submitted logs shows submitted logs by default
+- opening a date does not create a draft by itself
+- creating another daily log requires an explicit user action
 - starting another draft
 
 ### Shop Orders
@@ -180,7 +201,10 @@ Specs:
 Protected behavior:
 
 - next Thursday delivery default
+- opening the shop order workspace/history does not create a draft order by itself
+- `New Order` is the explicit draft creation action
 - catalog tree controls
+- catalog browsing/searching does not write order items by itself
 - added item names
 - custom items
 - normal and custom items render in one continuous print/PDF table
@@ -212,6 +236,10 @@ Protected behavior:
 
 - no lock controls on job timecard page
 - foremen can create current-week draft timecards for assigned jobs
+- opening a week does not create draft cards by itself
+- submitted/card-containing weeks display before accidental blank drafts
+- rollover copies from the most recent meaningful prior week, prioritizing submitted/card-containing weeks
+- rollover clears hour, production, and `ACCT` entry fields
 - job number cascade behavior
 - click-to-select input replacement
 - arrow key navigation
@@ -237,6 +265,11 @@ Add first tests around:
 
 - admin-only collections and routes
 - foreman assigned-job access
+- payroll employee/timecard export access, job creation access, and job delete/archive denial
+- shop foreman shop catalog management access, `Shop` job workflow access, read-only all-job lookup, and job delete/archive denial
+- project manager assigned-job edit access and unassigned-job denial
+- project manager submitted-timecard reporting for assigned jobs only
+- assigned Foremen, Shop Foremen, and Project Managers included in Daily Log and Shop Order email recipient resolution
 - submitted/read-only records
 - timecard export/lock permissions
 - daily log attachment Storage paths
@@ -252,6 +285,12 @@ Good first component tests:
 - extracted daily log text sections
 - extracted shop order items list
 
+Coverage expectations:
+
+- assert public props/events/slots instead of private implementation details
+- cover disabled/loading/error states for shared controls
+- cover keyboard/focus behavior for interactive shared controls where practical
+
 ### Composable Tests
 
 Good first composable tests:
@@ -263,6 +302,8 @@ Good first composable tests:
 - recipient normalization
 - shop order tree construction
 - timecard keyboard navigation helpers
+- runtime schema/normalization helpers
+- pagination/query helper behavior where added
 
 ### Responsiveness Regression Tests
 
@@ -275,6 +316,16 @@ Add focused tests when optimistic workflow helpers exist:
 - remote subscription echo does not overwrite locally dirty text
 - submit/delete workflows can block final action controls without freezing unrelated browsing/history controls
 
+### Release And Observability Tests
+
+Add focused tests/checks when the supporting infrastructure exists:
+
+- submit/email/export functions write status metadata with operation IDs
+- duplicate submit retries do not duplicate emails or artifacts
+- function failures return useful user-safe errors
+- generated artifact functions clean up temporary files
+- deployment notes identify rules/index/function/frontend order for Firebase-sensitive slices
+
 ## Stop Conditions
 
 Stop and reassess if:
@@ -285,3 +336,6 @@ Stop and reassess if:
 - a failing test is unclear and the refactor would hide the failure
 - a component extraction requires changing Firestore writes at the same time
 - a workflow refactor makes normal create/add/edit actions feel slower or more blocking
+- a Firebase-sensitive slice cannot be rolled back safely
+- a new query requires broad reads plus client-side filtering on expected large data
+- a visual/CSS refactor changes unrelated pages through global selectors

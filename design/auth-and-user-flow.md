@@ -25,21 +25,43 @@ It follows the parts of the old app that already worked well:
   - `assigned jobs`
 - Make user removal and deactivation safe and predictable.
 
-## Built-in roles in v1
+## Target built-in roles
 
-V1 currently uses these built-in stored roles:
+The refactor target uses these built-in stored roles:
 
 - `Admin`
-- `Foreman`
+- `Payroll`
+- `Shop Foreman`
 - `Project Manager`
+- `Foreman`
 
 Notes:
 
-- `Project Manager` is currently a transitional stored role.
-- Until the role refactor defines separate permissions, Project Manager is intentionally treated as foreman-equivalent for assigned-job workflows.
+- `Project Manager` should no longer remain foreman-equivalent after the role refactor.
+- `Project Manager` gets assigned-job dashboard access plus assigned-job edit rights, but no delete/archive rights.
+- `Payroll` gets employee and timecard export access, can create jobs, and gets read-only job lookup after creation unless final company confirmation expands that scope.
+- `Shop Foreman` gets shop catalog management access, read-only all-job lookup, and editable workflow access for the `Shop` job.
+- `Foreman` gets assigned-job dashboard access.
 - do not carry forward any separate timecard review role in `v1`
-- do not carry forward a built-in `None` role in `v1`
+- keep any `none`/unassigned access state as a no-workspace-access state only
 - use `inactive` status when a user should no longer have access
+
+## Target role capabilities
+
+| Role | Job List | Job Editing | Job Dashboard | Admin Areas | Email Defaults |
+| --- | --- | --- | --- | --- | --- |
+| `admin` | View all | Create/edit/delete/archive all | All jobs | All admin areas | Can be global/job recipient |
+| `payroll` | View all | Create jobs; no delete/archive | No workflow dashboard unless later requested | Employees, Timecard Export | Not automatic for field emails |
+| `shop-foreman` | View all | No job setup editing | `Shop` job workflow access | Shop Catalog management | Receives Daily Log and Shop Order emails for the `Shop` job and any explicitly assigned workflow jobs |
+| `project-manager` | View all | Edit assigned jobs only | Assigned jobs only | None | Receives Daily Log and Shop Order emails for assigned jobs |
+| `foreman` | View assigned jobs | None | Assigned jobs only | None | Receives Daily Log and Shop Order emails for assigned jobs |
+
+Permission intent:
+
+- UI permissions should be derived from capabilities such as `canManageEmployees`, `canUseTimecardExport`, `canEditAssignedJobs`, and `canUseShopCatalog`.
+- Firestore Rules and Cloud Functions must enforce the same capability boundaries.
+- Role dashboards should show modules for the user's role, while job dashboards should remain the shared job workspace.
+- Payroll job creation and Shop Foreman `Shop` job workflow access need matching e2e tests and Firebase rule coverage before the role refactor is considered complete.
 
 ## Core routes
 
@@ -66,8 +88,10 @@ Admin enters:
 Role options in `v1`:
 
 - `Admin`
-- `Foreman`
+- `Payroll`
+- `Shop Foreman`
 - `Project Manager`
+- `Foreman`
 
 What happens:
 
@@ -100,7 +124,7 @@ What happens:
 4. The user creates a password.
 5. The app completes password setup.
 6. The app signs the user in automatically.
-7. The user is routed to `/jobs`.
+7. The user is routed to the role dashboard or jobs landing page.
 
 ### 3. Existing user logs in
 
@@ -113,7 +137,7 @@ What happens:
    - `role`
    - `isActive`
    - `assignedJobIds`
-5. If valid, the user is routed to `/jobs`.
+5. If valid, the user is routed to the role dashboard or jobs landing page.
 
 ### 4. Existing user forgets password
 
@@ -144,7 +168,7 @@ type UserDoc = {
   displayName: string
   firstName: string
   lastName: string
-  roleKey: 'admin' | 'foreman' | 'project-manager'
+  roleKey: 'admin' | 'payroll' | 'shop-foreman' | 'project-manager' | 'foreman' | 'none'
   customRoleId: string | null
   isActive: boolean
   assignedJobIds: string[]
@@ -171,16 +195,22 @@ If any of those fail:
 
 ### Job access gate
 
-`Foreman` and transitional `Project Manager` users can only access jobs in `assignedJobIds`.
+`Foreman` users can only see and access jobs in `assignedJobIds`.
 
-`Admin` users can access all jobs, including archived jobs.
+`Project Manager` users can see all active jobs, edit assigned jobs, and open job dashboard workflows only for jobs in `assignedJobIds`.
+
+`Shop Foreman` users can see all active jobs, manage the shop catalog, and open job dashboard workflows for the `Shop` job unless additional workflow jobs are explicitly assigned/confirmed later.
+
+`Payroll` users can see all active jobs as read-only lookup context, create jobs, and use employee/timecard export areas. They should not delete/archive jobs or open field workflow dashboards unless that is explicitly added later.
+
+`Admin` users can access all jobs, including archived jobs, and can create/edit/delete/archive jobs.
 
 ## User management actions
 
 ### Admin can create
 
 - create new users
-- choose `Admin`, `Foreman`, or transitional `Project Manager`
+- choose one of the built-in target roles
 
 ### Admin can edit
 
@@ -245,7 +275,7 @@ Outputs:
 
 Inputs:
 
-- selected Foreman or Project Manager
+- selected Foreman, Shop Foreman, or Project Manager
 - selected jobs
 
 Outputs:
@@ -254,6 +284,13 @@ Outputs:
 - `jobs/{jobId}.assignedForemanIds` updated
 
 This should stay synchronized in both directions.
+
+Assigned-job records should support automatic notification behavior:
+
+- assigned Foremen receive Daily Log and Shop Order emails for assigned jobs
+- assigned Shop Foremen receive Daily Log and Shop Order emails for assigned jobs
+- assigned Project Managers receive Daily Log and Shop Order emails for assigned jobs
+- manual/global recipient lists can still add additional recipients
 
 ## Recommended Cloud Functions
 
@@ -324,6 +361,7 @@ These `v1` behaviors should stay close to the old app:
 
 These parts should change:
 
-- built-in roles become `Admin`, `Foreman`, and transitional `Project Manager`
-- old timecard review behavior is handled by `Admin`
-- future custom roles and final Project Manager permissions can be added later without changing the built-in auth flow
+- built-in roles become `Admin`, `Payroll`, `Shop Foreman`, `Project Manager`, and `Foreman`
+- old timecard review behavior is handled by `Admin` and `Payroll` timecard export permissions
+- Project Manager becomes an assigned-job billing/reporting/edit role rather than a foreman-equivalent placeholder
+- future custom roles can still be added later without changing the built-in auth flow

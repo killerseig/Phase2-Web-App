@@ -20,6 +20,12 @@ Files:
   Target Vue architecture for pages, components, composables, services, stores, styling, and testing.
 - `ui-modernization.md`
   Visual direction for a cleaner, more professional, modern operations UI without breaking dense workflows or print output.
+- `css-architecture.md`
+  CSS ownership, token strategy, global-vs-scoped style rules, PrimeVue styling boundaries, and migration plan.
+- `ui-token-rollout.md`
+  Practical GUI polish rollout plan for tokens, visual slices, CSS ownership, and stop conditions.
+- `future-dashboard-widgets.md`
+  Future dashboard customization, widgets, file storage, announcements, analytics, and related backlog ideas outside current scope.
 - `firebase-architecture.md`
   Firebase best-practice direction for Firestore, Security Rules, Storage, Functions, Hosting, Emulator Suite, and App Check.
 - `testing-strategy.md`
@@ -32,6 +38,12 @@ Files:
   Short record of important refactor and architecture decisions.
 - `refactor-playbook.md`
   Step-by-step refactor rules, test gates, phase order, and stop conditions.
+- `refactor-gap-audit.md`
+  Current codebase audit against the refactor docs, including risks, gaps, no-go conditions, and recommended first slices.
+- `refactor-execution-board.md`
+  Working board for refactor slices, baseline checks, allowed files, required tests, and exit criteria.
+- `role-capability-matrix.md`
+  Source-of-truth target permissions for Admin, Payroll, Shop Foreman, Project Manager, Foreman, and no-access users.
 - `reference-notes.md`
   Notes from the source materials, old app, Excel tools, and reference app.
 - `questions-for-company.md`

@@ -253,6 +253,7 @@ Short term:
 - keep `src/styles/main.css` as the token/global base
 - avoid large visual rewrites before component extraction
 - move repeated styles into shared components as they are extracted
+- treat `main.css` as the global entry point, not the forever home for page-specific styling
 
 Medium term:
 
@@ -263,8 +264,11 @@ Medium term:
   - shared controls
   - utilities
 - keep dense feature-specific CSS near feature components
+- move app shell, shared controls, and page-specific global selectors out of `main.css` as their Vue components are extracted
 
 Do not migrate all CSS at once.
+
+Detailed CSS ownership and migration rules live in `css-architecture.md`.
 
 ## PrimeVue Direction
 

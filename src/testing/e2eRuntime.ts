@@ -26,6 +26,7 @@ import type {
   UserProfile,
 } from '@/types/domain'
 import { roleCanBeAssignedJobs } from '@/types/domain'
+import { sortShopOrderItems } from '@/utils/shopOrders'
 
 declare global {
   interface Window {
@@ -298,6 +299,8 @@ function sortDailyLogs(logs: DailyLogRecord[]) {
 function sortWeeks(weeks: TimecardWeekRecord[]) {
   return weeks.slice().sort((left, right) => (
     right.weekEndDate.localeCompare(left.weekEndDate)
+    || Number(right.status === 'submitted') - Number(left.status === 'submitted')
+    || Number(right.employeeCardCount ?? 0) - Number(left.employeeCardCount ?? 0)
     || right.id.localeCompare(left.id)
   ))
 }
@@ -572,7 +575,7 @@ function sanitizeAttachmentType(value: unknown): DailyLogAttachmentType {
 }
 
 function normalizeItems(items: ShopOrderItemRecord[]): ShopOrderItemRecord[] {
-  return items
+  return sortShopOrderItems(items
     .map((item): ShopOrderItemRecord => ({
       ...item,
       id: String(item.id || '').trim() || makeId('item'),
@@ -584,7 +587,7 @@ function normalizeItems(items: ShopOrderItemRecord[]): ShopOrderItemRecord[] {
       sku: item.sku?.trim() || null,
       sourceType: item.sourceType === 'custom' ? 'custom' : 'catalog',
     }))
-    .filter((item) => item.description.length > 0)
+    .filter((item) => item.description.length > 0))
 }
 
 function getNextDailyLogSequence(jobId: string, logDate: string) {
@@ -1573,24 +1576,27 @@ function copyPreviousE2ETimecardCardsIntoDraft(
   weekStartDate: string,
 ) {
   state.timecardCards ??= []
+  const timecardCards = state.timecardCards
 
-  const targetHasCards = state.timecardCards.some((card) => card.weekId === targetWeek.id)
+  const targetHasCards = timecardCards.some((card) => card.weekId === targetWeek.id)
   if (targetHasCards) return 0
 
-  const previousWeek = state.timecardWeeks?.find((week) => (
+  const previousWeeks = sortWeeks(state.timecardWeeks?.filter((week) => (
     week.jobId === targetWeek.jobId
     && week.weekEndDate === getPreviousWeekEndDate(targetWeek.weekEndDate)
     && week.ownerForemanUserId === (targetWeek.ownerForemanUserId ?? null)
-  ))
-  if (!previousWeek) return 0
+  )) ?? [])
 
   const now = getNowValue().toISOString()
-  const previousCards = state.timecardCards
-    .filter((card) => card.weekId === previousWeek.id)
-    .sort((left, right) => left.sortIndex - right.sortIndex)
+  const previousCards = previousWeeks
+    .map((week) => timecardCards
+      .filter((card) => card.weekId === week.id)
+      .sort((left, right) => left.sortIndex - right.sortIndex))
+    .find((weekCards) => weekCards.length > 0)
+  if (!previousCards?.length) return 0
 
   previousCards.forEach((sourceCard, index) => {
-    state.timecardCards?.push({
+    timecardCards.push({
       ...cloneValue(sourceCard),
       weekId: targetWeek.id,
       id: makeId('timecard-card'),

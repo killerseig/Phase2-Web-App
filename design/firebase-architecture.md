@@ -47,7 +47,10 @@ Firestore and Storage rules should enforce:
 - role checks
 - assigned-job checks
 - draft vs submitted edit rules
-- admin-only employee/user/export/catalog access
+- role-specific employee/user/export/catalog access
+- Project Manager assigned-job edit access without delete/archive access
+- Payroll employee, timecard export, and job creation access without delete/archive access
+- Shop Foreman shop catalog management and `Shop` job workflow access without job setup delete/archive access
 - attachment ownership and metadata checks
 
 Client code should assume a write can fail even if the UI allowed the action.
@@ -112,6 +115,15 @@ Avoid:
 - sequential document IDs for high-write collections
 - duplicated business rules that only live in the UI
 - data layouts that require broad client reads followed by filtering in memory
+- list screens that depend on loading entire collections and filtering/sorting on the client
+
+Query rules:
+
+- Prefer queryable fields, compound indexes, and scoped reads over broad collection reads.
+- Use cursor-based pagination for large lists; do not use offsets for normal app pagination.
+- Use stable sort fields for history lists and admin directories.
+- Keep visible counts separate from expensive full reads when a count would otherwise require loading many documents.
+- Treat every new query as a schema/rules/index decision, not just a frontend change.
 
 ### 6. Indexes Are Intentional
 
@@ -127,7 +139,25 @@ Current audit item:
 
 - Review `firestore.indexes.json` for legacy indexes tied to old fields or old collections, especially around daily logs and timecards.
 
-### 7. Emulators Protect Rules and Functions
+### 7. Runtime Validation At Boundaries
+
+TypeScript is not enough once data crosses a runtime boundary.
+
+Validate runtime payloads at:
+
+- frontend service command inputs before writes or callable requests
+- Cloud Function request bodies before privileged work
+- Firestore snapshot normalization when old/partial documents may exist
+- file/upload metadata before Storage writes
+
+Rules:
+
+- Prefer shared schema helpers per domain so the app and functions agree on required fields.
+- Convert unknown input into explicit domain types before business logic runs.
+- Return user-safe validation errors instead of generic crashes.
+- Do not rely on component-level form validation as the only protection before a backend write.
+
+### 8. Emulators Protect Rules and Functions
 
 The Emulator Suite should be used for rules/function validation where e2e browser tests are not enough.
 
@@ -140,13 +170,17 @@ Recommended test layers:
 Priority emulator tests:
 
 - foreman can only read assigned-job records
+- payroll can read employees, use timecard export data, and create jobs, but cannot delete/archive jobs
+- shop foreman can manage/use shop catalog permissions and `Shop` job workflows as designed, but cannot delete/archive jobs
+- project manager can edit assigned jobs but cannot delete/archive jobs or access unassigned job dashboards
+- project manager can read submitted timecards and daily log history for assigned jobs only
 - foreman cannot read employee admin data
 - submitted timecard/shop order/daily log records are protected
 - admin can perform export/admin operations
 - Storage attachments require valid metadata and draft access
 - submit functions create the expected emails/artifacts exactly once
 
-### 8. App Check Is a Production Hardening Goal
+### 9. App Check Is a Production Hardening Goal
 
 App Check should be considered for production hardening after the refactor is stable.
 
@@ -218,7 +252,10 @@ Rules should stay conservative:
 - require signed-in active users
 - admins get full operational access
 - foremen get assigned-job workflow access
-- payroll/project-manager/shop-manager roles can be added later as explicit rules, not loose client-only checks
+- payroll, project-manager, and shop-foreman roles must be explicit rules, not loose client-only checks
+- all-job read-only lookup must not imply job edit or workflow access
+- assigned-job dashboard access must not imply access to unassigned workflow records
+- submitted-timecard reporting for Project Managers should be assigned-job and submitted-status scoped
 
 The app currently uses role/profile documents in Firestore. That is acceptable for this app as long as rules continue to read the profile directly.
 
@@ -269,6 +306,10 @@ Function rules:
 - record send/export status where the user needs reliable feedback
 - never rely on client-calculated privileged fields
 - keep email/PDF renderers covered by preview or smoke tests
+- assign a correlation ID or operation ID to submit/email/export workflows
+- write enough status metadata for support to answer whether an email/PDF/export was generated, sent, failed, or retried
+- clean up temporary files created during PDF/export generation
+- prefer stream/pipeline-style artifact generation for large files when practical
 
 Timecard-specific rule:
 
@@ -324,7 +365,52 @@ Backend rules:
 - Throw `HttpsError` with useful codes/messages for user-facing failures.
 - Await all async work before returning.
 - Make submit/email/export functions idempotent where retries could duplicate side effects.
+- Do not start timers, callbacks, or background work that can continue after the function response.
+- If a function writes temporary files, delete them before returning even on failure paths where practical.
 - For production hardening, consider `enforceAppCheck: true` on sensitive callable functions after App Check is configured.
+
+## Observability And Support Direction
+
+Operational workflows should be diagnosable without asking users to reproduce the issue repeatedly.
+
+For submit/email/export workflows, record:
+
+- workflow type
+- source record ID
+- job ID
+- acting user ID
+- operation/correlation ID
+- started/completed/failed timestamps
+- email recipient summary where appropriate
+- generated artifact path where appropriate
+- retry count or duplicate-prevention key where appropriate
+- user-safe failure reason
+
+Logging rules:
+
+- Logs should include correlation IDs for matching frontend errors to function work.
+- Logs should avoid sensitive payload dumps.
+- User-facing errors should be plain language, while detailed errors stay in logs/status metadata.
+
+## Release And Rollback Direction
+
+Firebase releases can involve frontend code, rules, indexes, functions, and data shape changes. Treat those as coordinated releases.
+
+Before deploying a Firebase-sensitive change:
+
+- identify affected Firestore paths, rules, indexes, functions, and frontend routes
+- deploy required indexes before frontend code depends on them
+- deploy backward-compatible rules/functions before frontend code sends new payloads where possible
+- keep old fields readable until deployed data and code no longer need them
+- have a rollback note for frontend Hosting, Functions exports, Rules, and indexes
+- verify smoke tests for email/PDF/CSV outputs after deploy
+
+Stop and split the release if:
+
+- frontend code requires rules that are not deployed yet
+- functions expect a payload shape the old frontend cannot send
+- a data migration and workflow refactor are bundled together
+- rollback would leave users unable to submit field workflows
 
 ## Client Firebase Direction
 
@@ -350,6 +436,8 @@ During refactor slices:
 - Preserve `data-testid` values.
 - Add emulator tests before broad Security Rules changes.
 - Keep output generators isolated and protected.
+- Keep runtime validation close to service/function boundaries.
+- Keep release order explicit when rules, indexes, functions, and frontend code all change.
 
 ## Immediate Firebase Checklist
 
@@ -357,7 +445,10 @@ Before or during the next refactor phase:
 
 - Audit `firestore.indexes.json` against current query usage.
 - Add a first Security Rules emulator test suite for roles and assigned-job access.
+- Add shared runtime validation helpers for callable/function payloads.
 - Confirm all email/PDF functions await async work and record enough status for support.
 - Confirm submit functions avoid duplicate side effects on retries.
+- Confirm PDF/export functions clean up temporary files and do not leave background work after return.
+- Document the deployment order for any slice that changes rules, indexes, functions, and frontend behavior together.
 - Decide whether App Check belongs in the first production hardening pass.
 - Keep the timecard email PDF path unified with the admin PDF export path.

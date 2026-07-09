@@ -18,6 +18,7 @@ import {
 } from '@/testing/e2eRuntime'
 import type { ShopOrderItemRecord, ShopOrderRecord, ShopOrderStatus } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
+import { sortShopOrderItems } from '@/utils/shopOrders'
 
 export interface CreateShopOrderInput {
   jobId: string
@@ -79,9 +80,9 @@ function sanitizeShopOrderItem(item: ShopOrderItemRecord): ShopOrderItemRecord {
 }
 
 function sanitizeShopOrderItems(items: ShopOrderItemRecord[]) {
-  return items
+  return sortShopOrderItems(items
     .map((item) => sanitizeShopOrderItem(item))
-    .filter((item) => item.description.length > 0)
+    .filter((item) => item.description.length > 0))
 }
 
 function normalizeShopOrderItem(data: Record<string, unknown>): ShopOrderItemRecord {
@@ -133,9 +134,9 @@ function normalizeShopOrder(id: string, data: DocumentData): ShopOrderRecord {
     comments: typeof data.comments === 'string' ? data.comments.trim() : '',
     foremanUserId: toNullableText(data.foremanUserId),
     foremanName: toNullableText(data.foremanName),
-    items: rawItems
+    items: sortShopOrderItems(rawItems
       .map((item) => (item && typeof item === 'object' ? normalizeShopOrderItem(item as Record<string, unknown>) : null))
-      .filter((item): item is ShopOrderItemRecord => item !== null && item.description.length > 0),
+      .filter((item): item is ShopOrderItemRecord => item !== null && item.description.length > 0)),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     submittedAt: data.submittedAt,

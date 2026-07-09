@@ -20,6 +20,8 @@ The refactor should move the app toward:
 - services that hide Firebase implementation details
 - Cloud Functions that own privileged backend work
 - a cleaner, more professional, more modern GUI
+- role dashboards that show the right modules for Admin, Payroll, Shop Foreman, Project Manager, and Foreman users
+- shared job dashboards that expose job modules by capability
 - interactions that feel immediate, even when Firebase or Functions are still working
 - real-page e2e coverage that protects user workflows
 - smoke/preview coverage for emails, PDFs, CSVs, and print artifacts
@@ -48,6 +50,7 @@ The current app also has predictable refactor pressure:
 - autosave behavior needs consistent patterns across modules
 - create/add/save actions can feel clunky when the UI waits on remote writes
 - permission rules need to stay centralized and testable
+- current role handling must move from temporary role equivalence to explicit role capabilities
 - visual design needs a stronger system instead of page-by-page patching
 
 ## Refactor Tracks
@@ -110,6 +113,7 @@ Primary docs:
 
 - `ui-modernization.md`
 - `component-architecture.md`
+- `css-architecture.md`
 
 ### Track 4: Feature Component Extraction
 
@@ -149,8 +153,21 @@ Work:
 - keep Firebase SDK usage inside services
 - keep privileged writes and email/PDF generation in Functions
 - keep security rules aligned with app roles
+- implement role capabilities for Admin, Payroll, Shop Foreman, Project Manager, and Foreman
+- enforce assigned-job access for Project Manager and Foreman workflow dashboards
+- enforce `Shop` job workflow access for Shop Foreman unless additional workflow jobs are explicitly confirmed later
+- support read-only all-job lookup for Payroll, Shop Foreman, and Project Manager
+- support job creation for Payroll with no delete/archive access
+- support assigned-job editing for Project Manager without delete/archive access
+- support full timecard export for Admin and Payroll
+- support assigned-job submitted timecard reporting for Project Manager
+- include assigned Foremen, Shop Foremen, and Project Managers in Daily Log and Shop Order email recipient resolution
 - centralize callable function wrappers
 - make retry-sensitive functions idempotent where possible
+- add runtime validation at service and function boundaries
+- record support-friendly status for submit/email/export workflows
+- keep Firestore queries scoped, indexed, and paginated instead of broad client-filtered reads
+- document release/rollback order when rules, indexes, functions, and frontend code change together
 - avoid stale migration paths
 
 Primary docs:
@@ -248,6 +265,11 @@ Recent lessons to preserve:
 - autosave must never fight user typing
 - normal create/add/edit actions should not make the app feel frozen while a write is pending
 - foremen must be able to create allowed timecards
+- opening a daily-log date or timecard week must not create drafts by itself
+- opening a shop order workspace or history must not create draft orders by itself
+- submitted daily logs and submitted/card-containing timecard weeks should be shown by default before any accidental blank draft
+- timecard rollover must copy from a meaningful prior week, not from an accidental blank draft
+- timecard `Job #` cascade behavior must continue across blank rows
 - shop order item tables need one normal/custom item table
 - shop order PDF must repeat table headers at the top of continuation pages
 - daily log emails must normalize current payload shape before rendering
@@ -296,6 +318,34 @@ Expected benefit:
 - shared status/action patterns
 - safer destructive-action handling
 
+### Stage 2.5: Role Dashboards And Permission Shell
+
+Purpose:
+
+- introduce the target navigation model before deeper workflow extraction
+- make role access visible through capability checks instead of scattered role-name checks
+
+Targets:
+
+- role dashboard landing page
+- shared dashboard card/module primitives
+- Admin dashboard modules
+- Payroll dashboard modules
+- Shop Foreman dashboard modules
+- Project Manager dashboard modules
+- Foreman dashboard modules
+- permission/capability helper layer
+
+Guardrails:
+
+- keep job dashboard routes as the shared job workspace
+- role dashboards should link users into the shared job dashboard instead of duplicating job modules per role
+- Payroll job creation is part of the latest target role model, but exact post-create edit rights still need company confirmation
+- Shop Foreman should have read-only all-job lookup plus editable workflow access for the `Shop` job unless the company assigns more workflow access later
+- do not grant UI access without matching Firestore Rules and Cloud Function enforcement
+- preserve existing `/jobs/:jobId/...` workflow routes during transition
+- add e2e coverage for each role before replacing the old landing flow
+
 ### Stage 3: Shop Orders
 
 Purpose:
@@ -318,6 +368,8 @@ Guardrails:
 - do not mix GUI extraction with email/PDF output changes
 - preserve order number visibility
 - preserve next Thursday defaults
+- preserve view-first behavior: workspace/history/catalog browsing should read existing data without creating orders or items
+- keep `New Order`, catalog item add, and custom item add as explicit write actions
 - preserve one-table order output
 - preserve compact no-horizontal-scroll workspace behavior
 - preserve instant-feeling add/create behavior with localized pending states
@@ -344,6 +396,9 @@ Guardrails:
 - preserve required field behavior
 - preserve attachment upload/remove behavior
 - preserve submitted read-only behavior
+- opening a date is read-only and must not create a draft
+- submitted logs for the selected date should be visible by default with a clear action to create another log
+- submitted history counts should stay easy for foremen and project managers to browse
 
 ### Stage 5: Timecards
 
@@ -365,6 +420,11 @@ Guardrails:
 - do not casually touch `TimecardWorkbookCard`
 - do not casually touch `TimecardPrintCard`
 - do not mix UI refactor with PDF/email output changes
+- opening a week is read-only and must not create draft cards
+- submitted/card-containing weeks should display before accidental blank drafts
+- rollover should copy from the most recent meaningful prior week
+- rollover should clear hour, production, and `ACCT` entry fields
+- `Job #` cascade across blank rows must keep working
 
 ### Stage 6: Shop Catalog Admin
 
@@ -419,6 +479,7 @@ Targets:
 - spacing/radius/depth tokens
 - row/card/pane variants
 - button hierarchy
+- CSS ownership split between global tokens/base, shared component styles, and feature scoped styles
 - mobile/tablet behavior
 - accessibility pass
 
@@ -427,6 +488,7 @@ Guardrails:
 - do not make dense workflows slower
 - do not let visual cleanup alter email/PDF/print output
 - do not overfit one module at the expense of shared consistency
+- do not let `main.css` keep accumulating page-specific selectors as components are extracted
 
 ## Things Not To Mix
 
@@ -478,6 +540,17 @@ Do not force reuse when:
 
 If two things are similar but not identical, prefer sharing the smaller stable piece first.
 
+## Future Dashboard Backlog
+
+These ideas are outside the current refactor scope, but the refactor should avoid architectural choices that would block them later:
+
+- file storage for job and personal dashboards
+- dashboard customization with draggable widgets
+- announcements pushed to jobs or all users
+- alerts, calendar, notes, todos, checklists, document tree, pinned documents, photo/PDF viewer, job map, contacts, analytics, spreadsheet integration, and optional two-factor authentication
+
+The detailed future widget backlog lives in `future-dashboard-widgets.md`.
+
 ## Documentation Protocol
 
 Before a refactor slice:
@@ -491,6 +564,7 @@ During a refactor slice:
 - write down any new decision that future-us would otherwise rediscover painfully
 - update `questions-for-company.md` if a product answer is missing
 - update `testing-strategy.md` if a new behavior needs protection
+- update release notes/checklists if the slice changes rules, indexes, functions, or deployed data shape
 
 After a refactor slice:
 
@@ -504,12 +578,14 @@ After a refactor slice:
 - How far should the visual redesign move away from the current dark shell?
 - Which shared controls are worth building first versus wrapping later?
 - Should shop order email eventually become mostly a cover note plus PDF attachment?
-- How much role/permission configuration should be data-driven in the first refactor pass?
-- Should `Project Manager` remain foreman-equivalent, or split into explicit permissions for jobs, timecards, daily logs, and shop orders?
+- How much of the role/capability model should be data-driven in the first refactor pass versus hardcoded built-in role capabilities?
+- What exact Timecard Export actions should Project Managers get for assigned-job billing: view only, PDF, CSV, or both exports?
 - Which component tests should be introduced before larger page extractions?
 - Which migration/compatibility fields are now safe to remove?
 - Which workflows should be optimistic immediately, and which should wait for server confirmation?
 - What responsiveness budget should we expect for create/add/edit interactions?
+- Which runtime validation library/pattern should be standardized across app and functions?
+- What support/status dashboard or log view is needed for failed emails, PDFs, and exports?
 
 ## Stop Conditions
 
@@ -520,7 +596,10 @@ Pause and reassess if:
 - a component imports Firebase or Cloud Functions directly
 - output rendering changes unintentionally
 - a visual update makes dense workflows less usable
+- global CSS changes start affecting unrelated pages
 - normal workflow actions start blocking entire panels or dropping user input
+- a Firebase-sensitive slice has no clear deployment order or rollback path
+- a new query depends on broad reads and client-side filtering for large data
 - a slice becomes larger than one clear workflow section
 
 The goal is not speedrun demolition. The goal is steady, boringly safe improvement.

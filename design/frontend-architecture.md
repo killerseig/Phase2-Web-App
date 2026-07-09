@@ -60,6 +60,8 @@ They should:
 - expose slots for flexible layout
 - avoid importing services directly
 - avoid knowing route names unless they are navigation components
+- document their public props/events when they become shared components
+- keep emitted events domain-readable instead of leaking implementation details
 
 This makes components easier to stub and test.
 
@@ -71,6 +73,7 @@ Good composable candidates:
 
 - autosave queues
 - confirmation workflows
+- permission/capability checks
 - tree construction
 - search/filter helpers
 - selected item state
@@ -87,8 +90,11 @@ Services should:
 
 - normalize Firestore documents into domain types
 - sanitize payloads before writes
+- validate command payloads before remote writes or callable function calls
 - hide Firebase implementation details from views/components
 - branch to the e2e runtime when `isE2EActive()`
+- keep read/subscription APIs side-effect free
+- expose explicit command APIs for record creation instead of creating records during reads
 
 Services should not:
 
@@ -119,6 +125,12 @@ Domain types should be:
 - independent of Firestore internals where possible
 
 If a workflow needs a view-specific type, define it near that feature rather than bloating the global domain file.
+
+Runtime contracts:
+
+- TypeScript types describe expected app shapes, but runtime schemas should protect service/function boundaries.
+- Domain services should convert unknown Firestore/function data into explicit domain types before views consume it.
+- View-specific form state can stay local, but remote command payloads should be validated before sending.
 
 ## Target Folder Structure
 
@@ -176,6 +188,12 @@ src/
   services/
   stores/
   styles/
+    main.css
+    tokens.css
+    reset.css
+    base.css
+    utilities.css
+    primevue.css
   testing/
   types/
   utils/
@@ -225,13 +243,13 @@ Preferred flow:
 
 ```text
 Page
-  -> Store or Service
+  -> Store or read-only Service subscription
   -> Local page state/composable state
   -> Feature components
   -> Shared components
   -> User event
   -> Emit event upward
-  -> Page/composable calls service
+  -> Page/composable calls explicit command service for writes
 ```
 
 Avoid:
@@ -245,6 +263,54 @@ Deep child component
 ```
 
 Some intentionally stateful feature containers may call services, but that should be explicit and uncommon.
+
+Important workflow rule:
+
+- Navigating, selecting a date/week, opening history, filtering, or subscribing must never create a Firestore record.
+- Draft creation must come from explicit user intent such as `New Daily Log`, `Create Week`, `Create Card`, `New Order`, or `Add Item`.
+- This keeps timecard, daily-log, and shop-order history from filling with accidental blank drafts.
+
+## Navigation And Dashboard Architecture
+
+The target navigation model is role-dashboard first, job-dashboard second.
+
+Role dashboards are task-oriented:
+
+- Admin dashboard shows admin-wide modules such as users, employees, jobs needing setup, submitted records, and system shortcuts.
+- Payroll dashboard shows Employees, Timecard Export, job creation, and read-only job lookup after creation.
+- Shop Foreman dashboard shows Shop Catalog management, `Shop` job workflow modules, and read-only all-job lookup.
+- Project Manager dashboard shows assigned-job billing/reporting modules, assigned job edit entry points, submitted timecards, daily log activity, shop orders, and read-only job lookup.
+- Foreman dashboard shows assigned jobs, current timecards, daily logs, shop orders, and field workflow shortcuts.
+
+Job dashboards are context-oriented:
+
+- one shared job home base per job
+- visible modules are capability-driven
+- timecards, daily logs, shop orders, job details, history, and reports should be entered from the same job context
+
+Implementation direction:
+
+- avoid creating three or five unrelated dashboard apps
+- build reusable dashboard card/module primitives
+- route guards should use capability helpers, not scattered role-name checks
+- pages should still enforce the final permission through services/rules/functions
+- job module routes should remain stable during the transition
+
+Target capability examples:
+
+- `canManageUsers`
+- `canManageEmployees`
+- `canUseTimecardExport`
+- `canUseShopCatalog`
+- `canViewAllJobs`
+- `canCreateJobs`
+- `canEditAssignedJobs`
+- `canDeleteJobs`
+- `canArchiveJobs`
+- `canUseAssignedJobDashboard`
+- `canUseShopJobDashboard`
+- `canViewAssignedJobSubmittedTimecards`
+- `canViewAssignedJobDailyLogHistory`
 
 ## Autosave Architecture
 
@@ -286,6 +352,7 @@ Target interaction rules:
 
 Shop order examples:
 
+- Opening a job's shop order workspace or history should only read existing orders.
 - `New Order` can create a local pending draft immediately, then reconcile when Firestore returns the real id/order number.
 - `Add item` can add a local pending item row immediately, then clear the pending state when the draft save succeeds.
 - Item note/comment typing should remain local-first and never wait on a save.
@@ -377,13 +444,35 @@ Current styling is mostly global CSS with scoped component styles.
 
 Target:
 
-- keep global theme variables in `src/styles/main.css`
+- keep `src/styles/main.css` as the CSS entry point imported by `src/main.ts`
+- split global CSS into token/base/reset/utility/vendor files over time
 - move reusable component styles with shared components when practical
 - keep feature-specific dense layout styles near feature components
 - avoid copy-pasted empty/message/list/pane classes
 - use CSS variables for shared density, colors, radius, and borders
+- avoid page-specific selectors in global CSS once the owning view/component has been extracted
+- follow `css-architecture.md` for token naming, scoped style ownership, PrimeVue overrides, and CSS migration order
 
 PrimeVue is configured as unstyled, which is good for this app because we want Phase 2's own app visual language.
+
+## Accessibility Direction
+
+Accessibility should be part of the refactor, not a later cleanup pass.
+
+Shared components should provide:
+
+- visible focus states
+- keyboard access for buttons, menus, tabs, tree controls, dialogs, and table-like workflows
+- real labels or accessible names for inputs and action buttons
+- clear error text connected to the relevant field or section
+- semantic button/link behavior instead of clickable divs
+- predictable focus movement for modal/confirm flows
+
+Workflow pages should preserve:
+
+- keyboard navigation in timecards
+- readable form labels in dense daily log and shop order screens
+- print/email/PDF output readability separately from interactive accessibility
 
 ## Testing Architecture
 
@@ -405,6 +494,7 @@ Use component tests for reusable components:
 - confirm action
 - empty/status/loading components
 - feature subcomponents after extraction
+- accessibility-facing behavior such as labels, focusable actions, and keyboard events where practical
 
 ### Unit tests
 
@@ -422,6 +512,9 @@ Use unit tests for pure logic:
 - Keep behavior changes separate from structural moves whenever possible.
 - Keep Firebase access behind services and follow `firebase-architecture.md` when touching data, rules, functions, indexes, or storage paths.
 - Keep public APIs for components small.
+- Document props/events for shared components as they are extracted.
+- Preserve labels, keyboard behavior, and focus states during visual polish.
+- Keep CSS ownership aligned with `css-architecture.md`.
 - Preserve `data-testid` values during extraction.
 - Run targeted tests after each slice.
 - Run `npm run test:pre-refactor` after meaningful workflow refactors.

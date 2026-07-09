@@ -330,17 +330,32 @@ async function copyPreviousWeekCardsIntoDraft(input: {
     previousWeekQuery = previousWeekQuery.where('ownerForemanUserId', '==', input.ownerForemanUserId)
   }
 
-  const previousWeekSnap = await previousWeekQuery.limit(1).get()
-  const previousWeekDoc = previousWeekSnap.docs[0]
-  if (!previousWeekDoc) return 0
+  const previousWeekSnap = await previousWeekQuery.get()
+  const previousWeekDocs = previousWeekSnap.docs.sort((left, right) => {
+    const leftData = left.data() || {}
+    const rightData = right.data() || {}
+    return (
+      Number(text(rightData.status) === 'submitted') - Number(text(leftData.status) === 'submitted')
+      || numberOrZero(rightData.employeeCardCount) - numberOrZero(leftData.employeeCardCount)
+      || right.id.localeCompare(left.id)
+    )
+  })
 
-  const previousCardsSnap = await db
-    .collection('timecardWeeks')
-    .doc(previousWeekDoc.id)
-    .collection('cards')
-    .get()
+  let previousCardsSnap: admin.firestore.QuerySnapshot | null = null
+  for (const previousWeekDoc of previousWeekDocs) {
+    const candidateCardsSnap = await db
+      .collection('timecardWeeks')
+      .doc(previousWeekDoc.id)
+      .collection('cards')
+      .get()
 
-  if (previousCardsSnap.empty) return 0
+    if (!candidateCardsSnap.empty) {
+      previousCardsSnap = candidateCardsSnap
+      break
+    }
+  }
+
+  if (!previousCardsSnap || previousCardsSnap.empty) return 0
 
   const batch = db.batch()
   previousCardsSnap.docs

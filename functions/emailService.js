@@ -1271,7 +1271,10 @@ function buildShopOrderDocumentModel(order, costCodesByCatalogItemId = {}) {
             receivedQuantity: getShopOrderItemReceivedQuantity(item),
             backorderedQuantity: getShopOrderItemBackorderedQuantity(item),
         };
-    });
+    }).sort((left, right) => left.displayDescription.localeCompare(right.displayDescription, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+    }));
     return {
         orderIdentifier,
         orderBy,

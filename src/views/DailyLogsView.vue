@@ -89,7 +89,6 @@ const globalNotificationRecipients = ref<NotificationRecipients>({
 
 let unsubscribeLogs: (() => void) | null = null
 let unsubscribeGlobalNotificationRecipients: (() => void) | null = null
-let ensuringTodayDraft = false
 
 const scheduleSection = getDailyLogTextSection('schedule-assessment')
 const safetySection = getDailyLogTextSection('safety-concerns')
@@ -119,7 +118,11 @@ const canEditSelectedLog = computed(() => {
     && selectedLog.value.foremanUserId === currentUserId.value
   )
 })
-const canCreateAnotherLogForToday = computed(() => {
+const hasSubmittedLogForToday = computed(() => (
+  selectedDateIsToday.value
+  && visibleLogs.value.some((log) => log.status === 'submitted')
+))
+const canCreateDailyLogForToday = computed(() => {
   if (!selectedDateIsToday.value || !currentUserId.value) return false
 
   const hasOwnDraftForToday = visibleLogs.value.some((log) =>
@@ -127,10 +130,11 @@ const canCreateAnotherLogForToday = computed(() => {
   )
   if (hasOwnDraftForToday) return false
 
-  return visibleLogs.value.some((log) =>
-    log.status === 'submitted' && log.foremanUserId === currentUserId.value,
-  )
+  return true
 })
+const createDailyLogButtonLabel = computed(() => (
+  hasSubmittedLogForToday.value ? 'Another Daily Log' : 'Create Daily Log'
+))
 const siteInfo = computed<SiteInfoDisplay>(() => ({
   projectName: String(job.value?.name ?? form.value.projectName ?? '').trim(),
   jobNumber: String(job.value?.code ?? form.value.jobSiteNumbers ?? '').trim(),
@@ -422,17 +426,6 @@ async function subscribeLogsForSelectedDate() {
         selectedLogId.value = getPreferredLog(nextVisibleLogs)?.id ?? null
       }
 
-      if (
-        !ensuringTodayDraft
-        && selectedDateIsToday.value
-        && currentUserId.value
-        && !nextVisibleLogs.some((log) => log.foremanUserId === currentUserId.value)
-      ) {
-        ensuringTodayDraft = true
-        void handleCreateDraft(true).finally(() => {
-          ensuringTodayDraft = false
-        })
-      }
     },
     (error) => {
       logsError.value = normalizeError(error, 'Failed to load daily logs.')
@@ -883,13 +876,13 @@ onBeforeUnmount(() => {
           </button>
 
           <button
-            v-if="canCreateAnotherLogForToday"
+            v-if="canCreateDailyLogForToday"
             type="button"
             class="app-button app-button--primary"
             :disabled="creatingDraft"
             @click="handleCreateDraft()"
           >
-            {{ creatingDraft ? 'Creating...' : 'Another Daily Log' }}
+            {{ creatingDraft ? 'Creating...' : createDailyLogButtonLabel }}
           </button>
         </div>
       </header>

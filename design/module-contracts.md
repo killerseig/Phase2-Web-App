@@ -240,6 +240,8 @@ Component candidates:
 Rules:
 
 - typing must not be disrupted by autosave
+- opening a date or history entry must not create a draft
+- submitted logs show by default before offering an explicit new-log action
 - submitted logs stay read-only
 - attachment changes require Storage and e2e checks
 
@@ -275,6 +277,10 @@ Component candidates:
 Rules:
 
 - preserve exact workbook behavior
+- opening a week must not create draft cards
+- submitted/card-containing weeks display before accidental blank drafts
+- rollover must use the most recent meaningful prior week and clear hours, production, and `ACCT`
+- `Job #` cascade across blank rows must keep working
 - do not show lock controls on the job timecard page
 - do not refactor PDF/email output in the same slice as input behavior
 - email PDFs should use the same generation path as admin export
@@ -333,6 +339,8 @@ Component candidates:
 Rules:
 
 - draft delivery date defaults to next Thursday
+- opening the workspace, catalog, or history must not create a draft order
+- `New Order`, catalog item add, and custom item add are explicit write actions
 - item names shown in added items should not include folder paths
 - submitted orders are read-only
 - email/PDF layout changes require preview/smoke checks

@@ -22,7 +22,7 @@ import type {
 } from '@/types/domain'
 import { getE2ENowValue } from '@/testing/e2eRuntime'
 import { normalizeError } from '@/utils/normalizeError'
-import { getShopOrderDisplayNumber } from '@/utils/shopOrders'
+import { getShopOrderDisplayNumber, getShopOrderItemDisplayName, sortShopOrderItems } from '@/utils/shopOrders'
 
 type TreeNode =
   | {
@@ -189,6 +189,7 @@ const orderItemCount = computed(() => selectedOrder.value?.items.length ?? 0)
 const orderTotalQuantity = computed(() =>
   (selectedOrder.value?.items ?? []).reduce((sum, item) => sum + (item.quantity ?? 0), 0),
 )
+const sortedSelectedOrderItems = computed(() => sortShopOrderItems(selectedOrder.value?.items ?? []))
 
 const quietShopOrderMessages = new Set([
   'New order started.',
@@ -313,17 +314,6 @@ function getCatalogOrderItemDescription(item: Pick<ShopCatalogItemRecord, 'descr
 
   if (categoryPath === 'Top Level') return itemName
   return `${categoryPath} / ${itemName}`
-}
-
-function getOrderItemDisplayName(item: Pick<ShopOrderItemRecord, 'description' | 'sourceType' | 'categoryId'>) {
-  const itemName = item.description.trim() || 'Untitled Item'
-
-  if (item.sourceType !== 'catalog') return itemName
-  return itemName
-    .split(' / ')
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .at(-1) || itemName
 }
 
 function getCategoryPath(categoryId: string | null) {
@@ -925,7 +915,7 @@ function queueOrderMetaSave() {
 }
 
 function cloneOrderItems(order: ShopOrderRecord | null = selectedOrder.value) {
-  return (order?.items ?? []).map((item) => ({ ...item }))
+  return sortShopOrderItems(order?.items ?? []).map((item) => ({ ...item }))
 }
 
 async function persistOrderItems(
@@ -943,7 +933,7 @@ async function persistOrderItems(
   actionError.value = ''
 
   try {
-    await updateShopOrderRecord(orderId, { items: nextItems }, getActor())
+    await updateShopOrderRecord(orderId, { items: sortShopOrderItems(nextItems) }, getActor())
     actionInfo.value = successMessage
     return true
   } catch (error) {
@@ -1858,14 +1848,14 @@ onBeforeUnmount(() => {
               </div>
 
               <article
-                v-for="item in selectedOrder.items"
+                v-for="item in sortedSelectedOrderItems"
                 :key="item.id"
                 class="shop-orders-item-card shop-orders-item-card--line"
                 :data-testid="`shoporder-order-item-${item.catalogItemId || item.id}`"
                 :class="{ 'shop-orders-item-card--readonly': !canEditSelectedOrder }"
               >
                 <div class="shop-orders-item-card__main">
-                  <strong class="shop-orders-item-card__name">{{ getOrderItemDisplayName(item) }}</strong>
+                  <strong class="shop-orders-item-card__name">{{ getShopOrderItemDisplayName(item) }}</strong>
                   <span
                     v-if="item.sourceType !== 'catalog' || item.sku"
                     class="shop-orders-item-card__meta"

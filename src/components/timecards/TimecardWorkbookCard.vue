@@ -331,7 +331,7 @@ function cascadeLineFieldValue(
   for (let nextIndex = lineIndex + 1; nextIndex < props.card.lines.length; nextIndex += 1) {
     const nextLine = props.card.lines[nextIndex]
     if (!nextLine) break
-    if (nextLine[field] !== previousValue) break
+    if (nextLine[field] !== previousValue && nextLine[field].trim() !== '') break
     nextLine[field] = nextValue
   }
 }

@@ -2,6 +2,70 @@ import { expect, test } from './helpers/test.js'
 import { createDailyLogsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('daily log draft regressions', () => {
+  test('opening today does not create a daily log draft until the foreman asks for one', async ({ page }) => {
+    const fixture = createDailyLogsFixture()
+    fixture.dailyLogs = []
+
+    await gotoPhase2App(page, '/jobs/job-e2e/daily-logs', fixture)
+
+    await expect(page.getByRole('button', { name: 'Create Daily Log' })).toBeVisible()
+    await expect(page.getByText('No daily log is selected for this date.')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          dailyLogs?: unknown[]
+        }
+        return state.dailyLogs?.length ?? -1
+      }))
+      .toBe(0)
+
+    await page.getByRole('button', { name: 'Create Daily Log' }).click()
+
+    await expect(page.getByText('Daily log draft created.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Draft #1' })).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          dailyLogs?: unknown[]
+        }
+        return state.dailyLogs?.length ?? -1
+      }))
+      .toBe(1)
+  })
+
+  test('submitted daily logs show first and creating another log stays intentional', async ({ page }) => {
+    const fixture = createDailyLogsFixture()
+    fixture.dailyLogs[0].status = 'submitted'
+    fixture.dailyLogs[0].submittedAt = '2026-06-04T12:30:00.000Z'
+
+    await gotoPhase2App(page, '/jobs/job-e2e/daily-logs', fixture)
+
+    await expect(page.getByRole('heading', { name: 'Submitted #1' })).toBeVisible()
+    await expect(page.getByTestId('dailylog-weeklySchedule')).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Another Daily Log' })).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          dailyLogs?: unknown[]
+        }
+        return state.dailyLogs?.length ?? -1
+      }))
+      .toBe(1)
+
+    await page.getByRole('button', { name: 'Another Daily Log' }).click()
+
+    await expect(page.getByText('Daily log draft created.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Draft #2' })).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          dailyLogs?: Array<{ status?: string | null }>
+        }
+        return state.dailyLogs?.map((log) => log.status) ?? []
+      }))
+      .toEqual(['submitted', 'draft'])
+  })
+
   test('typing in weekly schedule stays stable until the field blurs', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/daily-logs', createDailyLogsFixture())
 

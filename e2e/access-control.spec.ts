@@ -78,6 +78,8 @@ test.describe('route access control', () => {
     await expect(page.getByTestId('timecards-page')).toBeVisible()
     await page.getByTestId('timecards-week-ending').fill('2026-06-06')
     await page.getByTestId('timecards-week-ending').dispatchEvent('change')
+    await expect(page.getByTestId('create-week')).toBeEnabled()
+    await page.getByTestId('create-week').click()
     await expect(page.getByTestId('create-card')).toBeEnabled()
     await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
   })

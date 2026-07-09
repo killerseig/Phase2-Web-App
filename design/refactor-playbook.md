@@ -13,6 +13,7 @@ Use alongside:
 - `module-contracts.md` for ownership boundaries
 - `cleanup-and-deprecation.md` for removing old code, fields, and functions
 - `ui-modernization.md` for visual direction and UI consistency
+- `css-architecture.md` before moving shared styles, global styles, or visual primitives
 - `firebase-architecture.md` when touching Firebase data, rules, functions, indexes, or storage
 
 ## North Star
@@ -131,6 +132,17 @@ npm run type-check
 
 If the change affects a user workflow, also run the matching Playwright spec.
 
+Before implementation, write down:
+
+- affected Firestore paths
+- affected Security Rules
+- affected indexes
+- affected callable/HTTP functions
+- affected frontend routes/services
+- deploy order and rollback path
+- runtime validation changes
+- support/status metadata changes for submit/email/export workflows
+
 ### Browser-sensitive layout or interaction
 
 Run:
@@ -143,6 +155,7 @@ Use this for:
 
 - timecard workbook layout/input
 - shop order print/email/PDF table behavior
+- shared controls where keyboard/focus behavior is changing
 - responsive shell/layout changes
 - anything involving drag, resize, print, or browser-specific form behavior
 
@@ -348,6 +361,10 @@ Before extracting:
 - Are there existing `data-testid` values to preserve?
 - Is this component shared app-level or feature-specific?
 - Are we sharing the smallest stable piece instead of building a too-flexible component?
+- Are props/events/slots documented if this will be reused?
+- Are labels, focus states, keyboard behavior, disabled states, and error messages preserved?
+- Does the component own its styles, or is the style still temporarily global for a documented reason?
+- Would this extraction let us remove selectors from `main.css`?
 - Does it need a component test?
 
 After extracting:
@@ -355,8 +372,31 @@ After extracting:
 - Did imports stay clean?
 - Did the parent page get smaller?
 - Did the extracted component avoid route/service coupling?
+- Did the extracted component preserve accessibility behavior?
+- Did the shared component public API stay small and clear?
+- Did CSS ownership improve or stay intentionally unchanged?
 - Did type-check pass?
 - Did targeted e2e pass?
+
+## CSS Refactor Checklist
+
+Before moving CSS:
+
+- Is the selector global foundation, shared component styling, feature styling, utility styling, or vendor override?
+- Can this move happen without changing markup or behavior?
+- Does `main.css` remain an entry point/foundation file instead of gaining more page-specific selectors?
+- Does the style use existing tokens before adding new values?
+- Does a new token belong in `tokens.css` instead of inside one component?
+- Does the change preserve mobile, focus, and dense workflow behavior?
+- Is print/email/PDF output untouched?
+
+After moving CSS:
+
+- Did the page still pass targeted e2e?
+- Did the visual state match before/after except for intentional polish?
+- Did the global stylesheet get smaller or more foundational?
+- Did scoped component styles avoid reaching into parent/page selectors?
+- Did we avoid `!important` and high-specificity hacks?
 
 ## Composable Extraction Checklist
 

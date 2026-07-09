@@ -154,6 +154,29 @@ test.describe('shop order workspace regressions', () => {
       })
   })
 
+  test('added order items stay alphabetized by item name', async ({ page }) => {
+    await gotoShopOrderApp(page)
+
+    await expandAllCatalogFolders(page)
+    await page.getByTestId('shoporder-add-item-bucket').click()
+    await page.getByTestId('shoporder-add-item-box').click()
+
+    await expect(page.locator('.shop-orders-item-card__name')).toHaveText(['Box', 'Bucket'])
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          shopOrders?: Array<{ id: string; items?: Array<{ description?: string }> }>
+        }
+        return state.shopOrders
+          ?.find((order) => order.id === 'order-draft')
+          ?.items?.map((item) => item.description) ?? []
+      }))
+      .toEqual([
+        'Drywall Mud / All Purpose Mud / Box',
+        'Drywall Mud / All Purpose Mud / Bucket',
+      ])
+  })
+
   test('comments survive autosave echo while the draft stays editable', async ({ page }) => {
     await gotoShopOrderApp(page)
 

@@ -74,6 +74,8 @@ Shared components should:
 - avoid direct service calls
 - avoid route assumptions
 - be easy to stub in unit tests or story-style previews
+- have a small documented public API once reused in more than one place
+- preserve labels, focus behavior, keyboard access, and error messaging
 
 Shared components can own small local UI state when that state is visual only, such as expanded/collapsed state, menu open state, or active tab state.
 
@@ -85,6 +87,21 @@ Feature components should:
 - know domain vocabulary
 - still avoid direct Firebase/service calls unless they are intentionally container components
 - expose clear events such as `save`, `submit`, `delete`, `select`, `change`, and `add`
+- emit business intent rather than raw persistence details
+- keep accessibility behavior visible in the component API when relevant, such as labels, disabled reasons, and described-by text
+
+### Public Component API Standard
+
+For any shared component, define:
+
+- required props
+- optional props and defaults
+- emitted events and payload shape
+- slots, if any
+- keyboard/focus behavior
+- loading/disabled/error behavior
+
+Tests should cover the component's public behavior, not private implementation details.
 
 ### Composables
 
@@ -697,5 +714,6 @@ Targets:
 - Keep e2e tests green after each meaningful extraction.
 - Preserve existing `data-testid` values unless intentionally updating tests.
 - Prefer props/events over child components importing services.
+- Keep shared component public APIs small, documented, and accessible.
 - Keep exact print/email/PDF rendering isolated and regression-tested.
 - Do not genericize the timecard workbook grid just because it is large.

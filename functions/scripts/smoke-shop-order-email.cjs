@@ -41,8 +41,8 @@ function runScenario(name, order, expectedDeliveryDate) {
   assert.equal(html.includes('Loaded / Pending'), false, `${name}: email should not include the loaded/pending column`)
   assert.equal(html.includes('Job # Trans. To'), false, `${name}: email should not include the transfer-to column`)
   assert.equal(html.includes('Part#'), true, `${name}: email should include the part number column`)
-  assert.equal(html.includes('Pulled<br>By'), true, `${name}: email should include the pulled by column`)
-  assert.equal(html.includes('Verified<br>By'), true, `${name}: email should include the verified by column`)
+  assert.equal(html.includes('>Pulled</th>'), true, `${name}: email should include the pulled column`)
+  assert.equal(html.includes('>Verified</th>'), true, `${name}: email should include the verified column`)
   assert.equal(html.includes('133/513'), true, `${name}: email should include the 133/513 column`)
   assert.equal(html.includes('Item Name'), true, `${name}: email should use the item name column heading`)
   assert.equal(html.includes('End of Order'), true, `${name}: email should include the end of order marker`)
@@ -164,7 +164,7 @@ const longOrderHtml = buildShopOrderEmail({
 })
 
 assert.equal(
-  countMatches(longOrderHtml, 'Pulled<br>By'),
+  countMatches(longOrderHtml, '>Pulled</th>'),
   1,
   'long order: email body should keep one visible item table instead of splitting into multiple tables',
 )

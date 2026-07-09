@@ -1406,7 +1406,12 @@ function buildShopOrderDocumentModel(
       receivedQuantity: getShopOrderItemReceivedQuantity(item),
       backorderedQuantity: getShopOrderItemBackorderedQuantity(item),
     }
-  })
+  }).sort((left: ShopOrderEmailLine, right: ShopOrderEmailLine) =>
+    left.displayDescription.localeCompare(right.displayDescription, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    }),
+  )
 
   return {
     orderIdentifier,

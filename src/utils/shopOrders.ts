@@ -5,7 +5,22 @@ type ShopOrderNumberSource = {
   updatedAt?: unknown
 }
 
+type ShopOrderItemSortSource = {
+  id?: unknown
+  sourceType?: unknown
+  description?: unknown
+}
+
+const shopOrderItemCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+})
+
 function normalizeShopOrderNumber(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeShopOrderItemText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -51,4 +66,37 @@ export function getShopOrderDisplayNumber(order: ShopOrderNumberSource | null | 
     || buildTimestampShopOrderNumber(order?.updatedAt)
     || 'Unnumbered'
   )
+}
+
+export function getShopOrderItemDisplayName(item: ShopOrderItemSortSource | null | undefined): string {
+  const itemName = normalizeShopOrderItemText(item?.description) || 'Untitled Item'
+
+  if (item?.sourceType !== 'catalog') return itemName
+
+  const segments = itemName
+    .split(' / ')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  return segments[segments.length - 1] || itemName
+}
+
+export function compareShopOrderItems(left: ShopOrderItemSortSource, right: ShopOrderItemSortSource): number {
+  const displayComparison = shopOrderItemCollator.compare(
+    getShopOrderItemDisplayName(left),
+    getShopOrderItemDisplayName(right),
+  )
+  if (displayComparison !== 0) return displayComparison
+
+  const fullDescriptionComparison = shopOrderItemCollator.compare(
+    normalizeShopOrderItemText(left.description),
+    normalizeShopOrderItemText(right.description),
+  )
+  if (fullDescriptionComparison !== 0) return fullDescriptionComparison
+
+  return normalizeShopOrderItemText(left.id).localeCompare(normalizeShopOrderItemText(right.id))
+}
+
+export function sortShopOrderItems<T extends ShopOrderItemSortSource>(items: readonly T[]): T[] {
+  return items.slice().sort(compareShopOrderItems)
 }

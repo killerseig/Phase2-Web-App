@@ -68,6 +68,10 @@ function toQuantity(value) {
 function makeItemId() {
     return `item-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
+const shopOrderItemCollator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: 'base',
+});
 function sanitizeItem(item) {
     return {
         id: text(item?.id) || makeItemId(),
@@ -80,8 +84,29 @@ function sanitizeItem(item) {
         sku: textOrNull(item?.sku),
     };
 }
+function getShopOrderItemDisplayName(item) {
+    const description = text(item?.description) || 'Untitled Item';
+    if (text(item?.sourceType) !== 'catalog')
+        return description;
+    return description
+        .split(' / ')
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+        .at(-1) || description;
+}
+function sortShopOrderItems(items) {
+    return items.slice().sort((left, right) => {
+        const displayComparison = shopOrderItemCollator.compare(getShopOrderItemDisplayName(left), getShopOrderItemDisplayName(right));
+        if (displayComparison !== 0)
+            return displayComparison;
+        const descriptionComparison = shopOrderItemCollator.compare(text(left.description), text(right.description));
+        if (descriptionComparison !== 0)
+            return descriptionComparison;
+        return text(left.id).localeCompare(text(right.id));
+    });
+}
 function sanitizeItems(items) {
-    return items.map((item) => sanitizeItem(item)).filter((item) => item.description.length > 0);
+    return sortShopOrderItems(items.map((item) => sanitizeItem(item)).filter((item) => item.description.length > 0));
 }
 async function getAuthorizedUser(uid) {
     const userSnap = await runtime_1.db.collection('users').doc(uid).get();

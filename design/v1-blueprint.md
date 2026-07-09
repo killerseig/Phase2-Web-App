@@ -27,9 +27,10 @@ The goal is to rebuild Phase 2 as a `Vue + Firebase` application that:
 
 - `Familiarity over novelty`
   - especially for timecards
-- `Same page, different permissions`
-  - admins use the same pages as foremen
-  - admins get extra abilities through `edit mode`
+- `Role dashboard, shared job workspace`
+  - each role gets a landing dashboard with the modules that matter to that role
+  - users drill into shared job dashboards for job-specific workflows
+  - extra abilities appear through capability checks and `edit mode` where appropriate
 - `Consistency over exceptions`
   - avoid special-case behavior when a shared rule will work
 - `History and auditability from day one`
@@ -44,18 +45,34 @@ The goal is to rebuild Phase 2 as a `Vue + Firebase` application that:
   - can help with drafts
   - can edit submitted records where allowed
   - can manage jobs, employees, fixed lists, catalog structure, and export tools
+- `Payroll`
+  - can manage employees
+  - can use timecard export
+  - can create jobs
+  - can view jobs as read-only lookup context
+  - cannot delete or archive jobs
+  - job edit scope after creation still needs final confirmation
+- `Shop Foreman`
+  - can manage the shop catalog
+  - can view all jobs as read-only lookup context
+  - can use the `Shop` job dashboard for timecards, daily logs, and shop orders
+  - other job workflow access requires explicit assignment/confirmation
+  - cannot edit, delete, or archive jobs
+- `Project Manager`
+  - can view jobs as lookup context
+  - can edit assigned jobs only
+  - cannot delete or archive jobs
+  - can use assigned job dashboards
+  - can view submitted timecards and daily log history for assigned jobs
 - `Foreman`
   - works inside assigned jobs
   - creates and submits timecards, daily logs, and shop orders
-- `Project Manager`
-  - currently stored as its own role
-  - intentionally uses Foreman-equivalent assigned-job access until the role refactor
 
 ### Role direction after v1
 
 - The permission system should be data-driven from the start.
 - Future custom non-admin roles should be possible.
-- The old timecard review workflow is handled by `Admin` in v1.
+- The old timecard review/export workflow is handled by `Admin` and `Payroll`.
 - The `Admin` role should stay fixed and always retain full access.
 
 ## Primary User Flow
@@ -63,12 +80,20 @@ The goal is to rebuild Phase 2 as a `Vue + Firebase` application that:
 ### Foreman flow
 
 1. Sign in.
-2. Choose a job.
-3. Open the job dashboard.
-4. Choose a module:
+2. Land on the Foreman dashboard.
+3. Choose an assigned job or a direct module shortcut.
+4. Open the job dashboard.
+5. Choose a module:
    - `Timecards`
    - `Daily Logs`
    - `Shop Orders`
+
+### Role dashboard flow
+
+1. Sign in.
+2. Land on the dashboard for the user's role.
+3. Use role-specific modules or drill into a job.
+4. Use the shared job dashboard for job-specific work.
 
 ### Account creation rule
 
@@ -79,9 +104,10 @@ The goal is to rebuild Phase 2 as a `Vue + Firebase` application that:
 ### Admin flow
 
 1. Sign in.
-2. Use the same core pages a foreman sees.
-3. Enter `edit mode` when admin-only actions are needed.
-4. Access admin-only tools such as filtered timecard export, list management, and archived jobs.
+2. Land on the Admin dashboard.
+3. Use admin-wide modules or drill into a job.
+4. Enter `edit mode` when admin-only actions are needed on shared job pages.
+5. Access admin-only tools such as users, list management, archived jobs, and full export controls.
 
 ## UX Direction
 
