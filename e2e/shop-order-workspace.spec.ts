@@ -10,6 +10,20 @@ async function gotoShopOrderApp(page: Page) {
   await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', createShopOrdersFixture())
 }
 
+async function confirmSubmitShopOrder(page: Page) {
+  await page
+    .getByRole('dialog', { name: 'Submit shop order?' })
+    .getByRole('button', { name: 'Submit Order' })
+    .click()
+}
+
+async function confirmRemoveOrderItem(page: Page) {
+  await page
+    .getByRole('dialog', { name: 'Remove item?' })
+    .getByRole('button', { name: 'Remove Item' })
+    .click()
+}
+
 test.describe('shop order workspace regressions', () => {
   test('draft orders start with the next Thursday delivery date', async ({ page }) => {
     await gotoShopOrderApp(page)
@@ -24,6 +38,7 @@ test.describe('shop order workspace regressions', () => {
     await expandAllCatalogFolders(page)
     await page.getByTestId('shoporder-add-item-box').click()
     await page.getByTestId('shoporder-submit').click()
+    await confirmSubmitShopOrder(page)
     await page.getByTestId('shoporder-new-order').click()
 
     await expect(page.getByTestId('shoporder-delivery-date')).toHaveValue('2026-06-11')
@@ -123,6 +138,7 @@ test.describe('shop order workspace regressions', () => {
     await expect(itemsList).toContainText('Special order bottled water')
 
     await page.getByTestId('shoporder-submit').click()
+    await confirmSubmitShopOrder(page)
 
     await expect(page.getByTestId('shoporder-comments')).toHaveCount(0)
     await expect(itemsList).toContainText('Box')
@@ -249,6 +265,7 @@ test.describe('shop order workspace regressions', () => {
     await expandAllCatalogFolders(page)
     await page.getByTestId('shoporder-add-item-box').click()
     await page.getByTestId('shoporder-order-item-remove-item-box').click()
+    await confirmRemoveOrderItem(page)
 
     await expect(page.getByTestId('shoporder-empty')).toBeVisible()
     await expect(page.getByTestId('shoporder-order-item-item-box')).toHaveCount(0)
@@ -269,6 +286,7 @@ test.describe('shop order workspace regressions', () => {
       }))
       .toBe('Keep this read only after submit')
     await page.getByTestId('shoporder-submit').click()
+    await confirmSubmitShopOrder(page)
 
     await expect(page.getByTestId('shoporder-comments')).toHaveCount(0)
     await expect(page.getByTestId('shoporder-comments-readonly')).toHaveText('Keep this read only after submit')
@@ -282,6 +300,7 @@ test.describe('shop order workspace regressions', () => {
     await expandAllCatalogFolders(page)
     await page.getByTestId('shoporder-add-item-box').click()
     await page.getByTestId('shoporder-submit').click()
+    await confirmSubmitShopOrder(page)
 
     await expect(page.locator('.shop-orders-workspace-strip__identity')).toContainText('Order #20260604163341')
     await expect(page.locator('.shop-orders-history-list')).toContainText('Order #20260604163341')

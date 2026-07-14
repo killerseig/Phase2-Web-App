@@ -276,9 +276,15 @@ Add first tests around:
 
 ### Component Tests
 
-Good first component tests:
+Current coverage:
 
-- `RecipientEditor`
+- `src/__tests__/RecipientEditor.spec.ts` covers the shared recipient editor public contract: editable input updates, add/remove events, disabled behavior, read-only/default recipient rendering, empty labels, hints, counts, and placeholders.
+- `src/__tests__/JobDashboardComponents.spec.ts` covers the extracted Job Dashboard presentation contract: module card links/test ids, module grid route construction, selected-job metadata, and missing-job empty state.
+- `src/__tests__/AppMobilePanelTabs.spec.ts` covers the shared responsive panel-tab primitive contract: tablist labeling, active tab state, and emitted panel keys.
+- `src/__tests__/AppStatusMessage.spec.ts` covers the shared status-message primitive contract: default status rendering, error alert rendering, and empty-state non-rendering.
+
+Good next component tests:
+
 - `SaveStatusIndicator`
 - `AppSplitWorkspace`
 - `ConfirmAction`
@@ -290,6 +296,22 @@ Coverage expectations:
 - assert public props/events/slots instead of private implementation details
 - cover disabled/loading/error states for shared controls
 - cover keyboard/focus behavior for interactive shared controls where practical
+
+### Unit Tests
+
+Current coverage:
+
+- `src/__tests__/capabilities.spec.ts` locks in the current frontend capability behavior, including `project-manager` mapping to field-workflow access for now, admin-only area access, assigned-job route access, visible-job fallback access, and the temporary unassigned-timecard route exception.
+- `src/__tests__/authService.spec.ts` covers auth profile normalization for complete records, missing/unknown fields, invalid assigned-job IDs, unknown roles, and inactive users.
+- `src/__tests__/recipientEmails.spec.ts` covers shared recipient email normalization, validation, filtering, and duplicate removal used by Jobs and Daily Logs.
+- `src/__tests__/routerQuery.spec.ts` covers shared route query-string normalization used by public auth routes.
+- `src/__tests__/directoryFilters.spec.ts` covers shared directory active/inactive/both filtering.
+- `src/__tests__/timecardCardSelection.spec.ts` and `src/__tests__/timecardSaveQueue.spec.ts` cover timecard UI state and save queue behavior.
+
+Near-term additions:
+
+- role/capability matrix cases when Payroll and Shop Foreman are added
+- shared component event contracts as `RecipientEditor`, confirmation, and split workspace primitives stabilize
 
 ### Composable Tests
 

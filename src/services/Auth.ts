@@ -1,6 +1,9 @@
 import { updatePassword } from 'firebase/auth'
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
+import type { UserProfile } from '@/types/domain'
+import { normalizeRoleKey } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
 interface VerifySetupTokenRequest {
@@ -20,6 +23,77 @@ interface SetUserPasswordRequest {
 
 interface RequestPasswordResetEmailRequest {
   email: string
+}
+
+interface AuthUserProfileSeed {
+  displayName?: string | null
+  email?: string | null
+}
+
+function normalizeAssignedJobIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
+export function normalizeAuthUserProfile(uid: string, data: Record<string, unknown>): UserProfile {
+  return {
+    id: uid,
+    email: typeof data.email === 'string' ? data.email : null,
+    firstName: typeof data.firstName === 'string' ? data.firstName : null,
+    lastName: typeof data.lastName === 'string' ? data.lastName : null,
+    role: normalizeRoleKey(data.role),
+    active: data.active !== false,
+    assignedJobIds: normalizeAssignedJobIds(data.assignedJobIds),
+  }
+}
+
+export async function getOrCreateUserProfile(
+  uid: string,
+  authUser: AuthUserProfileSeed | null,
+): Promise<UserProfile> {
+  const { db } = requireFirebaseServices()
+  const profileRef = doc(db, 'users', uid)
+  const snapshot = await getDoc(profileRef)
+
+  if (snapshot.exists()) {
+    return normalizeAuthUserProfile(snapshot.id, snapshot.data())
+  }
+
+  await setDoc(profileRef, {
+    email: authUser?.email ?? null,
+    displayName: authUser?.displayName || null,
+    firstName: null,
+    lastName: null,
+    role: 'none',
+    active: true,
+    assignedJobIds: [],
+    createdAt: serverTimestamp(),
+  })
+
+  return {
+    id: uid,
+    email: authUser?.email ?? null,
+    firstName: null,
+    lastName: null,
+    role: 'none',
+    active: true,
+    assignedJobIds: [],
+  }
+}
+
+export function subscribeUserProfile(
+  uid: string,
+  onProfile: (profile: UserProfile | null) => void,
+  onError: (error: unknown) => void,
+) {
+  const { db } = requireFirebaseServices()
+  return onSnapshot(
+    doc(db, 'users', uid),
+    (snapshot) => {
+      onProfile(snapshot.exists() ? normalizeAuthUserProfile(snapshot.id, snapshot.data()) : null)
+    },
+    onError,
+  )
 }
 
 export async function sendPasswordResetEmail(email: string): Promise<void> {

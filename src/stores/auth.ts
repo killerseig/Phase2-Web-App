@@ -6,12 +6,17 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth'
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
+import {
+  canAccessAdminArea,
+  canAccessProfileAssignedJob,
+  getEffectiveRole,
+  hasCurrentWorkspaceAccess,
+} from '@/auth/capabilities'
 import { hasFirebaseConfig, requireFirebaseServices } from '@/firebase'
+import { getOrCreateUserProfile, subscribeUserProfile } from '@/services/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { getE2EAuthState, isE2EActive } from '@/testing/e2eRuntime'
-import type { RoleKey, RawRoleKey, UserProfile } from '@/types/domain'
-import { normalizeRoleKey, toEffectiveRole } from '@/types/domain'
+import type { EffectiveRoleKey, RawRoleKey, UserProfile } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
 type FirebaseLikeError = Error & {
@@ -21,23 +26,6 @@ type FirebaseLikeError = Error & {
 let authInitPromise: Promise<void> | null = null
 let unsubscribeAuth: (() => void) | null = null
 let unsubscribeProfile: (() => void) | null = null
-
-function normalizeAssignedJobIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.filter((entry): entry is string => typeof entry === 'string')
-}
-
-function normalizeUserProfile(uid: string, data: Record<string, unknown>): UserProfile {
-  return {
-    id: uid,
-    email: typeof data.email === 'string' ? data.email : null,
-    firstName: typeof data.firstName === 'string' ? data.firstName : null,
-    lastName: typeof data.lastName === 'string' ? data.lastName : null,
-    role: normalizeRoleKey(data.role),
-    active: data.active !== false,
-    assignedJobIds: normalizeAssignedJobIds(data.assignedJobIds),
-  }
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -59,14 +47,14 @@ export const useAuthStore = defineStore('auth', () => {
   const ready = ref(false)
 
   const rawRole = computed<RawRoleKey>(() => profile.value?.role ?? 'none')
-  const roleKey = computed<RoleKey>(() => toEffectiveRole(rawRole.value))
+  const roleKey = computed<EffectiveRoleKey>(() => getEffectiveRole(rawRole.value))
   const isAuthenticated = computed(() => currentUser.value !== null)
-  const hasWorkspaceAccess = computed(() => (
-    currentUser.value !== null
-    && (profile.value?.active ?? true)
-    && roleKey.value !== 'none'
-  ))
-  const isAdmin = computed(() => roleKey.value === 'admin')
+  const hasWorkspaceAccess = computed(() => hasCurrentWorkspaceAccess({
+    active: profile.value?.active ?? true,
+    authenticated: currentUser.value !== null,
+    rawRole: rawRole.value,
+  }))
+  const isAdmin = computed(() => canAccessAdminArea(rawRole.value))
   const displayName = computed(() => {
     const first = profile.value?.firstName?.trim() ?? ''
     const last = profile.value?.lastName?.trim() ?? ''
@@ -81,40 +69,11 @@ export const useAuthStore = defineStore('auth', () => {
     unsubscribeProfile = null
   }
 
-  function applyProfileState(uid: string, data: Record<string, unknown>) {
-    profile.value = normalizeUserProfile(uid, data)
-  }
-
   async function hydrateProfile(uid: string, authUser: User | null) {
-    const { db } = requireFirebaseServices()
-    const profileRef = doc(db, 'users', uid)
-    const snapshot = await getDoc(profileRef)
-
-    if (snapshot.exists()) {
-      applyProfileState(snapshot.id, snapshot.data())
-      return
-    }
-
-    await setDoc(profileRef, {
-      email: authUser?.email ?? null,
+    profile.value = await getOrCreateUserProfile(uid, {
       displayName: authUser?.displayName || null,
-      firstName: null,
-      lastName: null,
-      role: 'none',
-      active: true,
-      assignedJobIds: [],
-      createdAt: serverTimestamp(),
-    })
-
-    profile.value = {
-      id: uid,
       email: authUser?.email ?? null,
-      firstName: null,
-      lastName: null,
-      role: 'none',
-      active: true,
-      assignedJobIds: [],
-    }
+    })
   }
 
   async function hydrateProfileWithRetry(uid: string, authUser: User | null) {
@@ -141,19 +100,17 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function setupProfileListener(uid: string) {
-    const { db } = requireFirebaseServices()
-
     clearProfileListener()
 
-    unsubscribeProfile = onSnapshot(
-      doc(db, 'users', uid),
-      (snapshot) => {
-        if (!snapshot.exists()) {
+    unsubscribeProfile = subscribeUserProfile(
+      uid,
+      (nextProfile) => {
+        if (!nextProfile) {
           void signOut()
           return
         }
 
-        applyProfileState(snapshot.id, snapshot.data())
+        profile.value = nextProfile
 
         if (profile.value && !profile.value.active) {
           void signOut()
@@ -266,8 +223,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function canAccessJob(jobId: string) {
-    if (isAdmin.value) return true
-    return assignedJobIds.value.includes(jobId)
+    return canAccessProfileAssignedJob({
+      assignedJobIds: assignedJobIds.value,
+      jobId,
+      rawRole: rawRole.value,
+    })
   }
 
   function getLoginErrorMessage(error: unknown) {

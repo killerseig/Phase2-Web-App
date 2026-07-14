@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AuthCard from '@/components/auth/AuthCard.vue'
+import AppField from '@/components/common/AppField.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import AppTextInput from '@/components/common/AppTextInput.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { useRoute, useRouter } from 'vue-router'
 import { hasFirebaseConfig } from '@/firebase'
 import { setPasswordFromSetupLink, verifySetupToken } from '@/services/auth'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from '@/utils/normalizeError'
+import { readFirstQueryParam } from '@/utils/routerQuery'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,12 +32,6 @@ useToastMessages([
   { source: info, severity: 'success', summary: 'Create Password' },
 ])
 
-function readQueryParam(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (Array.isArray(value) && typeof value[0] === 'string') return value[0]
-  return ''
-}
-
 async function verifyLink() {
   if (!hasFirebaseConfig) {
     error.value = 'Firebase is not configured yet. Add the v1 VITE_FIREBASE_* values first.'
@@ -40,8 +39,8 @@ async function verifyLink() {
     return
   }
 
-  const nextToken = readQueryParam(route.query.setupToken)
-  const nextUid = readQueryParam(route.query.uid)
+  const nextToken = readFirstQueryParam(route.query.setupToken)
+  const nextUid = readFirstQueryParam(route.query.uid)
 
   if (!nextToken || !nextUid) {
     error.value = 'Invalid setup link. Please request a new password creation link.'
@@ -110,55 +109,48 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="auth-page">
-    <div class="auth-card">
-      <span class="auth-card__eyebrow">Phase 2</span>
-      <h1 class="auth-card__title">Create Your Password</h1>
-      <p class="auth-card__copy">
-        Finish the admin-created account setup using the same link flow from the current app.
-      </p>
+  <AuthCard
+    eyebrow="Phase 2"
+    title="Create Your Password"
+    copy="Finish the admin-created account setup using the same link flow from the current app."
+  >
+    <AppStatusMessage v-if="verifying" class="auth-card__status">
+      Verifying your setup link...
+    </AppStatusMessage>
 
-      <div v-if="verifying" class="auth-card__note">
-        Verifying your setup link...
-      </div>
+    <template v-else-if="email">
+      <AppField class="auth-field" label="Email">
+        <AppTextInput :model-value="email" type="email" readonly />
+      </AppField>
 
-      <template v-else-if="email">
-        <div class="auth-field">
-          <label>Email</label>
-          <input :value="email" type="email" readonly />
-        </div>
-
-        <div class="auth-field">
-          <label for="setup-password">New Password</label>
-          <input
-            id="setup-password"
-            v-model="password"
-            type="password"
-            autocomplete="new-password"
-            placeholder="Create a secure password"
-          />
-        </div>
-
-        <div class="auth-field">
-          <label for="setup-confirm-password">Confirm Password</label>
-          <input
-            id="setup-confirm-password"
-            v-model="confirmPassword"
-            type="password"
-            autocomplete="new-password"
-            placeholder="Repeat your password"
-          />
-        </div>
-
-        <AppLoadingButton
-          class="auth-card__button"
-          variant="primary"
-          label="Create Password & Login"
-          loading-label="Creating Password..."
-          :loading="loading"
-          @click="handleSubmit"
+      <AppField class="auth-field" label="New Password">
+        <AppTextInput
+          id="setup-password"
+          v-model="password"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Create a secure password"
         />
-      </template>
-    </div>
-  </div>
+      </AppField>
+
+      <AppField class="auth-field" label="Confirm Password">
+        <AppTextInput
+          id="setup-confirm-password"
+          v-model="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Repeat your password"
+        />
+      </AppField>
+
+      <AppLoadingButton
+        class="auth-card__button"
+        variant="primary"
+        label="Create Password & Login"
+        loading-label="Creating Password..."
+        :loading="loading"
+        @click="handleSubmit"
+      />
+    </template>
+  </AuthCard>
 </template>

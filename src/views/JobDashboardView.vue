@@ -1,21 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import JobDashboardHeader from '@/components/jobs/JobDashboardHeader.vue'
+import ModuleLauncherGrid from '@/components/jobs/ModuleLauncherGrid.vue'
+import type { ModuleLauncherItem } from '@/components/jobs/ModuleLauncherGrid.vue'
+import { useRouteJobContext } from '@/composables/useRouteJobContext'
+import { useJobDashboardLifecycle } from '@/features/jobs/useJobDashboardLifecycle'
 import AppShell from '@/layouts/AppShell.vue'
-import PagePanel from '@/components/PagePanel.vue'
-import { useJobsStore } from '@/stores/jobs'
-import { formatJobTypeLabel } from '@/types/domain'
 
-const route = useRoute()
-const jobsStore = useJobsStore()
+const {
+  job,
+  jobId,
+  subscribeRouteJob,
+  stopRouteJobSubscription,
+} = useRouteJobContext()
 
-const jobId = computed(() => String(route.params.jobId ?? ''))
-const job = computed(() => {
-  if (jobsStore.currentJob?.id === jobId.value) return jobsStore.currentJob
-  return jobsStore.jobs.find((item) => item.id === jobId.value) ?? null
-})
-
-const modules = [
+const modules: ModuleLauncherItem[] = [
   {
     label: 'Timecards',
     detail: 'Weekly card workflow stays the first production priority.',
@@ -33,54 +31,25 @@ const modules = [
   },
 ]
 
-function syncJobSubscription() {
-  if (!jobId.value) return
-  jobsStore.subscribeJob(jobId.value)
-}
-
-onMounted(() => {
-  syncJobSubscription()
-})
-
-watch(jobId, () => {
-  syncJobSubscription()
-})
-
-onUnmounted(() => {
-  jobsStore.stopCurrentJobSubscription()
+useJobDashboardLifecycle({
+  jobId,
+  subscribeRouteJob,
+  stopRouteJobSubscription,
 })
 </script>
 
 <template>
   <AppShell>
     <div class="workspace-grid" data-testid="job-dashboard-page">
-      <PagePanel
-        eyebrow="Job"
-        :title="job ? `${job.code || 'No Job #'} · ${job.name}` : 'Job not found'"
-        description="Foremen land on the job dashboard first, then choose a module."
-      >
-        <div class="dashboard-header">
-          <div class="dashboard-header__meta">
-            <span v-if="job">Type: {{ formatJobTypeLabel(job.type) }}</span>
-            <span v-if="job?.gc">GC: {{ job.gc }}</span>
-            <span>Mode: module launcher</span>
-          </div>
-        </div>
-      </PagePanel>
-
-      <div class="module-launcher-grid">
-        <RouterLink
-          v-for="module in modules"
-          :key="module.label"
-          :to="`/jobs/${route.params.jobId}/${module.to}`"
-          class="module-launcher"
-          :data-testid="`job-dashboard-module-${module.to}`"
-        >
-          <span class="module-launcher__eyebrow">{{ module.label }}</span>
-          <strong>{{ module.label }}</strong>
-          <p>{{ module.detail }}</p>
-        </RouterLink>
-      </div>
+      <JobDashboardHeader :job="job" />
+      <ModuleLauncherGrid :job-id="jobId" :modules="modules" />
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.workspace-grid {
+  display: grid;
+  gap: 1rem;
+}
+</style>

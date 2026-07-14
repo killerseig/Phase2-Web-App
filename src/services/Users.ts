@@ -21,7 +21,7 @@ import {
   updateE2EUser,
 } from '@/testing/e2eRuntime'
 import type { RoleKey, UserProfile } from '@/types/domain'
-import { normalizeRoleKey, roleCanBeAssignedJobs, toEffectiveRole } from '@/types/domain'
+import { normalizeRoleKey, roleCanBeAssignedJobs } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
 export interface CreateUserInput {
@@ -263,12 +263,4 @@ export async function sendPendingInvitesByAdmin(): Promise<SendPendingUserInvite
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to send pending invites.'))
   }
-}
-
-export function getRoleBadgeLabel(role: UserProfile['role']): string {
-  if (role === 'project-manager') return 'Project Manager'
-  const effectiveRole = toEffectiveRole(role)
-  if (effectiveRole === 'admin') return 'Admin'
-  if (effectiveRole === 'foreman') return 'Foreman'
-  return 'No Access'
 }

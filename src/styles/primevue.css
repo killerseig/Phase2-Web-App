@@ -1,0 +1,19 @@
+.p-toast .p-toast-message {
+  backdrop-filter: blur(10px);
+}
+
+.p-toast .p-toast-message.p-toast-message-success {
+  background: rgba(236, 253, 243, 0.66);
+}
+
+.p-toast .p-toast-message.p-toast-message-info {
+  background: rgba(239, 246, 255, 0.66);
+}
+
+.p-toast .p-toast-message.p-toast-message-warn {
+  background: rgba(254, 252, 232, 0.7);
+}
+
+.p-toast .p-toast-message.p-toast-message-error {
+  background: rgba(254, 242, 242, 0.7);
+}

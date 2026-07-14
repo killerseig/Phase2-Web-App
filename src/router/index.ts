@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { canAccessAdminArea, canAccessJobRoute } from '@/auth/capabilities'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 
@@ -159,20 +160,20 @@ router.beforeEach(async (to) => {
     return { name: 'login' }
   }
 
-  if (to.meta.adminOnly && !auth.isAdmin) {
+  if (to.meta.adminOnly && !canAccessAdminArea(auth.rawRole)) {
     return { name: 'jobs' }
   }
 
-  const isTimecardRoute = to.name === 'timecards'
-  const canOpenUnassignedTimecardRoute = isTimecardRoute && auth.roleKey === 'foreman'
   const routeJobId = typeof to.params.jobId === 'string' ? to.params.jobId : ''
-  const currentUid = auth.currentUser?.uid ?? ''
-  const canAccessVisibleAssignedJob = !!routeJobId
-    && auth.roleKey === 'foreman'
-    && !!currentUid
-    && jobs.jobs.some((job) => job.id === routeJobId && job.assignedForemanIds.includes(currentUid))
 
-  if (routeJobId && !auth.canAccessJob(routeJobId) && !canAccessVisibleAssignedJob && !canOpenUnassignedTimecardRoute) {
+  if (!canAccessJobRoute({
+    assignedJobIds: auth.assignedJobIds,
+    currentUserId: auth.currentUser?.uid ?? null,
+    jobId: routeJobId,
+    rawRole: auth.rawRole,
+    routeName: to.name,
+    visibleJobs: jobs.jobs,
+  })) {
     return { name: 'jobs' }
   }
 

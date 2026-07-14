@@ -57,6 +57,10 @@ test.describe('admin management workflows', () => {
       .toBe('Lead Installer')
 
     await page.getByRole('button', { name: 'Delete Employee' }).click()
+    await page
+      .getByRole('dialog', { name: 'Delete employee?' })
+      .getByRole('button', { name: 'Delete Employee' })
+      .click()
 
     await expect(page.getByText('Employee deleted.')).toBeVisible()
     await expect(employeeDirectoryCode).toHaveCount(0)
@@ -94,6 +98,10 @@ test.describe('admin management workflows', () => {
       .toEqual([])
 
     await page.getByRole('button', { name: 'Delete User', exact: true }).click()
+    await page
+      .getByRole('dialog', { name: 'Delete user?' })
+      .getByRole('button', { name: 'Delete User', exact: true })
+      .click()
 
     await expect(page.getByText('User deleted.')).toBeVisible()
     await expect(samRow).toHaveCount(0)

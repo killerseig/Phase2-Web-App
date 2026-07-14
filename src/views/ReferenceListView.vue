@@ -29,3 +29,17 @@ const title = computed(() => {
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.catalog-tree-preview {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.catalog-tree-preview__node {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+</style>

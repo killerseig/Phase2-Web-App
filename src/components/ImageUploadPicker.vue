@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import FileUpload, { type FileUploadSelectEvent, type FileUploadUploaderEvent } from 'primevue/fileupload'
+import AppButton from '@/components/common/AppButton.vue'
+import AppTextarea from '@/components/common/AppTextarea.vue'
 import type { DailyLogAttachmentRecord } from '@/types/domain'
 
 export interface ImageUploadEntry {
@@ -84,9 +86,8 @@ function closePreview() {
   previewImage.value = null
 }
 
-function handleUploadedDescriptionInput(path: string, event: Event) {
-  const value = event.target instanceof HTMLTextAreaElement ? event.target.value : ''
-  emit('updateDescription', { path, description: value })
+function handleUploadedDescriptionUpdate(path: string, description: string) {
+  emit('updateDescription', { path, description })
 }
 </script>
 
@@ -108,14 +109,13 @@ function handleUploadedDescriptionInput(path: string, event: Event) {
       <template #header="{ chooseCallback }">
         <div class="image-upload-picker__header">
           <div class="image-upload-picker__buttons">
-            <button
-              type="button"
-              class="app-button image-upload-picker__icon-button"
+            <AppButton
+              class="image-upload-picker__icon-button"
               :disabled="disabled || busy"
               @click="chooseCallback()"
             >
               <i class="pi pi-images" aria-hidden="true"></i>
-            </button>
+            </AppButton>
           </div>
 
           <div
@@ -161,24 +161,24 @@ function handleUploadedDescriptionInput(path: string, event: Event) {
 
                 <label class="image-upload-picker__field">
                   <span>{{ descriptionLabel }}</span>
-                  <textarea
-                    :value="attachment.description"
+                  <AppTextarea
+                    :model-value="attachment.description"
                     rows="3"
                     :disabled="disabled || busy"
                     :placeholder="descriptionLabel"
-                    @input="handleUploadedDescriptionInput(attachment.path, $event)"
+                    @update:model-value="handleUploadedDescriptionUpdate(attachment.path, $event)"
                     @blur="emit('commitDescription')"
-                  ></textarea>
+                  />
                 </label>
 
-                <button
-                  type="button"
-                  class="app-button image-upload-picker__remove"
+                <AppButton
+                  class="image-upload-picker__remove"
+                  variant="danger"
                   :disabled="disabled || busy"
                   @click="emit('remove', attachment.path)"
                 >
                   Delete
-                </button>
+                </AppButton>
               </article>
             </div>
           </section>
@@ -198,13 +198,12 @@ function handleUploadedDescriptionInput(path: string, event: Event) {
     </FileUpload>
 
     <div v-if="previewImage" class="image-upload-picker__lightbox" @click.self="closePreview">
-      <button
-        type="button"
-        class="app-button image-upload-picker__lightbox-close"
+      <AppButton
+        class="image-upload-picker__lightbox-close"
         @click="closePreview"
       >
         <i class="pi pi-times" aria-hidden="true"></i>
-      </button>
+      </AppButton>
 
       <div class="image-upload-picker__lightbox-body">
         <img
@@ -251,11 +250,6 @@ function handleUploadedDescriptionInput(path: string, event: Event) {
   width: 2.9rem;
   min-width: 2.9rem;
   padding: 0;
-}
-
-.image-upload-picker__remove {
-  border-color: rgba(255, 125, 107, 0.24);
-  color: var(--danger);
 }
 
 .image-upload-picker__progress-shell {
@@ -356,6 +350,9 @@ function handleUploadedDescriptionInput(path: string, event: Event) {
 }
 
 .image-upload-picker__field {
+  --app-textarea-min-height: 3.35rem;
+  --app-textarea-padding: 0.6rem 0.75rem;
+  --app-textarea-background: rgba(255, 255, 255, 0.045);
   display: grid;
   gap: 0.3rem;
   color: var(--text-muted);
@@ -363,17 +360,6 @@ function handleUploadedDescriptionInput(path: string, event: Event) {
 
 .image-upload-picker__field span {
   font-size: 0.78rem;
-}
-
-.image-upload-picker__field textarea {
-  width: 100%;
-  min-height: 3.35rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  color: var(--text);
-  resize: vertical;
 }
 
 .image-upload-picker__empty {

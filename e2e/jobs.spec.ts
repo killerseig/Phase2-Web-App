@@ -150,6 +150,7 @@ test.describe('jobs page regressions', () => {
     const detailPanel = page.locator('.jobs-detail')
 
     await detailPanel.getByRole('button', { name: 'Archive Job' }).click()
+    await page.getByRole('dialog', { name: 'Archive job?' }).getByRole('button', { name: 'Archive Job' }).click()
     await expect(page.getByTestId('job-card-3C')).toHaveCount(0)
     await expect
       .poll(async () => page.evaluate(() => {
@@ -163,6 +164,7 @@ test.describe('jobs page regressions', () => {
     await page.getByTestId('jobs-status-filter').selectOption('inactive')
     await page.getByTestId('job-card-3C').click()
     await detailPanel.getByRole('button', { name: 'Restore Job' }).click()
+    await page.getByRole('dialog', { name: 'Restore job?' }).getByRole('button', { name: 'Restore Job' }).click()
     await page.getByTestId('jobs-status-filter').selectOption('active')
 
     await expect(page.getByTestId('job-card-3C')).toBeVisible()
@@ -177,6 +179,7 @@ test.describe('jobs page regressions', () => {
       .toBe(true)
 
     await detailPanel.getByRole('button', { name: 'Delete Job' }).click()
+    await page.getByRole('dialog', { name: 'Delete job?' }).getByRole('button', { name: 'Delete Job' }).click()
 
     await expect(page.getByTestId('job-card-3C')).toHaveCount(0)
     await expect

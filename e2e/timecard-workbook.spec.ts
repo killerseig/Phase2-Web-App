@@ -23,6 +23,20 @@ async function createSelectedWeek(page: Page) {
   await expect(page.getByTestId('create-card')).toBeEnabled()
 }
 
+async function confirmSubmitWeek(page: Page) {
+  await page
+    .getByRole('dialog', { name: 'Submit week?' })
+    .getByRole('button', { name: 'Submit Week' })
+    .click()
+}
+
+async function confirmDeleteCard(page: Page) {
+  await page
+    .getByRole('dialog', { name: 'Delete timecard?' })
+    .getByRole('button', { name: 'Delete Card' })
+    .click()
+}
+
 test.describe('timecard workbook regressions', () => {
   test('timecards require the foreman to choose a week ending date before creating a week', async ({ page }) => {
     const fixture = createTimecardsFixture({ seededCard: false })
@@ -393,6 +407,7 @@ test.describe('timecard workbook regressions', () => {
 
     await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(1)
     await page.getByRole('button', { name: 'Submit Week' }).click()
+    await confirmSubmitWeek(page)
 
     await expect(page.getByText('Week submitted and emailed to 1 recipient.')).toBeVisible()
     await expect
@@ -440,6 +455,7 @@ test.describe('timecard workbook regressions', () => {
     await selectWeekEnding(page)
 
     await page.getByRole('button', { name: 'Submit Week' }).click()
+    await confirmSubmitWeek(page)
 
     await expect(page.getByText('Week submitted and emailed to 1 recipient.')).toBeVisible()
   })
@@ -465,6 +481,7 @@ test.describe('timecard workbook regressions', () => {
     await expect(page.getByTestId('timecards-card-card-e2e')).toBeVisible()
 
     await page.getByRole('button', { name: 'Delete Card' }).click()
+    await confirmDeleteCard(page)
 
     await expect(page.getByText('Removed the timecard.')).toBeVisible()
     await expect(page.getByTestId('timecards-card-card-e2e')).toHaveCount(0)

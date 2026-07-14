@@ -10,21 +10,19 @@ The goal is a consistent, professional app without a giant global stylesheet tha
 
 The app currently has:
 
-- one global stylesheet at `src/styles/main.css`
-- global theme tokens
-- global base/reset rules
+- a global stylesheet entry point at `src/styles/main.css`
+- split global foundation files for tokens, reset, base, tiny app-wide utilities, shared button-family styles, and PrimeVue overrides
 - app shell styles
-- shared primitive styles such as buttons, select fields, panels, empty states, and status messages
-- auth, jobs, dashboard, quick-link, workflow, and preview styles in the same global file
+- shared primitive styles mostly colocated with components, with the AppButton family currently sharing a global class contract
+- page and workflow styles mostly colocated in Vue views/components, with remaining cleanup handled slice-by-slice
 - many large Vue views with `<style scoped>` blocks
 - PrimeVue configured with `unstyled: true`
 
 This is a workable transition state, but not the ideal final shape.
 
-The main problem is responsibility mixing:
+The remaining problem is responsibility mixing:
 
-- `main.css` is both design-system foundation and page-specific styling.
-- Shared components depend on global classes instead of owning their own visual contract.
+- Some shared component families still depend on a global class contract, such as the AppButton family.
 - Some style names describe pages instead of reusable primitives.
 - Tokens exist, but the token set is not yet complete enough to prevent one-off spacing, radius, shadow, and color choices.
 
@@ -315,6 +313,12 @@ Do this gradually:
 8. Audit `main.css` after each extraction and delete migrated global selectors.
 
 Do not do a big-bang CSS migration.
+
+Current implementation note:
+
+- `main.css` now imports `tokens.css`, `reset.css`, `base.css`, `utilities.css`, `button-family.css`, and `primevue.css`.
+- `button-family.css` remains global because `AppButton`, `AppButtonLink`, and `AppLoadingButton` intentionally share the same button class contract until that family is redesigned together.
+- `utilities.css` currently owns tiny app-wide accessibility utilities such as `.sr-only` and `.visually-hidden`.
 
 ## Visual QA Checklist
 

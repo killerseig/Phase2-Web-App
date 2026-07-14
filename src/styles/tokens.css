@@ -1,0 +1,124 @@
+:root {
+  /* Typography */
+  --font-sans: "Aptos", "Segoe UI Variable Text", "Trebuchet MS", sans-serif;
+  --font-body: var(--font-sans);
+  --font-mono: "Cascadia Code", "Consolas", monospace;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.35rem;
+  --line-height-tight: 1.15;
+  --line-height-normal: 1.5;
+  --letter-spacing-eyebrow: 0.16em;
+
+  /* App backgrounds */
+  --app-root-background:
+    radial-gradient(circle at 16% -8%, rgba(83, 176, 213, 0.2), transparent 32%),
+    radial-gradient(circle at 88% 2%, rgba(229, 168, 83, 0.1), transparent 26%),
+    linear-gradient(145deg, #111923 0%, #15212b 52%, #10171f 100%);
+  --app-body-background:
+    radial-gradient(circle at 18% -12%, rgba(99, 199, 230, 0.18), transparent 31%),
+    radial-gradient(circle at 82% 0%, rgba(239, 180, 93, 0.09), transparent 26%),
+    linear-gradient(145deg, #0b1219 0%, #13202b 45%, #0d151d 100%);
+
+  /* Legacy color tokens. Keep these until feature CSS is migrated. */
+  --bg: #111923;
+  --bg-elevated: #17222d;
+  --bg-panel: #1c2a36;
+  --bg-soft: #263746;
+  --bg-softest: #334858;
+  --bg-accent: #173f50;
+  --surface: rgba(26, 38, 50, 0.88);
+  --surface-raised: rgba(31, 45, 58, 0.94);
+  --surface-glass: rgba(23, 34, 45, 0.78);
+  --field: rgba(237, 245, 248, 0.055);
+  --field-hover: rgba(237, 245, 248, 0.078);
+  --border: rgba(168, 190, 209, 0.17);
+  --border-soft: rgba(168, 190, 209, 0.09);
+  --border-strong: rgba(112, 205, 240, 0.42);
+  --text: #edf5f8;
+  --text-muted: #b2c2ce;
+  --text-soft: #8294a4;
+  --accent: #63c7e6;
+  --accent-strong: #91dcff;
+  --accent-ink: #07151c;
+  --accent-warm: #efb45d;
+  --success: #7fd39a;
+  --danger: #ff816f;
+  --warning: #eac064;
+
+  /* Normalized color tokens for new shared components and feature CSS. */
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-soft: var(--bg-soft);
+  --color-bg-softest: var(--bg-softest);
+  --color-bg-accent: var(--bg-accent);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-glass: var(--surface-glass);
+  --color-field: var(--field);
+  --color-field-hover: var(--field-hover);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-soft: var(--text-soft);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-warm: var(--accent-warm);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  /* Focus and depth */
+  --focus-ring: 0 0 0 3px rgba(99, 199, 230, 0.2);
+  --shadow: 0 18px 42px rgba(3, 9, 15, 0.34);
+  --shadow-soft: 0 10px 28px rgba(3, 9, 15, 0.22);
+  --shadow-hard: 0 26px 68px rgba(1, 7, 12, 0.44);
+  --shadow-sm: var(--shadow-soft);
+  --shadow-md: var(--shadow);
+  --shadow-lg: var(--shadow-hard);
+  --glow-accent: 0 0 30px rgba(99, 199, 230, 0.16);
+
+  /* Shape */
+  --radius-xs: 7px;
+  --radius: 16px;
+  --radius-sm: 11px;
+  --radius-md: var(--radius);
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Workflow density */
+  --control-height-sm: 2rem;
+  --control-height-md: 2.5rem;
+  --control-height-lg: 3rem;
+  --pane-padding: var(--space-6);
+  --pane-padding-compact: var(--space-4);
+  --row-gap: var(--space-4);
+  --row-gap-compact: var(--space-2);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Documented breakpoints for CSS and component planning. */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 900px;
+  --breakpoint-lg: 1180px;
+}

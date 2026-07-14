@@ -1,13 +1,40 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
+import TimecardWorkbookHeader from '@/components/timecards/TimecardWorkbookHeader.vue'
+import TimecardWorkbookFooter from '@/components/timecards/TimecardWorkbookFooter.vue'
+import {
+  TIMECARD_LINE_ROW_KINDS as lineRowKinds,
+  formatTimecardCurrency as formatCurrency,
+  formatTimecardHours as formatHours,
+  getTimecardLineDayDisplayValue,
+  getTimecardLineDiffValue,
+  getTimecardLineHoursTotal,
+  getTimecardLineOffDisplayValue,
+  getTimecardLineProductionDisplayValue,
+  parseNullableTimecardNumber as parseNullableNumber,
+  parseTimecardNumericDraft as parseNumericDraft,
+  sanitizeTimecardWageInputValue as sanitizeWageInputValue,
+  type TimecardLineDayField as LineDayField,
+  type TimecardLineOffField as LineOffField,
+  type TimecardLineRowKind as LineRowKind,
+} from '@/features/timecards/cardDisplayHelpers'
+import {
+  findNextGridTimecardInput as findNextGridInput,
+  findNextTimecardInputByGeometry as findNextInputByGeometry,
+  focusAndSelectTimecardInput as focusAndSelectInput,
+  getTimecardNavigationDirection as getNavigationDirection,
+  isTimecardNavigableInput as isNavigableInput,
+  shouldUseHorizontalTimecardNavigation as shouldUseHorizontalNavigation,
+  type TimecardNavigableInputElement as NavigableInputElement,
+} from '@/features/timecards/workbookNavigation'
 import {
   TIMECARD_VISIBLE_DAY_INDEXES,
   TIMECARD_VISIBLE_DAY_LABELS,
   buildCardDisplayName,
-  calculateLineSummaryUnitCost,
   calculateRegularAndOvertimeHours,
 } from '@/features/timecards/workbook'
 import type { TimecardCardRecord } from '@/types/domain'
+import { readInputValue } from '@/utils/domEvents'
 
 const props = withDefaults(defineProps<{
   card: TimecardCardRecord
@@ -33,30 +60,9 @@ const emit = defineEmits<{
 
 const dayLabels = TIMECARD_VISIBLE_DAY_LABELS
 const visibleDayIndexes = TIMECARD_VISIBLE_DAY_INDEXES
-const lineRowKinds = [
-  { key: 'hours', label: 'H', diffField: 'difH' },
-  { key: 'production', label: 'P', diffField: 'difP' },
-  { key: 'cost', label: 'C', diffField: 'difC' },
-] as const
 const visibleLineRowKinds = computed(() => (
   props.showCostValues ? lineRowKinds : lineRowKinds.filter((row) => row.key !== 'cost')
 ))
-
-type LineRowKind = (typeof lineRowKinds)[number]['key']
-type LineOffField = 'offHours' | 'offProduction' | 'offCost'
-type LineDayField = 'hours' | 'production' | 'unitCostOverride'
-type NumericDraftResult =
-  | { kind: 'empty' }
-  | { kind: 'incomplete' }
-  | { kind: 'invalid' }
-  | { kind: 'value'; value: number }
-type NavigableInputElement = HTMLInputElement | HTMLTextAreaElement
-type NavigationDirection = 'up' | 'down' | 'left' | 'right'
-type GridInputMeta = {
-  rowStart: number
-  rowEnd: number
-  col: number
-}
 
 const visibleHoursByDay = computed(() => visibleDayIndexes.map((dayIndex) => Number(props.card.totals.hoursByDay[dayIndex] ?? 0)))
 const visibleProductionByDay = computed(() => visibleDayIndexes.map((dayIndex) => Number(props.card.totals.productionByDay[dayIndex] ?? 0)))
@@ -66,86 +72,18 @@ const hoursBreakdown = computed(() => calculateRegularAndOvertimeHours(
   props.card.overtimeHoursOverride,
 ))
 const numericDrafts = reactive<Record<string, string>>({})
-const timecardNavigableInputSelector = [
-  '.timecard-card__inline-input',
-  '.timecard-card__header-input',
-  '.timecard-card__footer-input',
-  '.timecard-grid__input',
-].join(', ')
 const pendingMouseSelectInputs = new WeakSet<NavigableInputElement>()
-
-function formatWeekEnding(value: string) {
-  const parsed = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) return value
-  return `${parsed.getMonth() + 1}/${parsed.getDate()}/${parsed.getFullYear()}`
-}
-
-function formatEmployeeHeaderName(card: Pick<TimecardCardRecord, 'fullName' | 'firstName' | 'lastName' | 'employeeNumber'>) {
-  const firstName = card.firstName.trim()
-  const lastName = card.lastName.trim()
-  if (lastName && firstName) return `${lastName}, ${firstName}`
-  if (lastName || firstName) return lastName || firstName
-  return card.fullName.trim() || buildCardDisplayName(card)
-}
-
-function formatCurrency(value: number | null | undefined) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return ''
-  return `$${safe.toFixed(2)}`
-}
-
-function formatMaskedWage() {
-  return '----'
-}
-
-function formatHours(value: number | null | undefined, blankWhenZero = false) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return blankWhenZero ? '' : '0.0'
-  if (blankWhenZero && safe === 0) return ''
-  return safe.toFixed(1)
-}
-
-function formatFixedNumber(value: number | null | undefined, decimals = 2, blankWhenZero = false) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return blankWhenZero ? '' : (0).toFixed(decimals)
-  if (blankWhenZero && safe === 0) return ''
-  return safe.toFixed(decimals)
-}
-
-function formatTrimmedNumber(value: number | null | undefined, decimals = 2, blankWhenZero = false) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return blankWhenZero ? '' : (0).toFixed(decimals)
-  if (blankWhenZero && safe === 0) return ''
-  return safe.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
-}
-
-function parseNumber(value: string) {
-  const parsed = Number(value.trim())
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return 0
-  return Math.max(0, parsed)
-}
-
-function parseNullableNumber(value: string) {
-  if (!value.trim()) return null
-  const parsed = Number(value.trim())
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return null
-  return Math.max(0, parsed)
-}
 
 function hasNumericDraft(key: string) {
   return Object.prototype.hasOwnProperty.call(numericDrafts, key)
 }
 
 function getNumericFieldValue(key: string, fallback: string) {
-  return hasNumericDraft(key) ? numericDrafts[key] : fallback
+  return hasNumericDraft(key) ? (numericDrafts[key] ?? '') : fallback
 }
 
 function clearNumericDraft(key: string) {
   delete numericDrafts[key]
-}
-
-function sanitizeWageInputValue(value: string) {
-  return value.replace(/[^0-9.,]/g, '')
 }
 
 function filterWageKey(event: KeyboardEvent) {
@@ -154,20 +92,6 @@ function filterWageKey(event: KeyboardEvent) {
   if (/^[0-9]$/.test(key) || key === '.' || key === ',') return
   if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab', 'Enter', 'Escape'].includes(key)) return
   event.preventDefault()
-}
-
-function parseNumericDraft(value: string): NumericDraftResult {
-  const trimmed = value.trim().replace(/[$,]/g, '')
-  if (!trimmed) return { kind: 'empty' }
-  if (trimmed === '.' || /^\d+\.$/.test(trimmed)) return { kind: 'incomplete' }
-
-  const parsed = Number(trimmed)
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return { kind: 'invalid' }
-
-  return {
-    kind: 'value',
-    value: Math.max(0, parsed),
-  }
 }
 
 function lineOffDraftKey(lineIndex: number, field: LineOffField) {
@@ -191,25 +115,11 @@ function lineRowPosition(lineIndex: number, rowKindIndex: number) {
 }
 
 function lineHoursTotal(lineIndex: number) {
-  return props.card.lines[lineIndex]?.days.reduce((sum, day) => sum + Number(day.hours ?? 0), 0) ?? 0
-}
-
-function lineProductionTotal(lineIndex: number) {
-  return props.card.lines[lineIndex]?.days.reduce((sum, day) => sum + Number(day.production ?? 0), 0) ?? 0
-}
-
-function lineSummaryCost(lineIndex: number) {
-  const line = props.card.lines[lineIndex]
-  if (!line) return 0
-  return calculateLineSummaryUnitCost(line, props.card.wageRate, props.burden)
+  return getTimecardLineHoursTotal(props.card.lines[lineIndex])
 }
 
 function lineDiffValue(lineIndex: number, rowKind: LineRowKind) {
-  const line = props.card.lines[lineIndex]
-  if (!line) return ''
-  if (rowKind === 'hours') return line.difH
-  if (rowKind === 'production') return line.difP
-  return line.difC
+  return getTimecardLineDiffValue(props.card.lines[lineIndex], rowKind)
 }
 
 function lineDayValue(lineIndex: number, rowKind: LineRowKind, dayIndex: number) {
@@ -217,33 +127,43 @@ function lineDayValue(lineIndex: number, rowKind: LineRowKind, dayIndex: number)
   const day = line?.days[dayIndex]
   if (!line || !day) return ''
   if (rowKind === 'hours') {
-    return getNumericFieldValue(lineDayDraftKey(lineIndex, dayIndex, 'hours'), formatFixedNumber(day.hours, 2, true))
+    return getNumericFieldValue(lineDayDraftKey(lineIndex, dayIndex, 'hours'), getTimecardLineDayDisplayValue(line, rowKind, dayIndex))
   }
   if (rowKind === 'production') {
-    return getNumericFieldValue(lineDayDraftKey(lineIndex, dayIndex, 'production'), formatFixedNumber(day.production, 2, true))
+    return getNumericFieldValue(lineDayDraftKey(lineIndex, dayIndex, 'production'), getTimecardLineDayDisplayValue(line, rowKind, dayIndex))
   }
   return getNumericFieldValue(
     lineDayDraftKey(lineIndex, dayIndex, 'unitCostOverride'),
-    formatFixedNumber(day.unitCostOverride ?? day.unitCost, 2, true),
+    getTimecardLineDayDisplayValue(line, rowKind, dayIndex),
   )
 }
 
+function getLineDayField(rowKind: LineRowKind): LineDayField {
+  if (rowKind === 'hours') return 'hours'
+  if (rowKind === 'production') return 'production'
+  return 'unitCostOverride'
+}
+
 function lineProductionValue(lineIndex: number, rowKind: LineRowKind) {
-  if (rowKind === 'hours') return ''
-  if (rowKind === 'production') return formatTrimmedNumber(lineProductionTotal(lineIndex), 3, true)
-  return formatFixedNumber(lineSummaryCost(lineIndex), 3, true)
+  return getTimecardLineProductionDisplayValue(props.card.lines[lineIndex], rowKind, props.card.wageRate, props.burden, true)
 }
 
 function lineOffValue(lineIndex: number, rowKind: LineRowKind) {
   const line = props.card.lines[lineIndex]
   if (!line) return ''
   if (rowKind === 'hours') {
-    return getNumericFieldValue(lineOffDraftKey(lineIndex, 'offHours'), formatTrimmedNumber(line.offHours, 2, true))
+    return getNumericFieldValue(lineOffDraftKey(lineIndex, 'offHours'), getTimecardLineOffDisplayValue(line, rowKind))
   }
   if (rowKind === 'production') {
-    return getNumericFieldValue(lineOffDraftKey(lineIndex, 'offProduction'), formatTrimmedNumber(line.offProduction, 2, true))
+    return getNumericFieldValue(lineOffDraftKey(lineIndex, 'offProduction'), getTimecardLineOffDisplayValue(line, rowKind))
   }
-  return getNumericFieldValue(lineOffDraftKey(lineIndex, 'offCost'), formatTrimmedNumber(line.offCost, 2, true))
+  return getNumericFieldValue(lineOffDraftKey(lineIndex, 'offCost'), getTimecardLineOffDisplayValue(line, rowKind))
+}
+
+function getLineOffField(rowKind: LineRowKind): LineOffField {
+  if (rowKind === 'hours') return 'offHours'
+  if (rowKind === 'production') return 'offProduction'
+  return 'offCost'
 }
 
 function setCardField(
@@ -467,192 +387,6 @@ function commitDayField(lineIndex: number, dayIndex: number, field: LineDayField
   emit('changed')
 }
 
-function isNavigableInput(target: EventTarget | null): target is NavigableInputElement {
-  return (
-    (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
-    && target.matches(timecardNavigableInputSelector)
-  )
-}
-
-function focusAndSelectInput(input: NavigableInputElement) {
-  if (input.disabled || input.readOnly) return
-  if (document.activeElement !== input) {
-    input.focus()
-  }
-  if (document.activeElement !== input) return
-  input.select()
-}
-
-function getNavigationDirection(key: string): NavigationDirection | null {
-  if (key === 'ArrowUp') return 'up'
-  if (key === 'ArrowDown') return 'down'
-  if (key === 'ArrowLeft') return 'left'
-  if (key === 'ArrowRight') return 'right'
-  return null
-}
-
-function rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
-  return startA <= endB && startB <= endA
-}
-
-function getRangeGap(startA: number, endA: number, startB: number, endB: number) {
-  if (rangesOverlap(startA, endA, startB, endB)) return 0
-  if (endB < startA) return startA - endB
-  return startB - endA
-}
-
-function getGridInputMeta(input: NavigableInputElement): GridInputMeta | null {
-  const rowStart = Number(input.dataset.navRowStart)
-  const rowEnd = Number(input.dataset.navRowEnd)
-  const col = Number(input.dataset.navCol)
-
-  if (!Number.isFinite(rowStart) || !Number.isFinite(rowEnd) || !Number.isFinite(col)) {
-    return null
-  }
-
-  return { rowStart, rowEnd, col }
-}
-
-function shouldUseHorizontalNavigation(input: NavigableInputElement, direction: 'left' | 'right') {
-  const selectionStart = input.selectionStart
-  const selectionEnd = input.selectionEnd
-  if (selectionStart == null || selectionEnd == null) return true
-
-  const valueLength = input.value.length
-  const fullySelected = selectionStart === 0 && selectionEnd === valueLength
-  if (fullySelected) return true
-
-  if (direction === 'left') {
-    return selectionStart === 0 && selectionEnd === 0
-  }
-
-  return selectionStart === valueLength && selectionEnd === valueLength
-}
-
-function findNextGridInput(
-  current: NavigableInputElement,
-  direction: NavigationDirection,
-): NavigableInputElement | null {
-  const currentMeta = getGridInputMeta(current)
-  if (!currentMeta) return null
-
-  const sheet = current.closest('.timecard-card__sheet')
-  if (!(sheet instanceof HTMLElement)) return null
-
-  const candidates = Array.from(sheet.querySelectorAll<NavigableInputElement>(timecardNavigableInputSelector))
-    .filter((input) => input !== current && !input.disabled)
-    .map((input) => {
-      const meta = getGridInputMeta(input)
-      return meta ? { input, meta } : null
-    })
-    .filter((candidate): candidate is { input: NavigableInputElement; meta: GridInputMeta } => candidate !== null)
-
-  const scoredCandidates = candidates
-    .map((candidate) => {
-      if (direction === 'up') {
-        if (candidate.meta.rowEnd >= currentMeta.rowStart) return null
-        return {
-          ...candidate,
-          axisPenalty: candidate.meta.col === currentMeta.col ? 0 : 1,
-          primaryDistance: currentMeta.rowStart - candidate.meta.rowEnd,
-          secondaryDistance: Math.abs(candidate.meta.col - currentMeta.col),
-        }
-      }
-
-      if (direction === 'down') {
-        if (candidate.meta.rowStart <= currentMeta.rowEnd) return null
-        return {
-          ...candidate,
-          axisPenalty: candidate.meta.col === currentMeta.col ? 0 : 1,
-          primaryDistance: candidate.meta.rowStart - currentMeta.rowEnd,
-          secondaryDistance: Math.abs(candidate.meta.col - currentMeta.col),
-        }
-      }
-
-      if (direction === 'left') {
-        if (candidate.meta.col >= currentMeta.col) return null
-        if (!rangesOverlap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd)) return null
-        return {
-          ...candidate,
-          axisPenalty: 0,
-          primaryDistance: currentMeta.col - candidate.meta.col,
-          secondaryDistance: getRangeGap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd),
-        }
-      }
-
-      if (candidate.meta.col <= currentMeta.col) return null
-      if (!rangesOverlap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd)) return null
-      return {
-        ...candidate,
-        axisPenalty: 0,
-        primaryDistance: candidate.meta.col - currentMeta.col,
-        secondaryDistance: getRangeGap(candidate.meta.rowStart, candidate.meta.rowEnd, currentMeta.rowStart, currentMeta.rowEnd),
-      }
-    })
-    .filter((
-      candidate,
-    ): candidate is {
-      input: NavigableInputElement
-      meta: GridInputMeta
-      axisPenalty: number
-      primaryDistance: number
-      secondaryDistance: number
-    } => candidate !== null)
-
-  scoredCandidates.sort((left, right) => (
-    left.axisPenalty - right.axisPenalty
-    || left.primaryDistance - right.primaryDistance
-    || left.secondaryDistance - right.secondaryDistance
-  ))
-
-  return scoredCandidates[0]?.input ?? null
-}
-
-function findNextInputByGeometry(
-  current: NavigableInputElement,
-  direction: NavigationDirection,
-): NavigableInputElement | null {
-  const sheet = current.closest('.timecard-card__sheet')
-  if (!(sheet instanceof HTMLElement)) return null
-
-  const currentRect = current.getBoundingClientRect()
-  const currentCenterX = currentRect.left + currentRect.width / 2
-  const currentCenterY = currentRect.top + currentRect.height / 2
-
-  const candidates = Array.from(sheet.querySelectorAll<NavigableInputElement>(timecardNavigableInputSelector))
-    .filter((input) => input !== current && !input.disabled)
-    .map((input) => {
-      const rect = input.getBoundingClientRect()
-      const centerX = rect.left + rect.width / 2
-      const centerY = rect.top + rect.height / 2
-
-      if (direction === 'up' && centerY >= currentCenterY) return null
-      if (direction === 'down' && centerY <= currentCenterY) return null
-      if (direction === 'left' && centerX >= currentCenterX) return null
-      if (direction === 'right' && centerX <= currentCenterX) return null
-
-      return {
-        input,
-        primaryDistance: direction === 'up' || direction === 'down'
-          ? Math.abs(centerY - currentCenterY)
-          : Math.abs(centerX - currentCenterX),
-        secondaryDistance: direction === 'up' || direction === 'down'
-          ? Math.abs(centerX - currentCenterX)
-          : Math.abs(centerY - currentCenterY),
-      }
-    })
-    .filter((
-      candidate,
-    ): candidate is { input: NavigableInputElement; primaryDistance: number; secondaryDistance: number } => candidate !== null)
-
-  candidates.sort((left, right) => (
-    left.primaryDistance - right.primaryDistance
-    || left.secondaryDistance - right.secondaryDistance
-  ))
-
-  return candidates[0]?.input ?? null
-}
-
 function handleSheetMouseDown(event: MouseEvent) {
   if (props.readOnly || event.button !== 0 || !isNavigableInput(event.target)) return
   pendingMouseSelectInputs.add(event.target)
@@ -700,99 +434,18 @@ function handleSheetKeydown(event: KeyboardEvent) {
       @mousedown.capture="handleSheetMouseDown"
       @mouseup.capture="handleSheetMouseUp"
     >
-      <div class="timecard-card__brand">PHASE 2 COMPANY</div>
-
-      <div class="timecard-card__field-row timecard-card__field-row--name">
-        <span class="timecard-card__field-label timecard-card__field-label--name">EMP. NAME:</span>
-        <div v-if="employeeHeaderLocked" class="timecard-card__field-value timecard-card__field-value--name">
-          {{ formatEmployeeHeaderName(card) }}
-        </div>
-        <div v-else class="timecard-card__field-value timecard-card__field-value--name timecard-card__field-value--split">
-          <input
-            class="timecard-card__inline-input"
-            :disabled="readOnly"
-            :value="card.lastName"
-            type="text"
-            placeholder="Last Name"
-            @input="setCardField('lastName', ($event.target as HTMLInputElement).value)"
-          />
-          <input
-            class="timecard-card__inline-input"
-            :disabled="readOnly"
-            :value="card.firstName"
-            type="text"
-            placeholder="First Name"
-            @input="setCardField('firstName', ($event.target as HTMLInputElement).value)"
-          />
-        </div>
-
-        <span class="timecard-card__field-label timecard-card__field-label--employee-number">EMPLOYEE#</span>
-        <div class="timecard-card__field-value timecard-card__field-value--employee-number">
-          <template v-if="employeeHeaderLocked">
-            {{ card.employeeNumber || '-' }}
-          </template>
-          <template v-else>
-            <input
-              class="timecard-card__header-input timecard-card__header-input--center"
-              :disabled="readOnly"
-              :value="card.employeeNumber"
-              type="text"
-              @input="setCardField('employeeNumber', ($event.target as HTMLInputElement).value)"
-            />
-          </template>
-        </div>
-      </div>
-
-      <div class="timecard-card__field-row timecard-card__field-row--occupation">
-        <span class="timecard-card__field-label timecard-card__field-label--occupation">OCCUPATION:</span>
-        <div
-          class="timecard-card__field-value timecard-card__field-value--occupation"
-        >
-          <template v-if="employeeHeaderLocked">
-            {{ card.occupation || '-' }}
-          </template>
-          <input
-            v-else
-            class="timecard-card__header-input"
-            :disabled="readOnly"
-            :value="card.occupation"
-            type="text"
-            @input="setCardField('occupation', ($event.target as HTMLInputElement).value)"
-          />
-        </div>
-
-        <span class="timecard-card__field-label timecard-card__field-label--wage">WAGE</span>
-        <div class="timecard-card__field-value timecard-card__field-value--wage">
-          <template v-if="showEmployeeWage">
-            <template v-if="readOnly">
-              <span data-testid="timecard-wage-display">{{ formatCurrency(card.wageRate) || '-' }}</span>
-            </template>
-            <input
-              v-else
-              class="timecard-card__header-input timecard-card__header-input--center"
-              data-testid="timecard-wage-input"
-              :disabled="readOnly"
-              :value="getNumericFieldValue('card:wageRate', card.wageRate == null ? '' : formatCurrency(card.wageRate))"
-              type="text"
-              inputmode="decimal"
-              @keydown="filterWageKey"
-              @input="setWageRateField(($event.target as HTMLInputElement).value)"
-              @blur="commitWageRateField"
-            />
-          </template>
-          <template v-else>
-            {{ formatMaskedWage() }}
-          </template>
-        </div>
-      </div>
-
-      <div class="timecard-card__field-row timecard-card__field-row--week-ending">
-        <div class="timecard-card__field-filler"></div>
-        <span class="timecard-card__field-label timecard-card__field-label--week-ending">WEEK ENDING</span>
-        <div class="timecard-card__field-value timecard-card__field-value--week-ending">
-          {{ formatWeekEnding(weekEndDate) }}
-        </div>
-      </div>
+      <TimecardWorkbookHeader
+        :card="card"
+        :week-end-date="weekEndDate"
+        :read-only="readOnly"
+        :employee-header-locked="employeeHeaderLocked"
+        :show-employee-wage="showEmployeeWage"
+        :wage-input-value="getNumericFieldValue('card:wageRate', card.wageRate == null ? '' : (formatCurrency(card.wageRate) ?? ''))"
+        @update-field="setCardField"
+        @update-wage="setWageRateField"
+        @commit-wage="commitWageRateField"
+        @filter-wage-key="filterWageKey"
+      />
 
       <template v-if="!compact">
         <div class="timecard-card__header-gap" aria-hidden="true"></div>
@@ -853,7 +506,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       :disabled="readOnly"
                       :value="line.jobNumber"
                       type="text"
-                      @input="setLineField(lineIndex, 'jobNumber', ($event.target as HTMLInputElement).value)"
+                      @input="setLineField(lineIndex, 'jobNumber', readInputValue($event))"
                     />
                   </td>
                   <td v-if="rowKindIndex === 0" :rowspan="visibleLineRowKinds.length" class="timecard-grid__rowspan-cell">
@@ -865,7 +518,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       :disabled="readOnly"
                       :value="line.subsectionArea"
                       type="text"
-                      @input="setLineField(lineIndex, 'subsectionArea', ($event.target as HTMLInputElement).value)"
+                      @input="setLineField(lineIndex, 'subsectionArea', readInputValue($event))"
                     />
                   </td>
                   <td class="timecard-grid__label-cell" :data-testid="`timecard-row-label-${lineIndex}-${rowKind.key}`">{{ rowKind.label }}</td>
@@ -879,7 +532,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       :disabled="readOnly"
                       :value="line.account"
                       type="text"
-                      @input="setLineField(lineIndex, 'account', ($event.target as HTMLInputElement).value)"
+                      @input="setLineField(lineIndex, 'account', readInputValue($event))"
                     />
                   </td>
                   <td class="timecard-grid__diff-cell">
@@ -891,7 +544,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       :disabled="readOnly"
                       :value="lineDiffValue(lineIndex, rowKind.key)"
                       type="text"
-                      @input="setLineField(lineIndex, rowKind.diffField, ($event.target as HTMLInputElement).value)"
+                      @input="setLineField(lineIndex, rowKind.diffField, readInputValue($event))"
                     />
                   </td>
 
@@ -916,21 +569,13 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       @input="setDayField(
                         lineIndex,
                         dayIndex,
-                        rowKind.key === 'hours'
-                          ? 'hours'
-                          : rowKind.key === 'production'
-                            ? 'production'
-                            : 'unitCostOverride',
-                        ($event.target as HTMLInputElement).value,
+                        getLineDayField(rowKind.key),
+                        readInputValue($event),
                       )"
                       @blur="commitDayField(
                         lineIndex,
                         dayIndex,
-                        rowKind.key === 'hours'
-                          ? 'hours'
-                          : rowKind.key === 'production'
-                            ? 'production'
-                            : 'unitCostOverride',
+                        getLineDayField(rowKind.key),
                       )"
                     />
                   </td>
@@ -958,20 +603,12 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       inputmode="decimal"
                       @input="setOffField(
                         lineIndex,
-                        rowKind.key === 'hours'
-                          ? 'offHours'
-                          : rowKind.key === 'production'
-                            ? 'offProduction'
-                            : 'offCost',
-                        ($event.target as HTMLInputElement).value,
+                        getLineOffField(rowKind.key),
+                        readInputValue($event),
                       )"
                       @blur="commitOffField(
                         lineIndex,
-                        rowKind.key === 'hours'
-                          ? 'offHours'
-                          : rowKind.key === 'production'
-                            ? 'offProduction'
-                            : 'offCost',
+                        getLineOffField(rowKind.key),
                       )"
                     />
                   </td>
@@ -997,108 +634,13 @@ function handleSheetKeydown(event: KeyboardEvent) {
           </table>
         </div>
 
-        <div class="timecard-card__footer-grid">
-          <div class="timecard-card__footer-label timecard-card__footer-label--job">JOB or GL</div>
-          <div class="timecard-card__footer-label timecard-card__footer-label--acct">ACCT</div>
-          <div class="timecard-card__footer-label timecard-card__footer-label--office">OFFICE</div>
-          <div class="timecard-card__footer-label timecard-card__footer-label--amt">AMT</div>
-          <div class="timecard-card__footer-stat-label timecard-card__footer-stat-label--ot">OT</div>
-          <div class="timecard-card__footer-stat-line timecard-card__footer-stat-line--ot">
-            <span class="timecard-card__footer-stat-value" data-testid="timecard-overtime-hours">{{ formatTrimmedNumber(hoursBreakdown.overtimeHours, 1) }}</span>
-          </div>
-          <div class="timecard-card__footer-stat-label timecard-card__footer-stat-label--reg">REG</div>
-          <div class="timecard-card__footer-stat-line timecard-card__footer-stat-line--reg">
-            <span class="timecard-card__footer-stat-value" data-testid="timecard-regular-hours">{{ formatTrimmedNumber(hoursBreakdown.regularHours, 1) }}</span>
-          </div>
-
-          <div class="timecard-card__footer-box timecard-card__footer-box--job">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerJobOrGl"
-              type="text"
-              @input="setCardField('footerJobOrGl', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-          <div class="timecard-card__footer-box timecard-card__footer-box--acct">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerAccount"
-              type="text"
-              @input="setCardField('footerAccount', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-          <div class="timecard-card__footer-box timecard-card__footer-box--office">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerOffice"
-              type="text"
-              @input="setCardField('footerOffice', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-          <div class="timecard-card__footer-box timecard-card__footer-box--amount">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerAmount"
-              type="text"
-              @input="setCardField('footerAmount', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-
-          <div class="timecard-card__footer-box timecard-card__footer-box--job-second">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerSecondJobOrGl"
-              type="text"
-              @input="setCardField('footerSecondJobOrGl', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-          <div class="timecard-card__footer-box timecard-card__footer-box--acct-second">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerSecondAccount"
-              type="text"
-              @input="setCardField('footerSecondAccount', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-          <div class="timecard-card__footer-box timecard-card__footer-box--office-second">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerSecondOffice"
-              type="text"
-              @input="setCardField('footerSecondOffice', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-          <div class="timecard-card__footer-box timecard-card__footer-box--amount-second">
-            <input
-              class="timecard-card__footer-input"
-              :disabled="readOnly"
-              :value="card.footerSecondAmount"
-              type="text"
-              @input="setCardField('footerSecondAmount', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-
-          <div class="timecard-card__notes-label">NOTES:</div>
-          <div class="timecard-card__notes-line">
-            <input
-              class="timecard-card__notes-input"
-              data-testid="timecard-notes-input"
-              :disabled="readOnly"
-              :value="card.notes"
-              type="text"
-              @input="setCardField('notes', ($event.target as HTMLInputElement).value)"
-            />
-          </div>
-
-          <div class="timecard-card__footer-gap" aria-hidden="true"></div>
-        </div>
+        <TimecardWorkbookFooter
+          :card="card"
+          :read-only="readOnly"
+          :overtime-hours="hoursBreakdown.overtimeHours"
+          :regular-hours="hoursBreakdown.regularHours"
+          @update-field="setCardField"
+        />
       </template>
     </div>
   </div>
@@ -1142,132 +684,10 @@ function handleSheetKeydown(event: KeyboardEvent) {
     7.42578125fr;
 }
 
-.timecard-card__brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 21.853pt;
-  padding: 0 0.3rem;
-  text-align: center;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 1.08rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.timecard-card__field-row {
-  display: grid;
-  grid-template-columns: var(--timecard-column-template);
-  align-items: end;
-  height: 11.849pt;
-  min-width: 0;
-  padding: 0 0.3rem;
-  box-sizing: border-box;
-}
-
-.timecard-card__field-label {
-  display: flex;
-  justify-content: flex-start;
-  align-items: end;
-  min-width: 0;
-  white-space: nowrap;
-  padding: 0 0.08rem 0.03rem 0;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.54rem;
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1;
-}
-
-.timecard-card__field-value {
-  display: flex;
-  min-width: 0;
-  align-items: stretch;
-  border-bottom: 1px solid #111;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.63rem;
-  font-weight: 700;
-  overflow: hidden;
-  padding: 0 0.08rem 0.03rem;
-  line-height: 1;
-}
-
-.timecard-card__field-value--split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.22rem;
-  padding: 0;
-}
-
-.timecard-card__field-value--employee-number,
-.timecard-card__field-value--wage {
-  font-size: 0.69rem;
-}
-
-.timecard-card__field-row--week-ending {
-  align-items: end;
-}
-
-.timecard-card__field-label--name,
-.timecard-card__field-label--occupation {
-  grid-column: 1 / 4;
-  justify-content: flex-end;
-  text-align: right;
-  padding-right: 0.16rem;
-}
-
-.timecard-card__field-value--name,
-.timecard-card__field-value--occupation {
-  grid-column: 4 / 11;
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.timecard-card__field-value--occupation-full {
-  grid-column: 4 / 15;
-}
-
-.timecard-card__field-label--employee-number,
-.timecard-card__field-label--wage {
-  grid-column: 12 / 13;
-  justify-content: flex-end;
-  padding-right: 0.14rem;
-}
-
-.timecard-card__field-label--week-ending {
-  grid-column: 12 / 13;
-  justify-content: flex-end;
-  padding-right: 0.08rem;
-  align-self: end;
-}
-
-.timecard-card__field-value--employee-number,
-.timecard-card__field-value--wage,
-.timecard-card__field-value--week-ending {
-  grid-column: 13 / 15;
-  justify-content: center;
-  text-align: center;
-}
-
-.timecard-card__field-filler {
-  grid-column: 4 / 11;
-  min-height: 0;
-  border-bottom: 0;
-  align-self: end;
-}
-
-.timecard-card__field-value--week-ending {
-  align-self: end;
-}
-
 .timecard-card__header-gap {
   height: 9.8pt;
 }
 
-.timecard-card__inline-input,
-.timecard-card__header-input,
-.timecard-card__footer-input,
-.timecard-card__notes-input,
 .timecard-grid__input {
   width: 100%;
   border: 0;
@@ -1279,31 +699,11 @@ function handleSheetKeydown(event: KeyboardEvent) {
   caret-color: #111;
 }
 
-.timecard-card__inline-input,
-.timecard-card__header-input {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: inherit;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.timecard-card__header-input--center {
-  text-align: center;
-}
-
-.timecard-card__inline-input:focus,
-.timecard-card__header-input:focus,
-.timecard-card__footer-input:focus,
-.timecard-card__notes-input:focus,
 .timecard-grid__input:focus {
   background: rgba(255, 245, 196, 0.48);
   box-shadow: inset 0 -1px 0 rgba(146, 117, 24, 0.5);
 }
 
-.timecard-card__inline-input:disabled,
-.timecard-card__header-input:disabled,
-.timecard-card__footer-input:disabled,
-.timecard-card__notes-input:disabled,
 .timecard-grid__input:disabled {
   color: inherit;
   -webkit-text-fill-color: currentColor;
@@ -1499,206 +899,6 @@ function handleSheetKeydown(event: KeyboardEvent) {
 .timecard-grid__total-label {
   text-align: right !important;
   padding-right: 0.24rem !important;
-}
-
-.timecard-card__footer-grid {
-  display: grid;
-  grid-template-columns: var(--timecard-column-template);
-  grid-template-rows: 13.079pt 15.539pt 13.079pt 13.079pt 13.079pt;
-  align-items: stretch;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.timecard-card__footer-label {
-  align-self: end;
-  justify-self: center;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.09in;
-  font-style: normal;
-  font-weight: 400;
-  text-align: center;
-  line-height: 1;
-  padding-bottom: 0;
-}
-
-.timecard-card__footer-label--job {
-  grid-column: 1 / 4;
-  grid-row: 1;
-}
-
-.timecard-card__footer-label--acct {
-  grid-column: 4 / 6;
-  grid-row: 1;
-}
-
-.timecard-card__footer-label--office {
-  grid-column: 6 / 8;
-  grid-row: 1;
-}
-
-.timecard-card__footer-label--amt {
-  grid-column: 8 / 10;
-  grid-row: 1;
-}
-
-.timecard-card__footer-box {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  border: 1px solid #111;
-  padding: 0.01in 0.02in;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.timecard-card__footer-box:focus-within {
-  background: rgba(255, 245, 196, 0.48);
-  box-shadow: inset 0 0 0 1px rgba(146, 117, 24, 0.36);
-}
-
-.timecard-card__footer-input {
-  min-width: 0;
-  min-height: 0;
-  text-align: center;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.095in;
-  font-weight: 700;
-  line-height: 1;
-  padding: 0;
-}
-
-.timecard-card__footer-box .timecard-card__footer-input:focus,
-.timecard-card__notes-line .timecard-card__notes-input:focus {
-  background: transparent;
-  box-shadow: none;
-}
-
-.timecard-card__footer-stat-label {
-  align-self: end;
-  justify-self: center;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.09in;
-  font-style: normal;
-  font-weight: 400;
-  text-align: center;
-  line-height: 1;
-}
-
-.timecard-card__footer-stat-label--ot {
-  grid-column: 11 / 12;
-  grid-row: 1;
-}
-
-.timecard-card__footer-stat-label--reg {
-  grid-column: 11 / 12;
-  grid-row: 2;
-}
-
-.timecard-card__footer-stat-line {
-  position: relative;
-  align-self: end;
-  margin: 0 0.03in 0.03in;
-  border-bottom: 1px solid #111;
-}
-
-.timecard-card__footer-stat-line--ot {
-  grid-column: 12 / 13;
-  grid-row: 1;
-}
-
-.timecard-card__footer-stat-line--reg {
-  grid-column: 12 / 13;
-  grid-row: 2;
-}
-
-.timecard-card__footer-stat-value {
-  position: absolute;
-  inset: auto 0 -0.01in 0;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.1in;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
-}
-
-.timecard-card__footer-box--job,
-.timecard-card__footer-box--job-second {
-  grid-column: 1 / 4;
-}
-
-.timecard-card__footer-box--acct,
-.timecard-card__footer-box--acct-second {
-  grid-column: 4 / 6;
-}
-
-.timecard-card__footer-box--office,
-.timecard-card__footer-box--office-second {
-  grid-column: 6 / 8;
-}
-
-.timecard-card__footer-box--amount,
-.timecard-card__footer-box--amount-second {
-  grid-column: 8 / 10;
-}
-
-.timecard-card__footer-box--job,
-.timecard-card__footer-box--acct,
-.timecard-card__footer-box--office,
-.timecard-card__footer-box--amount {
-  grid-row: 2;
-}
-
-.timecard-card__footer-box--job-second,
-.timecard-card__footer-box--acct-second,
-.timecard-card__footer-box--office-second,
-.timecard-card__footer-box--amount-second {
-  grid-row: 3;
-}
-
-.timecard-card__notes-label {
-  grid-column: 2 / 4;
-  grid-row: 4;
-  align-self: end;
-  justify-self: end;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.09in;
-  font-style: normal;
-  font-weight: 400;
-  text-align: right;
-  padding: 0 0.02in 0 0;
-}
-
-.timecard-card__notes-line {
-  grid-column: 4 / 14;
-  grid-row: 4;
-  display: flex;
-  align-items: flex-end;
-  min-width: 0;
-  align-self: end;
-  border-bottom: 1px solid #111;
-  padding-bottom: 0.01in;
-}
-
-.timecard-card__notes-line:focus-within {
-  background: rgba(255, 245, 196, 0.35);
-}
-
-.timecard-card__notes-input {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.095in;
-  line-height: 1;
-  padding: 0;
-}
-
-.timecard-card__footer-gap {
-  grid-column: 1 / -1;
-  grid-row: 5;
 }
 
 </style>

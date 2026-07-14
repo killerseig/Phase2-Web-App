@@ -369,16 +369,16 @@ Needed composables:
 
 ## Confirmation Architecture
 
-Direct `window.confirm` calls are easy, but they are not ideal long-term.
+Direct `window.confirm` calls are easy, but they are not ideal long-term. App views now use the shared `ConfirmDialog` instead.
 
 Target:
 
-- one `useConfirmAction` composable
-- one optional `ConfirmDialog` component later
-- current implementation may still delegate to `window.confirm`
-- tests can stub the confirmation function
+- `ConfirmDialog` for destructive and final workflow confirmations
+- page-owned pending action state when the action is page-specific
+- optional `useConfirmAction` composable later if repeated pending-action state becomes noisy
+- tests click the real confirmation dialog instead of stubbing browser confirms
 
-This lets us migrate safely without changing every destructive flow at once.
+This keeps destructive flows accessible, visible, and testable without relying on browser-native prompts.
 
 ## Recipient Architecture
 

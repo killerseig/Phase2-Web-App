@@ -16,3 +16,16 @@ defineProps<{
     <slot v-else />
   </div>
 </template>
+
+<style scoped>
+.app-empty-state__title {
+  display: block;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.app-empty-state__message {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+}
+</style>

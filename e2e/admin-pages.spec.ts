@@ -174,15 +174,27 @@ test.describe('admin page coverage', () => {
     await expect(page.locator('.catalog-tree-node', { hasText: 'Hard Hat - White' })).toBeVisible()
 
     await inspector.getByRole('button', { name: 'Archive Item' }).click()
+    await page
+      .getByRole('dialog', { name: 'Archive item?' })
+      .getByRole('button', { name: 'Archive Item' })
+      .click()
     await expect(page.locator('.catalog-tree-node', { hasText: 'Hard Hat - White' })).toHaveCount(0)
 
     await page.getByLabel('Show Archived').check()
     await page.locator('.catalog-tree-node', { hasText: 'Hard Hat - White' }).click()
     await inspector.getByRole('button', { name: 'Delete Item' }).click()
+    await page
+      .getByRole('dialog', { name: 'Delete item?' })
+      .getByRole('button', { name: 'Delete Item' })
+      .click()
     await expect(page.locator('.catalog-tree-node', { hasText: 'Hard Hat - White' })).toHaveCount(0)
 
     await page.locator('.catalog-tree-node', { hasText: 'Field Safety' }).click()
     await inspector.getByRole('button', { name: 'Delete Folder' }).click()
+    await page
+      .getByRole('dialog', { name: 'Delete folder?' })
+      .getByRole('button', { name: 'Delete Folder' })
+      .click()
     await expect(page.locator('.catalog-tree-node', { hasText: 'Field Safety' })).toHaveCount(0)
 
     await expect
@@ -223,6 +235,10 @@ test.describe('admin page coverage', () => {
     await expect(page.getByTestId('timecard-export-delete-week-week-admin-2')).toHaveCount(0)
 
     await page.getByTestId('timecard-export-delete-week-week-e2e').click()
+    await page
+      .getByRole('dialog', { name: 'Delete draft week?' })
+      .getByRole('button', { name: 'Delete Draft' })
+      .click()
 
     await expect(page.getByText('Draft week deleted.')).toBeVisible()
     await expect(page.getByTestId('timecard-export-week-week-e2e')).toHaveCount(0)
@@ -245,6 +261,33 @@ test.describe('admin page coverage', () => {
         draftCardsExist: false,
         submittedWeekExists: true,
       })
+  })
+
+  test('timecard export deletes editable saved cards through the shared confirmation dialog', async ({ page }) => {
+    await gotoPhase2App(page, '/exports/timecards', createAdminWorkspaceFixture())
+
+    await page.getByTestId('timecard-export-week-search').fill('1A')
+    await expect(page.getByTestId('timecard-export-week-week-admin-2')).toHaveCount(0)
+    await expect.poll(async () => page.locator('.timecards-canvas__item').count()).toBe(1)
+
+    await page.getByRole('button', { name: 'Edit Card', exact: true }).click()
+    await page.getByRole('button', { name: 'Delete Card', exact: true }).click()
+    await page
+      .getByRole('dialog', { name: 'Delete saved timecard?' })
+      .getByRole('button', { name: 'Delete Card' })
+      .click()
+
+    await expect(page.getByText('Removed the timecard.')).toBeVisible()
+    await expect.poll(async () => page.locator('.timecards-canvas__item').count()).toBe(0)
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardCards?: Array<{ id?: string }>
+        }
+
+        return state.timecardCards?.some((card) => card.id === 'card-admin-1') ?? true
+      }))
+      .toBe(false)
   })
 
   test('timecard export csv downloads the filtered package from the real export page', async ({ page }) => {

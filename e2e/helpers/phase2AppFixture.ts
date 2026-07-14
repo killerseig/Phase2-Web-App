@@ -573,7 +573,6 @@ export function createAdminWorkspaceFixture() {
 export async function gotoPhase2App(page: Page, route: string, fixture: Record<string, unknown>) {
   await page.addInitScript((state) => {
     window.__PHASE2_E2E__ = structuredClone(state)
-    window.confirm = () => true
   }, fixture)
 
   await page.goto(route)

@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import AuthCard from '@/components/auth/AuthCard.vue'
+import AppField from '@/components/common/AppField.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import AppTextInput from '@/components/common/AppTextInput.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { hasFirebaseConfig } from '@/firebase'
 import { useAuthStore } from '@/stores/auth'
+import { readFirstQueryParam } from '@/utils/routerQuery'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -35,8 +40,8 @@ async function routeIntoWorkspaceIfAllowed() {
 }
 
 onMounted(async () => {
-  const nextEmail = route.query.email
-  if (typeof nextEmail === 'string') {
+  const nextEmail = readFirstQueryParam(route.query.email)
+  if (nextEmail) {
     email.value = nextEmail
   }
 
@@ -77,56 +82,50 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="auth-page">
-    <div class="auth-card">
-      <span class="auth-card__eyebrow">Phase 2</span>
-      <h1 class="auth-card__title">Phase 2 Web Application</h1>
+  <AuthCard eyebrow="Phase 2" title="Phase 2 Web Application">
+    <AppStatusMessage v-if="initializing" class="auth-card__status">
+      Checking your current session...
+    </AppStatusMessage>
 
-      <div v-if="initializing" class="auth-card__note">
-        Checking your current session...
-      </div>
-
-      <form v-else @submit.prevent="handleLogin">
-        <div class="auth-field">
-          <label for="login-email">Email</label>
-          <input
-            id="login-email"
-            v-model="email"
-            type="email"
-            autocomplete="email"
-            placeholder="you@example.com"
-          />
-        </div>
-
-        <div class="auth-field">
-          <label for="login-password">Password</label>
-          <input
-            id="login-password"
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            placeholder="Enter your password"
-          />
-        </div>
-
-        <AppLoadingButton
-          class="auth-card__button"
-          type="submit"
-          variant="primary"
-          label="Login"
-          loading-label="Signing In..."
-          :loading="loading"
+    <form v-else @submit.prevent="handleLogin">
+      <AppField class="auth-field" label="Email">
+        <AppTextInput
+          id="login-email"
+          v-model="email"
+          type="email"
+          autocomplete="email"
+          placeholder="you@example.com"
         />
+      </AppField>
 
-        <RouterLink class="auth-card__link" :to="forgotPasswordTarget">
-          Forgot Password?
-        </RouterLink>
-      </form>
-      <div v-if="!hasFirebaseConfig" class="auth-card__note">
-        Firebase is not configured yet. Copy the `v1` `VITE_FIREBASE_*` values into `.env.local`
-        so this app can use the same project.
-      </div>
-    </div>
-  </div>
+      <AppField class="auth-field" label="Password">
+        <AppTextInput
+          id="login-password"
+          v-model="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Enter your password"
+        />
+      </AppField>
+
+      <AppLoadingButton
+        class="auth-card__button"
+        type="submit"
+        variant="primary"
+        label="Login"
+        loading-label="Signing In..."
+        :loading="loading"
+      />
+
+      <RouterLink class="auth-card__link" :to="forgotPasswordTarget">
+        Forgot Password?
+      </RouterLink>
+    </form>
+
+    <AppStatusMessage v-if="!hasFirebaseConfig" class="auth-card__status" tone="warning">
+      Firebase is not configured yet. Copy the `v1` `VITE_FIREBASE_*` values into `.env.local`
+      so this app can use the same project.
+    </AppStatusMessage>
+  </AuthCard>
 </template>
 

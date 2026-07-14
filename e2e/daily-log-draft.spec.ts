@@ -107,4 +107,25 @@ test.describe('daily log draft regressions', () => {
     await expect(page.getByTestId('dailylog-saved-budgetConcerns')).toHaveText(budget)
     await expect(page.getByTestId('dailylog-saved-deliveriesNeeded')).toHaveText(deliveries)
   })
+
+  test('draft daily logs delete through the shared confirmation dialog', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/daily-logs', createDailyLogsFixture())
+
+    await page.getByRole('button', { name: 'Delete Draft' }).click()
+    await page
+      .getByRole('dialog', { name: 'Delete daily log draft?' })
+      .getByRole('button', { name: 'Delete Draft' })
+      .click()
+
+    await expect(page.getByText('Daily log draft deleted.')).toBeVisible()
+    await expect(page.getByText('No daily log is selected for this date.')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          dailyLogs?: unknown[]
+        }
+        return state.dailyLogs?.length ?? -1
+      }))
+      .toBe(0)
+  })
 })

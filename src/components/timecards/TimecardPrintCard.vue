@@ -1,10 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
+  TIMECARD_LINE_ROW_KINDS as lineRowKinds,
+  displayTimecardText as displayText,
+  formatTimecardCurrency as formatCurrency,
+  formatTimecardEmployeeHeaderName as formatEmployeeHeaderName,
+  formatTimecardHours as formatHours,
+  formatTimecardTrimmedNumber as formatTrimmedNumber,
+  formatTimecardWeekEnding as formatWeekEnding,
+  getTimecardLineDayDisplayValue,
+  getTimecardLineDiffValue,
+  getTimecardLineHoursTotal,
+  getTimecardLineOffDisplayValue,
+  getTimecardLineProductionDisplayValue,
+  type TimecardLineRowKind as LineRowKind,
+} from '@/features/timecards/cardDisplayHelpers'
+import {
   TIMECARD_VISIBLE_DAY_INDEXES,
   TIMECARD_VISIBLE_DAY_LABELS,
-  buildCardDisplayName,
-  calculateLineSummaryUnitCost,
   calculateRegularAndOvertimeHours,
 } from '@/features/timecards/workbook'
 import type { TimecardCardRecord } from '@/types/domain'
@@ -19,13 +32,6 @@ const props = withDefaults(defineProps<{
 
 const dayLabels = TIMECARD_VISIBLE_DAY_LABELS
 const visibleDayIndexes = TIMECARD_VISIBLE_DAY_INDEXES
-const lineRowKinds = [
-  { key: 'hours', label: 'H', diffField: 'difH' },
-  { key: 'production', label: 'P', diffField: 'difP' },
-  { key: 'cost', label: 'C', diffField: 'difC' },
-] as const
-
-type LineRowKind = (typeof lineRowKinds)[number]['key']
 
 const visibleHoursByDay = computed(() =>
   visibleDayIndexes.map((dayIndex) => Number(props.card.totals.hoursByDay[dayIndex] ?? 0)),
@@ -36,95 +42,24 @@ const hoursBreakdown = computed(() => calculateRegularAndOvertimeHours(
   props.card.overtimeHoursOverride,
 ))
 
-function formatWeekEnding(value: string) {
-  const parsed = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) return value
-  return `${parsed.getMonth() + 1}/${parsed.getDate()}/${parsed.getFullYear()}`
-}
-
-function formatEmployeeHeaderName(card: Pick<TimecardCardRecord, 'fullName' | 'firstName' | 'lastName' | 'employeeNumber'>) {
-  const firstName = card.firstName.trim()
-  const lastName = card.lastName.trim()
-  if (lastName && firstName) return `${lastName}, ${firstName}`
-  if (lastName || firstName) return lastName || firstName
-  return card.fullName.trim() || buildCardDisplayName(card)
-}
-
-function formatCurrency(value: number | null | undefined) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return ''
-  return `$${safe.toFixed(2)}`
-}
-
-function formatHours(value: number | null | undefined, blankWhenZero = false) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return blankWhenZero ? '' : '0.0'
-  if (blankWhenZero && safe === 0) return ''
-  return safe.toFixed(1)
-}
-
-function formatFixedNumber(value: number | null | undefined, decimals = 2, blankWhenZero = false) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return blankWhenZero ? '' : (0).toFixed(decimals)
-  if (blankWhenZero && safe === 0) return ''
-  return safe.toFixed(decimals)
-}
-
-function formatTrimmedNumber(value: number | null | undefined, decimals = 2, blankWhenZero = false) {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe) || Number.isNaN(safe)) return blankWhenZero ? '' : (0).toFixed(decimals)
-  if (blankWhenZero && safe === 0) return ''
-  return safe.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
-}
-
 function lineHoursTotal(lineIndex: number) {
-  return props.card.lines[lineIndex]?.days.reduce((sum, day) => sum + Number(day.hours ?? 0), 0) ?? 0
-}
-
-function lineProductionTotal(lineIndex: number) {
-  return props.card.lines[lineIndex]?.days.reduce((sum, day) => sum + Number(day.production ?? 0), 0) ?? 0
-}
-
-function lineSummaryCost(lineIndex: number) {
-  const line = props.card.lines[lineIndex]
-  if (!line) return 0
-  return calculateLineSummaryUnitCost(line, props.card.wageRate, props.burden)
+  return getTimecardLineHoursTotal(props.card.lines[lineIndex])
 }
 
 function lineDiffValue(lineIndex: number, rowKind: LineRowKind) {
-  const line = props.card.lines[lineIndex]
-  if (!line) return ''
-  if (rowKind === 'hours') return line.difH
-  if (rowKind === 'production') return line.difP
-  return line.difC
+  return getTimecardLineDiffValue(props.card.lines[lineIndex], rowKind)
 }
 
 function lineDayValue(lineIndex: number, rowKind: LineRowKind, dayIndex: number) {
-  const line = props.card.lines[lineIndex]
-  const day = line?.days[dayIndex]
-  if (!line || !day) return ''
-  if (rowKind === 'hours') return formatFixedNumber(day.hours, 2, true)
-  if (rowKind === 'production') return formatFixedNumber(day.production, 2, true)
-  return formatFixedNumber(day.unitCostOverride ?? day.unitCost, 2, true)
+  return getTimecardLineDayDisplayValue(props.card.lines[lineIndex], rowKind, dayIndex)
 }
 
 function lineProductionValue(lineIndex: number, rowKind: LineRowKind) {
-  if (rowKind === 'hours') return ''
-  if (rowKind === 'production') return formatTrimmedNumber(lineProductionTotal(lineIndex), 3, false)
-  return formatFixedNumber(lineSummaryCost(lineIndex), 3, true)
+  return getTimecardLineProductionDisplayValue(props.card.lines[lineIndex], rowKind, props.card.wageRate, props.burden, false)
 }
 
 function lineOffValue(lineIndex: number, rowKind: LineRowKind) {
-  const line = props.card.lines[lineIndex]
-  if (!line) return ''
-  if (rowKind === 'hours') return formatTrimmedNumber(line.offHours, 2, true)
-  if (rowKind === 'production') return formatTrimmedNumber(line.offProduction, 2, true)
-  return formatTrimmedNumber(line.offCost, 2, true)
-}
-
-function displayText(value: string | null | undefined, fallback = '') {
-  const next = typeof value === 'string' ? value.trim() : ''
-  return next || fallback
+  return getTimecardLineOffDisplayValue(props.card.lines[lineIndex], rowKind)
 }
 </script>
 

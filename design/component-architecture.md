@@ -137,15 +137,74 @@ Composables should hold reusable behavior that is not naturally visual:
 - `TimecardPrintCard`
   - print/PDF timecard card
   - critical exact-print behavior
+- `TimecardButton`
+  - feature-level action button for green-sheet timecard toolbars and trays
+  - keeps timecard action styling out of individual toolbar components
+- `TimecardToolbarTabs`
+  - feature-level mobile tablist for job timecards and timecard export
+  - preserves each toolbar's ARIA id/control prefixes while sharing the responsive tab styling
+- `TimecardSortModePicker`
+  - feature-level Employee#/Name radio picker shared by job timecards and timecard export
+  - emits only the selected sort mode so each parent still owns sorting behavior
+- `JobDashboardHeader`
+  - feature-level job dashboard header built around `PagePanel`
+  - keeps job title/meta rendering out of the route shell
+- `ModuleLauncherGrid`
+  - feature-level module launcher list for job dashboards
+  - preserves real route links and e2e `data-testid` contracts
+- `ModuleLauncherCard`
+  - one linked dashboard module tile
+  - owns hover styling and module card presentation
 
 ### New shared primitives already started
 
+- `AppButton`
+  - thin wrapper over existing global `.app-button` styles
+  - used by directory create actions, notification recipient actions, upload picker actions, and shop catalog/shop order/daily-log actions
+- `AppButtonLink`
+  - semantic `RouterLink` wrapper for links that intentionally use button styling
+  - keeps button-looking links separate from real button actions
 - `AppLoadingButton`
   - button with consistent loading and disabled behavior
+- `AppListButton`
+  - selectable card-like button shell for directory/list rows
+  - shared by Users, Employees, and Jobs while each feature keeps its own row content
+- `AppIconButton`
+  - compact circular icon-only action button with an explicit accessible label
+  - used for repeated add/remove controls in daily-log repeater tables and recipient rows
 - `AppEmptyState`
   - reusable empty/loading/error placeholder block
 - `AppStatusMessage`
   - inline status/error/success message block
+- `AppMobilePanelTabs`
+  - reusable mobile switcher for two-pane management screens
+- `AppPaneHeader`
+  - reusable pane eyebrow/title/action header
+  - supports heading-level selection for nested panels
+  - exposes CSS variables for compact panel-specific heading sizing
+- `AppSearchInput`
+  - reusable search input styling and `update:modelValue` behavior
+  - exposes CSS variables for compact search fields
+- `AppSelect`
+  - reusable native select wrapper with attrs passthrough and `update:modelValue` behavior
+  - all app-owned native selects should render through this wrapper
+- `AppTextInput`
+  - reusable text/date/number input styling and `update:modelValue` behavior
+  - can re-emit native input events for formatting workflows that need the raw event
+  - exposes sizing/background/border/box-shadow CSS variables for compact feature forms
+- `AppTextarea`
+  - reusable textarea styling and `update:modelValue` behavior
+  - can re-emit native input events for workflows that need the raw event
+  - exposes sizing/background/border/box-shadow/resize CSS variables for feature-specific text areas
+- `AppCheckbox`
+  - reusable checkbox wrapper with native semantics and `update:modelValue` behavior
+  - can re-emit native change events for workflows that still need the raw event
+- `AppField`
+  - reusable label/help/field wrapper layout
+  - used by job, user, employee, shop catalog, shop order, daily-log, recipient, and auth forms
+  - exposes label color/weight/letter-spacing/text-transform CSS variables for compact feature forms
+- `AppBadge`
+  - reusable status/role pill styling
 
 ## Needed Shared Components
 
@@ -154,9 +213,13 @@ Composables should hold reusable behavior that is not naturally visual:
 These are small, generic pieces used everywhere.
 
 - `AppButton`
-  - optional future replacement for raw `app-button` class usage
-  - variants: default, primary, success, danger, ghost
+  - already started
+  - replacement for raw `app-button` class usage
+  - current variants: default, primary, success, danger, ghost
   - supports loading state or delegates that to `AppLoadingButton`
+- `AppButtonLink`
+  - already started
+  - use for router links that need the same visual treatment as buttons
 - `AppLoadingButton`
   - already started
   - use anywhere a button label changes during loading
@@ -167,14 +230,26 @@ These are small, generic pieces used everywhere.
   - already started
   - use for inline success/error/warning/info messages
 - `AppBadge`
+  - already started
   - statuses such as draft, submitted, active, archived, admin, foreman
 - `AppField`
+  - already started
   - shared label/help/error wrapper for inputs
 - `AppTextInput`
+  - already started
   - common input styling and attrs passthrough
+- `AppTextarea`
+  - already started
+  - common textarea styling and attrs passthrough
+- `AppCheckbox`
+  - already started
+  - common checkbox behavior and attrs passthrough
 - `AppSelect`
+  - already started
   - wrapper around native select or PrimeVue select where needed
+  - all app-owned native selects currently render through this wrapper
 - `AppSearchInput`
+  - already started
   - shared search field with label/placeholder/clear affordance
 - `AppDateInput`
   - consistent date field behavior
@@ -191,6 +266,7 @@ These define repeated page structures.
 - `AppPane`
   - titled panel with optional eyebrow, title, actions, and scroll body
 - `AppPaneHeader`
+  - already started
   - reusable header block for panes
 - `AppToolbar`
   - dense row or grid of controls
@@ -218,7 +294,7 @@ These are common workflow helpers.
   - button-level pending state without disabling an entire pane
   - useful for add item, create draft, submit, delete, archive, and send actions
 - `ConfirmAction`
-  - replaces direct `window.confirm` calls over time
+  - app-native confirmation pattern now backed by `ConfirmDialog`
   - should support message, confirm label, destructive styling, and test-friendly behavior
 - `PermissionNotice`
   - explains why a user can view but not edit
@@ -279,13 +355,13 @@ Recommended extraction order:
 
 Current page: `JobDashboardView.vue`
 
-Needed components:
+Current components:
 
 - `JobDashboardHeader`
 - `ModuleLauncherGrid`
 - `ModuleLauncherCard`
 
-This page is already small, so it is a good low-risk place to establish shared shell patterns.
+This page is now a small route shell that owns route context/lifecycle and composes the dashboard components. It remains a good place to evolve future dashboard widget shell patterns because the navigation behavior is protected by e2e.
 
 ## Users
 
@@ -363,6 +439,15 @@ Needed components:
 
 Needed composables:
 
+- `useJobTimecardRecords`
+  - already started
+  - owns job timecard employee/week/card subscriptions while keeping save/workbook behavior in focused composables
+- `useJobTimecardSaveQueue`
+  - already started
+  - wraps the generic save queue with job-week `updateTimecardCard` persistence
+- `useTimecardExportSaveQueue`
+  - already started
+  - wraps the generic save queue with archive/export card persistence
 - `useTimecardSaveQueue`
   - shared by job timecards and admin export
 - `useTimecardCardScaling`
@@ -561,13 +646,13 @@ Use cases:
 
 ### `useConfirmAction`
 
-Replaces direct `window.confirm` calls.
+Optional helper for pages that have enough repeated confirmation state to justify a composable.
 
 Responsibilities:
 
 - expose one consistent confirmation API
-- allow future custom modal UI
-- be easy to stub during tests
+- compose cleanly with the existing `ConfirmDialog`
+- keep action-specific labels, messages, and busy state testable through real dialog UI
 
 ### `useRecipientEditor`
 

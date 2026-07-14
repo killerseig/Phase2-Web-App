@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import AuthCard from '@/components/auth/AuthCard.vue'
+import AppButtonLink from '@/components/common/AppButtonLink.vue'
 </script>
 
 <template>
-  <div class="auth-page">
-    <div class="auth-card">
-      <span class="auth-card__eyebrow">404</span>
-      <h1 class="auth-card__title">Page not found</h1>
-      <p class="auth-card__copy">The workspace route you opened does not exist in the current scaffold.</p>
-      <RouterLink to="/jobs" class="app-button app-button--primary">Back to Jobs</RouterLink>
-    </div>
-  </div>
+  <AuthCard
+    eyebrow="404"
+    title="Page not found"
+    copy="The workspace route you opened does not exist in the current scaffold."
+  >
+    <AppButtonLink to="/jobs" variant="primary">Back to Jobs</AppButtonLink>
+  </AuthCard>
 </template>

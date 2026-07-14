@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import AuthCard from '@/components/auth/AuthCard.vue'
+import AppField from '@/components/common/AppField.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import AppTextInput from '@/components/common/AppTextInput.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { hasFirebaseConfig } from '@/firebase'
 import { sendPasswordResetEmail } from '@/services/auth'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from '@/utils/normalizeError'
+import { readFirstQueryParam } from '@/utils/routerQuery'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -23,12 +28,6 @@ useToastMessages([
   { source: info, severity: 'success', summary: 'Reset Password' },
 ])
 
-function readQueryParam(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (Array.isArray(value) && typeof value[0] === 'string') return value[0]
-  return ''
-}
-
 onMounted(async () => {
   await auth.init()
 
@@ -37,7 +36,7 @@ onMounted(async () => {
     return
   }
 
-  email.value = readQueryParam(route.query.email)
+  email.value = readFirstQueryParam(route.query.email)
 })
 
 async function handleSubmit() {
@@ -62,48 +61,42 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="auth-page">
-    <div class="auth-card">
-      <span class="auth-card__eyebrow">Phase 2</span>
-      <h1 class="auth-card__title">Reset Password</h1>
+  <AuthCard eyebrow="Phase 2" title="Reset Password">
+    <AppStatusMessage v-if="initializing" class="auth-card__status">
+      Checking your current session...
+    </AppStatusMessage>
 
-      <div v-if="initializing" class="auth-card__note">
-        Checking your current session...
-      </div>
-
-      <template v-else>
-        <form @submit.prevent="handleSubmit">
-          <div class="auth-field">
-            <label for="forgot-email">Email</label>
-            <input
-              id="forgot-email"
-              v-model="email"
-              type="email"
-              autocomplete="email"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <AppLoadingButton
-            class="auth-card__button"
-            type="submit"
-            variant="primary"
-            label="Send Reset Link"
-            loading-label="Sending Reset..."
-            :loading="loading"
-            :disabled="!hasFirebaseConfig"
+    <template v-else>
+      <form @submit.prevent="handleSubmit">
+        <AppField class="auth-field" label="Email">
+          <AppTextInput
+            id="forgot-email"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
           />
-        </form>
+        </AppField>
 
-        <RouterLink class="auth-card__link" to="/login">
-          Back to login
-        </RouterLink>
-      </template>
+        <AppLoadingButton
+          class="auth-card__button"
+          type="submit"
+          variant="primary"
+          label="Send Reset Link"
+          loading-label="Sending Reset..."
+          :loading="loading"
+          :disabled="!hasFirebaseConfig"
+        />
+      </form>
 
-      <div v-if="!hasFirebaseConfig" class="auth-card__note">
-        Firebase is not configured yet. Copy the `v1` `VITE_FIREBASE_*` values into `.env.local`
-        so this app can use the same project.
-      </div>
-    </div>
-  </div>
+      <RouterLink class="auth-card__link" to="/login">
+        Back to login
+      </RouterLink>
+    </template>
+
+    <AppStatusMessage v-if="!hasFirebaseConfig" class="auth-card__status" tone="warning">
+      Firebase is not configured yet. Copy the `v1` `VITE_FIREBASE_*` values into `.env.local`
+      so this app can use the same project.
+    </AppStatusMessage>
+  </AuthCard>
 </template>
