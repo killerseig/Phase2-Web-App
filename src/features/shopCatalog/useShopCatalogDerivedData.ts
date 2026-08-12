@@ -11,10 +11,7 @@ import {
   getShopCatalogVisibleChildItemCount,
 } from '@/features/shopCatalog/adminViewHelpers'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopCatalogDerivedDataOptions {
   categories: ReadonlyRef<ShopCategoryRecord[]>

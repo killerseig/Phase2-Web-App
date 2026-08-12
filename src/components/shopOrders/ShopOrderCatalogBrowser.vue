@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { usePendingActionMap } from '@/composables/usePendingActionMap'
 import { useWindowEventListener } from '@/composables/useWindowEventListener'
 import {
   formatShopCatalogFolderItemSummary as formatFolderItemSummary,
@@ -12,10 +13,13 @@ import {
 } from '@/features/shopCatalog/useShopCatalogContextMenu'
 import {
   buildShopOrderCatalogTreeNodes,
+  type ShopOrderCatalogRootNode,
   type ShopOrderCatalogTreeNode as TreeNode,
 } from '@/features/shopOrders/catalogBrowserHelpers'
+import AppPane from '@/components/common/AppPane.vue'
+import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
-import ShopOrderCatalogTreeNodeRow from './ShopOrderCatalogTreeNodeRow.vue'
+import ShopOrderCatalogTree from './ShopOrderCatalogTree.vue'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
 
 interface ContextMenuAction {
@@ -45,6 +49,11 @@ const expandedCategoryIds = ref<string[]>([])
 const collapsedCategoryIdsDuringSearch = ref<string[]>([])
 const catalogItemQuantities = reactive<Record<string, string>>({})
 const { closeContextMenu, contextMenu, openContextMenu } = useShopCatalogContextMenu()
+const {
+  isActionPending: isCatalogItemAddPending,
+  pendingKeys: pendingCatalogItemAddKeys,
+  runWithPendingAction: runWithPendingCatalogItemAdd,
+} = usePendingActionMap()
 
 let treeInitialized = false
 
@@ -99,7 +108,7 @@ const rootBucketSummary = computed(() =>
     getVisibleChildItemCount(null),
   ),
 )
-const rootTreeNode = computed(() => ({
+const rootTreeNode = computed<ShopOrderCatalogRootNode>(() => ({
   key: 'root' as const,
   kind: 'root' as const,
   depth: 0 as const,
@@ -122,6 +131,12 @@ const treeNodes = computed<TreeNode[]>(() => {
     getCategoryPath,
   })
 })
+const effectivelyExpandedCategoryIds = computed(() =>
+  treeNodes.value
+    .filter((node) => node.kind === 'category' && isCategoryEffectivelyExpanded(node.id))
+    .map((node) => node.id),
+)
+const pendingCatalogItemAddIds = computed(() => Object.keys(pendingCatalogItemAddKeys))
 
 const contextMenuActions = computed<ContextMenuAction[]>(() => {
   const target = contextMenu.target
@@ -194,13 +209,13 @@ const contextMenuActions = computed<ContextMenuAction[]>(() => {
         closeContextMenu()
       },
     },
-    {
-      key: 'add-item',
-      label: 'Add to Order',
-      disabled: props.disabled,
-      run: async () => {
-        closeContextMenu()
-        await handleTreeItemAdd(target.id)
+      {
+        key: 'add-item',
+        label: 'Add to Order',
+        disabled: props.disabled || isCatalogItemAddPending(target.id),
+        run: async () => {
+          closeContextMenu()
+          await handleTreeItemAdd(target.id)
       },
     },
     {
@@ -355,15 +370,21 @@ function handleTreeNodeSelection(node: TreeNode) {
 }
 
 async function handleTreeItemAdd(itemId: string) {
+  if (props.disabled || isCatalogItemAddPending(itemId)) return
+
   const item = catalogItemsById.value.get(itemId)
   if (!item) return
 
   const quantity = readQuantity(catalogItemQuantities[item.id] ?? '1')
-  const saved = await props.addCatalogItem(item, quantity)
+  const saved = await runWithPendingCatalogItemAdd(itemId, () => props.addCatalogItem(item, quantity))
   if (saved) {
     catalogItemQuantities[item.id] = '1'
     inspectCatalogItem(item)
   }
+}
+
+function handleTreeQuantityUpdate(itemId: string, value: string) {
+  catalogItemQuantities[itemId] = value
 }
 
 function getVisibleCategoryIds() {
@@ -394,6 +415,13 @@ function collapseAllCategories() {
 function handleContextMenuAction(action: ContextMenuAction) {
   if (action.disabled) return
   void action.run()
+}
+
+function handleContextMenuActionKey(actionKey: string) {
+  const action = contextMenuActions.value.find((entry) => entry.key === actionKey)
+  if (action) {
+    handleContextMenuAction(action)
+  }
 }
 
 function openRootContextMenu(event: MouseEvent) {
@@ -448,17 +476,19 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 </script>
 
 <template>
-  <section class="shop-orders-tree-pane">
-    <header class="shop-orders-pane__header shop-orders-tree-pane__header">
-      <div>
-        <span class="shop-orders-pane__eyebrow">Catalog Browser</span>
-        <h1 class="shop-orders-pane__title">Shop Orders</h1>
-      </div>
-      <div class="shop-orders-tree-pane__summary">
-        <span>{{ activeCategoryCount }} folders</span>
-        <span>{{ activeItemCount }} items</span>
-      </div>
-    </header>
+  <AppPane class="shop-orders-tree-pane">
+    <AppPaneHeader
+      class="shop-orders-pane__header shop-orders-tree-pane__header"
+      eyebrow="Catalog Browser"
+      title="Shop Orders"
+    >
+      <template #actions>
+        <div class="shop-orders-tree-pane__summary">
+          <span>{{ activeCategoryCount }} folders</span>
+          <span>{{ activeItemCount }} items</span>
+        </div>
+      </template>
+    </AppPaneHeader>
 
     <div class="shop-orders-tree-pane__body">
       <label class="shop-orders-pane__search">
@@ -470,95 +500,54 @@ useWindowEventListener('keydown', handleGlobalKeydown)
         />
       </label>
 
-      <div
-        class="shop-orders-tree-pane__list"
-        :class="{ 'shop-orders-tree-pane__list--collapsed': treeListCollapsed }"
-      >
-        <ShopOrderCatalogTreeNodeRow
-          :active="activeFolderId === null && !selectedCatalogItemId"
-          :expanded="rootBucketEffectivelyExpanded"
-          :node="rootTreeNode"
-          @context-menu="openRootContextMenu"
-          @select="handleRootSelection"
-          @toggle="toggleRootBucketExpanded"
-        />
-
-        <div v-if="loading" class="shop-orders-pane__empty">
-          Loading catalog...
-        </div>
-
-        <div
-          v-else-if="treeNodes.length === 0 && (!rootBucketHasChildren || normalizedTreeSearch)"
-          class="shop-orders-pane__empty"
-        >
-          No catalog entries match this view.
-        </div>
-
-        <div v-else class="shop-orders-tree">
-          <ShopOrderCatalogTreeNodeRow
-            v-for="node in treeNodes"
-            :key="node.key"
-            :active="node.kind === 'category'
-              ? activeFolderId === node.id && !selectedCatalogItemId
-              : selectedCatalogItemId === node.id"
-            :disabled="disabled"
-            :expanded="node.kind === 'category' ? isCategoryEffectivelyExpanded(node.id) : false"
-            :node="node"
-            :quantity="node.kind === 'item' ? catalogItemQuantities[node.id] ?? '1' : '1'"
-            @add="handleTreeItemAdd(node.id)"
-            @context-menu="openNodeContextMenu($event, node)"
-            @select="handleTreeNodeSelection(node)"
-            @toggle="node.kind === 'category' ? toggleCategoryExpanded(node.id) : undefined"
-            @update-quantity="catalogItemQuantities[node.id] = $event"
-          />
-        </div>
-      </div>
+      <ShopOrderCatalogTree
+        :active-folder-id="activeFolderId"
+        :context-menu="contextMenu"
+        :context-menu-actions="contextMenuActions"
+        :disabled="disabled"
+        :expanded-category-ids="effectivelyExpandedCategoryIds"
+        :list-collapsed="treeListCollapsed"
+        :loading="loading"
+        :nodes="treeNodes"
+        :pending-item-ids="pendingCatalogItemAddIds"
+        :quantities="catalogItemQuantities"
+        :root-expanded="rootBucketEffectivelyExpanded"
+        :root-has-children="rootBucketHasChildren"
+        :root-node="rootTreeNode"
+        :search-active="normalizedTreeSearch.length > 0"
+        :selected-catalog-item-id="selectedCatalogItemId"
+        @context-action="handleContextMenuActionKey"
+        @item-add="handleTreeItemAdd"
+        @node-context-menu="openNodeContextMenu"
+        @node-select="handleTreeNodeSelection"
+        @node-toggle="toggleCategoryExpanded($event.id)"
+        @root-context-menu="openRootContextMenu"
+        @root-select="handleRootSelection"
+        @root-toggle="toggleRootBucketExpanded"
+        @update-quantity="handleTreeQuantityUpdate"
+      />
 
       <slot />
     </div>
-
-    <div
-      v-if="contextMenu.visible"
-      class="shop-orders-context-menu"
-      data-testid="shoporder-context-menu"
-      :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
-      @pointerdown.stop
-      @click.stop
-      @contextmenu.prevent
-    >
-      <button
-        v-for="action in contextMenuActions"
-        :key="action.key"
-        type="button"
-        class="shop-orders-context-menu__item"
-        :data-testid="`shoporder-context-${action.key}`"
-        :disabled="action.disabled"
-        @pointerdown.stop.prevent
-        @click.stop.prevent="handleContextMenuAction(action)"
-      >
-        {{ action.label }}
-      </button>
-    </div>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>
 .shop-orders-tree-pane {
-  display: grid;
-  gap: 0.65rem;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  padding: 0.75rem;
-  border: 1px solid var(--shop-line);
-  border-radius: var(--radius);
-  background:
+  --app-pane-grid-template-rows: auto minmax(0, 1fr);
+  --app-pane-gap: 0.65rem;
+  --app-pane-padding: 0.75rem;
+  --app-pane-border: 1px solid var(--shop-line);
+  --app-pane-background:
     radial-gradient(circle at top right, rgba(99, 199, 230, 0.08), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006)),
     rgba(24, 36, 48, 0.9);
-  box-shadow: var(--shadow-soft);
-  grid-template-rows: auto minmax(0, 1fr);
+  --app-pane-shadow: var(--shadow-soft);
+  --app-pane-header-eyebrow-font-size: 0.64rem;
+  --app-pane-header-eyebrow-letter-spacing: 0.14em;
+  --app-pane-header-title-margin: 0.18rem 0 0;
+  --app-pane-header-title-font-size: 1.08rem;
+  min-width: 0;
 }
 
 .shop-orders-tree-pane__body {
@@ -571,10 +560,6 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 }
 
 .shop-orders-pane__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
   min-width: 0;
   padding-bottom: 0.32rem;
   border-bottom: 1px solid var(--shop-line-soft);
@@ -584,16 +569,12 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   align-items: center;
 }
 
-.shop-orders-pane__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.64rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.shop-orders-pane__header :deep(.app-pane-header__copy),
+.shop-orders-pane__header :deep(.app-pane-header__title) {
+  min-width: 0;
 }
 
-.shop-orders-pane__title {
-  margin: 0.18rem 0 0;
-  font-size: 1.08rem;
+.shop-orders-pane__header :deep(.app-pane-header__title) {
   letter-spacing: -0.015em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -630,77 +611,6 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   text-transform: uppercase;
 }
 
-.shop-orders-tree-pane__list {
-  display: grid;
-  flex: 1 1 auto;
-  align-content: start;
-  gap: 0;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 0.15rem;
-}
-
-.shop-orders-tree-pane__list--collapsed {
-  flex: 0 0 auto;
-  overflow: visible;
-}
-
-.shop-orders-tree {
-  display: grid;
-  gap: 0.08rem;
-}
-
-.shop-orders-context-menu {
-  position: fixed;
-  z-index: 30;
-  display: grid;
-  gap: 0.2rem;
-  min-width: 13rem;
-  padding: 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(33, 48, 61, 0.98), rgba(18, 28, 38, 0.98)),
-    rgba(18, 24, 33, 0.96);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
-}
-
-.shop-orders-context-menu__item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 2.25rem;
-  padding: 0.5rem 0.7rem;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.shop-orders-context-menu__item:hover:not(:disabled) {
-  background: rgba(99, 199, 230, 0.14);
-}
-
-.shop-orders-context-menu__item:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.shop-orders-pane__empty {
-  display: grid;
-  place-content: center;
-  min-height: 8.5rem;
-  padding: 0.85rem;
-  border: 1px dashed rgba(140, 162, 186, 0.1);
-  border-radius: 12px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
 @media (max-width: 1180px) {
   .shop-orders-tree-pane {
     max-height: 34rem;
@@ -708,6 +618,17 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 }
 
 @media (max-width: 820px) {
+  .shop-orders-tree-pane {
+    --app-pane-height: auto;
+    --app-pane-grid-template-rows: auto auto;
+    --app-pane-overflow: visible;
+    max-height: none;
+  }
+
+  .shop-orders-tree-pane__body {
+    overflow: visible;
+  }
+
   .shop-orders-pane__header {
     flex-direction: column;
     align-items: flex-start;

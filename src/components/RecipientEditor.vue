@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 
 const props = withDefaults(defineProps<{
@@ -49,14 +50,16 @@ function removeRecipient(email: string) {
 
 <template>
   <section class="recipient-editor">
-    <div class="recipient-editor__header">
-      <div class="recipient-editor__title">
-        <strong>{{ title }}</strong>
-        <span v-if="hint">{{ hint }}</span>
-        <span v-else>{{ recipientCountLabel }}</span>
-      </div>
-      <span v-if="hint" class="recipient-editor__count">{{ recipientCountLabel }}</span>
-    </div>
+    <AppSectionHeader
+      class="recipient-editor__header"
+      :title="title"
+      title-tag="strong"
+      :description="hint || undefined"
+    >
+      <template #actions>
+        <span class="recipient-editor__count">{{ recipientCountLabel }}</span>
+      </template>
+    </AppSectionHeader>
 
     <div v-if="!readOnly" class="recipient-editor__input-row">
       <AppTextInput
@@ -105,31 +108,18 @@ function removeRecipient(email: string) {
 
 <style scoped>
 .recipient-editor {
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
+  --app-section-header-description-font-size: 0.86rem;
+  --app-section-header-description-line-height: 1.25;
   display: grid;
   gap: 0.75rem;
   min-width: 0;
 }
 
-.recipient-editor__header,
-.recipient-editor__title {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.85rem;
-  min-width: 0;
-}
-
-.recipient-editor__title {
-  flex: 1 1 auto;
-  color: var(--text-muted);
-}
-
-.recipient-editor__title strong {
-  color: var(--text);
-  font-size: 1rem;
-}
-
-.recipient-editor__title span,
 .recipient-editor__count {
   flex: 0 0 auto;
   color: var(--text-muted);
@@ -214,11 +204,10 @@ function removeRecipient(email: string) {
     max-width: none;
   }
 
-  .recipient-editor__title,
   .recipient-editor__header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.15rem;
+    --app-section-header-flex-direction: column;
+    --app-section-header-align-items: flex-start;
+    --app-section-header-gap: 0.15rem;
   }
 }
 </style>

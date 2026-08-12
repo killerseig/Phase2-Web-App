@@ -9,10 +9,7 @@ import {
   getWeekStartFromSaturday,
 } from '@/features/timecards/workbook'
 import type { EmployeeRecord, JobRecord, TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseJobTimecardWorkspaceStateOptions {
   cardSearchTerm: ReadonlyRef<string>
@@ -20,7 +17,8 @@ interface UseJobTimecardWorkspaceStateOptions {
   employeeSearchTerm: ReadonlyRef<string>
   employees: ReadonlyRef<EmployeeRecord[]>
   ensuringWeek: ReadonlyRef<boolean>
-  getIsAdmin: () => boolean
+  getCanManageJobTimecards: () => boolean
+  getCanUseJobTimecardWorkflow: () => boolean
   job: ReadonlyRef<JobRecord | null>
   jobId: ReadonlyRef<string | null>
   selectedWeekEndDate: ReadonlyRef<string>
@@ -35,7 +33,8 @@ export function useJobTimecardWorkspaceState({
   employeeSearchTerm,
   employees,
   ensuringWeek,
-  getIsAdmin,
+  getCanManageJobTimecards,
+  getCanUseJobTimecardWorkflow,
   job,
   jobId,
   selectedWeekEndDate,
@@ -62,7 +61,8 @@ export function useJobTimecardWorkspaceState({
   const availableEmployees = computed(() => filterAvailableTimecardEmployees(employees.value, employeeSearchTerm.value))
   const canEditWeek = computed(() => {
     if (!selectedWeek.value) return false
-    return selectedWeek.value.status !== 'submitted' || getIsAdmin()
+    if (selectedWeek.value.status === 'submitted') return getCanManageJobTimecards()
+    return getCanUseJobTimecardWorkflow()
   })
   const canCreateSelectedWeek = computed(() => (
     !!jobId.value
@@ -70,6 +70,7 @@ export function useJobTimecardWorkspaceState({
     && !selectedWeek.value
     && !weeksLoading.value
     && !ensuringWeek.value
+    && getCanUseJobTimecardWorkflow()
   ))
   const burdenValue = computed(() => job.value?.productionBurden ?? DEFAULT_TIMECARD_BURDEN)
   const recentWeeks = computed(() => weeks.value.slice(0, 10))

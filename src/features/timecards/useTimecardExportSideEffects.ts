@@ -1,11 +1,12 @@
-import { watch, type ComputedRef } from 'vue'
+import { watch } from 'vue'
 import type { JobRecord, TimecardCardRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 type UseTimecardExportSideEffectsOptions<TCard extends TimecardCardRecord> = {
   getJobs: () => readonly JobRecord[]
-  orderedCards: ComputedRef<TCard[]>
+  orderedCards: ReadonlyRef<readonly TCard[]>
   redecorateLoadedCards: () => void
-  syncSelectedCardFromVisibleCards: (cards: TCard[]) => void
+  syncSelectedCardFromVisibleCards: (cards: readonly TCard[]) => void
 }
 
 export function useTimecardExportSideEffects<TCard extends TimecardCardRecord>({

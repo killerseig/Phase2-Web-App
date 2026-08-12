@@ -6,17 +6,10 @@ import {
 import { buildCardDisplayName } from '@/features/timecards/workbook'
 import { deleteTimecardCard, submitTimecardWeek, updateTimecardCard } from '@/services/timecards'
 import type { TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseJobTimecardCardActionsOptions {
-  actionLoading: Ref<boolean>
+  actionLoading: WritableRef<boolean>
   burdenValue: ReadonlyRef<number>
   canEditWeek: ReadonlyRef<boolean>
   cards: ReadonlyRef<TimecardCardRecord[]>
@@ -31,7 +24,7 @@ interface UseJobTimecardCardActionsOptions {
   setPageError: (error: unknown, fallback: string) => void
   setPageInfo: (message: string) => void
   sortMode: ReadonlyRef<JobTimecardSortMode>
-  timecardConfirmAction: Ref<JobTimecardConfirmAction | null>
+  timecardConfirmAction: WritableRef<JobTimecardConfirmAction | null>
 }
 
 export function useJobTimecardCardActions({
@@ -106,7 +99,7 @@ export function useJobTimecardCardActions({
   }
 
   function handleSubmitWeek() {
-    if (!selectedWeek.value || !cards.value.length) return
+    if (!selectedWeek.value || !cards.value.length || !canEditWeek.value) return
 
     timecardConfirmAction.value = {
       kind: 'submit-week',

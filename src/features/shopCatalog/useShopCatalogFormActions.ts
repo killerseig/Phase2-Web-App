@@ -13,28 +13,21 @@ import {
   updateShopCategory,
 } from '@/services/shopCatalog'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogFormActionsOptions {
-  activeFolderId: Ref<string | null>
+  activeFolderId: WritableRef<string | null>
   createCategoryForm: ShopCatalogCategoryFormState
   createItemForm: ShopCatalogItemFormState
-  createLoading: Ref<boolean>
+  createLoading: WritableRef<boolean>
   detailCategoryForm: ShopCatalogCategoryFormState
   detailItemForm: ShopCatalogItemFormState
   ensureExpandedToCategory: (categoryId: string | null) => void
-  expandedCategoryIds: Ref<string[]>
+  expandedCategoryIds: WritableRef<string[]>
   resetDetailMessages: () => void
-  saveLoading: Ref<boolean>
+  saveLoading: WritableRef<boolean>
   selectedCategory: ReadonlyRef<ShopCategoryRecord | null>
-  selectedInspectorKey: Ref<string>
+  selectedInspectorKey: WritableRef<string>
   selectedItem: ReadonlyRef<ShopCatalogItemRecord | null>
   setCreateError: (error: unknown, fallbackMessage: string) => void
   setCreateErrorMessage: (message: string) => void

@@ -2,6 +2,7 @@
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import { getJobFieldUserDisplayName } from '@/features/jobs/jobViewHelpers'
 import type { UserProfile } from '@/types/domain'
 
@@ -22,10 +23,15 @@ const emit = defineEmits<{
 
 <template>
   <section class="jobs-foremen-panel">
-    <div class="jobs-foremen-panel__header">
-      <strong>Assigned Field Users</strong>
-      <span>{{ selectedIds.length }} selected</span>
-    </div>
+    <AppSectionHeader
+      class="jobs-foremen-panel__header"
+      title="Assigned Field Users"
+      title-tag="strong"
+    >
+      <template #actions>
+        <span class="jobs-foremen-panel__selected-count">{{ selectedIds.length }} selected</span>
+      </template>
+    </AppSectionHeader>
 
     <div class="jobs-foremen-panel__search">
       <AppSearchInput
@@ -69,6 +75,11 @@ const emit = defineEmits<{
 
 <style scoped>
 .jobs-foremen-panel {
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
   display: grid;
   gap: 0.85rem;
   min-height: 0;
@@ -78,14 +89,7 @@ const emit = defineEmits<{
   background: rgba(255, 255, 255, 0.03);
 }
 
-.jobs-foremen-panel__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.jobs-foremen-panel__header span {
+.jobs-foremen-panel__selected-count {
   color: var(--text-muted);
 }
 
@@ -152,8 +156,8 @@ const emit = defineEmits<{
 
 @media (max-width: 760px) {
   .jobs-foremen-panel__header {
-    flex-direction: column;
-    align-items: flex-start;
+    --app-section-header-flex-direction: column;
+    --app-section-header-align-items: flex-start;
   }
 }
 </style>

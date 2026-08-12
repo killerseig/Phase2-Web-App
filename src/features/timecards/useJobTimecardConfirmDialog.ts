@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { useActionConfirmDialog } from '@/composables/useActionConfirmDialog'
 import {
   getJobTimecardConfirmLabel,
   getJobTimecardConfirmMessage,
@@ -6,28 +6,24 @@ import {
   isJobTimecardConfirmDestructive,
   type JobTimecardConfirmAction,
 } from '@/features/timecards/jobViewHelpers'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 export function useJobTimecardConfirmDialog(isBusy: ReadonlyRef<boolean>) {
-  const timecardConfirmAction = ref<JobTimecardConfirmAction | null>(null)
-
-  const timecardConfirmTitle = computed(() => getJobTimecardConfirmTitle(timecardConfirmAction.value))
-  const timecardConfirmMessage = computed(() => getJobTimecardConfirmMessage(timecardConfirmAction.value))
-  const timecardConfirmLabel = computed(() => getJobTimecardConfirmLabel(timecardConfirmAction.value))
-  const timecardConfirmDestructive = computed(() => isJobTimecardConfirmDestructive(timecardConfirmAction.value))
-
-  function closeTimecardConfirm() {
-    timecardConfirmAction.value = null
-  }
-
-  function handleTimecardConfirmOpenUpdate(open: boolean) {
-    if (open || isBusy.value) return
-
-    closeTimecardConfirm()
-  }
+  const {
+    closeConfirm: closeTimecardConfirm,
+    confirmAction: timecardConfirmAction,
+    confirmDestructive: timecardConfirmDestructive,
+    confirmLabel: timecardConfirmLabel,
+    confirmMessage: timecardConfirmMessage,
+    confirmTitle: timecardConfirmTitle,
+    handleConfirmOpenUpdate: handleTimecardConfirmOpenUpdate,
+  } = useActionConfirmDialog<JobTimecardConfirmAction>({
+    getLabel: getJobTimecardConfirmLabel,
+    getMessage: getJobTimecardConfirmMessage,
+    getTitle: getJobTimecardConfirmTitle,
+    isBusy,
+    isDestructive: isJobTimecardConfirmDestructive,
+  })
 
   return {
     closeTimecardConfirm,

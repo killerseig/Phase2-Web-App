@@ -1,6 +1,13 @@
 <script setup lang="ts">
+import AppBadge from '@/components/common/AppBadge.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import type { ShopOrderRecord } from '@/types/domain'
-import { getShopOrderDisplayNumber } from '@/utils/shopOrders'
+import {
+  formatShopOrderTimestamp,
+  getShopOrderDisplayLabel,
+  getShopOrderNumberLabel,
+  getShopOrderStatusLabel,
+} from '@/utils/shopOrders'
 
 defineProps<{
   orders: ShopOrderRecord[]
@@ -10,61 +17,14 @@ defineProps<{
 const emit = defineEmits<{
   select: [orderId: string]
 }>()
-
-function toMillis(value: unknown): number {
-  if (typeof (value as { toMillis?: () => number })?.toMillis === 'function') {
-    return (value as { toMillis: () => number }).toMillis()
-  }
-
-  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().getTime()
-  }
-
-  if (value instanceof Date) return value.getTime()
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value).getTime()
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  return 0
-}
-
-function formatOrderTimestamp(value: unknown) {
-  const millis = toMillis(value)
-  if (!millis) return 'Unknown date'
-
-  return new Date(millis).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
-function getOrderStatusLabel(order: ShopOrderRecord) {
-  return order.status === 'submitted' ? 'Submitted' : 'Draft'
-}
-
-function getOrderDisplayLabel(order: ShopOrderRecord) {
-  const createdLabel = formatOrderTimestamp(order.createdAt)
-  if (order.deliveryDate) {
-    return `${getOrderStatusLabel(order)} / Due ${order.deliveryDate}`
-  }
-
-  return `${getOrderStatusLabel(order)} / ${createdLabel}`
-}
-
-function getOrderNumberLabel(order: ShopOrderRecord) {
-  return `Order #${getShopOrderDisplayNumber(order)}`
-}
 </script>
 
 <template>
-  <div v-if="orders.length === 0" class="shop-orders-pane__empty shop-orders-pane__empty--compact">
-    No shop orders exist for this job yet.
-  </div>
+  <AppEmptyState
+    v-if="orders.length === 0"
+    class="shop-orders-pane__empty shop-orders-pane__empty--compact"
+    message="No shop orders exist for this job yet."
+  />
 
   <div v-else class="shop-orders-history-list">
     <button
@@ -76,15 +36,17 @@ function getOrderNumberLabel(order: ShopOrderRecord) {
       @click="emit('select', order.id)"
     >
       <div class="shop-orders-history-row__main">
-        <strong>{{ getOrderDisplayLabel(order) }}</strong>
+        <strong>{{ getShopOrderDisplayLabel(order) }}</strong>
         <div class="shop-orders-history-row__meta">
-          <span>{{ getOrderNumberLabel(order) }}</span>
-          <span>{{ formatOrderTimestamp(order.submittedAt || order.updatedAt || order.createdAt) }}</span>
+          <span>{{ getShopOrderNumberLabel(order) }}</span>
+          <span>{{ formatShopOrderTimestamp(order.submittedAt || order.updatedAt || order.createdAt) }}</span>
           <span>{{ order.items.length }} items</span>
           <span>{{ order.deliveryDate || 'No delivery date' }}</span>
         </div>
       </div>
-      <span class="shop-orders-badge">{{ getOrderStatusLabel(order) }}</span>
+      <AppBadge class="shop-orders-badge" tone="accent">
+        {{ getShopOrderStatusLabel(order) }}
+      </AppBadge>
     </button>
   </div>
 </template>
@@ -152,19 +114,14 @@ function getOrderNumberLabel(order: ShopOrderRecord) {
 }
 
 .shop-orders-badge {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  min-height: 1.55rem;
-  padding: 0 0.5rem;
-  border: 1px solid rgba(99, 199, 230, 0.25);
-  border-radius: 999px;
-  background: rgba(30, 83, 100, 0.3);
-  color: var(--accent);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  --app-badge-flex: 0 0 auto;
+  --app-badge-min-height: 1.55rem;
+  --app-badge-padding: 0 0.5rem;
+  --app-badge-font-size: 0.68rem;
+  --app-badge-letter-spacing: 0.08em;
+  --app-badge-white-space: nowrap;
+  --app-badge-accent-border-color: rgba(99, 199, 230, 0.25);
+  --app-badge-accent-background: rgba(30, 83, 100, 0.3);
 }
 
 .shop-orders-pane__empty {

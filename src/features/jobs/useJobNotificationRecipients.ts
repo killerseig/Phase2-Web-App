@@ -1,4 +1,5 @@
-import { ref, type ComputedRef, type Ref } from 'vue'
+import { ref } from 'vue'
+import { useRecipientEditor } from '@/composables/useRecipientEditor'
 import {
   getNotificationModuleLabel,
 } from '@/features/jobs/jobViewHelpers'
@@ -7,26 +8,23 @@ import {
   updateJobNotificationRecipients,
 } from '@/services/jobs'
 import type { JobRecord, NotificationModuleKey, NotificationRecipients } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
-import {
-  isValidRecipientEmail,
-  normalizeRecipientEmail,
-} from '@/utils/recipientEmails'
 
 type JobRecipientTargetMode = 'create' | 'job' | 'all'
 
 interface UseJobNotificationRecipientsOptions {
-  createError: Ref<string>
-  createInfo: Ref<string>
+  createError: WritableRef<string>
+  createInfo: WritableRef<string>
   createNotificationRecipients: NotificationRecipients
   createRecipientInputs: Record<NotificationModuleKey, string>
-  detailError: Ref<string>
-  detailInfo: Ref<string>
+  detailError: WritableRef<string>
+  detailInfo: WritableRef<string>
   detailNotificationRecipients: NotificationRecipients
   detailRecipientInputs: Record<NotificationModuleKey, string>
-  globalNotificationRecipients: Ref<NotificationRecipients>
+  globalNotificationRecipients: WritableRef<NotificationRecipients>
   globalRecipientInputs: Record<NotificationModuleKey, string>
-  selectedJob: ComputedRef<JobRecord | null>
+  selectedJob: ReadonlyRef<JobRecord | null>
 }
 
 export function useJobNotificationRecipients({
@@ -43,6 +41,11 @@ export function useJobNotificationRecipients({
   selectedJob,
 }: UseJobNotificationRecipientsOptions) {
   const recipientSaving = ref(false)
+  const {
+    appendRecipient,
+    getRecipientValueAddResult,
+    removeRecipient,
+  } = useRecipientEditor()
 
   function getRecipientTargets(mode: JobRecipientTargetMode) {
     return {
@@ -91,27 +94,27 @@ export function useJobNotificationRecipients({
       inputs,
       recipients,
     } = getRecipientTargets(mode)
-    const email = normalizeRecipientEmail(inputs[moduleKey])
+    const result = getRecipientValueAddResult(inputs[moduleKey], recipients[moduleKey])
 
     errorTarget.value = ''
 
-    if (!email.length) {
+    if (result.status === 'empty') {
       errorTarget.value = `Enter a ${getNotificationModuleLabel(moduleKey)} email first.`
       return
     }
 
-    if (!isValidRecipientEmail(email)) {
+    if (result.status === 'invalid') {
       errorTarget.value = 'Enter a valid email address.'
       return
     }
 
-    if (recipients[moduleKey].includes(email)) {
+    if (result.status === 'duplicate') {
       infoTarget.value = 'That recipient is already on the list.'
       inputs[moduleKey] = ''
       return
     }
 
-    const nextRecipients = [...recipients[moduleKey], email]
+    const nextRecipients = appendRecipient(recipients[moduleKey], result.email)
 
     if (mode === 'create') {
       recipients[moduleKey] = nextRecipients
@@ -143,7 +146,7 @@ export function useJobNotificationRecipients({
       infoTarget,
       recipients,
     } = getRecipientTargets(mode)
-    const nextRecipients = recipients[moduleKey].filter((entry) => entry !== email)
+    const nextRecipients = removeRecipient(recipients[moduleKey], email)
 
     errorTarget.value = ''
 

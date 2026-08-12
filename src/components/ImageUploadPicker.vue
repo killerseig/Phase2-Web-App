@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import FileUpload, { type FileUploadSelectEvent, type FileUploadUploaderEvent } from 'primevue/fileupload'
 import AppButton from '@/components/common/AppButton.vue'
+import AppCard from '@/components/common/AppCard.vue'
 import AppTextarea from '@/components/common/AppTextarea.vue'
 import type { DailyLogAttachmentRecord } from '@/types/domain'
 
@@ -143,9 +144,10 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
 
           <section v-if="attachments.length" class="image-upload-picker__section">
             <div class="image-upload-picker__grid">
-              <article
+              <AppCard
                 v-for="attachment in attachments"
                 :key="attachment.path"
+                as="article"
                 class="image-upload-picker__card"
               >
                 <button
@@ -179,7 +181,7 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
                 >
                   Delete
                 </AppButton>
-              </article>
+              </AppCard>
             </div>
           </section>
 
@@ -302,14 +304,14 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
 }
 
 .image-upload-picker__card {
-  display: grid;
+  --app-card-gap: 0.55rem;
+  --app-card-padding: 0.75rem;
+  --app-card-border: 1px solid rgba(255, 255, 255, 0.08);
+  --app-card-radius: 14px;
+  --app-card-background: rgba(255, 255, 255, 0.03);
+  --app-card-shadow: none;
   flex: 0 1 220px;
-  gap: 0.55rem;
   width: min(100%, 220px);
-  padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
 }
 
 .image-upload-picker__preview-button {

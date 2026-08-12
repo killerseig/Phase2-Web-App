@@ -5,6 +5,7 @@ import {
   getShopCategoryDisplayName,
   normalizeShopCatalogSearch,
 } from '@/features/shopCatalog/catalogDisplayHelpers'
+import { formatShopOrderCurrency } from '@/utils/shopOrders'
 
 export type ShopOrderCatalogTreeNode =
   | {
@@ -24,7 +25,19 @@ export type ShopOrderCatalogTreeNode =
       parentId: string | null
       depth: number
       label: string
+      priceLabel: string
     }
+
+export type ShopOrderCatalogRootNode = {
+  key: 'root'
+  kind: 'root'
+  depth: 0
+  label: string
+  secondary?: string
+  hasChildren: boolean
+}
+
+export type ShopOrderCatalogBrowserNode = ShopOrderCatalogRootNode | ShopOrderCatalogTreeNode
 
 interface BuildShopOrderCatalogTreeNodesOptions {
   treeSearch: string
@@ -144,6 +157,7 @@ export function buildShopOrderCatalogTreeNodes(
         parentId: item.categoryId,
         depth,
         label: getShopCatalogItemDisplayName(item),
+        priceLabel: formatShopOrderCurrency(item.price),
       })
     }
 

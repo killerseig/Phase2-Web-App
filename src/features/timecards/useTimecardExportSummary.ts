@@ -15,10 +15,7 @@ import {
 } from '@/features/timecards/exportViewHelpers'
 import { buildAccountsSummary } from '@/features/timecards/workbook'
 import type { TimecardWeekRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface TimecardExportWeekFilterBounds {
   startDate: string

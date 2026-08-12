@@ -28,12 +28,14 @@ const buttonClasses = computed(() => [
 <style scoped>
 .timecards-button {
   min-height: var(--timecards-toolbar-control-height);
+  min-width: 0;
   padding: 0 0.95rem;
   border: 1px solid var(--timecards-toolbar-control-border);
   border-radius: var(--timecards-toolbar-control-radius);
   background: var(--timecards-toolbar-control-bg-muted);
   color: var(--timecards-toolbar-control-text);
   font-weight: 600;
+  overflow-wrap: anywhere;
   box-shadow: none;
   transition:
     border-color 0.18s ease,

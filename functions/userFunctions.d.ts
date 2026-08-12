@@ -4,6 +4,19 @@ export declare const removeEmailFromAllRecipientLists: import("firebase-function
     removedFromRecipientLists: boolean;
     updatedJobCount: number;
 }>, unknown>;
+export declare const listAssignableFieldUsers: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    users: {
+        id: string;
+        email: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        role: "admin" | "payroll" | "shop-foreman" | "project-manager" | "foreman" | "none";
+        active: boolean;
+        assignedJobIds: string[];
+        inviteStatus: string | null;
+        inviteSentAt: any;
+    }[];
+}>, unknown>;
 export declare const handleUserAccessRevocationCleanup: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     uid: string;
 }>>;

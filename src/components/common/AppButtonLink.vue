@@ -20,3 +20,5 @@ const linkClasses = computed(() => [
     <slot />
   </RouterLink>
 </template>
+
+<style src="./button-family.css"></style>

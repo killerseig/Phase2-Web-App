@@ -6,8 +6,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EMAIL_STYLES_OBJECT = exports.EMAIL_STYLES = exports.DEFAULTS = exports.ERROR_MESSAGES = exports.EMAIL = exports.COLLECTIONS = exports.VALID_ROLES = void 0;
 // User Roles
-// Keep backend role validation aligned with frontend roles.
-exports.VALID_ROLES = ['admin', 'foreman', 'project-manager', 'none'];
+// Keep backend stored-role validation aligned with the frontend role catalog.
+// Payroll and Shop Foreman are recognized stored roles before their live
+// workflow permissions are enabled by the coordinated rules/functions rollout.
+exports.VALID_ROLES = ['admin', 'payroll', 'shop-foreman', 'project-manager', 'foreman', 'none'];
 // Firestore Collections
 exports.COLLECTIONS = {
     USERS: 'users',
@@ -19,6 +21,7 @@ exports.COLLECTIONS = {
 };
 // Email Configuration
 exports.EMAIL = {
+    SENDER_DISPLAY_NAME: 'Phase 2',
     SUBJECTS: {
         WELCOME: 'Create Your Phase 2 Account Password',
         PASSWORD_RESET: 'Reset Your Phase 2 Password',

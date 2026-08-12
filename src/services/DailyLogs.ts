@@ -1,10 +1,6 @@
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  type DocumentData,
-  type Unsubscribe,
+import type {
+  DocumentData,
+  Unsubscribe,
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
@@ -13,6 +9,8 @@ import {
   createEmptyDailyLogPayload,
   createEmptyIndoorClimateReading,
   createEmptyManpowerLine,
+  getSubmittableDailyLogIndoorClimateReadings,
+  getSubmittableDailyLogManpowerLines,
   type DailyLogTextFieldKey,
 } from '@/features/dailyLogs/schema'
 import type {
@@ -34,6 +32,7 @@ import {
   updateE2EDailyLog,
   uploadE2EDailyLogAttachment,
 } from '@/testing/e2eRuntime'
+import { toAppMillis } from '@/utils/dateTime'
 import { normalizeError } from '@/utils/normalizeError'
 
 export interface CreateDailyLogInput {
@@ -57,6 +56,10 @@ export interface UpdateDailyLogInput {
 export interface DailyLogActor {
   userId: string | null
   displayName: string | null
+}
+
+interface ListDailyLogsResponse {
+  logs: Array<Record<string, unknown> & { id: string }>
 }
 
 function toNullableText(value: unknown): string | null {
@@ -136,8 +139,10 @@ function sanitizePayload(payload: DailyLogPayload): DailyLogPayload {
   nextPayload.projectName = nextPayload.projectName.trim()
   nextPayload.weeklySchedule = nextPayload.weeklySchedule.trim()
   nextPayload.manpowerAssessment = nextPayload.manpowerAssessment.trim()
-  nextPayload.manpowerLines = nextPayload.manpowerLines.map((line) => sanitizeManpowerLine(line))
-  nextPayload.indoorClimateReadings = nextPayload.indoorClimateReadings.map((reading) => sanitizeIndoorClimateReading(reading))
+  nextPayload.manpowerLines = getSubmittableDailyLogManpowerLines(nextPayload.manpowerLines)
+    .map((line) => sanitizeManpowerLine(line))
+  nextPayload.indoorClimateReadings = getSubmittableDailyLogIndoorClimateReadings(nextPayload.indoorClimateReadings)
+    .map((reading) => sanitizeIndoorClimateReading(reading))
   nextPayload.safetyConcerns = nextPayload.safetyConcerns.trim()
   nextPayload.ahaReviewed = nextPayload.ahaReviewed.trim()
   nextPayload.scheduleConcerns = nextPayload.scheduleConcerns.trim()
@@ -300,25 +305,6 @@ function normalizeDailyLog(id: string, data: DocumentData): DailyLogRecord {
   }
 }
 
-function toMillis(value: unknown): number {
-  if (typeof (value as { toMillis?: () => number })?.toMillis === 'function') {
-    return (value as { toMillis: () => number }).toMillis()
-  }
-
-  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().getTime()
-  }
-
-  if (value instanceof Date) return value.getTime()
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value).getTime()
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  return 0
-}
-
 function sortDailyLogs(logs: DailyLogRecord[]) {
   return logs
     .slice()
@@ -326,13 +312,59 @@ function sortDailyLogs(logs: DailyLogRecord[]) {
       const rank = (status: string) => (status === 'submitted' ? 0 : 1)
       if (rank(left.status) !== rank(right.status)) return rank(left.status) - rank(right.status)
 
-      const rightTimestamp = toMillis(right.submittedAt) || toMillis(right.updatedAt) || toMillis(right.createdAt)
-      const leftTimestamp = toMillis(left.submittedAt) || toMillis(left.updatedAt) || toMillis(left.createdAt)
+      const rightTimestamp = toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
+      const leftTimestamp = toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
       if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
 
       if (right.sequenceNumber !== left.sequenceNumber) return right.sequenceNumber - left.sequenceNumber
       return right.id.localeCompare(left.id)
     })
+}
+
+function startCallablePollingSubscription<TRecord>(
+  fetchRecords: () => Promise<TRecord[]>,
+  onUpdate: (records: TRecord[]) => void,
+  onError?: (error: unknown) => void,
+): Unsubscribe {
+  let cancelled = false
+  let timerId: ReturnType<typeof setTimeout> | null = null
+
+  async function refresh() {
+    try {
+      const records = await fetchRecords()
+      if (!cancelled) {
+        onUpdate(records)
+      }
+    } catch (error) {
+      if (!cancelled) {
+        onError?.(error)
+      }
+    } finally {
+      if (!cancelled) {
+        timerId = setTimeout(refresh, 3000)
+      }
+    }
+  }
+
+  void refresh()
+
+  return () => {
+    cancelled = true
+    if (timerId) {
+      clearTimeout(timerId)
+      timerId = null
+    }
+  }
+}
+
+async function fetchDailyLogsForDateViaCallable(jobId: string, logDate: string) {
+  const { functions } = requireFirebaseServices()
+  const callable = httpsCallable<{ jobId: string; logDate: string }, ListDailyLogsResponse>(
+    functions,
+    'listDailyLogsForCurrentUser',
+  )
+  const result = await callable({ jobId, logDate })
+  return sortDailyLogs((result.data?.logs ?? []).map((log) => normalizeDailyLog(log.id, log)))
 }
 
 export function subscribeDailyLogsForDate(
@@ -345,16 +377,10 @@ export function subscribeDailyLogsForDate(
     return subscribeE2EDailyLogsForDate(jobId, logDate, onUpdate)
   }
 
-  const { db } = requireFirebaseServices()
-
-  return onSnapshot(
-    query(collection(db, 'dailyLogs'), where('jobId', '==', jobId), where('logDate', '==', logDate)),
-    (snapshot) => {
-      onUpdate(sortDailyLogs(snapshot.docs.map((entry) => normalizeDailyLog(entry.id, entry.data()))))
-    },
-    (error) => {
-      onError?.(error)
-    },
+  return startCallablePollingSubscription(
+    () => fetchDailyLogsForDateViaCallable(jobId, logDate),
+    onUpdate,
+    onError,
   )
 }
 

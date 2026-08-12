@@ -1,7 +1,8 @@
-import { onMounted, onUnmounted, watch, type ComputedRef } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseJobDashboardLifecycleOptions {
-  jobId: ComputedRef<string>
+  jobId: ReadonlyRef<string>
   subscribeRouteJob: () => void
   stopRouteJobSubscription: () => void
 }
@@ -15,7 +16,7 @@ export function useJobDashboardLifecycle({
     subscribeRouteJob()
   })
 
-  watch(jobId, () => {
+  watch(() => jobId.value, () => {
     subscribeRouteJob()
   })
 

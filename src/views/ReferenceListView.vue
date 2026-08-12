@@ -1,45 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import AppShell from '@/layouts/AppShell.vue'
-import PagePanel from '@/components/PagePanel.vue'
+import ReferenceListPageShell from '@/components/referenceLists/ReferenceListPageShell.vue'
+import { getReferenceListTitle } from '@/features/referenceLists/viewHelpers'
 
 const route = useRoute()
 
-const title = computed(() => {
-  const key = String(route.params.listKey)
-  if (key === 'job-types') return 'Job Types'
-  if (key === 'gcs') return 'GCs'
-  return 'Occupations'
-})
+const title = computed(() => getReferenceListTitle(route.params.listKey))
 </script>
 
 <template>
-  <AppShell>
-    <div data-testid="reference-list-page">
-      <PagePanel
-        eyebrow="Admin"
-        :title="title"
-        description="These fixed lists are managed by admins and reused throughout jobs, employees, and workflow forms."
-      >
-        <div class="catalog-tree-preview">
-          <div class="catalog-tree-preview__node">List management scaffold</div>
-        </div>
-      </PagePanel>
-    </div>
-  </AppShell>
+  <ReferenceListPageShell :title="title" />
 </template>
-
-<style scoped>
-.catalog-tree-preview {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.catalog-tree-preview__node {
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-}
-</style>

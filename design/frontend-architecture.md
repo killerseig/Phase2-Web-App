@@ -212,7 +212,7 @@ This does not need to happen in one move. Existing imports can be migrated gradu
   - `AppPane`
 - Feature components use the feature prefix.
   - `TimecardWeekToolbar`
-  - `ShopOrderItemsList`
+  - `ShopOrderItemsEditor`
   - `DailyLogAttachmentSection`
 - Avoid generic names like `Manager`, `Helper`, or `Thing`.
 
@@ -221,7 +221,7 @@ This does not need to happen in one move. Existing imports can be migrated gradu
 - Use `use*`.
   - `useAutosaveQueue`
   - `useRecipientEditor`
-  - `useShopOrderTree`
+  - `shopOrderCatalogTree`
 - A composable should have one clear job.
 
 ### Services
@@ -412,14 +412,14 @@ Target split:
   - exact interactive workbook grid
 - `TimecardPrintCard`
   - exact print/PDF card
-- `TimecardCardCanvas`
+- `TimecardCanvasPanel`
   - scaling, selection, card wrapper layout
 - `TimecardCreateCardTray`
   - employee/custom card creation
 - `TimecardWeekToolbar`
   - week selection and submit actions
 - `useTimecardSaveQueue`
-  - shared job/export save behavior
+  - covered shared job/export save behavior
 - `useTimecardCardScaling`
   - shared measurement/scale behavior
 

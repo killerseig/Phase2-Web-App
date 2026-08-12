@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import JobDashboardHeader from '@/components/jobs/JobDashboardHeader.vue'
+import JobDashboardWorkspaceShell from '@/components/jobs/JobDashboardWorkspaceShell.vue'
 import ModuleLauncherCard from '@/components/jobs/ModuleLauncherCard.vue'
 import ModuleLauncherGrid from '@/components/jobs/ModuleLauncherGrid.vue'
 import type { JobRecord } from '@/types/domain'
@@ -25,6 +26,24 @@ function makeJob(overrides: Partial<JobRecord> = {}): JobRecord {
 }
 
 describe('Job Dashboard components', () => {
+  it('renders header and module slots inside the dashboard workspace shell', () => {
+    const wrapper = mount(JobDashboardWorkspaceShell, {
+      props: {
+        testId: 'job-dashboard-page',
+      },
+      slots: {
+        header: '<section data-testid="dashboard-header">Header slot</section>',
+        modules: '<section data-testid="dashboard-modules">Modules slot</section>',
+      },
+    })
+
+    expect(wrapper.get('[data-testid="job-dashboard-page"]').classes()).toContain(
+      'job-dashboard-workspace',
+    )
+    expect(wrapper.get('[data-testid="dashboard-header"]').text()).toBe('Header slot')
+    expect(wrapper.get('[data-testid="dashboard-modules"]').text()).toBe('Modules slot')
+  })
+
   it('renders a module card as a route link with label, detail, and test id', () => {
     const wrapper = mount(ModuleLauncherCard, {
       global: {

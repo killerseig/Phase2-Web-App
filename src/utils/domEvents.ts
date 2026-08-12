@@ -1,6 +1,6 @@
 export function readInputValue(event: Event) {
   const target = event.target
-  return target instanceof HTMLInputElement ? target.value : ''
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ? target.value : ''
 }
 
 export function readCheckboxChecked(event: Event) {

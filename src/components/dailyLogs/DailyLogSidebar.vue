@@ -7,6 +7,7 @@ import type { DailyLogRecord } from '@/types/domain'
 const props = defineProps<{
   additionalRecipients: readonly string[]
   adminRecipients: readonly string[]
+  canDeleteSelectedLog: boolean
   canEditSelectedLog: boolean
   deletingDraft: boolean
   logs: DailyLogRecord[]
@@ -33,7 +34,7 @@ const emit = defineEmits<{
 <template>
   <aside class="daily-logs-sidebar">
     <DailyLogSelectedLogCard
-      :can-edit="props.canEditSelectedLog"
+      :can-delete="props.canDeleteSelectedLog"
       :deleting="props.deletingDraft"
       :selected-log="props.selectedLog"
       @delete="emit('deleteSelectedLog')"

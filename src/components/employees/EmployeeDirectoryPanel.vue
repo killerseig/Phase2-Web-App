@@ -3,6 +3,7 @@ import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppListButton from '@/components/common/AppListButton.vue'
+import AppPane from '@/components/common/AppPane.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
 import AppSelect from '@/components/common/AppSelect.vue'
@@ -37,7 +38,7 @@ function handleStatusFilterUpdate(value: string) {
 </script>
 
 <template>
-  <section class="employees-browser">
+  <AppPane class="employees-browser">
     <AppPaneHeader eyebrow="Admin" title="Employees">
       <template #actions>
         <AppButton variant="primary" @click="emit('createEmployee')">
@@ -112,7 +113,7 @@ function handleStatusFilterUpdate(value: string) {
         />
       </div>
     </div>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>

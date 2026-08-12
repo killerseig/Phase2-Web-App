@@ -1,18 +1,15 @@
-import { ref, type Ref } from 'vue'
+import { ref } from 'vue'
 import {
   isShopCatalogVisibleByArchive,
 } from '@/features/shopCatalog/adminViewHelpers'
 import type { ShopCategoryRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface ShopCatalogTreeExpansionOptions {
   categories: ReadonlyRef<ShopCategoryRecord[]>
   categoriesById: ReadonlyRef<Map<string, ShopCategoryRecord>>
   closeContextMenu?: () => void
-  showArchived: Ref<boolean>
+  showArchived: ReadonlyRef<boolean>
 }
 
 export function useShopCatalogTreeExpansion({
@@ -73,7 +70,10 @@ export function useShopCatalogTreeExpansion({
 
   function initializeRootCategories(nextCategories = categories.value) {
     expandedCategoryIds.value = nextCategories
-      .filter((category) => category.parentId === null)
+      .filter((category) => (
+        category.parentId === null
+        && isShopCatalogVisibleByArchive(category.active, showArchived.value)
+      ))
       .map((category) => category.id)
   }
 

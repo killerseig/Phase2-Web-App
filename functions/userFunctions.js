@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setUserPassword = exports.requestPasswordResetEmail = exports.verifySetupToken = exports.sendPendingUserInvites = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.removeEmailFromAllRecipientLists = void 0;
+exports.setUserPassword = exports.requestPasswordResetEmail = exports.verifySetupToken = exports.sendPendingUserInvites = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.listAssignableFieldUsers = exports.removeEmailFromAllRecipientLists = void 0;
 const crypto_1 = require("crypto");
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
@@ -42,8 +42,10 @@ const constants_1 = require("./constants");
 const emailService_1 = require("./emailService");
 const functionConfig_1 = require("./functionConfig");
 const recipientCleanup_1 = require("./recipientCleanup");
+const roleAccess_1 = require("./roleAccess");
 const runtime_1 = require("./runtime");
 const firestoreService_1 = require("./firestoreService");
+const targetRoleCapabilities_1 = require("./targetRoleCapabilities");
 function parseTokenExpiry(value) {
     if (value?.toDate && typeof value.toDate === 'function') {
         return value.toDate();
@@ -67,6 +69,44 @@ function createSetupTokenRecord() {
         setupToken: (0, crypto_1.randomBytes)(32).toString('hex'),
         setupTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     };
+}
+function normalizeAssignedJobIds(value) {
+    if (!Array.isArray(value))
+        return [];
+    return Array.from(new Set(value
+        .filter((entry) => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean)));
+}
+function normalizeAssignableUser(id, data) {
+    const role = (0, roleAccess_1.normalizeStoredRole)(data.role);
+    if (!(0, targetRoleCapabilities_1.targetFunctionRoleCanBeAssignedJobs)(role))
+        return null;
+    return {
+        id,
+        email: typeof data.email === 'string' ? data.email : null,
+        firstName: typeof data.firstName === 'string' ? data.firstName : null,
+        lastName: typeof data.lastName === 'string' ? data.lastName : null,
+        role,
+        active: data.active !== false,
+        assignedJobIds: normalizeAssignedJobIds(data.assignedJobIds),
+        inviteStatus: typeof data.inviteStatus === 'string' ? data.inviteStatus : null,
+        inviteSentAt: data.inviteSentAt ?? null,
+    };
+}
+async function getAuthorizedAssignableUserReader(uid) {
+    const userSnap = await runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(uid).get();
+    if (!userSnap.exists) {
+        throw new https_1.HttpsError('failed-precondition', 'Your user profile was not found.');
+    }
+    const user = (0, roleAccess_1.buildCurrentFunctionUser)(uid, userSnap.data() || {});
+    if (!user.active) {
+        throw new https_1.HttpsError('permission-denied', 'Your account is inactive.');
+    }
+    if (!(0, roleAccess_1.currentFunctionUserHasAnyRole)(user, ['admin', 'payroll', 'project-manager'])) {
+        throw new https_1.HttpsError('permission-denied', 'Your account cannot load assignable users.');
+    }
+    return user;
 }
 async function sendUserInvite(options) {
     const userRef = runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(options.uid);
@@ -99,6 +139,28 @@ exports.removeEmailFromAllRecipientLists = (0, https_1.onCall)(async (request) =
         removedFromRecipientLists: cleanup.settingsUpdated || cleanup.jobsUpdated > 0,
         updatedJobCount: cleanup.jobsUpdated,
     };
+});
+exports.listAssignableFieldUsers = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
+    }
+    await getAuthorizedAssignableUserReader(request.auth.uid);
+    const snapshot = await runtime_1.db.collection(constants_1.COLLECTIONS.USERS).get();
+    const users = snapshot.docs
+        .map((entry) => normalizeAssignableUser(entry.id, entry.data()))
+        .filter((entry) => entry !== null)
+        .sort((left, right) => {
+        const leftActive = left.active ? 0 : 1;
+        const rightActive = right.active ? 0 : 1;
+        if (leftActive !== rightActive)
+            return leftActive - rightActive;
+        const leftName = `${left.firstName ?? ''} ${left.lastName ?? ''}`.trim();
+        const rightName = `${right.firstName ?? ''} ${right.lastName ?? ''}`.trim();
+        if (leftName && rightName && leftName !== rightName)
+            return leftName.localeCompare(rightName);
+        return (left.email ?? '').localeCompare(right.email ?? '');
+    });
+    return { users };
 });
 exports.handleUserAccessRevocationCleanup = (0, firestore_1.onDocumentUpdated)('users/{uid}', async (event) => {
     const beforeData = event.data?.before?.data();
@@ -206,7 +268,7 @@ exports.createUserByAdmin = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
     if (!lastName) {
         throw new https_1.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.LAST_NAME_REQUIRED);
     }
-    if (!constants_1.VALID_ROLES.includes(userRole)) {
+    if (!(0, roleAccess_1.isValidStoredRole)(userRole)) {
         throw new https_1.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.INVALID_ROLE(constants_1.VALID_ROLES));
     }
     try {
@@ -317,7 +379,7 @@ exports.sendPendingUserInvites = (0, https_1.onCall)({ secrets: (0, functionConf
             const firstName = String(userData.firstName || '').trim();
             const role = String(userData.role || '').trim().toLowerCase();
             const active = userData.active !== false;
-            if (!email || !active || role === 'none' || !constants_1.VALID_ROLES.includes(role)) {
+            if (!email || !active || !(0, roleAccess_1.canSendInviteForStoredRole)(role)) {
                 skippedCount += 1;
                 continue;
             }

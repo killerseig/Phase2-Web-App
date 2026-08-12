@@ -5,28 +5,26 @@ import {
   type TimecardExportConfirmAction,
 } from '@/features/timecards/exportViewHelpers'
 import { buildCardDisplayName } from '@/features/timecards/workbook'
-import { deleteTimecardCard, deleteTimecardWeek } from '@/services/timecards'
+import {
+  deleteTimecardCard,
+  deleteTimecardWeek,
+  reopenTimecardWeek,
+  submitTimecardWeek,
+} from '@/services/timecards'
 import type { TimecardWeekRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseTimecardExportMutationActionsOptions {
-  actionLoading: Ref<boolean>
+  actionLoading: WritableRef<boolean>
   canEditWeek: ReadonlyRef<boolean>
   deleteWeekCache: (weekId: string) => void
   flushPendingSaves: () => Promise<void>
-  getIsAdmin: () => boolean
+  getCanUseTimecardExport: () => boolean
   resetPageAndSaveMessages: () => void
   selectCard: (cardId: string) => void
   setPageError: (error: unknown, fallback: string) => void
   setPageInfo: (message: string) => void
-  timecardExportConfirmAction: Ref<TimecardExportConfirmAction | null>
+  timecardExportConfirmAction: WritableRef<TimecardExportConfirmAction | null>
 }
 
 export function useTimecardExportMutationActions({
@@ -34,7 +32,7 @@ export function useTimecardExportMutationActions({
   canEditWeek,
   deleteWeekCache,
   flushPendingSaves,
-  getIsAdmin,
+  getCanUseTimecardExport,
   resetPageAndSaveMessages,
   selectCard,
   setPageError,
@@ -70,10 +68,32 @@ export function useTimecardExportMutationActions({
   }
 
   function handleDeleteWeek(week: TimecardWeekRecord) {
-    if (!getIsAdmin() || week.status !== 'draft') return
+    if (!getCanUseTimecardExport() || week.status !== 'draft') return
 
     timecardExportConfirmAction.value = {
       kind: 'delete-week',
+      weekId: week.id,
+      weekLabel: formatTimecardExportWeekRowSubtitle(week),
+      weekEndDate: formatTimecardExportDate(week.weekEndDate),
+    }
+  }
+
+  function handleSubmitWeek(week: TimecardWeekRecord) {
+    if (!getCanUseTimecardExport() || week.status !== 'draft') return
+
+    timecardExportConfirmAction.value = {
+      kind: 'submit-week',
+      weekId: week.id,
+      weekLabel: formatTimecardExportWeekRowSubtitle(week),
+      weekEndDate: formatTimecardExportDate(week.weekEndDate),
+    }
+  }
+
+  function handleReopenWeek(week: TimecardWeekRecord) {
+    if (!getCanUseTimecardExport() || week.status !== 'submitted') return
+
+    timecardExportConfirmAction.value = {
+      kind: 'reopen-week',
       weekId: week.id,
       weekLabel: formatTimecardExportWeekRowSubtitle(week),
       weekEndDate: formatTimecardExportDate(week.weekEndDate),
@@ -96,6 +116,36 @@ export function useTimecardExportMutationActions({
     }
   }
 
+  async function confirmSubmitWeek(action: Extract<TimecardExportConfirmAction, { kind: 'submit-week' }>) {
+    actionLoading.value = true
+    resetPageAndSaveMessages()
+    try {
+      await flushPendingSaves()
+      await submitTimecardWeek(action.weekId)
+      setPageInfo('Week submitted.')
+    } catch (error) {
+      setPageError(error, 'Failed to submit the draft week.')
+    } finally {
+      actionLoading.value = false
+      timecardExportConfirmAction.value = null
+    }
+  }
+
+  async function confirmReopenWeek(action: Extract<TimecardExportConfirmAction, { kind: 'reopen-week' }>) {
+    actionLoading.value = true
+    resetPageAndSaveMessages()
+    try {
+      await flushPendingSaves()
+      await reopenTimecardWeek(action.weekId)
+      setPageInfo('Submitted week moved back to draft.')
+    } catch (error) {
+      setPageError(error, 'Failed to undo the submitted week.')
+    } finally {
+      actionLoading.value = false
+      timecardExportConfirmAction.value = null
+    }
+  }
+
   async function confirmTimecardExportAction() {
     const action = timecardExportConfirmAction.value
     if (!action) return
@@ -105,14 +155,28 @@ export function useTimecardExportMutationActions({
       return
     }
 
-    await confirmDeleteWeek(action)
+    if (action.kind === 'delete-week') {
+      await confirmDeleteWeek(action)
+      return
+    }
+
+    if (action.kind === 'submit-week') {
+      await confirmSubmitWeek(action)
+      return
+    }
+
+    await confirmReopenWeek(action)
   }
 
   return {
     confirmDeleteWeek,
     confirmRemoveCard,
+    confirmReopenWeek,
+    confirmSubmitWeek,
     confirmTimecardExportAction,
     handleDeleteWeek,
     handleRemoveCard,
+    handleReopenWeek,
+    handleSubmitWeek,
   }
 }

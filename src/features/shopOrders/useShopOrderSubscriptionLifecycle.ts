@@ -1,8 +1,5 @@
 import { onBeforeUnmount, onMounted, watch } from 'vue'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 type UseShopOrderSubscriptionLifecycleOptions = {
   clearOrderItemNoteDrafts: () => void

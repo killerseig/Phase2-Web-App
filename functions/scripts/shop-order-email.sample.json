@@ -11,6 +11,7 @@
     {
       "description": "./ *Start Up / Job Posters",
       "quantity": 2,
+      "price": 7.5,
       "receivedQuantity": 0,
       "backorderedQuantity": 0,
       "note": ""
@@ -18,6 +19,7 @@
     {
       "description": "./ *Start Up / Foreman Book",
       "quantity": 1,
+      "price": 12.5,
       "receivedQuantity": 0,
       "backorderedQuantity": 0,
       "note": ""

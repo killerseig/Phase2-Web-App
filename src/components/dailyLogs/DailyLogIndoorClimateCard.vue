@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import AppCard from '@/components/common/AppCard.vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 import type { DailyLogIndoorClimateFieldKey, DailyLogRepeaterColumnSchema } from '@/features/dailyLogs/schema'
 import type { DailyLogIndoorClimateReadingRecord } from '@/types/domain'
@@ -26,13 +28,13 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
 </script>
 
 <template>
-  <article class="daily-log-climate-card daily-logs-card">
-    <header class="daily-log-climate-card__header">
-      <div>
-        <span class="daily-log-climate-card__eyebrow">Indoor Climate</span>
-        <h2 class="daily-log-climate-card__title">Indoor Temperature Readings</h2>
-      </div>
-    </header>
+  <AppCard class="daily-log-climate-card daily-logs-card">
+    <AppSectionHeader
+      class="daily-log-climate-card__header"
+      eyebrow="Indoor Climate"
+      title="Indoor Temperature Readings"
+      title-tag="h2"
+    />
 
     <div class="daily-log-climate-card__table-wrapper">
       <table class="daily-log-climate-card__table">
@@ -81,39 +83,19 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
         </tbody>
       </table>
     </div>
-  </article>
+  </AppCard>
 </template>
 
 <style scoped>
 .daily-log-climate-card {
-  display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-}
-
-.daily-log-climate-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.85rem;
-}
-
-.daily-log-climate-card__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.68rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.daily-log-climate-card__title {
-  margin: 0.2rem 0 0;
-  font-size: 1.05rem;
+  --app-section-header-copy-gap: 0.2rem;
+  --app-section-header-eyebrow-font-size: 0.68rem;
+  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
 }
 
 .daily-log-climate-card__table-wrapper {

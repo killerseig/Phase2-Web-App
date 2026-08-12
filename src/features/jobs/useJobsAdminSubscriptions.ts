@@ -2,16 +2,18 @@ import { useSubscribedRecords } from '@/composables/useSubscribedRecords'
 import { useSubscribedValue } from '@/composables/useSubscribedValue'
 import { createEmptyNotificationRecipients } from '@/features/jobs/jobViewHelpers'
 import { subscribeGlobalNotificationRecipients } from '@/services/jobs'
-import { subscribeUsers } from '@/services/users'
+import { subscribeAssignableUsers } from '@/services/users'
 import type { NotificationRecipients, UserProfile } from '@/types/domain'
 
 interface UseJobsAdminSubscriptionsOptions {
-  getIsAdmin: () => boolean
+  getCanLoadAssignableUsers: () => boolean
+  getCanManageGlobalRecipients: () => boolean
   setDetailError: (error: unknown, fallbackMessage: string) => void
 }
 
 export function useJobsAdminSubscriptions({
-  getIsAdmin,
+  getCanLoadAssignableUsers,
+  getCanManageGlobalRecipients,
   setDetailError,
 }: UseJobsAdminSubscriptionsOptions) {
   const {
@@ -20,7 +22,7 @@ export function useJobsAdminSubscriptions({
     records: users,
     start: startUsersSubscription,
     stop: stopUsersSubscription,
-  } = useSubscribedRecords<UserProfile>(subscribeUsers, {
+  } = useSubscribedRecords<UserProfile>(subscribeAssignableUsers, {
     errorMessage: 'Failed to load assignable users.',
     initialLoading: false,
   })
@@ -41,10 +43,8 @@ export function useJobsAdminSubscriptions({
   )
 
   function startAdminSubscriptions() {
-    if (!getIsAdmin()) return
-
-    startUsersSubscription()
-    startGlobalNotificationRecipientsSubscription()
+    if (getCanLoadAssignableUsers()) startUsersSubscription()
+    if (getCanManageGlobalRecipients()) startGlobalNotificationRecipientsSubscription()
   }
 
   function stopAdminSubscriptions() {

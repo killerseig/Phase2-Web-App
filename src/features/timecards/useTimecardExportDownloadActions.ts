@@ -1,10 +1,7 @@
 import { buildTimecardCsvExport, downloadTimecardCsvExport } from '@/features/timecards/csv-export'
 import type { TimecardExportArchiveCardRecord } from '@/features/timecards/exportViewHelpers'
 import { saveTimecardPdfExportPayload } from '@/features/timecards/pdf-export'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseTimecardExportDownloadActionsOptions {
   buildCsvExportFilename: () => string

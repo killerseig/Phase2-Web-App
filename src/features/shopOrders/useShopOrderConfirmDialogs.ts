@@ -1,9 +1,10 @@
-import { computed, ref, type ComputedRef } from 'vue'
+import { computed, ref } from 'vue'
 import { getRemoveShopOrderItemConfirmMessage } from '@/features/shopOrders/viewHelpers'
 import type { ShopOrderRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopOrderConfirmDialogsOptions {
-  selectedOrder: ComputedRef<ShopOrderRecord | null>
+  selectedOrder: ReadonlyRef<ShopOrderRecord | null>
 }
 
 export function useShopOrderConfirmDialogs({

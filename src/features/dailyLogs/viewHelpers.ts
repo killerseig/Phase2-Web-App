@@ -1,6 +1,7 @@
 import {
-  DAILY_LOG_SUBMIT_REQUIRED_TEXT_FIELDS,
   cloneDailyLogPayload,
+  getSubmittableDailyLogIndoorClimateReadings,
+  getSubmittableDailyLogManpowerLines,
 } from '@/features/dailyLogs/schema'
 import type {
   DailyLogAttachmentRecord,
@@ -11,9 +12,9 @@ import type {
   NotificationRecipients,
 } from '@/types/domain'
 import {
-  normalizeRecipientEmail,
   normalizeRecipientEmailList,
 } from '@/utils/recipientEmails'
+export { validateDailyLogForSubmit } from '@/features/dailyLogs/validation'
 
 export interface DailyLogSiteInfoDisplay {
   projectName: string
@@ -36,15 +37,15 @@ export const savedDailyLogFieldKeys: SavedDailyLogFieldKey[] = [
 
 export function isDailyLogVisibleToUser(
   log: DailyLogRecord,
-  options: { currentUserId: string | null; isAdmin: boolean },
+  options: { currentUserId: string | null; canViewAllDailyLogs: boolean },
 ) {
-  if (options.isAdmin) return true
+  if (options.canViewAllDailyLogs) return true
   return log.status === 'submitted' || log.foremanUserId === options.currentUserId
 }
 
 export function getVisibleDailyLogs(
   logs: readonly DailyLogRecord[],
-  options: { currentUserId: string | null; isAdmin: boolean },
+  options: { currentUserId: string | null; canViewAllDailyLogs: boolean },
 ) {
   return logs.filter((log) => isDailyLogVisibleToUser(log, options))
 }
@@ -63,6 +64,27 @@ export function getPreferredDailyLog(logs: readonly DailyLogRecord[], currentUse
   return logs[0] ?? null
 }
 
+export function getNextDailyLogSelectionId(
+  logs: readonly DailyLogRecord[],
+  options: {
+    canViewAllDailyLogs: boolean
+    currentSelectedLogId: string | null
+    currentUserId: string | null
+  },
+) {
+  const visibleLogs = getVisibleDailyLogs(logs, {
+    currentUserId: options.currentUserId,
+    canViewAllDailyLogs: options.canViewAllDailyLogs,
+  })
+
+  if (options.currentSelectedLogId) {
+    const selectedStillVisible = visibleLogs.some((log) => log.id === options.currentSelectedLogId)
+    if (selectedStillVisible) return options.currentSelectedLogId
+  }
+
+  return getPreferredDailyLog(visibleLogs, options.currentUserId)?.id ?? null
+}
+
 export function getDailyLogsTitle(job: JobRecord | null) {
   return job ? `${job.code || 'No Job #'} - ${job.name}` : 'Daily Logs'
 }
@@ -73,17 +95,29 @@ export function canEditDailyLog(
 ) {
   return (
     log?.status === 'draft'
-    && log.logDate === options.todayDate
+    && log.logDate <= options.todayDate
     && log.foremanUserId === options.currentUserId
   )
+}
+
+export function canDeleteDailyLogDraft(
+  log: DailyLogRecord | null,
+  options: { currentUserId: string | null; todayDate: string; canViewAllDailyLogs: boolean },
+) {
+  if (log?.status !== 'draft') return false
+  if (options.canViewAllDailyLogs) return true
+
+  return canEditDailyLog(log, {
+    currentUserId: options.currentUserId,
+    todayDate: options.todayDate,
+  })
 }
 
 export function hasSubmittedDailyLogForDate(
   logs: readonly DailyLogRecord[],
   selectedDate: string,
-  todayDate: string,
 ) {
-  return selectedDate === todayDate && logs.some((log) => log.status === 'submitted')
+  return logs.some((log) => log.status === 'submitted' && log.logDate === selectedDate)
 }
 
 export function canCreateDailyLogForDate(options: {
@@ -92,13 +126,15 @@ export function canCreateDailyLogForDate(options: {
   currentUserId: string | null
   visibleLogs: readonly DailyLogRecord[]
 }) {
-  if (options.selectedDate !== options.todayDate || !options.currentUserId) return false
+  if (!options.currentUserId || options.selectedDate > options.todayDate) return false
 
-  const hasOwnDraftForToday = options.visibleLogs.some((log) =>
-    log.status === 'draft' && log.foremanUserId === options.currentUserId,
+  const hasOwnDraftForSelectedDate = options.visibleLogs.some((log) =>
+    log.status === 'draft'
+    && log.logDate === options.selectedDate
+    && log.foremanUserId === options.currentUserId,
   )
 
-  return !hasOwnDraftForToday
+  return !hasOwnDraftForSelectedDate
 }
 
 export function getDailyLogCreateButtonLabel(hasSubmittedLogForToday: boolean) {
@@ -139,6 +175,8 @@ export function prepareDailyLogPayload(
   nextPayload.jobSiteNumbers = siteInfo.jobNumber
   nextPayload.foremanOnSite = siteInfo.foreman
   nextPayload.siteForemanAssistant = siteInfo.projectManager
+  nextPayload.manpowerLines = getSubmittableDailyLogManpowerLines(nextPayload.manpowerLines)
+  nextPayload.indoorClimateReadings = getSubmittableDailyLogIndoorClimateReadings(nextPayload.indoorClimateReadings)
   nextPayload.manpower = nextPayload.manpowerLines
     .filter((line) => line.trade.trim().length > 0 && Number(line.count) > 0)
     .map((line) => {
@@ -149,6 +187,16 @@ export function prepareDailyLogPayload(
     .join('; ')
   nextPayload.qcInspection = nextPayload.qcAreasInspected.trim()
   return nextPayload
+}
+
+export function createDailyLogPayloadPreparer(options: {
+  getPayload: () => DailyLogPayload
+  getSiteInfo: () => DailyLogSiteInfoDisplay
+}) {
+  return (payload?: DailyLogPayload) => prepareDailyLogPayload(
+    payload ?? options.getPayload(),
+    options.getSiteInfo(),
+  )
 }
 
 export function getDailyLogAttachmentsByType(
@@ -162,10 +210,6 @@ export function toDailyLogAttachmentSection(type: DailyLogAttachmentType): Daily
   if (type === 'ptp') return 'ptp'
   if (type === 'qc') return 'qc'
   return 'photo'
-}
-
-export function normalizeDailyLogRecipientEmail(value: string) {
-  return normalizeRecipientEmail(value)
 }
 
 export function getAdminDailyLogRecipients(options: {
@@ -188,28 +232,4 @@ export function getAdditionalDailyLogRecipients(
 ) {
   const adminRecipientSet = new Set(adminRecipients)
   return (selectedLog?.additionalRecipients ?? []).filter((email) => !adminRecipientSet.has(email))
-}
-
-export function validateDailyLogForSubmit(payload: DailyLogPayload) {
-  for (const field of DAILY_LOG_SUBMIT_REQUIRED_TEXT_FIELDS) {
-    if (!(payload[field.key] ?? '').trim().length) {
-      return `Complete "${field.label}" before submitting.`
-    }
-  }
-
-  const invalidManpowerIndex = payload.manpowerLines.findIndex(
-    (line) => !line.trade.trim().length || Math.round(Number(line.count) || 0) < 1,
-  )
-  if (invalidManpowerIndex !== -1) {
-    return `Complete manpower row ${invalidManpowerIndex + 1} before submitting.`
-  }
-
-  const invalidClimateIndex = payload.indoorClimateReadings.findIndex(
-    (reading) => !reading.area.trim() || !reading.high.trim() || !reading.low.trim() || !reading.humidity.trim(),
-  )
-  if (invalidClimateIndex !== -1) {
-    return `Complete indoor climate row ${invalidClimateIndex + 1} before submitting.`
-  }
-
-  return ''
 }

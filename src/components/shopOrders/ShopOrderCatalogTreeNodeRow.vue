@@ -2,18 +2,7 @@
 import { computed } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
-import type { ShopOrderCatalogTreeNode } from '@/features/shopOrders/catalogBrowserHelpers'
-
-type ShopOrderCatalogRootNode = {
-  key: 'root'
-  kind: 'root'
-  depth: 0
-  label: string
-  secondary?: string
-  hasChildren: boolean
-}
-
-type ShopOrderCatalogBrowserNode = ShopOrderCatalogRootNode | ShopOrderCatalogTreeNode
+import type { ShopOrderCatalogBrowserNode } from '@/features/shopOrders/catalogBrowserHelpers'
 
 const props = withDefaults(defineProps<{
   active: boolean
@@ -44,6 +33,10 @@ const hasChildren = computed(() => {
 const secondaryLabel = computed(() => {
   if (props.node.kind === 'item') return ''
   return props.node.secondary ?? ''
+})
+const itemPriceLabel = computed(() => {
+  if (props.node.kind !== 'item') return ''
+  return props.node.priceLabel
 })
 const rowTestId = computed(() => {
   if (props.node.kind === 'root') return 'shoporder-root-row'
@@ -94,6 +87,12 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
       ]"
     ></span>
     <span class="shop-orders-tree-node__label">{{ props.node.label }}</span>
+    <span
+      v-if="itemPriceLabel"
+      class="shop-orders-tree-node__price"
+    >
+      {{ itemPriceLabel }}
+    </span>
     <span
       v-if="secondaryLabel"
       class="shop-orders-tree-node__meta"
@@ -265,6 +264,14 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
   text-overflow: ellipsis;
   color: var(--text-soft);
   font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.shop-orders-tree-node__price {
+  flex: 0 0 auto;
+  color: var(--accent-blue-bright, #72d3ff);
+  font-size: 0.76rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 

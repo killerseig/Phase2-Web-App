@@ -1,17 +1,10 @@
 import { watch } from 'vue'
 import type { JobRecord, TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseJobTimecardWorkspaceSyncOptions {
   burdenValue: ReadonlyRef<number>
-  cards: Ref<TimecardCardRecord[]>
+  cards: WritableRef<TimecardCardRecord[]>
   filteredCards: ReadonlyRef<TimecardCardRecord[]>
   job: ReadonlyRef<JobRecord | null>
   jobId: ReadonlyRef<string | null>
@@ -19,13 +12,14 @@ interface UseJobTimecardWorkspaceSyncOptions {
   resetCardWorkspaceState: () => void
   resetPageAndSaveMessages: () => void
   selectedWeek: ReadonlyRef<TimecardWeekRecord | null>
-  selectedWeekEndDate: ReadonlyRef<string>
-  selectedWeekId: Ref<string | null>
+  selectedWeekEndDate: WritableRef<string>
+  selectedWeekId: WritableRef<string | null>
   subscribeCardsForWeek: () => void
   subscribeJob: () => void
   subscribeWeeksForJob: () => void
   syncSelectedCardFromVisibleCards: (cards: TimecardCardRecord[]) => void
-  weeks: Ref<TimecardWeekRecord[]>
+  weekSubscriptionKey: ReadonlyRef<string>
+  weeks: WritableRef<TimecardWeekRecord[]>
 }
 
 export function useJobTimecardWorkspaceSync({
@@ -44,6 +38,7 @@ export function useJobTimecardWorkspaceSync({
   subscribeJob,
   subscribeWeeksForJob,
   syncSelectedCardFromVisibleCards,
+  weekSubscriptionKey,
   weeks,
 }: UseJobTimecardWorkspaceSyncOptions) {
   watch(
@@ -65,6 +60,19 @@ export function useJobTimecardWorkspaceSync({
   )
 
   watch(
+    () => weeks.value.map((week) => `${week.id}:${week.weekEndDate}`).join('|'),
+    () => {
+      if (selectedWeekEndDate.value || selectedWeekId.value || !weeks.value.length) return
+
+      const nextWeek = weeks.value[0]
+      if (!nextWeek) return
+
+      selectedWeekEndDate.value = nextWeek.weekEndDate
+      selectedWeekId.value = nextWeek.id
+    },
+  )
+
+  watch(
     () => jobId.value,
     () => {
       resetPageAndSaveMessages()
@@ -73,6 +81,18 @@ export function useJobTimecardWorkspaceSync({
       weeks.value = []
       cards.value = []
       subscribeJob()
+      subscribeWeeksForJob()
+    },
+  )
+
+  watch(
+    () => weekSubscriptionKey.value,
+    () => {
+      if (!jobId.value) return
+
+      resetPageAndSaveMessages()
+      weeks.value = []
+      cards.value = []
       subscribeWeeksForJob()
     },
   )

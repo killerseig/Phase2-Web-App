@@ -501,7 +501,7 @@ type ShopOrderItemDoc = {
   - explicit draft or submitted package view
 - `/exports/timecards`
   - admin/payroll filtered export page
-  - project manager assigned-job submitted-timecard reporting may reuse this view in read-only scoped mode or use a separate dashboard module
+  - reserved for export/admin workflows; project manager assigned-job submitted-timecard reporting currently uses the job timecards route in read-only scoped mode
 
 ### Daily log routes
 
@@ -570,12 +570,12 @@ Responsibilities:
 - remove employee from roster
 - submit weekly package
 - view history
+- show assigned Project Managers submitted weeks only in read-only reporting mode
 
 ### `TimecardExportPage`
 
 Responsibilities:
 - admin/payroll filters
-- project manager assigned-job submitted-timecard reporting if this view is reused in scoped read-only mode
 - result set preview
 - export exact PDF
 - export exact CSV

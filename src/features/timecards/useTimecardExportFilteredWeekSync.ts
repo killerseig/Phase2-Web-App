@@ -1,10 +1,7 @@
 import { watch } from 'vue'
 import type { TimecardExportArchiveCardRecord } from '@/features/timecards/exportViewHelpers'
 import type { TimecardWeekRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseTimecardExportFilteredWeekSyncOptions {
   cards: ReadonlyRef<TimecardExportArchiveCardRecord[]>

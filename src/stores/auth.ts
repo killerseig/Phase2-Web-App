@@ -1,19 +1,30 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  type User,
-} from 'firebase/auth'
-import {
-  canAccessAdminArea,
   canAccessProfileAssignedJob,
+  canCreateJobs as canCreateJobsForRole,
+  canDeleteOrArchiveJobs as canDeleteOrArchiveJobsForRole,
+  canEditJobSetup as canEditJobSetupForRole,
+  canManageJobTimecards as canManageJobTimecardsForRole,
+  canManageJobs as canManageJobsForRole,
+  canUseJobTimecardWorkflow as canUseJobTimecardWorkflowForRole,
+  canUseJobSetupEditor as canUseJobSetupEditorForRole,
+  canUseTimecardExport as canUseTimecardExportForRole,
+  canViewAllDailyLogs as canViewAllDailyLogsForRole,
+  canViewAllJobs as canViewAllJobsForRole,
+  canViewSubmittedTimecardReport as canViewSubmittedTimecardReportForRole,
   getEffectiveRole,
   hasCurrentWorkspaceAccess,
 } from '@/auth/capabilities'
-import { hasFirebaseConfig, requireFirebaseServices } from '@/firebase'
-import { getOrCreateUserProfile, subscribeUserProfile } from '@/services/auth'
+import {
+  getOrCreateUserProfile,
+  signInWithPassword,
+  signOutOfAuthSession,
+  subscribeAuthSession,
+  subscribeUserProfile,
+  type AuthSessionUser,
+} from '@/services/auth'
+import { hasConfiguredFirebase } from '@/services/firebaseConfig'
 import { useJobsStore } from '@/stores/jobs'
 import { getE2EAuthState, isE2EActive } from '@/testing/e2eRuntime'
 import type { EffectiveRoleKey, RawRoleKey, UserProfile } from '@/types/domain'
@@ -26,6 +37,7 @@ type FirebaseLikeError = Error & {
 let authInitPromise: Promise<void> | null = null
 let unsubscribeAuth: (() => void) | null = null
 let unsubscribeProfile: (() => void) | null = null
+let profileRetryTimer: number | null = null
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -41,8 +53,19 @@ function isRetryableProfileError(error: unknown) {
   )
 }
 
+function isTransientProfileListenerError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const firebaseError = error as FirebaseLikeError
+  return (
+    firebaseError.code === 'firestore/deadline-exceeded' ||
+    firebaseError.code === 'firestore/unavailable' ||
+    firebaseError.code === 'deadline-exceeded' ||
+    firebaseError.code === 'unavailable'
+  )
+}
+
 export const useAuthStore = defineStore('auth', () => {
-  const currentUser = ref<User | null>(null)
+  const currentUser = ref<AuthSessionUser | null>(null)
   const profile = ref<UserProfile | null>(null)
   const ready = ref(false)
 
@@ -54,7 +77,14 @@ export const useAuthStore = defineStore('auth', () => {
     authenticated: currentUser.value !== null,
     rawRole: rawRole.value,
   }))
-  const isAdmin = computed(() => canAccessAdminArea(rawRole.value))
+  const canViewAllJobs = computed(() => canViewAllJobsForRole(rawRole.value))
+  const canManageJobs = computed(() => canManageJobsForRole(rawRole.value))
+  const canCreateJobs = computed(() => canCreateJobsForRole(rawRole.value))
+  const canDeleteOrArchiveJobs = computed(() => canDeleteOrArchiveJobsForRole(rawRole.value))
+  const canUseJobSetupEditor = computed(() => canUseJobSetupEditorForRole(rawRole.value))
+  const canUseTimecardExport = computed(() => canUseTimecardExportForRole(rawRole.value))
+  const canViewAllDailyLogs = computed(() => canViewAllDailyLogsForRole(rawRole.value))
+  const canManageJobTimecards = computed(() => canManageJobTimecardsForRole(rawRole.value))
   const displayName = computed(() => {
     const first = profile.value?.firstName?.trim() ?? ''
     const last = profile.value?.lastName?.trim() ?? ''
@@ -63,20 +93,27 @@ export const useAuthStore = defineStore('auth', () => {
   })
   const assignedJobIds = computed(() => profile.value?.assignedJobIds ?? [])
 
+  function clearProfileRetry() {
+    if (profileRetryTimer === null) return
+    window.clearTimeout(profileRetryTimer)
+    profileRetryTimer = null
+  }
+
   function clearProfileListener() {
+    clearProfileRetry()
     if (!unsubscribeProfile) return
     unsubscribeProfile()
     unsubscribeProfile = null
   }
 
-  async function hydrateProfile(uid: string, authUser: User | null) {
+  async function hydrateProfile(uid: string, authUser: AuthSessionUser | null) {
     profile.value = await getOrCreateUserProfile(uid, {
       displayName: authUser?.displayName || null,
       email: authUser?.email ?? null,
     })
   }
 
-  async function hydrateProfileWithRetry(uid: string, authUser: User | null) {
+  async function hydrateProfileWithRetry(uid: string, authUser: AuthSessionUser | null) {
     const retryDelays = [0, 250, 800]
     let lastError: unknown = null
 
@@ -116,10 +153,31 @@ export const useAuthStore = defineStore('auth', () => {
           void signOut()
         }
       },
-      () => {
+      (error) => {
+        if (isTransientProfileListenerError(error)) {
+          scheduleProfileListenerRetry(uid)
+          return
+        }
+
         void signOut()
       },
     )
+  }
+
+  function scheduleProfileListenerRetry(uid: string) {
+    if (profileRetryTimer !== null) return
+
+    profileRetryTimer = window.setTimeout(async () => {
+      profileRetryTimer = null
+      if (currentUser.value?.uid !== uid) return
+
+      try {
+        await hydrateProfileWithRetry(uid, currentUser.value)
+        setupProfileListener(uid)
+      } catch {
+        await signOut()
+      }
+    }, 1500)
   }
 
   async function init() {
@@ -133,14 +191,14 @@ export const useAuthStore = defineStore('auth', () => {
             uid: e2eAuthState.user.uid,
             email: e2eAuthState.user.email,
             displayName: e2eAuthState.user.displayName,
-          } as User)
+          } satisfies AuthSessionUser)
         : null
       profile.value = e2eAuthState?.profile ?? null
       ready.value = true
       return
     }
 
-    if (!hasFirebaseConfig) {
+    if (!hasConfiguredFirebase) {
       ready.value = true
       return
     }
@@ -160,9 +218,7 @@ export const useAuthStore = defineStore('auth', () => {
         return
       }
 
-      const { auth } = requireFirebaseServices()
-
-      unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
+      unsubscribeAuth = subscribeAuthSession(async (nextUser) => {
         currentUser.value = nextUser
 
         if (!nextUser) {
@@ -187,30 +243,27 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(email: string, password: string) {
-    if (!hasFirebaseConfig) {
+    if (!hasConfiguredFirebase) {
       throw new Error('Firebase config is missing. Copy the v1 VITE_FIREBASE_* values into .env.local.')
     }
 
-    const { auth } = requireFirebaseServices()
-    const credentials = await signInWithEmailAndPassword(auth, email.trim(), password)
-
-    currentUser.value = credentials.user
+    const authenticatedUser = await signInWithPassword(email, password)
+    currentUser.value = authenticatedUser
 
     if (!ready.value || !unsubscribeAuth) {
       await init()
     }
 
-    await hydrateProfileWithRetry(credentials.user.uid, credentials.user)
-    setupProfileListener(credentials.user.uid)
+    await hydrateProfileWithRetry(authenticatedUser.uid, authenticatedUser)
+    setupProfileListener(authenticatedUser.uid)
   }
 
   async function signOut() {
     clearProfileListener()
 
-    if (hasFirebaseConfig && !isE2EActive()) {
-      const { auth } = requireFirebaseServices()
+    if (hasConfiguredFirebase && !isE2EActive()) {
       try {
-        await firebaseSignOut(auth)
+        await signOutOfAuthSession()
       } catch {
         // Keep clearing local state even if Firebase sign-out throws.
       }
@@ -230,6 +283,32 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  function canEditJobSetup(jobId: string) {
+    return canEditJobSetupForRole({
+      assignedJobIds: assignedJobIds.value,
+      jobId,
+      rawRole: rawRole.value,
+    })
+  }
+
+  function canUseJobTimecardWorkflow(jobId: string, isShopJob = false) {
+    return canUseJobTimecardWorkflowForRole({
+      assignedJobIds: assignedJobIds.value,
+      isShopJob,
+      jobId,
+      rawRole: rawRole.value,
+    })
+  }
+
+  function canViewSubmittedTimecardReport(jobId: string, isShopJob = false) {
+    return canViewSubmittedTimecardReportForRole({
+      assignedJobIds: assignedJobIds.value,
+      isShopJob,
+      jobId,
+      rawRole: rawRole.value,
+    })
+  }
+
   function getLoginErrorMessage(error: unknown) {
     return normalizeError(error, 'Failed to sign in.')
   }
@@ -242,13 +321,23 @@ export const useAuthStore = defineStore('auth', () => {
     roleKey,
     isAuthenticated,
     hasWorkspaceAccess,
-    isAdmin,
+    canViewAllJobs,
+    canManageJobs,
+    canCreateJobs,
+    canDeleteOrArchiveJobs,
+    canUseJobSetupEditor,
+    canUseTimecardExport,
+    canViewAllDailyLogs,
+    canManageJobTimecards,
     displayName,
     assignedJobIds,
     init,
     login,
     signOut,
     canAccessJob,
+    canEditJobSetup,
+    canUseJobTimecardWorkflow,
+    canViewSubmittedTimecardReport,
     getLoginErrorMessage,
   }
 })

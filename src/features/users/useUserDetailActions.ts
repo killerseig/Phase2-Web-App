@@ -1,32 +1,29 @@
-import type { UserDetailFormState } from '@/features/users/userViewHelpers'
+import { currentRoleCanBeAssignedJobs } from '@/auth/roles'
+import {
+  getUserDetailUpdateRole,
+  type UserDetailFormState,
+} from '@/features/users/userViewHelpers'
 import { deleteUserByAdmin, updateUser } from '@/services/users'
 import type { UserProfile } from '@/types/domain'
-import { roleCanBeAssignedJobs } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseUserDetailActionsOptions {
-  deleteConfirmOpen: Ref<boolean>
-  deleteLoading: Ref<boolean>
+  deleteConfirmOpen: WritableRef<boolean>
+  deleteLoading: WritableRef<boolean>
   detailError: ReadonlyRef<string>
   detailForm: UserDetailFormState
   editingSelf: ReadonlyRef<boolean>
-  hasUnsavedDetailChanges: () => boolean
+  hasUnsavedDetailChanges: (user: UserProfile | null) => boolean
   isCreateMode: ReadonlyRef<boolean>
   resetCreateForm: () => void
-  saveLoading: Ref<boolean>
+  saveLoading: WritableRef<boolean>
   selectedUser: ReadonlyRef<UserProfile | null>
-  selectedUserId: Ref<string | 'new' | null>
+  selectedUserId: WritableRef<string | 'new' | null>
   setDetailError: (error: unknown, fallback: string) => void
   setDetailErrorMessage: (message: string) => void
   setDetailInfo: (message: string) => void
   syncingDetailForm: ReadonlyRef<boolean>
+  toggleDetailAssignedJob: (jobId: string) => void
 }
 
 export function useUserDetailActions({
@@ -45,6 +42,7 @@ export function useUserDetailActions({
   setDetailErrorMessage,
   setDetailInfo,
   syncingDetailForm,
+  toggleDetailAssignedJob,
 }: UseUserDetailActionsOptions) {
   let detailSaveTimer: number | null = null
 
@@ -61,7 +59,7 @@ export function useUserDetailActions({
     clearDetailSaveTimer()
     setDetailErrorMessage('')
 
-    if (!hasUnsavedDetailChanges()) {
+    if (!hasUnsavedDetailChanges(selectedUser.value)) {
       setDetailInfo('Changes save automatically.')
       return
     }
@@ -74,12 +72,13 @@ export function useUserDetailActions({
     saveLoading.value = true
     setDetailInfo('Saving changes...')
     try {
+      const role = getUserDetailUpdateRole(selectedUser.value, detailForm.role)
       await updateUser(selectedUser.value.id, {
         firstName: detailForm.firstName,
         lastName: detailForm.lastName,
-        role: detailForm.role,
+        role,
         active: detailForm.active,
-        assignedJobIds: roleCanBeAssignedJobs(detailForm.role) ? detailForm.assignedJobIds : [],
+        assignedJobIds: currentRoleCanBeAssignedJobs(role) ? detailForm.assignedJobIds : [],
       })
 
       setDetailInfo('All changes saved.')
@@ -95,7 +94,7 @@ export function useUserDetailActions({
 
     clearDetailSaveTimer()
 
-    if (!hasUnsavedDetailChanges()) {
+    if (!hasUnsavedDetailChanges(selectedUser.value)) {
       if (!detailError.value) {
         setDetailInfo('Changes save automatically.')
       }
@@ -137,11 +136,20 @@ export function useUserDetailActions({
     }
   }
 
+  function handleDetailAssignedJobToggle(jobId: string) {
+    toggleDetailAssignedJob(jobId)
+
+    if (syncingDetailForm.value || !selectedUser.value || isCreateMode.value) return
+
+    void handleAutoSaveUser()
+  }
+
   return {
     clearDetailSaveTimer,
     confirmDeleteUser,
     handleAutoSaveUser,
     handleDeleteUser,
+    handleDetailAssignedJobToggle,
     queueDetailSave,
   }
 }

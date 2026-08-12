@@ -1,10 +1,11 @@
-import type { ComputedRef } from 'vue'
 import { useSubscribedRecords } from '@/composables/useSubscribedRecords'
 import { subscribeShopOrders } from '@/services/shopOrders'
 import type { ShopOrderRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
+import { replaceRecordById } from '@/utils/optimisticRecords'
 
 interface UseShopOrderRecordsOptions {
-  jobId: ComputedRef<string>
+  jobId: ReadonlyRef<string>
 }
 
 export function useShopOrderRecords({ jobId }: UseShopOrderRecordsOptions) {
@@ -26,10 +27,15 @@ export function useShopOrderRecords({ jobId }: UseShopOrderRecordsOptions) {
     errorMessage: 'Failed to load shop orders.',
   })
 
+  function replaceOrderLocally(order: ShopOrderRecord) {
+    orders.value = replaceRecordById(orders.value, order)
+  }
+
   return {
     orders,
     ordersError,
     ordersLoading,
+    replaceOrderLocally,
     startOrdersSubscription,
     stopOrdersSubscription,
   }

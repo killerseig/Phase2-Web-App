@@ -1,20 +1,22 @@
-import { watch, type ComputedRef, type Ref } from 'vue'
+import { watch } from 'vue'
 import type { ShopOrderRecord } from '@/types/domain'
-import type { OrderMetaFormState } from './viewHelpers'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
+import { getNextShopOrderSelectionId, type OrderMetaFormState } from './viewHelpers'
 
 type UseShopOrderSelectionSyncOptions = {
   applySelectedOrderToForm: (order: ShopOrderRecord | null) => void
   clearOrderItemNoteDrafts: () => void
   clearOrderMetaSaveTimer: () => void
+  ensureFreshDraftDeliveryDate: (order: ShopOrderRecord | null) => boolean
   hasSelectedOrderChanged: (
     order: ShopOrderRecord,
     previousOrder: ShopOrderRecord | null,
   ) => boolean
   orderMetaForm: OrderMetaFormState
-  orders: Ref<ShopOrderRecord[]>
+  orders: WritableRef<ShopOrderRecord[]>
   queueOrderMetaSave: () => void
-  selectedOrder: ComputedRef<ShopOrderRecord | null>
-  selectedOrderId: Ref<string | null>
+  selectedOrder: ReadonlyRef<ShopOrderRecord | null>
+  selectedOrderId: WritableRef<string | null>
   shouldHydrateSelectedOrder: (
     order: ShopOrderRecord,
     previousOrder: ShopOrderRecord | null,
@@ -26,6 +28,7 @@ export function useShopOrderSelectionSync({
   applySelectedOrderToForm,
   clearOrderItemNoteDrafts,
   clearOrderMetaSaveTimer,
+  ensureFreshDraftDeliveryDate,
   hasSelectedOrderChanged,
   orderMetaForm,
   orders,
@@ -35,22 +38,20 @@ export function useShopOrderSelectionSync({
   shouldHydrateSelectedOrder,
   syncOrderItemNoteDrafts,
 }: UseShopOrderSelectionSyncOptions) {
+  function selectOrder(orderId: string) {
+    selectedOrderId.value = orderId
+  }
+
   watch(
-    orders,
+    () => orders.value,
     (nextOrders) => {
-      const selectedStillExists = selectedOrderId.value
-        ? nextOrders.some((order) => order.id === selectedOrderId.value)
-        : false
-
-      if (selectedStillExists) return
-
-      selectedOrderId.value = nextOrders[0]?.id ?? null
+      selectedOrderId.value = getNextShopOrderSelectionId(nextOrders, selectedOrderId.value)
     },
     { immediate: true },
   )
 
   watch(
-    selectedOrder,
+    () => selectedOrder.value,
     (order, previousOrder) => {
       if (!order) {
         clearOrderMetaSaveTimer()
@@ -63,6 +64,9 @@ export function useShopOrderSelectionSync({
         clearOrderMetaSaveTimer()
         clearOrderItemNoteDrafts()
         applySelectedOrderToForm(order)
+        if (ensureFreshDraftDeliveryDate(order)) {
+          queueOrderMetaSave()
+        }
         syncOrderItemNoteDrafts(order, true)
         return
       }
@@ -71,6 +75,9 @@ export function useShopOrderSelectionSync({
 
       if (shouldHydrateSelectedOrder(order, previousOrder ?? null)) {
         applySelectedOrderToForm(order)
+        if (ensureFreshDraftDeliveryDate(order)) {
+          queueOrderMetaSave()
+        }
       }
     },
     { immediate: true },
@@ -83,4 +90,8 @@ export function useShopOrderSelectionSync({
     },
     { deep: true },
   )
+
+  return {
+    selectOrder,
+  }
 }

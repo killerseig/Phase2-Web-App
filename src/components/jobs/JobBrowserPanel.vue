@@ -2,6 +2,7 @@
 import AppButton from '@/components/common/AppButton.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppListButton from '@/components/common/AppListButton.vue'
+import AppPane from '@/components/common/AppPane.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
 import AppSelect from '@/components/common/AppSelect.vue'
@@ -11,7 +12,9 @@ import { formatJobTypeLabel } from '@/types/domain'
 import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
 
 defineProps<{
-  isAdmin: boolean
+  canCreateJobs: boolean
+  canManageJobs: boolean
+  canUseJobSetupEditor: boolean
   editMode: boolean
   searchTerm: string
   statusFilter: DirectoryStatusFilter
@@ -48,9 +51,9 @@ function handleStatusFilterUpdate(value: string) {
 </script>
 
 <template>
-  <section class="jobs-browser">
-    <AppPaneHeader :eyebrow="isAdmin ? 'Admin' : 'Field Workspace'" title="Jobs">
-      <template v-if="isAdmin && editMode" #actions>
+  <AppPane class="jobs-browser">
+    <AppPaneHeader :eyebrow="canManageJobs ? 'Admin' : 'Field Workspace'" title="Jobs">
+      <template v-if="canCreateJobs && editMode" #actions>
         <AppButton
           variant="primary"
           data-testid="jobs-new-button"
@@ -74,11 +77,11 @@ function handleStatusFilterUpdate(value: string) {
       <div class="jobs-browser__filters">
         <div class="jobs-browser__summary">
           <span>{{ activeJobCount }} active</span>
-          <span v-if="isAdmin">{{ archivedJobCount }} archived</span>
+          <span v-if="canManageJobs">{{ archivedJobCount }} archived</span>
           <span>{{ visibleJobs.length }} visible</span>
         </div>
 
-        <label v-if="isAdmin && editMode" class="jobs-browser__filter">
+        <label v-if="canManageJobs && editMode" class="jobs-browser__filter">
           <span>Status</span>
           <AppSelect
             :model-value="statusFilter"
@@ -113,7 +116,7 @@ function handleStatusFilterUpdate(value: string) {
           v-for="job in visibleJobs"
           :key="job.id"
           class="jobs-browser__row"
-          :active="isAdmin && editMode && selectedJobId === job.id"
+          :active="canUseJobSetupEditor && editMode && selectedJobId === job.id"
           :data-testid="`job-card-${getJobCode(job)}`"
           @click="emit('selectJob', job)"
         >
@@ -132,26 +135,10 @@ function handleStatusFilterUpdate(value: string) {
         />
       </div>
     </div>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>
-.jobs-browser {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 1rem;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-}
-
 .jobs-browser__body {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);

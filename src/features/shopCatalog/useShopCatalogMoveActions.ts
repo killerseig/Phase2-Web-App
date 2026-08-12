@@ -1,10 +1,7 @@
 import type { ShopCatalogDragPayload } from '@/features/shopCatalog/adminViewHelpers'
 import { updateShopCatalogItem, updateShopCategory } from '@/services/shopCatalog'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopCatalogMoveActionsOptions {
   categoriesById: ReadonlyRef<ReadonlyMap<string, ShopCategoryRecord>>

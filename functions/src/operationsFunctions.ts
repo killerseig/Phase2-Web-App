@@ -13,13 +13,25 @@ import {
 import {
   sendEmail,
   buildDailyLogEmail,
+  buildDailyLogEmailSubject,
   buildDailyLogAutoSubmitEmail,
   normalizeDailyLogEmailPayload,
   buildShopOrderEmail,
+  buildShopOrderEmailSubject,
   buildShopOrderPdfBuffer,
   buildShopOrderPdfFilename,
   isEmailEnabled,
 } from './emailService'
+import {
+  buildSubmittedEmailOperationId,
+  buildSubmittedEmailStatusUpdate,
+  isSubmittedEmailOperationAlreadySent,
+  type SubmittedEmailStatusResult,
+} from './emailStatus'
+import {
+  claimSubmittedEmailOperation,
+  getSubmittedEmailClaimShortCircuitMessage,
+} from './submittedEmailOperations'
 import {
   ERROR_MESSAGES,
   EMAIL,
@@ -27,7 +39,13 @@ import {
   EMAIL_STYLES,
 } from './constants'
 import { getGraphEmailSecrets } from './functionConfig'
+import {
+  type CurrentFunctionRole,
+  buildCurrentFunctionUser,
+  currentFunctionUserHasAnyRole,
+} from './roleAccess'
 import { db, storageBucket } from './runtime'
+import { canWriteFieldWorkflowForJob } from './fieldWorkflowAccess'
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
@@ -64,59 +82,107 @@ async function getShopOrderCostCodesByCatalogItemId(items: any[]): Promise<Recor
   }, {})
 }
 
-function getAssignedJobIds(user: any): string[] {
-  if (!Array.isArray(user?.assignedJobIds)) return []
-  return user.assignedJobIds
-    .filter((value: unknown): value is string => typeof value === 'string')
-    .map((value: string) => value.trim())
-    .filter(Boolean)
-}
-
-function assertActiveRoleUser(user: any, allowedRoles: string[], errorMessage: string) {
+function assertActiveRoleUser(user: any, allowedRoles: readonly CurrentFunctionRole[], errorMessage: string) {
   if (!user) {
     throw new HttpsError('failed-precondition', ERROR_MESSAGES.USER_PROFILE_NOT_FOUND)
   }
 
-  const rawRole = String(user?.role || 'none').trim().toLowerCase()
-  const role = rawRole === 'project-manager' ? 'foreman' : rawRole
-  if (user?.active !== true) {
+  const authorizedUser = buildCurrentFunctionUser(String(user?.uid || ''), user)
+  if (!authorizedUser.active) {
     throw new HttpsError('permission-denied', 'Your account is inactive')
   }
-  if (!allowedRoles.includes(role)) {
+  if (!currentFunctionUserHasAnyRole(authorizedUser, allowedRoles)) {
     throw new HttpsError('permission-denied', errorMessage)
   }
 
   return {
     ...user,
-    role,
-    assignedJobIds: getAssignedJobIds(user),
+    ...authorizedUser,
   }
 }
 
-function assertAdminOrAssignedForeman(user: any, jobId: string, errorMessage: string) {
-  const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman'], errorMessage)
-  if (authorizedUser.role === 'admin') return authorizedUser
+function assertCanSendSubmittedFieldWorkflowEmail(
+  user: any,
+  jobId: string,
+  jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
+  errorMessage: string,
+) {
+  const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman', 'shop-foreman'], errorMessage)
 
-  if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
+  if (!canWriteFieldWorkflowForJob(authorizedUser, jobId, jobDetails, 'submit')) {
     throw new HttpsError('permission-denied', errorMessage)
   }
 
   return authorizedUser
 }
 
-function formatEmailDate(value: any): string {
+async function recordSubmittedEmailStatus(
+  refs: admin.firestore.DocumentReference[],
+  result: SubmittedEmailStatusResult,
+  context: Record<string, unknown>,
+) {
+  const payload = buildSubmittedEmailStatusUpdate(result, admin.firestore.FieldValue)
+  let updatedCount = 0
+
   try {
-    if (!value) return 'N/A'
-    const asDate = typeof value?.toDate === 'function'
-      ? value.toDate()
-      : value instanceof Date
-        ? value
-        : new Date(value)
-    if (Number.isNaN(asDate.getTime())) return 'N/A'
-    return asDate.toLocaleDateString()
-  } catch {
-    return 'N/A'
+    for (const ref of refs) {
+      const snap = await ref.get()
+      if (!snap.exists) continue
+      await ref.update(payload)
+      updatedCount += 1
+    }
+
+    if (updatedCount === 0) {
+      console.warn('[recordSubmittedEmailStatus] No matching documents updated', context)
+    }
+  } catch (error) {
+    console.warn('[recordSubmittedEmailStatus] Failed to update email status', {
+      ...context,
+      error,
+    })
   }
+}
+
+async function hasSubmittedEmailOperationAlreadySent(
+  refs: admin.firestore.DocumentReference[],
+  operationId: string,
+  context: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    for (const ref of refs) {
+      const snap = await ref.get()
+      if (!snap.exists) continue
+      if (isSubmittedEmailOperationAlreadySent(snap.data(), operationId)) {
+        return true
+      }
+    }
+  } catch (error) {
+    console.warn('[hasSubmittedEmailOperationAlreadySent] Failed to check email operation status', {
+      ...context,
+      operationId,
+      error,
+    })
+  }
+
+  return false
+}
+
+function dailyLogEmailStatusRefs(jobId: string, dailyLogId: string): admin.firestore.DocumentReference[] {
+  return [
+    db.collection(COLLECTIONS.DAILY_LOGS).doc(dailyLogId),
+    db.collection(COLLECTIONS.JOBS).doc(jobId).collection('dailyLogs').doc(dailyLogId),
+  ]
+}
+
+function shopOrderEmailStatusRefs(jobId: string, shopOrderId: string): admin.firestore.DocumentReference[] {
+  return [
+    db.collection(COLLECTIONS.SHOP_ORDERS).doc(shopOrderId),
+    db.collection(COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId),
+  ]
+}
+
+async function getJobScopedShopOrderSnapshot(jobId: string, shopOrderId: string) {
+  return db.collection(COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get()
 }
 
 function toNumber(value: any): number {
@@ -716,6 +782,41 @@ async function loadDailyLogAttachments(log: any) {
   return attachments
 }
 
+interface CallableRequestLike {
+  auth?: { uid: string } | null
+  data?: any
+}
+
+interface SendDailyLogEmailDependencies {
+  getUserProfile: typeof getUserProfile
+  getJobDetails: typeof getJobDetails
+  dailyLogEmailStatusRefs: typeof dailyLogEmailStatusRefs
+  claimSubmittedEmailOperation: typeof claimSubmittedEmailOperation
+  isEmailEnabled: typeof isEmailEnabled
+  getDailyLog: typeof getDailyLog
+  getEmailSettings: typeof getEmailSettings
+  getJobNotificationRecipients: typeof getJobNotificationRecipients
+  buildDailyLogEmail: typeof buildDailyLogEmail
+  loadDailyLogAttachments: typeof loadDailyLogAttachments
+  sendEmail: typeof sendEmail
+  recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus
+}
+
+const defaultSendDailyLogEmailDependencies: SendDailyLogEmailDependencies = {
+  getUserProfile,
+  getJobDetails,
+  dailyLogEmailStatusRefs,
+  claimSubmittedEmailOperation,
+  isEmailEnabled,
+  getDailyLog,
+  getEmailSettings,
+  getJobNotificationRecipients,
+  buildDailyLogEmail,
+  loadDailyLogAttachments,
+  sendEmail,
+  recordSubmittedEmailStatus,
+}
+
 export function normalizeTimecardForEmail(tc: any) {
   const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage)
   const sourceLines = Array.isArray(tc?.lines) && tc.lines.length
@@ -876,16 +977,16 @@ export function normalizeTimecardForEmail(tc: any) {
   }
 }
 
-/**
- * Send Daily Log via email
- */
-export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) => {
+export async function handleSendDailyLogEmail(
+  request: CallableRequestLike,
+  deps: SendDailyLogEmailDependencies = defaultSendDailyLogEmailDependencies,
+) {
   if (!request.auth) {
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
   const callerUid = request.auth.uid
 
-  const { jobId, dailyLogId } = request.data
+  const { jobId, dailyLogId } = request.data || {}
 
   if (!jobId) {
     throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
@@ -896,19 +997,41 @@ export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, asy
   }
 
   try {
-    const user = await getUserProfile(callerUid)
-    const authorizedUser = assertAdminOrAssignedForeman(
+    const user = await deps.getUserProfile(callerUid)
+    const requestedJob = await deps.getJobDetails(jobId)
+    const authorizedUser = assertCanSendSubmittedFieldWorkflowEmail(
       user,
       jobId,
+      requestedJob,
       'Only admins or assigned foremen can send daily log emails'
     )
-
-    if (!isEmailEnabled()) {
-      console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.')
-      return { success: true, message: 'Email sending disabled. Skipped.' }
+    const statusRefs = deps.dailyLogEmailStatusRefs(jobId, dailyLogId)
+    const operationId = buildSubmittedEmailOperationId('dailyLogSubmittedEmail', dailyLogId)
+    const operationContext = {
+      jobId,
+      dailyLogId,
+      operation: 'sendDailyLogEmail',
+      operationId,
     }
 
-    const log = await getDailyLog(jobId, dailyLogId)
+    const claimStatus = await deps.claimSubmittedEmailOperation(db, statusRefs, operationId, operationContext)
+    const claimMessage = getSubmittedEmailClaimShortCircuitMessage(claimStatus)
+    if (claimMessage) {
+      return { success: true, message: claimMessage }
+    }
+
+    if (!deps.isEmailEnabled()) {
+      console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.')
+      const emailResult = {
+        emailSent: false,
+        emailMessage: 'Email sending disabled. Skipped.',
+        operationId,
+      }
+      await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext)
+      return { success: true, message: emailResult.emailMessage }
+    }
+
+    const log = await deps.getDailyLog(jobId, dailyLogId)
     if (!log) {
       throw new Error(ERROR_MESSAGES.DAILY_LOG_NOT_FOUND)
     }
@@ -916,40 +1039,67 @@ export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, asy
       throw new HttpsError('failed-precondition', 'Only submitted daily logs can be emailed')
     }
     const logOwnerUserId = String(log?.foremanUserId || log?.uid || log?.createdByUserId || '').trim()
-    if (authorizedUser.role === 'foreman' && logOwnerUserId !== callerUid) {
-      throw new HttpsError('permission-denied', 'Foremen can only email their own daily logs')
+    if (authorizedUser.role !== 'admin' && logOwnerUserId !== callerUid) {
+      throw new HttpsError('permission-denied', 'Field users can only email their own daily logs')
     }
 
-    const settings = await getEmailSettings()
+    const settings = await deps.getEmailSettings()
     const recipients = normalizeRecipients(
       settings.globalNotificationRecipients.dailyLogs,
-      await getJobNotificationRecipients(jobId, 'dailyLogs'),
+      await deps.getJobNotificationRecipients(jobId, 'dailyLogs'),
       log?.additionalRecipients,
     )
 
     if (!recipients.length) {
+      await deps.recordSubmittedEmailStatus(statusRefs, {
+        emailSent: false,
+        emailMessage: ERROR_MESSAGES.RECIPIENTS_REQUIRED,
+        operationId,
+      }, operationContext)
       throw new HttpsError('failed-precondition', ERROR_MESSAGES.RECIPIENTS_REQUIRED)
     }
 
-    const job = await getJobDetails(log?.jobId || '')
-    const emailHtml = buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log)
-    const attachments = await loadDailyLogAttachments(log)
+    try {
+      const job = requestedJob || await deps.getJobDetails(log?.jobId || '')
+      const emailHtml = deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log)
+      const attachments = await deps.loadDailyLogAttachments(log)
 
-    await sendEmail({
-      to: recipients,
-      subject: `${EMAIL.SUBJECTS.DAILY_LOG} - ${job?.name || 'Job'} - ${log?.logDate || 'N/A'}`,
-      html: emailHtml,
-      ...(attachments.length ? { attachments } : {}),
-    })
+      await deps.sendEmail({
+        to: recipients,
+        subject: buildDailyLogEmailSubject(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log),
+        html: emailHtml,
+        ...(attachments.length ? { attachments } : {}),
+      })
+    } catch (emailError: any) {
+      await deps.recordSubmittedEmailStatus(statusRefs, {
+        emailSent: false,
+        emailMessage: emailError?.message || 'Failed to send daily log email',
+        operationId,
+      }, operationContext)
+      throw emailError
+    }
 
     console.log(`Daily log ${dailyLogId} emailed to ${recipients.join(', ')}`)
-    return { success: true, message: 'Email sent successfully' }
+    const emailResult = {
+      emailSent: true,
+      emailMessage: 'Email sent successfully',
+      operationId,
+    }
+    await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext)
+    return { success: true, message: emailResult.emailMessage }
   } catch (error: any) {
     console.error('Error sending daily log email:', error)
     if (error instanceof HttpsError) throw error
     throw new HttpsError('internal', error?.message || 'Failed to send daily log email')
   }
-})
+}
+
+/**
+ * Send Daily Log via email
+ */
+export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) => (
+  handleSendDailyLogEmail(request)
+))
 
 export function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: string): string {
   const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', '']
@@ -1035,13 +1185,27 @@ export function buildTimecardPdfFilename(startWeek: string, endWeek?: string, jo
   return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.pdf` : `${periodLabel}.pdf`
 }
 
+export interface TimecardPdfCardHeaderEvent {
+  cardId?: string
+  employeeName: string
+  employeeCode: string
+  occupation: string
+  renderBlankTemplate: boolean
+  wageLabel: string
+  weekEnding: string
+}
+
+export interface TimecardPdfBuildOptions {
+  onCardHeader?: (event: TimecardPdfCardHeaderEvent) => void
+}
+
 export async function buildTimecardPdfBuffer(payload: {
   jobName?: string
   jobNumber?: string
   submittedBy?: string
   weekStart?: string
   timecards: any[]
-}): Promise<Buffer> {
+}, options: TimecardPdfBuildOptions = {}): Promise<Buffer> {
   // Use a true landscape page so the emailed PDF prints in the same orientation
   // as the legacy workbook instead of relying on rotated portrait content.
   const doc = new PDFDocument({ margin: 24, size: 'LETTER', layout: 'landscape' })
@@ -1380,6 +1544,15 @@ export async function buildTimecardPdfBuffer(payload: {
       const cardWeekEnding = String(tc?.weekEndingDate || '').trim()
         || getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim())
       const weekEnding = renderBlankTemplate ? '' : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel
+      options.onCardHeader?.({
+        cardId: typeof tc?.id === 'string' ? tc.id : undefined,
+        employeeName,
+        employeeCode,
+        occupation,
+        renderBlankTemplate,
+        wageLabel,
+        weekEnding,
+      })
 
       const fieldRowHeight = 11.5
       drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
@@ -1827,12 +2000,51 @@ export async function buildTimecardPdfBuffer(payload: {
 /**
  * Send Shop Order via email
  */
-export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) => {
+interface SendShopOrderEmailDependencies {
+  getUserProfile: typeof getUserProfile
+  getJobDetails: typeof getJobDetails
+  shopOrderEmailStatusRefs: typeof shopOrderEmailStatusRefs
+  claimSubmittedEmailOperation: typeof claimSubmittedEmailOperation
+  isEmailEnabled: typeof isEmailEnabled
+  getEmailSettings: typeof getEmailSettings
+  getJobNotificationRecipients: typeof getJobNotificationRecipients
+  recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus
+  getShopOrder: typeof getShopOrder
+  getJobScopedShopOrderSnapshot: typeof getJobScopedShopOrderSnapshot
+  getShopOrderCostCodesByCatalogItemId: typeof getShopOrderCostCodesByCatalogItemId
+  buildShopOrderEmail: typeof buildShopOrderEmail
+  buildShopOrderPdfBuffer: typeof buildShopOrderPdfBuffer
+  buildShopOrderPdfFilename: typeof buildShopOrderPdfFilename
+  sendEmail: typeof sendEmail
+}
+
+const defaultSendShopOrderEmailDependencies: SendShopOrderEmailDependencies = {
+  getUserProfile,
+  getJobDetails,
+  shopOrderEmailStatusRefs,
+  claimSubmittedEmailOperation,
+  isEmailEnabled,
+  getEmailSettings,
+  getJobNotificationRecipients,
+  recordSubmittedEmailStatus,
+  getShopOrder,
+  getJobScopedShopOrderSnapshot,
+  getShopOrderCostCodesByCatalogItemId,
+  buildShopOrderEmail,
+  buildShopOrderPdfBuffer,
+  buildShopOrderPdfFilename,
+  sendEmail,
+}
+
+export async function handleSendShopOrderEmail(
+  request: CallableRequestLike,
+  deps: SendShopOrderEmailDependencies = defaultSendShopOrderEmailDependencies,
+) {
   if (!request.auth) {
     throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN)
   }
 
-  const { jobId, shopOrderId } = request.data
+  const { jobId, shopOrderId } = request.data || {}
 
   if (!jobId) {
     throw new Error(ERROR_MESSAGES.JOB_ID_REQUIRED)
@@ -1842,38 +2054,65 @@ export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, as
   }
 
   try {
-    const user = await getUserProfile(request.auth.uid)
-    assertAdminOrAssignedForeman(
+    const user = await deps.getUserProfile(request.auth.uid)
+    const requestedJob = await deps.getJobDetails(jobId)
+    assertCanSendSubmittedFieldWorkflowEmail(
       user,
       jobId,
+      requestedJob,
       'Only admins or assigned foremen can send shop order emails'
     )
+    const statusRefs = deps.shopOrderEmailStatusRefs(jobId, shopOrderId)
+    const operationId = buildSubmittedEmailOperationId('shopOrderSubmittedEmail', shopOrderId)
+    const operationContext = {
+      jobId,
+      shopOrderId,
+      operation: 'sendShopOrderEmail',
+      operationId,
+    }
 
-    if (!isEmailEnabled()) {
+    const claimStatus = await deps.claimSubmittedEmailOperation(db, statusRefs, operationId, operationContext)
+    const claimMessage = getSubmittedEmailClaimShortCircuitMessage(claimStatus)
+    if (claimMessage) {
+      return { success: true, message: claimMessage }
+    }
+
+    if (!deps.isEmailEnabled()) {
       console.log('[sendShopOrderEmail] Email sending disabled. Skipping send.')
-      return { success: true, message: 'Email sending disabled. Skipped.' }
+      const emailResult = {
+        emailSent: false,
+        emailMessage: 'Email sending disabled. Skipped.',
+        operationId,
+      }
+      await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext)
+      return { success: true, message: emailResult.emailMessage }
     }
 
     const requestedRecipients = Array.isArray(request.data?.recipients)
       ? request.data.recipients
       : []
-    const settings = await getEmailSettings()
+    const settings = await deps.getEmailSettings()
     const recipients = normalizeRecipients(
       requestedRecipients,
       settings.globalNotificationRecipients.shopOrders,
-      await getJobNotificationRecipients(jobId, 'shopOrders'),
+      await deps.getJobNotificationRecipients(jobId, 'shopOrders'),
     )
     if (!recipients.length) {
+      await deps.recordSubmittedEmailStatus(statusRefs, {
+        emailSent: false,
+        emailMessage: ERROR_MESSAGES.RECIPIENTS_REQUIRED,
+        operationId,
+      }, operationContext)
       throw new HttpsError('failed-precondition', ERROR_MESSAGES.RECIPIENTS_REQUIRED)
     }
 
     let order: any = null
 
-    const rootOrder = await getShopOrder(shopOrderId)
+    const rootOrder = await deps.getShopOrder(shopOrderId)
 
     // Prefer the job-scoped record when it exists, but fill missing fields from
     // the current root record so legacy partial docs do not hide newer metadata.
-    const jobOrderSnap = await db.collection(COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get()
+    const jobOrderSnap = await deps.getJobScopedShopOrderSnapshot(jobId, shopOrderId)
     if (jobOrderSnap.exists) {
       const jobOrderData = jobOrderSnap.data() || {}
       const rootDeliveryDate = String(rootOrder?.deliveryDate || '').trim()
@@ -1901,32 +2140,51 @@ export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, as
       throw new HttpsError('permission-denied', 'Shop order does not belong to the requested job')
     }
 
-    const job = await getJobDetails(resolvedJobId || jobId)
-    const costCodesByCatalogItemId = await getShopOrderCostCodesByCatalogItemId(order?.items)
-    const emailHtml = buildShopOrderEmail(order, costCodesByCatalogItemId)
-    const pdfBuffer = await buildShopOrderPdfBuffer(order, costCodesByCatalogItemId)
+    const job = resolvedJobId && resolvedJobId !== String(jobId).trim()
+      ? await deps.getJobDetails(resolvedJobId)
+      : requestedJob || await deps.getJobDetails(resolvedJobId || jobId)
+    try {
+      const costCodesByCatalogItemId = await deps.getShopOrderCostCodesByCatalogItemId(order?.items)
+      const emailHtml = deps.buildShopOrderEmail(order, costCodesByCatalogItemId)
+      const pdfBuffer = await deps.buildShopOrderPdfBuffer(order, costCodesByCatalogItemId)
 
-    const orderDateLabel = formatEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt)
-
-    await sendEmail({
-      to: recipients,
-      subject: `${EMAIL.SUBJECTS.SHOP_ORDER} - ${job?.name || 'Job'} - ${orderDateLabel}`,
-      html: emailHtml,
-      attachments: [
-        {
-          name: buildShopOrderPdfFilename(order),
-          contentType: 'application/pdf',
-          contentBytes: pdfBuffer.toString('base64'),
-        },
-      ],
-    })
+      await deps.sendEmail({
+        to: recipients,
+        subject: buildShopOrderEmailSubject(order, job),
+        html: emailHtml,
+        attachments: [
+          {
+            name: deps.buildShopOrderPdfFilename(order),
+            contentType: 'application/pdf',
+            contentBytes: pdfBuffer.toString('base64'),
+          },
+        ],
+      })
+    } catch (emailError: any) {
+      await deps.recordSubmittedEmailStatus(statusRefs, {
+        emailSent: false,
+        emailMessage: emailError?.message || 'Failed to send shop order email',
+        operationId,
+      }, operationContext)
+      throw emailError
+    }
 
     console.log(`Shop order ${shopOrderId} emailed to ${recipients.join(', ')}`)
-    return { success: true, message: 'Email sent successfully' }
+    const emailResult = {
+      emailSent: true,
+      emailMessage: 'Email sent successfully',
+      operationId,
+    }
+    await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext)
+    return { success: true, message: emailResult.emailMessage }
   } catch (error: any) {
     console.error('Error sending shop order email:', error)
     if (error instanceof HttpsError) throw error
     throw new HttpsError('internal', error?.message || 'Failed to send shop order email')
   }
-})
+}
+
+export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) => (
+  handleSendShopOrderEmail(request)
+))
 

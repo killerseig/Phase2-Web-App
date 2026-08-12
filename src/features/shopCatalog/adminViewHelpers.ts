@@ -227,7 +227,9 @@ export function buildShopCatalogChildCategoriesByParent(categories: readonly Sho
   }
 
   for (const siblings of map.values()) {
-    siblings.sort((left, right) => left.name.localeCompare(right.name))
+    siblings.sort((left, right) => (
+      getShopCategoryDisplayName(left).localeCompare(getShopCategoryDisplayName(right))
+    ))
   }
 
   return map
@@ -244,7 +246,9 @@ export function buildShopCatalogChildItemsByParent(items: readonly ShopCatalogIt
   }
 
   for (const siblings of map.values()) {
-    siblings.sort((left, right) => left.description.localeCompare(right.description))
+    siblings.sort((left, right) => (
+      getShopCatalogItemDisplayName(left).localeCompare(getShopCatalogItemDisplayName(right))
+    ))
   }
 
   return map

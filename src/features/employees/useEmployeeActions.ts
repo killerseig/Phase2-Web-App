@@ -1,33 +1,24 @@
 import {
-  getEmployeeFormSnapshot,
-  getEmployeeRecordSnapshot,
   validateEmployeeForm,
-  areEmployeeSnapshotsEqual,
   type EmployeeFormState,
 } from '@/features/employees/employeeViewHelpers'
 import { createEmployeeRecord, deleteEmployeeRecord, updateEmployeeRecord } from '@/services/employees'
 import type { EmployeeRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseEmployeeActionsOptions {
   createForm: EmployeeFormState
-  createLoading: Ref<boolean>
-  deleteConfirmOpen: Ref<boolean>
-  deleteLoading: Ref<boolean>
+  createLoading: WritableRef<boolean>
+  deleteConfirmOpen: WritableRef<boolean>
+  deleteLoading: WritableRef<boolean>
   detailForm: EmployeeFormState
+  hasUnsavedDetailChanges: (employee: EmployeeRecord | null) => boolean
   resetCreateForm: () => void
   resetCreateMessages: () => void
   resetDetailMessages: () => void
-  saveLoading: Ref<boolean>
+  saveLoading: WritableRef<boolean>
   selectedEmployee: ReadonlyRef<EmployeeRecord | null>
-  selectedEmployeeId: Ref<string | 'new'>
+  selectedEmployeeId: WritableRef<string | 'new'>
   setCreateError: (error: unknown, fallback: string) => void
   setCreateErrorMessage: (message: string) => void
   setCreateInfo: (message: string) => void
@@ -43,6 +34,7 @@ export function useEmployeeActions({
   deleteConfirmOpen,
   deleteLoading,
   detailForm,
+  hasUnsavedDetailChanges,
   resetCreateForm,
   resetCreateMessages,
   resetDetailMessages,
@@ -57,14 +49,6 @@ export function useEmployeeActions({
   setDetailInfo,
   syncingDetailForm,
 }: UseEmployeeActionsOptions) {
-  function getDetailFormSnapshot() {
-    return getEmployeeFormSnapshot(detailForm)
-  }
-
-  function hasUnsavedDetailChanges() {
-    return !areEmployeeSnapshotsEqual(getEmployeeRecordSnapshot(selectedEmployee.value), getDetailFormSnapshot())
-  }
-
   async function handleCreateEmployee() {
     resetCreateMessages()
 
@@ -100,7 +84,7 @@ export function useEmployeeActions({
 
     setDetailErrorMessage('')
 
-    if (!hasUnsavedDetailChanges()) {
+    if (!hasUnsavedDetailChanges(selectedEmployee.value)) {
       setDetailInfo('Changes save when you leave a field.')
       return
     }

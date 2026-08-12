@@ -6,10 +6,7 @@ import {
   type TimecardExportSortMode,
 } from '@/features/timecards/exportViewHelpers'
 import type { TimecardWeekRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface TimecardExportVisibleCardFilters {
   cardSearch: string

@@ -1,17 +1,10 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 import type { TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 type UseJobTimecardSubscriptionLifecycleOptions = {
-  cards: Ref<TimecardCardRecord[]>
-  cardsLoading: Ref<boolean>
+  cards: WritableRef<TimecardCardRecord[]>
+  cardsLoading: WritableRef<boolean>
   disconnectCardMeasurements: () => void
   disposeSaveQueue: () => void
   jobId: ReadonlyRef<string | null>

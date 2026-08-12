@@ -4,15 +4,8 @@ import {
 } from '@/features/shopOrders/viewHelpers'
 import { createShopOrderRecord } from '@/services/shopOrders'
 import type { JobRecord, ShopOrderItemRecord, ShopOrderRecord } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
 
 interface ShopOrderMetaFormLike {
   deliveryDate: string
@@ -25,7 +18,7 @@ interface EnsureDraftOrderTarget {
 
 interface UseShopOrderDraftActionsOptions {
   cloneOrderItems: (order: ShopOrderRecord) => ShopOrderItemRecord[]
-  createOrderLoading: Ref<boolean>
+  createOrderLoading: WritableRef<boolean>
   draftOrders: ReadonlyRef<ShopOrderRecord[]>
   getForemanName: () => string | null
   getForemanUserId: () => string | null
@@ -33,7 +26,7 @@ interface UseShopOrderDraftActionsOptions {
   jobId: ReadonlyRef<string | null>
   orderMetaForm: ShopOrderMetaFormLike
   selectedOrder: ReadonlyRef<ShopOrderRecord | null>
-  selectedOrderId: Ref<string | null>
+  selectedOrderId: WritableRef<string | null>
   setActionError: (message: string) => void
   setActionInfo: (message: string) => void
 }

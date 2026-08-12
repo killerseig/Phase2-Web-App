@@ -20,12 +20,22 @@ export function usePageMessages() {
     if (message) pageError.value = ''
   }
 
+  function clearPageError() {
+    pageError.value = ''
+  }
+
+  function clearPageInfo() {
+    pageInfo.value = ''
+  }
+
   function resetMessages() {
     pageError.value = ''
     pageInfo.value = ''
   }
 
   return {
+    clearPageError,
+    clearPageInfo,
     pageError,
     pageInfo,
     resetMessages,

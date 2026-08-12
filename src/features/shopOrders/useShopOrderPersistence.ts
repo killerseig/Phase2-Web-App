@@ -5,15 +5,8 @@ import {
 } from '@/features/shopOrders/viewHelpers'
 import { updateShopOrderRecord } from '@/services/shopOrders'
 import type { ShopOrderItemRecord, ShopOrderRecord } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
 
 interface ShopOrderActor {
   userId: string | null
@@ -22,7 +15,8 @@ interface ShopOrderActor {
 
 interface UseShopOrderPersistenceOptions {
   getActor: () => ShopOrderActor
-  itemActionLoading: Ref<boolean>
+  itemActionLoading: WritableRef<boolean>
+  replaceOrderLocally: (order: ShopOrderRecord) => void
   selectedOrder: ReadonlyRef<ShopOrderRecord | null>
   setActionError: (message: string) => void
   setActionInfo: (message: string) => void
@@ -31,12 +25,27 @@ interface UseShopOrderPersistenceOptions {
 export function useShopOrderPersistence({
   getActor,
   itemActionLoading,
+  replaceOrderLocally,
   selectedOrder,
   setActionError,
   setActionInfo,
 }: UseShopOrderPersistenceOptions) {
+  let itemPersistQueue: Promise<void> = Promise.resolve()
+  let itemPersistRevision = 0
+  let activeMutationCount = 0
+
+  function beginMutation() {
+    activeMutationCount += 1
+    itemActionLoading.value = activeMutationCount > 0
+
+    return () => {
+      activeMutationCount = Math.max(0, activeMutationCount - 1)
+      itemActionLoading.value = activeMutationCount > 0
+    }
+  }
+
   async function persistOrderMeta(orderId: string, form: OrderMetaFormState) {
-    itemActionLoading.value = true
+    const endMutation = beginMutation()
     setActionError('')
 
     try {
@@ -55,7 +64,7 @@ export function useShopOrderPersistence({
       setActionInfo('')
       return false
     } finally {
-      itemActionLoading.value = false
+      endMutation()
     }
   }
 
@@ -77,16 +86,38 @@ export function useShopOrderPersistence({
     itemActionLoading.value = true
     setActionError('')
 
+    const sortedItems = getSortedShopOrderItems(nextItems)
+    const previousOrder = selectedOrder.value?.id === orderId ? selectedOrder.value : null
+    const persistRevision = ++itemPersistRevision
+
+    if (previousOrder) {
+      replaceOrderLocally({
+        ...previousOrder,
+        items: sortedItems,
+      })
+    }
+
+    const endMutation = beginMutation()
+
+    const persistOperation = itemPersistQueue
+      .catch(() => undefined)
+      .then(() => updateShopOrderRecord(orderId, { items: sortedItems }, getActor()))
+    itemPersistQueue = persistOperation
+
     try {
-      await updateShopOrderRecord(orderId, { items: getSortedShopOrderItems(nextItems) }, getActor())
+      await persistOperation
+      setActionError('')
       setActionInfo(successMessage)
       return true
     } catch (error) {
+      if (previousOrder && persistRevision === itemPersistRevision) {
+        replaceOrderLocally(previousOrder)
+      }
       setActionError(normalizeError(error, 'Failed to update shop order items.'))
       setActionInfo('')
       return false
     } finally {
-      itemActionLoading.value = false
+      endMutation()
     }
   }
 

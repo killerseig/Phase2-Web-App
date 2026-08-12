@@ -15,7 +15,7 @@ import {
   graphTenantId,
   outlookSenderEmail,
 } from './functionConfig'
-import { JobDetails } from './firestoreService'
+import type { JobDetails } from './firestoreService'
 
 // Token cache
 let cachedToken: { token: string; expiresAt: number } | null = null
@@ -85,6 +85,87 @@ export function getSenderEmail(): string {
   return outlookSenderEmail.value()
 }
 
+export function buildGraphSenderRecipient(senderEmail: string) {
+  return {
+    emailAddress: {
+      address: senderEmail.trim(),
+      name: EMAIL.SENDER_DISPLAY_NAME,
+    },
+  }
+}
+
+function compactEmailText(value: any): string {
+  return String(value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function buildSubjectJobLabel(jobNumber: any, jobName: any): string {
+  const normalizedJobNumber = compactEmailText(jobNumber)
+  const normalizedJobName = compactEmailText(jobName)
+
+  if (normalizedJobNumber && normalizedJobName) return `#${normalizedJobNumber} ${normalizedJobName}`
+  if (normalizedJobNumber) return `#${normalizedJobNumber}`
+  return normalizedJobName
+}
+
+function formatShortEmailDate(value: any): string {
+  const asDate = resolveOrderEmailDate(value)
+  return asDate ? asDate.toLocaleDateString('en-US') : ''
+}
+
+function buildEmailSubject(parts: any[]): string {
+  return parts.map(compactEmailText).filter(Boolean).join(' | ')
+}
+
+function renderHiddenEmailPreheader(preheader: string): string {
+  const normalizedPreheader = compactEmailText(preheader)
+  if (!normalizedPreheader) return ''
+
+  return `
+    <div style="display:none!important; max-height:0; max-width:0; overflow:hidden; opacity:0; color:transparent; font-size:1px; line-height:1px; mso-hide:all;">
+      ${escapeHtml(normalizedPreheader)}
+    </div>
+  `
+}
+
+export function buildDailyLogEmailSubject(jobDetails: JobDetails, logDate: string, dailyLog: any = {}): string {
+  const dailyLogPayload = normalizeDailyLogEmailPayload(dailyLog || {})
+  return buildEmailSubject([
+    EMAIL.SUBJECTS.DAILY_LOG,
+    dailyLog?.submittedByName || dailyLog?.foremanName || dailyLogPayload.foremanOnSite,
+    buildSubjectJobLabel(
+      dailyLogPayload.jobSiteNumbers || dailyLog?.jobCode || jobDetails?.number,
+      dailyLogPayload.projectName || dailyLog?.jobName || jobDetails?.name,
+    ),
+    formatShortEmailDate(logDate),
+  ])
+}
+
+export function buildShopOrderEmailSubject(order: any, jobDetails?: Partial<JobDetails> | null): string {
+  return buildEmailSubject([
+    EMAIL.SUBJECTS.SHOP_ORDER,
+    order?.submittedByName || order?.foremanName,
+    buildSubjectJobLabel(
+      order?.jobCode || jobDetails?.number,
+      order?.jobName || jobDetails?.name,
+    ),
+    `Order #${getShopOrderDisplayNumber(order)}`,
+  ])
+}
+
+export function buildTimecardEmailSubject(payload: {
+  jobName?: string
+  jobNumber?: string
+  submittedBy?: string
+  weekStart?: string
+}): string {
+  return buildEmailSubject([
+    EMAIL.SUBJECTS.TIMECARD,
+    payload.submittedBy,
+    buildSubjectJobLabel(payload.jobNumber, payload.jobName),
+    payload.weekStart ? `Week ${formatShortEmailDate(payload.weekStart) || payload.weekStart}` : '',
+  ])
+}
+
 function displayValue(value: any): string {
   if (value === null || value === undefined) return 'N/A'
   if (typeof value === 'string') {
@@ -95,24 +176,37 @@ function displayValue(value: any): string {
   return 'N/A'
 }
 
+function renderMultilineDisplayValue(value: any, fallback = 'N/A'): string {
+  if (value === null || value === undefined) return escapeHtml(fallback)
+
+  const normalized = String(value).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const trimmed = normalized.trim()
+  if (!trimmed) return escapeHtml(fallback)
+
+  return escapeHtml(trimmed)
+    .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+    .replace(/ {2}/g, ' &nbsp;')
+    .replace(/\n/g, '<br>')
+}
+
+function renderDailyLogResponseBlock(label: string, value: any, fallback = 'N/A'): string {
+  return `
+    <div style="margin: 0 0 14px 0;">
+      <div style="font-weight: bold; margin-bottom: 4px;">${escapeHtml(label)}:</div>
+      <div style="line-height: 1.45;">${renderMultilineDisplayValue(value, fallback)}</div>
+    </div>
+  `
+}
+
 function formatAnyDate(value: any): string {
-  try {
-    if (!value) return 'N/A'
-    const asDate = typeof value?.toDate === 'function'
-      ? value.toDate()
-      : value instanceof Date
-        ? value
-        : new Date(value)
-    if (Number.isNaN(asDate.getTime())) return 'N/A'
-    return asDate.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  } catch {
-    return 'N/A'
-  }
+  const asDate = resolveOrderEmailDate(value)
+  if (!asDate) return 'N/A'
+  return asDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 }
 
 function objectRecord(value: any): Record<string, any> {
@@ -230,7 +324,7 @@ export function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, logDate: st
         <h1>Daily Log Auto-Submitted</h1>
       </div>
       <div class="content">
-        <p><strong>Job:</strong> ${jobDetails.name || 'Unnamed Job'}</p>
+        <p><strong>Job:</strong> ${renderEmailText(jobDetails.name, 'Unnamed Job')}</p>
         <p><strong>Date:</strong> ${formattedDate}</p>
         <p>A daily log has been auto-submitted for this job. Please review the Phase 2 application for full details.</p>
       </div>
@@ -247,15 +341,16 @@ export function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, logDate: st
 export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dailyLog: any): string {
   const formattedDate = formatAnyDate(logDate)
   const dailyLogPayload = normalizeDailyLogEmailPayload(dailyLog)
+  const preheader = buildDailyLogEmailSubject(jobDetails, logDate, dailyLog)
 
   const manpowerLines = (Array.isArray(dailyLogPayload.manpowerLines) && dailyLogPayload.manpowerLines.length
     ? dailyLogPayload.manpowerLines
     : [{ trade: '', count: 0, areas: '' }])
     .map((line: any) => `
     <tr>
-      <td style="padding: 8px; border: 1px solid #ddd;">${displayValue(line.trade)}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(line.count)}</td>
-      <td style="padding: 8px; border: 1px solid #ddd;">${displayValue(line.areas)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">${renderEmailText(line.trade)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(line.count)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">${renderEmailText(line.areas)}</td>
     </tr>
   `).join('')
 
@@ -264,10 +359,10 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
     : [{ area: '', high: '', low: '', humidity: '' }])
     .map((reading: any) => `
     <tr>
-      <td style="padding: 8px; border: 1px solid #ddd;">${displayValue(reading.area)}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(reading.high)}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(reading.low)}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${displayValue(reading.humidity)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">${renderEmailText(reading.area)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(reading.high)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(reading.low)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(reading.humidity)}</td>
     </tr>
   `).join('')
 
@@ -282,14 +377,14 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
             : 'Attachment'
       const name = att?.name || att?.path || 'Attachment'
       const url = att?.url || '#'
-      const description = displayValue(att?.description)
+      const description = renderMultilineDisplayValue(att?.description)
       const hasImagePreview = typeof url === 'string' && /^https?:\/\//i.test(url)
       return `
         <li style="margin-bottom: 12px;">
-          <div style="margin-bottom: 4px;"><strong>${label}:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${name}</a></div>
+          <div style="margin-bottom: 4px;"><strong>${escapeHtml(label)}:</strong> <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${renderEmailText(name)}</a></div>
           <div style="margin-bottom: 6px;"><strong>${att?.type === 'ptp' ? 'Note' : 'Description'}:</strong> ${description}</div>
           ${hasImagePreview
-            ? `<a href="${url}" target="_blank" rel="noopener noreferrer"><img src="${url}" alt="${name}" style="max-width: 180px; max-height: 120px; border: 1px solid #ddd; border-radius: 4px; display: block;" /></a>`
+            ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(url)}" alt="${renderEmailText(name)}" style="max-width: 180px; max-height: 120px; border: 1px solid #ddd; border-radius: 4px; display: block;" /></a>`
             : ''}
         </li>
       `
@@ -298,26 +393,27 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
 
   return `
     ${EMAIL_STYLES}
+    ${renderHiddenEmailPreheader(preheader)}
     <div class="email-container">
       <div class="header">
         <h1>Daily Log Submitted</h1>
       </div>
       <div class="content">
-        <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">${jobDetails.name || 'Unnamed Job'} ${jobDetails.number ? `(#${jobDetails.number})` : ''}</h2>
+        <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">${renderEmailText(jobDetails.name, 'Unnamed Job')} ${jobDetails.number ? `(#${renderEmailText(jobDetails.number)})` : ''}</h2>
         <p><strong>Date:</strong> ${formattedDate}</p>
 
         <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Site Information</h3>
-        <p><strong>Project Name:</strong> ${displayValue(dailyLogPayload.projectName)}</p>
-        <p><strong>Job Number:</strong> ${displayValue(dailyLogPayload.jobSiteNumbers || jobDetails?.number)}</p>
-        <p><strong>Foreman:</strong> ${displayValue(dailyLogPayload.foremanOnSite)}</p>
-        <p><strong>Project Manager:</strong> ${displayValue(dailyLogPayload.siteForemanAssistant)}</p>
+        <p><strong>Project Name:</strong> ${renderEmailText(dailyLogPayload.projectName)}</p>
+        <p><strong>Job Number:</strong> ${renderEmailText(dailyLogPayload.jobSiteNumbers || jobDetails?.number)}</p>
+        <p><strong>Foreman:</strong> ${renderEmailText(dailyLogPayload.foremanOnSite)}</p>
+        <p><strong>Project Manager:</strong> ${renderEmailText(dailyLogPayload.siteForemanAssistant)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Manpower</h3>
-        <p><strong>Manpower Summary:</strong> ${displayValue(dailyLogPayload.manpower)}</p>
-        <p><strong>Weekly Schedule:</strong> ${displayValue(dailyLogPayload.weeklySchedule)}</p>
-        <p><strong>Manpower Assessment:</strong> ${displayValue(dailyLogPayload.manpowerAssessment)}</p>
+        ${renderDailyLogResponseBlock('Manpower Summary', dailyLogPayload.manpower)}
+        ${renderDailyLogResponseBlock('Weekly Schedule', dailyLogPayload.weeklySchedule)}
+        ${renderDailyLogResponseBlock('Manpower Assessment', dailyLogPayload.manpowerAssessment)}
 
         <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
           <thead>
@@ -350,31 +446,31 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Safety & Concerns</h3>
-        <p><strong>Safety Concerns:</strong> ${displayValue(dailyLogPayload.safetyConcerns)}</p>
-        <p><strong>AHA Reviewed:</strong> ${displayValue(dailyLogPayload.ahaReviewed)}</p>
-        <p><strong>Schedule Concerns:</strong> ${displayValue(dailyLogPayload.scheduleConcerns)}</p>
-        <p><strong>Budget Concerns:</strong> ${displayValue(dailyLogPayload.budgetConcerns)}</p>
+        ${renderDailyLogResponseBlock('Safety Concerns', dailyLogPayload.safetyConcerns)}
+        ${renderDailyLogResponseBlock('AHA Reviewed', dailyLogPayload.ahaReviewed)}
+        ${renderDailyLogResponseBlock('Schedule Concerns', dailyLogPayload.scheduleConcerns)}
+        ${renderDailyLogResponseBlock('Budget Concerns', dailyLogPayload.budgetConcerns)}
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Deliveries & Materials</h3>
-        <p><strong>Deliveries Received:</strong> ${displayValue(dailyLogPayload.deliveriesReceived)}</p>
-        <p><strong>Deliveries Needed:</strong> ${displayValue(dailyLogPayload.deliveriesNeeded)}</p>
-        <p><strong>New Work Authorizations:</strong> ${displayValue(dailyLogPayload.newWorkAuthorizations)}</p>
+        ${renderDailyLogResponseBlock('Deliveries Received', dailyLogPayload.deliveriesReceived)}
+        ${renderDailyLogResponseBlock('Deliveries Needed', dailyLogPayload.deliveriesNeeded)}
+        ${renderDailyLogResponseBlock('New Work Authorizations', dailyLogPayload.newWorkAuthorizations)}
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Quality Control</h3>
-        <p><strong>Who is assigned to do QC?</strong> ${displayValue(dailyLogPayload.qcAssignedTo)}</p>
-        <p><strong>What areas were inspected?</strong> ${displayValue(dailyLogPayload.qcAreasInspected ?? dailyLogPayload.qcInspection)}</p>
-        <p><strong>What issues were identified?</strong> ${displayValue(dailyLogPayload.qcIssuesIdentified)}</p>
-        <p><strong>What was done to fix the issues?</strong> ${displayValue(dailyLogPayload.qcIssuesResolved)}</p>
+        ${renderDailyLogResponseBlock('Who is assigned to do QC?', dailyLogPayload.qcAssignedTo)}
+        ${renderDailyLogResponseBlock('What areas were inspected?', dailyLogPayload.qcAreasInspected ?? dailyLogPayload.qcInspection)}
+        ${renderDailyLogResponseBlock('What issues were identified?', dailyLogPayload.qcIssuesIdentified)}
+        ${renderDailyLogResponseBlock('What was done to fix the issues?', dailyLogPayload.qcIssuesResolved)}
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Notes & Action Items</h3>
-        <p><strong>Notes & Correspondence:</strong> ${displayValue(dailyLogPayload.notesCorrespondence)}</p>
-        <p><strong>Action Items:</strong> ${displayValue(dailyLogPayload.actionItems)}</p>
+        ${renderDailyLogResponseBlock('Notes & Correspondence', dailyLogPayload.notesCorrespondence)}
+        ${renderDailyLogResponseBlock('Action Items', dailyLogPayload.actionItems)}
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Attachments</h3>
@@ -406,9 +502,11 @@ export function buildTimecardsEmail(payload: {
 
   const timecardCount = Array.isArray(payload.timecards) ? payload.timecards.length : 0
   const jobHeading = `${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}`
+  const preheader = buildTimecardEmailSubject(payload)
 
   return `
     ${EMAIL_STYLES}
+    ${renderHiddenEmailPreheader(preheader)}
     <div class="email-container">
       <div class="header">
         <h1>Timecards Submitted</h1>
@@ -1145,10 +1243,11 @@ interface ShopOrderDocumentModel {
   orderBy: string
   orderDate: string
   deliveryDateLabel: string
+  jobName: string
+  jobNumber: string
   jobLabel: string
   comments: string
   lines: ShopOrderEmailLine[]
-  totalAmount: number | null
 }
 
 function formatCompactOrderEmailDate(value: any): string {
@@ -1183,14 +1282,14 @@ const SHOP_ORDER_DOCUMENT_PADDING = 14
 const SHOP_ORDER_TABLE_WIDTH = SHOP_ORDER_DOCUMENT_WIDTH - (SHOP_ORDER_DOCUMENT_PADDING * 2)
 const SHOP_ORDER_TABLE_BORDER = '#9b9b9b'
 const SHOP_ORDER_EMAIL_COLUMN_WIDTHS = {
-  pulledBy: 60,
-  verifiedBy: 70,
-  code: 64,
+  pulledBy: 68,
+  verifiedBy: 80,
+  code: 78,
   partNumber: 160,
-  itemName: 361,
-  quantity: 76,
-  notes: 135,
-  check: 26,
+  itemName: 334,
+  quantity: 74,
+  notes: 130,
+  check: 28,
 } as const
 
 const SHOP_ORDER_EMAIL_PRINT_STYLES = `
@@ -1278,8 +1377,8 @@ function renderPrintedShopOrderItemsTable(items: ShopOrderEmailLine[], marginTop
       </colgroup>
       <thead style="display: table-header-group !important;">
         <tr>
-          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; padding: 6px 2px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 14px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Pulled</th>
-          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; padding: 6px 2px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 14px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Verified</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy}px; padding: 6px 4px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 14px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Pulled</th>
+          <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy}px; padding: 6px 4px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 14px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Verified</th>
           <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">133/513</th>
           <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber}px; padding: 6px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: center; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Part#</th>
           <th width="${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}" style="width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; min-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; max-width: ${SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName}px; padding: 6px 7px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; font-size: 15px; font-weight: 700; line-height: 1.15; text-align: left; vertical-align: middle; word-break: normal; overflow-wrap: normal;">Item Name</th>
@@ -1378,13 +1477,14 @@ function buildShopOrderDocumentModel(
 ): ShopOrderDocumentModel {
   void costCodesByCatalogItemId
   const items = Array.isArray(order?.items) ? order.items : []
-  const totalAmount = Number(order?.totalAmount)
   const orderIdentifier = getShopOrderDisplayNumber(order)
   const orderDate = formatCompactOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt)
   const deliveryDate = getShopOrderRequestedDeliveryDateValue(order)
   const deliveryDateLabel = deliveryDate
     ? formatCompactOrderEmailDate(deliveryDate)
     : 'N/A'
+  const jobName = String(order?.jobName || '').trim()
+  const jobNumber = String(order?.jobCode || '').trim()
   const jobLabel = getJobDisplayLabel(order)
   const comments = String(order?.comments || '').trim()
   const orderBy = String(order?.foremanName || order?.submittedByName || '').trim() || 'Phase 2 Foreman'
@@ -1396,7 +1496,10 @@ function buildShopOrderDocumentModel(
       ? descriptionSegments.slice(1)
       : descriptionSegments
     const fallbackDescription = String(item?.description || '').trim() || 'Untitled Item'
-    const displayDescription = remainingSegments.at(-1) || descriptionSegments.at(-1) || fallbackDescription
+    const displayDescription =
+      remainingSegments[remainingSegments.length - 1] ||
+      descriptionSegments[descriptionSegments.length - 1] ||
+      fallbackDescription
 
     return {
       displayDescription,
@@ -1418,10 +1521,11 @@ function buildShopOrderDocumentModel(
     orderBy,
     orderDate,
     deliveryDateLabel,
+    jobName,
+    jobNumber,
     jobLabel,
     comments,
     lines,
-    totalAmount: Number.isFinite(totalAmount) ? totalAmount : null,
   }
 }
 
@@ -1433,6 +1537,12 @@ export function buildShopOrderEmail(
   costCodesByCatalogItemId: Record<string, string> = {},
 ): string {
   const model = buildShopOrderDocumentModel(order, costCodesByCatalogItemId)
+  const preheader = buildShopOrderEmailSubject({
+    ...order,
+    foremanName: model.orderBy,
+    jobCode: model.jobNumber,
+    jobName: model.jobName,
+  })
   const itemsHtml = model.lines.length
     ? renderPrintedShopOrderSection(
       model.orderIdentifier,
@@ -1453,9 +1563,9 @@ export function buildShopOrderEmail(
   return `
     ${EMAIL_STYLES}
     ${SHOP_ORDER_EMAIL_PRINT_STYLES}
+    ${renderHiddenEmailPreheader(preheader)}
     <div class="email-container shop-order-email__document" style="width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; min-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; max-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; font-family: Arial, sans-serif; background-color: #efefef; padding: 16px;">
       <div class="content shop-order-email__paper" style="width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; min-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; max-width: ${SHOP_ORDER_DOCUMENT_WIDTH}px; background-color: #ffffff; padding: 14px; line-height: 1.45; color: #222222;">
-        ${model.totalAmount !== null ? `<div style="margin-bottom: 10px; font-size: 14px; color: #333333;"><strong>Estimated Total:</strong> $${model.totalAmount.toFixed(2)}</div>` : ''}
         ${itemsHtml}
         ${endOfOrderHtml}
       </div>
@@ -1476,9 +1586,19 @@ export function buildShopOrderPdfFilename(order: any): string {
   return `Online Shop Order ${orderIdentifier}.pdf`
 }
 
+export interface ShopOrderPdfRenderEvent {
+  pageNumber: number
+  y: number
+}
+
+export interface ShopOrderPdfBuildOptions {
+  onTableHeader?: (event: ShopOrderPdfRenderEvent) => void
+}
+
 export async function buildShopOrderPdfBuffer(
   order: any,
   costCodesByCatalogItemId: Record<string, string> = {},
+  options: ShopOrderPdfBuildOptions = {},
 ): Promise<Buffer> {
   const model = buildShopOrderDocumentModel(order, costCodesByCatalogItemId)
   const doc = new PDFDocument({ margin: 28, size: 'LETTER' })
@@ -1489,7 +1609,16 @@ export async function buildShopOrderPdfBuffer(
   const pageBottom = doc.page.height - pageMargin
   const tableX = pageMargin
   const tableWidth = doc.page.width - (pageMargin * 2)
-  const colWidths = [46, 54, 50, 116, 172, 48, 88, 18]
+  const colWidths = [
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy,
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy,
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.code,
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.partNumber,
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.itemName,
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.quantity,
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.notes,
+    SHOP_ORDER_EMAIL_COLUMN_WIDTHS.check,
+  ]
   const tableScale = tableWidth / colWidths.reduce((sum, width) => sum + width, 0)
   const scaledColWidths = colWidths.map((width) => width * tableScale)
   const borderColor = '#111111'
@@ -1509,6 +1638,8 @@ export async function buildShopOrderPdfBuffer(
     doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
     doc.on('end', () => resolve())
     doc.on('error', (err) => reject(err))
+
+    let pageNumber = 1
 
     const drawCell = (
       x: number,
@@ -1542,6 +1673,7 @@ export async function buildShopOrderPdfBuffer(
     const drawTableHeader = (y: number) => {
       const headerHeight = 32
       const headers = ['Pulled', 'Verified', '133/513', 'Part#', 'Item Name', 'Quantity', 'Notes', '']
+      options.onTableHeader?.({ pageNumber, y })
       headers.forEach((header, index) => {
         drawCell(columnX(index), y, scaledColWidths[index] || 0, headerHeight, header, {
           bold: true,
@@ -1599,12 +1731,14 @@ export async function buildShopOrderPdfBuffer(
     const ensureSpace = (height: number) => {
       if (cursorY + height <= pageBottom - 24) return
       doc.addPage()
+      pageNumber += 1
       cursorY = drawTableHeader(pageTop)
     }
 
     const ensureEndMarkerSpace = (height: number) => {
       if (cursorY + height <= pageBottom - 24) return
       doc.addPage()
+      pageNumber += 1
       cursorY = pageTop
     }
 
@@ -1615,8 +1749,8 @@ export async function buildShopOrderPdfBuffer(
     }
 
     model.lines.forEach((line) => {
-      const itemWidth = scaledColWidths[4] - 10
-      const notesWidth = scaledColWidths[6] - 10
+      const itemWidth = Math.max(20, (scaledColWidths[4] ?? 0) - 10)
+      const notesWidth = Math.max(20, (scaledColWidths[6] ?? 0) - 10)
       doc.font('Helvetica').fontSize(10)
       const itemHeight = doc.heightOfString(pdfText(line.displayDescription, 'Untitled Item'), { width: itemWidth })
       const noteHeight = line.note ? doc.heightOfString(line.note, { width: notesWidth }) : 0
@@ -1732,6 +1866,7 @@ export async function sendEmail(options: {
     }
 
     const senderEmail = outlookSenderEmail.value()
+    const senderRecipient = buildGraphSenderRecipient(senderEmail)
 
     console.log(`[sendEmail] Sending email to ${recipients.join(', ')} from ${senderEmail}`)
     console.log(`[sendEmail] Subject: ${options.subject}`)
@@ -1740,6 +1875,7 @@ export async function sendEmail(options: {
     const payload = {
       message: {
         subject: options.subject,
+        from: senderRecipient,
         body: {
           contentType: 'HTML',
           content: options.html,
@@ -1813,7 +1949,7 @@ export async function sendDailyLogEmailNotification(
   const html = buildDailyLogEmail(jobDetails, logDate, dailyLog || {})
   await sendEmail({
     to: recipients,
-    subject: `${EMAIL.SUBJECTS.DAILY_LOG} - ${jobDetails.name || 'Job'} - ${logDate}`,
+    subject: buildDailyLogEmailSubject(jobDetails, logDate, dailyLog || {}),
     html,
   })
 }
@@ -1825,12 +1961,11 @@ export async function sendShopOrderEmailNotification(
   recipients: string[],
   order: any
 ): Promise<void> {
-  const orderIdentifier = getShopOrderDisplayNumber(order)
   const html = buildShopOrderEmail(order)
   const pdfBuffer = await buildShopOrderPdfBuffer(order)
   await sendEmail({
     to: recipients,
-    subject: `${EMAIL.SUBJECTS.SHOP_ORDER} - Order #${orderIdentifier}`,
+    subject: buildShopOrderEmailSubject(order),
     html,
     attachments: [
       {

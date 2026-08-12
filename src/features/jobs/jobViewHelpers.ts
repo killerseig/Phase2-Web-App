@@ -1,5 +1,7 @@
-import { formatJobTypeLabel, toEffectiveRole } from '@/types/domain'
+import { targetRoleCanBeAssignedJobs } from '@/auth/targetRoleCapabilities'
+import { formatJobTypeLabel } from '@/types/domain'
 import type { JobRecord, JobType, NotificationModuleKey, NotificationRecipients, UserProfile } from '@/types/domain'
+import { shouldHydrateDirtySnapshot } from '@/utils/dirtySnapshotGuard'
 import { filterDirectoryRecords, type DirectoryStatusFilter } from '@/utils/directoryFilters'
 
 export interface JobFormState {
@@ -23,6 +25,11 @@ const DEFAULT_JOB_TYPES = ['paint', 'acoustics', 'drywall', 'small-jobs', 'gener
 export const JOB_NOTIFICATION_MODULES: Array<{ key: NotificationModuleKey; label: string }> = [
   { key: 'dailyLogs', label: 'Daily Logs' },
   { key: 'timecards', label: 'Timecards' },
+  { key: 'shopOrders', label: 'Shop Orders' },
+]
+
+export const JOB_SPECIFIC_NOTIFICATION_MODULES: Array<{ key: NotificationModuleKey; label: string }> = [
+  { key: 'dailyLogs', label: 'Daily Logs' },
   { key: 'shopOrders', label: 'Shop Orders' },
 ]
 
@@ -154,7 +161,7 @@ export function getSelectedJobForJobsView(
 
 export function buildJobForemanOptions(users: readonly UserProfile[]) {
   return users
-    .filter((user) => toEffectiveRole(user.role) === 'foreman')
+    .filter((user) => targetRoleCanBeAssignedJobs(user.role))
     .slice()
     .sort((left, right) => {
       const leftRank = left.active ? 0 : 1
@@ -232,7 +239,7 @@ export function shouldHydrateJobDetailForm(options: {
   lastHydratedJobId: string | null
   form: JobFormState
   lastSavedSignature: string
-  isAdmin: boolean
+  canEditJob: boolean
   editDrawerOpen: boolean
   isCreateMode: boolean
 }) {
@@ -244,33 +251,35 @@ export function shouldHydrateJobDetailForm(options: {
 
   const localSignature = serializeJobForm(options.form)
   const incomingSignature = serializeJobRecord(options.job)
-  const hasUnsavedLocalChanges =
-    options.isAdmin
-    && options.editDrawerOpen
-    && !options.isCreateMode
-    && localSignature !== options.lastSavedSignature
-
-  if (hasUnsavedLocalChanges) return false
-  if (incomingSignature === options.lastSavedSignature) return false
-  if (options.editDrawerOpen && !options.isCreateMode && localSignature !== incomingSignature) return false
-
-  return true
+  return shouldHydrateDirtySnapshot({
+    incomingSignature,
+    lastSavedSignature: options.lastSavedSignature,
+    localSignature,
+    protectLocalMismatch: options.editDrawerOpen && !options.isCreateMode,
+    trackUnsavedLocalChanges:
+      options.canEditJob
+      && options.editDrawerOpen
+      && !options.isCreateMode,
+  })
 }
 
 export function resolveJobsViewSelectionAfterVisibleJobsChange(options: {
-  isAdmin: boolean
+  canManageGlobalJobDefaults: boolean
+  canUseJobSetupEditor: boolean
   selectedJobId: string | null
   nextJobs: readonly JobRecord[]
   editDrawerOpen: boolean
 }): string | null | undefined {
-  if (!options.isAdmin) {
+  if (!options.canUseJobSetupEditor) {
     const firstJob = options.nextJobs[0]
     if (!options.selectedJobId && firstJob) return firstJob.id
     return undefined
   }
 
   if (options.selectedJobId === 'new') return undefined
-  if (options.selectedJobId === ALL_JOBS_ID) return undefined
+  if (options.selectedJobId === ALL_JOBS_ID) {
+    return options.canManageGlobalJobDefaults ? undefined : null
+  }
 
   const selectedStillVisible =
     typeof options.selectedJobId === 'string'
@@ -278,7 +287,7 @@ export function resolveJobsViewSelectionAfterVisibleJobsChange(options: {
     && options.nextJobs.some((job) => job.id === options.selectedJobId)
 
   if (selectedStillVisible) return undefined
-  return options.editDrawerOpen ? ALL_JOBS_ID : null
+  return options.editDrawerOpen && options.canManageGlobalJobDefaults ? ALL_JOBS_ID : null
 }
 
 export function validateJobForm(form: JobFormState) {
@@ -290,6 +299,12 @@ export function validateJobForm(form: JobFormState) {
 
 export function getNotificationModuleLabel(moduleKey: NotificationModuleKey) {
   return JOB_NOTIFICATION_MODULES.find((module) => module.key === moduleKey)?.label ?? moduleKey
+}
+
+const passiveJobDetailMessages = new Set(['Saving...', 'All changes saved.'])
+
+export function shouldShowJobDetailSuccessToast(message: string) {
+  return !passiveJobDetailMessages.has(message)
 }
 
 export function normalizeFormText(value: unknown) {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppCard from '@/components/common/AppCard.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import RecipientEditor from '@/components/RecipientEditor.vue'
 
 defineProps<{
@@ -17,13 +19,13 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <article class="daily-log-recipients-card daily-logs-card">
-    <header class="daily-log-recipients-card__header">
-      <div>
-        <span class="daily-log-recipients-card__eyebrow">Recipients</span>
-        <h2 class="daily-log-recipients-card__title">Email List</h2>
-      </div>
-    </header>
+  <AppCard class="daily-log-recipients-card daily-logs-card">
+    <AppSectionHeader
+      class="daily-log-recipients-card__header"
+      eyebrow="Recipients"
+      title="Email List"
+      title-tag="h2"
+    />
 
     <div class="daily-log-recipients-card__groups">
       <RecipientEditor
@@ -47,39 +49,19 @@ const emit = defineEmits<{
         @remove="emit('remove', $event)"
       />
     </div>
-  </article>
+  </AppCard>
 </template>
 
 <style scoped>
 .daily-log-recipients-card {
-  display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-}
-
-.daily-log-recipients-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.85rem;
-}
-
-.daily-log-recipients-card__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.68rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.daily-log-recipients-card__title {
-  margin: 0.2rem 0 0;
-  font-size: 1.05rem;
+  --app-section-header-copy-gap: 0.2rem;
+  --app-section-header-eyebrow-font-size: 0.68rem;
+  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
 }
 
 .daily-log-recipients-card__groups {

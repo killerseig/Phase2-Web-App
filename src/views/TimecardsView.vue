@@ -1,18 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { computed, ref } from 'vue'
 import JobTimecardCanvasPanel from '@/components/timecards/JobTimecardCanvasPanel.vue'
 import JobTimecardCreateTray from '@/components/timecards/JobTimecardCreateTray.vue'
 import JobTimecardToolbar from '@/components/timecards/JobTimecardToolbar.vue'
-import TimecardPageMessage from '@/components/timecards/TimecardPageMessage.vue'
+import TimecardConfirmDialog from '@/components/timecards/TimecardConfirmDialog.vue'
+import TimecardPageShell from '@/components/timecards/TimecardPageShell.vue'
+import TimecardPageMessages from '@/components/timecards/TimecardPageMessages.vue'
 import TimecardSummaryPanel from '@/components/timecards/TimecardSummaryPanel.vue'
 import { useMeasuredCardScale } from '@/composables/useMeasuredCardScale'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useRouteJobContext } from '@/composables/useRouteJobContext'
-import {
-  mergeJobTimecardRemoteCardsWithLocalState,
-  type JobTimecardSortMode,
-} from '@/features/timecards/jobViewHelpers'
+import { type JobTimecardSortMode } from '@/features/timecards/jobViewHelpers'
 import { MAX_TIMECARD_CARD_SCALE } from '@/features/timecards/layout'
 import { useJobTimecardCardActions } from '@/features/timecards/useJobTimecardCardActions'
 import { useJobTimecardCardWorkspaceActions } from '@/features/timecards/useJobTimecardCardWorkspaceActions'
@@ -20,6 +18,7 @@ import { useJobTimecardCreateActions } from '@/features/timecards/useJobTimecard
 import { useJobTimecardConfirmDialog } from '@/features/timecards/useJobTimecardConfirmDialog'
 import { useJobTimecardCreateTray } from '@/features/timecards/useJobTimecardCreateTray'
 import { useJobTimecardRecords } from '@/features/timecards/useJobTimecardRecords'
+import { useJobTimecardAccess } from '@/features/timecards/useJobTimecardAccess'
 import { useJobTimecardSaveQueue } from '@/features/timecards/useJobTimecardSaveQueue'
 import { useJobTimecardSubscriptionLifecycle } from '@/features/timecards/useJobTimecardSubscriptionLifecycle'
 import { useJobTimecardSummary } from '@/features/timecards/useJobTimecardSummary'
@@ -27,8 +26,8 @@ import { useJobTimecardWeekActions } from '@/features/timecards/useJobTimecardWe
 import { useJobTimecardWeekSelectionActions } from '@/features/timecards/useJobTimecardWeekSelectionActions'
 import { useJobTimecardWorkspaceState } from '@/features/timecards/useJobTimecardWorkspaceState'
 import { useJobTimecardWorkspaceSync } from '@/features/timecards/useJobTimecardWorkspaceSync'
+import { collectTimecardPendingStateMaps } from '@/features/timecards/stateMapHelpers'
 import { useTimecardCardSelection } from '@/features/timecards/useTimecardCardSelection'
-import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { TimecardCardRecord } from '@/types/domain'
 
@@ -42,6 +41,22 @@ const {
   subscribeRouteJob,
   stopRouteJobSubscription,
 } = useRouteJobContext()
+const {
+  canUseJobTimecardWorkflow,
+  weekSubscriptionMode,
+} = useJobTimecardAccess({
+  getAssignedJobIds: () => auth.assignedJobIds,
+  getCanManageJobTimecards: () => auth.canManageJobTimecards,
+  getCurrentUserId: () => auth.currentUser?.uid ?? null,
+  getRawRole: () => auth.rawRole,
+  job,
+  jobId,
+})
+const weekSubscriptionKey = computed(() => [
+  jobId.value,
+  weekSubscriptionMode.value,
+  auth.currentUser?.uid ?? '',
+].join('|'))
 
 const cardSearchTerm = ref('')
 const selectedWeekEndDate = ref('')
@@ -70,10 +85,11 @@ const {
 } = useJobTimecardRecords({
   getBurdenValue: () => burdenValue.value,
   getCurrentUserId: () => auth.currentUser?.uid ?? null,
-  getIsAdmin: () => auth.isAdmin,
+  getCanManageJobTimecards: () => auth.canManageJobTimecards,
+  getWeekSubscriptionMode: () => weekSubscriptionMode.value,
+  getPendingStateMaps: () => collectTimecardPendingStateMaps(scheduledSaveIds, savingIds, queuedSaveIds),
   getSelectedWeek: () => selectedWeek.value,
   jobId,
-  mergeRemoteCardsWithLocalState,
   onCardsUpdate: (nextCards) => {
     syncCardUiState(nextCards)
   },
@@ -144,7 +160,8 @@ const {
   employeeSearchTerm,
   employees,
   ensuringWeek,
-  getIsAdmin: () => auth.isAdmin,
+  getCanManageJobTimecards: () => auth.canManageJobTimecards,
+  getCanUseJobTimecardWorkflow: () => canUseJobTimecardWorkflow.value,
   job,
   jobId,
   selectedWeekEndDate,
@@ -227,6 +244,7 @@ const {
   closeCreateTray,
   ensuringWeek,
   flushPendingSaves,
+  getCanCreateWeeks: () => canUseJobTimecardWorkflow.value,
   getCurrentUserId: () => auth.currentUser?.uid ?? null,
   getDisplayName: () => auth.displayName ?? null,
   job,
@@ -239,14 +257,6 @@ const {
   setPageInfo,
   weeksLoading,
 })
-
-function mergeRemoteCardsWithLocalState(nextCards: TimecardCardRecord[]) {
-  return mergeJobTimecardRemoteCardsWithLocalState(
-    nextCards,
-    cards.value,
-    [scheduledSaveIds, savingIds, queuedSaveIds],
-  )
-}
 
 const {
   subscribeCardsForWeek,
@@ -280,7 +290,7 @@ const {
   customCardForm,
   employeeSearchTerm,
   expandAndSelectCard,
-  getIsAdmin: () => auth.isAdmin,
+  getCanManageJobTimecards: () => auth.canManageJobTimecards,
   linkedJobNumber,
   resetCustomCardForm,
   resetPageAndSaveMessages,
@@ -344,147 +354,116 @@ useJobTimecardWorkspaceSync({
   subscribeJob,
   subscribeWeeksForJob,
   syncSelectedCardFromVisibleCards,
+  weekSubscriptionKey,
   weeks,
 })
 </script>
 
 <template>
-  <AppShell>
-    <div class="timecards-page" data-testid="timecards-page">
-      <section class="timecards-workbook">
-        <JobTimecardToolbar
-          :active-mobile-tab="activeMobileToolbarTab"
-          :display-job-code="displayJobCode"
-          :display-job-name="displayJobName"
-          :selected-week-end-date="selectedWeekEndDate"
-          :card-search-term="cardSearchTerm"
-          :can-create-selected-week="canCreateSelectedWeek"
-          :action-loading="actionLoading"
-          :ensuring-week="ensuringWeek"
-          :can-edit-week="canEditWeek"
-          :has-selected-week="!!selectedWeek"
-          :card-count="cards.length"
-          :show-create-tray="showCreateTray"
-          :sort-mode="sortMode"
-          :recent-weeks="recentWeeks"
-          :active-week-id="selectedWeek?.id ?? null"
-          :weeks-loading="weeksLoading"
-          :week-range-label="weekRangeLabel"
-          :week-status-label="weekStatusLabel"
-          :selected-week-submitted="selectedWeek?.status === 'submitted'"
-          :save-error="saveError"
-          :save-state-label="saveStateLabel"
-          @update-active-mobile-tab="activeMobileToolbarTab = $event"
-          @update-card-search-term="cardSearchTerm = $event"
-          @update-sort-mode="sortMode = $event"
-          @week-ending-input="handleWeekEndingInput"
-          @week-ending-picker-open="handleWeekEndingPickerOpen"
-          @create-week="handleCreateWeek"
-          @toggle-create-tray="toggleCreateTray"
-          @submit-week="handleSubmitWeek"
-          @expand-all="setAllCardsCompact(false)"
-          @compact-all="setAllCardsCompact(true)"
-          @sort-cards="handleSortCards"
-          @select-week="handleSelectWeek"
-        />
+  <TimecardPageShell test-id="timecards-page">
+    <template #workspace>
+      <JobTimecardToolbar
+        :active-mobile-tab="activeMobileToolbarTab"
+        :display-job-code="displayJobCode"
+        :display-job-name="displayJobName"
+        :selected-week-end-date="selectedWeekEndDate"
+        :card-search-term="cardSearchTerm"
+        :can-create-selected-week="canCreateSelectedWeek"
+        :action-loading="actionLoading"
+        :ensuring-week="ensuringWeek"
+        :can-edit-week="canEditWeek"
+        :has-selected-week="!!selectedWeek"
+        :card-count="cards.length"
+        :show-create-tray="showCreateTray"
+        :sort-mode="sortMode"
+        :recent-weeks="recentWeeks"
+        :active-week-id="selectedWeek?.id ?? null"
+        :weeks-loading="weeksLoading"
+        :week-range-label="weekRangeLabel"
+        :week-status-label="weekStatusLabel"
+        :selected-week-submitted="selectedWeek?.status === 'submitted'"
+        :save-error="saveError"
+        :save-state-label="saveStateLabel"
+        @update-active-mobile-tab="activeMobileToolbarTab = $event"
+        @update-card-search-term="cardSearchTerm = $event"
+        @update-sort-mode="sortMode = $event"
+        @week-ending-input="handleWeekEndingInput"
+        @week-ending-picker-open="handleWeekEndingPickerOpen"
+        @create-week="handleCreateWeek"
+        @toggle-create-tray="toggleCreateTray"
+        @submit-week="handleSubmitWeek"
+        @expand-all="setAllCardsCompact(false)"
+        @compact-all="setAllCardsCompact(true)"
+        @sort-cards="handleSortCards"
+        @select-week="handleSelectWeek"
+      />
 
-        <JobTimecardCreateTray
-          v-if="showCreateTray"
-          :employee-search="employeeSearchTerm"
-          :employees="availableEmployees"
-          :employees-loading="employeesLoading"
-          :action-loading="actionLoading"
-          :can-edit-week="canEditWeek"
-          :custom-first-name="customCardForm.firstName"
-          :custom-last-name="customCardForm.lastName"
-          :custom-employee-number="customCardForm.employeeNumber"
-          :custom-occupation="customCardForm.occupation"
-          :custom-wage-rate="customCardForm.wageRate"
-          :custom-is-contractor="customCardForm.isContractor"
-          @update-employee-search="employeeSearchTerm = $event"
-          @update-custom-first-name="customCardForm.firstName = $event"
-          @update-custom-last-name="customCardForm.lastName = $event"
-          @update-custom-employee-number="customCardForm.employeeNumber = $event"
-          @update-custom-occupation="customCardForm.occupation = $event"
-          @update-custom-wage-rate="customCardForm.wageRate = $event"
-          @update-custom-is-contractor="customCardForm.isContractor = $event"
-          @add-employee="handleAddEmployee"
-          @add-custom-card="handleAddCustomCard"
-        />
+      <JobTimecardCreateTray
+        v-if="showCreateTray"
+        :employee-search="employeeSearchTerm"
+        :employees="availableEmployees"
+        :employees-loading="employeesLoading"
+        :action-loading="actionLoading"
+        :can-edit-week="canEditWeek"
+        :custom-first-name="customCardForm.firstName"
+        :custom-last-name="customCardForm.lastName"
+        :custom-employee-number="customCardForm.employeeNumber"
+        :custom-occupation="customCardForm.occupation"
+        :custom-wage-rate="customCardForm.wageRate"
+        :custom-is-contractor="customCardForm.isContractor"
+        @update-employee-search="employeeSearchTerm = $event"
+        @update-custom-first-name="customCardForm.firstName = $event"
+        @update-custom-last-name="customCardForm.lastName = $event"
+        @update-custom-employee-number="customCardForm.employeeNumber = $event"
+        @update-custom-occupation="customCardForm.occupation = $event"
+        @update-custom-wage-rate="customCardForm.wageRate = $event"
+        @update-custom-is-contractor="customCardForm.isContractor = $event"
+        @add-employee="handleAddEmployee"
+        @add-custom-card="handleAddCustomCard"
+      />
 
-        <TimecardPageMessage v-if="pageError" :message="pageError" tone="error" />
-        <TimecardPageMessage v-else-if="pageInfo" :message="pageInfo" />
+      <TimecardPageMessages :error="pageError" :info="pageInfo" />
 
-        <JobTimecardCanvasPanel
-          :cards="filteredCards"
-          :cards-loading="cardsLoading"
-          :ensuring-week="ensuringWeek"
-          :selected-week-end-date="selectedWeekEndDate"
-          :selected-card-id="selectedCardId"
-          :empty-message="emptyCanvasMessage"
-          :burden="burdenValue"
-          :can-edit-week="canEditWeek"
-          :action-loading="actionLoading"
-          :is-admin="auth.isAdmin"
-          :is-card-compact="isCardCompact"
-          :is-card-read-only="isCardReadOnly"
-          :get-card-shell-style="getCardShellStyle"
-          :get-card-scale-style="getCardScaleStyle"
-          @select-card="selectCard"
-          @toggle-card-compact="toggleCardCompact"
-          @set-shell-element="setCardShellElement"
-          @set-content-element="setCardContentElement"
-          @workbook-changed="handleWorkbookChanged"
-          @remove-card="handleRemoveCard"
-        />
+      <JobTimecardCanvasPanel
+        :cards="filteredCards"
+        :cards-loading="cardsLoading"
+        :ensuring-week="ensuringWeek"
+        :selected-week-end-date="selectedWeekEndDate"
+        :selected-card-id="selectedCardId"
+        :empty-message="emptyCanvasMessage"
+        :burden="burdenValue"
+        :can-edit-week="canEditWeek"
+        :action-loading="actionLoading"
+        :can-manage-job-timecards="auth.canManageJobTimecards"
+        :is-card-compact="isCardCompact"
+        :is-card-read-only="isCardReadOnly"
+        :get-card-shell-style="getCardShellStyle"
+        :get-card-scale-style="getCardScaleStyle"
+        @select-card="selectCard"
+        @toggle-card-compact="toggleCardCompact"
+        @set-shell-element="setCardShellElement"
+        @set-content-element="setCardContentElement"
+        @workbook-changed="handleWorkbookChanged"
+        @remove-card="handleRemoveCard"
+      />
 
-        <TimecardSummaryPanel
-          :card-count="cards.length"
-          :total-hours="totalHours"
-          :total-production="totalProduction"
-          :accounts-summary="accountsSummary"
-        />
-      </section>
-    </div>
+      <TimecardSummaryPanel
+        :card-count="cards.length"
+        :total-hours="totalHours"
+        :total-production="totalProduction"
+        :accounts-summary="accountsSummary"
+      />
+    </template>
 
-    <ConfirmDialog
+    <TimecardConfirmDialog
       :open="timecardConfirmAction !== null"
       :title="timecardConfirmTitle"
       :message="timecardConfirmMessage"
       :confirm-label="timecardConfirmLabel"
       :destructive="timecardConfirmDestructive"
       :busy="actionLoading"
-      @update:open="handleTimecardConfirmOpenUpdate"
+      @update-open="handleTimecardConfirmOpenUpdate"
       @confirm="confirmTimecardAction"
     />
-  </AppShell>
+  </TimecardPageShell>
 </template>
-
-<style scoped>
-.timecards-page {
-  display: grid;
-  min-width: 0;
-}
-
-.timecards-workbook {
-  display: grid;
-  gap: 1rem;
-  padding: 1rem;
-  border: 1px solid rgba(88, 105, 44, 0.55);
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(236, 241, 213, 0.98) 0%, rgba(213, 225, 169, 0.96) 100%);
-  color: #1a1a12;
-  min-width: 0;
-  --timecards-toolbar-control-height: 2.3rem;
-  --timecards-toolbar-control-radius: 0;
-  --timecards-toolbar-control-border: rgba(88, 105, 44, 0.42);
-  --timecards-toolbar-control-border-strong: rgba(63, 97, 43, 0.54);
-  --timecards-toolbar-control-bg: rgba(251, 252, 246, 0.98);
-  --timecards-toolbar-control-bg-muted: rgba(238, 242, 223, 0.96);
-  --timecards-toolbar-control-bg-active: rgba(223, 238, 210, 0.98);
-  --timecards-toolbar-control-text: #191b13;
-  --timecards-toolbar-focus-ring: 0 0 0 3px rgba(102, 138, 77, 0.16);
-}
-
-</style>

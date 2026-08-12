@@ -8,10 +8,7 @@ import {
 } from '@/features/shopCatalog/adminViewHelpers'
 import type { ShopCatalogTreeNode } from '@/features/shopCatalog/treeTypes'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface InlineCreateState {
   key: ShopCatalogTreeNode['key'] | null

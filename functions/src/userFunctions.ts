@@ -11,8 +11,16 @@ import {
 import { buildPasswordResetEmail, buildWelcomeEmail, isEmailEnabled, sendEmail } from './emailService'
 import { getAppBaseUrl, getGraphEmailSecrets } from './functionConfig'
 import { removeEmailFromRecipientLists } from './recipientCleanup'
+import {
+  buildCurrentFunctionUser,
+  canSendInviteForStoredRole,
+  currentFunctionUserHasAnyRole,
+  isValidStoredRole,
+  normalizeStoredRole,
+} from './roleAccess'
 import { auth, db } from './runtime'
 import { verifyAdminRole } from './firestoreService'
+import { targetFunctionRoleCanBeAssignedJobs } from './targetRoleCapabilities'
 
 function parseTokenExpiry(value: any): Date {
   if (value?.toDate && typeof value.toDate === 'function') {
@@ -40,6 +48,54 @@ function createSetupTokenRecord() {
     setupToken: randomBytes(32).toString('hex'),
     setupTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   }
+}
+
+function normalizeAssignedJobIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return Array.from(
+    new Set(
+      value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  )
+}
+
+function normalizeAssignableUser(id: string, data: admin.firestore.DocumentData) {
+  const role = normalizeStoredRole(data.role)
+  if (!targetFunctionRoleCanBeAssignedJobs(role)) return null
+
+  return {
+    id,
+    email: typeof data.email === 'string' ? data.email : null,
+    firstName: typeof data.firstName === 'string' ? data.firstName : null,
+    lastName: typeof data.lastName === 'string' ? data.lastName : null,
+    role,
+    active: data.active !== false,
+    assignedJobIds: normalizeAssignedJobIds(data.assignedJobIds),
+    inviteStatus: typeof data.inviteStatus === 'string' ? data.inviteStatus : null,
+    inviteSentAt: data.inviteSentAt ?? null,
+  }
+}
+
+async function getAuthorizedAssignableUserReader(uid: string) {
+  const userSnap = await db.collection(COLLECTIONS.USERS).doc(uid).get()
+  if (!userSnap.exists) {
+    throw new HttpsError('failed-precondition', 'Your user profile was not found.')
+  }
+
+  const user = buildCurrentFunctionUser(uid, userSnap.data() || {})
+  if (!user.active) {
+    throw new HttpsError('permission-denied', 'Your account is inactive.')
+  }
+
+  if (!currentFunctionUserHasAnyRole(user, ['admin', 'payroll', 'project-manager'])) {
+    throw new HttpsError('permission-denied', 'Your account cannot load assignable users.')
+  }
+
+  return user
 }
 
 async function sendUserInvite(options: {
@@ -85,6 +141,32 @@ export const removeEmailFromAllRecipientLists = onCall(async (request) => {
     removedFromRecipientLists: cleanup.settingsUpdated || cleanup.jobsUpdated > 0,
     updatedJobCount: cleanup.jobsUpdated,
   }
+})
+
+export const listAssignableFieldUsers = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', ERROR_MESSAGES.NOT_SIGNED_IN)
+  }
+
+  await getAuthorizedAssignableUserReader(request.auth.uid)
+
+  const snapshot = await db.collection(COLLECTIONS.USERS).get()
+  const users = snapshot.docs
+    .map((entry) => normalizeAssignableUser(entry.id, entry.data()))
+    .filter((entry): entry is NonNullable<ReturnType<typeof normalizeAssignableUser>> => entry !== null)
+    .sort((left, right) => {
+      const leftActive = left.active ? 0 : 1
+      const rightActive = right.active ? 0 : 1
+      if (leftActive !== rightActive) return leftActive - rightActive
+
+      const leftName = `${left.firstName ?? ''} ${left.lastName ?? ''}`.trim()
+      const rightName = `${right.firstName ?? ''} ${right.lastName ?? ''}`.trim()
+      if (leftName && rightName && leftName !== rightName) return leftName.localeCompare(rightName)
+
+      return (left.email ?? '').localeCompare(right.email ?? '')
+    })
+
+  return { users }
 })
 
 export const handleUserAccessRevocationCleanup = onDocumentUpdated('users/{uid}', async (event) => {
@@ -207,7 +289,7 @@ export const createUserByAdmin = onCall({ secrets: getGraphEmailSecrets() }, asy
   if (!lastName) {
     throw new HttpsError('invalid-argument', ERROR_MESSAGES.LAST_NAME_REQUIRED)
   }
-  if (!VALID_ROLES.includes(userRole as typeof VALID_ROLES[number])) {
+  if (!isValidStoredRole(userRole)) {
     throw new HttpsError('invalid-argument', ERROR_MESSAGES.INVALID_ROLE(VALID_ROLES as unknown as string[]))
   }
 
@@ -330,7 +412,7 @@ export const sendPendingUserInvites = onCall({ secrets: getGraphEmailSecrets() }
       const role = String(userData.role || '').trim().toLowerCase()
       const active = userData.active !== false
 
-      if (!email || !active || role === 'none' || !VALID_ROLES.includes(role as typeof VALID_ROLES[number])) {
+      if (!email || !active || !canSendInviteForStoredRole(role)) {
         skippedCount += 1
         continue
       }

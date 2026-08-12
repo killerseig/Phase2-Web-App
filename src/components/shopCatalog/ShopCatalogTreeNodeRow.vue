@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import type { ComponentPublicInstance } from 'vue'
+import AppInlineInput from '@/components/common/AppInlineInput.vue'
 import type { ShopCatalogTreeNode } from '@/features/shopCatalog/treeTypes'
-import { readInputValue } from '@/utils/domEvents'
 
 defineProps<{
   node: ShopCatalogTreeNode
@@ -14,7 +13,7 @@ defineProps<{
   renaming: boolean
   createValue: string
   renameValue: string
-  setInputRef: (element: Element | ComponentPublicInstance | null) => void
+  setInputRef: (element: HTMLInputElement | null) => void
 }>()
 
 const emit = defineEmits<{
@@ -37,14 +36,6 @@ const emit = defineEmits<{
   saveInlineRename: []
   cancelRename: []
 }>()
-
-function handleCreateInput(event: Event) {
-  emit('updateCreateValue', readInputValue(event))
-}
-
-function handleRenameInput(event: Event) {
-  emit('updateRenameValue', readInputValue(event))
-}
 </script>
 
 <template>
@@ -82,29 +73,23 @@ function handleRenameInput(event: Event) {
       </span>
       <span v-else class="catalog-tree-node__twist catalog-tree-node__twist--placeholder"></span>
       <span :class="['catalog-node-icon', node.kind === 'category' ? 'catalog-node-icon--folder' : 'catalog-node-icon--item']"></span>
-      <input
+      <AppInlineInput
         v-if="creating"
-        :ref="setInputRef"
-        :value="createValue"
-        type="text"
+        :input-ref="setInputRef"
+        :model-value="createValue"
         class="catalog-tree-node__rename"
-        @input="handleCreateInput"
-        @click.stop
-        @blur="emit('saveInlineCreate')"
-        @keydown.enter.prevent="emit('saveInlineCreate')"
-        @keydown.esc.prevent="emit('cancelInlineCreate')"
+        @update:model-value="emit('updateCreateValue', $event)"
+        @commit="emit('saveInlineCreate')"
+        @cancel="emit('cancelInlineCreate')"
       />
-      <input
+      <AppInlineInput
         v-else-if="renaming"
-        :ref="setInputRef"
-        :value="renameValue"
-        type="text"
+        :input-ref="setInputRef"
+        :model-value="renameValue"
         class="catalog-tree-node__rename"
-        @input="handleRenameInput"
-        @click.stop
-        @blur="emit('saveInlineRename')"
-        @keydown.enter.prevent="emit('saveInlineRename')"
-        @keydown.esc.prevent="emit('cancelRename')"
+        @update:model-value="emit('updateRenameValue', $event)"
+        @commit="emit('saveInlineRename')"
+        @cancel="emit('cancelRename')"
       />
       <span v-else class="catalog-tree-node__label">{{ node.label }}</span>
       <span

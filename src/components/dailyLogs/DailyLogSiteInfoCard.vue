@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppCard from '@/components/common/AppCard.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import type { DailyLogSiteInfoFieldSchema } from '@/features/dailyLogs/schema'
 
 type SiteInfoValues = Record<DailyLogSiteInfoFieldSchema['key'], string>
@@ -10,13 +12,13 @@ defineProps<{
 </script>
 
 <template>
-  <article class="daily-log-site-info-card daily-logs-card">
-    <header class="daily-log-site-info-card__header">
-      <div>
-        <span class="daily-log-site-info-card__eyebrow">Job Information</span>
-        <h2 class="daily-log-site-info-card__title">Site Info</h2>
-      </div>
-    </header>
+  <AppCard class="daily-log-site-info-card daily-logs-card">
+    <AppSectionHeader
+      class="daily-log-site-info-card__header"
+      eyebrow="Job Information"
+      title="Site Info"
+      title-tag="h2"
+    />
 
     <div class="daily-log-site-info-card__grid">
       <label
@@ -28,39 +30,19 @@ defineProps<{
         <div class="daily-log-site-info-card__value">{{ siteInfo[field.key] || '-' }}</div>
       </label>
     </div>
-  </article>
+  </AppCard>
 </template>
 
 <style scoped>
 .daily-log-site-info-card {
-  display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-}
-
-.daily-log-site-info-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.85rem;
-}
-
-.daily-log-site-info-card__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.68rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.daily-log-site-info-card__title {
-  margin: 0.2rem 0 0;
-  font-size: 1.05rem;
+  --app-section-header-copy-gap: 0.2rem;
+  --app-section-header-eyebrow-font-size: 0.68rem;
+  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
 }
 
 .daily-log-site-info-card__grid {

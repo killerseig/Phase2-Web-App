@@ -11,10 +11,7 @@ import {
   type TimecardExportDateFilterMode,
 } from '@/features/timecards/exportViewHelpers'
 import type { EmployeeRecord, JobRecord, TimecardWeekRecord, UserProfile } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface TimecardExportCreateContextFilters {
   dateMode: TimecardExportDateFilterMode

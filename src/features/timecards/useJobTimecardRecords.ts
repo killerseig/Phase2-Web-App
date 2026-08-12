@@ -4,19 +4,25 @@ import {
   subscribeTimecardCards,
   subscribeTimecardWeeks,
 } from '@/services/timecards'
+import { mergeJobTimecardRemoteCardsWithLocalState } from './jobViewHelpers'
 import type { EmployeeRecord, TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
+import { normalizeError } from '@/utils/normalizeError'
 
-interface ReadonlyRef<T> {
-  readonly value: T
+export type JobTimecardWeekSubscriptionMode = 'all' | 'current-user' | 'submitted-report'
+
+type FirebaseLikeError = Error & {
+  code?: string
 }
 
 interface UseJobTimecardRecordsOptions {
   getBurdenValue: () => number
   getCurrentUserId: () => string | null
-  getIsAdmin: () => boolean
+  getCanManageJobTimecards: () => boolean
+  getWeekSubscriptionMode?: () => JobTimecardWeekSubscriptionMode
+  getPendingStateMaps: () => ReadonlyArray<Readonly<Record<string, boolean>>>
   getSelectedWeek: () => TimecardWeekRecord | null
   jobId: ReadonlyRef<string>
-  mergeRemoteCardsWithLocalState: (cards: TimecardCardRecord[]) => TimecardCardRecord[]
   onCardsUpdate: (cards: TimecardCardRecord[]) => void
   onRecordsError: (error: unknown, fallbackMessage: string) => void
   onWeeksUpdate: () => void
@@ -25,25 +31,71 @@ interface UseJobTimecardRecordsOptions {
 export function useJobTimecardRecords({
   getBurdenValue,
   getCurrentUserId,
-  getIsAdmin,
+  getCanManageJobTimecards,
+  getWeekSubscriptionMode,
+  getPendingStateMaps,
   getSelectedWeek,
   jobId,
-  mergeRemoteCardsWithLocalState,
   onCardsUpdate,
   onRecordsError,
   onWeeksUpdate,
 }: UseJobTimecardRecordsOptions) {
+  function isDeadlineExceededError(error: unknown) {
+    if (!(error instanceof Error)) return false
+
+    const firebaseError = error as FirebaseLikeError
+    const code = firebaseError.code?.toLowerCase()
+    const message = firebaseError.message?.toLowerCase() ?? ''
+
+    return code === 'deadline-exceeded'
+      || code === 'firestore/deadline-exceeded'
+      || message.includes('deadline-exceeded')
+  }
+
+  function reportRecordsError(error: unknown, fallbackMessage: string) {
+    const detail = normalizeError(error, fallbackMessage)
+    onRecordsError(detail === fallbackMessage ? fallbackMessage : `${fallbackMessage} ${detail}`, fallbackMessage)
+  }
+
+  function reportCardsError(error: unknown) {
+    if (isDeadlineExceededError(error)) {
+      console.warn('[timecards] Timecard card listener deadline exceeded; keeping the workspace usable.', error)
+      return
+    }
+
+    reportRecordsError(error, 'Failed to load timecard cards.')
+  }
+
   function subscribeCurrentJobTimecardWeeks(
     onUpdate: (records: TimecardWeekRecord[]) => void,
     onError?: (error: unknown) => void,
   ) {
     if (!jobId.value) return () => {}
 
+    const mode = getWeekSubscriptionMode?.() ?? (getCanManageJobTimecards() ? 'all' : 'all')
+
+    if (mode === 'submitted-report') {
+      return subscribeTimecardWeeks(
+        jobId.value,
+        onUpdate,
+        onError,
+        null,
+        'submitted',
+      )
+    }
+
+    const ownerForemanUserId = mode === 'all' ? null : getCurrentUserId()
+
+    if (mode === 'current-user' && !ownerForemanUserId) {
+      onUpdate([])
+      return () => {}
+    }
+
     return subscribeTimecardWeeks(
       jobId.value,
       onUpdate,
       onError,
-      getIsAdmin() ? null : getCurrentUserId(),
+      ownerForemanUserId,
     )
   }
 
@@ -59,7 +111,11 @@ export function useJobTimecardRecords({
       week.weekStartDate,
       getBurdenValue(),
       (nextCards) => {
-        onUpdate(mergeRemoteCardsWithLocalState(nextCards))
+        onUpdate(mergeJobTimecardRemoteCardsWithLocalState(
+          nextCards,
+          cardsSubscription.records.value,
+          getPendingStateMaps(),
+        ))
       },
       onError,
     )
@@ -68,7 +124,7 @@ export function useJobTimecardRecords({
   const employeesSubscription = useSubscribedRecords<EmployeeRecord>(subscribeEmployees, {
     errorMessage: 'Failed to load employees.',
     onError: (error) => {
-      onRecordsError(error, 'Failed to load employees.')
+      reportRecordsError(error, 'Failed to load employees.')
     },
   })
   const weeksSubscription = useSubscribedRecords<TimecardWeekRecord>(subscribeCurrentJobTimecardWeeks, {
@@ -77,7 +133,7 @@ export function useJobTimecardRecords({
       onWeeksUpdate()
     },
     onError: (error) => {
-      onRecordsError(error, 'Failed to load timecard weeks.')
+      reportRecordsError(error, 'Failed to load timecard weeks.')
     },
   })
   const cardsSubscription = useSubscribedRecords<TimecardCardRecord>(subscribeCurrentWeekTimecardCards, {
@@ -85,7 +141,7 @@ export function useJobTimecardRecords({
     initialLoading: false,
     onUpdate: onCardsUpdate,
     onError: (error) => {
-      onRecordsError(error, 'Failed to load timecard cards.')
+      reportCardsError(error)
     },
   })
 

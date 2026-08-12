@@ -1,26 +1,25 @@
-import { computed, ref } from 'vue'
+import { useActionConfirmDialog } from '@/composables/useActionConfirmDialog'
 import {
   getTimecardExportConfirmLabel,
   getTimecardExportConfirmMessage,
   getTimecardExportConfirmTitle,
   type TimecardExportConfirmAction,
 } from '@/features/timecards/exportViewHelpers'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 export function useTimecardExportConfirmDialog(isBusy: ReadonlyRef<boolean>) {
-  const timecardExportConfirmAction = ref<TimecardExportConfirmAction | null>(null)
-
-  const timecardExportConfirmTitle = computed(() => getTimecardExportConfirmTitle(timecardExportConfirmAction.value))
-  const timecardExportConfirmMessage = computed(() => getTimecardExportConfirmMessage(timecardExportConfirmAction.value))
-  const timecardExportConfirmLabel = computed(() => getTimecardExportConfirmLabel(timecardExportConfirmAction.value))
-
-  function handleTimecardExportConfirmOpenUpdate(open: boolean) {
-    if (open || isBusy.value) return
-    timecardExportConfirmAction.value = null
-  }
+  const {
+    confirmAction: timecardExportConfirmAction,
+    confirmLabel: timecardExportConfirmLabel,
+    confirmMessage: timecardExportConfirmMessage,
+    confirmTitle: timecardExportConfirmTitle,
+    handleConfirmOpenUpdate: handleTimecardExportConfirmOpenUpdate,
+  } = useActionConfirmDialog<TimecardExportConfirmAction>({
+    getLabel: getTimecardExportConfirmLabel,
+    getMessage: getTimecardExportConfirmMessage,
+    getTitle: getTimecardExportConfirmTitle,
+    isBusy,
+  })
 
   return {
     handleTimecardExportConfirmOpenUpdate,

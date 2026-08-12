@@ -2,14 +2,15 @@
 import {
   computed,
   ref,
-  type ComponentPublicInstance,
 } from 'vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ShopCatalogConfirmDialog from '@/components/shopCatalog/ShopCatalogConfirmDialog.vue'
 import ShopCatalogContextMenu from '@/components/shopCatalog/ShopCatalogContextMenu.vue'
 import ShopCatalogInspectorPane from '@/components/shopCatalog/ShopCatalogInspectorPane.vue'
 import ShopCatalogMobileNav from '@/components/shopCatalog/ShopCatalogMobileNav.vue'
+import ShopCatalogPageShell from '@/components/shopCatalog/ShopCatalogPageShell.vue'
 import ShopCatalogTreePane from '@/components/shopCatalog/ShopCatalogTreePane.vue'
 import { usePageMessages } from '@/composables/usePageMessages'
+import { isHtmlDivElement, useTemplateElementRef } from '@/composables/useTemplateElementRef'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { useWindowEventListener } from '@/composables/useWindowEventListener'
 import { useShopCatalogContextMenu } from '@/features/shopCatalog/useShopCatalogContextMenu'
@@ -38,7 +39,6 @@ import { useShopCatalogSelectionSync } from '@/features/shopCatalog/useShopCatal
 import { useShopCatalogTreeDisplayState } from '@/features/shopCatalog/useShopCatalogTreeDisplayState'
 import { useShopCatalogTreeExpansion } from '@/features/shopCatalog/useShopCatalogTreeExpansion'
 import { useShopCatalogTreeInteractions } from '@/features/shopCatalog/useShopCatalogTreeInteractions'
-import AppShell from '@/layouts/AppShell.vue'
 
 const {
   categories,
@@ -72,7 +72,10 @@ const createLoading = ref(false)
 const saveLoading = ref(false)
 const deleteLoading = ref(false)
 const treeInitialized = ref(false)
-const treeListElement = ref<HTMLDivElement | null>(null)
+const {
+  elementRef: treeListElement,
+  setElementRef: setTreeListRef,
+} = useTemplateElementRef(isHtmlDivElement)
 const {
   clearPointerType,
   closeContextMenu,
@@ -97,10 +100,6 @@ const {
   startInlineCreate,
   startInlineRename,
 } = useShopCatalogInlineEditing()
-
-function setTreeListRef(element: Element | ComponentPublicInstance | null) {
-  treeListElement.value = element instanceof HTMLDivElement ? element : null
-}
 
 const {
   categoriesById,
@@ -260,6 +259,8 @@ const {
   confirmArchiveItem,
   handleArchiveCategory,
   handleArchiveItem,
+  handleSelectedCategoryArchiveRequest,
+  handleSelectedItemArchiveRequest,
 } = useShopCatalogArchiveActions({
   activeFolderId,
   catalogConfirmAction,
@@ -395,16 +396,6 @@ const {
   selectedItem,
 })
 
-function handleSelectedCategoryArchiveRequest() {
-  if (!selectedCategory.value) return
-  handleArchiveCategory(!selectedCategory.value.active)
-}
-
-function handleSelectedItemArchiveRequest() {
-  if (!selectedItem.value) return
-  handleArchiveItem(!selectedItem.value.active)
-}
-
 const {
   confirmDeleteCategory,
   confirmDeleteItem,
@@ -498,17 +489,15 @@ useShopCatalogAdminLifecycle({
 </script>
 
 <template>
-  <AppShell>
-    <div
-      class="catalog-explorer"
-      data-testid="shop-catalog-page"
-      :class="{
-        'catalog-explorer--mobile-catalog': activeMobilePanel === 'catalog',
-        'catalog-explorer--mobile-inspector': activeMobilePanel === 'inspector',
-      }"
-    >
+  <ShopCatalogPageShell
+    :active-panel="activeMobilePanel"
+    test-id="shop-catalog-page"
+  >
+    <template #mobile-nav>
       <ShopCatalogMobileNav :active-panel="activeMobilePanel" @show="showMobilePanel" />
+    </template>
 
+    <template #catalog>
       <ShopCatalogTreePane
         :search="treeSearch"
         :show-archived="showArchived"
@@ -561,7 +550,9 @@ useShopCatalogAdminLifecycle({
         @save-inline-rename="saveInlineRename"
         @cancel-rename="cancelRename"
       />
+    </template>
 
+    <template #inspector>
       <ShopCatalogInspectorPane
         :mobile-visible="activeMobilePanel === 'inspector'"
         :is-root-inspector="isRootInspector"
@@ -616,55 +607,26 @@ useShopCatalogAdminLifecycle({
         @archive-item="handleSelectedItemArchiveRequest"
         @delete-item="handleDeleteItem"
       />
+    </template>
 
+    <template #context-menu>
       <ShopCatalogContextMenu
         :visible="contextMenu.visible"
         :x="contextMenu.x"
         :y="contextMenu.y"
         :actions="contextMenuActions"
       />
-    </div>
+    </template>
 
-    <ConfirmDialog
+    <ShopCatalogConfirmDialog
       :open="catalogConfirmAction !== null"
       :title="catalogConfirmTitle"
       :message="catalogConfirmMessage"
       :confirm-label="catalogConfirmLabel"
       :destructive="catalogConfirmDestructive"
       :busy="catalogConfirmBusy"
-      @update:open="handleCatalogConfirmOpenUpdate"
+      @update-open="handleCatalogConfirmOpenUpdate"
       @confirm="confirmCatalogAction"
     />
-  </AppShell>
+  </ShopCatalogPageShell>
 </template>
-
-<style scoped>
-.catalog-explorer {
-  display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr);
-  gap: 1rem;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-@media (max-width: 1440px) {
-  .catalog-explorer {
-    grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
-  }
-}
-
-@media (max-width: 1180px) {
-  .catalog-explorer {
-    grid-template-columns: 1fr;
-    height: auto;
-    overflow: visible;
-    align-content: start;
-  }
-
-  .catalog-explorer--mobile-inspector .catalog-tree-pane {
-    display: none;
-  }
-}
-
-</style>

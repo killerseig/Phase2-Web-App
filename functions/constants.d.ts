@@ -2,7 +2,7 @@
  * Application Constants
  * Centralized configuration for roles, collections, messages, and shared email styling.
  */
-export declare const VALID_ROLES: readonly ["admin", "foreman", "project-manager", "none"];
+export declare const VALID_ROLES: readonly ["admin", "payroll", "shop-foreman", "project-manager", "foreman", "none"];
 export type UserRole = typeof VALID_ROLES[number];
 export declare const COLLECTIONS: {
     readonly USERS: "users";
@@ -13,6 +13,7 @@ export declare const COLLECTIONS: {
     readonly TIMECARDS: "timecards";
 };
 export declare const EMAIL: {
+    readonly SENDER_DISPLAY_NAME: "Phase 2";
     readonly SUBJECTS: {
         readonly WELCOME: "Create Your Phase 2 Account Password";
         readonly PASSWORD_RESET: "Reset Your Phase 2 Password";

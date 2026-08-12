@@ -4,22 +4,16 @@ import {
   resolveJobsViewSelectionAfterVisibleJobsChange,
 } from '@/features/jobs/jobViewHelpers'
 import type { JobRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseJobsSelectionSyncOptions {
   applySelectedJobToForm: (job: JobRecord | null) => void
   clearDetailAutosaveTimer: () => void
-  editDrawerOpen: Ref<boolean>
-  getIsAdmin: () => boolean
+  editDrawerOpen: WritableRef<boolean>
+  getCanManageGlobalJobDefaults: () => boolean
+  getCanUseJobSetupEditor: () => boolean
   selectedJob: ReadonlyRef<JobRecord | null>
-  selectedJobId: Ref<string | 'new' | typeof ALL_JOBS_ID | null>
+  selectedJobId: WritableRef<string | 'new' | typeof ALL_JOBS_ID | null>
   shouldHydrateSelectedJob: (job: JobRecord, previousJob: JobRecord | null) => boolean
   visibleJobs: ReadonlyRef<JobRecord[]>
 }
@@ -28,7 +22,8 @@ export function useJobsSelectionSync({
   applySelectedJobToForm,
   clearDetailAutosaveTimer,
   editDrawerOpen,
-  getIsAdmin,
+  getCanManageGlobalJobDefaults,
+  getCanUseJobSetupEditor,
   selectedJob,
   selectedJobId,
   shouldHydrateSelectedJob,
@@ -55,7 +50,8 @@ export function useJobsSelectionSync({
     () => visibleJobs.value,
     (nextJobs) => {
       const nextSelection = resolveJobsViewSelectionAfterVisibleJobsChange({
-        isAdmin: getIsAdmin(),
+        canManageGlobalJobDefaults: getCanManageGlobalJobDefaults(),
+        canUseJobSetupEditor: getCanUseJobSetupEditor(),
         selectedJobId: selectedJobId.value,
         nextJobs,
         editDrawerOpen: editDrawerOpen.value,
@@ -66,9 +62,9 @@ export function useJobsSelectionSync({
   )
 
   watch(editDrawerOpen, (isOpen) => {
-    if (!getIsAdmin()) return
+    if (!getCanUseJobSetupEditor()) return
 
-    if (isOpen && !selectedJobId.value) {
+    if (isOpen && !selectedJobId.value && getCanManageGlobalJobDefaults()) {
       selectedJobId.value = ALL_JOBS_ID
     }
 

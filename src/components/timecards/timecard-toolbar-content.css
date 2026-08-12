@@ -1,0 +1,52 @@
+.timecards-toolbar__stack,
+.timecards-toolbar__controls {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.timecards-toolbar__lead-spacer {
+  display: block;
+  height: calc(var(--timecards-toolbar-label-height) + var(--timecards-toolbar-label-gap));
+  margin-bottom: calc(-1 * var(--timecards-toolbar-lead-overlap));
+}
+
+.timecards-toolbar__group--status-bar {
+  grid-column: 1 / -1;
+}
+
+.timecards-toolbar__search {
+  display: grid;
+  gap: var(--timecards-toolbar-label-gap);
+  font-weight: 600;
+  min-width: 0;
+}
+
+.timecards-toolbar__search > span {
+  display: flex;
+  align-items: end;
+  min-height: var(--timecards-toolbar-label-height);
+}
+
+.timecards-toolbar__matrix {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.timecards-toolbar__sort-stack {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .timecards-toolbar__matrix {
+    grid-template-columns: 1fr;
+  }
+
+  .timecards-toolbar__lead-spacer {
+    display: none;
+  }
+}

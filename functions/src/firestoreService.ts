@@ -29,6 +29,19 @@ function normalizeRecipientList(value: unknown): string[] {
   )
 }
 
+function normalizeIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return Array.from(
+    new Set(
+      value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  )
+}
+
 function normalizeNotificationRecipients(
   value: unknown,
   legacyFallbacks?: Partial<NotificationRecipients>,
@@ -45,7 +58,8 @@ function normalizeNotificationRecipients(
 export interface JobDetails {
   id: string
   name: string
-  number: string
+  number: string | number
+  assignedForemanIds?: string[]
   productionBurden?: number | null
 }
 
@@ -87,6 +101,7 @@ export async function getJobDetails(jobId: string): Promise<JobDetails | null> {
     id: jobSnap.id,
     name: data?.name || DEFAULTS.JOB_NAME,
     number: data?.number || data?.code || '',
+    assignedForemanIds: normalizeIdList(data?.assignedForemanIds),
     productionBurden: typeof data?.productionBurden === 'number' ? data.productionBurden : null,
   }
 }

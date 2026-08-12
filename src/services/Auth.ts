@@ -1,9 +1,17 @@
-import { updatePassword } from 'firebase/auth'
+import {
+  browserLocalPersistence,
+  onAuthStateChanged,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updatePassword,
+  type User,
+} from 'firebase/auth'
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
 import type { UserProfile } from '@/types/domain'
-import { normalizeRoleKey } from '@/types/domain'
+import { normalizeStoredRoleKey } from '@/auth/roles'
 import { normalizeError } from '@/utils/normalizeError'
 
 interface VerifySetupTokenRequest {
@@ -30,9 +38,44 @@ interface AuthUserProfileSeed {
   email?: string | null
 }
 
+export interface AuthSessionUser {
+  displayName: string | null
+  email: string | null
+  uid: string
+}
+
+export function normalizeAuthSessionUser(user: User): AuthSessionUser {
+  return {
+    displayName: user.displayName || null,
+    email: user.email ?? null,
+    uid: user.uid,
+  }
+}
+
 function normalizeAssignedJobIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
+export function subscribeAuthSession(
+  onUser: (user: AuthSessionUser | null) => void,
+) {
+  const { auth } = requireFirebaseServices()
+  return onAuthStateChanged(auth, (user) => {
+    onUser(user ? normalizeAuthSessionUser(user) : null)
+  })
+}
+
+export async function signInWithPassword(email: string, password: string): Promise<AuthSessionUser> {
+  const { auth } = requireFirebaseServices()
+  await setPersistence(auth, browserLocalPersistence)
+  const credentials = await signInWithEmailAndPassword(auth, email.trim(), password)
+  return normalizeAuthSessionUser(credentials.user)
+}
+
+export async function signOutOfAuthSession(): Promise<void> {
+  const { auth } = requireFirebaseServices()
+  await firebaseSignOut(auth)
 }
 
 export function normalizeAuthUserProfile(uid: string, data: Record<string, unknown>): UserProfile {
@@ -41,7 +84,7 @@ export function normalizeAuthUserProfile(uid: string, data: Record<string, unkno
     email: typeof data.email === 'string' ? data.email : null,
     firstName: typeof data.firstName === 'string' ? data.firstName : null,
     lastName: typeof data.lastName === 'string' ? data.lastName : null,
-    role: normalizeRoleKey(data.role),
+    role: normalizeStoredRoleKey(data.role),
     active: data.active !== false,
     assignedJobIds: normalizeAssignedJobIds(data.assignedJobIds),
   }

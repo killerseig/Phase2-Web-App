@@ -1,28 +1,24 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import AppBadge from '@/components/common/AppBadge.vue'
-import AppButton from '@/components/common/AppButton.vue'
-import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
-import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import JobAdminDetailPane from '@/components/jobs/JobAdminDetailPane.vue'
 import JobBrowserPanel from '@/components/jobs/JobBrowserPanel.vue'
-import JobDetailsFormFields from '@/components/jobs/JobDetailsFormFields.vue'
-import JobFieldUserAssignmentPanel from '@/components/jobs/JobFieldUserAssignmentPanel.vue'
-import JobNotificationRecipientsPanel from '@/components/jobs/JobNotificationRecipientsPanel.vue'
+import JobConfirmDialogs from '@/components/jobs/JobConfirmDialogs.vue'
+import JobsWorkspaceShell from '@/components/jobs/JobsWorkspaceShell.vue'
 import { useAppToast } from '@/composables/useAppToast'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useToastMessages } from '@/composables/useToastMessages'
 import {
   ALL_JOBS_ID,
   JOB_NOTIFICATION_MODULES,
+  JOB_SPECIFIC_NOTIFICATION_MODULES,
   createEmptyNotificationRecipients,
   createRecipientInputState,
-  getJobDisplayName,
+  shouldShowJobDetailSuccessToast,
   toggleAssignedForeman,
 } from '@/features/jobs/jobViewHelpers'
 import { useJobsAdminSubscriptions } from '@/features/jobs/useJobsAdminSubscriptions'
+import { useJobsCapabilities } from '@/features/jobs/useJobsCapabilities'
 import { useJobConfirmDialogs } from '@/features/jobs/useJobConfirmDialogs'
 import { useJobCreateForm } from '@/features/jobs/useJobCreateForm'
 import { useJobCrudActions } from '@/features/jobs/useJobCrudActions'
@@ -33,7 +29,6 @@ import { useJobNotificationRecipients } from '@/features/jobs/useJobNotification
 import { useJobsSelectionSync } from '@/features/jobs/useJobsSelectionSync'
 import { useJobsSideEffects } from '@/features/jobs/useJobsSideEffects'
 import { useJobsViewState } from '@/features/jobs/useJobsViewState'
-import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import type { NotificationModuleKey, NotificationRecipients } from '@/types/domain'
@@ -77,7 +72,8 @@ const {
   usersError,
   usersLoading,
 } = useJobsAdminSubscriptions({
-  getIsAdmin: () => auth.isAdmin,
+  getCanLoadAssignableUsers: () => canUseJobSetupEditor.value,
+  getCanManageGlobalRecipients: () => auth.canManageJobs,
   setDetailError,
 })
 
@@ -110,11 +106,22 @@ const {
   allJobs: { get value() { return jobsStore.jobs } },
   editDrawerOpen,
   foremanSearchTerm,
-  getIsAdmin: () => auth.isAdmin,
+  getCanCreateJobs: () => canCreateJobs.value,
+  getCanManageJobs: () => auth.canManageJobs,
+  getCanUseJobSetupEditor: () => canUseJobSetupEditor.value,
   jobStatusFilter,
   searchTerm,
   selectedJobId,
   users,
+})
+const {
+  canCreateJobs,
+  canDeleteOrArchiveJobs,
+  canEditSelectedJobSetup,
+  canUseJobSetupEditor,
+} = useJobsCapabilities({
+  auth,
+  selectedJob,
 })
 const {
   archiveConfirmOpen,
@@ -172,7 +179,7 @@ const {
   detailNotificationRecipients,
   detailRecipientInputs,
   getEditDrawerOpen: () => editDrawerOpen.value,
-  getIsAdmin: () => auth.isAdmin,
+  getCanEditSelectedJob: () => canEditSelectedJobSetup.value,
   getIsCreateMode: () => isCreateMode.value,
   getSelectedJob: () => selectedJob.value,
   persistJobDetail,
@@ -203,7 +210,9 @@ const {
   openEditDrawer,
 } = useJobsNavigationActions({
   editDrawerOpen,
-  getIsAdmin: () => auth.isAdmin,
+  getCanCreateJobs: () => canCreateJobs.value,
+  getCanManageGlobalJobDefaults: () => auth.canManageJobs,
+  getCanUseJobSetupEditor: () => canUseJobSetupEditor.value,
   resetCreateForm,
   router,
   selectedJobId,
@@ -212,7 +221,8 @@ useJobsSelectionSync({
   applySelectedJobToForm,
   clearDetailAutosaveTimer,
   editDrawerOpen,
-  getIsAdmin: () => auth.isAdmin,
+  getCanManageGlobalJobDefaults: () => auth.canManageJobs,
+  getCanUseJobSetupEditor: () => canUseJobSetupEditor.value,
   selectedJob,
   selectedJobId,
   shouldHydrateSelectedJob,
@@ -225,8 +235,6 @@ useJobsSideEffects({
   showJobsError: (message) => toast.error(message, 'Jobs'),
 })
 
-const passiveJobDetailMessages = new Set(['Saving...', 'All changes saved.'])
-
 useToastMessages([
   { source: usersError, severity: 'error', summary: 'Jobs' },
   { source: createError, severity: 'error', summary: 'Create Job' },
@@ -236,7 +244,7 @@ useToastMessages([
     source: detailInfo,
     severity: 'success',
     summary: 'Job Editor',
-    when: (message) => !passiveJobDetailMessages.has(message),
+    when: shouldShowJobDetailSuccessToast,
   },
 ])
 
@@ -250,24 +258,17 @@ useJobsLifecycle({
 </script>
 
 <template>
-  <AppShell>
-    <template v-if="auth.isAdmin" #topbar-actions>
-      <AppButton
-        class="app-shell__topbar-button"
-        variant="primary"
-        data-testid="jobs-edit-mode"
-        @click="editDrawerOpen ? closeEditDrawer() : openEditDrawer()"
-      >
-        {{ editDrawerOpen ? 'Done Editing' : 'Edit Mode' }}
-      </AppButton>
-    </template>
-
-    <div
-      class="jobs-workspace"
-      :class="{ 'jobs-workspace--split': auth.isAdmin && editDrawerOpen }"
-    >
+  <JobsWorkspaceShell
+    :can-use-job-setup-editor="canUseJobSetupEditor"
+    :edit-mode="editDrawerOpen"
+    @toggle-edit-mode="editDrawerOpen ? closeEditDrawer() : openEditDrawer()"
+  >
+    <template #primary>
       <JobBrowserPanel
-        :is-admin="auth.isAdmin"
+        class="app-split-workspace__primary-pane"
+        :can-create-jobs="canCreateJobs"
+        :can-manage-jobs="auth.canManageJobs"
+        :can-use-job-setup-editor="canUseJobSetupEditor"
         :edit-mode="editDrawerOpen"
         :search-term="searchTerm"
         :status-filter="jobStatusFilter"
@@ -284,285 +285,75 @@ useJobsLifecycle({
         @select-all-jobs="selectedJobId = ALL_JOBS_ID"
         @select-job="handleJobPrimaryAction"
       />
+    </template>
 
-      <section
-        v-if="auth.isAdmin && editDrawerOpen"
-        class="jobs-detail"
-      >
-        <template v-if="isCreateMode">
-          <header class="jobs-detail__header">
-            <div>
-              <span class="jobs-workspace__eyebrow">Create</span>
-              <h2 class="jobs-detail__title">New Job</h2>
-            </div>
-          </header>
-
-          <div class="jobs-detail__body">
-            <form class="jobs-form" @submit.prevent="handleCreateJob">
-              <JobDetailsFormFields
-                :model="createForm"
-                :job-type-options="jobTypeOptions"
-                test-id-prefix="jobs-create"
-                @update-field="updateCreateFormField"
-              />
-
-              <JobFieldUserAssignmentPanel
-                :selected-ids="createForm.assignedForemanIds"
-                :users="filteredForemen"
-                :search-term="foremanSearchTerm"
-                :loading="usersLoading"
-                row-test-id-prefix="jobs-foreman"
-                @update-search-term="foremanSearchTerm = $event"
-                @toggle-user="toggleAssignedForeman(createForm.assignedForemanIds, $event)"
-              />
-
-              <JobNotificationRecipientsPanel
-                description="Applies only to this new job"
-                :modules="JOB_NOTIFICATION_MODULES"
-                :recipients="createNotificationRecipients"
-                :inputs="createRecipientInputs"
-                @update-input="(moduleKey, value) => (createRecipientInputs[moduleKey] = value)"
-                @add-recipient="addRecipientToTarget('create', $event)"
-                @remove-recipient="(moduleKey, email) => removeRecipientFromTarget('create', moduleKey, email)"
-              />
-
-              <div class="jobs-detail__actions">
-                <AppLoadingButton
-                  label="Create Job"
-                  loading-label="Creating..."
-                  variant="primary"
-                  :loading="createLoading"
-                  data-testid="jobs-create-button"
-                  type="submit"
-                />
-              </div>
-            </form>
-          </div>
-        </template>
-
-        <template v-else-if="isAllJobsMode">
-          <header class="jobs-detail__header">
-            <div>
-              <span class="jobs-workspace__eyebrow">Global Scope</span>
-              <h2 class="jobs-detail__title">All Jobs</h2>
-            </div>
-            <div class="jobs-detail__status-group">
-              <AppBadge tone="accent">Defaults</AppBadge>
-            </div>
-          </header>
-
-          <div class="jobs-detail__body">
-            <JobNotificationRecipientsPanel
-              description="Sent for every job unless that job adds more recipients"
-              :modules="JOB_NOTIFICATION_MODULES"
-              :recipients="globalNotificationRecipients"
-              :inputs="globalRecipientInputs"
-              :disabled="recipientSaving"
-              @update-input="(moduleKey, value) => (globalRecipientInputs[moduleKey] = value)"
-              @add-recipient="addRecipientToTarget('all', $event)"
-              @remove-recipient="(moduleKey, email) => removeRecipientFromTarget('all', moduleKey, email)"
-            />
-          </div>
-        </template>
-
-        <template v-else-if="selectedJob">
-          <header class="jobs-detail__header">
-            <div>
-              <span class="jobs-workspace__eyebrow">Selected Job</span>
-              <h2 class="jobs-detail__title">{{ getJobDisplayName(selectedJob) }}</h2>
-            </div>
-            <div class="jobs-detail__status-group">
-              <AppBadge :tone="selectedJob.active ? 'success' : 'danger'">
-                {{ selectedJob.active ? 'Active' : 'Archived' }}
-              </AppBadge>
-            </div>
-          </header>
-
-          <div class="jobs-detail__body">
-            <form class="jobs-form" @submit.prevent="handleSaveJob">
-              <JobDetailsFormFields
-                :model="detailForm"
-                :job-type-options="jobTypeOptions"
-                @update-field="updateDetailFormField"
-              />
-
-              <JobFieldUserAssignmentPanel
-                :selected-ids="detailForm.assignedForemanIds"
-                :users="filteredForemen"
-                :search-term="foremanSearchTerm"
-                :loading="usersLoading"
-                @update-search-term="foremanSearchTerm = $event"
-                @toggle-user="toggleAssignedForeman(detailForm.assignedForemanIds, $event)"
-              />
-
-              <JobNotificationRecipientsPanel
-                description="Added on top of All Jobs defaults for this job only"
-                :modules="JOB_NOTIFICATION_MODULES"
-                :recipients="detailNotificationRecipients"
-                :inputs="detailRecipientInputs"
-                :disabled="recipientSaving"
-                @update-input="(moduleKey, value) => (detailRecipientInputs[moduleKey] = value)"
-                @add-recipient="addRecipientToTarget('job', $event)"
-                @remove-recipient="(moduleKey, email) => removeRecipientFromTarget('job', moduleKey, email)"
-              />
-
-              <div class="jobs-detail__actions">
-                <AppButton :disabled="archiveLoading" @click="requestToggleArchive">
-                  {{ archiveLoading ? 'Updating...' : selectedJob.active ? 'Archive Job' : 'Restore Job' }}
-                </AppButton>
-                <AppButton variant="danger" :disabled="deleteLoading" @click="requestDeleteJob">
-                  {{ deleteLoading ? 'Deleting...' : 'Delete Job' }}
-                </AppButton>
-              </div>
-            </form>
-            <AppStatusMessage
-              v-if="saveLoading || detailInfo === 'All changes saved.'"
-              :tone="!saveLoading && detailInfo === 'All changes saved.' ? 'success' : 'default'"
-            >
-              {{ saveLoading ? 'Saving...' : 'All changes saved.' }}
-            </AppStatusMessage>
-          </div>
-        </template>
-
-        <template v-else>
-          <div class="jobs-detail__body">
-            <AppEmptyState
-              class="jobs-browser__empty"
-              message="Select a job to edit, or create a new one."
-            />
-          </div>
-        </template>
-      </section>
-    </div>
+    <template #secondary>
+      <JobAdminDetailPane
+        v-if="canUseJobSetupEditor && editDrawerOpen"
+        class="app-split-workspace__secondary-pane"
+        :archive-loading="archiveLoading"
+        :can-delete-or-archive-jobs="canDeleteOrArchiveJobs"
+        :can-edit-selected-job="canEditSelectedJobSetup"
+        :create-form="createForm"
+        :create-loading="createLoading"
+        :create-notification-recipients="createNotificationRecipients"
+        :create-recipient-inputs="createRecipientInputs"
+        :delete-loading="deleteLoading"
+        :detail-form="detailForm"
+        :detail-info="detailInfo"
+        :detail-notification-recipients="detailNotificationRecipients"
+        :detail-recipient-inputs="detailRecipientInputs"
+        :filtered-foremen="filteredForemen"
+        :foreman-search-term="foremanSearchTerm"
+        :global-notification-recipients="globalNotificationRecipients"
+        :global-recipient-inputs="globalRecipientInputs"
+        :is-all-jobs-mode="isAllJobsMode"
+        :is-create-mode="isCreateMode"
+        :global-notification-modules="JOB_NOTIFICATION_MODULES"
+        :job-notification-modules="JOB_SPECIFIC_NOTIFICATION_MODULES"
+        :job-type-options="jobTypeOptions"
+        :recipient-saving="recipientSaving"
+        :save-loading="saveLoading"
+        :selected-job="selectedJob"
+        :users-loading="usersLoading"
+        @add-create-recipient="addRecipientToTarget('create', $event)"
+        @add-detail-recipient="addRecipientToTarget('job', $event)"
+        @add-global-recipient="addRecipientToTarget('all', $event)"
+        @create-job="handleCreateJob"
+        @delete-job="requestDeleteJob"
+        @remove-create-recipient="(moduleKey, email) => removeRecipientFromTarget('create', moduleKey, email)"
+        @remove-detail-recipient="(moduleKey, email) => removeRecipientFromTarget('job', moduleKey, email)"
+        @remove-global-recipient="(moduleKey, email) => removeRecipientFromTarget('all', moduleKey, email)"
+        @request-toggle-archive="requestToggleArchive"
+        @save-job="handleSaveJob"
+        @toggle-create-foreman="toggleAssignedForeman(createForm.assignedForemanIds, $event)"
+        @toggle-detail-foreman="toggleAssignedForeman(detailForm.assignedForemanIds, $event)"
+        @update-create-field="updateCreateFormField"
+        @update-create-recipient-input="(moduleKey, value) => (createRecipientInputs[moduleKey] = value)"
+        @update-detail-field="updateDetailFormField"
+        @update-detail-recipient-input="(moduleKey, value) => (detailRecipientInputs[moduleKey] = value)"
+        @update-foreman-search-term="foremanSearchTerm = $event"
+        @update-global-recipient-input="(moduleKey, value) => (globalRecipientInputs[moduleKey] = value)"
+      />
+    </template>
 
     <datalist id="job-gc-options">
       <option v-for="gc in gcSuggestions" :key="gc" :value="gc" />
     </datalist>
 
-    <ConfirmDialog
-      :open="archiveConfirmOpen"
-      :title="archiveJobConfirmTitle"
-      :message="archiveJobConfirmMessage"
-      :confirm-label="archiveJobConfirmLabel"
-      :busy="archiveLoading"
-      @update:open="handleArchiveConfirmOpenUpdate"
-      @confirm="handleToggleArchive"
+    <JobConfirmDialogs
+      :archive-busy="archiveLoading"
+      :archive-confirm-label="archiveJobConfirmLabel"
+      :archive-message="archiveJobConfirmMessage"
+      :archive-open="archiveConfirmOpen"
+      :archive-title="archiveJobConfirmTitle"
+      :delete-busy="deleteLoading"
+      :delete-message="deleteJobConfirmMessage"
+      :delete-open="deleteConfirmOpen"
+      @confirm-archive="handleToggleArchive"
+      @confirm-delete="handleDeleteJob"
+      @update-archive-open="handleArchiveConfirmOpenUpdate"
+      @update-delete-open="handleDeleteConfirmOpenUpdate"
     />
-
-    <ConfirmDialog
-      :open="deleteConfirmOpen"
-      title="Delete job?"
-      :message="deleteJobConfirmMessage"
-      confirm-label="Delete Job"
-      destructive
-      :busy="deleteLoading"
-      @update:open="handleDeleteConfirmOpenUpdate"
-      @confirm="handleDeleteJob"
-    />
-  </AppShell>
+  </JobsWorkspaceShell>
 </template>
-
-<style scoped>
-.jobs-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.jobs-workspace--split {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.jobs-detail {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 1rem;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-}
-
-.jobs-detail__body {
-  display: grid;
-  gap: 1rem;
-  min-height: 0;
-  overflow: auto;
-  align-content: start;
-  padding-right: 0.15rem;
-}
-
-.jobs-detail__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.jobs-workspace__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.jobs-detail__title {
-  margin: 0.35rem 0 0;
-  font-size: 1.1rem;
-}
-
-.jobs-detail__status-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.jobs-form {
-  display: grid;
-  gap: 1rem;
-  align-content: start;
-}
-
-.jobs-browser__empty {
-  color: var(--text-muted);
-  display: grid;
-  place-content: center;
-  min-height: 12rem;
-  padding: 1.5rem;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.jobs-detail__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-}
-
-@media (max-width: 1100px) {
-  .jobs-workspace--split {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .jobs-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .jobs-detail__header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-</style>

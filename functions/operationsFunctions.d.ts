@@ -1,5 +1,44 @@
+import * as admin from 'firebase-admin';
+import { getJobDetails, getUserProfile, getDailyLog, getShopOrder, getEmailSettings, getJobNotificationRecipients } from './firestoreService';
+import { sendEmail, buildDailyLogEmail, buildShopOrderEmail, buildShopOrderPdfBuffer, buildShopOrderPdfFilename, isEmailEnabled } from './emailService';
+import { type SubmittedEmailStatusResult } from './emailStatus';
+import { claimSubmittedEmailOperation } from './submittedEmailOperations';
+declare function getShopOrderCostCodesByCatalogItemId(items: any[]): Promise<Record<string, string>>;
+declare function recordSubmittedEmailStatus(refs: admin.firestore.DocumentReference[], result: SubmittedEmailStatusResult, context: Record<string, unknown>): Promise<void>;
+declare function dailyLogEmailStatusRefs(jobId: string, dailyLogId: string): admin.firestore.DocumentReference[];
+declare function shopOrderEmailStatusRefs(jobId: string, shopOrderId: string): admin.firestore.DocumentReference[];
+declare function getJobScopedShopOrderSnapshot(jobId: string, shopOrderId: string): Promise<admin.firestore.DocumentSnapshot<admin.firestore.DocumentData, admin.firestore.DocumentData>>;
 export declare function prepareTimecardsForPdfCsvExport(timecards: any[]): Promise<any[]>;
+declare function loadDailyLogAttachments(log: any): Promise<{
+    name: string;
+    contentType?: string;
+    contentBytes: string;
+}[]>;
+interface CallableRequestLike {
+    auth?: {
+        uid: string;
+    } | null;
+    data?: any;
+}
+interface SendDailyLogEmailDependencies {
+    getUserProfile: typeof getUserProfile;
+    getJobDetails: typeof getJobDetails;
+    dailyLogEmailStatusRefs: typeof dailyLogEmailStatusRefs;
+    claimSubmittedEmailOperation: typeof claimSubmittedEmailOperation;
+    isEmailEnabled: typeof isEmailEnabled;
+    getDailyLog: typeof getDailyLog;
+    getEmailSettings: typeof getEmailSettings;
+    getJobNotificationRecipients: typeof getJobNotificationRecipients;
+    buildDailyLogEmail: typeof buildDailyLogEmail;
+    loadDailyLogAttachments: typeof loadDailyLogAttachments;
+    sendEmail: typeof sendEmail;
+    recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus;
+}
 export declare function normalizeTimecardForEmail(tc: any): any;
+export declare function handleSendDailyLogEmail(request: CallableRequestLike, deps?: SendDailyLogEmailDependencies): Promise<{
+    success: boolean;
+    message: string;
+}>;
 /**
  * Send Daily Log via email
  */
@@ -10,18 +49,52 @@ export declare const sendDailyLogEmail: import("firebase-functions/v2/https").Ca
 export declare function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: string): string;
 export declare function buildTimecardCsvFilename(startWeek: string, endWeek?: string, jobCode?: string): string;
 export declare function buildTimecardPdfFilename(startWeek: string, endWeek?: string, jobCode?: string): string;
+export interface TimecardPdfCardHeaderEvent {
+    cardId?: string;
+    employeeName: string;
+    employeeCode: string;
+    occupation: string;
+    renderBlankTemplate: boolean;
+    wageLabel: string;
+    weekEnding: string;
+}
+export interface TimecardPdfBuildOptions {
+    onCardHeader?: (event: TimecardPdfCardHeaderEvent) => void;
+}
 export declare function buildTimecardPdfBuffer(payload: {
     jobName?: string;
     jobNumber?: string;
     submittedBy?: string;
     weekStart?: string;
     timecards: any[];
-}): Promise<Buffer>;
+}, options?: TimecardPdfBuildOptions): Promise<Buffer>;
 /**
  * Send Shop Order via email
  */
+interface SendShopOrderEmailDependencies {
+    getUserProfile: typeof getUserProfile;
+    getJobDetails: typeof getJobDetails;
+    shopOrderEmailStatusRefs: typeof shopOrderEmailStatusRefs;
+    claimSubmittedEmailOperation: typeof claimSubmittedEmailOperation;
+    isEmailEnabled: typeof isEmailEnabled;
+    getEmailSettings: typeof getEmailSettings;
+    getJobNotificationRecipients: typeof getJobNotificationRecipients;
+    recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus;
+    getShopOrder: typeof getShopOrder;
+    getJobScopedShopOrderSnapshot: typeof getJobScopedShopOrderSnapshot;
+    getShopOrderCostCodesByCatalogItemId: typeof getShopOrderCostCodesByCatalogItemId;
+    buildShopOrderEmail: typeof buildShopOrderEmail;
+    buildShopOrderPdfBuffer: typeof buildShopOrderPdfBuffer;
+    buildShopOrderPdfFilename: typeof buildShopOrderPdfFilename;
+    sendEmail: typeof sendEmail;
+}
+export declare function handleSendShopOrderEmail(request: CallableRequestLike, deps?: SendShopOrderEmailDependencies): Promise<{
+    success: boolean;
+    message: string;
+}>;
 export declare const sendShopOrderEmail: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
     message: string;
 }>, unknown>;
+export {};
 //# sourceMappingURL=operationsFunctions.d.ts.map

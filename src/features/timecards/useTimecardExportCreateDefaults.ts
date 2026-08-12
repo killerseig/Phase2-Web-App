@@ -1,12 +1,5 @@
 import { watch } from 'vue'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface JobOption {
   id: string
@@ -23,9 +16,9 @@ interface CreateWeekOption {
 }
 
 interface UseTimecardExportCreateDefaultsOptions {
-  createCardForemanId: Ref<string>
+  createCardForemanId: WritableRef<string>
   createCardForemanOptions: ReadonlyRef<ForemanOption[]>
-  createCardJobId: Ref<string>
+  createCardJobId: WritableRef<string>
   createCardJobOptions: ReadonlyRef<JobOption[]>
   selectedForemanFilter: ReadonlyRef<string>
   targetCreateWeek: ReadonlyRef<CreateWeekOption | null>

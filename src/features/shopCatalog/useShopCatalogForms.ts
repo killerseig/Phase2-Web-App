@@ -1,4 +1,4 @@
-import { reactive, type Ref } from 'vue'
+import { reactive } from 'vue'
 import {
   createEmptyShopCatalogCategoryForm,
   createEmptyShopCatalogItemForm,
@@ -13,13 +13,14 @@ import {
   type ShopCatalogItemFormState,
 } from '@/features/shopCatalog/adminViewHelpers'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { readInputValue } from '@/utils/domEvents'
 
 interface UseShopCatalogFormsOptions {
-  activeFolderId: Ref<string | null>
-  createError: Ref<string>
-  detailError: Ref<string>
-  detailInfo: Ref<string>
+  activeFolderId: ReadonlyRef<string | null>
+  createError: WritableRef<string>
+  detailError: WritableRef<string>
+  detailInfo: WritableRef<string>
 }
 
 export function useShopCatalogForms({

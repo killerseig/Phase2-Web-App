@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppField from '@/components/common/AppField.vue'
+import AppDateInput from '@/components/common/AppDateInput.vue'
 import AppSelect from '@/components/common/AppSelect.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 import type { JobType } from '@/types/domain'
@@ -88,16 +89,14 @@ function handleSelectInput(field: JobDetailsField, value: string) {
       />
     </AppField>
     <AppField label="Start Date">
-      <AppTextInput
+      <AppDateInput
         :model-value="model.startDate"
-        type="date"
         @update:model-value="handleTextInput('startDate', $event)"
       />
     </AppField>
     <AppField label="End Date">
-      <AppTextInput
+      <AppDateInput
         :model-value="model.finishDate"
-        type="date"
         @update:model-value="handleTextInput('finishDate', $event)"
       />
     </AppField>

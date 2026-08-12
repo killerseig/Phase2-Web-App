@@ -1,8 +1,15 @@
+import { formatAppTimestamp, toAppDate } from '@/utils/dateTime'
+
 type ShopOrderNumberSource = {
   orderNumber?: unknown
   orderDate?: unknown
   createdAt?: unknown
   updatedAt?: unknown
+}
+
+type ShopOrderDisplaySource = ShopOrderNumberSource & {
+  deliveryDate?: unknown
+  status?: unknown
 }
 
 type ShopOrderItemSortSource = {
@@ -11,9 +18,19 @@ type ShopOrderItemSortSource = {
   description?: unknown
 }
 
+type ShopOrderItemPriceSource = {
+  quantity?: unknown
+  price?: unknown
+}
+
 const shopOrderItemCollator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: 'base',
+})
+
+const shopOrderCurrencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
 })
 
 function normalizeShopOrderNumber(value: unknown): string {
@@ -24,28 +41,19 @@ function normalizeShopOrderItemText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function toDate(value: unknown): Date | null {
-  if (!value) return null
+function normalizeShopOrderNumberValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
 
-  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
-    const dateValue = (value as { toDate: () => Date }).toDate()
-    return Number.isNaN(dateValue.getTime()) ? null : dateValue
-  }
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value
-  }
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const dateValue = new Date(value)
-    return Number.isNaN(dateValue.getTime()) ? null : dateValue
+  if (typeof value === 'string' && value.trim().length) {
+    const parsed = Number(value.replace(/[$,]/g, ''))
+    return Number.isFinite(parsed) ? parsed : null
   }
 
   return null
 }
 
 export function buildTimestampShopOrderNumber(value: unknown): string {
-  const dateValue = toDate(value)
+  const dateValue = toAppDate(value)
   if (!dateValue) return ''
 
   return [
@@ -66,6 +74,27 @@ export function getShopOrderDisplayNumber(order: ShopOrderNumberSource | null | 
     || buildTimestampShopOrderNumber(order?.updatedAt)
     || 'Unnumbered'
   )
+}
+
+export function formatShopOrderTimestamp(value: unknown): string {
+  return formatAppTimestamp(value, 'Unknown date')
+}
+
+export function getShopOrderStatusLabel(order: ShopOrderDisplaySource | null | undefined): string {
+  return order?.status === 'submitted' ? 'Submitted' : 'Draft'
+}
+
+export function getShopOrderDisplayLabel(order: ShopOrderDisplaySource | null | undefined): string {
+  const statusLabel = getShopOrderStatusLabel(order)
+  const deliveryDate = typeof order?.deliveryDate === 'string' ? order.deliveryDate.trim() : ''
+
+  if (deliveryDate) return `${statusLabel} / Due ${deliveryDate}`
+
+  return `${statusLabel} / ${formatShopOrderTimestamp(order?.createdAt)}`
+}
+
+export function getShopOrderNumberLabel(order: ShopOrderNumberSource | null | undefined): string {
+  return `Order #${getShopOrderDisplayNumber(order)}`
 }
 
 export function getShopOrderItemDisplayName(item: ShopOrderItemSortSource | null | undefined): string {
@@ -99,4 +128,36 @@ export function compareShopOrderItems(left: ShopOrderItemSortSource, right: Shop
 
 export function sortShopOrderItems<T extends ShopOrderItemSortSource>(items: readonly T[]): T[] {
   return items.slice().sort(compareShopOrderItems)
+}
+
+export function getShopOrderItemUnitPrice(item: ShopOrderItemPriceSource | null | undefined): number | null {
+  const price = normalizeShopOrderNumberValue(item?.price)
+  return price === null || price < 0 ? null : price
+}
+
+export function getShopOrderItemLineTotal(item: ShopOrderItemPriceSource | null | undefined): number | null {
+  const unitPrice = getShopOrderItemUnitPrice(item)
+  const quantity = normalizeShopOrderNumberValue(item?.quantity)
+
+  if (unitPrice === null || quantity === null || quantity < 1) return null
+
+  return unitPrice * Math.round(quantity)
+}
+
+export function getShopOrderEstimatedTotal(items: readonly ShopOrderItemPriceSource[]): number | null {
+  const lineTotals = items
+    .map((item) => getShopOrderItemLineTotal(item))
+    .filter((value): value is number => value !== null)
+
+  if (!lineTotals.length) return null
+
+  return lineTotals.reduce((sum, total) => sum + total, 0)
+}
+
+export function formatShopOrderCurrency(value: unknown, fallback = 'No price'): string {
+  const normalized = normalizeShopOrderNumberValue(value)
+
+  if (normalized === null || normalized < 0) return fallback
+
+  return shopOrderCurrencyFormatter.format(normalized)
 }

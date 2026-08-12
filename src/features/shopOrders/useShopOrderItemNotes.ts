@@ -1,4 +1,4 @@
-import { reactive, type ComputedRef } from 'vue'
+import { reactive } from 'vue'
 import {
   clearShopOrderItemNoteDraftState,
   clearShopOrderItemNoteSaveTimer,
@@ -7,6 +7,7 @@ import {
   type ShopOrderItemNoteDraftState,
 } from '@/features/shopOrders/viewHelpers'
 import type { ShopOrderItemRecord, ShopOrderRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopOrderItemNotesOptions {
   cloneOrderItems: (order?: ShopOrderRecord | null) => ShopOrderItemRecord[]
@@ -15,7 +16,7 @@ interface UseShopOrderItemNotesOptions {
     nextItems: ShopOrderItemRecord[],
     successMessage: string,
   ) => Promise<boolean>
-  selectedOrder: ComputedRef<ShopOrderRecord | null>
+  selectedOrder: ReadonlyRef<ShopOrderRecord | null>
 }
 
 export function useShopOrderItemNotes({

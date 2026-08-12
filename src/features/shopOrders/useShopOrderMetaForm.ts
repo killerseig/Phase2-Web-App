@@ -1,7 +1,8 @@
-import { reactive, ref, type ComputedRef } from 'vue'
+import { reactive, ref } from 'vue'
 import {
   createEmptyOrderMetaFormState,
   getDeliveryDateValidationMessage,
+  getRefreshedDraftDeliveryDate,
   getNextThursdayDateString,
   hydrateOrderMetaFormState,
   serializeOrderMetaForm,
@@ -9,11 +10,12 @@ import {
   type OrderMetaFormState,
 } from '@/features/shopOrders/viewHelpers'
 import type { ShopOrderRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopOrderMetaFormOptions {
-  canEditSelectedOrder: ComputedRef<boolean>
+  canEditSelectedOrder: ReadonlyRef<boolean>
   persistOrderMeta: (orderId: string, form: OrderMetaFormState) => Promise<boolean>
-  selectedOrder: ComputedRef<ShopOrderRecord | null>
+  selectedOrder: ReadonlyRef<ShopOrderRecord | null>
   setActionError: (message: string) => void
   setActionInfo: (message: string) => void
 }
@@ -41,6 +43,21 @@ export function useShopOrderMetaForm({
     hydratingOrderMetaForm.value = false
   }
 
+  function ensureFreshDraftDeliveryDate(order: ShopOrderRecord | null = selectedOrder.value) {
+    if (!order || !canEditSelectedOrder.value) return false
+
+    const currentFormDate = orderMetaForm.deliveryDate.trim()
+    const savedOrderDate = order.deliveryDate?.trim() ?? ''
+    const shouldPreserveLocalEdit = savedOrderDate && currentFormDate && currentFormDate !== savedOrderDate
+    if (shouldPreserveLocalEdit) return false
+
+    const refreshedDeliveryDate = getRefreshedDraftDeliveryDate(order)
+    if (!refreshedDeliveryDate || currentFormDate === refreshedDeliveryDate) return false
+
+    orderMetaForm.deliveryDate = refreshedDeliveryDate
+    return true
+  }
+
   function clearOrderMetaSaveTimer() {
     if (!orderMetaSaveTimer) return
 
@@ -50,6 +67,8 @@ export function useShopOrderMetaForm({
 
   async function saveOrderMetaImmediately() {
     if (!selectedOrder.value || !canEditSelectedOrder.value) return true
+
+    ensureFreshDraftDeliveryDate(selectedOrder.value)
 
     const validationMessage = getDeliveryDateValidationMessage(orderMetaForm.deliveryDate)
     if (validationMessage) {
@@ -111,6 +130,7 @@ export function useShopOrderMetaForm({
     applySelectedOrderToForm,
     applyThursdayDelivery,
     clearOrderMetaSaveTimer,
+    ensureFreshDraftDeliveryDate,
     hasSelectedOrderChanged,
     orderMetaForm,
     queueOrderMetaSave,

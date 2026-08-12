@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import {
   buildDailyLogSiteInfo,
   canCreateDailyLogForDate,
+  canDeleteDailyLogDraft,
   canEditDailyLog,
   getDailyLogCreateButtonLabel,
   getDailyLogsTitle,
@@ -9,15 +10,12 @@ import {
   hasSubmittedDailyLogForDate,
 } from '@/features/dailyLogs/viewHelpers'
 import type { DailyLogPayload, DailyLogRecord, JobRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseDailyLogSelectionStateOptions {
   form: ReadonlyRef<DailyLogPayload>
   getAuthDisplayName: () => string
-  getIsAdmin: () => boolean
+  getCanViewAllDailyLogs: () => boolean
   getTodayDateString: () => string
   currentUserId: ReadonlyRef<string | null>
   job: ReadonlyRef<JobRecord | null>
@@ -29,7 +27,7 @@ interface UseDailyLogSelectionStateOptions {
 export function useDailyLogSelectionState({
   form,
   getAuthDisplayName,
-  getIsAdmin,
+  getCanViewAllDailyLogs,
   getTodayDateString,
   currentUserId,
   job,
@@ -38,9 +36,10 @@ export function useDailyLogSelectionState({
   selectedLogId,
 }: UseDailyLogSelectionStateOptions) {
   const selectedDateIsToday = computed(() => selectedDate.value === getTodayDateString())
+  const selectedDateIsFuture = computed(() => selectedDate.value > getTodayDateString())
   const visibleLogs = computed(() => getVisibleDailyLogs(logs.value, {
     currentUserId: currentUserId.value,
-    isAdmin: getIsAdmin(),
+    canViewAllDailyLogs: getCanViewAllDailyLogs(),
   }))
   const selectedLog = computed(() => visibleLogs.value.find((log) => log.id === selectedLogId.value) ?? null)
   const dailyLogsTitle = computed(() => getDailyLogsTitle(job.value))
@@ -48,10 +47,14 @@ export function useDailyLogSelectionState({
     currentUserId: currentUserId.value,
     todayDate: getTodayDateString(),
   }))
+  const canDeleteSelectedLog = computed(() => canDeleteDailyLogDraft(selectedLog.value, {
+    currentUserId: currentUserId.value,
+    todayDate: getTodayDateString(),
+    canViewAllDailyLogs: getCanViewAllDailyLogs(),
+  }))
   const hasSubmittedLogForToday = computed(() => hasSubmittedDailyLogForDate(
     visibleLogs.value,
     selectedDate.value,
-    getTodayDateString(),
   ))
   const canCreateDailyLogForToday = computed(() => canCreateDailyLogForDate({
     selectedDate: selectedDate.value,
@@ -69,10 +72,12 @@ export function useDailyLogSelectionState({
 
   return {
     canCreateDailyLogForToday,
+    canDeleteSelectedLog,
     canEditSelectedLog,
     createDailyLogButtonLabel,
     dailyLogsTitle,
     hasSubmittedLogForToday,
+    selectedDateIsFuture,
     selectedDateIsToday,
     selectedLog,
     siteInfo,

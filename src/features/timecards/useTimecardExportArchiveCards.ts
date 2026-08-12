@@ -9,17 +9,14 @@ import {
 import { clearRecord } from '@/features/timecards/stateMapHelpers'
 import { subscribeTimecardCards } from '@/services/timecards'
 import type { JobRecord, TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseTimecardExportArchiveCardsOptions {
   defaultBurden: number
   filteredWeeks: ReadonlyRef<TimecardWeekRecord[]>
   getJobs: () => readonly JobRecord[]
   getPendingStateMaps: () => ReadonlyArray<Readonly<Record<string, boolean>>>
-  onCardsChanged: (cards: TimecardExportArchiveCardRecord[]) => void
+  onCardsChanged?: (cards: TimecardExportArchiveCardRecord[]) => void
   onError: (error: unknown, week: TimecardWeekRecord) => void
 }
 
@@ -29,6 +26,7 @@ export function useTimecardExportArchiveCards(options: UseTimecardExportArchiveC
   const cardsByWeekId = reactive<Record<string, TimecardExportArchiveCardRecord[]>>({})
   const pendingCardWeekIds = reactive<Record<string, boolean>>({})
   const cardSubscriptionStops = new Map<string, () => void>()
+  let cardsChangedHandler = options.onCardsChanged ?? (() => {})
 
   function getWeekBurden(week: TimecardWeekRecord) {
     return getTimecardExportWeekBurden(week, options.getJobs(), options.defaultBurden)
@@ -40,7 +38,11 @@ export function useTimecardExportArchiveCards(options: UseTimecardExportArchiveC
 
   function rebuildArchiveCards() {
     cards.value = options.filteredWeeks.value.flatMap((week) => cardsByWeekId[week.id] ?? [])
-    options.onCardsChanged(cards.value)
+    cardsChangedHandler(cards.value)
+  }
+
+  function setCardsChangedHandler(handler: (cards: TimecardExportArchiveCardRecord[]) => void) {
+    cardsChangedHandler = handler
   }
 
   function syncCardsLoadingState() {
@@ -82,7 +84,7 @@ export function useTimecardExportArchiveCards(options: UseTimecardExportArchiveC
 
     if (!targetWeeks.length) {
       cards.value = []
-      options.onCardsChanged([])
+      cardsChangedHandler([])
       syncCardsLoadingState()
       return
     }
@@ -154,6 +156,7 @@ export function useTimecardExportArchiveCards(options: UseTimecardExportArchiveC
     getNextSortIndexForWeek,
     rebuildArchiveCards,
     redecorateLoadedCards,
+    setCardsChangedHandler,
     stopCardsSubscription,
     syncCardsForFilteredWeeks,
   }

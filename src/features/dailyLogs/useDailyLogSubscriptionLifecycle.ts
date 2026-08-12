@@ -1,8 +1,5 @@
 import { onBeforeUnmount, onMounted } from 'vue'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 type UseDailyLogSubscriptionLifecycleOptions = {
   jobId: ReadonlyRef<string | null>

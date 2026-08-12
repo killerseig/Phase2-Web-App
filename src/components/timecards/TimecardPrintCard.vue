@@ -55,7 +55,7 @@ function lineDayValue(lineIndex: number, rowKind: LineRowKind, dayIndex: number)
 }
 
 function lineProductionValue(lineIndex: number, rowKind: LineRowKind) {
-  return getTimecardLineProductionDisplayValue(props.card.lines[lineIndex], rowKind, props.card.wageRate, props.burden, false)
+  return getTimecardLineProductionDisplayValue(props.card.lines[lineIndex], rowKind, props.card.wageRate, props.burden, true)
 }
 
 function lineOffValue(lineIndex: number, rowKind: LineRowKind) {

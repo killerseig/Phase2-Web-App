@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import AppButton from '@/components/common/AppButton.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppReadonlyField from '@/components/common/AppReadonlyField.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 import type { ShopOrderItemRecord, ShopOrderRecord } from '@/types/domain'
 import { readInputValue } from '@/utils/domEvents'
-import { getShopOrderItemDisplayName } from '@/utils/shopOrders'
+import {
+  formatShopOrderCurrency,
+  getShopOrderItemDisplayName,
+  getShopOrderItemLineTotal,
+} from '@/utils/shopOrders'
 
 const props = defineProps<{
   canEdit: boolean
@@ -29,20 +35,32 @@ function getOrderItemKey(item: ShopOrderItemRecord) {
 function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
   return props.noteDrafts[item.id] ?? item.note ?? ''
 }
+
+function getOrderItemLineTotalLabel(item: ShopOrderItemRecord) {
+  return formatShopOrderCurrency(getShopOrderItemLineTotal(item), '-')
+}
 </script>
 
 <template>
-  <div v-if="ordersLoading && ordersCount === 0" class="shop-orders-pane__empty">
-    Loading orders...
-  </div>
+  <AppEmptyState
+    v-if="ordersLoading && ordersCount === 0"
+    class="shop-orders-pane__empty"
+    message="Loading orders..."
+  />
 
-  <div v-else-if="!selectedOrder" class="shop-orders-pane__empty" data-testid="shoporder-empty">
-    Add a catalog item or custom item to start a new order.
-  </div>
+  <AppEmptyState
+    v-else-if="!selectedOrder"
+    class="shop-orders-pane__empty"
+    data-testid="shoporder-empty"
+    message="Add a catalog item or custom item to start a new order."
+  />
 
-  <div v-else-if="selectedOrder.items.length === 0" class="shop-orders-pane__empty" data-testid="shoporder-empty">
-    Nothing has been added to this order yet. Use the catalog browser or custom item form to build it.
-  </div>
+  <AppEmptyState
+    v-else-if="selectedOrder.items.length === 0"
+    class="shop-orders-pane__empty"
+    data-testid="shoporder-empty"
+    message="Nothing has been added to this order yet. Use the catalog browser or custom item form to build it."
+  />
 
   <div v-else class="shop-orders-items-list">
     <div
@@ -50,7 +68,9 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
       :class="{ 'shop-orders-items-head--readonly': !canEdit }"
     >
       <span>Description</span>
+      <span>Price</span>
       <span>Qty</span>
+      <span>Total</span>
       <span>Note</span>
       <span v-if="canEdit"></span>
     </div>
@@ -74,6 +94,13 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
         </span>
       </div>
 
+      <AppReadonlyField
+        class="shop-orders-readonly-value shop-orders-readonly-value--centered"
+        :data-testid="`shoporder-order-item-price-${getOrderItemKey(item)}`"
+      >
+        {{ formatShopOrderCurrency(item.price) }}
+      </AppReadonlyField>
+
       <AppTextInput
         v-if="canEdit"
         class="shop-orders-item-card__qty-input"
@@ -87,13 +114,20 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
         :disabled="!canEdit"
         @change="emit('updateQuantity', item.id, readInputValue($event))"
       />
-      <div
+      <AppReadonlyField
         v-else
         class="shop-orders-readonly-value shop-orders-readonly-value--centered"
         :data-testid="`shoporder-order-item-qty-readonly-${getOrderItemKey(item)}`"
       >
         {{ item.quantity ?? 1 }}
-      </div>
+      </AppReadonlyField>
+
+      <AppReadonlyField
+        class="shop-orders-readonly-value shop-orders-readonly-value--centered"
+        :data-testid="`shoporder-order-item-line-total-${getOrderItemKey(item)}`"
+      >
+        {{ getOrderItemLineTotalLabel(item) }}
+      </AppReadonlyField>
 
       <AppTextInput
         v-if="canEdit"
@@ -108,13 +142,14 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
         @update:model-value="emit('updateNoteDraft', item.id, $event)"
         @blur="emit('saveNote', item.id)"
       />
-      <div
+      <AppReadonlyField
         v-else
+        multiline
         class="shop-orders-readonly-value shop-orders-readonly-value--multiline"
         :data-testid="`shoporder-order-item-note-readonly-${getOrderItemKey(item)}`"
       >
         {{ item.note || '-' }}
-      </div>
+      </AppReadonlyField>
 
       <AppButton
         v-if="canEdit"
@@ -146,7 +181,7 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
 
 .shop-orders-items-head {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr) 2.55rem;
+  grid-template-columns: minmax(0, 1.2fr) 5.25rem 4rem 5.25rem minmax(8rem, 0.9fr) 2.55rem;
   align-items: center;
   gap: 0.3rem;
   padding: 0 0.15rem 0.18rem;
@@ -159,11 +194,13 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
 }
 
 .shop-orders-items-head--readonly {
-  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) 5.25rem 4rem 5.25rem minmax(8rem, 0.9fr);
 }
 
 .shop-orders-items-head span:nth-child(2),
-.shop-orders-items-head span:nth-child(4) {
+.shop-orders-items-head span:nth-child(3),
+.shop-orders-items-head span:nth-child(4),
+.shop-orders-items-head span:nth-child(6) {
   text-align: center;
 }
 
@@ -175,7 +212,7 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
 }
 
 .shop-orders-item-card--line {
-  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr) 2.55rem;
+  grid-template-columns: minmax(0, 1.2fr) 5.25rem 4rem 5.25rem minmax(8rem, 0.9fr) 2.55rem;
   align-items: center;
   gap: 0.3rem;
   padding: 0.3rem 0.15rem;
@@ -185,8 +222,24 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
   background: transparent;
 }
 
+.shop-orders-item-card--line:nth-of-type(even) {
+  background:
+    linear-gradient(90deg, rgba(99, 199, 230, 0.055), transparent 42%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.shop-orders-item-card--line:nth-of-type(odd) {
+  background: rgba(255, 255, 255, 0.006);
+}
+
+.shop-orders-item-card--line:hover {
+  background:
+    linear-gradient(90deg, rgba(99, 199, 230, 0.09), transparent 46%),
+    rgba(255, 255, 255, 0.04);
+}
+
 .shop-orders-item-card--readonly {
-  grid-template-columns: minmax(0, 1.35fr) 4rem minmax(9rem, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) 5.25rem 4rem 5.25rem minmax(8rem, 0.9fr);
 }
 
 .shop-orders-item-card__main {
@@ -239,26 +292,24 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
 }
 
 .shop-orders-readonly-value {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: var(--shop-control-height);
-  padding: 0 0.8rem;
-  border: 1px solid var(--shop-line-soft);
-  border-radius: var(--shop-radius-md);
-  background: rgba(255, 255, 255, 0.015);
-  color: var(--text);
+  --app-readonly-field-min-height: var(--shop-control-height);
+  --app-readonly-field-padding-x: 0.8rem;
+  --app-readonly-field-border: var(--shop-line-soft);
+  --app-readonly-field-radius: var(--shop-radius-md);
+  --app-readonly-field-background: rgba(255, 255, 255, 0.015);
+  --app-readonly-field-color: var(--text);
   line-height: 1.2;
 }
 
 .shop-orders-readonly-value--multiline {
-  min-height: 2rem;
-  white-space: normal;
+  --app-readonly-field-min-height: 2rem;
+  --app-readonly-field-multiline-min-height: 2rem;
+  --app-readonly-field-multiline-padding-y: 0.35rem;
 }
 
 .shop-orders-readonly-value--centered {
   justify-content: center;
-  padding: 0 0.5rem;
+  --app-readonly-field-padding-x: 0.5rem;
 }
 
 .shop-orders-pane__empty {
@@ -273,10 +324,26 @@ function getOrderItemNoteInputValue(item: ShopOrderItemRecord) {
 }
 
 @media (max-width: 820px) {
+  .shop-orders-items-list {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.2rem;
+  }
+
   .shop-orders-items-head,
-  .shop-orders-item-card--line {
-    grid-template-columns: 1fr;
-    align-items: start;
+  .shop-orders-items-head--readonly,
+  .shop-orders-item-card--line,
+  .shop-orders-item-card--readonly {
+    min-width: 44rem;
+  }
+
+  .shop-orders-items-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding-top: 0.25rem;
+    background: rgba(24, 36, 48, 0.98);
   }
 }
 </style>

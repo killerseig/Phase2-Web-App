@@ -1,10 +1,7 @@
 import { useTimecardSaveQueue } from '@/features/timecards/useTimecardSaveQueue'
 import { updateTimecardCard } from '@/services/timecards'
 import type { TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseJobTimecardSaveQueueOptions {
   burdenValue: ReadonlyRef<number>

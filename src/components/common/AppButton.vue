@@ -20,3 +20,5 @@ const buttonClasses = computed(() => [
     <slot />
   </button>
 </template>
+
+<style src="./button-family.css"></style>

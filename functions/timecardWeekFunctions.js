@@ -33,18 +33,27 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitTimecardWeekRecord = exports.deleteTimecardWeekRecord = exports.deleteTimecardCardRecord = exports.updateTimecardCardRecord = exports.createTimecardCardRecord = exports.ensureTimecardWeekRecord = void 0;
+exports.submitTimecardWeekRecord = exports.reopenTimecardWeekRecord = exports.deleteTimecardWeekRecord = exports.deleteTimecardCardRecord = exports.updateTimecardCardRecord = exports.createTimecardCardRecord = exports.ensureTimecardWeekRecord = exports.listTimecardCardsForCurrentUser = exports.listTimecardWeeksForCurrentUser = void 0;
+exports.handleSubmitTimecardWeekRecord = handleSubmitTimecardWeekRecord;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
-const constants_1 = require("./constants");
 const emailService_1 = require("./emailService");
+const emailStatus_1 = require("./emailStatus");
 const firestoreService_1 = require("./firestoreService");
 const functionConfig_1 = require("./functionConfig");
+const submittedEmailOperations_1 = require("./submittedEmailOperations");
 const operationsFunctions_1 = require("./operationsFunctions");
+const roleAccess_1 = require("./roleAccess");
 const runtime_1 = require("./runtime");
+const timecardWeekAccess_1 = require("./timecardWeekAccess");
+const targetTimecardAccess_1 = require("./targetTimecardAccess");
 const SUBMITTED_WEEK_LOCKED_MESSAGE = 'Week has already been submitted and can no longer be changed.';
 function text(value) {
-    return typeof value === 'string' ? value.trim() : '';
+    if (typeof value === 'string')
+        return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value))
+        return String(value);
+    return '';
 }
 function textOrNull(value) {
     const normalized = text(value);
@@ -70,14 +79,6 @@ function numberOrNull(value) {
     if (!Number.isFinite(parsed) || Number.isNaN(parsed))
         return null;
     return Math.max(0, parsed);
-}
-function normalizeRole(value) {
-    const role = text(value).toLowerCase();
-    if (role === 'admin' || role === 'foreman')
-        return role;
-    if (role === 'project-manager')
-        return 'foreman';
-    return 'none';
 }
 function formatIsoDate(date) {
     const year = date.getUTCFullYear();
@@ -109,43 +110,97 @@ async function getAuthorizedUser(uid) {
         throw new https_1.HttpsError('failed-precondition', 'Your user profile was not found.');
     }
     const data = userSnap.data() || {};
-    const role = normalizeRole(data.role);
-    const active = data.active === true;
-    const assignedJobIds = Array.isArray(data.assignedJobIds)
-        ? data.assignedJobIds
-            .filter((value) => typeof value === 'string')
-            .map((value) => value.trim())
-            .filter(Boolean)
-        : [];
-    const displayName = [text(data.firstName), text(data.lastName)].filter(Boolean).join(' ') || textOrNull(data.email);
-    if (!active) {
+    const user = (0, roleAccess_1.buildCurrentFunctionUser)(uid, data);
+    if (!user.active) {
         throw new https_1.HttpsError('permission-denied', 'Your account is inactive.');
     }
-    if (!['admin', 'foreman'].includes(role)) {
+    if (!(0, roleAccess_1.currentFunctionUserHasAnyRole)(user, ['admin', 'payroll', 'foreman', 'shop-foreman', 'project-manager'])) {
         throw new https_1.HttpsError('permission-denied', 'Your account does not have access to timecards.');
     }
+    return user;
+}
+function isFieldTimecardOwnerRole(user) {
+    return user.role === 'foreman' || user.role === 'shop-foreman';
+}
+function getAccessAssignedJobIds(user, jobId, job) {
+    const assignedJobIds = new Set(user.assignedJobIds);
+    if ((job?.assignedForemanIds ?? []).includes(user.uid)) {
+        assignedJobIds.add(jobId);
+    }
+    return Array.from(assignedJobIds);
+}
+function canViewSubmittedWeekForJob(user, jobId, job) {
+    return (0, targetTimecardAccess_1.targetFunctionRoleCanViewSubmittedTimecards)({
+        assignedJobIds: getAccessAssignedJobIds(user, jobId, job),
+        isShopJob: (0, timecardWeekAccess_1.isFunctionShopJob)(job),
+        jobId,
+        role: user.role,
+    });
+}
+function canReadTimecardWeekHeaderForJob(user, jobId, job) {
+    return (user.role === 'admin'
+        || user.role === 'payroll'
+        || (0, timecardWeekAccess_1.canCreateTimecardWeekForJob)(user, jobId, job)
+        || canViewSubmittedWeekForJob(user, jobId, job));
+}
+function canReadTimecardWeekCardsForJob(user, week, jobId, job) {
+    if (user.role === 'admin' || user.role === 'payroll')
+        return true;
+    if ((0, timecardWeekAccess_1.canCreateTimecardWeekForJob)(user, jobId, job))
+        return true;
+    return text(week?.status) === 'submitted' && canViewSubmittedWeekForJob(user, jobId, job);
+}
+function serializeFirestoreValue(value) {
+    if (value === null || value === undefined)
+        return value;
+    if (typeof value?.toDate === 'function') {
+        return value.toDate().toISOString();
+    }
+    if (Array.isArray(value)) {
+        return value.map((entry) => serializeFirestoreValue(entry));
+    }
+    if (typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, serializeFirestoreValue(entry)]));
+    }
+    return value;
+}
+function normalizeWeekForResponse(doc) {
     return {
-        uid,
-        role,
-        active,
-        assignedJobIds,
-        displayName,
+        id: doc.id,
+        ...serializeFirestoreValue(doc.data() || {}),
     };
 }
-function assertCanAccessWeek(user, week) {
-    if (user.role === 'admin')
+function normalizeCardForResponse(doc) {
+    return {
+        id: doc.id,
+        ...serializeFirestoreValue(doc.data() || {}),
+    };
+}
+function sortWeekResponses(weeks) {
+    return weeks.slice().sort((left, right) => (text(right.weekEndDate).localeCompare(text(left.weekEndDate))
+        || Number(text(right.status) === 'submitted') - Number(text(left.status) === 'submitted')
+        || numberOrZero(right.employeeCardCount) - numberOrZero(left.employeeCardCount)
+        || text(right.id).localeCompare(text(left.id))));
+}
+function sortCardResponses(cards) {
+    return cards.slice().sort((left, right) => (numberOrZero(left.sortIndex) - numberOrZero(right.sortIndex)
+        || text(left.lastName).localeCompare(text(right.lastName))
+        || text(left.firstName).localeCompare(text(right.firstName))
+        || text(left.id).localeCompare(text(right.id))));
+}
+async function assertCanAccessWeek(user, jobId, getJob = firestoreService_1.getJobDetails) {
+    const job = await getJob(jobId);
+    if ((0, timecardWeekAccess_1.canCreateTimecardWeekForJob)(user, jobId, job))
         return;
-    if (textOrNull(week?.ownerForemanUserId) === user.uid)
-        return;
-    throw new https_1.HttpsError('permission-denied', 'You can only change your own timecard week.');
+    throw new https_1.HttpsError('permission-denied', 'You can only change timecard weeks for jobs assigned to you.');
 }
 function getOwnerForemanUserId(user, inputOwnerId) {
-    if (user.role === 'foreman')
+    if (user.role === 'foreman' || user.role === 'shop-foreman')
         return user.uid;
     return textOrNull(inputOwnerId ?? user.uid);
 }
 function getOwnerForemanName(user, inputOwnerName) {
-    if (user.role === 'foreman')
+    if (user.role === 'foreman' || user.role === 'shop-foreman')
         return user.displayName;
     return textOrNull(inputOwnerName ?? user.displayName);
 }
@@ -288,6 +343,63 @@ async function listWeekCards(weekId) {
         .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
         .sort((left, right) => numberOrZero(left.sortIndex) - numberOrZero(right.sortIndex));
 }
+exports.listTimecardWeeksForCurrentUser = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+    const input = request.data;
+    const jobId = text(input?.jobId);
+    if (!jobId || jobId.includes('/')) {
+        throw new https_1.HttpsError('invalid-argument', 'jobId is required.');
+    }
+    const user = await getAuthorizedUser(request.auth.uid);
+    const job = await (0, firestoreService_1.getJobDetails)(jobId);
+    if (!canReadTimecardWeekHeaderForJob(user, jobId, job)) {
+        throw new https_1.HttpsError('permission-denied', 'Your account does not have access to this job timecard.');
+    }
+    let weekQuery = runtime_1.db
+        .collection('timecardWeeks')
+        .where('jobId', '==', jobId);
+    const statusFilter = textOrNull(input?.statusFilter);
+    if (statusFilter) {
+        weekQuery = weekQuery.where('status', '==', statusFilter);
+    }
+    const requestedOwnerForemanUserId = textOrNull(input?.ownerForemanUserId);
+    if (!isFieldTimecardOwnerRole(user) && requestedOwnerForemanUserId) {
+        weekQuery = weekQuery.where('ownerForemanUserId', '==', requestedOwnerForemanUserId);
+    }
+    const snapshot = await weekQuery.get();
+    let weeks = snapshot.docs.map(normalizeWeekForResponse);
+    if (!(user.role === 'admin' || user.role === 'payroll' || (0, timecardWeekAccess_1.canCreateTimecardWeekForJob)(user, jobId, job))) {
+        weeks = weeks.filter((week) => text(week.status) === 'submitted');
+    }
+    return {
+        weeks: sortWeekResponses(weeks),
+    };
+});
+exports.listTimecardCardsForCurrentUser = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+    const weekId = text(request.data?.weekId);
+    if (!weekId || weekId.includes('/')) {
+        throw new https_1.HttpsError('invalid-argument', 'weekId is required.');
+    }
+    const { week, jobId } = await getWeekDoc(weekId);
+    const user = await getAuthorizedUser(request.auth.uid);
+    const job = await (0, firestoreService_1.getJobDetails)(jobId);
+    if (!canReadTimecardWeekCardsForJob(user, week, jobId, job)) {
+        throw new https_1.HttpsError('permission-denied', 'Your account does not have access to these timecard cards.');
+    }
+    const cardsSnap = await runtime_1.db
+        .collection('timecardWeeks')
+        .doc(weekId)
+        .collection('cards')
+        .get();
+    return {
+        cards: sortCardResponses(cardsSnap.docs.map(normalizeCardForResponse)),
+    };
+});
 async function copyPreviousWeekCardsIntoDraft(input) {
     const targetCardsSnap = await runtime_1.db
         .collection('timecardWeeks')
@@ -297,13 +409,10 @@ async function copyPreviousWeekCardsIntoDraft(input) {
         .get();
     if (!targetCardsSnap.empty)
         return 0;
-    let previousWeekQuery = runtime_1.db
+    const previousWeekQuery = runtime_1.db
         .collection('timecardWeeks')
         .where('jobId', '==', input.jobId)
         .where('weekEndDate', '==', getPreviousSaturday(input.weekEndDate));
-    if (input.ownerForemanUserId) {
-        previousWeekQuery = previousWeekQuery.where('ownerForemanUserId', '==', input.ownerForemanUserId);
-    }
     const previousWeekSnap = await previousWeekQuery.get();
     const previousWeekDocs = previousWeekSnap.docs.sort((left, right) => {
         const leftData = left.data() || {};
@@ -352,7 +461,7 @@ async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName) {
         };
     }
     const settings = await (0, firestoreService_1.getEmailSettings)();
-    const recipients = normalizeRecipients(settings.globalNotificationRecipients.timecards, await (0, firestoreService_1.getJobNotificationRecipients)(jobId, 'timecards'));
+    const recipients = normalizeRecipients(settings.globalNotificationRecipients.timecards);
     if (!recipients.length) {
         return {
             success: true,
@@ -418,7 +527,12 @@ async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName) {
     });
     await (0, emailService_1.sendEmail)({
         to: recipients,
-        subject: `${constants_1.EMAIL.SUBJECTS.TIMECARD} - ${normalizedTimecards.length} timecard(s) - Week of ${weekStart}`,
+        subject: (0, emailService_1.buildTimecardEmailSubject)({
+            jobName,
+            jobNumber,
+            submittedBy,
+            weekStart,
+        }),
         html,
         attachments,
     });
@@ -440,22 +554,22 @@ exports.ensureTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
     if (!weekEndDate)
         throw new https_1.HttpsError('invalid-argument', 'weekEndDate is required');
     const user = await getAuthorizedUser(request.auth.uid);
+    const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
+    if (!(0, timecardWeekAccess_1.canCreateTimecardWeekForJob)(user, jobId, jobDetails)) {
+        throw new https_1.HttpsError('permission-denied', 'You are not assigned to this job.');
+    }
     const ownerForemanUserId = getOwnerForemanUserId(user, input?.ownerForemanUserId);
     const ownerForemanName = getOwnerForemanName(user, input?.ownerForemanName);
     let jobCode = textOrNull(input?.jobCode);
     let jobName = textOrNull(input?.jobName);
     if (!jobCode || !jobName) {
-        const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
         jobCode = jobCode || textOrNull(jobDetails?.number);
         jobName = jobName || textOrNull(jobDetails?.name);
     }
-    let existingQuery = runtime_1.db
+    const existingQuery = runtime_1.db
         .collection('timecardWeeks')
         .where('jobId', '==', jobId)
         .where('weekEndDate', '==', weekEndDate);
-    if (user.role === 'foreman') {
-        existingQuery = existingQuery.where('ownerForemanUserId', '==', ownerForemanUserId);
-    }
     const existingSnap = await existingQuery.limit(1).get();
     const existingDoc = existingSnap.docs[0];
     if (existingDoc) {
@@ -514,10 +628,10 @@ exports.createTimecardCardRecord = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'weekStartDate is required');
     if (!card || typeof card !== 'object')
         throw new https_1.HttpsError('invalid-argument', 'card is required');
-    const { weekRef, week } = await getWeekDoc(weekId);
+    const { weekRef, week, jobId } = await getWeekDoc(weekId);
     const user = await getAuthorizedUser(request.auth.uid);
-    assertCanAccessWeek(user, week);
-    if (text(week.status) === 'submitted' && user.role === 'foreman') {
+    await assertCanAccessWeek(user, jobId);
+    if (text(week.status) === 'submitted' && !(user.role === 'admin' || user.role === 'payroll')) {
         throw new https_1.HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE);
     }
     const createdRef = runtime_1.db.collection('timecardWeeks').doc(weekId).collection('cards').doc();
@@ -548,10 +662,10 @@ exports.updateTimecardCardRecord = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'weekStartDate is required');
     if (!card || typeof card !== 'object')
         throw new https_1.HttpsError('invalid-argument', 'card is required');
-    const { weekRef, week } = await getWeekDoc(weekId);
+    const { weekRef, week, jobId } = await getWeekDoc(weekId);
     const user = await getAuthorizedUser(request.auth.uid);
-    assertCanAccessWeek(user, week);
-    if (text(week.status) === 'submitted' && user.role === 'foreman') {
+    await assertCanAccessWeek(user, jobId);
+    if (text(week.status) === 'submitted' && !(user.role === 'admin' || user.role === 'payroll')) {
         throw new https_1.HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE);
     }
     const cardRef = runtime_1.db.collection('timecardWeeks').doc(weekId).collection('cards').doc(cardId);
@@ -576,10 +690,10 @@ exports.deleteTimecardCardRecord = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'weekId is required');
     if (!cardId)
         throw new https_1.HttpsError('invalid-argument', 'cardId is required');
-    const { weekRef, week } = await getWeekDoc(weekId);
+    const { weekRef, week, jobId } = await getWeekDoc(weekId);
     const user = await getAuthorizedUser(request.auth.uid);
-    assertCanAccessWeek(user, week);
-    if (text(week.status) === 'submitted' && user.role === 'foreman') {
+    await assertCanAccessWeek(user, jobId);
+    if (text(week.status) === 'submitted' && !(user.role === 'admin' || user.role === 'payroll')) {
         throw new https_1.HttpsError('failed-precondition', SUBMITTED_WEEK_LOCKED_MESSAGE);
     }
     const cardRef = runtime_1.db.collection('timecardWeeks').doc(weekId).collection('cards').doc(cardId);
@@ -604,8 +718,8 @@ exports.deleteTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'weekId is required');
     const { weekRef, week } = await getWeekDoc(weekId);
     const user = await getAuthorizedUser(request.auth.uid);
-    if (user.role !== 'admin') {
-        throw new https_1.HttpsError('permission-denied', 'Only admins can delete timecard weeks.');
+    if (!(user.role === 'admin' || user.role === 'payroll')) {
+        throw new https_1.HttpsError('permission-denied', 'Only admins or payroll can delete timecard weeks.');
     }
     if (text(week.status) === 'submitted') {
         throw new https_1.HttpsError('failed-precondition', 'Submitted weeks cannot be deleted.');
@@ -619,16 +733,70 @@ exports.deleteTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
     await batch.commit();
     return { success: true };
 });
-exports.submitTimecardWeekRecord = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => {
+exports.reopenTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Must be signed in.');
     }
     const weekId = text(request.data?.weekId);
     if (!weekId)
         throw new https_1.HttpsError('invalid-argument', 'weekId is required');
-    const { weekRef, week, jobId } = await getWeekDoc(weekId);
+    const { weekRef, week } = await getWeekDoc(weekId);
     const user = await getAuthorizedUser(request.auth.uid);
-    assertCanAccessWeek(user, week);
+    if (!(user.role === 'admin' || user.role === 'payroll')) {
+        throw new https_1.HttpsError('permission-denied', 'Only admins or payroll can undo submitted timecard weeks.');
+    }
+    if (text(week.status) !== 'submitted') {
+        return { success: true };
+    }
+    await weekRef.update({
+        status: 'draft',
+        submittedAt: null,
+        submittedByName: null,
+        submittedByUserId: null,
+        submittedEmailAttemptedAt: admin.firestore.FieldValue.delete(),
+        submittedEmailError: admin.firestore.FieldValue.delete(),
+        submittedEmailInProgressAt: admin.firestore.FieldValue.delete(),
+        submittedEmailOperationId: admin.firestore.FieldValue.delete(),
+        submittedEmailSentAt: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedByUserId: request.auth.uid,
+    });
+    return { success: true };
+});
+const defaultSubmitTimecardWeekDependencies = {
+    getWeekDoc,
+    getAuthorizedUser,
+    getJobDetails: firestoreService_1.getJobDetails,
+    claimSubmittedEmailOperation: submittedEmailOperations_1.claimSubmittedEmailOperation,
+    sendSubmittedWeekEmail,
+    buildSubmittedEmailStatusUpdate: emailStatus_1.buildSubmittedEmailStatusUpdate,
+};
+async function handleSubmitTimecardWeekRecord(request, deps = defaultSubmitTimecardWeekDependencies) {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+    const weekId = text(request.data?.weekId);
+    if (!weekId)
+        throw new https_1.HttpsError('invalid-argument', 'weekId is required');
+    const { weekRef, week, jobId } = await deps.getWeekDoc(weekId);
+    const user = await deps.getAuthorizedUser(request.auth.uid);
+    await assertCanAccessWeek(user, jobId, deps.getJobDetails);
+    const operationId = (0, emailStatus_1.buildSubmittedEmailOperationId)('timecardWeekSubmittedEmail', weekId);
+    const operationContext = {
+        weekId,
+        jobId,
+        operation: 'submitTimecardWeekRecord',
+        operationId,
+    };
+    const claimStatus = await deps.claimSubmittedEmailOperation(runtime_1.db, [weekRef], operationId, operationContext);
+    const claimMessage = (0, submittedEmailOperations_1.getSubmittedEmailClaimShortCircuitMessage)(claimStatus);
+    if (claimMessage) {
+        return {
+            success: true,
+            emailSent: claimStatus === 'already-sent',
+            emailMessage: claimMessage,
+        };
+    }
     const submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid);
     const submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName);
     await weekRef.update({
@@ -640,32 +808,33 @@ exports.submitTimecardWeekRecord = (0, https_1.onCall)({ secrets: (0, functionCo
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     try {
-        const emailResult = await sendSubmittedWeekEmail(weekId, {
+        const emailResult = await deps.sendSubmittedWeekEmail(weekId, {
             ...week,
             submittedByUserId,
             submittedByName,
             status: 'submitted',
         }, jobId, submittedByName);
-        await weekRef.update({
-            submittedEmailAttemptedAt: admin.firestore.FieldValue.serverTimestamp(),
-            submittedEmailSentAt: emailResult.emailSent ? admin.firestore.FieldValue.serverTimestamp() : null,
-            submittedEmailError: emailResult.emailSent ? admin.firestore.FieldValue.delete() : emailResult.emailMessage,
-        });
+        await weekRef.update(deps.buildSubmittedEmailStatusUpdate({
+            emailSent: emailResult.emailSent,
+            emailMessage: emailResult.emailMessage,
+            operationId,
+        }, admin.firestore.FieldValue));
         return emailResult;
     }
     catch (error) {
         const emailMessage = `Week submitted, but the notification email failed: ${error?.message || 'Unknown error'}`;
         console.error('[submitTimecardWeekRecord] Notification email failed', { weekId, jobId, error });
-        await weekRef.update({
-            submittedEmailAttemptedAt: admin.firestore.FieldValue.serverTimestamp(),
-            submittedEmailSentAt: null,
-            submittedEmailError: emailMessage,
-        });
+        await weekRef.update(deps.buildSubmittedEmailStatusUpdate({
+            emailSent: false,
+            emailMessage,
+            operationId,
+        }, admin.firestore.FieldValue));
         return {
             success: true,
             emailSent: false,
             emailMessage,
         };
     }
-});
+}
+exports.submitTimecardWeekRecord = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => (handleSubmitTimecardWeekRecord(request)));
 //# sourceMappingURL=timecardWeekFunctions.js.map

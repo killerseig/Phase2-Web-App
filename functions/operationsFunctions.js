@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -6,18 +39,25 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendShopOrderEmail = exports.sendDailyLogEmail = void 0;
 exports.prepareTimecardsForPdfCsvExport = prepareTimecardsForPdfCsvExport;
 exports.normalizeTimecardForEmail = normalizeTimecardForEmail;
+exports.handleSendDailyLogEmail = handleSendDailyLogEmail;
 exports.buildTimecardCsv = buildTimecardCsv;
 exports.buildTimecardCsvFilename = buildTimecardCsvFilename;
 exports.buildTimecardPdfFilename = buildTimecardPdfFilename;
 exports.buildTimecardPdfBuffer = buildTimecardPdfBuffer;
+exports.handleSendShopOrderEmail = handleSendShopOrderEmail;
+const admin = __importStar(require("firebase-admin"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const https_1 = require("firebase-functions/v2/https");
 const https_2 = require("firebase-functions/v2/https");
 const firestoreService_1 = require("./firestoreService");
 const emailService_1 = require("./emailService");
+const emailStatus_1 = require("./emailStatus");
+const submittedEmailOperations_1 = require("./submittedEmailOperations");
 const constants_1 = require("./constants");
 const functionConfig_1 = require("./functionConfig");
+const roleAccess_1 = require("./roleAccess");
 const runtime_1 = require("./runtime");
+const fieldWorkflowAccess_1 = require("./fieldWorkflowAccess");
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024;
 const MAX_ATTACHMENT_COUNT = 10;
@@ -45,57 +85,85 @@ async function getShopOrderCostCodesByCatalogItemId(items) {
         return costCodesByCatalogItemId;
     }, {});
 }
-function getAssignedJobIds(user) {
-    if (!Array.isArray(user?.assignedJobIds))
-        return [];
-    return user.assignedJobIds
-        .filter((value) => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter(Boolean);
-}
 function assertActiveRoleUser(user, allowedRoles, errorMessage) {
     if (!user) {
         throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.USER_PROFILE_NOT_FOUND);
     }
-    const rawRole = String(user?.role || 'none').trim().toLowerCase();
-    const role = rawRole === 'project-manager' ? 'foreman' : rawRole;
-    if (user?.active !== true) {
+    const authorizedUser = (0, roleAccess_1.buildCurrentFunctionUser)(String(user?.uid || ''), user);
+    if (!authorizedUser.active) {
         throw new https_2.HttpsError('permission-denied', 'Your account is inactive');
     }
-    if (!allowedRoles.includes(role)) {
+    if (!(0, roleAccess_1.currentFunctionUserHasAnyRole)(authorizedUser, allowedRoles)) {
         throw new https_2.HttpsError('permission-denied', errorMessage);
     }
     return {
         ...user,
-        role,
-        assignedJobIds: getAssignedJobIds(user),
+        ...authorizedUser,
     };
 }
-function assertAdminOrAssignedForeman(user, jobId, errorMessage) {
-    const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman'], errorMessage);
-    if (authorizedUser.role === 'admin')
-        return authorizedUser;
-    if (!authorizedUser.assignedJobIds.includes(String(jobId || '').trim())) {
+function assertCanSendSubmittedFieldWorkflowEmail(user, jobId, jobDetails, errorMessage) {
+    const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman', 'shop-foreman'], errorMessage);
+    if (!(0, fieldWorkflowAccess_1.canWriteFieldWorkflowForJob)(authorizedUser, jobId, jobDetails, 'submit')) {
         throw new https_2.HttpsError('permission-denied', errorMessage);
     }
     return authorizedUser;
 }
-function formatEmailDate(value) {
+async function recordSubmittedEmailStatus(refs, result, context) {
+    const payload = (0, emailStatus_1.buildSubmittedEmailStatusUpdate)(result, admin.firestore.FieldValue);
+    let updatedCount = 0;
     try {
-        if (!value)
-            return 'N/A';
-        const asDate = typeof value?.toDate === 'function'
-            ? value.toDate()
-            : value instanceof Date
-                ? value
-                : new Date(value);
-        if (Number.isNaN(asDate.getTime()))
-            return 'N/A';
-        return asDate.toLocaleDateString();
+        for (const ref of refs) {
+            const snap = await ref.get();
+            if (!snap.exists)
+                continue;
+            await ref.update(payload);
+            updatedCount += 1;
+        }
+        if (updatedCount === 0) {
+            console.warn('[recordSubmittedEmailStatus] No matching documents updated', context);
+        }
     }
-    catch {
-        return 'N/A';
+    catch (error) {
+        console.warn('[recordSubmittedEmailStatus] Failed to update email status', {
+            ...context,
+            error,
+        });
     }
+}
+async function hasSubmittedEmailOperationAlreadySent(refs, operationId, context) {
+    try {
+        for (const ref of refs) {
+            const snap = await ref.get();
+            if (!snap.exists)
+                continue;
+            if ((0, emailStatus_1.isSubmittedEmailOperationAlreadySent)(snap.data(), operationId)) {
+                return true;
+            }
+        }
+    }
+    catch (error) {
+        console.warn('[hasSubmittedEmailOperationAlreadySent] Failed to check email operation status', {
+            ...context,
+            operationId,
+            error,
+        });
+    }
+    return false;
+}
+function dailyLogEmailStatusRefs(jobId, dailyLogId) {
+    return [
+        runtime_1.db.collection(constants_1.COLLECTIONS.DAILY_LOGS).doc(dailyLogId),
+        runtime_1.db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('dailyLogs').doc(dailyLogId),
+    ];
+}
+function shopOrderEmailStatusRefs(jobId, shopOrderId) {
+    return [
+        runtime_1.db.collection(constants_1.COLLECTIONS.SHOP_ORDERS).doc(shopOrderId),
+        runtime_1.db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId),
+    ];
+}
+async function getJobScopedShopOrderSnapshot(jobId, shopOrderId) {
+    return runtime_1.db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get();
 }
 function toNumber(value) {
     const n = Number(value);
@@ -612,6 +680,20 @@ async function loadDailyLogAttachments(log) {
     }
     return attachments;
 }
+const defaultSendDailyLogEmailDependencies = {
+    getUserProfile: firestoreService_1.getUserProfile,
+    getJobDetails: firestoreService_1.getJobDetails,
+    dailyLogEmailStatusRefs,
+    claimSubmittedEmailOperation: submittedEmailOperations_1.claimSubmittedEmailOperation,
+    isEmailEnabled: emailService_1.isEmailEnabled,
+    getDailyLog: firestoreService_1.getDailyLog,
+    getEmailSettings: firestoreService_1.getEmailSettings,
+    getJobNotificationRecipients: firestoreService_1.getJobNotificationRecipients,
+    buildDailyLogEmail: emailService_1.buildDailyLogEmail,
+    loadDailyLogAttachments,
+    sendEmail: emailService_1.sendEmail,
+    recordSubmittedEmailStatus,
+};
 function normalizeTimecardForEmail(tc) {
     const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage);
     const sourceLines = Array.isArray(tc?.lines) && tc.lines.length
@@ -750,15 +832,12 @@ function normalizeTimecardForEmail(tc) {
         totals,
     };
 }
-/**
- * Send Daily Log via email
- */
-exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => {
+async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailDependencies) {
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
     const callerUid = request.auth.uid;
-    const { jobId, dailyLogId } = request.data;
+    const { jobId, dailyLogId } = request.data || {};
     if (!jobId) {
         throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
     }
@@ -766,13 +845,33 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
         throw new Error(constants_1.ERROR_MESSAGES.DAILY_LOG_ID_REQUIRED);
     }
     try {
-        const user = await (0, firestoreService_1.getUserProfile)(callerUid);
-        const authorizedUser = assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can send daily log emails');
-        if (!(0, emailService_1.isEmailEnabled)()) {
-            console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.');
-            return { success: true, message: 'Email sending disabled. Skipped.' };
+        const user = await deps.getUserProfile(callerUid);
+        const requestedJob = await deps.getJobDetails(jobId);
+        const authorizedUser = assertCanSendSubmittedFieldWorkflowEmail(user, jobId, requestedJob, 'Only admins or assigned foremen can send daily log emails');
+        const statusRefs = deps.dailyLogEmailStatusRefs(jobId, dailyLogId);
+        const operationId = (0, emailStatus_1.buildSubmittedEmailOperationId)('dailyLogSubmittedEmail', dailyLogId);
+        const operationContext = {
+            jobId,
+            dailyLogId,
+            operation: 'sendDailyLogEmail',
+            operationId,
+        };
+        const claimStatus = await deps.claimSubmittedEmailOperation(runtime_1.db, statusRefs, operationId, operationContext);
+        const claimMessage = (0, submittedEmailOperations_1.getSubmittedEmailClaimShortCircuitMessage)(claimStatus);
+        if (claimMessage) {
+            return { success: true, message: claimMessage };
         }
-        const log = await (0, firestoreService_1.getDailyLog)(jobId, dailyLogId);
+        if (!deps.isEmailEnabled()) {
+            console.log('[sendDailyLogEmail] Email sending disabled. Skipping send.');
+            const emailResult = {
+                emailSent: false,
+                emailMessage: 'Email sending disabled. Skipped.',
+                operationId,
+            };
+            await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext);
+            return { success: true, message: emailResult.emailMessage };
+        }
+        const log = await deps.getDailyLog(jobId, dailyLogId);
         if (!log) {
             throw new Error(constants_1.ERROR_MESSAGES.DAILY_LOG_NOT_FOUND);
         }
@@ -780,25 +879,46 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
             throw new https_2.HttpsError('failed-precondition', 'Only submitted daily logs can be emailed');
         }
         const logOwnerUserId = String(log?.foremanUserId || log?.uid || log?.createdByUserId || '').trim();
-        if (authorizedUser.role === 'foreman' && logOwnerUserId !== callerUid) {
-            throw new https_2.HttpsError('permission-denied', 'Foremen can only email their own daily logs');
+        if (authorizedUser.role !== 'admin' && logOwnerUserId !== callerUid) {
+            throw new https_2.HttpsError('permission-denied', 'Field users can only email their own daily logs');
         }
-        const settings = await (0, firestoreService_1.getEmailSettings)();
-        const recipients = normalizeRecipients(settings.globalNotificationRecipients.dailyLogs, await (0, firestoreService_1.getJobNotificationRecipients)(jobId, 'dailyLogs'), log?.additionalRecipients);
+        const settings = await deps.getEmailSettings();
+        const recipients = normalizeRecipients(settings.globalNotificationRecipients.dailyLogs, await deps.getJobNotificationRecipients(jobId, 'dailyLogs'), log?.additionalRecipients);
         if (!recipients.length) {
+            await deps.recordSubmittedEmailStatus(statusRefs, {
+                emailSent: false,
+                emailMessage: constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED,
+                operationId,
+            }, operationContext);
             throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
-        const job = await (0, firestoreService_1.getJobDetails)(log?.jobId || '');
-        const emailHtml = (0, emailService_1.buildDailyLogEmail)(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log);
-        const attachments = await loadDailyLogAttachments(log);
-        await (0, emailService_1.sendEmail)({
-            to: recipients,
-            subject: `${constants_1.EMAIL.SUBJECTS.DAILY_LOG} - ${job?.name || 'Job'} - ${log?.logDate || 'N/A'}`,
-            html: emailHtml,
-            ...(attachments.length ? { attachments } : {}),
-        });
+        try {
+            const job = requestedJob || await deps.getJobDetails(log?.jobId || '');
+            const emailHtml = deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log);
+            const attachments = await deps.loadDailyLogAttachments(log);
+            await deps.sendEmail({
+                to: recipients,
+                subject: (0, emailService_1.buildDailyLogEmailSubject)(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log),
+                html: emailHtml,
+                ...(attachments.length ? { attachments } : {}),
+            });
+        }
+        catch (emailError) {
+            await deps.recordSubmittedEmailStatus(statusRefs, {
+                emailSent: false,
+                emailMessage: emailError?.message || 'Failed to send daily log email',
+                operationId,
+            }, operationContext);
+            throw emailError;
+        }
         console.log(`Daily log ${dailyLogId} emailed to ${recipients.join(', ')}`);
-        return { success: true, message: 'Email sent successfully' };
+        const emailResult = {
+            emailSent: true,
+            emailMessage: 'Email sent successfully',
+            operationId,
+        };
+        await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext);
+        return { success: true, message: emailResult.emailMessage };
     }
     catch (error) {
         console.error('Error sending daily log email:', error);
@@ -806,7 +926,11 @@ exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
             throw error;
         throw new https_2.HttpsError('internal', error?.message || 'Failed to send daily log email');
     }
-});
+}
+/**
+ * Send Daily Log via email
+ */
+exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => (handleSendDailyLogEmail(request)));
 function buildTimecardCsv(timecards, weekStart, defaultJobCode) {
     const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', ''];
     const fixedDataRowCount = 108;
@@ -879,7 +1003,7 @@ function buildTimecardPdfFilename(startWeek, endWeek, jobCode) {
     const normalizedJobCode = String(jobCode || '').trim();
     return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.pdf` : `${periodLabel}.pdf`;
 }
-async function buildTimecardPdfBuffer(payload) {
+async function buildTimecardPdfBuffer(payload, options = {}) {
     // Use a true landscape page so the emailed PDF prints in the same orientation
     // as the legacy workbook instead of relying on rotated portrait content.
     const doc = new pdfkit_1.default({ margin: 24, size: 'LETTER', layout: 'landscape' });
@@ -1126,6 +1250,15 @@ async function buildTimecardPdfBuffer(payload) {
             const cardWeekEnding = String(tc?.weekEndingDate || '').trim()
                 || getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim());
             const weekEnding = renderBlankTemplate ? '' : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel;
+            options.onCardHeader?.({
+                cardId: typeof tc?.id === 'string' ? tc.id : undefined,
+                employeeName,
+                employeeCode,
+                occupation,
+                renderBlankTemplate,
+                wageLabel,
+                weekEnding,
+            });
             const fieldRowHeight = 11.5;
             drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
                 label: 'EMP. NAME:',
@@ -1476,14 +1609,28 @@ async function buildTimecardPdfBuffer(payload) {
     });
     return Buffer.concat(chunks);
 }
-/**
- * Send Shop Order via email
- */
-exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => {
+const defaultSendShopOrderEmailDependencies = {
+    getUserProfile: firestoreService_1.getUserProfile,
+    getJobDetails: firestoreService_1.getJobDetails,
+    shopOrderEmailStatusRefs,
+    claimSubmittedEmailOperation: submittedEmailOperations_1.claimSubmittedEmailOperation,
+    isEmailEnabled: emailService_1.isEmailEnabled,
+    getEmailSettings: firestoreService_1.getEmailSettings,
+    getJobNotificationRecipients: firestoreService_1.getJobNotificationRecipients,
+    recordSubmittedEmailStatus,
+    getShopOrder: firestoreService_1.getShopOrder,
+    getJobScopedShopOrderSnapshot,
+    getShopOrderCostCodesByCatalogItemId,
+    buildShopOrderEmail: emailService_1.buildShopOrderEmail,
+    buildShopOrderPdfBuffer: emailService_1.buildShopOrderPdfBuffer,
+    buildShopOrderPdfFilename: emailService_1.buildShopOrderPdfFilename,
+    sendEmail: emailService_1.sendEmail,
+};
+async function handleSendShopOrderEmail(request, deps = defaultSendShopOrderEmailDependencies) {
     if (!request.auth) {
         throw new Error(constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
     }
-    const { jobId, shopOrderId } = request.data;
+    const { jobId, shopOrderId } = request.data || {};
     if (!jobId) {
         throw new Error(constants_1.ERROR_MESSAGES.JOB_ID_REQUIRED);
     }
@@ -1491,25 +1638,50 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1
         throw new Error(constants_1.ERROR_MESSAGES.SHOP_ORDER_ID_REQUIRED);
     }
     try {
-        const user = await (0, firestoreService_1.getUserProfile)(request.auth.uid);
-        assertAdminOrAssignedForeman(user, jobId, 'Only admins or assigned foremen can send shop order emails');
-        if (!(0, emailService_1.isEmailEnabled)()) {
+        const user = await deps.getUserProfile(request.auth.uid);
+        const requestedJob = await deps.getJobDetails(jobId);
+        assertCanSendSubmittedFieldWorkflowEmail(user, jobId, requestedJob, 'Only admins or assigned foremen can send shop order emails');
+        const statusRefs = deps.shopOrderEmailStatusRefs(jobId, shopOrderId);
+        const operationId = (0, emailStatus_1.buildSubmittedEmailOperationId)('shopOrderSubmittedEmail', shopOrderId);
+        const operationContext = {
+            jobId,
+            shopOrderId,
+            operation: 'sendShopOrderEmail',
+            operationId,
+        };
+        const claimStatus = await deps.claimSubmittedEmailOperation(runtime_1.db, statusRefs, operationId, operationContext);
+        const claimMessage = (0, submittedEmailOperations_1.getSubmittedEmailClaimShortCircuitMessage)(claimStatus);
+        if (claimMessage) {
+            return { success: true, message: claimMessage };
+        }
+        if (!deps.isEmailEnabled()) {
             console.log('[sendShopOrderEmail] Email sending disabled. Skipping send.');
-            return { success: true, message: 'Email sending disabled. Skipped.' };
+            const emailResult = {
+                emailSent: false,
+                emailMessage: 'Email sending disabled. Skipped.',
+                operationId,
+            };
+            await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext);
+            return { success: true, message: emailResult.emailMessage };
         }
         const requestedRecipients = Array.isArray(request.data?.recipients)
             ? request.data.recipients
             : [];
-        const settings = await (0, firestoreService_1.getEmailSettings)();
-        const recipients = normalizeRecipients(requestedRecipients, settings.globalNotificationRecipients.shopOrders, await (0, firestoreService_1.getJobNotificationRecipients)(jobId, 'shopOrders'));
+        const settings = await deps.getEmailSettings();
+        const recipients = normalizeRecipients(requestedRecipients, settings.globalNotificationRecipients.shopOrders, await deps.getJobNotificationRecipients(jobId, 'shopOrders'));
         if (!recipients.length) {
+            await deps.recordSubmittedEmailStatus(statusRefs, {
+                emailSent: false,
+                emailMessage: constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED,
+                operationId,
+            }, operationContext);
             throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
         let order = null;
-        const rootOrder = await (0, firestoreService_1.getShopOrder)(shopOrderId);
+        const rootOrder = await deps.getShopOrder(shopOrderId);
         // Prefer the job-scoped record when it exists, but fill missing fields from
         // the current root record so legacy partial docs do not hide newer metadata.
-        const jobOrderSnap = await runtime_1.db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId).get();
+        const jobOrderSnap = await deps.getJobScopedShopOrderSnapshot(jobId, shopOrderId);
         if (jobOrderSnap.exists) {
             const jobOrderData = jobOrderSnap.data() || {};
             const rootDeliveryDate = String(rootOrder?.deliveryDate || '').trim();
@@ -1534,25 +1706,42 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1
         if (resolvedJobId && resolvedJobId !== String(jobId).trim()) {
             throw new https_2.HttpsError('permission-denied', 'Shop order does not belong to the requested job');
         }
-        const job = await (0, firestoreService_1.getJobDetails)(resolvedJobId || jobId);
-        const costCodesByCatalogItemId = await getShopOrderCostCodesByCatalogItemId(order?.items);
-        const emailHtml = (0, emailService_1.buildShopOrderEmail)(order, costCodesByCatalogItemId);
-        const pdfBuffer = await (0, emailService_1.buildShopOrderPdfBuffer)(order, costCodesByCatalogItemId);
-        const orderDateLabel = formatEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt);
-        await (0, emailService_1.sendEmail)({
-            to: recipients,
-            subject: `${constants_1.EMAIL.SUBJECTS.SHOP_ORDER} - ${job?.name || 'Job'} - ${orderDateLabel}`,
-            html: emailHtml,
-            attachments: [
-                {
-                    name: (0, emailService_1.buildShopOrderPdfFilename)(order),
-                    contentType: 'application/pdf',
-                    contentBytes: pdfBuffer.toString('base64'),
-                },
-            ],
-        });
+        const job = resolvedJobId && resolvedJobId !== String(jobId).trim()
+            ? await deps.getJobDetails(resolvedJobId)
+            : requestedJob || await deps.getJobDetails(resolvedJobId || jobId);
+        try {
+            const costCodesByCatalogItemId = await deps.getShopOrderCostCodesByCatalogItemId(order?.items);
+            const emailHtml = deps.buildShopOrderEmail(order, costCodesByCatalogItemId);
+            const pdfBuffer = await deps.buildShopOrderPdfBuffer(order, costCodesByCatalogItemId);
+            await deps.sendEmail({
+                to: recipients,
+                subject: (0, emailService_1.buildShopOrderEmailSubject)(order, job),
+                html: emailHtml,
+                attachments: [
+                    {
+                        name: deps.buildShopOrderPdfFilename(order),
+                        contentType: 'application/pdf',
+                        contentBytes: pdfBuffer.toString('base64'),
+                    },
+                ],
+            });
+        }
+        catch (emailError) {
+            await deps.recordSubmittedEmailStatus(statusRefs, {
+                emailSent: false,
+                emailMessage: emailError?.message || 'Failed to send shop order email',
+                operationId,
+            }, operationContext);
+            throw emailError;
+        }
         console.log(`Shop order ${shopOrderId} emailed to ${recipients.join(', ')}`);
-        return { success: true, message: 'Email sent successfully' };
+        const emailResult = {
+            emailSent: true,
+            emailMessage: 'Email sent successfully',
+            operationId,
+        };
+        await deps.recordSubmittedEmailStatus(statusRefs, emailResult, operationContext);
+        return { success: true, message: emailResult.emailMessage };
     }
     catch (error) {
         console.error('Error sending shop order email:', error);
@@ -1560,5 +1749,6 @@ exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1
             throw error;
         throw new https_2.HttpsError('internal', error?.message || 'Failed to send shop order email');
     }
-});
+}
+exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => (handleSendShopOrderEmail(request)));
 //# sourceMappingURL=operationsFunctions.js.map

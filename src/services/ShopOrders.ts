@@ -1,10 +1,6 @@
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  type DocumentData,
-  type Unsubscribe,
+import type {
+  DocumentData,
+  Unsubscribe,
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
@@ -17,6 +13,7 @@ import {
   updateE2EShopOrder,
 } from '@/testing/e2eRuntime'
 import type { ShopOrderItemRecord, ShopOrderRecord, ShopOrderStatus } from '@/types/domain'
+import { toAppMillis } from '@/utils/dateTime'
 import { normalizeError } from '@/utils/normalizeError'
 import { sortShopOrderItems } from '@/utils/shopOrders'
 
@@ -41,6 +38,10 @@ export interface ShopOrderActor {
   displayName: string | null
 }
 
+interface ListShopOrdersResponse {
+  orders: Array<Record<string, unknown> & { id: string }>
+}
+
 function toNullableText(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length ? value.trim() : null
 }
@@ -53,6 +54,19 @@ function toQuantity(value: unknown): number | null {
   if (typeof value === 'string' && value.trim().length) {
     const parsed = Number(value)
     return Number.isFinite(parsed) && parsed >= 1 ? Math.round(parsed) : null
+  }
+
+  return null
+}
+
+function toPrice(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.round(value * 100) / 100
+  }
+
+  if (typeof value === 'string' && value.trim().length) {
+    const parsed = Number(value.replace(/[$,]/g, ''))
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null
   }
 
   return null
@@ -73,6 +87,7 @@ function sanitizeShopOrderItem(item: ShopOrderItemRecord): ShopOrderItemRecord {
     catalogItemId: toNullableText(item.catalogItemId),
     description: item.description.trim(),
     quantity: toQuantity(item.quantity),
+    price: toPrice(item.price),
     note: item.note.trim(),
     categoryId: toNullableText(item.categoryId),
     sku: toNullableText(item.sku),
@@ -92,31 +107,11 @@ function normalizeShopOrderItem(data: Record<string, unknown>): ShopOrderItemRec
     catalogItemId: toNullableText(data.catalogItemId),
     description: typeof data.description === 'string' ? data.description.trim() : '',
     quantity: toQuantity(data.quantity),
+    price: toPrice(data.price),
     note: typeof data.note === 'string' ? data.note.trim() : '',
     categoryId: toNullableText(data.categoryId),
     sku: toNullableText(data.sku),
   }
-}
-
-function toMillis(value: unknown): number {
-  if (typeof (value as { toMillis?: () => number })?.toMillis === 'function') {
-    return (value as { toMillis: () => number }).toMillis()
-  }
-
-  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().getTime()
-  }
-
-  if (value instanceof Date) {
-    return value.getTime()
-  }
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value).getTime()
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  return 0
 }
 
 function normalizeShopOrder(id: string, data: DocumentData): ShopOrderRecord {
@@ -144,7 +139,7 @@ function normalizeShopOrder(id: string, data: DocumentData): ShopOrderRecord {
 }
 
 function getOrderSortTimestamp(order: ShopOrderRecord) {
-  return toMillis(order.submittedAt) || toMillis(order.updatedAt) || toMillis(order.createdAt)
+  return toAppMillis(order.submittedAt) || toAppMillis(order.updatedAt) || toAppMillis(order.createdAt)
 }
 
 function sortOrders(orders: ShopOrderRecord[]) {
@@ -159,6 +154,52 @@ function sortOrders(orders: ShopOrderRecord[]) {
     })
 }
 
+function startCallablePollingSubscription<TRecord>(
+  fetchRecords: () => Promise<TRecord[]>,
+  onUpdate: (records: TRecord[]) => void,
+  onError?: (error: unknown) => void,
+): Unsubscribe {
+  let cancelled = false
+  let timerId: ReturnType<typeof setTimeout> | null = null
+
+  async function refresh() {
+    try {
+      const records = await fetchRecords()
+      if (!cancelled) {
+        onUpdate(records)
+      }
+    } catch (error) {
+      if (!cancelled) {
+        onError?.(error)
+      }
+    } finally {
+      if (!cancelled) {
+        timerId = setTimeout(refresh, 3000)
+      }
+    }
+  }
+
+  void refresh()
+
+  return () => {
+    cancelled = true
+    if (timerId) {
+      clearTimeout(timerId)
+      timerId = null
+    }
+  }
+}
+
+async function fetchShopOrdersViaCallable(jobId: string) {
+  const { functions } = requireFirebaseServices()
+  const callable = httpsCallable<{ jobId: string }, ListShopOrdersResponse>(
+    functions,
+    'listShopOrdersForCurrentUser',
+  )
+  const result = await callable({ jobId })
+  return sortOrders((result.data?.orders ?? []).map((order) => normalizeShopOrder(order.id, order)))
+}
+
 export function subscribeShopOrders(
   jobId: string,
   onUpdate: (orders: ShopOrderRecord[]) => void,
@@ -168,16 +209,10 @@ export function subscribeShopOrders(
     return subscribeE2EShopOrders(jobId, onUpdate)
   }
 
-  const { db } = requireFirebaseServices()
-
-  return onSnapshot(
-    query(collection(db, 'shopOrders'), where('jobId', '==', jobId)),
-    (snapshot) => {
-      onUpdate(sortOrders(snapshot.docs.map((item) => normalizeShopOrder(item.id, item.data()))))
-    },
-    (error) => {
-      onError?.(error)
-    },
+  return startCallablePollingSubscription(
+    () => fetchShopOrdersViaCallable(jobId),
+    onUpdate,
+    onError,
   )
 }
 

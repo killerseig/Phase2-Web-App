@@ -25,7 +25,12 @@ import type {
   TimecardWeekRecord,
   UserProfile,
 } from '@/types/domain'
-import { roleCanBeAssignedJobs } from '@/types/domain'
+import {
+  currentRoleCanBeAssignedJobs,
+  normalizeStoredRoleKey,
+  type EditableUserRole,
+} from '@/auth/roles'
+import { toAppMillis } from '@/utils/dateTime'
 import { sortShopOrderItems } from '@/utils/shopOrders'
 
 declare global {
@@ -95,6 +100,7 @@ type ShopOrdersListener = (orders: ShopOrderRecord[]) => void
 type DailyLogsListener = (logs: DailyLogRecord[]) => void
 type TimecardWeeksListener = (weeks: TimecardWeekRecord[]) => void
 type TimecardCardsListener = (cards: TimecardCardRecord[]) => void
+type TimecardWeekStatusFilter = 'submitted'
 
 let cachedState: Phase2E2EState | null | undefined
 let sequence = 1
@@ -114,6 +120,7 @@ const dailyLogListeners = new Set<{ jobId: string; logDate: string; listener: Da
 const timecardWeekListeners = new Set<{
   jobId: string
   ownerForemanUserId: string | null
+  statusFilter: TimecardWeekStatusFilter | null
   listener: TimecardWeeksListener
 }>()
 const allTimecardWeekListeners = new Set<TimecardWeeksListener>()
@@ -209,25 +216,6 @@ function requireState() {
   return state
 }
 
-function toMillis(value: unknown): number {
-  if (typeof (value as { toMillis?: () => number })?.toMillis === 'function') {
-    return (value as { toMillis: () => number }).toMillis()
-  }
-
-  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().getTime()
-  }
-
-  if (value instanceof Date) return value.getTime()
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value).getTime()
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  return 0
-}
-
 function sortJobs(jobs: JobRecord[]) {
   return jobs.slice().sort((left, right) => {
     const leftActive = left.active !== false ? 0 : 1
@@ -273,8 +261,8 @@ function sortShopOrders(orders: ShopOrderRecord[]) {
   return orders
     .slice()
     .sort((left, right) => {
-      const rightTimestamp = toMillis(right.submittedAt) || toMillis(right.updatedAt) || toMillis(right.createdAt)
-      const leftTimestamp = toMillis(left.submittedAt) || toMillis(left.updatedAt) || toMillis(left.createdAt)
+      const rightTimestamp = toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
+      const leftTimestamp = toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
       if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
       return right.id.localeCompare(left.id)
     })
@@ -287,8 +275,8 @@ function sortDailyLogs(logs: DailyLogRecord[]) {
       const rank = (status: string) => (status === 'submitted' ? 0 : 1)
       if (rank(left.status) !== rank(right.status)) return rank(left.status) - rank(right.status)
 
-      const rightTimestamp = toMillis(right.submittedAt) || toMillis(right.updatedAt) || toMillis(right.createdAt)
-      const leftTimestamp = toMillis(left.submittedAt) || toMillis(left.updatedAt) || toMillis(left.createdAt)
+      const rightTimestamp = toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
+      const leftTimestamp = toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
       if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
 
       if (right.sequenceNumber !== left.sequenceNumber) return right.sequenceNumber - left.sequenceNumber
@@ -347,12 +335,17 @@ function getDailyLogsForDate(jobId: string, logDate: string) {
   return sortDailyLogs(requireState().dailyLogs?.filter((log) => log.jobId === jobId && log.logDate === logDate) ?? [])
 }
 
-function getTimecardWeeksForJob(jobId: string, ownerForemanUserId: string | null) {
+function getTimecardWeeksForJob(
+  jobId: string,
+  ownerForemanUserId: string | null,
+  statusFilter: TimecardWeekStatusFilter | null = null,
+) {
   const weeks = requireState().timecardWeeks ?? []
   return sortWeeks(
     weeks.filter((week) => (
       week.jobId === jobId
       && (!ownerForemanUserId || week.ownerForemanUserId === ownerForemanUserId)
+      && (!statusFilter || week.status === statusFilter)
     )),
   )
 }
@@ -455,7 +448,11 @@ function notifyTimecardWeekListeners(jobId: string) {
   if (!matchingListeners.length) return
 
   for (const entry of matchingListeners) {
-    entry.listener(cloneValue(getTimecardWeeksForJob(jobId, entry.ownerForemanUserId)))
+    entry.listener(cloneValue(getTimecardWeeksForJob(
+      jobId,
+      entry.ownerForemanUserId,
+      entry.statusFilter,
+    )))
   }
 }
 
@@ -582,6 +579,7 @@ function normalizeItems(items: ShopOrderItemRecord[]): ShopOrderItemRecord[] {
       description: item.description.trim(),
       note: item.note.trim(),
       quantity: normalizeQuantity(item.quantity),
+      price: normalizePrice(item.price),
       catalogItemId: item.catalogItemId?.trim() || null,
       categoryId: item.categoryId?.trim() || null,
       sku: item.sku?.trim() || null,
@@ -600,7 +598,7 @@ function updateUserAssignments(jobId: string, nextAssignedForemanIds: string[]) 
   if (!state.users) return
 
   state.users = state.users.map((user) => {
-    if (!roleCanBeAssignedJobs(user.role)) return user
+    if (!currentRoleCanBeAssignedJobs(user.role)) return user
 
     const nextAssignedJobIds = new Set(user.assignedJobIds)
     if (nextAssignedForemanIds.includes(user.id)) {
@@ -618,17 +616,17 @@ function updateUserAssignments(jobId: string, nextAssignedForemanIds: string[]) 
 
 function syncE2EUserJobAssignments(
   uid: string,
-  role: Exclude<UserProfile['role'], 'none'>,
+  role: UserProfile['role'],
   nextAssignedJobIds: string[],
 ) {
   const state = requireState()
-  const effectiveAssignedJobIds = roleCanBeAssignedJobs(role) ? normalizeStringList(nextAssignedJobIds) : []
+  const effectiveAssignedJobIds = currentRoleCanBeAssignedJobs(role) ? normalizeStringList(nextAssignedJobIds) : []
   const changedJobIds: string[] = []
 
   state.jobs = state.jobs.map((job) => {
     const nextAssignedForemanIds = new Set(job.assignedForemanIds)
     const hadUser = nextAssignedForemanIds.has(uid)
-    const shouldHaveUser = roleCanBeAssignedJobs(role) && effectiveAssignedJobIds.includes(job.id)
+    const shouldHaveUser = currentRoleCanBeAssignedJobs(role) && effectiveAssignedJobIds.includes(job.id)
 
     if (shouldHaveUser) {
       nextAssignedForemanIds.add(uid)
@@ -905,10 +903,11 @@ export function subscribeE2ETimecardWeeks(
   jobId: string,
   ownerForemanUserId: string | null,
   onUpdate: TimecardWeeksListener,
+  statusFilter: TimecardWeekStatusFilter | null = null,
 ) {
-  const entry = { jobId, ownerForemanUserId, listener: onUpdate }
+  const entry = { jobId, ownerForemanUserId, statusFilter, listener: onUpdate }
   timecardWeekListeners.add(entry)
-  onUpdate(cloneValue(getTimecardWeeksForJob(jobId, ownerForemanUserId)))
+  onUpdate(cloneValue(getTimecardWeeksForJob(jobId, ownerForemanUserId, statusFilter)))
 
   return () => {
     timecardWeekListeners.delete(entry)
@@ -1094,7 +1093,7 @@ export async function createE2EUser(input: {
   email: string
   firstName: string
   lastName: string
-  role: Exclude<UserProfile['role'], 'none'>
+  role: EditableUserRole
   assignedJobIds?: string[]
   sendInvite?: boolean
 }) {
@@ -1113,7 +1112,7 @@ export async function createE2EUser(input: {
 
   const uid = makeId('user')
   const role = input.role === 'admin' ? 'admin' : input.role === 'project-manager' ? 'project-manager' : 'foreman'
-  const assignedJobIds = roleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
+  const assignedJobIds = currentRoleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
   const inviteSent = input.sendInvite === true
   const now = getNowValue().toISOString()
 
@@ -1145,7 +1144,7 @@ export async function updateE2EUser(
   input: {
     firstName: string
     lastName: string
-    role: Exclude<UserProfile['role'], 'none'>
+    role: UserProfile['role']
     active: boolean
     assignedJobIds?: string[]
   },
@@ -1157,8 +1156,8 @@ export async function updateE2EUser(
   }
 
   const existingUser = state.users[index]!
-  const role = input.role === 'admin' ? 'admin' : input.role === 'project-manager' ? 'project-manager' : 'foreman'
-  const assignedJobIds = roleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
+  const role = normalizeStoredRoleKey(input.role)
+  const assignedJobIds = currentRoleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
 
   state.users[index] = {
     ...existingUser,
@@ -1584,7 +1583,6 @@ function copyPreviousE2ETimecardCardsIntoDraft(
   const previousWeeks = sortWeeks(state.timecardWeeks?.filter((week) => (
     week.jobId === targetWeek.jobId
     && week.weekEndDate === getPreviousWeekEndDate(targetWeek.weekEndDate)
-    && week.ownerForemanUserId === (targetWeek.ownerForemanUserId ?? null)
   )) ?? [])
 
   const now = getNowValue().toISOString()
@@ -1663,7 +1661,6 @@ export async function ensureE2ETimecardWeek(input: {
   const existingWeek = state.timecardWeeks.find((week) => (
     week.jobId === input.jobId
     && week.weekEndDate === input.weekEndDate
-    && week.ownerForemanUserId === (input.ownerForemanUserId ?? null)
   ))
 
   if (existingWeek) {
@@ -1855,4 +1852,25 @@ export async function submitE2ETimecardWeek(
     emailSent: true,
     emailMessage: 'Week submitted and emailed to 1 recipient.',
   }
+}
+
+export async function reopenE2ETimecardWeek(weekId: string) {
+  const state = requireState()
+  const weekIndex = state.timecardWeeks?.findIndex((entry) => entry.id === weekId) ?? -1
+  if (weekIndex === -1 || !state.timecardWeeks) {
+    throw new Error('Timecard week not found.')
+  }
+
+  const week = state.timecardWeeks[weekIndex]!
+  const now = getNowValue().toISOString()
+  state.timecardWeeks[weekIndex] = {
+    ...week,
+    status: 'draft',
+    submittedAt: null,
+    submittedByName: null,
+    submittedByUserId: null,
+    updatedAt: now,
+  }
+
+  notifyTimecardsChanged(week.jobId, weekId)
 }

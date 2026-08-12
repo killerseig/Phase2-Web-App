@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef } from 'vue'
+import { computed, ref } from 'vue'
 import {
   getArchiveJobConfirmLabel,
   getArchiveJobConfirmMessage,
@@ -6,15 +6,12 @@ import {
   getDeleteJobConfirmMessage,
 } from '@/features/jobs/jobViewHelpers'
 import type { JobRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseJobConfirmDialogsOptions {
   archiveBusy: ReadonlyRef<boolean>
   deleteBusy: ReadonlyRef<boolean>
-  selectedJob: ComputedRef<JobRecord | null>
+  selectedJob: ReadonlyRef<JobRecord | null>
 }
 
 export function useJobConfirmDialogs({

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import type { ComponentPublicInstance } from 'vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppPane from '@/components/common/AppPane.vue'
 import ShopCatalogTreeFilters from '@/components/shopCatalog/ShopCatalogTreeFilters.vue'
 import ShopCatalogTreeHeader from '@/components/shopCatalog/ShopCatalogTreeHeader.vue'
 import ShopCatalogTreeNodeRow from '@/components/shopCatalog/ShopCatalogTreeNodeRow.vue'
 import ShopCatalogTreeRootRow from '@/components/shopCatalog/ShopCatalogTreeRootRow.vue'
+import type { TemplateElementRefValue } from '@/composables/useTemplateElementRef'
 import type { ShopCatalogTreeNode as TreeNode } from '@/features/shopCatalog/treeTypes'
 
 defineProps<{
@@ -22,8 +24,8 @@ defineProps<{
   renameKey: TreeNode['key'] | null
   renameValue: string
   expandedCategoryIds: string[]
-  setInputRef: (element: Element | ComponentPublicInstance | null) => void
-  setListRef: (element: Element | ComponentPublicInstance | null) => void
+  setInputRef: (element: HTMLInputElement | null) => void
+  setListRef: (element: TemplateElementRefValue) => void
 }>()
 
 const emit = defineEmits<{
@@ -76,7 +78,7 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
 </script>
 
 <template>
-  <section id="catalog-tree-pane" class="catalog-tree-pane">
+  <AppPane id="catalog-tree-pane" class="catalog-tree-pane">
     <ShopCatalogTreeHeader />
 
     <div class="catalog-tree-pane__body">
@@ -103,7 +105,11 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
         @dragleave.self="emit('rootDragLeave', $event)"
         @drop.self="emit('rootDrop', $event)"
       >
-        <div v-if="catalogLoading" class="catalog-pane__empty">Loading catalog...</div>
+        <AppEmptyState
+          v-if="catalogLoading"
+          class="catalog-pane__empty"
+          message="Loading catalog..."
+        />
 
         <div v-else class="catalog-tree">
           <ShopCatalogTreeRootRow
@@ -158,30 +164,22 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
             @cancel-rename="emit('cancelRename')"
           />
 
-          <div v-if="treeNodes.length === 0" class="catalog-pane__empty">
-            No folders or items match your search.
-          </div>
+          <AppEmptyState
+            v-if="treeNodes.length === 0"
+            class="catalog-pane__empty"
+            message="No folders or items match your search."
+          />
         </div>
       </div>
     </div>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>
 .catalog-tree-pane {
-  display: grid;
-  gap: 0.7rem;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  padding: 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-  grid-template-rows: auto minmax(0, 1fr);
+  --app-pane-gap: 0.7rem;
+  --app-pane-padding: 0.9rem;
+  --app-pane-grid-template-rows: auto minmax(0, 1fr);
 }
 
 .catalog-tree-pane__body {
@@ -223,9 +221,8 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
 
 @media (max-width: 1180px) {
   .catalog-tree-pane {
-    height: auto;
-    overflow: visible;
-    max-height: none;
+    --app-pane-height: auto;
+    --app-pane-overflow: visible;
   }
 
   .catalog-tree-pane__body {

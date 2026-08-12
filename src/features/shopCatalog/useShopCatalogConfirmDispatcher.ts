@@ -1,11 +1,8 @@
 import type { ShopCatalogConfirmAction } from '@/features/shopCatalog/adminViewHelpers'
-
-interface Ref<T> {
-  value: T
-}
+import type { WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogConfirmDispatcherOptions {
-  catalogConfirmAction: Ref<ShopCatalogConfirmAction | null>
+  catalogConfirmAction: WritableRef<ShopCatalogConfirmAction | null>
   confirmArchiveCategory: (action: Extract<ShopCatalogConfirmAction, { kind: 'archive-category' }>) => Promise<void>
   confirmArchiveItem: (action: Extract<ShopCatalogConfirmAction, { kind: 'archive-item' }>) => Promise<void>
   confirmDeleteCategory: (action: Extract<ShopCatalogConfirmAction, { kind: 'delete-category' }>) => Promise<void>

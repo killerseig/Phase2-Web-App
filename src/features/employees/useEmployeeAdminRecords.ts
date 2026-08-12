@@ -1,10 +1,10 @@
-import type { Ref } from 'vue'
 import { useSubscribedRecords } from '@/composables/useSubscribedRecords'
 import { subscribeEmployees } from '@/services/employees'
 import type { EmployeeRecord } from '@/types/domain'
+import type { WritableRef } from '@/types/reactivity'
 
 interface UseEmployeeAdminRecordsOptions {
-  selectedEmployeeId: Ref<string | 'new'>
+  selectedEmployeeId: WritableRef<string | 'new'>
 }
 
 export function useEmployeeAdminRecords({

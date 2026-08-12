@@ -6,27 +6,20 @@ import {
 } from '@/features/shopCatalog/adminViewHelpers'
 import { updateShopCatalogItem, updateShopCategory } from '@/services/shopCatalog'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogArchiveActionsOptions {
-  activeFolderId: Ref<string | null>
-  catalogConfirmAction: Ref<ShopCatalogConfirmAction | null>
+  activeFolderId: WritableRef<string | null>
+  catalogConfirmAction: WritableRef<ShopCatalogConfirmAction | null>
   categoriesById: ReadonlyRef<ReadonlyMap<string, ShopCategoryRecord>>
   childCategoriesByParent: ReadonlyRef<ReadonlyMap<string | null, readonly ShopCategoryRecord[]>>
   inspectItem: (item: ShopCatalogItemRecord, options?: { showInspector?: boolean }) => void
   items: ReadonlyRef<ShopCatalogItemRecord[]>
   resetDetailMessages: () => void
-  saveLoading: Ref<boolean>
+  saveLoading: WritableRef<boolean>
   selectFolder: (categoryId: string, options?: { showInspector?: boolean }) => void
   selectedCategory: ReadonlyRef<ShopCategoryRecord | null>
-  selectedInspectorKey: Ref<string>
+  selectedInspectorKey: WritableRef<string>
   selectedItem: ReadonlyRef<ShopCatalogItemRecord | null>
   setDetailError: (error: unknown, fallbackMessage: string) => void
   setDetailInfo: (message: string) => void
@@ -204,10 +197,22 @@ export function useShopCatalogArchiveActions({
     }
   }
 
+  function handleSelectedCategoryArchiveRequest() {
+    if (!selectedCategory.value) return
+    handleArchiveCategory(!selectedCategory.value.active)
+  }
+
+  function handleSelectedItemArchiveRequest() {
+    if (!selectedItem.value) return
+    handleArchiveItem(!selectedItem.value.active)
+  }
+
   return {
     confirmArchiveCategory,
     confirmArchiveItem,
     handleArchiveCategory,
     handleArchiveItem,
+    handleSelectedCategoryArchiveRequest,
+    handleSelectedItemArchiveRequest,
   }
 }

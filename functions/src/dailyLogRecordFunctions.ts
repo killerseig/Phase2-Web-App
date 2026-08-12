@@ -1,8 +1,15 @@
 import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
+import {
+  type CurrentFunctionUser,
+  buildCurrentFunctionUser,
+  currentFunctionUserHasAnyRole,
+} from './roleAccess'
+import { canWriteFieldWorkflowForJob, type FieldWorkflowWriteAction } from './fieldWorkflowAccess'
+import { getJobDetails } from './firestoreService'
+import { isFunctionShopJob } from './jobIdentity'
 import { db } from './runtime'
 
-type DailyLogRole = 'admin' | 'foreman' | 'none'
 type DailyLogStatus = 'draft' | 'submitted'
 type DailyLogAttachmentType = 'photo' | 'ptp' | 'qc' | 'other'
 type DailyLogTextFieldKey =
@@ -21,14 +28,6 @@ type DailyLogTextFieldKey =
   | 'qcIssuesResolved'
   | 'notesCorrespondence'
   | 'actionItems'
-
-interface AuthorizedDailyLogUser {
-  uid: string
-  role: DailyLogRole
-  active: boolean
-  assignedJobIds: string[]
-  displayName: string | null
-}
 
 const dailyLogTextFieldKeys = new Set<DailyLogTextFieldKey>([
   'weeklySchedule',
@@ -70,13 +69,6 @@ function normalizeRecipientList(value: unknown): string[] {
   )
 }
 
-function normalizeRole(value: unknown): DailyLogRole {
-  const role = text(value).toLowerCase()
-  if (role === 'admin' || role === 'foreman') return role
-  if (role === 'project-manager') return 'foreman'
-  return 'none'
-}
-
 function toStatus(value: unknown): DailyLogStatus {
   return value === 'submitted' ? 'submitted' : 'draft'
 }
@@ -99,23 +91,37 @@ function summarizeManpowerLines(lines: Array<{ trade: string; count: number; are
   return summary.join('; ')
 }
 
+function isBlankManpowerLine(line: { trade: string; count: number; areas: string }) {
+  return !line.trade && !line.count && !line.areas
+}
+
+function isBlankIndoorClimateReading(reading: { area: string; high: string; low: string; humidity: string }) {
+  return !reading.area && !reading.high && !reading.low && !reading.humidity
+}
+
 function sanitizePayload(payload: any) {
   const manpowerLines = Array.isArray(payload?.manpowerLines)
-    ? payload.manpowerLines.map((line: any) => ({
-        trade: text(line?.trade),
-        count: sanitizeLineCount(line?.count),
-        areas: text(line?.areas),
-        addedByUserId: textOrNull(line?.addedByUserId),
-      }))
+    ? payload.manpowerLines
+        .map((line: any) => ({
+          trade: text(line?.trade),
+          count: sanitizeLineCount(line?.count),
+          areas: text(line?.areas),
+          addedByUserId: textOrNull(line?.addedByUserId),
+        }))
+        .filter((line: { trade: string; count: number; areas: string }) => !isBlankManpowerLine(line))
     : []
 
   const indoorClimateReadings = Array.isArray(payload?.indoorClimateReadings)
-    ? payload.indoorClimateReadings.map((reading: any) => ({
-        area: text(reading?.area),
-        high: text(reading?.high),
-        low: text(reading?.low),
-        humidity: text(reading?.humidity),
-      }))
+    ? payload.indoorClimateReadings
+        .map((reading: any) => ({
+          area: text(reading?.area),
+          high: text(reading?.high),
+          low: text(reading?.low),
+          humidity: text(reading?.humidity),
+        }))
+        .filter((reading: { area: string; high: string; low: string; humidity: string }) => (
+          !isBlankIndoorClimateReading(reading)
+        ))
     : []
 
   const attachments = Array.isArray(payload?.attachments)
@@ -159,43 +165,103 @@ function sanitizePayload(payload: any) {
   }
 }
 
-async function getAuthorizedUser(uid: string): Promise<AuthorizedDailyLogUser> {
+async function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser> {
   const userSnap = await db.collection('users').doc(uid).get()
   if (!userSnap.exists) {
     throw new HttpsError('failed-precondition', 'Your user profile was not found.')
   }
 
   const data = userSnap.data() || {}
-  const role = normalizeRole(data.role)
-  const active = data.active === true
-  const assignedJobIds = Array.isArray(data.assignedJobIds)
-    ? data.assignedJobIds
-        .filter((value: unknown): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter(Boolean)
-    : []
-  const displayName = [text(data.firstName), text(data.lastName)].filter(Boolean).join(' ') || textOrNull(data.email)
+  const user = buildCurrentFunctionUser(uid, data)
 
-  if (!active) {
+  if (!user.active) {
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!['admin', 'foreman'].includes(role)) {
+  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])) {
     throw new HttpsError('permission-denied', 'Your account does not have access to daily logs.')
   }
 
-  return {
-    uid,
-    role,
-    active,
-    assignedJobIds,
-    displayName,
-  }
+  return user
 }
 
-function assertCanWriteJob(user: AuthorizedDailyLogUser, jobId: string) {
-  if (user.role === 'admin') return
-  if (user.role === 'foreman' && user.assignedJobIds.includes(jobId)) return
+async function getAuthorizedReader(uid: string): Promise<CurrentFunctionUser> {
+  const userSnap = await db.collection('users').doc(uid).get()
+  if (!userSnap.exists) {
+    throw new HttpsError('failed-precondition', 'Your user profile was not found.')
+  }
+
+  const data = userSnap.data() || {}
+  const user = buildCurrentFunctionUser(uid, data)
+
+  if (!user.active) {
+    throw new HttpsError('permission-denied', 'Your account is inactive.')
+  }
+
+  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])) {
+    throw new HttpsError('permission-denied', 'Your account does not have access to daily logs.')
+  }
+
+  return user
+}
+
+function canReadJobDailyLogs(
+  user: CurrentFunctionUser,
+  jobId: string,
+  jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
+) {
+  if (user.role === 'admin') return true
+
+  const assignedJobIds = new Set(user.assignedJobIds)
+  if ((jobDetails?.assignedForemanIds ?? []).includes(user.uid)) {
+    assignedJobIds.add(jobId)
+  }
+
+  if (assignedJobIds.has(jobId)) return true
+  return user.role === 'shop-foreman' && isFunctionShopJob(jobDetails)
+}
+
+function assertCanWriteJob(
+  user: CurrentFunctionUser,
+  jobId: string,
+  jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
+  action: FieldWorkflowWriteAction,
+) {
+  if (canWriteFieldWorkflowForJob(user, jobId, jobDetails, action)) return
+  throw new HttpsError('permission-denied', 'You are not assigned to this job.')
+}
+
+function userOwnsDraftDailyLog(user: CurrentFunctionUser, log: Record<string, unknown>) {
+  if (toStatus(log.status) !== 'draft') return false
+
+  return [log.foremanUserId, log.createdByUserId]
+    .some((value) => text(value) === user.uid)
+}
+
+function canWriteExistingDailyLog(
+  user: CurrentFunctionUser,
+  jobId: string,
+  jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
+  action: FieldWorkflowWriteAction,
+  log: Record<string, unknown>,
+) {
+  if (canWriteFieldWorkflowForJob(user, jobId, jobDetails, action)) return true
+
+  // If the user was allowed to create the draft, do not strand them if job
+  // assignment metadata is stale or shaped differently than expected.
+  return (action === 'edit-draft' || action === 'submit')
+    && currentFunctionUserHasAnyRole(user, ['foreman', 'shop-foreman', 'project-manager'])
+    && userOwnsDraftDailyLog(user, log)
+}
+
+function assertCanWriteExistingDailyLog(
+  user: CurrentFunctionUser,
+  jobId: string,
+  jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
+  action: FieldWorkflowWriteAction,
+  log: Record<string, unknown>,
+) {
+  if (canWriteExistingDailyLog(user, jobId, jobDetails, action, log)) return
   throw new HttpsError('permission-denied', 'You are not assigned to this job.')
 }
 
@@ -231,6 +297,82 @@ async function getDailyLogDoc(dailyLogId: string) {
   return { logRef, logSnap, log, jobId }
 }
 
+function serializeFirestoreValue(value: any): any {
+  if (value === null || value === undefined) return value
+  if (typeof value?.toDate === 'function') {
+    return value.toDate().toISOString()
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => serializeFirestoreValue(entry))
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, serializeFirestoreValue(entry)]),
+    )
+  }
+  return value
+}
+
+function normalizeLogForResponse(doc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot) {
+  return {
+    id: doc.id,
+    ...serializeFirestoreValue(doc.data() || {}),
+  }
+}
+
+function getLogSortTimestamp(log: any) {
+  const submitted = Date.parse(text(log?.submittedAt))
+  if (Number.isFinite(submitted)) return submitted
+
+  const updated = Date.parse(text(log?.updatedAt))
+  if (Number.isFinite(updated)) return updated
+
+  const created = Date.parse(text(log?.createdAt))
+  return Number.isFinite(created) ? created : 0
+}
+
+function sortLogResponses(logs: any[]) {
+  const rank = (status: unknown) => (text(status) === 'submitted' ? 0 : 1)
+
+  return logs.slice().sort((left, right) => (
+    rank(left.status) - rank(right.status)
+    || getLogSortTimestamp(right) - getLogSortTimestamp(left)
+    || Number(right.sequenceNumber || 0) - Number(left.sequenceNumber || 0)
+    || text(right.id).localeCompare(text(left.id))
+  ))
+}
+
+export const listDailyLogsForCurrentUser = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be signed in.')
+  }
+
+  const jobId = text(request.data?.jobId)
+  const logDate = text(request.data?.logDate)
+  if (!jobId || jobId.includes('/')) {
+    throw new HttpsError('invalid-argument', 'jobId is required.')
+  }
+  if (!logDate) {
+    throw new HttpsError('invalid-argument', 'logDate is required.')
+  }
+
+  const user = await getAuthorizedReader(request.auth.uid)
+  const jobDetails = await getJobDetails(jobId)
+  if (!canReadJobDailyLogs(user, jobId, jobDetails)) {
+    throw new HttpsError('permission-denied', 'Your account does not have access to this job daily log workspace.')
+  }
+
+  const snapshot = await db
+    .collection('dailyLogs')
+    .where('jobId', '==', jobId)
+    .where('logDate', '==', logDate)
+    .get()
+
+  return {
+    logs: sortLogResponses(snapshot.docs.map(normalizeLogForResponse)),
+  }
+})
+
 export const createDailyLogRecordCallable = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be signed in.')
@@ -242,7 +384,8 @@ export const createDailyLogRecordCallable = onCall(async (request) => {
   if (!logDate) throw new HttpsError('invalid-argument', 'logDate is required')
 
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  const jobDetails = await getJobDetails(jobId)
+  assertCanWriteJob(user, jobId, jobDetails, 'create')
 
   const sequenceNumber = await getNextSequenceNumber(jobId, logDate)
   const created = await db.collection('dailyLogs').add({
@@ -277,10 +420,14 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
 
   const { logRef, log, jobId } = await getDailyLogDoc(dailyLogId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  const jobDetails = await getJobDetails(jobId)
+  const writeAction: FieldWorkflowWriteAction = (
+    'status' in request.data && toStatus(request.data?.status) === 'submitted'
+  ) ? 'submit' : 'edit-draft'
+  assertCanWriteExistingDailyLog(user, jobId, jobDetails, writeAction, log)
 
-  if (toStatus(log.status) === 'submitted' && user.role === 'foreman') {
-    throw new HttpsError('failed-precondition', 'Submitted daily logs cannot be changed by foremen.')
+  if (toStatus(log.status) === 'submitted' && user.role !== 'admin') {
+    throw new HttpsError('failed-precondition', 'Submitted daily logs cannot be changed by field users.')
   }
 
   const payload: Record<string, unknown> = {
@@ -339,10 +486,11 @@ export const deleteDailyLogRecordCallable = onCall(async (request) => {
 
   const { logRef, log, jobId } = await getDailyLogDoc(dailyLogId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  const jobDetails = await getJobDetails(jobId)
+  assertCanWriteExistingDailyLog(user, jobId, jobDetails, 'edit-draft', log)
 
-  if (toStatus(log.status) === 'submitted' && user.role === 'foreman') {
-    throw new HttpsError('failed-precondition', 'Submitted daily logs cannot be deleted by foremen.')
+  if (toStatus(log.status) === 'submitted' && user.role !== 'admin') {
+    throw new HttpsError('failed-precondition', 'Submitted daily logs cannot be deleted by field users.')
   }
 
   await logRef.delete()

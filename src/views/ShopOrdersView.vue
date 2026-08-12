@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { ref } from 'vue'
+import { useCurrentActor } from '@/composables/useCurrentActor'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useRouteJobContext } from '@/composables/useRouteJobContext'
 import { useToastMessages } from '@/composables/useToastMessages'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ShopOrderCatalogBrowser from '@/components/shopOrders/ShopOrderCatalogBrowser.vue'
+import ShopOrderConfirmDialogs from '@/components/shopOrders/ShopOrderConfirmDialogs.vue'
 import ShopOrderCustomItemForm from '@/components/shopOrders/ShopOrderCustomItemForm.vue'
+import ShopOrderPageShell from '@/components/shopOrders/ShopOrderPageShell.vue'
 import ShopOrderWorkspacePane from '@/components/shopOrders/ShopOrderWorkspacePane.vue'
-import AppShell from '@/layouts/AppShell.vue'
 import { useShopCatalogRecords } from '@/features/shopCatalog/useShopCatalogRecords'
 import {
-  createEmptyCustomItemFormState,
   getTodayDateString,
-  type CustomItemFormState,
+  shouldShowShopOrderSuccessToast,
 } from '@/features/shopOrders/viewHelpers'
 import { useShopOrderConfirmDialogs } from '@/features/shopOrders/useShopOrderConfirmDialogs'
+import { useShopOrderCustomItemForm } from '@/features/shopOrders/useShopOrderCustomItemForm'
 import { useShopOrderDraftActions } from '@/features/shopOrders/useShopOrderDraftActions'
 import { useShopOrderItemActions } from '@/features/shopOrders/useShopOrderItemActions'
 import { useShopOrderItemNotes } from '@/features/shopOrders/useShopOrderItemNotes'
@@ -58,13 +59,26 @@ const {
 const createOrderLoading = ref(false)
 const itemActionLoading = ref(false)
 
+const {
+  currentActorDisplayName,
+  currentUserId,
+  getActor,
+} = useCurrentActor({
+  getUserId: () => auth.currentUser?.uid ?? null,
+  getDisplayName: () => auth.displayName,
+  getEmail: () => auth.currentUser?.email ?? null,
+})
 
-const customItemForm = reactive<CustomItemFormState>(createEmptyCustomItemFormState())
+const {
+  customItemForm,
+  resetCustomItemForm,
+} = useShopOrderCustomItemForm()
 
 const {
   orders,
   ordersError,
   ordersLoading,
+  replaceOrderLocally,
   startOrdersSubscription,
   stopOrdersSubscription,
 } = useShopOrderRecords({
@@ -75,7 +89,9 @@ const {
   canEditSelectedOrder,
   categoriesById,
   draftOrders,
+  orderEstimatedTotal,
   orderItemCount,
+  orderInputDisabled,
   orderMutationDisabled,
   orderTotalQuantity,
   selectedOrder,
@@ -110,6 +126,7 @@ const {
 } = useShopOrderPersistence({
   getActor,
   itemActionLoading,
+  replaceOrderLocally,
   selectedOrder,
   setActionError,
   setActionInfo,
@@ -118,6 +135,7 @@ const {
   applySelectedOrderToForm,
   applyThursdayDelivery,
   clearOrderMetaSaveTimer,
+  ensureFreshDraftDeliveryDate,
   hasSelectedOrderChanged,
   orderMetaForm,
   queueOrderMetaSave,
@@ -148,8 +166,8 @@ const {
   cloneOrderItems,
   createOrderLoading,
   draftOrders,
-  getForemanName: () => auth.displayName || auth.currentUser?.email || null,
-  getForemanUserId: () => auth.currentUser?.uid ?? null,
+  getForemanName: () => currentActorDisplayName.value,
+  getForemanUserId: () => currentUserId.value,
   job,
   jobId,
   orderMetaForm,
@@ -171,6 +189,7 @@ const {
   ensureDraftOrderTarget,
   persistOrderItems,
   removeItemTargetId,
+  resetCustomItemForm,
   selectedOrder,
   setActionError,
 })
@@ -196,10 +215,13 @@ const {
   setActionInfo,
 })
 
-useShopOrderSelectionSync({
+const {
+  selectOrder,
+} = useShopOrderSelectionSync({
   applySelectedOrderToForm,
   clearOrderItemNoteDrafts,
   clearOrderMetaSaveTimer,
+  ensureFreshDraftDeliveryDate,
   hasSelectedOrderChanged,
   orderMetaForm,
   orders,
@@ -210,14 +232,6 @@ useShopOrderSelectionSync({
   syncOrderItemNoteDrafts,
 })
 
-const quietShopOrderMessages = new Set([
-  'New order started.',
-  'Order details saved.',
-  'Order quantity updated.',
-  'Order note updated.',
-  'Custom item added to the current order.',
-])
-
 useToastMessages([
   { source: catalogError, severity: 'error', summary: 'Catalog Browser' },
   { source: ordersError, severity: 'error', summary: 'Order Workspace' },
@@ -226,20 +240,9 @@ useToastMessages([
     source: actionInfo,
     severity: 'success',
     summary: 'Shop Orders',
-    when: (message) => !quietShopOrderMessages.has(message) && !message.endsWith('added to the current order.'),
+    when: shouldShowShopOrderSuccessToast,
   },
 ])
-
-function getActor() {
-  return {
-    userId: auth.currentUser?.uid ?? null,
-    displayName: auth.displayName || auth.currentUser?.email || null,
-  }
-}
-
-function selectOrder(orderId: string) {
-  selectedOrderId.value = orderId
-}
 
 useShopOrderSubscriptionLifecycle({
   clearOrderMetaSaveTimer,
@@ -255,24 +258,27 @@ useShopOrderSubscriptionLifecycle({
 </script>
 
 <template>
-  <AppShell>
-    <div class="shop-orders-explorer" data-testid="shop-orders-page">
+  <ShopOrderPageShell test-id="shop-orders-page">
+    <template #catalog>
       <ShopOrderCatalogBrowser
         :categories="categories"
         :catalog-items="catalogItems"
         :loading="catalogLoading"
-        :disabled="orderMutationDisabled"
+        :disabled="orderInputDisabled"
         :add-catalog-item="addCatalogItemToOrder"
       >
         <ShopOrderCustomItemForm
           v-model:description="customItemForm.description"
           v-model:quantity="customItemForm.quantity"
           v-model:note="customItemForm.note"
-          :disabled="orderMutationDisabled"
+          :disabled="orderInputDisabled"
+          :submit-disabled="orderMutationDisabled"
           @submit="addCustomItemToOrder"
         />
       </ShopOrderCatalogBrowser>
+    </template>
 
+    <template #workspace>
       <ShopOrderWorkspacePane
         v-model:delivery-date="orderMetaForm.deliveryDate"
         v-model:comments="orderMetaForm.comments"
@@ -286,6 +292,7 @@ useShopOrderSubscriptionLifecycle({
         :job="job"
         :min-delivery-date="getTodayDateString()"
         :note-drafts="orderItemNoteDrafts"
+        :order-estimated-total="orderEstimatedTotal"
         :orders="orders"
         :orders-count="orders.length"
         :orders-loading="ordersLoading"
@@ -303,74 +310,17 @@ useShopOrderSubscriptionLifecycle({
         @update-note-draft="handleOrderItemNoteInput"
         @update-quantity="updateOrderItemQuantity"
       />
-    </div>
+    </template>
 
-    <ConfirmDialog
-      :open="removeItemConfirmOpen"
-      title="Remove item?"
-      :message="removeItemConfirmMessage"
-      confirm-label="Remove Item"
-      destructive
+    <ShopOrderConfirmDialogs
+      v-model:delete-draft-open="deleteDraftConfirmOpen"
+      v-model:remove-item-open="removeItemConfirmOpen"
+      v-model:submit-open="submitConfirmOpen"
       :busy="itemActionLoading"
-      @update:open="removeItemConfirmOpen = $event"
-      @confirm="confirmRemoveOrderItem"
+      :remove-item-message="removeItemConfirmMessage"
+      @confirm-delete-draft="confirmDeleteSelectedOrder"
+      @confirm-remove-item="confirmRemoveOrderItem"
+      @confirm-submit-order="confirmSubmitSelectedOrder"
     />
-
-    <ConfirmDialog
-      :open="deleteDraftConfirmOpen"
-      title="Delete draft?"
-      message="Delete this draft shop order?"
-      confirm-label="Delete Draft"
-      destructive
-      :busy="itemActionLoading"
-      @update:open="deleteDraftConfirmOpen = $event"
-      @confirm="confirmDeleteSelectedOrder"
-    />
-
-    <ConfirmDialog
-      :open="submitConfirmOpen"
-      title="Submit shop order?"
-      message="Submit this shop order? The order will become read-only."
-      confirm-label="Submit Order"
-      :busy="itemActionLoading"
-      @update:open="submitConfirmOpen = $event"
-      @confirm="confirmSubmitSelectedOrder"
-    />
-  </AppShell>
+  </ShopOrderPageShell>
 </template>
-
-<style scoped>
-.shop-orders-explorer {
-  --shop-line: rgba(168, 190, 209, 0.16);
-  --shop-line-soft: rgba(168, 190, 209, 0.08);
-  --shop-surface: rgba(255, 255, 255, 0.018);
-  --shop-surface-soft: rgba(255, 255, 255, 0.035);
-  --shop-field: rgba(237, 245, 248, 0.052);
-  --shop-radius-md: 10px;
-  --shop-radius-lg: 12px;
-  --shop-control-height: 1.9rem;
-  display: grid;
-  grid-template-columns: minmax(340px, 0.92fr) minmax(540px, 1.08fr);
-  gap: 0.75rem;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.shop-orders-explorer > * {
-  min-width: 0;
-}
-
-@media (max-width: 1440px) {
-  .shop-orders-explorer {
-    grid-template-columns: minmax(320px, 0.88fr) minmax(480px, 1.12fr);
-  }
-}
-
-@media (max-width: 1180px) {
-  .shop-orders-explorer {
-    grid-template-columns: 1fr;
-  }
-}
-
-</style>

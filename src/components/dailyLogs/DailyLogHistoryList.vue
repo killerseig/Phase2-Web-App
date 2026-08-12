@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import AppCard from '@/components/common/AppCard.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
+import AppDateInput from '@/components/common/AppDateInput.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppField from '@/components/common/AppField.vue'
-import AppTextInput from '@/components/common/AppTextInput.vue'
-import { getDailyLogLabel, getDailyLogTimestampLabel } from '@/features/dailyLogs/format'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
+import { getDailyLogLabel, getDailyLogStatusLabel, getDailyLogTimestampLabel } from '@/features/dailyLogs/format'
 import type { DailyLogRecord } from '@/types/domain'
 
 defineProps<{
@@ -22,20 +25,19 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <article class="daily-log-history-card">
-    <header class="daily-log-history-card__header">
-      <div>
-        <span class="daily-log-history-card__eyebrow">History</span>
-        <h2 class="daily-log-history-card__title">Logs for {{ selectedDate }}</h2>
-      </div>
-    </header>
+  <AppCard class="daily-log-history-card">
+    <AppSectionHeader
+      class="daily-log-history-card__header"
+      eyebrow="History"
+      :title="`Logs for ${selectedDate}`"
+      title-tag="h2"
+    />
 
     <div class="daily-log-history-tools">
       <AppField class="daily-log-history-field" label="Calendar Search">
-        <AppTextInput
+        <AppDateInput
           :model-value="selectedDate"
           data-testid="dailylog-date-search"
-          type="date"
           @update:model-value="emit('update:selectedDate', $event)"
         />
       </AppField>
@@ -75,42 +77,24 @@ const emit = defineEmits<{
           <span>{{ log.foremanName || 'Unknown foreman' }}</span>
           <span>{{ getDailyLogTimestampLabel(log) }}</span>
         </div>
-        <span class="daily-log-history-badge">{{ log.status === 'submitted' ? 'Submitted' : 'Draft' }}</span>
+        <AppBadge class="daily-log-history-badge" tone="accent">
+          {{ getDailyLogStatusLabel(log) }}
+        </AppBadge>
       </button>
     </div>
-  </article>
+  </AppCard>
 </template>
 
 <style scoped>
 .daily-log-history-card {
-  display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-}
-
-.daily-log-history-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.85rem;
-}
-
-.daily-log-history-card__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.68rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.daily-log-history-card__title {
-  margin: 0.2rem 0 0;
-  font-size: 1.05rem;
+  --app-section-header-copy-gap: 0.2rem;
+  --app-section-header-eyebrow-font-size: 0.68rem;
+  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
 }
 
 .daily-log-history-tools {
@@ -181,18 +165,12 @@ const emit = defineEmits<{
 }
 
 .daily-log-history-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.8rem;
-  width: max-content;
-  padding: 0 0.7rem;
-  border: 1px solid rgba(88, 186, 233, 0.22);
-  border-radius: 999px;
-  background: rgba(38, 74, 96, 0.28);
-  color: var(--accent);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  --app-badge-width: max-content;
+  --app-badge-min-height: 1.8rem;
+  --app-badge-padding: 0 0.7rem;
+  --app-badge-font-size: 0.72rem;
+  --app-badge-letter-spacing: 0.08em;
+  --app-badge-accent-border-color: rgba(88, 186, 233, 0.22);
 }
 
 @media (max-width: 920px) {

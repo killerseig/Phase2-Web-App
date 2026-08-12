@@ -1,16 +1,17 @@
-import { onBeforeUnmount, onMounted, watch, type ComputedRef, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import type { UserProfile } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import type { UserDetailSnapshot } from './userViewHelpers'
 
 type UseUserAdminViewSyncOptions = {
-  applySelectedUserToForm: (user: UserProfile | null) => void | Promise<void>
+  applyUserToDetailForm: (user: UserProfile | null) => void | Promise<void>
   clearDetailSaveTimer: () => void
   getDetailFormSnapshot: () => UserDetailSnapshot
   queueDetailSave: () => void
   resetCreateForm: () => void
   resetDetailJobSearchTerm: () => void
-  selectedUser: ComputedRef<UserProfile | null>
-  selectedUserId: Ref<string | 'new' | null>
+  selectedUser: ReadonlyRef<UserProfile | null>
+  selectedUserId: WritableRef<string | 'new' | null>
   setDetailErrorMessage: (message: string) => void
   setDetailInfo: (message: string) => void
   startJobsSubscription: () => void
@@ -20,7 +21,7 @@ type UseUserAdminViewSyncOptions = {
 }
 
 export function useUserAdminViewSync({
-  applySelectedUserToForm,
+  applyUserToDetailForm,
   clearDetailSaveTimer,
   getDetailFormSnapshot,
   queueDetailSave,
@@ -35,23 +36,25 @@ export function useUserAdminViewSync({
   stopJobsSubscription,
   stopUsersSubscription,
 }: UseUserAdminViewSyncOptions) {
-  watch(selectedUserId, (nextValue) => {
+  watch(() => selectedUserId.value, (nextValue) => {
     clearDetailSaveTimer()
     setDetailErrorMessage('')
     setDetailInfo(nextValue && nextValue !== 'new' ? 'Changes save automatically.' : '')
     resetDetailJobSearchTerm()
   })
 
-  watch(selectedUser, (user) => {
+  watch(() => selectedUser.value, (user) => {
+    clearDetailSaveTimer()
+
     if (!user) {
       if (selectedUserId.value === 'new') {
         resetCreateForm()
       }
-      void applySelectedUserToForm(null)
+      void applyUserToDetailForm(null)
       return
     }
 
-    void applySelectedUserToForm(user)
+    void applyUserToDetailForm(user)
   })
 
   watch(

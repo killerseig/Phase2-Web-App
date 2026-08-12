@@ -1,15 +1,16 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, ref } from 'vue'
 import { cloneDailyLogPayload, type DailyLogTextFieldKey } from '@/features/dailyLogs/schema'
 import { updateDailyLogRecord, type DailyLogActor } from '@/services/dailyLogs'
 import type { DailyLogPayload, DailyLogRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseDailyLogDraftSaveOptions {
-  canEditSelectedLog: ComputedRef<boolean>
-  form: Ref<DailyLogPayload>
+  canEditSelectedLog: ReadonlyRef<boolean>
+  form: ReadonlyRef<DailyLogPayload>
   getActor: () => DailyLogActor
   normalizeError: (error: unknown, fallback: string) => string
   preparePayload: (payload?: DailyLogPayload) => DailyLogPayload
-  selectedLog: ComputedRef<DailyLogRecord | null>
+  selectedLog: ReadonlyRef<DailyLogRecord | null>
   setActionError: (message: string) => void
 }
 

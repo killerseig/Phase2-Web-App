@@ -14,7 +14,7 @@ defineProps<{
   burden: number
   canEditWeek: boolean
   actionLoading: boolean
-  isAdmin: boolean
+  canManageJobTimecards: boolean
   isCardCompact: (cardId: string) => boolean
   isCardReadOnly: (cardId: string) => boolean
   getCardShellStyle: (cardId: string) => StyleValue | undefined
@@ -69,7 +69,7 @@ function formatPanelDate(value: string) {
         :week-end-date="selectedWeekEndDate"
         :burden="burden"
         :read-only="isCardReadOnly(card.id)"
-        :employee-header-locked="card.sourceType !== 'custom' && (!isAdmin || isCardReadOnly(card.id))"
+        :employee-header-locked="card.sourceType !== 'custom' && (!canManageJobTimecards || isCardReadOnly(card.id))"
         :show-employee-wage="true"
         @changed="emit('workbookChanged', card)"
       />

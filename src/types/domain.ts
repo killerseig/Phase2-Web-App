@@ -1,4 +1,4 @@
-export type RawRoleKey = 'admin' | 'foreman' | 'project-manager' | 'none'
+export type RawRoleKey = 'admin' | 'payroll' | 'shop-foreman' | 'foreman' | 'project-manager' | 'none'
 export type EffectiveRoleKey = 'admin' | 'foreman' | 'none'
 export type RoleKey = RawRoleKey
 
@@ -86,6 +86,7 @@ export interface ShopOrderItemRecord {
   catalogItemId: string | null
   description: string
   quantity: number | null
+  price: number | null
   note: string
   categoryId: string | null
   sku: string | null
@@ -184,6 +185,8 @@ export interface TimecardWeekRecord {
   status: TimecardWeekStatus | string
   employeeCardCount: number
   submittedAt?: unknown
+  submittedByName?: string | null
+  submittedByUserId?: string | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -256,27 +259,6 @@ export interface DailyLogRecord {
   createdAt?: unknown
   updatedAt?: unknown
   submittedAt?: unknown
-}
-
-export function normalizeRoleKey(value: unknown): RawRoleKey {
-  if (typeof value !== 'string') return 'none'
-
-  const normalized = value.trim().toLowerCase()
-  if (normalized === 'admin' || normalized === 'foreman' || normalized === 'project-manager') {
-    return normalized
-  }
-
-  return 'none'
-}
-
-export function toEffectiveRole(value: RawRoleKey): EffectiveRoleKey {
-  if (value === 'admin') return 'admin'
-  if (value === 'foreman' || value === 'project-manager') return 'foreman'
-  return 'none'
-}
-
-export function roleCanBeAssignedJobs(value: RawRoleKey): boolean {
-  return toEffectiveRole(value) === 'foreman'
 }
 
 export function formatJobTypeLabel(value: string | null | undefined): string {

@@ -6,14 +6,7 @@ import type { ShopCatalogTreeNode as TreeNode } from '@/features/shopCatalog/tre
 import type { ShopCatalogContextMenuTarget } from '@/features/shopCatalog/useShopCatalogContextMenu'
 import { createShopCatalogItem, createShopCategory, updateShopCatalogItem, updateShopCategory } from '@/services/shopCatalog'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface InlineCreateState {
   key: TreeNode['key'] | null
@@ -30,22 +23,22 @@ interface InlineRenameState {
 }
 
 interface UseShopCatalogInlineActionsOptions {
-  activeFolderId: Ref<string | null>
+  activeFolderId: WritableRef<string | null>
   cancelInlineCreate: () => void
   cancelRename: () => void
   categoriesById: ReadonlyRef<ReadonlyMap<string, ShopCategoryRecord>>
   closeContextMenu: () => void
   createState: InlineCreateState
   ensureExpandedToCategory: (categoryId: string | null) => void
-  expandedCategoryIds: Ref<string[]>
+  expandedCategoryIds: WritableRef<string[]>
   focusInlineInput: (options?: { select?: boolean }) => Promise<void>
   inspectItem: (item: ShopCatalogItemRecord, options?: { showInspector?: boolean }) => void
   items: ReadonlyRef<ShopCatalogItemRecord[]>
   prepareCreateItemForm: (categoryId: string | null) => void
   renameState: InlineRenameState
-  rootBucketExpanded: Ref<boolean>
+  rootBucketExpanded: WritableRef<boolean>
   selectFolder: (categoryId: string, options?: { showInspector?: boolean }) => void
-  selectedInspectorKey: Ref<string>
+  selectedInspectorKey: WritableRef<string>
   setCreateError: (error: unknown, fallbackMessage: string) => void
   setCreateErrorMessage: (message: string) => void
   setDetailError: (error: unknown, fallbackMessage: string) => void
@@ -214,7 +207,7 @@ export function useShopCatalogInlineActions({
         }
 
         await updateShopCatalogItem(itemId, {
-          description: item.description,
+          description: nextValue,
           categoryId: item.categoryId,
           sku: item.sku ?? null,
           price: item.price,

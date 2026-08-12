@@ -42,6 +42,15 @@ export const useJobsStore = defineStore('jobs', () => {
     stopVisibilitySubscriptionWatcher()
 
     const applyVisibleJobsSubscription = () => {
+      let settleInitialLoad: (() => void) | null = null
+      const initialLoad = new Promise<void>((resolve) => {
+        settleInitialLoad = resolve
+      })
+      const finishInitialLoad = () => {
+        settleInitialLoad?.()
+        settleInitialLoad = null
+      }
+
       stopJobsSubscription()
       loading.value = true
       error.value = null
@@ -49,15 +58,15 @@ export const useJobsStore = defineStore('jobs', () => {
       if (!auth.currentUser) {
         jobs.value = []
         loading.value = false
-        return
+        finishInitialLoad()
+        return initialLoad
       }
 
       const assignedJobIds = auth.assignedJobIds.slice()
-      const options = auth.isAdmin
+      const options = auth.canViewAllJobs
         ? undefined
         : {
             assignedJobIds,
-            assignedOnlyForUid: auth.currentUser.uid,
           }
 
       if (isE2EActive()) {
@@ -65,8 +74,9 @@ export const useJobsStore = defineStore('jobs', () => {
           jobs.value = nextJobs
           error.value = null
           loading.value = false
+          finishInitialLoad()
         })
-        return
+        return initialLoad
       }
 
       unsubscribeJobs = subscribeVisibleJobsService(
@@ -75,26 +85,32 @@ export const useJobsStore = defineStore('jobs', () => {
           jobs.value = nextJobs
           error.value = null
           loading.value = false
+          finishInitialLoad()
         },
         (nextError) => {
           error.value = normalizeError(nextError, 'Failed to load jobs.')
           loading.value = false
+          finishInitialLoad()
         },
       )
+
+      return initialLoad
     }
 
-    applyVisibleJobsSubscription()
+    const initialLoad = applyVisibleJobsSubscription()
 
     stopVisibilityWatcher = watch(
       () => ({
         uid: auth.currentUser?.uid ?? '',
-        isAdmin: auth.isAdmin,
+        canViewAllJobs: auth.canViewAllJobs,
         assignedJobIds: auth.assignedJobIds.slice().sort().join('|'),
       }),
       () => {
-        applyVisibleJobsSubscription()
+        void applyVisibleJobsSubscription()
       },
     )
+
+    return initialLoad
   }
 
   function subscribeJob(jobId: string) {

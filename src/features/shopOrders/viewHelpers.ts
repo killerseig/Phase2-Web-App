@@ -9,7 +9,10 @@ import type {
   ShopOrderItemRecord,
   ShopOrderRecord,
 } from '@/types/domain'
-import { sortShopOrderItems } from '@/utils/shopOrders'
+import {
+  getShopOrderEstimatedTotal as getEstimatedTotalFromItems,
+  sortShopOrderItems,
+} from '@/utils/shopOrders'
 
 export interface OrderMetaFormState {
   deliveryDate: string
@@ -71,12 +74,27 @@ export function getShopOrderTotalQuantity(order: ShopOrderRecord | null) {
   return (order?.items ?? []).reduce((sum, item) => sum + (item.quantity ?? 0), 0)
 }
 
+export function getShopOrderEstimatedTotal(order: ShopOrderRecord | null) {
+  return getEstimatedTotalFromItems(order?.items ?? [])
+}
+
 export function getSortedShopOrderItems(items: readonly ShopOrderItemRecord[]) {
   return sortShopOrderItems(items)
 }
 
 export function cloneSortedShopOrderItems(order: ShopOrderRecord | null) {
   return getSortedShopOrderItems(order?.items ?? []).map((item) => ({ ...item }))
+}
+
+export function getNextShopOrderSelectionId(
+  orders: readonly Pick<ShopOrderRecord, 'id' | 'status'>[],
+  currentSelectedOrderId: string | null,
+) {
+  if (currentSelectedOrderId && orders.some((order) => order.id === currentSelectedOrderId)) {
+    return currentSelectedOrderId
+  }
+
+  return orders.find((order) => order.status === 'draft')?.id ?? null
 }
 
 export function getShopOrderCatalogItemDescription(
@@ -126,6 +144,19 @@ export function getNextThursdayDateString() {
 
 export function getDefaultDeliveryDateString() {
   return getNextThursdayDateString()
+}
+
+export function getRefreshedDraftDeliveryDate(
+  order: Pick<ShopOrderRecord, 'deliveryDate' | 'status'> | null | undefined,
+  todayDate = getTodayDateString(),
+) {
+  const deliveryDate = typeof order?.deliveryDate === 'string' ? order.deliveryDate.trim() : ''
+
+  if (order?.status !== 'draft' || !deliveryDate || deliveryDate >= todayDate) {
+    return null
+  }
+
+  return getDefaultDeliveryDateString()
 }
 
 export function readShopOrderQuantity(value: string | number | null | undefined) {
@@ -230,4 +261,16 @@ export function getDeliveryDateValidationMessage(value: string, todayDate = getT
   if (!trimmed) return 'Choose a delivery date.'
   if (trimmed < todayDate) return 'Delivery date must be today or later.'
   return ''
+}
+
+const quietShopOrderToastMessages = new Set([
+  'New order started.',
+  'Order details saved.',
+  'Order quantity updated.',
+  'Order note updated.',
+  'Custom item added to the current order.',
+])
+
+export function shouldShowShopOrderSuccessToast(message: string) {
+  return !quietShopOrderToastMessages.has(message) && !message.endsWith('added to the current order.')
 }

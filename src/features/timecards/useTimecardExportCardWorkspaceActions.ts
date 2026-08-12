@@ -5,14 +5,7 @@ import {
 } from '@/features/timecards/exportViewHelpers'
 import { recalculateCardTotals } from '@/features/timecards/workbook'
 import type { TimecardCardRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseTimecardExportCardWorkspaceActionsOptions {
   clearCardMeasurements: () => void
@@ -25,7 +18,7 @@ interface UseTimecardExportCardWorkspaceActionsOptions {
   resetCardSelectionState: () => void
   resetMessages: () => void
   resetSaveQueueState: () => void
-  saveError: Ref<string>
+  saveError: WritableRef<string>
   scheduleCardSave: (card: TimecardExportArchiveCardRecord) => void
   selectCard: (cardId: string) => void
   sortMode: ReadonlyRef<TimecardExportSortMode>

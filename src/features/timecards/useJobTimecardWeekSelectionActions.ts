@@ -3,16 +3,13 @@ import {
 } from '@/features/timecards/workbook'
 import type { TimecardWeekRecord } from '@/types/domain'
 import { openNativeDatePicker, readInputValue } from '@/utils/domEvents'
-
-interface Ref<T> {
-  value: T
-}
+import type { WritableRef } from '@/types/reactivity'
 
 interface UseJobTimecardWeekSelectionActionsOptions {
   closeCreateTray: () => void
   flushPendingSaves: () => Promise<void>
-  selectedWeekEndDate: Ref<string>
-  selectedWeekId: Ref<string | null>
+  selectedWeekEndDate: WritableRef<string>
+  selectedWeekId: WritableRef<string | null>
 }
 
 export function useJobTimecardWeekSelectionActions({

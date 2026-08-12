@@ -5,23 +5,16 @@ import {
 } from '@/features/shopCatalog/adminViewHelpers'
 import { deleteShopCatalogItem, deleteShopCategory } from '@/services/shopCatalog'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogDeleteActionsOptions {
-  activeFolderId: Ref<string | null>
-  catalogConfirmAction: Ref<ShopCatalogConfirmAction | null>
-  deleteLoading: Ref<boolean>
+  activeFolderId: WritableRef<string | null>
+  catalogConfirmAction: WritableRef<ShopCatalogConfirmAction | null>
+  deleteLoading: WritableRef<boolean>
   resetDetailMessages: () => void
   selectedCategory: ReadonlyRef<ShopCategoryRecord | null>
   selectedCategoryHasChildren: ReadonlyRef<boolean>
-  selectedInspectorKey: Ref<string>
+  selectedInspectorKey: WritableRef<string>
   selectedItem: ReadonlyRef<ShopCatalogItemRecord | null>
   setDetailError: (error: unknown, fallbackMessage: string) => void
   setDetailErrorMessage: (message: string) => void

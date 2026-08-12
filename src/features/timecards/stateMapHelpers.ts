@@ -1,3 +1,5 @@
+export type TimecardPendingStateMap = Readonly<Record<string, boolean>>
+
 export function clearRecord<T>(stateMap: Record<string, T>) {
   Object.keys(stateMap).forEach((key) => {
     delete stateMap[key]
@@ -14,4 +16,12 @@ export function pruneRecordToIds<T>(stateMap: Record<string, T>, validIds: Reado
       delete stateMap[key]
     }
   })
+}
+
+export function collectTimecardPendingStateMaps(
+  scheduledSaveIds: TimecardPendingStateMap,
+  savingIds: TimecardPendingStateMap,
+  queuedSaveIds: TimecardPendingStateMap,
+) {
+  return [scheduledSaveIds, savingIds, queuedSaveIds] as const
 }

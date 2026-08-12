@@ -5,7 +5,7 @@ import {
   type TimecardEmployeeSeed,
 } from '@/features/timecards/workbook'
 import type { EmployeeRecord, JobRecord, TimecardCardRecord, TimecardWeekRecord, UserProfile } from '@/types/domain'
-import { toEffectiveRole } from '@/types/domain'
+import { getCurrentEffectiveRole } from '@/auth/roles'
 
 export type TimecardExportSortMode = 'name' | 'number'
 export type TimecardExportDateFilterMode = 'single' | 'range'
@@ -20,6 +20,18 @@ export type TimecardExportConfirmAction =
     }
   | {
       kind: 'delete-week'
+      weekId: string
+      weekLabel: string
+      weekEndDate: string
+    }
+  | {
+      kind: 'submit-week'
+      weekId: string
+      weekLabel: string
+      weekEndDate: string
+    }
+  | {
+      kind: 'reopen-week'
       weekId: string
       weekLabel: string
       weekEndDate: string
@@ -62,7 +74,7 @@ export interface TimecardExportCustomCardValidationOptions {
   hasLinkedJob: boolean
   hasLinkedJobNumber: boolean
   needsForemanOwner: boolean
-  isAdmin: boolean
+  canUseTimecardExport: boolean
 }
 
 export interface TimecardExportJobOption {
@@ -102,6 +114,18 @@ interface TimecardExportWeekFilterBounds {
 }
 
 const defaultCollator = new Intl.Collator('en-US', { numeric: true, sensitivity: 'base' })
+export const timecardExportCollator = defaultCollator
+
+export const timecardExportDateModeOptions: Array<{ label: string; value: TimecardExportDateFilterMode }> = [
+  { label: 'Single', value: 'single' as TimecardExportDateFilterMode },
+  { label: 'Range', value: 'range' as TimecardExportDateFilterMode },
+]
+
+export const timecardExportWeekStatusOptions: Array<{ label: string; value: TimecardExportWeekStatusFilter }> = [
+  { label: 'Submitted', value: 'submitted' as TimecardExportWeekStatusFilter },
+  { label: 'Draft', value: 'draft' as TimecardExportWeekStatusFilter },
+  { label: 'Mixed', value: 'all' as TimecardExportWeekStatusFilter },
+]
 
 export function formatTimecardExportDate(value: string) {
   const parsed = new Date(`${value}T00:00:00`)
@@ -388,7 +412,7 @@ export function buildTimecardExportForemanFilterOptions(
 }
 
 export function filterTimecardExportUserForemen(users: readonly UserProfile[]) {
-  return users.filter((user) => user.active && toEffectiveRole(user.role) === 'foreman')
+  return users.filter((user) => user.active && getCurrentEffectiveRole(user.role) === 'foreman')
 }
 
 export function buildTimecardExportCreateForemanOptions(
@@ -512,7 +536,10 @@ export function getNextTimecardExportSortIndex(cards: readonly TimecardCardRecor
 
 export function getTimecardExportConfirmTitle(action: TimecardExportConfirmAction | null) {
   if (!action) return 'Confirm timecard export action'
-  return action.kind === 'remove-card' ? 'Delete saved timecard?' : 'Delete draft week?'
+  if (action.kind === 'remove-card') return 'Delete saved timecard?'
+  if (action.kind === 'delete-week') return 'Delete draft week?'
+  if (action.kind === 'submit-week') return 'Submit draft week?'
+  return 'Undo submitted week?'
 }
 
 export function getTimecardExportConfirmMessage(action: TimecardExportConfirmAction | null) {
@@ -521,12 +548,23 @@ export function getTimecardExportConfirmMessage(action: TimecardExportConfirmAct
     return `Remove ${action.cardLabel} from the saved week ending ${action.weekEndDate}? This cannot be undone.`
   }
 
-  return `Delete the draft week ending ${action.weekEndDate} for ${action.weekLabel}? This cannot be undone.`
+  if (action.kind === 'delete-week') {
+    return `Delete the draft week ending ${action.weekEndDate} for ${action.weekLabel}? This cannot be undone.`
+  }
+
+  if (action.kind === 'submit-week') {
+    return `Submit the week ending ${action.weekEndDate} for ${action.weekLabel}? The timecards will be marked submitted.`
+  }
+
+  return `Move the submitted week ending ${action.weekEndDate} for ${action.weekLabel} back to draft?`
 }
 
 export function getTimecardExportConfirmLabel(action: TimecardExportConfirmAction | null) {
   if (!action) return 'Confirm'
-  return action.kind === 'remove-card' ? 'Delete Card' : 'Delete Draft'
+  if (action.kind === 'remove-card') return 'Delete Card'
+  if (action.kind === 'delete-week') return 'Delete Draft'
+  if (action.kind === 'submit-week') return 'Submit Week'
+  return 'Undo Submitted'
 }
 
 export function sortTimecardExportCardsForMode<T extends TimecardCardRecord>(
@@ -579,13 +617,13 @@ export function validateTimecardExportCustomCardForm(
   if (!options.hasLinkedJob) return 'Select the linked job.'
   if (!options.hasLinkedJobNumber) return 'Select a linked job with a job number.'
   if (options.needsForemanOwner) return 'Select the foreman owner.'
-  if (!form.firstName.trim()) return 'Enter the first name.'
-  if (!form.lastName.trim()) return 'Enter the last name.'
-  if (!form.employeeNumber.trim()) return 'Enter the employee number.'
-  if (!form.occupation.trim()) return 'Enter the occupation.'
-  if (!options.isAdmin) return ''
+  if (!form.firstName.trim() && !form.lastName.trim()) return 'Enter the card name.'
+  if (!options.canUseTimecardExport) return ''
 
-  const wage = Number(form.wageRate.trim())
+  const wageText = form.wageRate.trim()
+  if (!wageText) return ''
+
+  const wage = Number(wageText)
   if (!Number.isFinite(wage) || Number.isNaN(wage) || wage < 0) return 'Enter a wage amount.'
   return ''
 }

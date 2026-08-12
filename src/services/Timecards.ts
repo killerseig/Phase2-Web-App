@@ -1,9 +1,6 @@
 import {
   collection,
-  getDocs,
   onSnapshot,
-  query,
-  where,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore'
@@ -28,6 +25,7 @@ import {
   deleteE2ETimecardWeek,
   ensureE2ETimecardWeek,
   isE2EActive,
+  reopenE2ETimecardWeek,
   subscribeE2EAllTimecardWeeks,
   subscribeE2ETimecardCards,
   subscribeE2ETimecardWeeks,
@@ -54,6 +52,22 @@ export interface SubmitTimecardWeekResult {
   success: boolean
   emailSent: boolean
   emailMessage: string
+}
+
+export type TimecardWeekSubscriptionStatus = Extract<TimecardWeekStatus, 'submitted'>
+
+interface ListTimecardWeeksInput {
+  jobId: string
+  ownerForemanUserId: string | null
+  statusFilter: TimecardWeekSubscriptionStatus | null
+}
+
+interface ListTimecardWeeksResponse {
+  weeks: Array<Record<string, unknown> & { id: string }>
+}
+
+interface ListTimecardCardsResponse {
+  cards: Array<Record<string, unknown> & { id: string }>
 }
 
 function toNullableText(value: unknown): string | null {
@@ -151,6 +165,78 @@ function sortCards(cards: TimecardCardRecord[]) {
   ))
 }
 
+function startCallablePollingSubscription<TRecord>(
+  fetchRecords: () => Promise<TRecord[]>,
+  onUpdate: (records: TRecord[]) => void,
+  onError?: (error: unknown) => void,
+): Unsubscribe {
+  let cancelled = false
+  let timerId: ReturnType<typeof setTimeout> | null = null
+
+  async function refresh() {
+    try {
+      const records = await fetchRecords()
+      if (!cancelled) {
+        onUpdate(records)
+      }
+    } catch (error) {
+      if (!cancelled) {
+        onError?.(error)
+      }
+    } finally {
+      if (!cancelled) {
+        timerId = setTimeout(refresh, 3000)
+      }
+    }
+  }
+
+  void refresh()
+
+  return () => {
+    cancelled = true
+    if (timerId) {
+      clearTimeout(timerId)
+      timerId = null
+    }
+  }
+}
+
+async function fetchTimecardWeeksViaCallable(
+  jobId: string,
+  ownerForemanUserId: string | null,
+  statusFilter: TimecardWeekSubscriptionStatus | null,
+) {
+  const { functions } = requireFirebaseServices()
+  const callable = httpsCallable<ListTimecardWeeksInput, ListTimecardWeeksResponse>(
+    functions,
+    'listTimecardWeeksForCurrentUser',
+  )
+  const result = await callable({
+    jobId,
+    ownerForemanUserId,
+    statusFilter,
+  })
+
+  return sortWeeks((result.data?.weeks ?? []).map((week) => normalizeWeek(week.id, week)))
+}
+
+async function fetchTimecardCardsViaCallable(
+  weekId: string,
+  weekStartDate: string,
+  burden: number,
+) {
+  const { functions } = requireFirebaseServices()
+  const callable = httpsCallable<{ weekId: string }, ListTimecardCardsResponse>(
+    functions,
+    'listTimecardCardsForCurrentUser',
+  )
+  const result = await callable({ weekId })
+
+  return sortCards((result.data?.cards ?? []).map((card) => (
+    normalizeTimecardCardData(card.id, card, weekStartDate, burden)
+  )))
+}
+
 export function sanitizeTimecardCardPayload(
   card: Omit<TimecardCardRecord, 'id'> | TimecardCardRecord,
   weekStartDate: string,
@@ -205,25 +291,16 @@ export function subscribeTimecardWeeks(
   onUpdate: (weeks: TimecardWeekRecord[]) => void,
   onError?: (error: unknown) => void,
   ownerForemanUserId: string | null = null,
+  statusFilter: TimecardWeekSubscriptionStatus | null = null,
 ): Unsubscribe {
   if (isE2EActive()) {
-    return subscribeE2ETimecardWeeks(jobId, ownerForemanUserId, onUpdate)
+    return subscribeE2ETimecardWeeks(jobId, ownerForemanUserId, onUpdate, statusFilter)
   }
 
-  const { db } = requireFirebaseServices()
-  const weekCollection = collection(db, 'timecardWeeks')
-  const weekQuery = ownerForemanUserId
-    ? query(weekCollection, where('jobId', '==', jobId), where('ownerForemanUserId', '==', ownerForemanUserId))
-    : query(weekCollection, where('jobId', '==', jobId))
-
-  return onSnapshot(
-    weekQuery,
-    (snapshot) => {
-      onUpdate(sortWeeks(snapshot.docs.map((entry) => normalizeWeek(entry.id, entry.data()))))
-    },
-    (error) => {
-      onError?.(error)
-    },
+  return startCallablePollingSubscription(
+    () => fetchTimecardWeeksViaCallable(jobId, ownerForemanUserId, statusFilter),
+    onUpdate,
+    onError,
   )
 }
 
@@ -259,16 +336,10 @@ export function subscribeTimecardCards(
     return subscribeE2ETimecardCards(weekId, weekStartDate, burden, onUpdate)
   }
 
-  const { db } = requireFirebaseServices()
-
-  return onSnapshot(
-    collection(db, 'timecardWeeks', weekId, 'cards'),
-    (snapshot) => {
-      onUpdate(sortCards(snapshot.docs.map((entry) => normalizeTimecardCardData(entry.id, entry.data(), weekStartDate, burden))))
-    },
-    (error) => {
-      onError?.(error)
-    },
+  return startCallablePollingSubscription(
+    () => fetchTimecardCardsViaCallable(weekId, weekStartDate, burden),
+    onUpdate,
+    onError,
   )
 }
 
@@ -434,5 +505,23 @@ export async function submitTimecardWeek(
     return result.data
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to submit the timecard week.'))
+  }
+}
+
+export async function reopenTimecardWeek(weekId: string): Promise<void> {
+  if (isE2EActive()) {
+    await reopenE2ETimecardWeek(weekId)
+    return
+  }
+
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<{ weekId: string }, { success: boolean }>(
+      functions,
+      'reopenTimecardWeekRecord',
+    )
+    await callable({ weekId })
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to undo the submitted timecard week.'))
   }
 }

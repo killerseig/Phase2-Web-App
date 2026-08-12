@@ -5,12 +5,12 @@ import { subscribeUsers } from '@/services/users'
 import type { EmployeeRecord, TimecardWeekRecord, UserProfile } from '@/types/domain'
 
 interface UseTimecardExportSubscriptionsOptions {
-  getIsAdmin: () => boolean
+  getCanUseTimecardExport: () => boolean
   setPageError: (error: unknown, fallbackMessage: string) => void
 }
 
 export function useTimecardExportSubscriptions({
-  getIsAdmin,
+  getCanUseTimecardExport,
   setPageError,
 }: UseTimecardExportSubscriptionsOptions) {
   const {
@@ -55,7 +55,7 @@ export function useTimecardExportSubscriptions({
   }
 
   function subscribeEmployeesForExport() {
-    if (!getIsAdmin()) {
+    if (!getCanUseTimecardExport()) {
       stopEmployeesSubscription()
       employees.value = []
       employeesLoading.value = false
@@ -66,7 +66,7 @@ export function useTimecardExportSubscriptions({
   }
 
   function subscribeUsersForExport() {
-    if (!getIsAdmin()) {
+    if (!getCanUseTimecardExport()) {
       stopUsersSubscription()
       users.value = []
       return

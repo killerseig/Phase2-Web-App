@@ -10,10 +10,7 @@ import {
 import type { ShopCatalogTreeNode as TreeNode } from '@/features/shopCatalog/treeTypes'
 import { useShopCatalogTreeAutoScroll } from '@/features/shopCatalog/useShopCatalogTreeAutoScroll'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopCatalogDragDropOptions {
   categoriesById: ReadonlyRef<Map<string, ShopCategoryRecord>>

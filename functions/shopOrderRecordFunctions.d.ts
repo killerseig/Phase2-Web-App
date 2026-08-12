@@ -1,3 +1,6 @@
+export declare const listShopOrdersForCurrentUser: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    orders: any[];
+}>, unknown>;
 export declare const createShopOrderRecordCallable: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     id: string;
 }>, unknown>;

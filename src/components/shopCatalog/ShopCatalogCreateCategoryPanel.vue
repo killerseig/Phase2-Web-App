@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import AppButton from '@/components/common/AppButton.vue'
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppField from '@/components/common/AppField.vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppSelect from '@/components/common/AppSelect.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
@@ -69,9 +69,13 @@ function getSelectValue(value: string) {
           <span>Active Folder</span>
         </label>
 
-        <AppButton variant="primary" :disabled="createLoading" type="submit">
-          {{ createLoading ? 'Creating...' : 'Create Folder' }}
-        </AppButton>
+        <AppLoadingButton
+          label="Create Folder"
+          loading-label="Creating..."
+          variant="primary"
+          type="submit"
+          :loading="createLoading"
+        />
       </form>
     </div>
   </div>

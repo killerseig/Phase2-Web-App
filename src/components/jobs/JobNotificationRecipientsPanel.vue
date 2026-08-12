@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import RecipientEditor from '@/components/RecipientEditor.vue'
 import type { NotificationModuleKey, NotificationRecipients } from '@/types/domain'
 
@@ -19,10 +20,12 @@ const emit = defineEmits<{
 
 <template>
   <section class="jobs-notifications-panel">
-    <div class="jobs-notifications-panel__header">
-      <strong>Email Recipients</strong>
-      <span>{{ description }}</span>
-    </div>
+    <AppSectionHeader
+      class="jobs-notifications-panel__header"
+      title="Email Recipients"
+      title-tag="strong"
+      :description="description"
+    />
 
     <RecipientEditor
       v-for="module in modules"
@@ -42,6 +45,12 @@ const emit = defineEmits<{
 
 <style scoped>
 .jobs-notifications-panel {
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
+  --app-section-header-description-font-size: 0.92rem;
   display: grid;
   gap: 0.85rem;
   align-content: start;
@@ -54,22 +63,6 @@ const emit = defineEmits<{
   border: 1px solid var(--border);
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.03);
-}
-
-.jobs-notifications-panel__header {
-  display: grid;
-  gap: 0.2rem;
-}
-
-.jobs-notifications-panel__header strong {
-  color: var(--text);
-  font-size: 1rem;
-}
-
-.jobs-notifications-panel__header span {
-  color: var(--text-muted);
-  font-size: 0.92rem;
-  line-height: 1.4;
 }
 
 .jobs-recipient-section {

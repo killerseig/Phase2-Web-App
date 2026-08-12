@@ -63,6 +63,14 @@ function normalizeRecipientList(value) {
         .map((entry) => entry.trim().toLowerCase())
         .filter(Boolean)));
 }
+function normalizeIdList(value) {
+    if (!Array.isArray(value))
+        return [];
+    return Array.from(new Set(value
+        .filter((entry) => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean)));
+}
 function normalizeNotificationRecipients(value, legacyFallbacks) {
     const data = typeof value === 'object' && value !== null ? value : {};
     return {
@@ -83,6 +91,7 @@ async function getJobDetails(jobId) {
         id: jobSnap.id,
         name: data?.name || constants_1.DEFAULTS.JOB_NAME,
         number: data?.number || data?.code || '',
+        assignedForemanIds: normalizeIdList(data?.assignedForemanIds),
         productionBurden: typeof data?.productionBurden === 'number' ? data.productionBurden : null,
     };
 }

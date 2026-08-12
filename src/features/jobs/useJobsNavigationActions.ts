@@ -1,35 +1,36 @@
 import type { Router } from 'vue-router'
 import { ALL_JOBS_ID } from '@/features/jobs/jobViewHelpers'
 import type { JobRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
+import type { WritableRef } from '@/types/reactivity'
 
 interface UseJobsNavigationActionsOptions {
-  editDrawerOpen: Ref<boolean>
-  getIsAdmin: () => boolean
+  editDrawerOpen: WritableRef<boolean>
+  getCanCreateJobs: () => boolean
+  getCanManageGlobalJobDefaults: () => boolean
+  getCanUseJobSetupEditor: () => boolean
   resetCreateForm: () => void
   router: Router
-  selectedJobId: Ref<string | 'new' | typeof ALL_JOBS_ID | null>
+  selectedJobId: WritableRef<string | 'new' | typeof ALL_JOBS_ID | null>
 }
 
 export function useJobsNavigationActions({
   editDrawerOpen,
-  getIsAdmin,
+  getCanCreateJobs,
+  getCanManageGlobalJobDefaults,
+  getCanUseJobSetupEditor,
   resetCreateForm,
   router,
   selectedJobId,
 }: UseJobsNavigationActionsOptions) {
   function openCreateMode() {
-    if (!getIsAdmin()) return
+    if (!getCanCreateJobs()) return
     editDrawerOpen.value = true
     selectedJobId.value = 'new'
     resetCreateForm()
   }
 
   function openEditDrawer(jobId?: string) {
-    if (!getIsAdmin()) return
+    if (!getCanUseJobSetupEditor()) return
 
     editDrawerOpen.value = true
 
@@ -40,7 +41,7 @@ export function useJobsNavigationActions({
 
     if (selectedJobId.value === 'new') return
 
-    selectedJobId.value = ALL_JOBS_ID
+    selectedJobId.value = getCanManageGlobalJobDefaults() ? ALL_JOBS_ID : null
   }
 
   function closeEditDrawer() {
@@ -48,7 +49,7 @@ export function useJobsNavigationActions({
   }
 
   function handleJobPrimaryAction(job: JobRecord) {
-    if (getIsAdmin() && editDrawerOpen.value) {
+    if (getCanUseJobSetupEditor() && editDrawerOpen.value) {
       selectedJobId.value = job.id
       return
     }

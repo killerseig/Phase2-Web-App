@@ -1,4 +1,9 @@
-import { reactive, type ComponentPublicInstance } from 'vue'
+import { reactive } from 'vue'
+import {
+  isElement,
+  resolveTemplateElementRef,
+  type TemplateElementRefValue,
+} from '@/composables/useTemplateElementRef'
 
 interface MeasuredContentSize {
   width: number
@@ -103,10 +108,8 @@ export function useMeasuredCardScale(maxScale = 1) {
     contentObservers.set(cardId, observer)
   }
 
-  function asObservedElement(
-    element: Element | ComponentPublicInstance | null,
-  ): Element | null {
-    return element instanceof Element ? element : null
+  function asObservedElement(element: TemplateElementRefValue): Element | null {
+    return resolveTemplateElementRef(element, isElement)
   }
 
   function getCardScale(cardId: string) {

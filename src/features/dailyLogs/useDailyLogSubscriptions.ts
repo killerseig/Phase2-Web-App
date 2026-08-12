@@ -1,8 +1,7 @@
 import { useSubscribedRecords } from '@/composables/useSubscribedRecords'
 import { useSubscribedValue } from '@/composables/useSubscribedValue'
 import {
-  getPreferredDailyLog,
-  getVisibleDailyLogs,
+  getNextDailyLogSelectionId,
 } from '@/features/dailyLogs/viewHelpers'
 import { subscribeDailyLogsForDate } from '@/services/dailyLogs'
 import { subscribeGlobalNotificationRecipients } from '@/services/jobs'
@@ -10,22 +9,15 @@ import type {
   DailyLogRecord,
   NotificationRecipients,
 } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
 
 interface UseDailyLogSubscriptionsOptions {
   currentUserId: ReadonlyRef<string | null>
-  getIsAdmin: () => boolean
+  getCanViewAllDailyLogs: () => boolean
   jobId: ReadonlyRef<string | null>
   selectedDate: ReadonlyRef<string>
-  selectedLogId: Ref<string | null>
+  selectedLogId: WritableRef<string | null>
   setActionError: (message: string) => void
   setActionInfo: (message: string) => void
 }
@@ -38,7 +30,7 @@ const emptyNotificationRecipients: NotificationRecipients = {
 
 export function useDailyLogSubscriptions({
   currentUserId,
-  getIsAdmin,
+  getCanViewAllDailyLogs,
   jobId,
   selectedDate,
   selectedLogId,
@@ -78,18 +70,11 @@ export function useDailyLogSubscriptions({
   } = useSubscribedRecords<DailyLogRecord>(subscribeCurrentDateDailyLogs, {
     errorMessage: 'Failed to load daily logs.',
     onUpdate: (nextLogs) => {
-      const nextVisibleLogs = getVisibleDailyLogs(nextLogs, {
+      selectedLogId.value = getNextDailyLogSelectionId(nextLogs, {
+        canViewAllDailyLogs: getCanViewAllDailyLogs(),
+        currentSelectedLogId: selectedLogId.value,
         currentUserId: currentUserId.value,
-        isAdmin: getIsAdmin(),
       })
-
-      const selectedStillExists = selectedLogId.value
-        ? nextVisibleLogs.some((log) => log.id === selectedLogId.value)
-        : false
-
-      if (!selectedStillExists) {
-        selectedLogId.value = getPreferredDailyLog(nextVisibleLogs, currentUserId.value)?.id ?? null
-      }
     },
   })
 

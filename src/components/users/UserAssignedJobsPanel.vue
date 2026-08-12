@@ -2,6 +2,7 @@
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import { getAssignedJobCode, getAssignedJobName } from '@/features/users/userViewHelpers'
 import type { JobRecord } from '@/types/domain'
 
@@ -25,10 +26,15 @@ const emit = defineEmits<{
 
 <template>
   <section class="users-jobs-panel">
-    <div class="users-jobs-panel__header">
-      <strong>Assigned Jobs</strong>
-      <span>{{ props.assignedJobIds.length }} selected</span>
-    </div>
+    <AppSectionHeader
+      class="users-jobs-panel__header"
+      title="Assigned Jobs"
+      title-tag="strong"
+    >
+      <template #actions>
+        <span class="users-jobs-panel__selected-count">{{ props.assignedJobIds.length }} selected</span>
+      </template>
+    </AppSectionHeader>
     <div class="users-jobs-panel__search">
       <AppSearchInput
         :model-value="props.searchTerm"
@@ -64,6 +70,11 @@ const emit = defineEmits<{
 
 <style scoped>
 .users-jobs-panel {
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
   display: grid;
   gap: 0.85rem;
   min-height: 0;
@@ -73,14 +84,7 @@ const emit = defineEmits<{
   background: rgba(255, 255, 255, 0.03);
 }
 
-.users-jobs-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.users-jobs-panel__header span,
+.users-jobs-panel__selected-count,
 .users-browser__empty {
   color: var(--text-muted);
 }
@@ -142,8 +146,8 @@ const emit = defineEmits<{
   }
 
   .users-jobs-panel__header {
-    flex-direction: column;
-    align-items: flex-start;
+    --app-section-header-flex-direction: column;
+    --app-section-header-align-items: flex-start;
   }
 }
 </style>

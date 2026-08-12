@@ -6,24 +6,17 @@ import {
 } from '@/features/timecards/jobViewHelpers'
 import { createTimecardCard } from '@/services/timecards'
 import type { EmployeeRecord, TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseJobTimecardCreateActionsOptions {
-  actionLoading: Ref<boolean>
+  actionLoading: WritableRef<boolean>
   canEditWeek: ReadonlyRef<boolean>
   cards: ReadonlyRef<TimecardCardRecord[]>
   closeCreateTray: () => void
   customCardForm: JobTimecardCustomCardFormState
-  employeeSearchTerm: Ref<string>
+  employeeSearchTerm: WritableRef<string>
   expandAndSelectCard: (cardId: string) => void
-  getIsAdmin: () => boolean
+  getCanManageJobTimecards: () => boolean
   linkedJobNumber: ReadonlyRef<string>
   resetCustomCardForm: () => void
   resetPageAndSaveMessages: () => void
@@ -42,7 +35,7 @@ export function useJobTimecardCreateActions({
   customCardForm,
   employeeSearchTerm,
   expandAndSelectCard,
-  getIsAdmin,
+  getCanManageJobTimecards,
   linkedJobNumber,
   resetCustomCardForm,
   resetPageAndSaveMessages,
@@ -81,7 +74,7 @@ export function useJobTimecardCreateActions({
   }
 
   function validateCustomCardForm() {
-    return validateJobTimecardCustomCardForm(customCardForm, { canEditWage: getIsAdmin() })
+    return validateJobTimecardCustomCardForm(customCardForm, { canEditWage: getCanManageJobTimecards() })
   }
 
   async function handleAddCustomCard() {

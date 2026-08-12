@@ -1,9 +1,10 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   getShopCatalogSelectedCategoryId,
   getShopCatalogSelectedItemId,
 } from '@/features/shopCatalog/adminViewHelpers'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 export type ShopCatalogInspectorKey =
   | 'root'
@@ -14,9 +15,9 @@ export type ShopCatalogInspectorKey =
 
 interface UseShopCatalogSelectionOptions {
   cancelInlineCreate: () => void
-  categoriesById: ComputedRef<Map<string, ShopCategoryRecord>>
+  categoriesById: ReadonlyRef<Map<string, ShopCategoryRecord>>
   ensureExpandedToCategory: (categoryId: string | null) => void
-  items: Ref<ShopCatalogItemRecord[]>
+  items: ReadonlyRef<ShopCatalogItemRecord[]>
   showInspectorPanel: () => void
 }
 

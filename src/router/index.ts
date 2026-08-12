@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { canAccessAdminArea, canAccessJobRoute } from '@/auth/capabilities'
+import { getRouteAccessDecision, getRouteParamJobId, getRouteRequiresAuth } from '@/router/routeAccess'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 
@@ -46,6 +46,14 @@ const router = createRouter({
       },
     },
     {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('@/views/RoleDashboardView.vue'),
+      meta: {
+        title: 'Dashboard',
+      },
+    },
+    {
       path: '/jobs/:jobId',
       name: 'job-dashboard',
       component: () => import('@/views/JobDashboardView.vue'),
@@ -83,7 +91,7 @@ const router = createRouter({
       component: () => import('@/views/TimecardExportView.vue'),
       meta: {
         title: 'Timecard Export',
-        adminOnly: true,
+        requiredCapability: 'use-timecard-export',
       },
     },
     {
@@ -92,7 +100,7 @@ const router = createRouter({
       component: () => import('@/views/TimecardExportPrintView.vue'),
       meta: {
         title: 'Timecard PDF',
-        adminOnly: true,
+        requiredCapability: 'use-timecard-export',
       },
     },
     {
@@ -101,7 +109,7 @@ const router = createRouter({
       component: () => import('@/views/UsersView.vue'),
       meta: {
         title: 'Users',
-        adminOnly: true,
+        requiredCapability: 'manage-users',
       },
     },
     {
@@ -110,7 +118,7 @@ const router = createRouter({
       component: () => import('@/views/EmployeesView.vue'),
       meta: {
         title: 'Employees',
-        adminOnly: true,
+        requiredCapability: 'manage-employees',
       },
     },
     {
@@ -119,7 +127,7 @@ const router = createRouter({
       component: () => import('@/views/ReferenceListView.vue'),
       meta: {
         title: 'Reference List',
-        adminOnly: true,
+        requiredCapability: 'manage-reference-lists',
       },
     },
     {
@@ -128,7 +136,7 @@ const router = createRouter({
       component: () => import('@/views/ShopCatalogAdminView.vue'),
       meta: {
         title: 'Shop Catalog',
-        adminOnly: true,
+        requiredCapability: 'manage-shop-catalog',
       },
     },
     {
@@ -147,37 +155,26 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   const jobs = useJobsStore()
   await auth.init()
+  const routeJobId = getRouteParamJobId(to.params.jobId)
 
-  const requiresAuth = to.meta.requiresAuth ?? true
-  if (!requiresAuth) {
-    if ((to.name === 'login' || to.name === 'forgot-password') && auth.hasWorkspaceAccess) {
-      return { name: 'jobs' }
-    }
-    return true
+  if (routeJobId && auth.hasWorkspaceAccess && jobs.jobs.length === 0) {
+    // Do not block deep-link rendering on job list hydration. On refresh, a slow
+    // callable/listener can otherwise leave the app shell blank before the route
+    // component has a chance to load.
+    void jobs.subscribeVisibleJobs()
   }
 
-  if (!auth.hasWorkspaceAccess) {
-    return { name: 'login' }
-  }
-
-  if (to.meta.adminOnly && !canAccessAdminArea(auth.rawRole)) {
-    return { name: 'jobs' }
-  }
-
-  const routeJobId = typeof to.params.jobId === 'string' ? to.params.jobId : ''
-
-  if (!canAccessJobRoute({
+  return getRouteAccessDecision({
     assignedJobIds: auth.assignedJobIds,
     currentUserId: auth.currentUser?.uid ?? null,
-    jobId: routeJobId,
+    hasWorkspaceAccess: auth.hasWorkspaceAccess,
+    requiredCapability: to.meta.requiredCapability,
+    requiresAuth: getRouteRequiresAuth(to.meta.requiresAuth),
+    routeJobId,
     rawRole: auth.rawRole,
     routeName: to.name,
     visibleJobs: jobs.jobs,
-  })) {
-    return { name: 'jobs' }
-  }
-
-  return true
+  })
 })
 
 router.afterEach((to) => {

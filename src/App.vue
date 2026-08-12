@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
+import { useIdleSessionTimeout } from '@/composables/useIdleSessionTimeout'
+
+useIdleSessionTimeout()
 </script>
 
 <template>

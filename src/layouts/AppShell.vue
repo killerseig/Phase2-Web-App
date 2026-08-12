@@ -2,31 +2,21 @@
 import { computed, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { getCurrentRoleLabel } from '@/auth/capabilities'
+import {
+  getAppShellAdminNavigationItems,
+  getAppShellRoleLabel,
+  getAppShellWorkspaceNavigationItems,
+} from '@/features/navigation/appShellNavigation'
 import { useAuthStore } from '@/stores/auth'
-
-type NavigationItem = {
-  label: string
-  to: string
-}
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const mobileNavOpen = ref(false)
 
-const workspaceNavigationItems = computed<NavigationItem[]>(() => [
-  { label: 'Jobs', to: '/jobs' },
-])
-
-const adminNavigationItems = computed<NavigationItem[]>(() => [
-  { label: 'Users', to: '/users' },
-  { label: 'Employees', to: '/employees' },
-  { label: 'Timecard Export', to: '/exports/timecards' },
-  { label: 'Shop Catalog', to: '/settings/shop-catalog' },
-])
-
-const roleLabel = computed(() => getCurrentRoleLabel(auth.rawRole))
+const workspaceNavigationItems = computed(() => getAppShellWorkspaceNavigationItems())
+const adminNavigationItems = computed(() => getAppShellAdminNavigationItems(auth.rawRole))
+const roleLabel = computed(() => getAppShellRoleLabel(auth.rawRole))
 
 function openMobileNav() {
   mobileNavOpen.value = true
@@ -86,7 +76,7 @@ watch(() => route.fullPath, () => {
       </div>
 
       <div class="app-shell__sidebar-footer">
-        <div v-if="auth.isAdmin" class="app-shell__sidebar-admin">
+        <div v-if="adminNavigationItems.length" class="app-shell__sidebar-admin">
           <div class="app-shell__section-label">Admin</div>
           <nav class="app-shell__nav">
             <RouterLink

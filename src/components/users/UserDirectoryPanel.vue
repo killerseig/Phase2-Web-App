@@ -4,6 +4,7 @@ import AppBadge, { type AppBadgeTone } from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppListButton from '@/components/common/AppListButton.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
+import AppPane from '@/components/common/AppPane.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
 import AppSelect from '@/components/common/AppSelect.vue'
@@ -53,7 +54,7 @@ function handleStatusFilterUpdate(value: string) {
 </script>
 
 <template>
-  <section class="users-browser">
+  <AppPane class="users-browser">
     <AppPaneHeader class="users-browser__header" eyebrow="Admin" title="Users">
       <template #actions>
         <div class="users-browser__header-actions">
@@ -145,7 +146,7 @@ function handleStatusFilterUpdate(value: string) {
         />
       </div>
     </div>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>

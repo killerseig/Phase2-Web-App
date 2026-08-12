@@ -347,9 +347,9 @@ export function createShopOrdersFixture() {
     { id: 'cat-concrete-wedge', name: 'Concrete Wedge Anchors', parentId: 'cat-anchors', active: true },
   ]
   fixture.shopCatalogItems = [
-    { id: 'item-box', description: 'Box', categoryId: 'cat-all-purpose', sku: null, price: null, active: true },
-    { id: 'item-bucket', description: 'Bucket', categoryId: 'cat-all-purpose', sku: null, price: null, active: true },
-    { id: 'item-half-inch', description: '1/2"', categoryId: 'cat-concrete-wedge', sku: null, price: null, active: true },
+    { id: 'item-box', description: 'Box', categoryId: 'cat-all-purpose', sku: null, price: 12.5, active: true },
+    { id: 'item-bucket', description: 'Bucket', categoryId: 'cat-all-purpose', sku: null, price: 18, active: true },
+    { id: 'item-half-inch', description: '1/2"', categoryId: 'cat-concrete-wedge', sku: null, price: 4.25, active: true },
   ]
   fixture.shopOrders = [
     {
@@ -388,6 +388,7 @@ export function createShopOrdersFixture() {
           catalogItemId: 'item-box',
           description: 'Drywall Mud / All Purpose Mud / Box',
           quantity: 2,
+          price: 12.5,
           note: '',
           categoryId: 'cat-all-purpose',
           sku: null,
@@ -416,6 +417,7 @@ export function createShopOrdersFixture() {
           catalogItemId: 'item-bucket',
           description: 'Drywall Mud / All Purpose Mud / Bucket',
           quantity: 1,
+          price: 18,
           note: '',
           categoryId: 'cat-all-purpose',
           sku: null,

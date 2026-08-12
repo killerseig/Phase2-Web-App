@@ -19,6 +19,32 @@ function createExportActionsFixture() {
   return fixture
 }
 
+function createShopForemanCatalogFixture() {
+  const fixture = createAdminWorkspaceFixture()
+  fixture.auth.user.uid = 'shop-foreman-e2e'
+  fixture.auth.user.email = 'shop@example.com'
+  fixture.auth.user.displayName = 'CJ Shop Foreman'
+  fixture.auth.profile.id = 'shop-foreman-e2e'
+  fixture.auth.profile.email = 'shop@example.com'
+  fixture.auth.profile.firstName = 'CJ'
+  fixture.auth.profile.lastName = 'Shop Foreman'
+  fixture.auth.profile.role = 'shop-foreman'
+  fixture.auth.profile.assignedJobIds = []
+  fixture.users = [
+    {
+      id: 'shop-foreman-e2e',
+      email: 'shop@example.com',
+      firstName: 'CJ',
+      lastName: 'Shop Foreman',
+      role: 'shop-foreman',
+      active: true,
+      assignedJobIds: [],
+    },
+    ...fixture.users,
+  ]
+  return fixture
+}
+
 test.describe('admin page coverage', () => {
   test('users page filters the real directory', async ({ page }) => {
     const fixture = createAdminWorkspaceFixture()
@@ -139,6 +165,52 @@ test.describe('admin page coverage', () => {
     await expect(page.getByTestId('shop-catalog-item-catalog-2')).toHaveCount(0)
   })
 
+  test('shop foremen can manage the real shop catalog route', async ({ page }) => {
+    await gotoPhase2App(page, '/settings/shop-catalog', createShopForemanCatalogFixture())
+
+    const inspector = page.locator('.catalog-inspector-pane')
+
+    await expect(page.getByTestId('shop-catalog-page')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Shop Catalog' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Users' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Timecard Export' })).toHaveCount(0)
+
+    await page.getByTestId('shop-catalog-root-row').click({ button: 'right' })
+    await page.getByRole('button', { name: 'New Item' }).click()
+    await inspector.getByLabel('Description').fill('Shop Foreman Harness')
+    await inspector.getByLabel('SKU').fill('SF-HARNESS')
+    await inspector.getByRole('button', { name: 'Create Item' }).click()
+
+    const harnessItem = page.locator('.catalog-tree-node', { hasText: 'Shop Foreman Harness' })
+    await expect(harnessItem).toBeVisible()
+
+    await harnessItem.click()
+    await inspector.getByLabel('Description').fill('Shop Foreman Harness - XL')
+    await inspector.getByRole('button', { name: 'Save Changes' }).click()
+
+    await expect(page.locator('.catalog-tree-node', { hasText: 'Shop Foreman Harness - XL' })).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          shopCatalogItems?: Array<{
+            active?: boolean
+            description?: string | null
+            sku?: string | null
+          }>
+        }
+        const item = state.shopCatalogItems?.find((entry) => entry.sku === 'SF-HARNESS')
+
+        return {
+          active: item?.active ?? null,
+          description: item?.description ?? null,
+        }
+      }))
+      .toEqual({
+        active: true,
+        description: 'Shop Foreman Harness - XL',
+      })
+  })
+
   test('shop catalog admin creates, edits, archives, and deletes real catalog entries', async ({ page }) => {
     await gotoPhase2App(page, '/settings/shop-catalog', createAdminWorkspaceFixture())
 
@@ -224,6 +296,48 @@ test.describe('admin page coverage', () => {
 
     await expect(page.getByTestId('timecard-export-week-week-admin-2')).toBeVisible()
     await expect(page.getByTestId('timecard-export-week-week-e2e')).toHaveCount(0)
+  })
+
+  test('timecard export lets admins submit draft weeks and undo submitted weeks', async ({ page }) => {
+    await gotoPhase2App(page, '/exports/timecards', createAdminWorkspaceFixture())
+
+    await expect(page.getByTestId('timecard-export-submit-week-week-e2e')).toBeVisible()
+    await expect(page.getByTestId('timecard-export-reopen-week-week-admin-2')).toBeVisible()
+
+    await page.getByTestId('timecard-export-submit-week-week-e2e').click()
+    await page
+      .getByRole('dialog', { name: 'Submit draft week?' })
+      .getByRole('button', { name: 'Submit Week' })
+      .click()
+
+    await expect(page.getByText('Week submitted.')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ id?: string; status?: string }>
+        }
+
+        return state.timecardWeeks?.find((week) => week.id === 'week-e2e')?.status ?? null
+      }))
+      .toBe('submitted')
+
+    await page.getByTestId('timecard-export-reopen-week-week-admin-2').click()
+    await page
+      .getByRole('dialog', { name: 'Undo submitted week?' })
+      .getByRole('button', { name: 'Undo Submitted' })
+      .click()
+
+    await expect(page.getByText('Submitted week moved back to draft.')).toBeVisible()
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ id?: string; status?: string; submittedAt?: unknown }>
+        }
+
+        const week = state.timecardWeeks?.find((entry) => entry.id === 'week-admin-2')
+        return week ? { status: week.status, submittedAt: week.submittedAt ?? null } : null
+      }))
+      .toEqual({ status: 'draft', submittedAt: null })
   })
 
   test('timecard export lets admins delete draft weeks only', async ({ page }) => {

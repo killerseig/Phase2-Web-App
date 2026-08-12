@@ -1,12 +1,9 @@
-import { computed, type Ref } from 'vue'
+import { computed } from 'vue'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 import type { ShopCatalogContextMenuTarget } from './useShopCatalogContextMenu'
 
 type InlineCreateKind = 'category' | 'item'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
 
 export interface ShopCatalogContextAction {
   key: string
@@ -43,7 +40,7 @@ interface UseShopCatalogContextMenuActionsOptions {
   inspectItem: (item: ShopCatalogItemRecord, options?: { showInspector?: boolean }) => void
   isSinglePaneLayout: ReadonlyRef<boolean>
   openCreateItemMode: (parentId: string | null) => void
-  rootBucketExpanded: Ref<boolean>
+  rootBucketExpanded: ReadonlyRef<boolean>
   selectFolder: (categoryId: string, options?: { showInspector?: boolean }) => void
   selectRoot: () => void
   showMobileInspector: () => void

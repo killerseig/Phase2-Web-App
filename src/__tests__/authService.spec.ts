@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAuthUserProfile } from '@/services/auth'
+import { normalizeAuthSessionUser, normalizeAuthUserProfile } from '@/services/auth'
+import type { User } from 'firebase/auth'
 
 describe('auth service profile normalization', () => {
+  it('normalizes Firebase Auth users into the app auth-session shape', () => {
+    expect(normalizeAuthSessionUser({
+      displayName: '',
+      email: undefined,
+      uid: 'auth-user-1',
+    } as unknown as User)).toEqual({
+      displayName: null,
+      email: null,
+      uid: 'auth-user-1',
+    })
+
+    expect(normalizeAuthSessionUser({
+      displayName: 'Chris Larsen',
+      email: 'chris@example.com',
+      uid: 'auth-user-2',
+    } as unknown as User)).toEqual({
+      displayName: 'Chris Larsen',
+      email: 'chris@example.com',
+      uid: 'auth-user-2',
+    })
+  })
+
   it('normalizes complete profile documents', () => {
     expect(normalizeAuthUserProfile('user-a', {
       active: true,
@@ -18,6 +41,24 @@ describe('auth service profile normalization', () => {
       id: 'user-a',
       lastName: 'User',
       role: 'project-manager',
+    })
+  })
+
+  it('preserves recognized target stored roles before live target access is enabled', () => {
+    expect(normalizeAuthUserProfile('user-payroll', {
+      email: 'payroll@example.com',
+      role: 'payroll',
+    })).toMatchObject({
+      id: 'user-payroll',
+      role: 'payroll',
+    })
+
+    expect(normalizeAuthUserProfile('user-shop', {
+      email: 'shop@example.com',
+      role: 'shop-foreman',
+    })).toMatchObject({
+      id: 'user-shop',
+      role: 'shop-foreman',
     })
   })
 

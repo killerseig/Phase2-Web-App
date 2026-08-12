@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { createEmptyDailyLogPayload } from '@/features/dailyLogs/schema'
-import { validateDailyLogForSubmit } from '@/features/dailyLogs/viewHelpers'
+import { validateDailyLogForSubmit } from '@/features/dailyLogs/validation'
 import {
   createDailyLogRecord,
   deleteDailyLogAttachment,
@@ -10,21 +10,15 @@ import {
   type DailyLogActor,
 } from '@/services/dailyLogs'
 import type { DailyLogPayload, DailyLogRecord, JobRecord } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
 
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
-
 interface UseDailyLogActionsOptions {
+  canDeleteSelectedLog: ReadonlyRef<boolean>
   canEditSelectedLog: ReadonlyRef<boolean>
   clonePreparedPayload: (payload?: DailyLogPayload) => DailyLogPayload
   currentUserId: ReadonlyRef<string | null>
-  form: Ref<DailyLogPayload>
+  form: WritableRef<DailyLogPayload>
   getActor: () => DailyLogActor
   hasUnsavedDraftChanges: ReadonlyRef<boolean>
   job: ReadonlyRef<JobRecord | null>
@@ -32,9 +26,9 @@ interface UseDailyLogActionsOptions {
   resetForm: (log?: DailyLogRecord | null) => void
   saveDraftImmediately: () => Promise<boolean>
   selectedDate: ReadonlyRef<string>
-  selectedDateIsToday: ReadonlyRef<boolean>
+  selectedDateIsFuture: ReadonlyRef<boolean>
   selectedLog: ReadonlyRef<DailyLogRecord | null>
-  selectedLogId: Ref<string | null>
+  selectedLogId: WritableRef<string | null>
   setActionError: (message: string) => void
   setActionInfo: (message: string) => void
   setSavedPayloadSnapshot: (payload?: DailyLogPayload) => void
@@ -42,6 +36,7 @@ interface UseDailyLogActionsOptions {
 }
 
 export function useDailyLogActions({
+  canDeleteSelectedLog,
   canEditSelectedLog,
   clonePreparedPayload,
   currentUserId,
@@ -53,7 +48,7 @@ export function useDailyLogActions({
   resetForm,
   saveDraftImmediately,
   selectedDate,
-  selectedDateIsToday,
+  selectedDateIsFuture,
   selectedLog,
   selectedLogId,
   setActionError,
@@ -72,13 +67,16 @@ export function useDailyLogActions({
       return
     }
 
-    if (!selectedDateIsToday.value) {
-      setActionError('New daily log drafts can only be created for today.')
+    if (selectedDateIsFuture.value) {
+      setActionError('Daily log drafts cannot be created for future dates.')
       return
     }
 
     const existingDraft = visibleLogs.value.find(
-      (log) => log.status === 'draft' && log.foremanUserId === currentUserId.value,
+      (log) =>
+        log.status === 'draft'
+        && log.logDate === selectedDate.value
+        && log.foremanUserId === currentUserId.value,
     )
     if (existingDraft) {
       selectedLogId.value = existingDraft.id
@@ -127,7 +125,7 @@ export function useDailyLogActions({
 
   async function handleSubmit() {
     if (!selectedLog.value || !canEditSelectedLog.value) {
-      setActionError('Only your current draft for today can be submitted.')
+      setActionError('Only an editable daily log draft can be submitted.')
       return
     }
 
@@ -178,13 +176,13 @@ export function useDailyLogActions({
   }
 
   function handleDeleteSelectedLog() {
-    if (!selectedLog.value || !canEditSelectedLog.value) return
+    if (!selectedLog.value || !canDeleteSelectedLog.value) return
 
     deleteDraftConfirmOpen.value = true
   }
 
   async function confirmDeleteSelectedLog() {
-    if (!selectedLog.value || !canEditSelectedLog.value) return
+    if (!selectedLog.value || !canDeleteSelectedLog.value) return
 
     deletingDraft.value = true
     setActionError('')

@@ -9,19 +9,12 @@ import type {
   DailyLogRecord,
   JobRecord,
 } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseDailyLogFormHydrationOptions {
   canEditSelectedLog: ReadonlyRef<boolean>
   clearRecipientInput: () => void
-  form: Ref<DailyLogPayload>
+  form: WritableRef<DailyLogPayload>
   getAuthDisplayName: () => string | null
   hydrateForm: (callback: () => void) => void
   job: ReadonlyRef<JobRecord | null>

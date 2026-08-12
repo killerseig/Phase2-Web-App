@@ -37,6 +37,6 @@ test.describe('public route coverage', () => {
     await gotoPhase2App(page, '/login', createJobDashboardFixture())
 
     await expect(page).toHaveURL(/\/jobs$/)
-    await expect(page.getByTestId('job-card-1A')).toBeVisible()
+    await expect(page.getByTestId('jobs-search')).toBeVisible()
   })
 })

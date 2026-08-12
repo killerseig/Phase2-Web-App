@@ -31,6 +31,25 @@ test.describe('shop order workspace regressions', () => {
     await expect(page.getByTestId('shoporder-delivery-date')).toHaveValue('2026-06-11')
   })
 
+  test('stale draft delivery dates refresh to the next Thursday when opened', async ({ page }) => {
+    const fixture = createShopOrdersFixture()
+    const draftOrder = fixture.shopOrders.find((order) => order.id === 'order-draft')
+    if (!draftOrder) throw new Error('Expected shop order draft fixture')
+    draftOrder.deliveryDate = '2026-06-03'
+
+    await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', fixture)
+
+    await expect(page.getByTestId('shoporder-delivery-date')).toHaveValue('2026-06-11')
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          shopOrders?: Array<{ id: string; deliveryDate?: string | null }>
+        }
+        return state.shopOrders?.find((order) => order.id === 'order-draft')?.deliveryDate ?? ''
+      }))
+      .toBe('2026-06-11')
+  })
+
   test('new drafts reset the delivery date back to next Thursday', async ({ page }) => {
     await gotoShopOrderApp(page)
 
@@ -86,11 +105,23 @@ test.describe('shop order workspace regressions', () => {
     await gotoShopOrderApp(page)
 
     await expandAllCatalogFolders(page)
+    await expect(page.getByTestId('shoporder-item-item-box')).toContainText('$12.50')
     await page.getByTestId('shoporder-add-item-box').click()
 
     const orderRow = page.getByTestId('shoporder-order-item-item-box')
     await expect(orderRow).toContainText('Box')
+    await expect(page.getByTestId('shoporder-order-item-price-item-box')).toHaveText('$12.50')
+    await expect(page.getByTestId('shoporder-order-item-line-total-item-box')).toHaveText('$12.50')
+    await expect(page.getByTestId('shoporder-submit-total')).toContainText('$12.50')
     await expect(orderRow).not.toContainText('Drywall Mud / All Purpose Mud /')
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          shopOrders?: Array<{ id: string; items?: Array<{ price?: number | null }> }>
+        }
+        return state.shopOrders?.find((order) => order.id === 'order-draft')?.items?.[0]?.price ?? null
+      }))
+      .toBe(12.5)
   })
 
   test('custom items can be added from the real custom item form', async ({ page }) => {

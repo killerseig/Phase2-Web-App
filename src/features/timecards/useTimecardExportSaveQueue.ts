@@ -1,10 +1,7 @@
 import type { TimecardExportArchiveCardRecord } from '@/features/timecards/exportViewHelpers'
 import { useTimecardSaveQueue } from '@/features/timecards/useTimecardSaveQueue'
 import { updateTimecardCard } from '@/services/timecards'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseTimecardExportSaveQueueOptions {
   canEditWeek: ReadonlyRef<boolean>

@@ -4,6 +4,12 @@ import type {
   EmployeeBooleanField,
   EmployeeFormState,
   EmployeeTextField,
+  EmployeeDetailSnapshot,
+} from './employeeViewHelpers'
+import {
+  areEmployeeSnapshotsEqual,
+  getEmployeeFormSnapshot,
+  getEmployeeRecordSnapshot,
 } from './employeeViewHelpers'
 
 type UseEmployeeFormStateOptions = {
@@ -84,10 +90,20 @@ export function useEmployeeFormState({
     detailForm[field] = value
   }
 
+  function getDetailFormSnapshot(): EmployeeDetailSnapshot {
+    return getEmployeeFormSnapshot(detailForm)
+  }
+
+  function hasUnsavedDetailChanges(employee: EmployeeRecord | null) {
+    return !areEmployeeSnapshotsEqual(getEmployeeRecordSnapshot(employee), getDetailFormSnapshot())
+  }
+
   return {
     applyEmployeeToDetailForm,
     createForm,
     detailForm,
+    getDetailFormSnapshot,
+    hasUnsavedDetailChanges,
     resetCreateForm,
     syncingDetailForm,
     updateCreateBooleanField,

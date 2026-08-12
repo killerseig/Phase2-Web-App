@@ -1,5 +1,4 @@
 import {
-  createEmptyCustomItemFormState,
   getShopOrderCatalogItemDescription,
   makeLocalShopOrderItemId,
   readShopOrderQuantity,
@@ -11,14 +10,7 @@ import type {
   ShopOrderItemRecord,
   ShopOrderRecord,
 } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface DraftOrderTarget {
   orderId: string
@@ -37,6 +29,7 @@ interface UseShopOrderItemActionsOptions {
     successMessage: string,
   ) => Promise<boolean>
   removeItemTargetId: ReadonlyRef<string | null>
+  resetCustomItemForm: () => void
   selectedOrder: ReadonlyRef<ShopOrderRecord | null>
   setActionError: (message: string) => void
 }
@@ -49,6 +42,7 @@ export function useShopOrderItemActions({
   ensureDraftOrderTarget,
   persistOrderItems,
   removeItemTargetId,
+  resetCustomItemForm,
   selectedOrder,
   setActionError,
 }: UseShopOrderItemActionsOptions) {
@@ -72,6 +66,7 @@ export function useShopOrderItemActions({
         catalogItemId: item.id,
         description: itemDescription,
         quantity: nextQuantity,
+        price: item.price,
         note: '',
         categoryId: item.categoryId,
         sku: item.sku,
@@ -101,6 +96,7 @@ export function useShopOrderItemActions({
       catalogItemId: null,
       description: customItemForm.description.trim(),
       quantity: readShopOrderQuantity(customItemForm.quantity),
+      price: null,
       note: customItemForm.note.trim(),
       categoryId: null,
       sku: null,
@@ -112,7 +108,7 @@ export function useShopOrderItemActions({
       'Custom item added to the current order.',
     )
     if (saved) {
-      Object.assign(customItemForm, createEmptyCustomItemFormState())
+      resetCustomItemForm()
     }
   }
 

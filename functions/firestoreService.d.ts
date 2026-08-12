@@ -5,7 +5,8 @@
 export interface JobDetails {
     id: string;
     name: string;
-    number: string;
+    number: string | number;
+    assignedForemanIds?: string[];
     productionBurden?: number | null;
 }
 export type NotificationModuleKey = 'dailyLogs' | 'timecards' | 'shopOrders';

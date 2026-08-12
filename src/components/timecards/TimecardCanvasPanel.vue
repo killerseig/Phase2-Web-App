@@ -1,5 +1,10 @@
 <script setup lang="ts" generic="TCard extends { id: string }">
-import type { ComponentPublicInstance, StyleValue } from 'vue'
+import type { StyleValue } from 'vue'
+import {
+  isElement,
+  resolveTemplateElementRef,
+  type TemplateElementRefValue,
+} from '@/composables/useTemplateElementRef'
 
 const props = withDefaults(defineProps<{
   cards: TCard[]
@@ -31,8 +36,8 @@ const emit = defineEmits<{
   setContentElement: [cardId: string, element: Element | null]
 }>()
 
-function asObservedElement(element: Element | ComponentPublicInstance | null): Element | null {
-  return element instanceof Element ? element : null
+function asObservedElement(element: TemplateElementRefValue): Element | null {
+  return resolveTemplateElementRef(element, isElement)
 }
 
 function shouldShowFooter(card: TCard) {
@@ -113,12 +118,18 @@ function shouldShowFooter(card: TCard) {
   gap: 1rem;
   align-items: start;
   min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .timecards-canvas-panel {
   display: grid;
   gap: 1rem;
   min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 1rem;
   border: 1px solid rgba(88, 105, 44, 0.42);
   background: rgba(247, 249, 239, 0.95);
@@ -130,6 +141,7 @@ function shouldShowFooter(card: TCard) {
   justify-content: space-between;
   gap: 1rem;
   align-items: end;
+  min-width: 0;
 }
 
 .timecards-canvas-panel__header h2 {
@@ -155,9 +167,11 @@ function shouldShowFooter(card: TCard) {
 
 .timecards-canvas {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr));
   gap: 1rem;
   min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
 }
 
 .timecards-canvas__item {
@@ -166,6 +180,8 @@ function shouldShowFooter(card: TCard) {
   background: rgba(234, 239, 216, 0.88);
   align-self: start;
   min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
   overflow: hidden;
 }
 
@@ -178,6 +194,7 @@ function shouldShowFooter(card: TCard) {
   display: flex;
   gap: 0.45rem;
   margin: 0 0 0.4rem;
+  min-width: 0;
 }
 
 .timecards-canvas__item-header-button {
@@ -255,6 +272,8 @@ function shouldShowFooter(card: TCard) {
 .timecards-canvas__item-card-shell {
   width: 100%;
   min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
   display: flex;
   justify-content: center;
   align-items: flex-start;

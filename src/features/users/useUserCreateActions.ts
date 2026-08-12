@@ -1,18 +1,15 @@
+import { currentRoleCanBeAssignedJobs } from '@/auth/roles'
 import { createUserByAdmin, sendPendingInvitesByAdmin } from '@/services/users'
 import type { UserCreateFormState } from '@/features/users/userViewHelpers'
-import { roleCanBeAssignedJobs } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
+import type { WritableRef } from '@/types/reactivity'
 
 interface UseUserCreateActionsOptions {
-  createAction: Ref<'queue' | 'send' | null>
+  createAction: WritableRef<'queue' | 'send' | null>
   createForm: UserCreateFormState
-  inviteLoading: Ref<boolean>
+  inviteLoading: WritableRef<boolean>
   resetCreateMessages: () => void
   resetInviteMessages: () => void
-  selectedUserId: Ref<string | 'new' | null>
+  selectedUserId: WritableRef<string | 'new' | null>
   setCreateError: (error: unknown, fallback: string) => void
   setCreateErrorMessage: (message: string) => void
   setCreateInfo: (message: string) => void
@@ -48,7 +45,7 @@ export function useUserCreateActions({
         firstName: createForm.firstName,
         lastName: createForm.lastName,
         role: createForm.role,
-        assignedJobIds: roleCanBeAssignedJobs(createForm.role) ? createForm.assignedJobIds : [],
+        assignedJobIds: currentRoleCanBeAssignedJobs(createForm.role) ? createForm.assignedJobIds : [],
         sendInvite,
       })
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppButton from '@/components/common/AppButton.vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 
 const props = withDefaults(defineProps<{
   busy?: boolean
@@ -56,13 +57,14 @@ function confirmAction() {
           <AppButton :disabled="busy" @click="closeDialog">
             {{ cancelLabel }}
           </AppButton>
-          <AppButton
+          <AppLoadingButton
+            :label="confirmLabel"
+            loading-label="Working..."
             :variant="destructive ? 'danger' : 'primary'"
+            :loading="busy"
             :disabled="busy"
             @click="confirmAction"
-          >
-            {{ busy ? 'Working...' : confirmLabel }}
-          </AppButton>
+          />
         </div>
       </section>
     </div>

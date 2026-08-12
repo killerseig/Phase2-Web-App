@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPane from '@/components/common/AppPane.vue'
 import ShopCatalogCategoryDetailPanel from '@/components/shopCatalog/ShopCatalogCategoryDetailPanel.vue'
 import ShopCatalogCreateCategoryPanel from '@/components/shopCatalog/ShopCatalogCreateCategoryPanel.vue'
 import ShopCatalogCreateItemPanel from '@/components/shopCatalog/ShopCatalogCreateItemPanel.vue'
@@ -71,7 +72,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <section
+  <AppPane
     id="catalog-inspector-pane"
     class="catalog-inspector-pane"
     :class="{ 'catalog-inspector-pane--mobile-hidden': !mobileVisible }"
@@ -152,30 +153,19 @@ const emit = defineEmits<{
         @delete="emit('delete-item')"
       />
     </template>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>
 .catalog-inspector-pane {
-  display: grid;
-  gap: 0.7rem;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  padding: 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
-  box-shadow: var(--shadow);
-  grid-template-rows: auto minmax(0, 1fr);
+  --app-pane-gap: 0.7rem;
+  --app-pane-padding: 0.9rem;
 }
 
 @media (max-width: 1180px) {
   .catalog-inspector-pane {
-    height: auto;
-    overflow: visible;
+    --app-pane-height: auto;
+    --app-pane-overflow: visible;
   }
 
   .catalog-inspector-pane--mobile-hidden {

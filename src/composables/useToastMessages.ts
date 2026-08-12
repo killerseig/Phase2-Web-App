@@ -1,8 +1,9 @@
-import { watch, type Ref } from 'vue'
+import { watch } from 'vue'
 import { type AppToastSeverity, useAppToast } from '@/composables/useAppToast'
+import type { WritableRef } from '@/types/reactivity'
 
 interface ToastMessageConfig {
-  source: Ref<string>
+  source: WritableRef<string>
   severity?: AppToastSeverity
   summary?: string
   life?: number
@@ -21,7 +22,7 @@ export function useToastMessages(configs: ToastMessageConfig[]) {
     when,
     clear = true,
   } of configs) {
-    watch(source, (nextMessage, previousMessage) => {
+    watch(() => source.value, (nextMessage, previousMessage) => {
       const message = nextMessage.trim()
       const previous = previousMessage.trim()
 

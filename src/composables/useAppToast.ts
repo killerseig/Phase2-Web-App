@@ -37,11 +37,12 @@ export function useAppToast() {
     if (!message) return
 
     const defaultSummary = getDefaultSummary(severity)
+    const messageSummary = summary?.trim() || defaultSummary
 
     toast.add({
       group: 'app',
       severity,
-      summary: defaultSummary,
+      summary: messageSummary,
       detail: message,
       life,
     })

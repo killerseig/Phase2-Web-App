@@ -10,11 +10,9 @@ import {
   updateE2EJobNotificationRecipients,
 } from '@/testing/e2eRuntime'
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
-  documentId,
   getDoc,
   onSnapshot,
   query,
@@ -26,6 +24,7 @@ import {
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
 import type { JobRecord, JobType, NotificationModuleKey, NotificationRecipients } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
@@ -55,7 +54,9 @@ function normalizeAssignedIds(value: unknown): string[] {
 }
 
 function normalizeTextValue(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length ? value : null
+  if (typeof value === 'string' && value.trim().length) return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return null
 }
 
 function normalizeBurdenValue(value: unknown): number | null {
@@ -102,7 +103,7 @@ function normalizeJob(id: string, data: DocumentData): JobRecord {
   return {
     id,
     name: typeof data.name === 'string' ? data.name : 'Untitled Job',
-    code: normalizeTextValue(data.code),
+    code: normalizeTextValue(data.code ?? data.number),
     gc: normalizeTextValue(data.gc),
     type: typeof data.type === 'string' ? data.type : 'general',
     projectManager: normalizeTextValue(data.projectManager),
@@ -139,6 +140,37 @@ function sortJobs(jobs: JobRecord[]): JobRecord[] {
   })
 }
 
+function normalizeCallableJob(raw: unknown): JobRecord | null {
+  if (!raw || typeof raw !== 'object') return null
+
+  const data = raw as DocumentData & { id?: unknown }
+  const id = typeof data.id === 'string' ? data.id.trim() : ''
+  if (!id) return null
+
+  return normalizeJob(id, data)
+}
+
+async function listVisibleJobsFromFunction(): Promise<JobRecord[]> {
+  const { functions } = requireFirebaseServices()
+  const callable = httpsCallable<Record<string, never>, { jobs?: unknown[] }>(
+    functions,
+    'listVisibleJobsForCurrentUser',
+  )
+  const result = await callable({})
+  const jobs = Array.isArray(result.data?.jobs) ? result.data.jobs : []
+  return sortJobs(jobs.map((entry) => normalizeCallableJob(entry)).filter((entry): entry is JobRecord => !!entry))
+}
+
+async function getVisibleJobFromFunction(jobId: string): Promise<JobRecord | null> {
+  const { functions } = requireFirebaseServices()
+  const callable = httpsCallable<{ jobId: string }, { job?: unknown | null }>(
+    functions,
+    'getVisibleJobForCurrentUser',
+  )
+  const result = await callable({ jobId })
+  return normalizeCallableJob(result.data?.job)
+}
+
 function buildJobsQuery(assignedOnlyForUid?: string) {
   const { db } = requireFirebaseServices()
   if (assignedOnlyForUid) {
@@ -146,14 +178,6 @@ function buildJobsQuery(assignedOnlyForUid?: string) {
   }
 
   return query(collection(db, 'jobs'))
-}
-
-function chunkJobIds(jobIds: string[], chunkSize = 30) {
-  const chunks: string[][] = []
-  for (let index = 0; index < jobIds.length; index += chunkSize) {
-    chunks.push(jobIds.slice(index, index + chunkSize))
-  }
-  return chunks
 }
 
 function sanitizeJobPayload(input: JobUpsertInput) {
@@ -176,42 +200,6 @@ function sanitizeJobPayload(input: JobUpsertInput) {
 
 function sanitizeRecipientList(recipients: string[]) {
   return normalizeNotificationRecipientList(recipients)
-}
-
-async function syncJobForemanAssignments(jobId: string, nextAssignedForemanIds: string[]) {
-  const { db } = requireFirebaseServices()
-  const jobRef = doc(db, 'jobs', jobId)
-  const jobSnapshot = await getDoc(jobRef)
-
-  if (!jobSnapshot.exists()) {
-    throw new Error('Job not found.')
-  }
-
-  const previousAssignedForemanIds = normalizeAssignedIds(jobSnapshot.data().assignedForemanIds)
-  const effectiveAssignedForemanIds = normalizeAssignedIds(nextAssignedForemanIds)
-  const changedForemanIds = Array.from(new Set([...previousAssignedForemanIds, ...effectiveAssignedForemanIds]))
-
-  const batch = writeBatch(db)
-  batch.update(jobRef, { assignedForemanIds: effectiveAssignedForemanIds })
-
-  for (const foremanId of changedForemanIds) {
-    const userRef = doc(db, 'users', foremanId)
-    const userSnapshot = await getDoc(userRef)
-    if (!userSnapshot.exists()) continue
-
-    const currentAssignedJobIds = normalizeAssignedIds(userSnapshot.data().assignedJobIds)
-    const nextAssignedJobIds = new Set(currentAssignedJobIds)
-
-    if (effectiveAssignedForemanIds.includes(foremanId)) {
-      nextAssignedJobIds.add(jobId)
-    } else {
-      nextAssignedJobIds.delete(jobId)
-    }
-
-    batch.update(userRef, { assignedJobIds: Array.from(nextAssignedJobIds) })
-  }
-
-  await batch.commit()
 }
 
 async function removeJobAssignments(jobId: string) {
@@ -247,59 +235,27 @@ export function subscribeVisibleJobs(
 
   const normalizedAssignedJobIds = normalizeAssignedIds(options?.assignedJobIds)
   const assignedOnlyForUid = options?.assignedOnlyForUid
-  if (normalizedAssignedJobIds.length > 0 || assignedOnlyForUid) {
-    const { db } = requireFirebaseServices()
-    const chunkedJobIds = chunkJobIds(normalizedAssignedJobIds)
-    const resultSets: JobRecord[][] = []
-    const unsubscribes: Unsubscribe[] = []
 
-    const emitVisibleJobs = () => {
-      const merged = new Map<string, JobRecord>()
-      resultSets.flat().forEach((job) => {
-        merged.set(job.id, job)
+  if (options || normalizedAssignedJobIds.length > 0 || assignedOnlyForUid) {
+    let active = true
+
+    void listVisibleJobsFromFunction()
+      .then((nextJobs) => {
+        if (!active) return
+        onUpdate(nextJobs)
       })
-      onUpdate(sortJobs(Array.from(merged.values())))
-    }
-
-    chunkedJobIds.forEach((jobIdChunk) => {
-      const resultIndex = resultSets.push([]) - 1
-      unsubscribes.push(onSnapshot(
-        query(collection(db, 'jobs'), where(documentId(), 'in', jobIdChunk)),
-        (snapshot) => {
-          resultSets[resultIndex] = snapshot.docs.map((item) => normalizeJob(item.id, item.data()))
-          emitVisibleJobs()
-        },
-        (error) => {
-          onError?.(error)
-        },
-      ))
-    })
-
-    if (assignedOnlyForUid) {
-      const resultIndex = resultSets.push([]) - 1
-      unsubscribes.push(onSnapshot(
-        buildJobsQuery(assignedOnlyForUid),
-        (snapshot) => {
-          resultSets[resultIndex] = snapshot.docs.map((item) => normalizeJob(item.id, item.data()))
-          emitVisibleJobs()
-        },
-        (error) => {
-          if (normalizedAssignedJobIds.length === 0) {
-            onError?.(error)
-          }
-        },
-      ))
-    }
-
-    emitVisibleJobs()
+      .catch((error) => {
+        if (!active) return
+        onError?.(error)
+      })
 
     return () => {
-      unsubscribes.forEach((unsubscribe) => unsubscribe())
+      active = false
     }
   }
 
   return onSnapshot(
-    buildJobsQuery(options?.assignedOnlyForUid),
+    buildJobsQuery(),
     (snapshot) => {
       onUpdate(sortJobs(snapshot.docs.map((item) => normalizeJob(item.id, item.data()))))
     },
@@ -316,6 +272,11 @@ export async function getJob(jobId: string): Promise<JobRecord | null> {
     if (!snapshot.exists()) return null
     return normalizeJob(snapshot.id, snapshot.data())
   } catch (error) {
+    try {
+      return await getVisibleJobFromFunction(jobId)
+    } catch {
+      // Report the original Firestore error so the message still points at the read that failed.
+    }
     throw new Error(normalizeError(error, 'Failed to load job.'))
   }
 }
@@ -326,10 +287,12 @@ export function subscribeJob(
   onError?: (error: unknown) => void,
 ): Unsubscribe {
   const { db } = requireFirebaseServices()
+  let active = true
 
-  return onSnapshot(
+  const unsubscribe = onSnapshot(
     doc(db, 'jobs', jobId),
     (snapshot) => {
+      if (!active) return
       if (!snapshot.exists()) {
         onUpdate(null)
         return
@@ -338,9 +301,22 @@ export function subscribeJob(
       onUpdate(normalizeJob(snapshot.id, snapshot.data()))
     },
     (error) => {
-      onError?.(error)
+      void getVisibleJobFromFunction(jobId)
+        .then((job) => {
+          if (!active) return
+          onUpdate(job)
+        })
+        .catch(() => {
+          if (!active) return
+          onError?.(error)
+        })
     },
   )
+
+  return () => {
+    active = false
+    unsubscribe()
+  }
 }
 
 export function subscribeGlobalNotificationRecipients(
@@ -380,36 +356,19 @@ export async function createJobRecord(input: JobUpsertInput): Promise<string> {
   }
 
   try {
-    const { db } = requireFirebaseServices()
+    const { functions } = requireFirebaseServices()
     const payload = sanitizeJobPayload(input)
+    const callable = httpsCallable<
+      { job: ReturnType<typeof sanitizeJobPayload> },
+      { id?: unknown }
+    >(functions, 'createJobRecordCallable')
 
-    const created = await addDoc(collection(db, 'jobs'), {
-      name: payload.name,
-      code: payload.code,
-      type: payload.type,
-      gc: payload.gc,
-      jobAddress: payload.jobAddress,
-      startDate: payload.startDate,
-      finishDate: payload.finishDate,
-      productionBurden: payload.productionBurden,
-      active: payload.active,
-      archivedAt: payload.active ? null : serverTimestamp(),
-      assignedForemanIds: payload.assignedForemanIds,
-      timecardStatus: 'pending',
-      timecardSubmittedAt: null,
-      timecardPeriodEndDate: null,
-      timecardLastSentWeekEnding: null,
-      notificationRecipients: payload.notificationRecipients,
-      adminDailyLogRecipients: [],
-      dailyLogRecipients: payload.notificationRecipients.dailyLogs,
-      createdAt: serverTimestamp(),
-    })
-
-    if (payload.assignedForemanIds.length) {
-      await syncJobForemanAssignments(created.id, payload.assignedForemanIds)
+    const result = await callable({ job: payload })
+    if (typeof result.data?.id !== 'string' || !result.data.id.trim()) {
+      throw new Error('Job was created, but the server did not return a job id.')
     }
 
-    return created.id
+    return result.data.id
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to create job.'))
   }
@@ -422,25 +381,14 @@ export async function updateJobRecord(jobId: string, input: JobUpsertInput): Pro
   }
 
   try {
-    const { db } = requireFirebaseServices()
+    const { functions } = requireFirebaseServices()
     const payload = sanitizeJobPayload(input)
+    const callable = httpsCallable<
+      { jobId: string; job: ReturnType<typeof sanitizeJobPayload> },
+      { success: boolean }
+    >(functions, 'updateJobRecordCallable')
 
-    await updateDoc(doc(db, 'jobs', jobId), {
-      name: payload.name,
-      code: payload.code,
-      type: payload.type,
-      gc: payload.gc,
-      jobAddress: payload.jobAddress,
-      startDate: payload.startDate,
-      finishDate: payload.finishDate,
-      productionBurden: payload.productionBurden,
-      active: payload.active,
-      archivedAt: payload.active ? null : serverTimestamp(),
-      notificationRecipients: payload.notificationRecipients,
-      dailyLogRecipients: payload.notificationRecipients.dailyLogs,
-    })
-
-    await syncJobForemanAssignments(jobId, payload.assignedForemanIds)
+    await callable({ jobId, job: payload })
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to update job.'))
   }

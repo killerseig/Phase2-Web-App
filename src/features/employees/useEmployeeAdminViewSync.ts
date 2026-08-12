@@ -1,11 +1,12 @@
-import { onBeforeUnmount, onMounted, watch, type ComputedRef, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import type { EmployeeRecord } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 type UseEmployeeAdminViewSyncOptions = {
   applyEmployeeToDetailForm: (employee: EmployeeRecord | null) => void | Promise<void>
   resetCreateForm: () => void
-  selectedEmployee: ComputedRef<EmployeeRecord | null>
-  selectedEmployeeId: Ref<string | 'new'>
+  selectedEmployee: ReadonlyRef<EmployeeRecord | null>
+  selectedEmployeeId: WritableRef<string | 'new'>
   setDetailErrorMessage: (message: string) => void
   setDetailInfo: (message: string) => void
   startEmployeesSubscription: () => void
@@ -22,7 +23,7 @@ export function useEmployeeAdminViewSync({
   startEmployeesSubscription,
   stopEmployeesSubscription,
 }: UseEmployeeAdminViewSyncOptions) {
-  watch(selectedEmployee, (employee) => {
+  watch(() => selectedEmployee.value, (employee) => {
     if (!employee) {
       if (selectedEmployeeId.value === 'new') {
         resetCreateForm()
@@ -34,7 +35,7 @@ export function useEmployeeAdminViewSync({
     void applyEmployeeToDetailForm(employee)
   })
 
-  watch(selectedEmployeeId, (nextValue) => {
+  watch(() => selectedEmployeeId.value, (nextValue) => {
     setDetailErrorMessage('')
     setDetailInfo(nextValue === 'new' ? '' : 'Changes save when you leave a field.')
   })

@@ -80,16 +80,38 @@ async function main() {
   assert.equal(csv.includes('9411'), true, 'csv export should include the workbook job number')
   assert.equal(csv.includes('Chris'), true, 'csv export should include the employee name')
 
+  const cardHeaderEvents = []
   const pdfBuffer = await buildTimecardPdfBuffer({
     jobName: 'Phase 2 Company Acoustical remodel',
     jobNumber: '1A',
     submittedBy: 'Chris (CJ) Larsen',
     weekStart: '2026-06-01',
     timecards: [normalized],
+  }, {
+    onCardHeader: (event) => cardHeaderEvents.push(event),
   })
 
   assert.equal(Buffer.isBuffer(pdfBuffer), true, 'pdf export should return a buffer')
   assert.equal(pdfBuffer.length > 0, true, 'pdf export should not be empty')
+  assert.deepEqual(
+    cardHeaderEvents.filter((event) => !event.renderBlankTemplate).map((event) => ({
+      employeeCode: event.employeeCode,
+      employeeName: event.employeeName,
+      occupation: event.occupation,
+      wageLabel: event.wageLabel,
+      weekEnding: event.weekEnding,
+    })),
+    [
+      {
+        employeeCode: '5133',
+        employeeName: 'Larsen, Chris',
+        occupation: 'Foreman',
+        wageLabel: '$42.50',
+        weekEnding: '6/7/2026',
+      },
+    ],
+    'pdf export should draw employee name, employee number, occupation, wage, and week ending in the attached card header',
+  )
 
   console.log('Timecard email smoke test passed.')
 }

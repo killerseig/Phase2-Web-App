@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import AppBadge from '@/components/common/AppBadge.vue'
-import AppButton from '@/components/common/AppButton.vue'
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppField from '@/components/common/AppField.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
-import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import AppPane from '@/components/common/AppPane.vue'
+import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
+import SaveStatusIndicator from '@/components/common/SaveStatusIndicator.vue'
 import {
   getEmployeeCode,
   getEmployeeDisplayName,
@@ -61,17 +63,20 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 </script>
 
 <template>
-  <section class="employees-detail">
+  <AppPane class="employees-detail">
     <template v-if="isCreateMode">
-      <header class="employees-detail__header">
-        <div>
+      <AppPaneHeader
+        class="employees-detail__header"
+        eyebrow="Directory"
+        title="Create Employee"
+        title-tag="h2"
+      >
+        <template #copy-prefix>
           <button class="employees-detail__mobile-back" type="button" @click="emit('backToDirectory')">
             Back to Directory
           </button>
-          <span class="employees-workspace__eyebrow">Directory</span>
-          <h2 class="employees-detail__title">Create Employee</h2>
-        </div>
-      </header>
+        </template>
+      </AppPaneHeader>
 
       <div class="employees-detail__body">
         <form class="employees-form" @submit.prevent="emit('createSubmit')">
@@ -122,10 +127,17 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
           </div>
 
           <section class="employees-settings-panel">
-            <div class="employees-settings-panel__header">
-              <strong>Directory Settings</strong>
-              <span>{{ activeEmployeesCount }} active / {{ inactiveEmployeesCount }} inactive</span>
-            </div>
+            <AppSectionHeader
+              class="employees-settings-panel__header"
+              title="Directory Settings"
+              title-tag="strong"
+            >
+              <template #actions>
+                <span class="employees-settings-panel__header-meta">
+                  {{ activeEmployeesCount }} active / {{ inactiveEmployeesCount }} inactive
+                </span>
+              </template>
+            </AppSectionHeader>
 
             <div class="employees-toggle-group">
               <label class="employees-toggle-row">
@@ -154,21 +166,26 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
     </template>
 
     <template v-else-if="selectedEmployee">
-      <header class="employees-detail__header">
-        <div>
+      <AppPaneHeader
+        class="employees-detail__header"
+        eyebrow="Selected Employee"
+        :title="getEmployeeDisplayName(selectedEmployee)"
+        title-tag="h2"
+      >
+        <template #copy-prefix>
           <button class="employees-detail__mobile-back" type="button" @click="emit('backToDirectory')">
             Back to Directory
           </button>
-          <span class="employees-workspace__eyebrow">Selected Employee</span>
-          <h2 class="employees-detail__title">{{ getEmployeeDisplayName(selectedEmployee) }}</h2>
-        </div>
-        <div class="employees-detail__status-group">
-          <AppBadge tone="accent">{{ getEmployeeTypeLabel(selectedEmployee) }}</AppBadge>
-          <AppBadge :tone="selectedEmployee.active ? 'success' : 'danger'">
-            {{ selectedEmployee.active ? 'Active' : 'Inactive' }}
-          </AppBadge>
-        </div>
-      </header>
+        </template>
+        <template #actions>
+          <div class="employees-detail__status-group">
+            <AppBadge tone="accent">{{ getEmployeeTypeLabel(selectedEmployee) }}</AppBadge>
+            <AppBadge :tone="selectedEmployee.active ? 'success' : 'danger'">
+              {{ selectedEmployee.active ? 'Active' : 'Inactive' }}
+            </AppBadge>
+          </div>
+        </template>
+      </AppPaneHeader>
 
       <div class="employees-detail__body">
         <form class="employees-form" @submit.prevent="emit('detailSubmit')">
@@ -217,10 +234,17 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
           </div>
 
           <section class="employees-settings-panel">
-            <div class="employees-settings-panel__header">
-              <strong>Employee Settings</strong>
-              <span>Employee #{{ getEmployeeCode(selectedEmployee) }}</span>
-            </div>
+            <AppSectionHeader
+              class="employees-settings-panel__header"
+              title="Employee Settings"
+              title-tag="strong"
+            >
+              <template #actions>
+                <span class="employees-settings-panel__header-meta">
+                  Employee #{{ getEmployeeCode(selectedEmployee) }}
+                </span>
+              </template>
+            </AppSectionHeader>
 
             <div class="employees-toggle-group">
               <label class="employees-toggle-row">
@@ -247,25 +271,26 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
           </section>
 
           <div class="employees-detail__actions">
-            <AppButton
+            <AppLoadingButton
               class="employees-detail__danger"
+              label="Delete Employee"
+              loading-label="Deleting..."
               variant="danger"
+              :loading="deleteLoading"
               :disabled="deleteLoading || saveLoading"
               @click="emit('deleteEmployee')"
-            >
-              {{ deleteLoading ? 'Deleting...' : 'Delete Employee' }}
-            </AppButton>
+            />
           </div>
         </form>
-        <AppStatusMessage
+        <SaveStatusIndicator
           v-if="saveLoading || detailInfo === 'All changes saved.' || detailInfo === 'Changes save when you leave a field.'"
-          :tone="!saveLoading && detailInfo === 'All changes saved.' ? 'success' : 'default'"
-        >
-          {{ saveLoading ? 'Saving changes...' : detailInfo || 'Changes save when you leave a field.' }}
-        </AppStatusMessage>
+          :saving="saveLoading"
+          :message="detailInfo"
+          idle-message="Changes save when you leave a field."
+        />
       </div>
     </template>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>
@@ -282,13 +307,6 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
   padding-right: 0.15rem;
 }
 
-.employees-detail__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
 .employees-detail__mobile-back {
   display: none;
   align-items: center;
@@ -298,18 +316,6 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-muted);
-}
-
-.employees-workspace__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.employees-detail__title {
-  margin: 0.35rem 0 0;
-  font-size: 1.1rem;
 }
 
 .employees-form {
@@ -352,6 +358,11 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 }
 
 .employees-settings-panel {
+  --app-section-header-title-color: var(--text);
+  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-letter-spacing: normal;
+  --app-section-header-title-text-transform: none;
   display: grid;
   gap: 0.85rem;
   min-height: 0;
@@ -361,14 +372,7 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.employees-settings-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.employees-settings-panel__header span,
+.employees-settings-panel__header-meta,
 .employees-settings-panel__meta span {
   color: var(--text-muted);
 }
@@ -414,8 +418,12 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
     grid-template-columns: 1fr;
   }
 
-  .employees-detail__header,
   .employees-settings-panel__header {
+    --app-section-header-flex-direction: column;
+    --app-section-header-align-items: flex-start;
+  }
+
+  .employees-detail__header {
     flex-direction: column;
     align-items: flex-start;
   }

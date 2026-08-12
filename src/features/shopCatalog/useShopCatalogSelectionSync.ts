@@ -1,16 +1,9 @@
 import { watch } from 'vue'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogSelectionSyncOptions {
-  activeFolderId: Ref<string | null>
+  activeFolderId: WritableRef<string | null>
   applySelectedCategoryToForm: (category: ShopCategoryRecord | null) => void
   applySelectedItemToForm: (item: ShopCatalogItemRecord | null) => void
   categories: ReadonlyRef<ShopCategoryRecord[]>
@@ -22,10 +15,10 @@ interface UseShopCatalogSelectionSyncOptions {
   resetCreateItemForm: () => void
   selectedCategory: ReadonlyRef<ShopCategoryRecord | null>
   selectedCategoryId: ReadonlyRef<string | null>
-  selectedInspectorKey: Ref<string>
+  selectedInspectorKey: WritableRef<string>
   selectedItem: ReadonlyRef<ShopCatalogItemRecord | null>
   selectedItemId: ReadonlyRef<string | null>
-  treeInitialized: Ref<boolean>
+  treeInitialized: WritableRef<boolean>
 }
 
 export function useShopCatalogSelectionSync({

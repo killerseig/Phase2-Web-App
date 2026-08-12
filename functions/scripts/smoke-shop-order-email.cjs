@@ -41,6 +41,8 @@ function runScenario(name, order, expectedDeliveryDate) {
   assert.equal(html.includes('Loaded / Pending'), false, `${name}: email should not include the loaded/pending column`)
   assert.equal(html.includes('Job # Trans. To'), false, `${name}: email should not include the transfer-to column`)
   assert.equal(html.includes('Part#'), true, `${name}: email should include the part number column`)
+  assert.equal(html.includes('>Price</th>'), false, `${name}: email should not include the price column`)
+  assert.equal(html.includes('Estimated Total'), false, `${name}: email should not include order pricing totals`)
   assert.equal(html.includes('>Pulled</th>'), true, `${name}: email should include the pulled column`)
   assert.equal(html.includes('>Verified</th>'), true, `${name}: email should include the verified column`)
   assert.equal(html.includes('133/513'), true, `${name}: email should include the 133/513 column`)
@@ -87,6 +89,7 @@ const sharedOrderFields = {
     {
       description: './ *Start Up / Job Posters',
       quantity: 2,
+      price: 7.5,
       receivedQuantity: 0,
       backorderedQuantity: 0,
       note: '',
@@ -94,6 +97,7 @@ const sharedOrderFields = {
     {
       description: './ *Start Up / Foreman Book',
       quantity: 1,
+      price: 12.5,
       receivedQuantity: 0,
       backorderedQuantity: 0,
       note: '',
@@ -128,6 +132,11 @@ assert.equal(
   combinedItemHtml.includes('Special order bottled water'),
   true,
   'special/custom item should render in the main item table',
+)
+assert.equal(
+  combinedItemHtml.includes('$7.50'),
+  false,
+  'catalog item unit prices should not render in the printable order table',
 )
 
 runScenario(
@@ -191,6 +200,7 @@ async function main() {
   })
   assert.equal(Buffer.isBuffer(pdfBuffer), true, 'shop order PDF should return a buffer')
   assert.equal(pdfBuffer.length > 0, true, 'shop order PDF should not be empty')
+  const longPdfHeaderEvents = []
   const longPdfBuffer = await buildShopOrderPdfBuffer({
     ...sharedOrderFields,
     deliveryDate: '2026-06-11',
@@ -202,13 +212,36 @@ async function main() {
       backorderedQuantity: 0,
       note: '',
     })),
+  }, {}, {
+    onTableHeader: (event) => longPdfHeaderEvents.push(event),
   })
   assert.equal(Buffer.isBuffer(longPdfBuffer), true, 'long shop order PDF should return a buffer')
   assert.equal(longPdfBuffer.length > 0, true, 'long shop order PDF should not be empty')
+  const longPdfPageCount = countPdfPages(longPdfBuffer)
   assert.equal(
-    countPdfPages(longPdfBuffer) > 1,
+    longPdfPageCount > 1,
     true,
     'long shop order PDF should span multiple pages so repeated PDF headers are exercised',
+  )
+  assert.equal(
+    longPdfHeaderEvents.length > 1,
+    true,
+    'long shop order PDF should draw the table header on continuation pages',
+  )
+  assert.equal(
+    longPdfHeaderEvents.length <= longPdfPageCount,
+    true,
+    'long shop order PDF should not draw more table headers than pages',
+  )
+  assert.deepEqual(
+    longPdfHeaderEvents.slice(1).map((event) => event.y),
+    longPdfHeaderEvents.slice(1).map(() => 28),
+    'long shop order PDF continuation table headers should start at the top page margin',
+  )
+  assert.deepEqual(
+    longPdfHeaderEvents.map((event) => event.pageNumber),
+    Array.from({ length: longPdfHeaderEvents.length }, (_, index) => index + 1),
+    'long shop order PDF table headers should be drawn once per table page in page order',
   )
   assert.equal(
     buildShopOrderPdfFilename({ orderNumber: '20260610170629' }),

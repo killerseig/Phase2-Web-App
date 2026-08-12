@@ -9,10 +9,7 @@ import {
   formatWeekRange,
 } from '@/features/timecards/workbook'
 import type { JobRecord, TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseJobTimecardSummaryOptions {
   activeSaveCount: ReadonlyRef<number>

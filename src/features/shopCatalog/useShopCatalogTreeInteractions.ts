@@ -1,9 +1,6 @@
 import type { ShopCatalogItemRecord } from '@/types/domain'
+import type { ReadonlyRef } from '@/types/reactivity'
 import type { ShopCatalogTreeNode } from './treeTypes'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
 
 interface UseShopCatalogTreeInteractionsOptions {
   clearDragState: () => void

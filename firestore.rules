@@ -20,12 +20,40 @@ service cloud.firestore {
       return userDocExists() ? userDoc().data.role : null;
     }
 
+    function hasAdminRole() {
+      return userRole() in ['admin', 'Admin'];
+    }
+
+    function hasPayrollRole() {
+      return userRole() in ['payroll', 'Payroll'];
+    }
+
+    function hasShopForemanRole() {
+      return userRole() in ['shop-foreman', 'shop_foreman', 'shop foreman', 'shopForeman', 'Shop Foreman'];
+    }
+
+    function hasProjectManagerRole() {
+      return userRole() in ['project-manager', 'project_manager', 'project manager', 'projectManager', 'Project Manager'];
+    }
+
+    function hasForemanRole() {
+      return userRole() in ['foreman', 'Foreman'];
+    }
+
+    function hasFieldAssigneeRole() {
+      return hasForemanRole() || hasShopForemanRole() || hasProjectManagerRole();
+    }
+
     function userIsActive() {
-      return userDocExists() && userDoc().data.active == true;
+      return userDocExists() && userDoc().data.active != false;
     }
 
     function roleCanUseApp() {
-      return userRole() in ['admin', 'foreman', 'project-manager'];
+      return hasAdminRole() ||
+             hasPayrollRole() ||
+             hasShopForemanRole() ||
+             hasForemanRole() ||
+             hasProjectManagerRole();
     }
 
     function activeAppUser() {
@@ -44,22 +72,65 @@ service cloud.firestore {
 
     function foremanAssignedInJobData(jobData) {
       return jobData.assignedForemanIds is list &&
-             jobData.assignedForemanIds.hasAny([request.auth.uid]);
+             request.auth.uid in jobData.assignedForemanIds;
+    }
+
+    function isShopJobData(jobData) {
+      return jobData.code in ['736', 736] ||
+             jobData.number in ['736', 736] ||
+             jobData.name in ['Shop', 'shop'];
+    }
+
+    function isShopJob(jobId) {
+      return jobDoc(jobId).data != null && isShopJobData(jobDoc(jobId).data);
     }
 
     function isAdmin() {
-      return activeAppUser() && userRole() == 'admin';
+      return signedIn() && userDocExists() && userIsActive() && hasAdminRole();
+    }
+
+    function isPayroll() {
+      return signedIn() && userDocExists() && userIsActive() && hasPayrollRole();
+    }
+
+    function isShopForeman() {
+      return signedIn() && userDocExists() && userIsActive() && hasShopForemanRole();
+    }
+
+    function isProjectManager() {
+      return signedIn() && userDocExists() && userIsActive() && hasProjectManagerRole();
+    }
+
+    function isFieldEditorRole() {
+      return activeAppUser() && (hasForemanRole() || hasShopForemanRole());
+    }
+
+    function canViewAllJobs() {
+      return activeAppUser() && (hasAdminRole() || hasPayrollRole() || hasShopForemanRole());
+    }
+
+    function canManageEmployees() {
+      return isAdmin() || isPayroll();
+    }
+
+    function canManageShopCatalog() {
+      return isAdmin() || isShopForeman();
+    }
+
+    function canUseTimecardExport() {
+      return isAdmin() || isPayroll();
     }
 
     function canUseTimecards() {
-      return activeAppUser() && (isAdmin() || (userRole() in ['foreman', 'project-manager']));
+      return activeAppUser() && (isAdmin() || isFieldEditorRole());
     }
 
     function isForemanAssigned(jobId) {
       return activeAppUser() &&
-        (userRole() in ['foreman', 'project-manager']) &&
+        hasFieldAssigneeRole() &&
         (userAssignedJobs().hasAny([jobId]) ||
-         (jobDoc(jobId).data != null && foremanAssignedInJobData(jobDoc(jobId).data)));
+         (jobDoc(jobId).data != null && foremanAssignedInJobData(jobDoc(jobId).data)) ||
+         (isShopForeman() && isShopJob(jobId)));
     }
 
     function hasJobReadAccess(jobId) {
@@ -71,8 +142,8 @@ service cloud.firestore {
 
     function hasJobReadAccessFromJobData(jobId, jobData) {
       return activeAppUser() && (
-        isAdmin() ||
-        ((userRole() in ['foreman', 'project-manager']) &&
+        canViewAllJobs() ||
+        (hasFieldAssigneeRole() &&
          (userAssignedJobs().hasAny([jobId]) || foremanAssignedInJobData(jobData)))
       );
     }
@@ -80,20 +151,72 @@ service cloud.firestore {
     function hasJobWriteAccess(jobId) {
       return activeAppUser() && (
         isAdmin() ||
-        isForemanAssigned(jobId)
+        (isFieldEditorRole() && isForemanAssigned(jobId))
       );
     }
 
-    function isAssignedForemanToJob(jobId) {
-      return activeAppUser() && (userRole() in ['foreman', 'project-manager']) && userAssignedJobs().hasAny([jobId]);
+    function isFieldWorkflowEditorRole() {
+      return activeAppUser() && (hasForemanRole() || hasShopForemanRole() || hasProjectManagerRole());
+    }
+
+    function hasFieldWorkflowWriteAccess(jobId) {
+      return activeAppUser() && (
+        isAdmin() ||
+        (isFieldWorkflowEditorRole() && isForemanAssigned(jobId))
+      );
+    }
+
+    function projectManagerCanUpdateJob(jobId) {
+      return isProjectManager() &&
+             isForemanAssigned(jobId) &&
+             !request.resource.data.diff(resource.data).changedKeys().hasAny([
+               'active',
+               'archivedAt'
+             ]);
     }
 
     function foremanOwnsWeek(weekData) {
-      return (userRole() in ['foreman', 'project-manager']) && weekData.ownerForemanUserId == request.auth.uid;
+      return (hasForemanRole() || hasShopForemanRole()) && weekData.ownerForemanUserId == request.auth.uid;
     }
 
-    function foremanCanAccessWeek(weekData) {
-      return canUseTimecards() && foremanOwnsWeek(weekData);
+    function foremanCanWorkWeek(weekData) {
+      return canUseTimecards() && hasJobWriteAccess(weekData.jobId);
+    }
+
+    function foremanCanReadWeekHeader(weekData) {
+      return canUseTimecards() && (hasJobWriteAccess(weekData.jobId) || isForemanAssigned(weekData.jobId));
+    }
+
+    function projectManagerCanReadSubmittedWeek(weekData) {
+      return isProjectManager() &&
+             weekData.status == 'submitted' &&
+             isForemanAssigned(weekData.jobId);
+    }
+
+    function canReadTimecardWeekHeader(weekData) {
+      return activeAppUser() && (
+        canUseTimecardExport() ||
+        foremanCanWorkWeek(weekData) ||
+        foremanCanReadWeekHeader(weekData) ||
+        projectManagerCanReadSubmittedWeek(weekData)
+      );
+    }
+
+    function canReadTimecardWeekCards(weekData) {
+      return activeAppUser() && (
+        canUseTimecardExport() ||
+        foremanCanWorkWeek(weekData) ||
+        projectManagerCanReadSubmittedWeek(weekData)
+      );
+    }
+
+    function canCreateTimecardWeek(weekData) {
+      return canUseTimecardExport() ||
+             (
+               canUseTimecards() &&
+               weekData.ownerForemanUserId == request.auth.uid &&
+               hasJobWriteAccess(weekData.jobId)
+             );
     }
 
     function isSelf(uid) {
@@ -145,7 +268,8 @@ service cloud.firestore {
     }
 
     function foremanCanUpdateDailyLogRecipients(jobId) {
-      return isForemanAssigned(jobId) &&
+      return isFieldEditorRole() &&
+             isForemanAssigned(jobId) &&
              request.resource.data.diff(resource.data).changedKeys().hasOnly([
                'dailyLogRecipients'
              ]);
@@ -159,17 +283,13 @@ service cloud.firestore {
       return timecardWeekDoc(weekId).data != null;
     }
 
-    function timecardWeekJobId(weekId) {
-      return timecardWeekExists(weekId) ? timecardWeekDoc(weekId).data.jobId : null;
-    }
-
     function timecardWeekIsSubmitted(weekId) {
       return timecardWeekExists(weekId) && timecardWeekDoc(weekId).data.status == 'submitted';
     }
 
     match /users/{uid} {
-      allow get: if signedIn() && (isSelf(uid) || isAdmin());
-      allow list: if isAdmin();
+      allow get: if signedIn() && (isSelf(uid) || isAdmin() || isPayroll());
+      allow list: if isAdmin() || isPayroll();
       allow create: if isSelf(uid) && selfCreateHasValidProfileShape();
       allow update: if isAdmin() || selfUpdateKeepsPrivileges(uid);
       allow delete: if isAdmin();
@@ -177,36 +297,40 @@ service cloud.firestore {
 
     match /employees/{employeeId} {
       allow read: if activeAppUser();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if canManageEmployees();
     }
 
     match /jobs/{jobId} {
-      allow read: if hasJobReadAccessFromJobData(jobId, resource.data);
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || foremanCanUpdateDailyLogRecipients(jobId);
+      allow get: if activeAppUser() && (canViewAllJobs() || isForemanAssigned(jobId));
+      allow list: if hasJobReadAccessFromJobData(jobId, resource.data);
+      allow create: if isAdmin() || isPayroll();
+      allow delete: if isAdmin();
+      allow update: if isAdmin() ||
+                    projectManagerCanUpdateJob(jobId) ||
+                    foremanCanUpdateDailyLogRecipients(jobId);
     }
 
     match /dailyLogs/{logId} {
       allow read: if hasJobReadAccess(resource.data.jobId);
-      allow create: if hasJobWriteAccess(request.resource.data.jobId);
+      allow create: if hasFieldWorkflowWriteAccess(request.resource.data.jobId);
       allow update: if isAdmin() ||
-                    (hasJobWriteAccess(resource.data.jobId) &&
+                    (hasFieldWorkflowWriteAccess(resource.data.jobId) &&
                      resource.data.status == 'draft' &&
                      request.resource.data.jobId == resource.data.jobId &&
                      request.resource.data.logDate == resource.data.logDate);
       allow delete: if isAdmin() ||
-                    (hasJobWriteAccess(resource.data.jobId) &&
+                    (hasFieldWorkflowWriteAccess(resource.data.jobId) &&
                      resource.data.status == 'draft');
     }
 
     match /timecardWeeks/{weekId} {
-      allow read: if isAdmin() || foremanCanAccessWeek(resource.data);
-      allow create: if canUseTimecards() &&
-                     (isAdmin() || request.resource.data.ownerForemanUserId == request.auth.uid);
+      allow get: if canReadTimecardWeekHeader(resource.data);
+      allow list: if canReadTimecardWeekHeader(resource.data);
+      allow create: if canCreateTimecardWeek(request.resource.data);
       allow update: if isAdmin() ||
                     (canUseTimecards() &&
                      resource.data.status == 'draft' &&
-                     resource.data.ownerForemanUserId == request.auth.uid &&
+                     hasJobWriteAccess(resource.data.jobId) &&
                      request.resource.data.diff(resource.data).changedKeys().hasOnly([
                        'status',
                        'employeeCardCount',
@@ -217,43 +341,44 @@ service cloud.firestore {
                        'submittedByName'
                      ]));
       allow delete: if isAdmin() ||
+                    (isPayroll() && resource.data.status == 'draft') ||
                     (canUseTimecards() &&
                      resource.data.status == 'draft' &&
                      resource.data.ownerForemanUserId == request.auth.uid);
 
       match /cards/{cardId} {
         allow read: if timecardWeekExists(weekId) &&
-                     (isAdmin() || foremanCanAccessWeek(timecardWeekDoc(weekId).data));
+                       canReadTimecardWeekCards(timecardWeekDoc(weekId).data);
         allow create: if timecardWeekExists(weekId) &&
-                       (isAdmin() ||
-                        (canUseTimecards() && timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid)) &&
-                       (!timecardWeekIsSubmitted(weekId) || isAdmin());
+                       (canUseTimecardExport() ||
+                        (canUseTimecards() && hasJobWriteAccess(timecardWeekDoc(weekId).data.jobId))) &&
+                       (!timecardWeekIsSubmitted(weekId) || canUseTimecardExport());
         allow update, delete: if timecardWeekExists(weekId) &&
-                              (isAdmin() ||
-                               (canUseTimecards() && timecardWeekDoc(weekId).data.ownerForemanUserId == request.auth.uid)) &&
-                              (!timecardWeekIsSubmitted(weekId) || isAdmin());
+                              (canUseTimecardExport() ||
+                               (canUseTimecards() && hasJobWriteAccess(timecardWeekDoc(weekId).data.jobId))) &&
+                              (!timecardWeekIsSubmitted(weekId) || canUseTimecardExport());
       }
     }
 
     match /shopCatalog/{itemId} {
       allow read: if activeAppUser();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if canManageShopCatalog();
     }
 
     match /shopCategories/{categoryId} {
       allow read: if activeAppUser();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if canManageShopCatalog();
     }
 
     match /shopOrders/{orderId} {
       allow read: if hasJobReadAccess(resource.data.jobId);
-      allow create: if hasJobWriteAccess(request.resource.data.jobId);
+      allow create: if hasFieldWorkflowWriteAccess(request.resource.data.jobId);
       allow update: if isAdmin() ||
-                    (hasJobWriteAccess(resource.data.jobId) &&
+                    (hasFieldWorkflowWriteAccess(resource.data.jobId) &&
                      resource.data.status == 'draft' &&
                      request.resource.data.jobId == resource.data.jobId);
       allow delete: if isAdmin() ||
-                    (hasJobWriteAccess(resource.data.jobId) &&
+                    (hasFieldWorkflowWriteAccess(resource.data.jobId) &&
                      resource.data.status == 'draft');
     }
 

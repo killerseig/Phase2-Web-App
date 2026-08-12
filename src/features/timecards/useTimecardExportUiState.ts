@@ -1,5 +1,6 @@
-import { reactive, ref, type Ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { clearBooleanRecord, pruneRecordToIds } from '@/features/timecards/stateMapHelpers'
+import type { ReadonlyRef } from '@/types/reactivity'
 
 export type TimecardExportMobileToolbarTabKey = 'weeks' | 'archive' | 'sort' | 'actions' | 'saved'
 
@@ -14,7 +15,7 @@ export const timecardExportMobileToolbarTabs: ReadonlyArray<{
   { key: 'saved', label: 'Saved' },
 ]
 
-export function useTimecardExportUiState(canEditWeek: Ref<boolean>) {
+export function useTimecardExportUiState(canEditWeek: ReadonlyRef<boolean>) {
   const activeMobileToolbarTab = ref<TimecardExportMobileToolbarTabKey>('weeks')
   const adminCardEditStates = reactive<Record<string, boolean>>({})
 

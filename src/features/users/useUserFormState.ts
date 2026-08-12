@@ -1,4 +1,10 @@
 import { nextTick, reactive, ref, watch } from 'vue'
+import {
+  CURRENT_DEFAULT_EDITABLE_USER_ROLE,
+  currentRoleCanBeAssignedJobs,
+  isEditableUserRole,
+  normalizeEditableUserRole,
+} from '@/auth/roles'
 import type { UserProfile } from '@/types/domain'
 import {
   areUserDetailSnapshotsEqual,
@@ -15,7 +21,7 @@ type UseUserFormStateOptions = {
   resetCreateMessages: () => void
 }
 
-const defaultRole: EditableUserRole = 'foreman'
+const defaultRole: EditableUserRole = CURRENT_DEFAULT_EDITABLE_USER_ROLE
 
 function toggleAssignedJob(target: string[], jobId: string) {
   if (target.includes(jobId)) {
@@ -70,13 +76,9 @@ export function useUserFormState({ resetCreateMessages }: UseUserFormStateOption
       } else {
         detailForm.firstName = user.firstName ?? ''
         detailForm.lastName = user.lastName ?? ''
-        detailForm.role = user.role === 'admin'
-          ? 'admin'
-          : user.role === 'project-manager'
-            ? 'project-manager'
-            : defaultRole
+        detailForm.role = normalizeEditableUserRole(user.role)
         detailForm.active = user.active
-        detailForm.assignedJobIds = [...user.assignedJobIds]
+        detailForm.assignedJobIds = isEditableUserRole(user.role) ? [...user.assignedJobIds] : []
       }
 
       await nextTick()
@@ -128,7 +130,7 @@ export function useUserFormState({ resetCreateMessages }: UseUserFormStateOption
   watch(
     () => createForm.role,
     (role) => {
-      if (role === 'admin') {
+      if (!currentRoleCanBeAssignedJobs(role)) {
         createForm.assignedJobIds = []
       }
     },
@@ -137,7 +139,7 @@ export function useUserFormState({ resetCreateMessages }: UseUserFormStateOption
   watch(
     () => detailForm.role,
     (role) => {
-      if (role === 'admin') {
+      if (!currentRoleCanBeAssignedJobs(role)) {
         detailForm.assignedJobIds = []
       }
     },

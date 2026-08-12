@@ -10,28 +10,21 @@ import {
 } from '@/features/timecards/exportViewHelpers'
 import { createTimecardCard, ensureTimecardWeek } from '@/services/timecards'
 import type { EmployeeRecord, TimecardWeekRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseTimecardExportCreateActionsOptions {
-  actionLoading: Ref<boolean>
+  actionLoading: WritableRef<boolean>
   canEditWeek: ReadonlyRef<boolean>
   closeCreateTray: () => void
-  createCardForemanId: Ref<string>
+  createCardForemanId: WritableRef<string>
   createCardForemanOptions: ReadonlyRef<readonly TimecardExportCreateForemanOption[]>
-  createCardJobId: Ref<string>
+  createCardJobId: WritableRef<string>
   createCardJobOptions: ReadonlyRef<readonly TimecardExportJobOption[]>
   customCardForm: TimecardExportCustomCardFormState
-  employeeSearchTerm: Ref<string>
+  employeeSearchTerm: WritableRef<string>
   expandAndSelectCard: (cardId: string) => void
   filters: TimecardExportFilterState
-  getIsAdmin: () => boolean
+  getCanUseTimecardExport: () => boolean
   getNextSortIndexForWeek: (weekId: string) => number
   resetCustomCardForm: () => void
   resetPageAndSaveMessages: () => void
@@ -54,7 +47,7 @@ export function useTimecardExportCreateActions({
   employeeSearchTerm,
   expandAndSelectCard,
   filters,
-  getIsAdmin,
+  getCanUseTimecardExport,
   getNextSortIndexForWeek,
   resetCustomCardForm,
   resetPageAndSaveMessages,
@@ -111,7 +104,7 @@ export function useTimecardExportCreateActions({
       hasLinkedJob: !!createCardJobId.value,
       hasLinkedJobNumber: !!resolveCreateCardJobNumber(),
       needsForemanOwner: !targetCreateWeek.value?.id && !createCardForemanId.value,
-      isAdmin: getIsAdmin(),
+      canUseTimecardExport: getCanUseTimecardExport(),
     })
   }
 
@@ -178,7 +171,9 @@ export function useTimecardExportCreateActions({
           lastName: customCardForm.lastName.trim(),
           employeeNumber: customCardForm.employeeNumber.trim(),
           occupation: customCardForm.occupation.trim(),
-          wageRate: getIsAdmin() ? Number(customCardForm.wageRate.trim()) : null,
+          wageRate: getCanUseTimecardExport() && customCardForm.wageRate.trim()
+            ? Number(customCardForm.wageRate.trim())
+            : null,
           isContractor: customCardForm.isContractor,
         },
         getNextSortIndexForWeek(week.id),

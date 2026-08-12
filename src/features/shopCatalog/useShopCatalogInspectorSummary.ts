@@ -9,10 +9,7 @@ import {
   getShopCategoryDisplayName,
 } from '@/features/shopCatalog/adminViewHelpers'
 import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopCatalogInspectorSummaryOptions {
   childCategoriesByParent: ReadonlyRef<Map<string | null, ShopCategoryRecord[]>>

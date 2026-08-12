@@ -1,13 +1,6 @@
 import { recalculateCardTotals } from '@/features/timecards/workbook'
 import type { TimecardCardRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseJobTimecardCardWorkspaceActionsOptions {
   burdenValue: ReadonlyRef<number>
@@ -18,7 +11,7 @@ interface UseJobTimecardCardWorkspaceActionsOptions {
   resetCardSelectionState: () => void
   resetMessages: () => void
   resetSaveQueueState: (options?: { clearQueued?: boolean; clearSavedAt?: boolean }) => void
-  saveError: Ref<string>
+  saveError: WritableRef<string>
   scheduleCardSave: (card: TimecardCardRecord) => void
   selectCard: (cardId: string) => void
   selectedWeekStartDate: ReadonlyRef<string>

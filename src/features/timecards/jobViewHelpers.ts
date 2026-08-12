@@ -110,10 +110,7 @@ export function validateJobTimecardCustomCardForm(
   form: JobTimecardCustomCardFormState,
   options: { canEditWage: boolean },
 ) {
-  if (!form.firstName.trim()) return 'Enter the first name.'
-  if (!form.lastName.trim()) return 'Enter the last name.'
-  if (!form.employeeNumber.trim()) return 'Enter the employee number.'
-  if (!form.occupation.trim()) return 'Enter the occupation.'
+  if (!form.firstName.trim() && !form.lastName.trim()) return 'Enter the card name.'
   if (!options.canEditWage) return ''
 
   const wageText = form.wageRate.trim()

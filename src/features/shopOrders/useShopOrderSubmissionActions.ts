@@ -6,15 +6,8 @@ import {
   type ShopOrderActor,
 } from '@/services/shopOrders'
 import type { ShopOrderRecord } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
 
 interface ShopOrderMetaFormLike {
   deliveryDate: string
@@ -26,13 +19,13 @@ interface UseShopOrderSubmissionActionsOptions {
   closeDeleteDraftConfirm: () => void
   closeSubmitConfirm: () => void
   getActor: () => ShopOrderActor
-  itemActionLoading: Ref<boolean>
+  itemActionLoading: WritableRef<boolean>
   openSubmitConfirm: () => void
   orderMetaForm: ShopOrderMetaFormLike
   requestDeleteDraftOrder: () => void
   saveOrderMetaImmediately: () => Promise<boolean>
   selectedOrder: ReadonlyRef<ShopOrderRecord | null>
-  selectedOrderId: Ref<string | null>
+  selectedOrderId: WritableRef<string | null>
   setActionError: (message: string) => void
   setActionInfo: (message: string) => void
 }

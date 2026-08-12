@@ -11,7 +11,7 @@ const props = withDefaults(defineProps<{
   loadingLabel?: string
   disabled?: boolean
   type?: 'button' | 'submit' | 'reset'
-  variant?: 'default' | 'primary' | 'success' | 'ghost'
+  variant?: 'default' | 'primary' | 'success' | 'danger' | 'ghost'
 }>(), {
   loading: false,
   loadingLabel: '',
@@ -42,3 +42,5 @@ const buttonClasses = computed(() => [
     </slot>
   </button>
 </template>
+
+<style src="./button-family.css"></style>

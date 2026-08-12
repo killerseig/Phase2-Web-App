@@ -1,8 +1,5 @@
 import type { ShopCatalogItemRecord } from '@/types/domain'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseShopCatalogContextDeleteActionsOptions {
   closeContextMenu: () => void

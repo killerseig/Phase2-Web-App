@@ -2,6 +2,13 @@ type FirebaseLikeError = Error & {
   code?: string
 }
 
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined
+
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' ? code : undefined
+}
+
 const AUTH_MESSAGES: Record<string, string> = {
   'auth/invalid-credential': 'Incorrect email or password.',
   'auth/invalid-email': 'Enter a valid email address.',
@@ -12,6 +19,7 @@ const AUTH_MESSAGES: Record<string, string> = {
 }
 
 const FIREBASE_MESSAGES: Record<string, string> = {
+  'permission-denied': 'Permission denied. Your account may not have access yet, or Firestore rules may still need to be deployed.',
   'firestore/permission-denied': 'Permission denied. Your account may not have access yet, or Firestore rules may still need to be deployed.',
   'storage/unauthorized': 'Storage access is not allowed yet. Storage rules may still need to be deployed for this feature.',
 }
@@ -19,18 +27,19 @@ const FIREBASE_MESSAGES: Record<string, string> = {
 export function normalizeError(error: unknown, fallback: string): string {
   if (typeof error === 'string' && error.trim()) return error
 
+  const errorCode = getErrorCode(error)
+  const authMessage = errorCode ? AUTH_MESSAGES[errorCode] : undefined
+  if (authMessage) {
+    return authMessage
+  }
+
+  const firebaseMessage = errorCode ? FIREBASE_MESSAGES[errorCode] : undefined
+  if (firebaseMessage) {
+    return firebaseMessage
+  }
+
   if (error instanceof Error) {
     const firebaseError = error as FirebaseLikeError
-    const authMessage = firebaseError.code ? AUTH_MESSAGES[firebaseError.code] : undefined
-    if (authMessage) {
-      return authMessage
-    }
-
-    const firebaseMessage = firebaseError.code ? FIREBASE_MESSAGES[firebaseError.code] : undefined
-    if (firebaseMessage) {
-      return firebaseMessage
-    }
-
     if (firebaseError.message?.trim()) {
       return firebaseError.message
     }

@@ -163,6 +163,24 @@ export function createEmptyIndoorClimateReading(): DailyLogIndoorClimateReadingR
   }
 }
 
+export function isBlankDailyLogManpowerLine(line: DailyLogManpowerLineRecord) {
+  return !line.trade.trim() && !Number(line.count) && !line.areas.trim()
+}
+
+export function isBlankDailyLogIndoorClimateReading(reading: DailyLogIndoorClimateReadingRecord) {
+  return !reading.area.trim() && !reading.high.trim() && !reading.low.trim() && !reading.humidity.trim()
+}
+
+export function getSubmittableDailyLogManpowerLines(lines: readonly DailyLogManpowerLineRecord[]) {
+  return lines.filter((line) => !isBlankDailyLogManpowerLine(line))
+}
+
+export function getSubmittableDailyLogIndoorClimateReadings(
+  readings: readonly DailyLogIndoorClimateReadingRecord[],
+) {
+  return readings.filter((reading) => !isBlankDailyLogIndoorClimateReading(reading))
+}
+
 export function cloneDailyLogAttachments(attachments: DailyLogAttachmentRecord[]): DailyLogAttachmentRecord[] {
   return attachments.map((attachment) => ({ ...attachment }))
 }

@@ -1,7 +1,13 @@
-import type { JobRecord, RoleKey, UserProfile } from '@/types/domain'
-import { roleCanBeAssignedJobs, toEffectiveRole } from '@/types/domain'
+import {
+  currentRoleCanBeAssignedJobs,
+  getStoredRoleLabel,
+  isEditableUserRole,
+  normalizeEditableUserRole,
+  type EditableUserRole,
+} from '@/auth/roles'
+import type { JobRecord, UserProfile } from '@/types/domain'
 
-export type EditableUserRole = Exclude<RoleKey, 'none'>
+export type { EditableUserRole } from '@/auth/roles'
 
 export type UserCreateFormState = {
   email: string
@@ -40,11 +46,7 @@ export function getUserDisplayName(user: UserProfile) {
 }
 
 export function getRoleBadgeLabel(role: UserProfile['role']) {
-  if (role === 'project-manager') return 'Project Manager'
-  const effectiveRole = toEffectiveRole(role)
-  if (effectiveRole === 'admin') return 'Admin'
-  if (effectiveRole === 'foreman') return 'Foreman'
-  return 'No Access'
+  return getStoredRoleLabel(role)
 }
 
 export function getAssignedJobCode(job: JobRecord) {
@@ -75,22 +77,17 @@ export function normalizeAssignedJobIds(jobIds: readonly string[]) {
   ).sort()
 }
 
-export function normalizeEditableUserRole(role: RoleKey): EditableUserRole {
-  if (role === 'admin') return 'admin'
-  if (role === 'project-manager') return 'project-manager'
-  return 'foreman'
-}
-
 export function getUserDetailSnapshot(user: UserProfile | null): UserDetailSnapshot | null {
   if (!user) return null
 
   const role = normalizeEditableUserRole(user.role)
+  const canAssignJobs = isEditableUserRole(user.role) && currentRoleCanBeAssignedJobs(role)
   return {
     firstName: (user.firstName ?? '').trim(),
     lastName: (user.lastName ?? '').trim(),
     role,
     active: user.active,
-    assignedJobIds: roleCanBeAssignedJobs(role) ? normalizeAssignedJobIds(user.assignedJobIds) : [],
+    assignedJobIds: canAssignJobs ? normalizeAssignedJobIds(user.assignedJobIds) : [],
   }
 }
 
@@ -101,7 +98,7 @@ export function getUserDetailFormSnapshot(form: UserDetailFormLike): UserDetailS
     lastName: form.lastName.trim(),
     role,
     active: form.active,
-    assignedJobIds: roleCanBeAssignedJobs(role) ? normalizeAssignedJobIds(form.assignedJobIds) : [],
+    assignedJobIds: currentRoleCanBeAssignedJobs(role) ? normalizeAssignedJobIds(form.assignedJobIds) : [],
   }
 }
 
@@ -119,4 +116,18 @@ export function areUserDetailSnapshotsEqual(
     left.assignedJobIds.length === right.assignedJobIds.length &&
     left.assignedJobIds.every((jobId, index) => jobId === right.assignedJobIds[index])
   )
+}
+
+export function getUserDetailUpdateRole(
+  user: UserProfile,
+  formRole: EditableUserRole,
+): UserProfile['role'] {
+  return isEditableUserRole(user.role) ? formRole : user.role
+}
+
+export function shouldShowUserDetailAssignedJobs(
+  user: UserProfile | null,
+  formRole: EditableUserRole,
+): boolean {
+  return (!user || isEditableUserRole(user.role)) && currentRoleCanBeAssignedJobs(formRole)
 }

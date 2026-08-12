@@ -33,9 +33,13 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteShopOrderRecordCallable = exports.updateShopOrderRecordCallable = exports.createShopOrderRecordCallable = void 0;
+exports.deleteShopOrderRecordCallable = exports.updateShopOrderRecordCallable = exports.createShopOrderRecordCallable = exports.listShopOrdersForCurrentUser = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
+const roleAccess_1 = require("./roleAccess");
+const fieldWorkflowAccess_1 = require("./fieldWorkflowAccess");
+const firestoreService_1 = require("./firestoreService");
+const jobIdentity_1 = require("./jobIdentity");
 const runtime_1 = require("./runtime");
 function text(value) {
     return typeof value === 'string' ? value.trim() : '';
@@ -43,14 +47,6 @@ function text(value) {
 function textOrNull(value) {
     const normalized = text(value);
     return normalized || null;
-}
-function normalizeRole(value) {
-    const role = text(value).toLowerCase();
-    if (role === 'admin' || role === 'foreman')
-        return role;
-    if (role === 'project-manager')
-        return 'foreman';
-    return 'none';
 }
 function toStatus(value) {
     return value === 'submitted' ? 'submitted' : 'draft';
@@ -62,6 +58,16 @@ function toQuantity(value) {
     if (typeof value === 'string' && value.trim().length) {
         const parsed = Number(value);
         return Number.isFinite(parsed) && parsed >= 1 ? Math.round(parsed) : null;
+    }
+    return null;
+}
+function toPrice(value) {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+        return Math.round(value * 100) / 100;
+    }
+    if (typeof value === 'string' && value.trim().length) {
+        const parsed = Number(value.replace(/[$,]/g, ''));
+        return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null;
     }
     return null;
 }
@@ -79,6 +85,7 @@ function sanitizeItem(item) {
         catalogItemId: textOrNull(item?.catalogItemId),
         description: text(item?.description),
         quantity: toQuantity(item?.quantity),
+        price: toPrice(item?.price),
         note: text(item?.note),
         categoryId: textOrNull(item?.categoryId),
         sku: textOrNull(item?.sku),
@@ -114,33 +121,43 @@ async function getAuthorizedUser(uid) {
         throw new https_1.HttpsError('failed-precondition', 'Your user profile was not found.');
     }
     const data = userSnap.data() || {};
-    const role = normalizeRole(data.role);
-    const active = data.active === true;
-    const assignedJobIds = Array.isArray(data.assignedJobIds)
-        ? data.assignedJobIds
-            .filter((value) => typeof value === 'string')
-            .map((value) => value.trim())
-            .filter(Boolean)
-        : [];
-    const displayName = [text(data.firstName), text(data.lastName)].filter(Boolean).join(' ') || textOrNull(data.email);
-    if (!active) {
+    const user = (0, roleAccess_1.buildCurrentFunctionUser)(uid, data);
+    if (!user.active) {
         throw new https_1.HttpsError('permission-denied', 'Your account is inactive.');
     }
-    if (!['admin', 'foreman'].includes(role)) {
+    if (!(0, roleAccess_1.currentFunctionUserHasAnyRole)(user, ['admin', 'foreman', 'shop-foreman'])) {
         throw new https_1.HttpsError('permission-denied', 'Your account does not have access to shop orders.');
     }
-    return {
-        uid,
-        role,
-        active,
-        assignedJobIds,
-        displayName,
-    };
+    return user;
 }
-function assertCanWriteJob(user, jobId) {
+async function getAuthorizedReader(uid) {
+    const userSnap = await runtime_1.db.collection('users').doc(uid).get();
+    if (!userSnap.exists) {
+        throw new https_1.HttpsError('failed-precondition', 'Your user profile was not found.');
+    }
+    const data = userSnap.data() || {};
+    const user = (0, roleAccess_1.buildCurrentFunctionUser)(uid, data);
+    if (!user.active) {
+        throw new https_1.HttpsError('permission-denied', 'Your account is inactive.');
+    }
+    if (!(0, roleAccess_1.currentFunctionUserHasAnyRole)(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])) {
+        throw new https_1.HttpsError('permission-denied', 'Your account does not have access to shop orders.');
+    }
+    return user;
+}
+function canReadJobShopOrders(user, jobId, jobDetails) {
     if (user.role === 'admin')
-        return;
-    if (user.role === 'foreman' && user.assignedJobIds.includes(jobId))
+        return true;
+    const assignedJobIds = new Set(user.assignedJobIds);
+    if ((jobDetails?.assignedForemanIds ?? []).includes(user.uid)) {
+        assignedJobIds.add(jobId);
+    }
+    if (assignedJobIds.has(jobId))
+        return true;
+    return user.role === 'shop-foreman' && (0, jobIdentity_1.isFunctionShopJob)(jobDetails);
+}
+function assertCanWriteJob(user, jobId, jobDetails, action) {
+    if ((0, fieldWorkflowAccess_1.canWriteFieldWorkflowForJob)(user, jobId, jobDetails, action))
         return;
     throw new https_1.HttpsError('permission-denied', 'You are not assigned to this job.');
 }
@@ -157,6 +174,58 @@ async function getShopOrderDoc(orderId) {
     }
     return { orderRef, orderSnap, order, jobId };
 }
+function serializeFirestoreValue(value) {
+    if (value === null || value === undefined)
+        return value;
+    if (typeof value?.toDate === 'function') {
+        return value.toDate().toISOString();
+    }
+    if (Array.isArray(value)) {
+        return value.map((entry) => serializeFirestoreValue(entry));
+    }
+    if (typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, serializeFirestoreValue(entry)]));
+    }
+    return value;
+}
+function normalizeOrderForResponse(doc) {
+    return {
+        id: doc.id,
+        ...serializeFirestoreValue(doc.data() || {}),
+    };
+}
+function getOrderSortTimestamp(order) {
+    const submitted = Date.parse(text(order?.submittedAt));
+    if (Number.isFinite(submitted))
+        return submitted;
+    const updated = Date.parse(text(order?.updatedAt));
+    if (Number.isFinite(updated))
+        return updated;
+    const created = Date.parse(text(order?.createdAt));
+    return Number.isFinite(created) ? created : 0;
+}
+function sortOrderResponses(orders) {
+    return orders.slice().sort((left, right) => (getOrderSortTimestamp(right) - getOrderSortTimestamp(left)
+        || text(right.id).localeCompare(text(left.id))));
+}
+exports.listShopOrdersForCurrentUser = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+    const jobId = text(request.data?.jobId);
+    if (!jobId || jobId.includes('/')) {
+        throw new https_1.HttpsError('invalid-argument', 'jobId is required.');
+    }
+    const user = await getAuthorizedReader(request.auth.uid);
+    const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
+    if (!canReadJobShopOrders(user, jobId, jobDetails)) {
+        throw new https_1.HttpsError('permission-denied', 'Your account does not have access to this job shop order workspace.');
+    }
+    const snapshot = await runtime_1.db.collection('shopOrders').where('jobId', '==', jobId).get();
+    return {
+        orders: sortOrderResponses(snapshot.docs.map(normalizeOrderForResponse)),
+    };
+});
 exports.createShopOrderRecordCallable = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Must be signed in.');
@@ -165,7 +234,8 @@ exports.createShopOrderRecordCallable = (0, https_1.onCall)(async (request) => {
     if (!jobId)
         throw new https_1.HttpsError('invalid-argument', 'jobId is required');
     const user = await getAuthorizedUser(request.auth.uid);
-    assertCanWriteJob(user, jobId);
+    const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
+    assertCanWriteJob(user, jobId, jobDetails, 'create');
     const created = await runtime_1.db.collection('shopOrders').add({
         jobId,
         jobCode: textOrNull(request.data?.jobCode),
@@ -194,9 +264,11 @@ exports.updateShopOrderRecordCallable = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'orderId is required');
     const { orderRef, order, jobId } = await getShopOrderDoc(orderId);
     const user = await getAuthorizedUser(request.auth.uid);
-    assertCanWriteJob(user, jobId);
-    if (toStatus(order.status) === 'submitted' && user.role === 'foreman') {
-        throw new https_1.HttpsError('failed-precondition', 'Submitted shop orders cannot be changed by foremen.');
+    const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
+    const writeAction = ('status' in request.data && toStatus(request.data?.status) === 'submitted') ? 'submit' : 'edit-draft';
+    assertCanWriteJob(user, jobId, jobDetails, writeAction);
+    if (toStatus(order.status) === 'submitted' && user.role !== 'admin') {
+        throw new https_1.HttpsError('failed-precondition', 'Submitted shop orders cannot be changed by field users.');
     }
     const payload = {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -232,9 +304,10 @@ exports.deleteShopOrderRecordCallable = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'orderId is required');
     const { orderRef, order, jobId } = await getShopOrderDoc(orderId);
     const user = await getAuthorizedUser(request.auth.uid);
-    assertCanWriteJob(user, jobId);
-    if (toStatus(order.status) === 'submitted' && user.role === 'foreman') {
-        throw new https_1.HttpsError('failed-precondition', 'Submitted shop orders cannot be deleted by foremen.');
+    const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
+    assertCanWriteJob(user, jobId, jobDetails, 'edit-draft');
+    if (toStatus(order.status) === 'submitted' && user.role !== 'admin') {
+        throw new https_1.HttpsError('failed-precondition', 'Submitted shop orders cannot be deleted by field users.');
     }
     await orderRef.delete();
     return { success: true };

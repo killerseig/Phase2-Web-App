@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { useActionConfirmDialog } from '@/composables/useActionConfirmDialog'
 import {
   getShopCatalogConfirmLabel,
   getShopCatalogConfirmMessage,
@@ -6,23 +6,23 @@ import {
   isShopCatalogConfirmDestructive,
   type ShopCatalogConfirmAction,
 } from '@/features/shopCatalog/adminViewHelpers'
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef } from '@/types/reactivity'
 
 export function useShopCatalogConfirmDialog(isBusy: ReadonlyRef<boolean>) {
-  const catalogConfirmAction = ref<ShopCatalogConfirmAction | null>(null)
-
-  const catalogConfirmTitle = computed(() => getShopCatalogConfirmTitle(catalogConfirmAction.value))
-  const catalogConfirmMessage = computed(() => getShopCatalogConfirmMessage(catalogConfirmAction.value))
-  const catalogConfirmLabel = computed(() => getShopCatalogConfirmLabel(catalogConfirmAction.value))
-  const catalogConfirmDestructive = computed(() => isShopCatalogConfirmDestructive(catalogConfirmAction.value))
-
-  function handleCatalogConfirmOpenUpdate(open: boolean) {
-    if (open || isBusy.value) return
-    catalogConfirmAction.value = null
-  }
+  const {
+    confirmAction: catalogConfirmAction,
+    confirmDestructive: catalogConfirmDestructive,
+    confirmLabel: catalogConfirmLabel,
+    confirmMessage: catalogConfirmMessage,
+    confirmTitle: catalogConfirmTitle,
+    handleConfirmOpenUpdate: handleCatalogConfirmOpenUpdate,
+  } = useActionConfirmDialog<ShopCatalogConfirmAction>({
+    getLabel: getShopCatalogConfirmLabel,
+    getMessage: getShopCatalogConfirmMessage,
+    getTitle: getShopCatalogConfirmTitle,
+    isBusy,
+    isDestructive: isShopCatalogConfirmDestructive,
+  })
 
   return {
     catalogConfirmAction,

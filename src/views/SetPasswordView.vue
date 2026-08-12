@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import AuthCard from '@/components/auth/AuthCard.vue'
+import AuthStatusMessage from '@/components/auth/AuthStatusMessage.vue'
+import AuthSubmitButton from '@/components/auth/AuthSubmitButton.vue'
 import AppField from '@/components/common/AppField.vue'
-import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
-import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
 import { useRoute, useRouter } from 'vue-router'
-import { hasFirebaseConfig } from '@/firebase'
+import {
+  getSetPasswordValidationMessage,
+  invalidSetupLinkMessage,
+  readSetupLinkParams,
+} from '@/features/auth/authViewHelpers'
 import { setPasswordFromSetupLink, verifySetupToken } from '@/services/auth'
+import { hasConfiguredFirebase } from '@/services/firebaseConfig'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from '@/utils/normalizeError'
-import { readFirstQueryParam } from '@/utils/routerQuery'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,17 +37,16 @@ useToastMessages([
 ])
 
 async function verifyLink() {
-  if (!hasFirebaseConfig) {
+  if (!hasConfiguredFirebase) {
     error.value = 'Firebase is not configured yet. Add the v1 VITE_FIREBASE_* values first.'
     verifying.value = false
     return
   }
 
-  const nextToken = readFirstQueryParam(route.query.setupToken)
-  const nextUid = readFirstQueryParam(route.query.uid)
+  const { setupToken: nextToken, uid: nextUid } = readSetupLinkParams(route.query)
 
   if (!nextToken || !nextUid) {
-    error.value = 'Invalid setup link. Please request a new password creation link.'
+    error.value = invalidSetupLinkMessage
     verifying.value = false
     return
   }
@@ -64,18 +67,9 @@ async function handleSubmit() {
   error.value = ''
   info.value = ''
 
-  if (!password.value.trim()) {
-    error.value = 'Password is required.'
-    return
-  }
-
-  if (password.value.length < 6) {
-    error.value = 'Password must be at least 6 characters.'
-    return
-  }
-
-  if (password.value !== confirmPassword.value) {
-    error.value = 'Passwords do not match.'
+  const validationMessage = getSetPasswordValidationMessage(password.value, confirmPassword.value)
+  if (validationMessage) {
+    error.value = validationMessage
     return
   }
 
@@ -114,9 +108,9 @@ onMounted(() => {
     title="Create Your Password"
     copy="Finish the admin-created account setup using the same link flow from the current app."
   >
-    <AppStatusMessage v-if="verifying" class="auth-card__status">
+    <AuthStatusMessage v-if="verifying">
       Verifying your setup link...
-    </AppStatusMessage>
+    </AuthStatusMessage>
 
     <template v-else-if="email">
       <AppField class="auth-field" label="Email">
@@ -143,9 +137,7 @@ onMounted(() => {
         />
       </AppField>
 
-      <AppLoadingButton
-        class="auth-card__button"
-        variant="primary"
+      <AuthSubmitButton
         label="Create Password & Login"
         loading-label="Creating Password..."
         :loading="loading"

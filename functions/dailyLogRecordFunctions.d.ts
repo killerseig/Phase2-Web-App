@@ -1,3 +1,6 @@
+export declare const listDailyLogsForCurrentUser: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    logs: any[];
+}>, unknown>;
 export declare const createDailyLogRecordCallable: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     id: string;
 }>, unknown>;

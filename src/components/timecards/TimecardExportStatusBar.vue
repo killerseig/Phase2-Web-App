@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, reactive, ref, type ComponentPublicInstance } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import TimecardToolbarSignal from '@/components/timecards/TimecardToolbarSignal.vue'
+import TimecardToolbarPanel from '@/components/timecards/TimecardToolbarPanel.vue'
+import {
+  isHtmlDivElement,
+  resolveTemplateElementRef,
+  type TemplateElementRefValue,
+} from '@/composables/useTemplateElementRef'
 
 export interface TimecardExportStatusSignal {
   key: string
@@ -26,17 +33,19 @@ const statusScrollerDrag = reactive({
 const canScrollStatusBackward = computed(() => activeStatusSignalIndex.value > 0)
 const canScrollStatusForward = computed(() => activeStatusSignalIndex.value < getMaxStatusSignalStartIndex())
 
-function setStatusScrollerRef(element: Element | ComponentPublicInstance | null) {
-  statusScrollerRef.value = element instanceof HTMLDivElement ? element : null
+function setStatusScrollerRef(element: TemplateElementRefValue) {
+  statusScrollerRef.value = resolveTemplateElementRef(element, isHtmlDivElement)
 }
 
-function setStatusSignalItemRef(index: number, element: Element | ComponentPublicInstance | null) {
-  if (!(element instanceof HTMLDivElement)) {
+function setStatusSignalItemRef(index: number, element: TemplateElementRefValue) {
+  const resolvedElement = resolveTemplateElementRef(element, isHtmlDivElement)
+
+  if (!resolvedElement) {
     delete statusSignalItemRefs.value[index]
     return
   }
 
-  statusSignalItemRefs.value[index] = element
+  statusSignalItemRefs.value[index] = resolvedElement
 }
 
 function getMaxStatusSignalStartIndex() {
@@ -151,20 +160,21 @@ function endStatusScrollerDrag(event: PointerEvent) {
 </script>
 
 <template>
-  <fieldset class="timecard-export-status-bar timecards-toolbar__group timecards-toolbar__group--status-bar">
-    <legend class="timecard-export-status-bar__legend">Status</legend>
+  <TimecardToolbarPanel
+    class="timecard-export-status-bar"
+    title="Status"
+    mobile-always-visible
+    :modifiers="['status-bar']"
+    collapse-at="960"
+  >
     <div class="timecard-export-status-bar__strip timecard-export-status-bar__strip--desktop">
-      <span
+      <TimecardToolbarSignal
         v-for="signal in signals"
         :key="signal.key"
-        class="timecard-export-status-bar__signal"
-        :class="{
-          'timecard-export-status-bar__signal--success': signal.tone === 'success',
-          'timecard-export-status-bar__signal--error': signal.tone === 'error',
-        }"
+        :tone="signal.tone"
       >
         {{ signal.text }}
-      </span>
+      </TimecardToolbarSignal>
     </div>
 
     <div class="timecard-export-status-bar__scroll">
@@ -193,15 +203,9 @@ function endStatusScrollerDrag(event: PointerEvent) {
           :ref="(element) => setStatusSignalItemRef(index, element)"
           class="timecard-export-status-bar__carousel-item"
         >
-          <span
-            class="timecard-export-status-bar__signal"
-            :class="{
-              'timecard-export-status-bar__signal--success': signal.tone === 'success',
-              'timecard-export-status-bar__signal--error': signal.tone === 'error',
-            }"
-          >
+          <TimecardToolbarSignal :tone="signal.tone">
             {{ signal.text }}
-          </span>
+          </TimecardToolbarSignal>
         </div>
       </div>
 
@@ -214,27 +218,12 @@ function endStatusScrollerDrag(event: PointerEvent) {
         <span class="timecard-export-status-bar__carousel-glyph" aria-hidden="true">&gt;</span>
       </button>
     </div>
-  </fieldset>
+  </TimecardToolbarPanel>
 </template>
 
 <style scoped>
 .timecard-export-status-bar {
-  display: grid;
-  gap: var(--timecards-toolbar-group-gap);
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
   grid-column: 1 / -1;
-}
-
-.timecard-export-status-bar__legend {
-  padding: 0;
-  color: rgba(64, 85, 36, 0.82);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .timecard-export-status-bar__strip {
@@ -317,30 +306,6 @@ function endStatusScrollerDrag(event: PointerEvent) {
   cursor: grabbing;
 }
 
-.timecard-export-status-bar__signal {
-  min-height: var(--timecards-toolbar-control-height);
-  padding: 0 0.8rem;
-  border: 1px solid var(--timecards-toolbar-control-border);
-  border-radius: var(--timecards-toolbar-control-radius);
-  background: var(--timecards-toolbar-control-bg-muted);
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.84rem;
-  font-weight: 600;
-}
-
-.timecard-export-status-bar__signal--success {
-  border-color: rgba(46, 109, 61, 0.36);
-  color: #1e5c34;
-  background: rgba(221, 241, 214, 0.96);
-}
-
-.timecard-export-status-bar__signal--error {
-  border-color: rgba(167, 53, 53, 0.36);
-  color: #8a2828;
-  background: rgba(248, 224, 220, 0.96);
-}
-
 @media (max-width: 960px) {
   .timecard-export-status-bar__strip--desktop {
     display: none;
@@ -358,7 +323,7 @@ function endStatusScrollerDrag(event: PointerEvent) {
     min-width: calc((100% - var(--timecards-status-gap)) / 2);
   }
 
-  .timecard-export-status-bar__signal {
+  .timecard-toolbar-signal {
     width: 100%;
     justify-content: center;
     white-space: nowrap;

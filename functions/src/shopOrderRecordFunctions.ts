@@ -1,17 +1,16 @@
 import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
+import {
+  type CurrentFunctionUser,
+  buildCurrentFunctionUser,
+  currentFunctionUserHasAnyRole,
+} from './roleAccess'
+import { canWriteFieldWorkflowForJob, type FieldWorkflowWriteAction } from './fieldWorkflowAccess'
+import { getJobDetails } from './firestoreService'
+import { isFunctionShopJob } from './jobIdentity'
 import { db } from './runtime'
 
-type ShopOrderRole = 'admin' | 'foreman' | 'none'
 type ShopOrderStatus = 'draft' | 'submitted'
-
-interface AuthorizedShopOrderUser {
-  uid: string
-  role: ShopOrderRole
-  active: boolean
-  assignedJobIds: string[]
-  displayName: string | null
-}
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -20,13 +19,6 @@ function text(value: unknown) {
 function textOrNull(value: unknown) {
   const normalized = text(value)
   return normalized || null
-}
-
-function normalizeRole(value: unknown): ShopOrderRole {
-  const role = text(value).toLowerCase()
-  if (role === 'admin' || role === 'foreman') return role
-  if (role === 'project-manager') return 'foreman'
-  return 'none'
 }
 
 function toStatus(value: unknown): ShopOrderStatus {
@@ -41,6 +33,19 @@ function toQuantity(value: unknown): number | null {
   if (typeof value === 'string' && value.trim().length) {
     const parsed = Number(value)
     return Number.isFinite(parsed) && parsed >= 1 ? Math.round(parsed) : null
+  }
+
+  return null
+}
+
+function toPrice(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.round(value * 100) / 100
+  }
+
+  if (typeof value === 'string' && value.trim().length) {
+    const parsed = Number(value.replace(/[$,]/g, ''))
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null
   }
 
   return null
@@ -62,6 +67,7 @@ function sanitizeItem(item: any) {
     catalogItemId: textOrNull(item?.catalogItemId),
     description: text(item?.description),
     quantity: toQuantity(item?.quantity),
+    price: toPrice(item?.price),
     note: text(item?.note),
     categoryId: textOrNull(item?.categoryId),
     sku: textOrNull(item?.sku),
@@ -98,43 +104,69 @@ function sanitizeItems(items: any[]) {
   return sortShopOrderItems(items.map((item) => sanitizeItem(item)).filter((item) => item.description.length > 0))
 }
 
-async function getAuthorizedUser(uid: string): Promise<AuthorizedShopOrderUser> {
+async function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser> {
   const userSnap = await db.collection('users').doc(uid).get()
   if (!userSnap.exists) {
     throw new HttpsError('failed-precondition', 'Your user profile was not found.')
   }
 
   const data = userSnap.data() || {}
-  const role = normalizeRole(data.role)
-  const active = data.active === true
-  const assignedJobIds = Array.isArray(data.assignedJobIds)
-    ? data.assignedJobIds
-        .filter((value: unknown): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter(Boolean)
-    : []
-  const displayName = [text(data.firstName), text(data.lastName)].filter(Boolean).join(' ') || textOrNull(data.email)
+  const user = buildCurrentFunctionUser(uid, data)
 
-  if (!active) {
+  if (!user.active) {
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!['admin', 'foreman'].includes(role)) {
+  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman'])) {
     throw new HttpsError('permission-denied', 'Your account does not have access to shop orders.')
   }
 
-  return {
-    uid,
-    role,
-    active,
-    assignedJobIds,
-    displayName,
-  }
+  return user
 }
 
-function assertCanWriteJob(user: AuthorizedShopOrderUser, jobId: string) {
-  if (user.role === 'admin') return
-  if (user.role === 'foreman' && user.assignedJobIds.includes(jobId)) return
+async function getAuthorizedReader(uid: string): Promise<CurrentFunctionUser> {
+  const userSnap = await db.collection('users').doc(uid).get()
+  if (!userSnap.exists) {
+    throw new HttpsError('failed-precondition', 'Your user profile was not found.')
+  }
+
+  const data = userSnap.data() || {}
+  const user = buildCurrentFunctionUser(uid, data)
+
+  if (!user.active) {
+    throw new HttpsError('permission-denied', 'Your account is inactive.')
+  }
+
+  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])) {
+    throw new HttpsError('permission-denied', 'Your account does not have access to shop orders.')
+  }
+
+  return user
+}
+
+function canReadJobShopOrders(
+  user: CurrentFunctionUser,
+  jobId: string,
+  jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
+) {
+  if (user.role === 'admin') return true
+
+  const assignedJobIds = new Set(user.assignedJobIds)
+  if ((jobDetails?.assignedForemanIds ?? []).includes(user.uid)) {
+    assignedJobIds.add(jobId)
+  }
+
+  if (assignedJobIds.has(jobId)) return true
+  return user.role === 'shop-foreman' && isFunctionShopJob(jobDetails)
+}
+
+function assertCanWriteJob(
+  user: CurrentFunctionUser,
+  jobId: string,
+  jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
+  action: FieldWorkflowWriteAction,
+) {
+  if (canWriteFieldWorkflowForJob(user, jobId, jobDetails, action)) return
   throw new HttpsError('permission-denied', 'You are not assigned to this job.')
 }
 
@@ -154,6 +186,69 @@ async function getShopOrderDoc(orderId: string) {
   return { orderRef, orderSnap, order, jobId }
 }
 
+function serializeFirestoreValue(value: any): any {
+  if (value === null || value === undefined) return value
+  if (typeof value?.toDate === 'function') {
+    return value.toDate().toISOString()
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => serializeFirestoreValue(entry))
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, serializeFirestoreValue(entry)]),
+    )
+  }
+  return value
+}
+
+function normalizeOrderForResponse(doc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot) {
+  return {
+    id: doc.id,
+    ...serializeFirestoreValue(doc.data() || {}),
+  }
+}
+
+function getOrderSortTimestamp(order: any) {
+  const submitted = Date.parse(text(order?.submittedAt))
+  if (Number.isFinite(submitted)) return submitted
+
+  const updated = Date.parse(text(order?.updatedAt))
+  if (Number.isFinite(updated)) return updated
+
+  const created = Date.parse(text(order?.createdAt))
+  return Number.isFinite(created) ? created : 0
+}
+
+function sortOrderResponses(orders: any[]) {
+  return orders.slice().sort((left, right) => (
+    getOrderSortTimestamp(right) - getOrderSortTimestamp(left)
+    || text(right.id).localeCompare(text(left.id))
+  ))
+}
+
+export const listShopOrdersForCurrentUser = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be signed in.')
+  }
+
+  const jobId = text(request.data?.jobId)
+  if (!jobId || jobId.includes('/')) {
+    throw new HttpsError('invalid-argument', 'jobId is required.')
+  }
+
+  const user = await getAuthorizedReader(request.auth.uid)
+  const jobDetails = await getJobDetails(jobId)
+  if (!canReadJobShopOrders(user, jobId, jobDetails)) {
+    throw new HttpsError('permission-denied', 'Your account does not have access to this job shop order workspace.')
+  }
+
+  const snapshot = await db.collection('shopOrders').where('jobId', '==', jobId).get()
+  return {
+    orders: sortOrderResponses(snapshot.docs.map(normalizeOrderForResponse)),
+  }
+})
+
 export const createShopOrderRecordCallable = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be signed in.')
@@ -163,7 +258,8 @@ export const createShopOrderRecordCallable = onCall(async (request) => {
   if (!jobId) throw new HttpsError('invalid-argument', 'jobId is required')
 
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  const jobDetails = await getJobDetails(jobId)
+  assertCanWriteJob(user, jobId, jobDetails, 'create')
 
   const created = await db.collection('shopOrders').add({
     jobId,
@@ -196,10 +292,14 @@ export const updateShopOrderRecordCallable = onCall(async (request) => {
 
   const { orderRef, order, jobId } = await getShopOrderDoc(orderId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  const jobDetails = await getJobDetails(jobId)
+  const writeAction: FieldWorkflowWriteAction = (
+    'status' in request.data && toStatus(request.data?.status) === 'submitted'
+  ) ? 'submit' : 'edit-draft'
+  assertCanWriteJob(user, jobId, jobDetails, writeAction)
 
-  if (toStatus(order.status) === 'submitted' && user.role === 'foreman') {
-    throw new HttpsError('failed-precondition', 'Submitted shop orders cannot be changed by foremen.')
+  if (toStatus(order.status) === 'submitted' && user.role !== 'admin') {
+    throw new HttpsError('failed-precondition', 'Submitted shop orders cannot be changed by field users.')
   }
 
   const payload: Record<string, unknown> = {
@@ -244,10 +344,11 @@ export const deleteShopOrderRecordCallable = onCall(async (request) => {
 
   const { orderRef, order, jobId } = await getShopOrderDoc(orderId)
   const user = await getAuthorizedUser(request.auth.uid)
-  assertCanWriteJob(user, jobId)
+  const jobDetails = await getJobDetails(jobId)
+  assertCanWriteJob(user, jobId, jobDetails, 'edit-draft')
 
-  if (toStatus(order.status) === 'submitted' && user.role === 'foreman') {
-    throw new HttpsError('failed-precondition', 'Submitted shop orders cannot be deleted by foremen.')
+  if (toStatus(order.status) === 'submitted' && user.role !== 'admin') {
+    throw new HttpsError('failed-precondition', 'Submitted shop orders cannot be deleted by field users.')
   }
 
   await orderRef.delete()

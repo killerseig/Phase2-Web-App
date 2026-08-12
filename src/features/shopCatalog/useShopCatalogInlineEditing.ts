@@ -2,7 +2,6 @@ import {
   nextTick,
   reactive,
   ref,
-  type ComponentPublicInstance,
 } from 'vue'
 import type { ShopCatalogTreeNode as TreeNode } from '@/features/shopCatalog/treeTypes'
 
@@ -23,8 +22,8 @@ export function useShopCatalogInlineEditing() {
     saving: false,
   })
 
-  function setInlineInputRef(element: Element | ComponentPublicInstance | null) {
-    inlineInputRef.value = element instanceof HTMLInputElement ? element : null
+  function setInlineInputRef(element: HTMLInputElement | null) {
+    inlineInputRef.value = element
   }
 
   function isRenamingNode(nodeKey: TreeNode['key']) {

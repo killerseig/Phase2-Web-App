@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppField from '@/components/common/AppField.vue'
+import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 
-defineProps<{
+const props = withDefaults(defineProps<{
   description: string
   disabled: boolean
   note: string
   quantity: string
-}>()
+  submitDisabled?: boolean
+}>(), {
+  submitDisabled: undefined,
+})
 
 const emit = defineEmits<{
   submit: []
@@ -17,16 +22,18 @@ const emit = defineEmits<{
   'update:quantity': [value: string]
 }>()
 
+const isSubmitDisabled = computed(() => props.submitDisabled ?? props.disabled)
+
 </script>
 
 <template>
   <section class="shop-order-custom-item-form shop-orders-tree-card">
-    <header class="shop-order-custom-item-form__header">
-      <div>
-        <span class="shop-order-custom-item-form__eyebrow">Custom Item</span>
-        <h3 class="shop-order-custom-item-form__title">Add Custom Item</h3>
-      </div>
-    </header>
+    <AppPaneHeader
+      class="shop-order-custom-item-form__header"
+      eyebrow="Custom Item"
+      title="Add Custom Item"
+      title-tag="h3"
+    />
 
     <form class="shop-orders-form__grid shop-order-custom-item-form__grid" @submit.prevent="emit('submit')">
       <AppField class="shop-order-custom-item-form__field shop-order-custom-item-form__field--full" label="Description">
@@ -67,7 +74,7 @@ const emit = defineEmits<{
         <AppButton
           type="submit"
           variant="primary"
-          :disabled="disabled"
+          :disabled="isSubmitDisabled"
         >
           Add Custom Item
         </AppButton>
@@ -78,6 +85,10 @@ const emit = defineEmits<{
 
 <style scoped>
 .shop-order-custom-item-form {
+  --app-pane-header-eyebrow-font-size: 0.66rem;
+  --app-pane-header-eyebrow-letter-spacing: 0.14em;
+  --app-pane-header-title-margin: 0.12rem 0 0;
+  --app-pane-header-title-font-size: 0.95rem;
   display: grid;
   align-content: start;
   gap: 0.45rem;
@@ -86,23 +97,7 @@ const emit = defineEmits<{
   background: transparent;
 }
 
-.shop-order-custom-item-form__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.65rem;
-}
-
-.shop-order-custom-item-form__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.66rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.shop-order-custom-item-form__title {
-  margin: 0.12rem 0 0;
-  font-size: 0.95rem;
+.shop-order-custom-item-form__header :deep(.app-pane-header__title) {
   letter-spacing: -0.01em;
 }
 

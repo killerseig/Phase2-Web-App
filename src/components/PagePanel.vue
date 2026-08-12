@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
+
 defineProps<{
   eyebrow: string
   title: string
@@ -8,11 +10,13 @@ defineProps<{
 
 <template>
   <section class="page-panel">
-    <header class="page-panel__header">
-      <span class="page-panel__eyebrow">{{ eyebrow }}</span>
-      <h2 class="page-panel__title">{{ title }}</h2>
-      <p v-if="description" class="page-panel__description">{{ description }}</p>
-    </header>
+    <AppPaneHeader
+      class="page-panel__header"
+      :eyebrow="eyebrow"
+      :title="title"
+      title-tag="h2"
+      :description="description"
+    />
 
     <div class="page-panel__body">
       <slot />
@@ -32,24 +36,12 @@ defineProps<{
 }
 
 .page-panel__header {
+  --app-pane-header-eyebrow-font-size: 0.74rem;
+  --app-pane-header-eyebrow-letter-spacing: 0.08em;
+  --app-pane-header-title-margin: 0.45rem 0 0;
+  --app-pane-header-title-font-size: 1.2rem;
+  --app-pane-header-description-margin: 0.45rem 0 0;
   padding: 1.1rem 1.25rem 0;
-}
-
-.page-panel__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.page-panel__title {
-  margin: 0.45rem 0 0;
-  font-size: 1.2rem;
-}
-
-.page-panel__description {
-  margin: 0.45rem 0 0;
-  color: var(--text-muted);
 }
 
 .page-panel__body {

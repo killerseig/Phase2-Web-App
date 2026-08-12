@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import AppButton from '@/components/common/AppButton.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
+import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 
 const props = defineProps<{
   canCreateDailyLog: boolean
@@ -10,6 +12,7 @@ const props = defineProps<{
   hasUnsavedDraftChanges: boolean
   savingDraft: boolean
   selectedDate: string
+  selectedDateIsFuture: boolean
   selectedDateIsToday: boolean
   selectedLogLabel: string
   submittingLog: boolean
@@ -24,55 +27,62 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <header class="daily-logs-header">
-    <div>
-      <span class="daily-logs-eyebrow">Daily Logs</span>
-      <h1 class="daily-logs-title">{{ props.title }}</h1>
-    </div>
+  <AppPaneHeader
+    class="daily-logs-header"
+    eyebrow="Daily Logs"
+    :title="props.title"
+    title-tag="h1"
+  >
+    <template #actions>
+      <div class="daily-logs-header__actions">
+        <AppLoadingButton
+          v-if="props.canEditSelectedLog"
+          label="Save Draft"
+          loading-label="Saving..."
+          :loading="props.savingDraft"
+          :disabled="props.submittingLog || props.deletingDraft || !props.hasUnsavedDraftChanges"
+          @click="emit('saveDraft')"
+        />
 
-    <div class="daily-logs-header__actions">
-      <AppButton
-        v-if="props.canEditSelectedLog"
-        :disabled="props.savingDraft || props.submittingLog || props.deletingDraft || !props.hasUnsavedDraftChanges"
-        @click="emit('saveDraft')"
-      >
-        {{ props.savingDraft ? 'Saving...' : 'Save Draft' }}
-      </AppButton>
-
-      <AppButton
-        v-if="props.canCreateDailyLog"
-        variant="primary"
-        :disabled="props.creatingDraft"
-        @click="emit('createDraft')"
-      >
-        {{ props.creatingDraft ? 'Creating...' : props.createButtonLabel }}
-      </AppButton>
-    </div>
-  </header>
+        <AppLoadingButton
+          v-if="props.canCreateDailyLog"
+          :label="props.createButtonLabel"
+          loading-label="Creating..."
+          variant="primary"
+          :loading="props.creatingDraft"
+          @click="emit('createDraft')"
+        />
+      </div>
+    </template>
+  </AppPaneHeader>
 
   <div class="daily-logs-toolbar">
-    <span class="daily-logs-badge">{{ props.selectedLogLabel }}</span>
-    <span class="daily-logs-badge">{{ props.visibleLogCount }} logs for {{ props.selectedDate }}</span>
-    <span v-if="props.savingDraft" class="daily-logs-badge">Saving draft...</span>
-    <span v-else-if="props.hasUnsavedDraftChanges" class="daily-logs-badge daily-logs-badge--warning">
+    <AppBadge class="daily-logs-badge" tone="accent">{{ props.selectedLogLabel }}</AppBadge>
+    <AppBadge class="daily-logs-badge" tone="accent">
+      {{ props.visibleLogCount }} logs for {{ props.selectedDate }}
+    </AppBadge>
+    <AppBadge v-if="props.savingDraft" class="daily-logs-badge" tone="accent">
+      Saving draft...
+    </AppBadge>
+    <AppBadge v-else-if="props.hasUnsavedDraftChanges" class="daily-logs-badge" tone="warning">
       Unsaved changes
-    </span>
+    </AppBadge>
   </div>
 
   <div
-    v-if="!props.selectedDateIsToday"
+    v-if="props.selectedDateIsFuture"
     class="daily-logs-message daily-logs-message--info"
   >
-    Logs from past or future dates are view only. New drafts can only be created for today.
+    Future daily logs are view only. Choose today or an earlier date to create a draft.
   </div>
 </template>
 
 <style scoped>
 .daily-logs-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  --app-pane-header-eyebrow-font-size: 0.68rem;
+  --app-pane-header-eyebrow-letter-spacing: 0.12em;
+  --app-pane-header-title-margin: 0.35rem 0 0;
+  --app-pane-header-title-font-size: 1.5rem;
   padding: 1rem 1.1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -80,18 +90,6 @@ const emit = defineEmits<{
     linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
     rgba(29, 38, 49, 0.92);
   box-shadow: var(--shadow);
-}
-
-.daily-logs-eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.68rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.daily-logs-title {
-  margin: 0.35rem 0 0;
-  font-size: 1.5rem;
 }
 
 .daily-logs-header__actions {
@@ -108,23 +106,14 @@ const emit = defineEmits<{
 }
 
 .daily-logs-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.8rem;
-  padding: 0 0.7rem;
-  border: 1px solid rgba(88, 186, 233, 0.22);
-  border-radius: 999px;
-  background: rgba(38, 74, 96, 0.28);
-  color: var(--accent);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.daily-logs-badge--warning {
-  border-color: rgba(245, 185, 90, 0.38);
-  background: rgba(245, 185, 90, 0.12);
-  color: #f8c878;
+  --app-badge-min-height: 1.8rem;
+  --app-badge-padding: 0 0.7rem;
+  --app-badge-font-size: 0.72rem;
+  --app-badge-letter-spacing: 0.08em;
+  --app-badge-accent-border-color: rgba(88, 186, 233, 0.22);
+  --app-badge-warning-border-color: rgba(245, 185, 90, 0.38);
+  --app-badge-warning-background: rgba(245, 185, 90, 0.12);
+  --app-badge-warning-color: #f8c878;
 }
 
 .daily-logs-message {

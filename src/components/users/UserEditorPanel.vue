@@ -1,18 +1,26 @@
 <script setup lang="ts">
+import {
+  currentRoleCanBeAssignedJobs,
+  EDITABLE_USER_ROLE_OPTIONS,
+  isEditableUserRole,
+} from '@/auth/roles'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
-import AppButton from '@/components/common/AppButton.vue'
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppField from '@/components/common/AppField.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
+import AppPane from '@/components/common/AppPane.vue'
+import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppSelect from '@/components/common/AppSelect.vue'
 import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
+import SaveStatusIndicator from '@/components/common/SaveStatusIndicator.vue'
 import UserAssignedJobsPanel from '@/components/users/UserAssignedJobsPanel.vue'
 import {
   getAssignedJobsEmptyStateMessage,
   getRoleBadgeLabel,
   getUserDisplayName,
+  shouldShowUserDetailAssignedJobs,
   type EditableUserRole,
   type UserCreateFormState,
   type UserCreateTextField,
@@ -20,7 +28,6 @@ import {
   type UserDetailTextField,
 } from '@/features/users/userViewHelpers'
 import type { JobRecord, UserProfile } from '@/types/domain'
-import { roleCanBeAssignedJobs } from '@/types/domain'
 
 defineProps<{
   isCreateMode: boolean
@@ -68,14 +75,9 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
 </script>
 
 <template>
-  <section class="users-detail">
+  <AppPane class="users-detail">
     <template v-if="isCreateMode">
-      <header class="users-detail__header">
-        <div>
-          <span class="users-workspace__eyebrow">Invite</span>
-          <h2 class="users-detail__title">Create User</h2>
-        </div>
-      </header>
+      <AppPaneHeader eyebrow="Invite" title="Create User" title-tag="h2" />
 
       <div class="users-detail__body">
         <form class="users-form" @submit.prevent>
@@ -94,9 +96,13 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
                 :model-value="createForm.role"
                 @update:model-value="emit('updateCreateRole', getRoleSelectValue($event))"
               >
-                <option value="foreman">Foreman</option>
-                <option value="project-manager">Project Manager</option>
-                <option value="admin">Admin</option>
+                <option
+                  v-for="option in EDITABLE_USER_ROLE_OPTIONS"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
               </AppSelect>
             </AppField>
             <AppField class="users-form__field" label="First Name">
@@ -138,7 +144,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
           </div>
 
           <UserAssignedJobsPanel
-            v-if="roleCanBeAssignedJobs(createForm.role)"
+            v-if="currentRoleCanBeAssignedJobs(createForm.role)"
             :assigned-job-ids="createForm.assignedJobIds"
             :empty-message="getAssignedJobsEmptyStateMessage(createJobSearchTerm)"
             :jobs="createJobs"
@@ -152,29 +158,32 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
     </template>
 
     <template v-else-if="selectedUser">
-      <header class="users-detail__header">
-        <div>
-          <span class="users-workspace__eyebrow">Selected User</span>
-          <h2 class="users-detail__title">{{ getUserDisplayName(selectedUser) }}</h2>
-        </div>
-        <div class="users-detail__header-side">
-          <div class="users-detail__status-group">
-            <AppBadge tone="accent">{{ getRoleBadgeLabel(selectedUser.role) }}</AppBadge>
-            <AppBadge :tone="selectedUser.active ? 'success' : 'danger'">
-              {{ selectedUser.active ? 'Active' : 'Inactive' }}
-            </AppBadge>
+      <AppPaneHeader
+        eyebrow="Selected User"
+        :title="getUserDisplayName(selectedUser)"
+        title-tag="h2"
+      >
+        <template #actions>
+          <div class="users-detail__header-side">
+            <div class="users-detail__status-group">
+              <AppBadge tone="accent">{{ getRoleBadgeLabel(selectedUser.role) }}</AppBadge>
+              <AppBadge :tone="selectedUser.active ? 'success' : 'danger'">
+                {{ selectedUser.active ? 'Active' : 'Inactive' }}
+              </AppBadge>
+            </div>
+            <AppLoadingButton
+              v-if="!editingSelf"
+              class="users-detail__danger"
+              label="Delete User"
+              loading-label="Deleting..."
+              variant="danger"
+              :loading="deleteLoading"
+              :disabled="deleteLoading || saveLoading"
+              @click="emit('deleteUser')"
+            />
           </div>
-          <AppButton
-            v-if="!editingSelf"
-            class="users-detail__danger"
-            variant="danger"
-            :disabled="deleteLoading || saveLoading"
-            @click="emit('deleteUser')"
-          >
-            {{ deleteLoading ? 'Deleting...' : 'Delete User' }}
-          </AppButton>
-        </div>
-      </header>
+        </template>
+      </AppPaneHeader>
 
       <div class="users-detail__body">
         <form class="users-form" @submit.prevent="emit('detailSubmit')">
@@ -184,6 +193,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
             </AppField>
             <AppField class="users-form__field" label="Role">
               <AppSelect
+                v-if="isEditableUserRole(selectedUser.role)"
                 :model-value="detailForm.role"
                 :class="{ 'users-form__control--locked': editingSelf }"
                 :disabled="saveLoading"
@@ -191,10 +201,20 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
                 :aria-disabled="editingSelf ? 'true' : undefined"
                 @update:model-value="emit('updateDetailRole', getRoleSelectValue($event))"
               >
-                <option value="foreman">Foreman</option>
-                <option value="project-manager">Project Manager</option>
-                <option value="admin">Admin</option>
+                <option
+                  v-for="option in EDITABLE_USER_ROLE_OPTIONS"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
               </AppSelect>
+              <AppTextInput
+                v-else
+                :model-value="getRoleBadgeLabel(selectedUser.role)"
+                type="text"
+                readonly
+              />
             </AppField>
             <AppField class="users-form__field" label="First Name">
               <AppTextInput
@@ -229,7 +249,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
           </label>
 
           <UserAssignedJobsPanel
-            v-if="roleCanBeAssignedJobs(detailForm.role)"
+            v-if="shouldShowUserDetailAssignedJobs(selectedUser, detailForm.role)"
             :assigned-job-ids="detailForm.assignedJobIds"
             :disabled="saveLoading"
             :empty-message="getAssignedJobsEmptyStateMessage(detailJobSearchTerm)"
@@ -244,22 +264,17 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
         <AppStatusMessage v-if="editingSelf" tone="warning">
           You are editing the currently signed-in account. Role, active state, and delete are locked to avoid accidental lockout.
         </AppStatusMessage>
-        <AppStatusMessage
+        <SaveStatusIndicator
           v-if="saveLoading || detailInfo === 'All changes saved.' || detailInfo === 'Changes save automatically.'"
-          :tone="!saveLoading && detailInfo === 'All changes saved.' ? 'success' : 'default'"
-        >
-          {{ saveLoading ? 'Saving changes...' : detailInfo || 'Changes save automatically.' }}
-        </AppStatusMessage>
+          :saving="saveLoading"
+          :message="detailInfo"
+          idle-message="Changes save automatically."
+        />
       </div>
     </template>
 
     <template v-else>
-      <header class="users-detail__header">
-        <div>
-          <span class="users-workspace__eyebrow">Selected User</span>
-          <h2 class="users-detail__title">No User Selected</h2>
-        </div>
-      </header>
+      <AppPaneHeader eyebrow="Selected User" title="No User Selected" title-tag="h2" />
 
       <div class="users-detail__body">
         <AppEmptyState
@@ -268,7 +283,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
         />
       </div>
     </template>
-  </section>
+  </AppPane>
 </template>
 
 <style scoped>
@@ -285,29 +300,10 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
   padding-right: 0.15rem;
 }
 
-.users-detail__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
 .users-detail__header-side {
   display: grid;
   justify-items: end;
   gap: 0.7rem;
-}
-
-.users-workspace__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.users-detail__title {
-  margin: 0.35rem 0 0;
-  font-size: 1.1rem;
 }
 
 .users-form {
@@ -402,11 +398,6 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
 @media (max-width: 720px) {
   .users-form__grid {
     grid-template-columns: 1fr;
-  }
-
-  .users-detail__header {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .users-detail__header-side {

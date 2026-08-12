@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import AuthCard from '@/components/auth/AuthCard.vue'
+import AuthFirebaseConfigWarning from '@/components/auth/AuthFirebaseConfigWarning.vue'
+import AuthStatusMessage from '@/components/auth/AuthStatusMessage.vue'
+import AuthSubmitButton from '@/components/auth/AuthSubmitButton.vue'
+import AuthTextLink from '@/components/auth/AuthTextLink.vue'
 import AppField from '@/components/common/AppField.vue'
-import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
-import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { hasFirebaseConfig } from '@/firebase'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  getAuthEmailQueryPrefill,
+  getForgotPasswordValidationMessage,
+  redirectToWorkspaceIfAllowed,
+} from '@/features/auth/authViewHelpers'
 import { sendPasswordResetEmail } from '@/services/auth'
+import { hasConfiguredFirebase } from '@/services/firebaseConfig'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from '@/utils/normalizeError'
-import { readFirstQueryParam } from '@/utils/routerQuery'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -31,20 +37,24 @@ useToastMessages([
 onMounted(async () => {
   await auth.init()
 
-  if (auth.hasWorkspaceAccess) {
-    await router.replace('/jobs')
+  const redirected = await redirectToWorkspaceIfAllowed({
+    hasWorkspaceAccess: auth.hasWorkspaceAccess,
+    replace: (target) => router.replace(target),
+  })
+  if (redirected) {
     return
   }
 
-  email.value = readFirstQueryParam(route.query.email)
+  email.value = getAuthEmailQueryPrefill(route.query)
 })
 
 async function handleSubmit() {
   error.value = ''
   info.value = ''
 
-  if (!email.value.trim()) {
-    error.value = 'Enter your email first.'
+  const validationMessage = getForgotPasswordValidationMessage(email.value)
+  if (validationMessage) {
+    error.value = validationMessage
     return
   }
 
@@ -62,9 +72,9 @@ async function handleSubmit() {
 
 <template>
   <AuthCard eyebrow="Phase 2" title="Reset Password">
-    <AppStatusMessage v-if="initializing" class="auth-card__status">
+    <AuthStatusMessage v-if="initializing">
       Checking your current session...
-    </AppStatusMessage>
+    </AuthStatusMessage>
 
     <template v-else>
       <form @submit.prevent="handleSubmit">
@@ -78,25 +88,20 @@ async function handleSubmit() {
           />
         </AppField>
 
-        <AppLoadingButton
-          class="auth-card__button"
+        <AuthSubmitButton
           type="submit"
-          variant="primary"
           label="Send Reset Link"
           loading-label="Sending Reset..."
           :loading="loading"
-          :disabled="!hasFirebaseConfig"
+          :disabled="!hasConfiguredFirebase"
         />
       </form>
 
-      <RouterLink class="auth-card__link" to="/login">
+      <AuthTextLink to="/login">
         Back to login
-      </RouterLink>
+      </AuthTextLink>
     </template>
 
-    <AppStatusMessage v-if="!hasFirebaseConfig" class="auth-card__status" tone="warning">
-      Firebase is not configured yet. Copy the `v1` `VITE_FIREBASE_*` values into `.env.local`
-      so this app can use the same project.
-    </AppStatusMessage>
+    <AuthFirebaseConfigWarning v-if="!hasConfiguredFirebase" />
   </AuthCard>
 </template>

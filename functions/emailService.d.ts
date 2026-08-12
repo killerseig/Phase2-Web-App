@@ -2,7 +2,7 @@
  * Email Service
  * Handles email sending via Microsoft Graph API
  */
-import { JobDetails } from './firestoreService';
+import type { JobDetails } from './firestoreService';
 /**
  * Check if email sending is enabled
  */
@@ -11,6 +11,20 @@ export declare function isEmailEnabled(): boolean;
  * Get sender email address
  */
 export declare function getSenderEmail(): string;
+export declare function buildGraphSenderRecipient(senderEmail: string): {
+    emailAddress: {
+        address: string;
+        name: "Phase 2";
+    };
+};
+export declare function buildDailyLogEmailSubject(jobDetails: JobDetails, logDate: string, dailyLog?: any): string;
+export declare function buildShopOrderEmailSubject(order: any, jobDetails?: Partial<JobDetails> | null): string;
+export declare function buildTimecardEmailSubject(payload: {
+    jobName?: string;
+    jobNumber?: string;
+    submittedBy?: string;
+    weekStart?: string;
+}): string;
 export declare function normalizeDailyLogEmailPayload(dailyLog: any): Record<string, any>;
 /**
  * Build HTML template for welcome email
@@ -40,7 +54,14 @@ export declare function buildTimecardsEmail(payload: {
  */
 export declare function buildShopOrderEmail(order: any, costCodesByCatalogItemId?: Record<string, string>): string;
 export declare function buildShopOrderPdfFilename(order: any): string;
-export declare function buildShopOrderPdfBuffer(order: any, costCodesByCatalogItemId?: Record<string, string>): Promise<Buffer>;
+export interface ShopOrderPdfRenderEvent {
+    pageNumber: number;
+    y: number;
+}
+export interface ShopOrderPdfBuildOptions {
+    onTableHeader?: (event: ShopOrderPdfRenderEvent) => void;
+}
+export declare function buildShopOrderPdfBuffer(order: any, costCodesByCatalogItemId?: Record<string, string>, options?: ShopOrderPdfBuildOptions): Promise<Buffer>;
 /**
  * Build HTML template for client secret expiration notification
  */

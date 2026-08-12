@@ -11,9 +11,9 @@ The goal is a consistent, professional app without a giant global stylesheet tha
 The app currently has:
 
 - a global stylesheet entry point at `src/styles/main.css`
-- split global foundation files for tokens, reset, base, tiny app-wide utilities, shared button-family styles, and PrimeVue overrides
+- split global foundation files for tokens, reset, base, tiny app-wide utilities, and PrimeVue overrides
 - app shell styles
-- shared primitive styles mostly colocated with components, with the AppButton family currently sharing a global class contract
+- shared primitive styles mostly colocated with components, with the AppButton family sharing a colocated class contract inside `src/components/common/button-family.css`
 - page and workflow styles mostly colocated in Vue views/components, with remaining cleanup handled slice-by-slice
 - many large Vue views with `<style scoped>` blocks
 - PrimeVue configured with `unstyled: true`
@@ -22,7 +22,7 @@ This is a workable transition state, but not the ideal final shape.
 
 The remaining problem is responsibility mixing:
 
-- Some shared component families still depend on a global class contract, such as the AppButton family.
+- Some shared component families still depend on shared class contracts, such as the AppButton family, but those contracts should be owned beside the primitives rather than by `main.css`.
 - Some style names describe pages instead of reusable primitives.
 - Tokens exist, but the token set is not yet complete enough to prevent one-off spacing, radius, shadow, and color choices.
 
@@ -316,8 +316,13 @@ Do not do a big-bang CSS migration.
 
 Current implementation note:
 
-- `main.css` now imports `tokens.css`, `reset.css`, `base.css`, `utilities.css`, `button-family.css`, and `primevue.css`.
-- `button-family.css` remains global because `AppButton`, `AppButtonLink`, and `AppLoadingButton` intentionally share the same button class contract until that family is redesigned together.
+- `main.css` now imports `tokens.css`, `reset.css`, `base.css`, `utilities.css`, and `primevue.css`.
+- `src/components/common/button-family.css` is imported by `AppButton`, `AppButtonLink`, and `AppLoadingButton` so the shared button class contract is owned by the primitives instead of the global entry point.
+- `AppCard` and `AppPane` now expose density, elevation, and tone props backed by colocated variant classes and normalized surface tokens, so future visual polish can use shared surface APIs instead of page-specific card/pane classes.
+- `AppSplitWorkspace` now exposes compact/default/spacious density variants backed by a tokenized gap custom property, so page shells can tune workspace density without adding route-specific split-grid CSS.
+- `src/components/timecards/timecard-toolbar-content.css` is imported by the job Timecards toolbar, Timecard Export toolbar/panels, Timecard Export create-card tray, and `TimecardCustomCardFields` so repeated feature-toolbar, export target-field, sort/search, actions layout, common mobile matrix/spacer behavior, and custom-card label/search utility classes are owned by the timecard feature instead of duplicated in each component. Extracted child panels own workflow-specific responsive overrides for the internals they render, while parent toolbars own only route-level grid placement.
+- `src/components/timecards/timecard-primevue-select.css` is imported by the Timecard Export Week Filters panel, Archive Filters panel, and create-card tray so repeated PrimeVue `Select` control/overlay styles are feature-owned while workflow-specific `MultiSelect` styling stays local to `TimecardExportArchiveFiltersPanel`.
+- `src/components/timecards/timecard-create-tray.css` is imported by the job Timecards and Timecard Export create-card tray components and child panels so repeated tray shell, panel, child-panel fieldset/legend support, heading/eyebrow/notice styling, export fieldset/legend reset, input-variable, custom-card spacing, and mobile rules are feature-owned instead of duplicated in each tray.
 - `utilities.css` currently owns tiny app-wide accessibility utilities such as `.sr-only` and `.visually-hidden`.
 
 ## Visual QA Checklist

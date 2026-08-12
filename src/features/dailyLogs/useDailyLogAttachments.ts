@@ -1,8 +1,6 @@
 import {
   computed,
   ref,
-  type ComputedRef,
-  type Ref,
 } from 'vue'
 import {
   getDailyLogAttachmentsByType,
@@ -20,16 +18,17 @@ import type {
   DailyLogPayload,
   DailyLogRecord,
 } from '@/types/domain'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
 
 interface UseDailyLogAttachmentsOptions {
-  canEditSelectedLog: ComputedRef<boolean>
+  canEditSelectedLog: ReadonlyRef<boolean>
   clearActionError: () => void
-  form: Ref<DailyLogPayload>
+  form: WritableRef<DailyLogPayload>
   getActor: () => DailyLogActor
-  jobId: ComputedRef<string>
+  jobId: ReadonlyRef<string>
   preparePayload: (payload?: DailyLogPayload) => DailyLogPayload
-  selectedLog: ComputedRef<DailyLogRecord | null>
+  selectedLog: ReadonlyRef<DailyLogRecord | null>
   setActionError: (message: string) => void
   setActionInfo: (message: string) => void
   setSavedPayloadSnapshot: (payload?: DailyLogPayload) => void

@@ -1,21 +1,14 @@
 import { watch } from 'vue'
 import type { DailyLogRecord } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseDailyLogDateNavigationOptions {
   getTodayDateString: () => string
   jobId: ReadonlyRef<string | null>
-  logs: Ref<DailyLogRecord[]>
+  logs: WritableRef<DailyLogRecord[]>
   resetForm: () => void
-  selectedDate: Ref<string>
-  selectedLogId: Ref<string | null>
+  selectedDate: WritableRef<string>
+  selectedLogId: WritableRef<string | null>
   stopLogsSubscription: () => void
   subscribeLogsForSelectedDate: () => void
   subscribeRouteJob: () => void
@@ -32,6 +25,8 @@ export function useDailyLogDateNavigation({
   subscribeLogsForSelectedDate,
   subscribeRouteJob,
 }: UseDailyLogDateNavigationOptions) {
+  let dateResetByJobChange: string | null = null
+
   function resetLogSelectionForDate() {
     selectedLogId.value = null
     logs.value = []
@@ -49,7 +44,9 @@ export function useDailyLogDateNavigation({
       if (!nextJobId || nextJobId === previousJobId) return
       stopLogsSubscription()
       subscribeRouteJob()
-      selectedDate.value = getTodayDateString()
+      const todayDate = getTodayDateString()
+      dateResetByJobChange = selectedDate.value === todayDate ? null : todayDate
+      selectedDate.value = todayDate
       resetLogSelectionForDate()
     },
   )
@@ -58,6 +55,10 @@ export function useDailyLogDateNavigation({
     () => selectedDate.value,
     (nextDate, previousDate) => {
       if (nextDate === previousDate) return
+      if (dateResetByJobChange === nextDate) {
+        dateResetByJobChange = null
+        return
+      }
       resetLogSelectionForDate()
     },
   )

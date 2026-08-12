@@ -91,6 +91,39 @@ test.describe('timecard workbook regressions', () => {
     await expect(page.getByRole('button', { name: 'Edit Card' })).toHaveCount(0)
   })
 
+  test('timecard workspace stays contained without page-level horizontal overflow', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: true })
+    const secondCard = cloneRecord(fixture.timecardCards[0]!)
+    secondCard.id = 'card-second'
+    secondCard.employeeNumber = '2002'
+    secondCard.firstName = 'Mackensie'
+    secondCard.lastName = 'Dannels'
+    secondCard.fullName = 'Mackensie Dannels'
+    secondCard.sortIndex = 1
+    fixture.timecardWeeks[0].employeeCardCount = 2
+    fixture.timecardCards = [fixture.timecardCards[0]!, secondCard]
+
+    await page.setViewportSize({ width: 1366, height: 900 })
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+    await selectWeekEnding(page)
+    await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(2)
+
+    await expect.poll(async () => page.evaluate(() => {
+      const selectors = [
+        '.app-shell__content',
+        '[data-testid="timecards-page"]',
+        '.timecards-workbook',
+        '.timecards-toolbar',
+      ]
+
+      return selectors.map((selector) => {
+        const element = document.querySelector(selector)
+        if (!(element instanceof HTMLElement)) return false
+        return element.scrollWidth <= element.clientWidth + 2
+      }).every(Boolean)
+    })).toBe(true)
+  })
+
   test('seeded cards keep the linked job number on every starting row', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
     await selectWeekEnding(page)
@@ -420,8 +453,8 @@ test.describe('timecard workbook regressions', () => {
       .toBe('submitted')
   })
 
-  test('foremen can create their own timecard when another foreman has the same job week', async ({ page }) => {
-    const fixture = createTimecardsFixture({ seededCard: false })
+  test('assigned foremen share draft job weeks created by another foreman', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: true })
     fixture.timecardWeeks = [
       {
         ...fixture.timecardWeeks[0],
@@ -430,24 +463,46 @@ test.describe('timecard workbook regressions', () => {
         ownerForemanName: 'Sam Foreman',
       },
     ]
-    fixture.timecardCards = []
+    fixture.timecardCards = [
+      {
+        ...fixture.timecardCards[0]!,
+        id: 'card-other-foreman',
+        weekId: 'week-other-foreman',
+        employeeId: 'employee-2',
+        employeeNumber: '1002',
+        firstName: 'Jamie',
+        lastName: 'Lopez',
+        fullName: 'Jamie Lopez',
+      },
+    ]
 
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
     await selectWeekEnding(page)
 
-    await createSelectedWeek(page)
+    await expect(page.getByTestId('timecards-history-week-other-foreman')).toBeVisible()
+    await expect(page.getByTestId('timecards-card-card-other-foreman')).toBeVisible()
     await page.getByTestId('create-card').click()
     await page.getByTestId('timecards-add-employee-employee-1').click()
 
-    await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(1)
+    await expect(page.locator('[data-testid^="timecards-card-"]')).toHaveCount(2)
+    await page.getByRole('button', { name: 'Submit Week' }).click()
+    await confirmSubmitWeek(page)
+
+    await expect(page.getByText('Week submitted and emailed to 1 recipient.')).toBeVisible()
     await expect
       .poll(async () => page.evaluate(() => {
         const state = window.__PHASE2_E2E_STATE__ as {
-          timecardWeeks?: Array<{ ownerForemanUserId?: string | null }>
+          timecardWeeks?: Array<{ id?: string; ownerForemanUserId?: string | null; status?: string | null }>
         }
-        return state.timecardWeeks?.filter((week) => week.ownerForemanUserId === 'foreman-e2e').length ?? 0
+        return {
+          currentForemanWeeks: state.timecardWeeks?.filter((week) => week.ownerForemanUserId === 'foreman-e2e').length ?? 0,
+          sharedWeekStatus: state.timecardWeeks?.find((week) => week.id === 'week-other-foreman')?.status ?? null,
+        }
       }))
-      .toBe(1)
+      .toEqual({
+        currentForemanWeeks: 0,
+        sharedWeekStatus: 'submitted',
+      })
   })
 
   test('submitting a week reports the notification email result', async ({ page }) => {

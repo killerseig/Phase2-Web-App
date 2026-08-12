@@ -11,31 +11,24 @@ import {
   updateJobRecord,
 } from '@/services/jobs'
 import type { JobRecord, NotificationRecipients } from '@/types/domain'
-
-interface Ref<T> {
-  value: T
-}
-
-interface ReadonlyRef<T> {
-  readonly value: T
-}
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 type JobsViewSelectionId = string | 'new' | typeof ALL_JOBS_ID | null
 
 interface UseJobCrudActionsOptions {
-  archiveLoading: Ref<boolean>
+  archiveLoading: WritableRef<boolean>
   closeArchiveConfirm: () => void
   closeDeleteConfirm: () => void
   createForm: JobFormState
-  createLoading: Ref<boolean>
+  createLoading: WritableRef<boolean>
   createNotificationRecipients: NotificationRecipients
-  deleteLoading: Ref<boolean>
+  deleteLoading: WritableRef<boolean>
   detailNotificationRecipients: NotificationRecipients
   resetCreateMessages: () => void
   resetDetailMessages: () => void
-  saveLoading: Ref<boolean>
+  saveLoading: WritableRef<boolean>
   selectedJob: ReadonlyRef<JobRecord | null>
-  selectedJobId: Ref<JobsViewSelectionId>
+  selectedJobId: WritableRef<JobsViewSelectionId>
   setCreateError: (error: unknown, fallbackMessage: string) => void
   setCreateErrorMessage: (message: string) => void
   setCreateInfo: (message: string) => void

@@ -2,6 +2,7 @@
 import AppButton from '@/components/common/AppButton.vue'
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppField from '@/components/common/AppField.vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 import type { ShopCatalogItemFormState } from '@/features/shopCatalog/adminViewHelpers'
@@ -89,19 +90,23 @@ const emit = defineEmits<{
         </section>
 
         <div class="shop-catalog-detail-panel__actions">
-          <AppButton variant="primary" :disabled="saveLoading" type="submit">
-            {{ saveLoading ? 'Saving...' : 'Save Changes' }}
-          </AppButton>
+          <AppLoadingButton
+            label="Save Changes"
+            loading-label="Saving..."
+            variant="primary"
+            type="submit"
+            :loading="saveLoading"
+          />
           <AppButton :disabled="saveLoading" @click="emit('archive')">
             {{ active ? 'Archive Item' : 'Restore Item' }}
           </AppButton>
-          <AppButton
+          <AppLoadingButton
+            label="Delete Item"
+            loading-label="Deleting..."
             variant="danger"
-            :disabled="deleteLoading"
+            :loading="deleteLoading"
             @click="emit('delete')"
-          >
-            {{ deleteLoading ? 'Deleting...' : 'Delete Item' }}
-          </AppButton>
+          />
         </div>
       </form>
     </div>
