@@ -152,17 +152,27 @@ describe('role workflow contract', () => {
     expect(rules).toContain("match /timecardWeeks/{weekId}")
   })
 
-  it('keeps Storage rules aligned for assigned daily log attachment uploads', () => {
+  it('keeps shop order callables open to assigned Project Managers', () => {
+    const source = readFileSync(resolve(process.cwd(), 'functions/src/shopOrderRecordFunctions.ts'), 'utf8')
+    const shopOrderFieldRoleList = "currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])"
+
+    expect(source.split(shopOrderFieldRoleList).length - 1).toBe(2)
+  })
+
+  it('keeps daily log attachment uploads independent from cross-product rule lookups', () => {
     const rules = readFileSync(resolve(process.cwd(), 'storage.rules'), 'utf8')
 
-    expect(rules).toContain("function userCanWriteFieldJob(jobId)")
-    expect(rules).toContain("hasForemanRole() || hasShopForemanRole() || hasProjectManagerRole()")
-    expect(rules).toContain("dailyLogStatus(logId) == 'draft'")
-    expect(rules).toContain("userCanWriteFieldJob(dailyLogJobId(logId))")
     expect(rules).toContain("function isSupportedDailyLogAttachmentUpload(logId)")
     expect(rules).toContain("request.resource.size < 10 * 1024 * 1024")
     expect(rules).toContain("request.resource.contentType.matches('image/.*')")
-    expect(rules).toContain("allow read: if signedIn() || canReadDailyLogAttachment(logId);")
+    expect(rules).toContain("request.resource.metadata.dailyLogId == logId")
+    expect(rules).toContain("request.resource.metadata.uploadedBy == request.auth.uid")
+    expect(rules).toContain("allow read: if signedIn();")
+    expect(rules).toContain("allow create: if signedIn() && isSupportedDailyLogAttachmentUpload(logId);")
+    expect(rules).toContain("allow delete: if signedIn();")
+    expect(rules).toContain("allow update: if false;")
+    expect(rules).not.toContain("firestore.get(")
+    expect(rules).not.toContain("firestore.exists(")
     expect(rules).toContain("match /daily-logs/{logId}/{allPaths=**}")
   })
 })

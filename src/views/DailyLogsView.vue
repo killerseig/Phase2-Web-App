@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useCurrentActor } from '@/composables/useCurrentActor'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useRouteJobContext } from '@/composables/useRouteJobContext'
@@ -21,24 +23,19 @@ import { useDailyLogPayloadPreparer } from '@/features/dailyLogs/useDailyLogPayl
 import { useDailyLogSelectionState } from '@/features/dailyLogs/useDailyLogSelectionState'
 import { useDailyLogSubscriptionLifecycle } from '@/features/dailyLogs/useDailyLogSubscriptionLifecycle'
 import { useDailyLogSubscriptions } from '@/features/dailyLogs/useDailyLogSubscriptions'
+import { getDailyLogRouteSelection } from '@/features/dailyLogs/routeSelection'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeError } from '@/utils/normalizeError'
 
 const auth = useAuthStore()
-const {
-  job,
-  jobId,
-  subscribeRouteJob,
-  stopRouteJobSubscription,
-} = useRouteJobContext()
+const route = useRoute()
+const { job, jobId, subscribeRouteJob, stopRouteJobSubscription } = useRouteJobContext()
 
-const {
-  form,
-  getTodayDateString,
-  selectedDate,
-  selectedLogId,
-  updateDailyLogTextField,
-} = useDailyLogFormState()
+const { form, getTodayDateString, selectedDate, selectedLogId, updateDailyLogTextField } =
+  useDailyLogFormState()
+const routeSelection = getDailyLogRouteSelection(route.query)
+if (routeSelection.date) selectedDate.value = routeSelection.date
+if (routeSelection.logId) selectedLogId.value = routeSelection.logId
 const {
   pageError: actionError,
   pageInfo: actionInfo,
@@ -47,10 +44,7 @@ const {
   setPageInfo: setActionInfo,
 } = usePageMessages()
 
-const {
-  currentUserId,
-  getActor,
-} = useCurrentActor({
+const { currentUserId, getActor } = useCurrentActor({
   getUserId: () => auth.currentUser?.uid ?? null,
   getDisplayName: () => auth.displayName,
   getEmail: () => auth.currentUser?.email ?? null,
@@ -120,9 +114,7 @@ useToastMessages([
   { source: actionInfo, severity: 'success', summary: 'Daily Logs' },
 ])
 
-const {
-  clonePreparedPayload,
-} = useDailyLogPayloadPreparer({ form, siteInfo })
+const { clonePreparedPayload } = useDailyLogPayloadPreparer({ form, siteInfo })
 
 const {
   handleDailyLogTextFieldBlur,
@@ -142,9 +134,7 @@ const {
   selectedLog,
   setActionError,
 })
-const {
-  resetForm,
-} = useDailyLogFormHydration({
+const { resetForm } = useDailyLogFormHydration({
   canEditSelectedLog,
   clearRecipientInput,
   form,
@@ -157,9 +147,7 @@ const {
   setSavedPayloadSnapshot,
   siteInfo,
 })
-const {
-  setSelectedDateToToday,
-} = useDailyLogDateNavigation({
+const { setSelectedDateToToday } = useDailyLogDateNavigation({
   getTodayDateString,
   jobId,
   logs,
@@ -250,6 +238,30 @@ useDailyLogSubscriptionLifecycle({
   subscribeLogsForSelectedDate,
   subscribeRouteJob,
 })
+
+let handledPhotoLinkKey = ''
+watch(
+  [selectedLog, logsLoading, () => route.hash],
+  async ([currentLog, loading, routeHash]) => {
+    const photoLinkKey = `${selectedLogId.value}:${routeHash}`
+    if (
+      handledPhotoLinkKey === photoLinkKey ||
+      loading ||
+      !currentLog ||
+      routeHash !== '#daily-log-photos'
+    ) {
+      return
+    }
+
+    await nextTick()
+    const photoSection = document.getElementById('daily-log-photos')
+    if (!photoSection) return
+
+    photoSection.scrollIntoView({ behavior: 'auto', block: 'start' })
+    handledPhotoLinkKey = photoLinkKey
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

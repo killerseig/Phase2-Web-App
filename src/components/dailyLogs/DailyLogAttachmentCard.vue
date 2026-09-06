@@ -5,6 +5,7 @@ import ImageUploadPicker from '@/components/ImageUploadPicker.vue'
 import type { DailyLogAttachmentRecord } from '@/types/domain'
 
 defineProps<{
+  anchorId?: string
   attachments: DailyLogAttachmentRecord[]
   busy: boolean
   chooseLabel: string
@@ -24,7 +25,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <AppCard class="daily-log-attachment-card daily-logs-card">
+  <AppCard :id="anchorId" class="daily-log-attachment-card daily-logs-card">
     <AppSectionHeader
       class="daily-log-attachment-card__header"
       eyebrow="Attachments"
@@ -58,6 +59,7 @@ const emit = defineEmits<{
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
+  scroll-margin-top: 1rem;
 }
 
 @media (max-width: 920px) {

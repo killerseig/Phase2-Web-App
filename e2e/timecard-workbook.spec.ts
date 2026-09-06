@@ -91,6 +91,55 @@ test.describe('timecard workbook regressions', () => {
     await expect(page.getByRole('button', { name: 'Edit Card' })).toHaveCount(0)
   })
 
+  test('employee identity and week ending stay locked after a card is created', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: true })
+    const card = fixture.timecardCards[0]!
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+    await selectWeekEnding(page)
+
+    await expect(page.getByTestId('timecard-employee-name')).toHaveText(`${card.lastName}, ${card.firstName}`)
+    await expect(page.getByTestId('timecard-employee-number')).toHaveText(card.employeeNumber)
+    await expect(page.getByTestId('timecard-occupation')).toHaveText(card.occupation)
+    await expect(page.getByTestId('timecard-week-ending')).toHaveText('6/6/2026')
+    await expect(page.locator([
+      '[data-testid="timecard-employee-name"] input',
+      '[data-testid="timecard-employee-number"] input',
+      '[data-testid="timecard-occupation"] input',
+      '[data-testid="timecard-week-ending"] input',
+    ].join(', '))).toHaveCount(0)
+  })
+
+  test('card creation favors employees and clearly labels one-off cards', async ({ page }) => {
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: false }))
+    await selectWeekEnding(page)
+
+    await page.getByTestId('create-card').click()
+    await expect(page.getByText('Create From Employee')).toBeVisible()
+    await expect(page.getByTestId('timecards-show-one-off-card')).toBeVisible()
+    await expect(page.getByTestId('timecards-add-one-off-card')).toHaveCount(0)
+
+    await page.getByTestId('timecards-show-one-off-card').click()
+    await expect(page.getByText('Use a one-off card only when the worker is not available in the employee list.')).toBeVisible()
+    await page.getByLabel('First Name').fill('Temporary')
+    await page.getByLabel('Last Name').fill('Worker')
+    await page.getByLabel('Employee #').fill('TEMP-1')
+    await page.getByLabel('Occupation').fill('Helper')
+    await page.getByTestId('timecards-add-one-off-card').click()
+
+    const sourceBadges = page.locator('[data-testid^="timecard-card-source-"]')
+    await expect(sourceBadges).toHaveCount(1)
+    await expect(sourceBadges.filter({ hasText: 'ONE-OFF' })).toHaveCount(1)
+
+    await page.getByTestId('create-card').click()
+    await page.getByTestId('timecards-add-employee-employee-1').click()
+
+    await expect(sourceBadges).toHaveCount(2)
+    await expect(sourceBadges.filter({ hasText: 'ONE-OFF' })).toHaveCount(1)
+    await expect(sourceBadges.filter({ hasText: 'EMPLOYEE' })).toHaveCount(1)
+    await expect(sourceBadges.first().locator('..').getByRole('button', { name: /Card/ })).toBeVisible()
+  })
+
   test('timecard workspace stays contained without page-level horizontal overflow', async ({ page }) => {
     const fixture = createTimecardsFixture({ seededCard: true })
     const secondCard = cloneRecord(fixture.timecardCards[0]!)

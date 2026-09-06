@@ -329,6 +329,7 @@ Based on the workbook structure and formulas:
 - If a shop order item table spans multiple PDF pages, the table column header should appear at the top of each continuation page.
 - Normal catalog items and custom one-off items should print in one continuous order table, not separate tables.
 - Shop order email/PDF output should use a fixed paper-width layout that scales down on small screens instead of letting email clients crush table columns vertically.
+- In the interactive Shop Order workspace, Delivery Date and the Thursday Delivery shortcut should use the same available width on compact and mobile screens, and the native date control must never overflow its containing panel.
 - The shop catalog should behave like a file system:
   - folders can contain folders
   - folders can contain items
@@ -397,6 +398,9 @@ Based on the workbook structure and formulas:
 - Daily logs should keep a visible history of submitted records.
 - Foremen should be able to see all submitted daily log records for jobs they are assigned to for now.
 - Project Managers should be able to browse submitted daily log history for assigned jobs and see counts by job/foreman.
+- Public Daily Log photo galleries must allow visitors to scroll through every attached image on desktop, tablet, and phone without clipping images or exposing authenticated application controls.
+- Daily Log email attachments must remain grouped with the form section where they were added, including normal Photos, PTP Photos, QC Photos, and any future attachment sections.
+- Attachment descriptions and section labels must remain visible in email and gallery output so recipients can understand what each image documents.
 
 ## Daily Log Recipients
 

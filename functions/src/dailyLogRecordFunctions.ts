@@ -1,4 +1,8 @@
-import * as admin from 'firebase-admin'
+import {
+  FieldValue,
+  type DocumentSnapshot,
+  type QueryDocumentSnapshot,
+} from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import {
   type CurrentFunctionUser,
@@ -313,7 +317,7 @@ function serializeFirestoreValue(value: any): any {
   return value
 }
 
-function normalizeLogForResponse(doc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot) {
+function normalizeLogForResponse(doc: QueryDocumentSnapshot | DocumentSnapshot) {
   return {
     id: doc.id,
     ...serializeFirestoreValue(doc.data() || {}),
@@ -402,8 +406,8 @@ export const createDailyLogRecordCallable = onCall(async (request) => {
     submittedByUserId: null,
     additionalRecipients: normalizeRecipientList(request.data?.additionalRecipients),
     payload: sanitizePayload(request.data?.payload),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
     submittedAt: null,
   })
 
@@ -431,7 +435,7 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
   }
 
   const payload: Record<string, unknown> = {
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
     updatedByUserId: request.auth.uid,
   }
 
@@ -466,7 +470,7 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
     payload.status = status
 
     if (status === 'submitted') {
-      payload.submittedAt = admin.firestore.FieldValue.serverTimestamp()
+      payload.submittedAt = FieldValue.serverTimestamp()
       payload.submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid)
       payload.submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName)
     }

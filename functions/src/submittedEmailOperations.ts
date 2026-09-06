@@ -1,4 +1,9 @@
-import * as admin from 'firebase-admin'
+import {
+  FieldValue,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Firestore,
+} from 'firebase-admin/firestore'
 
 import {
   buildSubmittedEmailClaimUpdate,
@@ -20,14 +25,14 @@ export function getSubmittedEmailClaimShortCircuitMessage(
 }
 
 export async function claimSubmittedEmailOperation(
-  db: admin.firestore.Firestore,
-  refs: admin.firestore.DocumentReference[],
+  db: Firestore,
+  refs: DocumentReference[],
   operationId: string,
   context: Record<string, unknown>,
 ): Promise<SubmittedEmailOperationClaimStatus> {
   try {
     return await db.runTransaction(async (transaction) => {
-      const snapshots: admin.firestore.DocumentSnapshot[] = []
+      const snapshots: DocumentSnapshot[] = []
 
       for (const ref of refs) {
         snapshots.push(await transaction.get(ref))
@@ -48,7 +53,7 @@ export async function claimSubmittedEmailOperation(
         return 'missing-record'
       }
 
-      const payload = buildSubmittedEmailClaimUpdate(operationId, admin.firestore.FieldValue)
+      const payload = buildSubmittedEmailClaimUpdate(operationId, FieldValue)
       for (const snapshot of existingSnapshots) {
         transaction.update(snapshot.ref, payload)
       }

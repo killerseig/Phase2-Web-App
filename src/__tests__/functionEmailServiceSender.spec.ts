@@ -126,4 +126,29 @@ describe('function email inbox labels', () => {
     expect(html).toContain('&lt;script&gt;alert(&quot;bad&quot;)&lt;/script&gt;<br>Safe line')
     expect(html).not.toContain('<script>alert("bad")</script>')
   })
+
+  it('keeps photo-heavy daily log emails small and links to the full gallery', () => {
+    const attachments = Array.from({ length: 101 }, (_, index) => ({
+      name: `photo-${index + 1}.jpg`,
+      path: `daily-logs/log-1/photo-${index + 1}.jpg`,
+      type: 'photo',
+      url: `https://storage.example.com/photo-${index + 1}.jpg`,
+    }))
+    const dailyLogUrl =
+      'https://phase2-website.web.app/daily-log-gallery/preview-gallery-share'
+
+    const html = buildDailyLogEmail(
+      { id: 'job-1', name: 'Lucky 3 Ranch', number: '5229' },
+      '2026-06-17',
+      { attachments },
+      { dailyLogUrl },
+    )
+
+    expect(html).toContain('101 photos saved with this daily log.')
+    expect(html).toContain('View Photo Gallery (101)')
+    expect(html).toContain(dailyLogUrl.replace(/&/g, '&amp;'))
+    expect(html).not.toContain('<img ')
+    expect(html).not.toContain('photo-1.jpg')
+    expect(html).not.toContain('Plus 91 more photos in the daily log.')
+  })
 })

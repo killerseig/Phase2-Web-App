@@ -306,4 +306,20 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
   font-size: 1.1rem;
   line-height: 1;
 }
+
+@media (max-width: 1180px) {
+  .shop-orders-tree-node {
+    height: auto;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .shop-orders-tree-node__label {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+}
 </style>

@@ -17,11 +17,12 @@ const employee: EmployeeRecord = {
 const EmployeePanelStub = {
   name: 'JobTimecardEmployeePanel',
   props: ['search', 'employees', 'loading', 'disabled'],
-  emits: ['update-search', 'add-employee'],
+  emits: ['update-search', 'add-employee', 'create-one-off-card'],
   template: `
     <section data-testid="employee-panel">
       <button type="button" data-testid="emit-search" @click="$emit('update-search', 'vince')" />
       <button type="button" data-testid="emit-employee" @click="$emit('add-employee', employees[0])" />
+      <button type="button" data-testid="emit-one-off" @click="$emit('create-one-off-card')" />
     </section>
   `,
 }
@@ -45,6 +46,7 @@ const CustomCardPanelStub = {
     'update-wage-rate',
     'update-is-contractor',
     'add-custom-card',
+    'back-to-employee-search',
   ],
   template: `
     <section data-testid="custom-panel">
@@ -55,6 +57,7 @@ const CustomCardPanelStub = {
       <button type="button" data-testid="emit-wage" @click="$emit('update-wage-rate', '42.50')" />
       <button type="button" data-testid="emit-contractor" @click="$emit('update-is-contractor', true)" />
       <button type="button" data-testid="emit-add-custom" @click="$emit('add-custom-card')" />
+      <button type="button" data-testid="emit-back" @click="$emit('back-to-employee-search')" />
     </section>
   `,
 }
@@ -85,18 +88,21 @@ function mountTray(overrides = {}) {
 }
 
 describe('JobTimecardCreateTray', () => {
-  it('forwards employee and custom-card state to child panels', () => {
+  it('shows employee selection first and reveals the one-off form on request', async () => {
     const wrapper = mountTray()
 
     const employeePanel = wrapper.getComponent({ name: 'JobTimecardEmployeePanel' })
-    const customPanel = wrapper.getComponent({ name: 'JobTimecardCustomCardPanel' })
-
     expect(employeePanel.props()).toMatchObject({
       search: 'chris',
       employees: [employee],
       loading: false,
       disabled: false,
     })
+    expect(wrapper.findComponent({ name: 'JobTimecardCustomCardPanel' }).exists()).toBe(false)
+
+    await wrapper.get('[data-testid="emit-one-off"]').trigger('click')
+    const customPanel = wrapper.getComponent({ name: 'JobTimecardCustomCardPanel' })
+
     expect(customPanel.props()).toMatchObject({
       firstName: 'Custom',
       lastName: 'Employee',
@@ -106,16 +112,25 @@ describe('JobTimecardCreateTray', () => {
       isContractor: false,
       disabled: false,
     })
+
+    await wrapper.get('[data-testid="emit-back"]').trigger('click')
+    expect(wrapper.findComponent({ name: 'JobTimecardEmployeePanel' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'JobTimecardCustomCardPanel' }).exists()).toBe(false)
   })
 
-  it('disables both panels while loading or when the selected week is read-only', () => {
+  it('disables the active panel while loading or when the selected week is read-only', async () => {
     const loadingWrapper = mountTray({ actionLoading: true })
     const readOnlyWrapper = mountTray({ canEditWeek: false })
 
     expect(loadingWrapper.getComponent({ name: 'JobTimecardEmployeePanel' }).props('disabled')).toBe(true)
-    expect(loadingWrapper.getComponent({ name: 'JobTimecardCustomCardPanel' }).props('disabled')).toBe(true)
     expect(readOnlyWrapper.getComponent({ name: 'JobTimecardEmployeePanel' }).props('disabled')).toBe(true)
-    expect(readOnlyWrapper.getComponent({ name: 'JobTimecardCustomCardPanel' }).props('disabled')).toBe(true)
+
+    const oneOffWrapper = mountTray()
+    await oneOffWrapper.get('[data-testid="emit-one-off"]').trigger('click')
+    await oneOffWrapper.setProps({ actionLoading: true })
+    expect(oneOffWrapper.getComponent({ name: 'JobTimecardCustomCardPanel' }).props('disabled')).toBe(true)
+    await oneOffWrapper.setProps({ actionLoading: false, canEditWeek: false })
+    expect(oneOffWrapper.getComponent({ name: 'JobTimecardCustomCardPanel' }).props('disabled')).toBe(true)
   })
 
   it('forwards child panel events to the parent contract', async () => {
@@ -123,6 +138,7 @@ describe('JobTimecardCreateTray', () => {
 
     await wrapper.get('[data-testid="emit-search"]').trigger('click')
     await wrapper.get('[data-testid="emit-employee"]').trigger('click')
+    await wrapper.get('[data-testid="emit-one-off"]').trigger('click')
     await wrapper.get('[data-testid="emit-first-name"]').trigger('click')
     await wrapper.get('[data-testid="emit-last-name"]').trigger('click')
     await wrapper.get('[data-testid="emit-number"]').trigger('click')

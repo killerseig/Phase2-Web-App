@@ -2,10 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const {
-  buildDailyLogEmail,
-  normalizeDailyLogEmailPayload,
-} = require('../emailService.js')
+const { buildDailyLogEmail, normalizeDailyLogEmailPayload } = require('../emailService.js')
 
 const nestedDailyLogRecord = {
   id: 'daily-log-1',
@@ -25,12 +22,8 @@ const nestedDailyLogRecord = {
     manpower: 'Four installers on site',
     weeklySchedule: 'Finish layout and hang grid',
     manpowerAssessment: 'Crew size is on track',
-    manpowerLines: [
-      { trade: 'Acoustics', count: 4, areas: 'Level 1 corridors' },
-    ],
-    indoorClimateReadings: [
-      { area: 'Level 1', high: '72', low: '68', humidity: '35' },
-    ],
+    manpowerLines: [{ trade: 'Acoustics', count: 4, areas: 'Level 1 corridors' }],
+    indoorClimateReadings: [{ area: 'Level 1', high: '72', low: '68', humidity: '35' }],
     safetyConcerns: 'No safety concerns reported',
     ahaReviewed: 'Reviewed with crew',
     scheduleConcerns: 'No schedule concerns',
@@ -58,14 +51,26 @@ const nestedDailyLogRecord = {
 
 const normalizedPayload = normalizeDailyLogEmailPayload(nestedDailyLogRecord)
 
-assert.equal(normalizedPayload.projectName, 'Warehouse Retrofit', 'nested payload project name should normalize')
-assert.equal(normalizedPayload.foremanOnSite, 'Chris (CJ) Larsen', 'nested payload foreman should normalize')
+assert.equal(
+  normalizedPayload.projectName,
+  'Warehouse Retrofit',
+  'nested payload project name should normalize',
+)
+assert.equal(
+  normalizedPayload.foremanOnSite,
+  'Chris (CJ) Larsen',
+  'nested payload foreman should normalize',
+)
 assert.equal(normalizedPayload.attachments.length, 1, 'nested payload attachments should normalize')
 
 const html = buildDailyLogEmail(
   { id: 'job-1', name: 'Warehouse Retrofit', number: '9411' },
   nestedDailyLogRecord.logDate,
   nestedDailyLogRecord,
+  {
+    dailyLogUrl:
+      'https://phase2-website.web.app/daily-log-gallery/daily-log-gallery-share',
+  },
 )
 
 for (const expectedText of [
@@ -89,9 +94,14 @@ for (const expectedText of [
   'Tile replaced before closeout',
   'GC requested early start tomorrow',
   'Confirm delivery time with shop',
-  'Level 1 progress photo',
+  '1 photo saved with this daily log.',
+  'View Photo Gallery (1)',
 ]) {
-  assert.equal(html.includes(expectedText), true, `daily log email should include "${expectedText}"`)
+  assert.equal(
+    html.includes(expectedText),
+    true,
+    `daily log email should include "${expectedText}"`,
+  )
 }
 
 assert.equal(
@@ -114,5 +124,31 @@ assert.equal(
   false,
   'nested payload attachments should not render as an empty N/A block',
 )
+assert.equal(
+  html.includes('/daily-log-gallery/daily-log-gallery-share'),
+  true,
+  'photo gallery link should open the isolated public gallery for the exact daily log',
+)
+assert.equal(
+  html.includes('Level 1 progress photo'),
+  false,
+  'photo descriptions should stay in the gallery instead of lengthening the email',
+)
+assert.equal(
+  html.includes('<img '),
+  false,
+  'photo previews should stay in the gallery instead of lengthening the email',
+)
+assert.equal(
+  html.includes('What areas were inspected?:'),
+  false,
+  'question labels should not add a second punctuation mark',
+)
+assert.equal(
+  html.includes('High (&deg;F)'),
+  true,
+  'temperature labels should use email-safe degree entities',
+)
+assert.equal(html.includes('&copy;'), true, 'footer should use an email-safe copyright entity')
 
 console.log('Daily log email smoke test passed.')

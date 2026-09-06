@@ -203,6 +203,16 @@ export interface DailyLogAttachmentRecord {
   createdAt?: unknown
 }
 
+export interface PublicDailyLogGalleryRecord {
+  jobName: string
+  jobCode: string
+  logDate: string
+  sequenceNumber: number
+  foremanName: string
+  submittedAt: string | null
+  attachments: Array<Pick<DailyLogAttachmentRecord, 'name' | 'url' | 'type' | 'description'>>
+}
+
 export interface DailyLogManpowerLineRecord {
   trade: string
   count: number

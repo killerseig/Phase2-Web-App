@@ -1,9 +1,12 @@
-import type {
-  DocumentData,
-  Unsubscribe,
-} from 'firebase/firestore'
+import type { DocumentData, Unsubscribe } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
+import {
+  deleteObject,
+  getDownloadURL,
+  ref as storageRef,
+  uploadBytesResumable,
+} from 'firebase/storage'
+import { prepareDailyLogPhotoForUpload } from '@/features/dailyLogs/photoUpload'
 import { requireFirebaseServices } from '@/firebase'
 import {
   createEmptyDailyLogPayload,
@@ -98,7 +101,9 @@ function sanitizeManpowerLine(line: DailyLogManpowerLineRecord): DailyLogManpowe
   }
 }
 
-function sanitizeIndoorClimateReading(reading: DailyLogIndoorClimateReadingRecord): DailyLogIndoorClimateReadingRecord {
+function sanitizeIndoorClimateReading(
+  reading: DailyLogIndoorClimateReadingRecord,
+): DailyLogIndoorClimateReadingRecord {
   return {
     area: reading.area.trim(),
     high: reading.high.trim(),
@@ -139,10 +144,12 @@ function sanitizePayload(payload: DailyLogPayload): DailyLogPayload {
   nextPayload.projectName = nextPayload.projectName.trim()
   nextPayload.weeklySchedule = nextPayload.weeklySchedule.trim()
   nextPayload.manpowerAssessment = nextPayload.manpowerAssessment.trim()
-  nextPayload.manpowerLines = getSubmittableDailyLogManpowerLines(nextPayload.manpowerLines)
-    .map((line) => sanitizeManpowerLine(line))
-  nextPayload.indoorClimateReadings = getSubmittableDailyLogIndoorClimateReadings(nextPayload.indoorClimateReadings)
-    .map((reading) => sanitizeIndoorClimateReading(reading))
+  nextPayload.manpowerLines = getSubmittableDailyLogManpowerLines(nextPayload.manpowerLines).map(
+    (line) => sanitizeManpowerLine(line),
+  )
+  nextPayload.indoorClimateReadings = getSubmittableDailyLogIndoorClimateReadings(
+    nextPayload.indoorClimateReadings,
+  ).map((reading) => sanitizeIndoorClimateReading(reading))
   nextPayload.safetyConcerns = nextPayload.safetyConcerns.trim()
   nextPayload.ahaReviewed = nextPayload.ahaReviewed.trim()
   nextPayload.scheduleConcerns = nextPayload.scheduleConcerns.trim()
@@ -158,7 +165,10 @@ function sanitizePayload(payload: DailyLogPayload): DailyLogPayload {
   nextPayload.actionItems = nextPayload.actionItems.trim()
   nextPayload.attachments = nextPayload.attachments
     .map((attachment) => sanitizeAttachment(attachment))
-    .filter((attachment) => attachment.name.length > 0 && attachment.path.length > 0 && attachment.url.length > 0)
+    .filter(
+      (attachment) =>
+        attachment.name.length > 0 && attachment.path.length > 0 && attachment.url.length > 0,
+    )
   nextPayload.manpower = summarizeManpowerLines(nextPayload.manpowerLines)
   nextPayload.qcInspection = nextPayload.qcAreasInspected
   return nextPayload
@@ -240,44 +250,76 @@ function normalizeAttachment(value: unknown): DailyLogAttachmentRecord | null {
 }
 
 function normalizePayload(data: DocumentData): DailyLogPayload {
-  const payloadSource = data.payload && typeof data.payload === 'object'
-    ? (data.payload as Record<string, unknown>)
-    : (data as Record<string, unknown>)
+  const payloadSource =
+    data.payload && typeof data.payload === 'object'
+      ? (data.payload as Record<string, unknown>)
+      : (data as Record<string, unknown>)
 
-  return sanitizePayload(createEmptyDailyLogPayload({
-    jobSiteNumbers: typeof payloadSource.jobSiteNumbers === 'string' ? payloadSource.jobSiteNumbers : '',
-    foremanOnSite: typeof payloadSource.foremanOnSite === 'string' ? payloadSource.foremanOnSite : '',
-    siteForemanAssistant: typeof payloadSource.siteForemanAssistant === 'string' ? payloadSource.siteForemanAssistant : '',
-    projectName: typeof payloadSource.projectName === 'string' ? payloadSource.projectName : '',
-    manpower: typeof payloadSource.manpower === 'string' ? payloadSource.manpower : '',
-    weeklySchedule: typeof payloadSource.weeklySchedule === 'string' ? payloadSource.weeklySchedule : '',
-    manpowerAssessment: typeof payloadSource.manpowerAssessment === 'string' ? payloadSource.manpowerAssessment : '',
-    indoorClimateReadings: Array.isArray(payloadSource.indoorClimateReadings)
-      ? payloadSource.indoorClimateReadings.map((entry) => normalizeIndoorClimateReading(entry))
-      : undefined,
-    manpowerLines: Array.isArray(payloadSource.manpowerLines)
-      ? payloadSource.manpowerLines.map((entry) => normalizeManpowerLine(entry))
-      : undefined,
-    safetyConcerns: typeof payloadSource.safetyConcerns === 'string' ? payloadSource.safetyConcerns : '',
-    ahaReviewed: typeof payloadSource.ahaReviewed === 'string' ? payloadSource.ahaReviewed : '',
-    scheduleConcerns: typeof payloadSource.scheduleConcerns === 'string' ? payloadSource.scheduleConcerns : '',
-    budgetConcerns: typeof payloadSource.budgetConcerns === 'string' ? payloadSource.budgetConcerns : '',
-    deliveriesReceived: typeof payloadSource.deliveriesReceived === 'string' ? payloadSource.deliveriesReceived : '',
-    deliveriesNeeded: typeof payloadSource.deliveriesNeeded === 'string' ? payloadSource.deliveriesNeeded : '',
-    newWorkAuthorizations: typeof payloadSource.newWorkAuthorizations === 'string' ? payloadSource.newWorkAuthorizations : '',
-    qcInspection: typeof payloadSource.qcInspection === 'string' ? payloadSource.qcInspection : '',
-    qcAssignedTo: typeof payloadSource.qcAssignedTo === 'string' ? payloadSource.qcAssignedTo : '',
-    qcAreasInspected: typeof payloadSource.qcAreasInspected === 'string' ? payloadSource.qcAreasInspected : '',
-    qcIssuesIdentified: typeof payloadSource.qcIssuesIdentified === 'string' ? payloadSource.qcIssuesIdentified : '',
-    qcIssuesResolved: typeof payloadSource.qcIssuesResolved === 'string' ? payloadSource.qcIssuesResolved : '',
-    notesCorrespondence: typeof payloadSource.notesCorrespondence === 'string' ? payloadSource.notesCorrespondence : '',
-    actionItems: typeof payloadSource.actionItems === 'string' ? payloadSource.actionItems : '',
-    attachments: Array.isArray(payloadSource.attachments)
-      ? payloadSource.attachments
-        .map((entry) => normalizeAttachment(entry))
-        .filter((entry): entry is DailyLogAttachmentRecord => entry !== null)
-      : undefined,
-  }))
+  return sanitizePayload(
+    createEmptyDailyLogPayload({
+      jobSiteNumbers:
+        typeof payloadSource.jobSiteNumbers === 'string' ? payloadSource.jobSiteNumbers : '',
+      foremanOnSite:
+        typeof payloadSource.foremanOnSite === 'string' ? payloadSource.foremanOnSite : '',
+      siteForemanAssistant:
+        typeof payloadSource.siteForemanAssistant === 'string'
+          ? payloadSource.siteForemanAssistant
+          : '',
+      projectName: typeof payloadSource.projectName === 'string' ? payloadSource.projectName : '',
+      manpower: typeof payloadSource.manpower === 'string' ? payloadSource.manpower : '',
+      weeklySchedule:
+        typeof payloadSource.weeklySchedule === 'string' ? payloadSource.weeklySchedule : '',
+      manpowerAssessment:
+        typeof payloadSource.manpowerAssessment === 'string'
+          ? payloadSource.manpowerAssessment
+          : '',
+      indoorClimateReadings: Array.isArray(payloadSource.indoorClimateReadings)
+        ? payloadSource.indoorClimateReadings.map((entry) => normalizeIndoorClimateReading(entry))
+        : undefined,
+      manpowerLines: Array.isArray(payloadSource.manpowerLines)
+        ? payloadSource.manpowerLines.map((entry) => normalizeManpowerLine(entry))
+        : undefined,
+      safetyConcerns:
+        typeof payloadSource.safetyConcerns === 'string' ? payloadSource.safetyConcerns : '',
+      ahaReviewed: typeof payloadSource.ahaReviewed === 'string' ? payloadSource.ahaReviewed : '',
+      scheduleConcerns:
+        typeof payloadSource.scheduleConcerns === 'string' ? payloadSource.scheduleConcerns : '',
+      budgetConcerns:
+        typeof payloadSource.budgetConcerns === 'string' ? payloadSource.budgetConcerns : '',
+      deliveriesReceived:
+        typeof payloadSource.deliveriesReceived === 'string'
+          ? payloadSource.deliveriesReceived
+          : '',
+      deliveriesNeeded:
+        typeof payloadSource.deliveriesNeeded === 'string' ? payloadSource.deliveriesNeeded : '',
+      newWorkAuthorizations:
+        typeof payloadSource.newWorkAuthorizations === 'string'
+          ? payloadSource.newWorkAuthorizations
+          : '',
+      qcInspection:
+        typeof payloadSource.qcInspection === 'string' ? payloadSource.qcInspection : '',
+      qcAssignedTo:
+        typeof payloadSource.qcAssignedTo === 'string' ? payloadSource.qcAssignedTo : '',
+      qcAreasInspected:
+        typeof payloadSource.qcAreasInspected === 'string' ? payloadSource.qcAreasInspected : '',
+      qcIssuesIdentified:
+        typeof payloadSource.qcIssuesIdentified === 'string'
+          ? payloadSource.qcIssuesIdentified
+          : '',
+      qcIssuesResolved:
+        typeof payloadSource.qcIssuesResolved === 'string' ? payloadSource.qcIssuesResolved : '',
+      notesCorrespondence:
+        typeof payloadSource.notesCorrespondence === 'string'
+          ? payloadSource.notesCorrespondence
+          : '',
+      actionItems: typeof payloadSource.actionItems === 'string' ? payloadSource.actionItems : '',
+      attachments: Array.isArray(payloadSource.attachments)
+        ? payloadSource.attachments
+            .map((entry) => normalizeAttachment(entry))
+            .filter((entry): entry is DailyLogAttachmentRecord => entry !== null)
+        : undefined,
+    }),
+  )
 }
 
 function normalizeSequenceNumber(value: unknown) {
@@ -306,19 +348,20 @@ function normalizeDailyLog(id: string, data: DocumentData): DailyLogRecord {
 }
 
 function sortDailyLogs(logs: DailyLogRecord[]) {
-  return logs
-    .slice()
-    .sort((left, right) => {
-      const rank = (status: string) => (status === 'submitted' ? 0 : 1)
-      if (rank(left.status) !== rank(right.status)) return rank(left.status) - rank(right.status)
+  return logs.slice().sort((left, right) => {
+    const rank = (status: string) => (status === 'submitted' ? 0 : 1)
+    if (rank(left.status) !== rank(right.status)) return rank(left.status) - rank(right.status)
 
-      const rightTimestamp = toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
-      const leftTimestamp = toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
-      if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
+    const rightTimestamp =
+      toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
+    const leftTimestamp =
+      toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
+    if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
 
-      if (right.sequenceNumber !== left.sequenceNumber) return right.sequenceNumber - left.sequenceNumber
-      return right.id.localeCompare(left.id)
-    })
+    if (right.sequenceNumber !== left.sequenceNumber)
+      return right.sequenceNumber - left.sequenceNumber
+    return right.id.localeCompare(left.id)
+  })
 }
 
 function startCallablePollingSubscription<TRecord>(
@@ -391,10 +434,10 @@ export async function createDailyLogRecord(input: CreateDailyLogInput): Promise<
 
   try {
     const { functions } = requireFirebaseServices()
-    const callable = httpsCallable<
-      CreateDailyLogInput,
-      { id: string }
-    >(functions, 'createDailyLogRecordCallable')
+    const callable = httpsCallable<CreateDailyLogInput, { id: string }>(
+      functions,
+      'createDailyLogRecordCallable',
+    )
 
     const result = await callable({
       ...input,
@@ -442,7 +485,9 @@ export async function updateDailyLogRecord(
       ...(input.payload ? { payload: serializePayloadForCallable(input.payload) } : {}),
       ...(input.payloadFields ? { payloadFields: input.payloadFields } : {}),
       ...(input.status ? { status: input.status } : {}),
-      ...('additionalRecipients' in input ? { additionalRecipients: normalizeRecipientList(input.additionalRecipients) } : {}),
+      ...('additionalRecipients' in input
+        ? { additionalRecipients: normalizeRecipientList(input.additionalRecipients) }
+        : {}),
       ...(actor ? { actor } : {}),
     })
   } catch (error) {
@@ -505,12 +550,14 @@ export async function uploadDailyLogAttachment(
       throw new Error('You must be signed in to upload attachments.')
     }
 
-    const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+    const preparedFile = await prepareDailyLogPhotoForUpload(file)
+    const safeName = preparedFile.name.replace(/[^A-Za-z0-9._-]/g, '_')
     const storagePath = `daily-logs/${dailyLogId}/${Date.now()}-${safeName}`
     const reference = storageRef(storage, storagePath)
 
-    await uploadBytes(reference, file, {
-      contentType: file.type || undefined,
+    // Resumable uploads let the Firebase SDK recover from brief mobile-network interruptions.
+    await uploadBytesResumable(reference, preparedFile, {
+      contentType: preparedFile.type || undefined,
       customMetadata: {
         jobId,
         dailyLogId,

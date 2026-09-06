@@ -40,7 +40,8 @@ describe('useSubscribedRecords', () => {
   it('stops existing subscriptions before restarting or stopping explicitly', () => {
     const firstUnsubscribe = vi.fn()
     const secondUnsubscribe = vi.fn()
-    const subscriber = vi.fn()
+    const subscriber = vi
+      .fn()
       .mockReturnValueOnce(firstUnsubscribe)
       .mockReturnValueOnce(secondUnsubscribe)
     const subscription = useSubscribedRecords<TestRecord>(subscriber, {
@@ -64,13 +65,12 @@ describe('useSubscribedRecords', () => {
   it('normalizes callback and synchronous subscriber failures', () => {
     const onError = vi.fn()
     let emitError: (error: unknown) => void = () => {}
-    const callbackFailureSubscriber = vi.fn((
-      _next: (records: TestRecord[]) => void,
-      error?: (caughtError: unknown) => void,
-    ) => {
-      emitError = error ?? (() => {})
-      return vi.fn()
-    })
+    const callbackFailureSubscriber = vi.fn(
+      (_next: (records: TestRecord[]) => void, error?: (caughtError: unknown) => void) => {
+        emitError = error ?? (() => {})
+        return vi.fn()
+      },
+    )
     const callbackFailure = useSubscribedRecords<TestRecord>(callbackFailureSubscriber, {
       errorMessage: 'Failed to load records.',
       onError,
@@ -85,12 +85,15 @@ describe('useSubscribedRecords', () => {
     )
     expect(onError).toHaveBeenCalledWith({ code: 'firestore/permission-denied' })
 
-    const syncFailure = useSubscribedRecords<TestRecord>(() => {
-      throw new Error('Listener failed')
-    }, {
-      errorMessage: 'Failed to load records.',
-      onError,
-    })
+    const syncFailure = useSubscribedRecords<TestRecord>(
+      () => {
+        throw new Error('Listener failed')
+      },
+      {
+        errorMessage: 'Failed to load records.',
+        onError,
+      },
+    )
 
     syncFailure.start()
 
@@ -101,13 +104,12 @@ describe('useSubscribedRecords', () => {
 
   it('clears previous errors when a subscription restarts', () => {
     let emitError: (error: unknown) => void = () => {}
-    const subscriber = vi.fn((
-      _next: (records: TestRecord[]) => void,
-      error?: (caughtError: unknown) => void,
-    ) => {
-      emitError = error ?? (() => {})
-      return vi.fn()
-    })
+    const subscriber = vi.fn(
+      (_next: (records: TestRecord[]) => void, error?: (caughtError: unknown) => void) => {
+        emitError = error ?? (() => {})
+        return vi.fn()
+      },
+    )
     const subscription = useSubscribedRecords<TestRecord>(subscriber, {
       errorMessage: 'Failed to load records.',
     })
@@ -152,13 +154,18 @@ describe('useSubscribedValue', () => {
   it('stops existing value subscriptions before restarting or stopping explicitly', () => {
     const firstUnsubscribe = vi.fn()
     const secondUnsubscribe = vi.fn()
-    const subscriber = vi.fn()
+    const subscriber = vi
+      .fn()
       .mockReturnValueOnce(firstUnsubscribe)
       .mockReturnValueOnce(secondUnsubscribe)
-    const subscription = useSubscribedValue(subscriber, { count: 0 }, {
-      errorMessage: 'Failed to load value.',
-      initialLoading: false,
-    })
+    const subscription = useSubscribedValue(
+      subscriber,
+      { count: 0 },
+      {
+        errorMessage: 'Failed to load value.',
+        initialLoading: false,
+      },
+    )
 
     expect(subscription.loading.value).toBe(false)
 
@@ -176,13 +183,12 @@ describe('useSubscribedValue', () => {
   it('normalizes value callback and synchronous subscriber failures', () => {
     const onError = vi.fn()
     let emitError: (error: unknown) => void = () => {}
-    const callbackFailureSubscriber = vi.fn((
-      _next: (value: string) => void,
-      error?: (caughtError: unknown) => void,
-    ) => {
-      emitError = error ?? (() => {})
-      return vi.fn()
-    })
+    const callbackFailureSubscriber = vi.fn(
+      (_next: (value: string) => void, error?: (caughtError: unknown) => void) => {
+        emitError = error ?? (() => {})
+        return vi.fn()
+      },
+    )
     const callbackFailure = useSubscribedValue(callbackFailureSubscriber, 'initial', {
       errorMessage: 'Failed to load value.',
       onError,
@@ -193,17 +199,21 @@ describe('useSubscribedValue', () => {
 
     expect(callbackFailure.loading.value).toBe(false)
     expect(callbackFailure.error.value).toBe(
-      'Storage access is not allowed yet. Storage rules may still need to be deployed for this feature.',
+      'You do not have permission to add or view this photo.',
     )
     expect(callbackFailure.value.value).toBe('initial')
     expect(onError).toHaveBeenCalledWith({ code: 'storage/unauthorized' })
 
-    const syncFailure = useSubscribedValue(() => {
-      throw new Error('Value listener failed')
-    }, 'initial', {
-      errorMessage: 'Failed to load value.',
-      onError,
-    })
+    const syncFailure = useSubscribedValue(
+      () => {
+        throw new Error('Value listener failed')
+      },
+      'initial',
+      {
+        errorMessage: 'Failed to load value.',
+        onError,
+      },
+    )
 
     syncFailure.start()
 
@@ -214,13 +224,12 @@ describe('useSubscribedValue', () => {
 
   it('clears value subscription errors when restarted', () => {
     let emitError: (error: unknown) => void = () => {}
-    const subscriber = vi.fn((
-      _next: (value: string) => void,
-      error?: (caughtError: unknown) => void,
-    ) => {
-      emitError = error ?? (() => {})
-      return vi.fn()
-    })
+    const subscriber = vi.fn(
+      (_next: (value: string) => void, error?: (caughtError: unknown) => void) => {
+        emitError = error ?? (() => {})
+        return vi.fn()
+      },
+    )
     const subscription = useSubscribedValue(subscriber, 'initial', {
       errorMessage: 'Failed to load value.',
     })

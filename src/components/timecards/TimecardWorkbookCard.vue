@@ -11,7 +11,6 @@ import {
   getTimecardLineHoursTotal,
   getTimecardLineOffDisplayValue,
   getTimecardLineProductionDisplayValue,
-  parseNullableTimecardNumber as parseNullableNumber,
   parseTimecardNumericDraft as parseNumericDraft,
   sanitizeTimecardWageInputValue as sanitizeWageInputValue,
   type TimecardLineDayField as LineDayField,
@@ -30,7 +29,6 @@ import {
 import {
   TIMECARD_VISIBLE_DAY_INDEXES,
   TIMECARD_VISIBLE_DAY_LABELS,
-  buildCardDisplayName,
   calculateRegularAndOvertimeHours,
 } from '@/features/timecards/workbook'
 import type { TimecardCardRecord } from '@/types/domain'
@@ -42,14 +40,12 @@ const props = withDefaults(defineProps<{
   burden?: number
   compact?: boolean
   readOnly?: boolean
-  employeeHeaderLocked?: boolean
   showEmployeeWage?: boolean
   showCostValues?: boolean
 }>(), {
   burden: undefined,
   compact: false,
   readOnly: false,
-  employeeHeaderLocked: true,
   showEmployeeWage: true,
   showCostValues: true,
 })
@@ -168,11 +164,6 @@ function getLineOffField(rowKind: LineRowKind): LineOffField {
 
 function setCardField(
   field:
-    | 'firstName'
-    | 'lastName'
-    | 'employeeNumber'
-    | 'occupation'
-    | 'wageRate'
     | 'notes'
     | 'footerJobOrGl'
     | 'footerAccount'
@@ -184,14 +175,7 @@ function setCardField(
     | 'footerSecondAmount',
   value: string,
 ) {
-  if (field === 'wageRate') {
-    props.card.wageRate = parseNullableNumber(value)
-  } else if (field === 'notes' || field.startsWith('footer')) {
-    props.card[field] = value
-  } else {
-    props.card[field] = value
-    props.card.fullName = buildCardDisplayName(props.card)
-  }
+  props.card[field] = value
   emit('changed')
 }
 
@@ -438,10 +422,8 @@ function handleSheetKeydown(event: KeyboardEvent) {
         :card="card"
         :week-end-date="weekEndDate"
         :read-only="readOnly"
-        :employee-header-locked="employeeHeaderLocked"
         :show-employee-wage="showEmployeeWage"
         :wage-input-value="getNumericFieldValue('card:wageRate', card.wageRate == null ? '' : (formatCurrency(card.wageRate) ?? ''))"
-        @update-field="setCardField"
         @update-wage="setWageRateField"
         @commit-wage="commitWageRateField"
         @filter-wage-key="filterWageKey"

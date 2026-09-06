@@ -226,6 +226,7 @@ function createBaseFixture(authKind: FixtureAuthKind, assignedJobIds = [JOB_ID])
     shopCatalogItems: [] as ShopCatalogItemRecord[],
     shopOrders: [] as ShopOrderRecord[],
     dailyLogs: [] as DailyLogRecord[],
+    publicDailyLogGalleries: {},
     timecardWeeks: [] as TimecardWeekRecord[],
     timecardCards: [] as FixtureTimecardCard[],
     globalNotificationRecipients: {

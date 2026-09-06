@@ -1,19 +1,16 @@
-import * as admin from 'firebase-admin';
+import { type DocumentReference } from 'firebase-admin/firestore';
 import { getJobDetails, getUserProfile, getDailyLog, getShopOrder, getEmailSettings, getJobNotificationRecipients } from './firestoreService';
 import { sendEmail, buildDailyLogEmail, buildShopOrderEmail, buildShopOrderPdfBuffer, buildShopOrderPdfFilename, isEmailEnabled } from './emailService';
 import { type SubmittedEmailStatusResult } from './emailStatus';
 import { claimSubmittedEmailOperation } from './submittedEmailOperations';
+import { getAppBaseUrl } from './functionConfig';
+import { ensureDailyLogGalleryShare } from './dailyLogGalleryFunctions';
 declare function getShopOrderCostCodesByCatalogItemId(items: any[]): Promise<Record<string, string>>;
-declare function recordSubmittedEmailStatus(refs: admin.firestore.DocumentReference[], result: SubmittedEmailStatusResult, context: Record<string, unknown>): Promise<void>;
-declare function dailyLogEmailStatusRefs(jobId: string, dailyLogId: string): admin.firestore.DocumentReference[];
-declare function shopOrderEmailStatusRefs(jobId: string, shopOrderId: string): admin.firestore.DocumentReference[];
-declare function getJobScopedShopOrderSnapshot(jobId: string, shopOrderId: string): Promise<admin.firestore.DocumentSnapshot<admin.firestore.DocumentData, admin.firestore.DocumentData>>;
+declare function recordSubmittedEmailStatus(refs: DocumentReference[], result: SubmittedEmailStatusResult, context: Record<string, unknown>): Promise<void>;
+declare function dailyLogEmailStatusRefs(jobId: string, dailyLogId: string): DocumentReference[];
+declare function shopOrderEmailStatusRefs(jobId: string, shopOrderId: string): DocumentReference[];
+declare function getJobScopedShopOrderSnapshot(jobId: string, shopOrderId: string): Promise<FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData, FirebaseFirestore.DocumentData>>;
 export declare function prepareTimecardsForPdfCsvExport(timecards: any[]): Promise<any[]>;
-declare function loadDailyLogAttachments(log: any): Promise<{
-    name: string;
-    contentType?: string;
-    contentBytes: string;
-}[]>;
 interface CallableRequestLike {
     auth?: {
         uid: string;
@@ -29,8 +26,9 @@ interface SendDailyLogEmailDependencies {
     getDailyLog: typeof getDailyLog;
     getEmailSettings: typeof getEmailSettings;
     getJobNotificationRecipients: typeof getJobNotificationRecipients;
+    getAppBaseUrl: typeof getAppBaseUrl;
+    ensureDailyLogGalleryShare: typeof ensureDailyLogGalleryShare;
     buildDailyLogEmail: typeof buildDailyLogEmail;
-    loadDailyLogAttachments: typeof loadDailyLogAttachments;
     sendEmail: typeof sendEmail;
     recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus;
 }

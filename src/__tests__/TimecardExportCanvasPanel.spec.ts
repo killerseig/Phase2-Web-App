@@ -2,7 +2,6 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import TimecardExportCanvasPanel from '@/components/timecards/TimecardExportCanvasPanel.vue'
 import type { TimecardExportArchiveCardRecord } from '@/features/timecards/exportViewHelpers'
-import type { TimecardCardRecord } from '@/types/domain'
 
 function makeCard(overrides: Partial<TimecardExportArchiveCardRecord> = {}): TimecardExportArchiveCardRecord {
   return {
@@ -53,6 +52,8 @@ const cards = [
   makeCard(),
   makeCard({
     id: 'readonly-card',
+    sourceType: 'custom',
+    employeeId: null,
     fullName: 'Locked Employee',
     firstName: 'Locked',
     lastName: 'Employee',
@@ -113,7 +114,6 @@ const WorkbookStub = {
     'weekEndDate',
     'burden',
     'readOnly',
-    'employeeHeaderLocked',
     'showEmployeeWage',
     'showCostValues',
   ],
@@ -144,7 +144,6 @@ function mountPanel(overrides = {}) {
       isCardCompact: (cardId: string) => cardId === 'readonly-card',
       isCardEditable: (cardId: string) => cardId === 'export-card-1',
       isCardReadOnly: (cardId: string) => cardId !== 'export-card-1',
-      isEmployeeHeaderLocked: (card: TimecardCardRecord) => card.id !== 'export-card-1',
       getCardShellStyle: (cardId: string) => ({ minHeight: cardId === 'export-card-1' ? '100px' : '200px' }),
       getCardScaleStyle: (cardId: string) => ({ transform: cardId === 'export-card-1' ? 'scale(0.8)' : 'scale(1)' }),
       setCardShellElement: vi.fn(),
@@ -184,6 +183,8 @@ describe('TimecardExportCanvasPanel', () => {
       'data-has-footer': 'false',
       'data-compact': 'true',
     })
+    expect(wrapper.get('[data-testid="timecard-card-source-export-card-1"]').text()).toBe('EMPLOYEE')
+    expect(wrapper.get('[data-testid="timecard-card-source-readonly-card"]').text()).toBe('ONE-OFF')
   })
 
   it('combines loading flags before passing them to the shared canvas shell', () => {
@@ -207,7 +208,6 @@ describe('TimecardExportCanvasPanel', () => {
       weekEndDate: '2026-06-20',
       burden: 0.33,
       readOnly: false,
-      employeeHeaderLocked: false,
       showEmployeeWage: true,
       showCostValues: true,
     })
@@ -216,7 +216,6 @@ describe('TimecardExportCanvasPanel', () => {
       weekEndDate: '2026-06-27',
       burden: 0.4,
       readOnly: true,
-      employeeHeaderLocked: true,
     })
 
     await wrapper.get('[data-testid="emit-select-export-card-1"]').trigger('click')

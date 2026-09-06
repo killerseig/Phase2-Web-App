@@ -49,6 +49,15 @@ const assignedForeman = {
   assignedJobIds: ['job-1'],
 }
 
+const assignedProjectManager = {
+  ...assignedForeman,
+  uid: 'project-manager-1',
+  email: 'project.manager@phase2co.com',
+  firstName: 'Project',
+  lastName: 'Manager',
+  role: 'project-manager',
+}
+
 function emailSettings(dailyLogs: string[] = [], shopOrders: string[] = []) {
   return {
     timecardSubmitRecipients: [],
@@ -83,8 +92,9 @@ function makeDailyLogDeps(overrides: Record<string, unknown> = {}) {
     })),
     getEmailSettings: vi.fn(async () => emailSettings(['global-daily@phase2co.com'])),
     getJobNotificationRecipients: vi.fn(async () => ['job-daily@phase2co.com']),
+    getAppBaseUrl: vi.fn(() => 'https://phase2-website.web.app'),
+    ensureDailyLogGalleryShare: vi.fn(async () => 'gallery-share-id'),
     buildDailyLogEmail: vi.fn(() => '<p>daily log</p>'),
-    loadDailyLogAttachments: vi.fn(async () => []),
     sendEmail: vi.fn(async () => undefined),
     recordSubmittedEmailStatus: vi.fn(async () => undefined),
     ...overrides,
@@ -140,6 +150,23 @@ describe('submitted field email callable handlers', () => {
       to: ['global-daily@phase2co.com', 'job-daily@phase2co.com'],
       subject: 'Daily Log Report | Vince Hintz | #5229 Lucky 3 Ranch | 6/17/2026',
       html: '<p>daily log</p>',
+    }))
+    expect(deps.buildDailyLogEmail).toHaveBeenCalledWith(
+      job,
+      '2026-06-17',
+      expect.objectContaining({ id: 'daily-log-1' }),
+      {
+        dailyLogUrl: 'https://phase2-website.web.app/daily-log-gallery/gallery-share-id',
+      },
+    )
+    expect(deps.ensureDailyLogGalleryShare).toHaveBeenCalledWith({
+      dailyLogId: 'daily-log-1',
+      jobId: 'job-1',
+      jobDetails: job,
+      log: expect.objectContaining({ id: 'daily-log-1' }),
+    })
+    expect(deps.sendEmail).not.toHaveBeenCalledWith(expect.objectContaining({
+      attachments: expect.anything(),
     }))
     expect(deps.recordSubmittedEmailStatus).toHaveBeenLastCalledWith(
       expect.any(Array),
@@ -320,6 +347,49 @@ describe('submitted field email callable handlers', () => {
         operationId: 'shopOrderSubmittedEmail:order-1',
       }),
     )
+  })
+
+  it('allows an assigned project manager to send a submitted shop order email', async () => {
+    const deps = makeShopOrderDeps({
+      getUserProfile: vi.fn(async () => assignedProjectManager),
+    })
+
+    await expect(
+      handleSendShopOrderEmail({
+        auth: { uid: 'project-manager-1' },
+        data: {
+          jobId: 'job-1',
+          shopOrderId: 'order-1',
+        },
+      }, deps as never),
+    ).resolves.toEqual({ success: true, message: 'Email sent successfully' })
+
+    expect(deps.claimSubmittedEmailOperation).toHaveBeenCalled()
+    expect(deps.sendEmail).toHaveBeenCalled()
+  })
+
+  it('denies an unassigned project manager before sending a shop order email', async () => {
+    const deps = makeShopOrderDeps({
+      getUserProfile: vi.fn(async () => ({
+        ...assignedProjectManager,
+        assignedJobIds: [],
+      })),
+    })
+
+    await expect(
+      handleSendShopOrderEmail({
+        auth: { uid: 'project-manager-1' },
+        data: {
+          jobId: 'job-1',
+          shopOrderId: 'order-1',
+        },
+      }, deps as never),
+    ).rejects.toMatchObject({
+      code: 'permission-denied',
+    })
+
+    expect(deps.claimSubmittedEmailOperation).not.toHaveBeenCalled()
+    expect(deps.sendEmail).not.toHaveBeenCalled()
   })
 
   it('rejects shop orders that do not belong to the requested job', async () => {

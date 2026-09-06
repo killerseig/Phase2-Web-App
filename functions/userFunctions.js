@@ -1,43 +1,10 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setUserPassword = exports.requestPasswordResetEmail = exports.verifySetupToken = exports.sendPendingUserInvites = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.listAssignableFieldUsers = exports.removeEmailFromAllRecipientLists = void 0;
 const crypto_1 = require("crypto");
-const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
-const firestore_1 = require("firebase-functions/v2/firestore");
+const firestore_2 = require("firebase-functions/v2/firestore");
 const constants_1 = require("./constants");
 const emailService_1 = require("./emailService");
 const functionConfig_1 = require("./functionConfig");
@@ -119,7 +86,7 @@ async function sendUserInvite(options) {
     });
     await userRef.update({
         inviteStatus: 'sent',
-        inviteSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        inviteSentAt: firestore_1.FieldValue.serverTimestamp(),
         inviteSentByUid: options.sentByUid ?? null,
     });
 }
@@ -162,7 +129,7 @@ exports.listAssignableFieldUsers = (0, https_1.onCall)(async (request) => {
     });
     return { users };
 });
-exports.handleUserAccessRevocationCleanup = (0, firestore_1.onDocumentUpdated)('users/{uid}', async (event) => {
+exports.handleUserAccessRevocationCleanup = (0, firestore_2.onDocumentUpdated)('users/{uid}', async (event) => {
     const beforeData = event.data?.before?.data();
     const afterData = event.data?.after?.data();
     if (!afterData)
@@ -295,7 +262,7 @@ exports.createUserByAdmin = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
             lastName,
             role: userRole,
             active: true,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: firestore_1.FieldValue.serverTimestamp(),
             setupToken: null,
             setupTokenExpiry: null,
             inviteStatus: 'pending',
@@ -503,7 +470,7 @@ exports.setUserPassword = (0, https_1.onCall)(async (request) => {
             setupToken: null,
             setupTokenExpiry: null,
             inviteStatus: 'accepted',
-            inviteAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+            inviteAcceptedAt: firestore_1.FieldValue.serverTimestamp(),
         });
         return {
             success: true,

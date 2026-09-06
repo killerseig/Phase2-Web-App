@@ -9,6 +9,7 @@
     "watch": "tsc --watch",
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
+    "preview:daily-log-email": "npm run build && node scripts/preview-daily-log-email.cjs",
     "preview:shop-order-email": "npm run build && node scripts/preview-shop-order-email.cjs",
     "preview:timecard-email": "npm run build && node scripts/preview-timecard-email.cjs",
     "smoke:daily-log-email": "npm run build && node scripts/smoke-daily-log-email.cjs",
@@ -18,8 +19,8 @@
   "dependencies": {
     "@types/pdfkit": "^0.17.5",
     "axios": "^1.6.0",
-    "firebase-admin": "^12.4.0",
-    "firebase-functions": "^7.2.5",
+    "firebase-admin": "^14.3.0",
+    "firebase-functions": "^7.3.2",
     "pdfkit": "^0.17.2"
   },
   "devDependencies": {

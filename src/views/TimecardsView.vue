@@ -434,7 +434,6 @@ useJobTimecardWorkspaceSync({
         :burden="burdenValue"
         :can-edit-week="canEditWeek"
         :action-loading="actionLoading"
-        :can-manage-job-timecards="auth.canManageJobTimecards"
         :is-card-compact="isCardCompact"
         :is-card-read-only="isCardReadOnly"
         :get-card-shell-style="getCardShellStyle"

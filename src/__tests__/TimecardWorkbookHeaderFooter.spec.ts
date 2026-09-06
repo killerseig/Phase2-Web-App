@@ -48,7 +48,6 @@ describe('TimecardWorkbookHeader', () => {
         card: makeCard(),
         weekEndDate: '2026-06-13',
         readOnly: true,
-        employeeHeaderLocked: true,
         showEmployeeWage: true,
         wageInputValue: '$42.50',
       },
@@ -67,39 +66,31 @@ describe('TimecardWorkbookHeader', () => {
     expect(wrapper.find('input').exists()).toBe(false)
   })
 
-  it('renders editable employee fields and forwards header update events', async () => {
+  it('keeps employee identity and week ending display-only on an editable card', () => {
     const wrapper = mount(TimecardWorkbookHeader, {
       props: {
-        card: makeCard(),
+        card: makeCard({
+          sourceType: 'custom',
+          employeeId: null,
+          firstName: 'Black',
+          lastName: 'Eagle',
+          fullName: 'Black Eagle',
+          employeeNumber: 'BE-101',
+          occupation: 'Contractor',
+        }),
         weekEndDate: '2026-06-13',
         readOnly: false,
-        employeeHeaderLocked: false,
         showEmployeeWage: false,
         wageInputValue: '$42.50',
       },
     })
-    const inputs = wrapper.findAll('input')
 
     expect(wrapper.text()).toContain('----')
-    expect(inputs).toHaveLength(4)
-    expect((inputs[0]!.element as HTMLInputElement).placeholder).toBe('Last Name')
-    expect((inputs[0]!.element as HTMLInputElement).value).toBe('Larsen')
-    expect((inputs[1]!.element as HTMLInputElement).placeholder).toBe('First Name')
-    expect((inputs[1]!.element as HTMLInputElement).value).toBe('Chris')
-    expect((inputs[2]!.element as HTMLInputElement).value).toBe('5133')
-    expect((inputs[3]!.element as HTMLInputElement).value).toBe('Foreman')
-
-    await inputs[0]!.setValue('Blanchard')
-    await inputs[1]!.setValue('CJ')
-    await inputs[2]!.setValue('9001')
-    await inputs[3]!.setValue('Shop Foreman')
-
-    expect(wrapper.emitted('update-field')).toEqual([
-      ['lastName', 'Blanchard'],
-      ['firstName', 'CJ'],
-      ['employeeNumber', '9001'],
-      ['occupation', 'Shop Foreman'],
-    ])
+    expect(wrapper.get('[data-testid="timecard-employee-name"]').text()).toBe('Eagle, Black')
+    expect(wrapper.get('[data-testid="timecard-employee-number"]').text()).toBe('BE-101')
+    expect(wrapper.get('[data-testid="timecard-occupation"]').text()).toBe('Contractor')
+    expect(wrapper.get('[data-testid="timecard-week-ending"]').text()).toBe('6/13/2026')
+    expect(wrapper.find('input').exists()).toBe(false)
   })
 
   it('renders editable wage input and forwards wage filter/update/commit events', async () => {
@@ -108,7 +99,6 @@ describe('TimecardWorkbookHeader', () => {
         card: makeCard(),
         weekEndDate: '2026-06-13',
         readOnly: false,
-        employeeHeaderLocked: true,
         showEmployeeWage: true,
         wageInputValue: '42.50',
       },
@@ -126,19 +116,18 @@ describe('TimecardWorkbookHeader', () => {
     expect(wrapper.emitted('commit-wage')).toHaveLength(1)
   })
 
-  it('disables editable fields when the card is read-only', () => {
+  it('renders no editable header inputs when the card is read-only', () => {
     const wrapper = mount(TimecardWorkbookHeader, {
       props: {
         card: makeCard(),
         weekEndDate: '2026-06-13',
         readOnly: true,
-        employeeHeaderLocked: false,
         showEmployeeWage: true,
         wageInputValue: '42.50',
       },
     })
 
-    expect(wrapper.findAll('input').every((input) => input.attributes('disabled') !== undefined)).toBe(true)
+    expect(wrapper.find('input').exists()).toBe(false)
   })
 })
 

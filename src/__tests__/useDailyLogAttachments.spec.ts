@@ -8,11 +8,7 @@ import {
   updateDailyLogRecord,
   uploadDailyLogAttachment,
 } from '@/services/dailyLogs'
-import type {
-  DailyLogAttachmentRecord,
-  DailyLogPayload,
-  DailyLogRecord,
-} from '@/types/domain'
+import type { DailyLogAttachmentRecord, DailyLogPayload, DailyLogRecord } from '@/types/domain'
 
 vi.mock('@/services/dailyLogs', () => ({
   deleteDailyLogAttachment: vi.fn(),
@@ -24,7 +20,9 @@ const deleteDailyLogAttachmentMock = vi.mocked(deleteDailyLogAttachment)
 const updateDailyLogRecordMock = vi.mocked(updateDailyLogRecord)
 const uploadDailyLogAttachmentMock = vi.mocked(uploadDailyLogAttachment)
 
-function makeAttachment(overrides: Partial<DailyLogAttachmentRecord> = {}): DailyLogAttachmentRecord {
+function makeAttachment(
+  overrides: Partial<DailyLogAttachmentRecord> = {},
+): DailyLogAttachmentRecord {
   return {
     description: 'Existing attachment',
     name: 'photo.jpg',
@@ -102,12 +100,14 @@ function createDeferred<T>() {
   return { promise, reject, resolve }
 }
 
-function mountAttachments(options: {
-  canEdit?: boolean
-  form?: DailyLogPayload
-  jobId?: string
-  selectedLog?: DailyLogRecord | null
-} = {}) {
+function mountAttachments(
+  options: {
+    canEdit?: boolean
+    form?: DailyLogPayload
+    jobId?: string
+    selectedLog?: DailyLogRecord | null
+  } = {},
+) {
   const canEdit = ref(options.canEdit ?? true)
   const form = ref(options.form ?? makePayload())
   const jobId = ref(options.jobId ?? 'job-1')
@@ -158,13 +158,15 @@ describe('useDailyLogAttachments', () => {
     uploadDailyLogAttachmentMock.mockReset()
     deleteDailyLogAttachmentMock.mockResolvedValue(undefined)
     updateDailyLogRecordMock.mockResolvedValue(undefined)
-    uploadDailyLogAttachmentMock.mockResolvedValue(makeAttachment({
-      description: 'Uploaded photo',
-      name: 'uploaded.png',
-      path: 'dailyLogs/job-1/log-1/uploaded.png',
-      type: 'photo',
-      url: 'https://example.test/uploaded.png',
-    }))
+    uploadDailyLogAttachmentMock.mockResolvedValue(
+      makeAttachment({
+        description: 'Uploaded photo',
+        name: 'uploaded.png',
+        path: 'dailyLogs/job-1/log-1/uploaded.png',
+        type: 'photo',
+        url: 'https://example.test/uploaded.png',
+      }),
+    )
   })
 
   it('groups saved attachments by section and updates descriptions locally', () => {
@@ -196,12 +198,7 @@ describe('useDailyLogAttachments', () => {
       url: 'https://example.test/progress.png',
     })
     uploadDailyLogAttachmentMock.mockReturnValueOnce(uploadDeferred.promise)
-    const {
-      attachments,
-      form,
-      preparePayload,
-      setSavedPayloadSnapshot,
-    } = mountAttachments()
+    const { attachments, form, preparePayload, setSavedPayloadSnapshot } = mountAttachments()
 
     const uploadPromise = attachments.uploadPhotoAttachments([
       {
@@ -281,57 +278,131 @@ describe('useDailyLogAttachments', () => {
     expect(updateDailyLogRecordMock).not.toHaveBeenCalled()
 
     const noSelection = mountAttachments({ selectedLog: null })
-    await expect(noSelection.attachments.uploadPhotoAttachments([
-      {
-        description: 'Photo',
-        file: makeImageFile(),
-      },
-    ])).rejects.toThrow('Select your current draft before uploading attachments.')
+    await expect(
+      noSelection.attachments.uploadPhotoAttachments([
+        {
+          description: 'Photo',
+          file: makeImageFile(),
+        },
+      ]),
+    ).rejects.toThrow('Select your current draft before uploading attachments.')
 
     const readOnly = mountAttachments({ canEdit: false })
-    await expect(readOnly.attachments.uploadPhotoAttachments([
-      {
-        description: 'Photo',
-        file: makeImageFile(),
-      },
-    ])).rejects.toThrow('Select your current draft before uploading attachments.')
+    await expect(
+      readOnly.attachments.uploadPhotoAttachments([
+        {
+          description: 'Photo',
+          file: makeImageFile(),
+        },
+      ]),
+    ).rejects.toThrow('Select your current draft before uploading attachments.')
 
     expect(uploadDailyLogAttachmentMock).not.toHaveBeenCalled()
   })
 
-  it('rejects unsupported or oversized uploads and clears the section busy flag', async () => {
+  it('rejects unsupported uploads but delegates large photos to the upload optimizer', async () => {
     const wrongType = mountAttachments()
 
-    await expect(wrongType.attachments.uploadPhotoAttachments([
-      {
-        description: 'PDF',
-        file: new File(['pdf'], 'document.pdf', { type: 'application/pdf' }),
-      },
-    ])).rejects.toThrow('Only image attachments are supported.')
+    await expect(
+      wrongType.attachments.uploadPhotoAttachments([
+        {
+          description: 'PDF',
+          file: new File(['pdf'], 'document.pdf', { type: 'application/pdf' }),
+        },
+      ]),
+    ).rejects.toThrow(
+      '1 file could not be uploaded (document.pdf). Please choose photo files only.',
+    )
     expect(wrongType.attachments.photoAttachmentBusy.value).toBe(false)
 
     const oversized = mountAttachments()
+    const largePhoto = makeOversizedImageFile()
 
-    await expect(oversized.attachments.uploadPhotoAttachments([
+    await oversized.attachments.uploadPhotoAttachments([
       {
         description: 'Large photo',
-        file: makeOversizedImageFile(),
+        file: largePhoto,
       },
-    ])).rejects.toThrow('Attachments must be smaller than 10 MB.')
+    ])
+
+    expect(uploadDailyLogAttachmentMock).toHaveBeenCalledWith(
+      largePhoto,
+      'job-1',
+      'daily-log-1',
+      'photo',
+      'Large photo',
+    )
     expect(oversized.attachments.photoAttachmentBusy.value).toBe(false)
-    expect(uploadDailyLogAttachmentMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps successful photos when another file in the same selection fails', async () => {
+    const uploadedPhoto = makeAttachment({
+      name: 'first.jpg',
+      path: 'dailyLogs/job-1/log-1/first.jpg',
+      url: 'https://example.test/first.jpg',
+    })
+    uploadDailyLogAttachmentMock
+      .mockResolvedValueOnce(uploadedPhoto)
+      .mockRejectedValueOnce(new Error('Could not optimize second.jpg'))
+    const { attachments, form } = mountAttachments()
+
+    await expect(
+      attachments.uploadPhotoAttachments([
+        { description: 'First', file: makeImageFile('first.jpg') },
+        { description: 'Second', file: makeImageFile('second.jpg') },
+      ]),
+    ).rejects.toThrow(
+      '1 photo could not be uploaded (second.jpg). The app resized and retried it automatically; tap the photo button to try again.',
+    )
+
+    expect(uploadDailyLogAttachmentMock).toHaveBeenCalledTimes(2)
+    expect(form.value.attachments).toContainEqual(uploadedPhoto)
+    expect(updateDailyLogRecordMock).toHaveBeenCalledOnce()
+    expect(attachments.photoAttachmentBusy.value).toBe(false)
+  })
+
+  it('does not mislabel a Storage access failure as a photo-size problem', async () => {
+    uploadDailyLogAttachmentMock.mockRejectedValueOnce(
+      new Error('You do not have permission to add or view this photo.'),
+    )
+    const { attachments } = mountAttachments()
+
+    await expect(
+      attachments.uploadPhotoAttachments([
+        { description: 'Progress', file: makeImageFile('progress.jpg') },
+      ]),
+    ).rejects.toThrow(
+      '1 photo could not be uploaded (progress.jpg) because this account does not have photo access. Please contact an administrator.',
+    )
+  })
+
+  it('does not impose a picture-count limit on a daily log', async () => {
+    uploadDailyLogAttachmentMock.mockImplementation(async (file) =>
+      makeAttachment({
+        name: file.name,
+        path: `dailyLogs/job-1/log-1/${file.name}`,
+        url: `https://example.test/${file.name}`,
+      }),
+    )
+    const { attachments, form } = mountAttachments()
+    const existingAttachmentCount = form.value.attachments.length
+    const selectedPhotos = Array.from({ length: 101 }, (_, index) => ({
+      description: '',
+      file: makeImageFile(`photo-${index + 1}.jpg`),
+    }))
+
+    await attachments.uploadPhotoAttachments(selectedPhotos)
+
+    expect(uploadDailyLogAttachmentMock).toHaveBeenCalledTimes(101)
+    expect(form.value.attachments).toHaveLength(existingAttachmentCount + 101)
+    expect(updateDailyLogRecordMock).toHaveBeenCalledTimes(11)
   })
 
   it('deletes attachments, persists the remaining payload, and updates the saved snapshot', async () => {
     const deleteDeferred = createDeferred<void>()
     deleteDailyLogAttachmentMock.mockReturnValueOnce(deleteDeferred.promise)
-    const {
-      actionInfos,
-      attachments,
-      form,
-      preparePayload,
-      setSavedPayloadSnapshot,
-    } = mountAttachments()
+    const { actionInfos, attachments, form, preparePayload, setSavedPayloadSnapshot } =
+      mountAttachments()
 
     const deletePromise = attachments.handleDeleteAttachment('dailyLogs/job-1/log-1/ptp.jpg')
 
@@ -342,7 +413,9 @@ describe('useDailyLogAttachments', () => {
     await deletePromise
 
     expect(deleteDailyLogAttachmentMock).toHaveBeenCalledWith('dailyLogs/job-1/log-1/ptp.jpg')
-    expect(form.value.attachments.some((attachment) => attachment.path.endsWith('/ptp.jpg'))).toBe(false)
+    expect(form.value.attachments.some((attachment) => attachment.path.endsWith('/ptp.jpg'))).toBe(
+      false,
+    )
     expect(preparePayload).toHaveBeenCalledWith(form.value)
     expect(updateDailyLogRecordMock).toHaveBeenCalledWith(
       'daily-log-1',
@@ -381,7 +454,9 @@ describe('useDailyLogAttachments', () => {
 
     expect(actionErrors).toContain('')
     expect(actionErrors).toContain('Storage unavailable')
-    expect(form.value.attachments.some((attachment) => attachment.path.endsWith('/qc.jpg'))).toBe(true)
+    expect(form.value.attachments.some((attachment) => attachment.path.endsWith('/qc.jpg'))).toBe(
+      true,
+    )
     expect(updateDailyLogRecordMock).not.toHaveBeenCalled()
     expect(attachments.qcAttachmentBusy.value).toBe(false)
   })

@@ -427,7 +427,7 @@ describe('useTimecardExportCreateActions', () => {
     ;[errorArg, fallback] = customCase.setPageError.mock.calls[0]!
     expect(errorArg).toBeInstanceOf(Error)
     expect((errorArg as Error).message).toBe('Custom create denied')
-    expect(fallback).toBe('Failed to add the custom timecard.')
+    expect(fallback).toBe('Failed to add the one-off timecard.')
     expect(customCase.actionLoading.value).toBe(false)
   })
 })

@@ -10,6 +10,7 @@ import {
 
 function createProjectManagerDashboardFixture() {
   const fixture = createJobDashboardFixture()
+  const shopOrderFixture = createShopOrdersFixture()
 
   fixture.auth.user.email = 'pm@example.com'
   fixture.auth.user.displayName = 'Pat Project Manager'
@@ -28,6 +29,9 @@ function createProjectManagerDashboardFixture() {
         }
       : user
   ))
+  fixture.shopCategories = shopOrderFixture.shopCategories
+  fixture.shopCatalogItems = shopOrderFixture.shopCatalogItems
+  fixture.shopOrders = shopOrderFixture.shopOrders
 
   return fixture
 }
@@ -413,6 +417,27 @@ test.describe('route access control', () => {
     await page.goto('/jobs/job-e2e/shop-orders')
     await expect(page.getByTestId('shop-orders-page')).toBeVisible()
     await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
+    await page.getByTestId('shoporder-root-row').click({ button: 'right' })
+    await page.getByTestId('shoporder-context-expand-all').click()
+    await page.getByTestId('shoporder-add-item-box').click()
+    await page.getByTestId('shoporder-comments').fill('Project manager order')
+    await page.getByTestId('shoporder-comments').blur()
+    await page.getByTestId('shoporder-submit').click()
+    await page
+      .getByRole('dialog', { name: 'Submit shop order?' })
+      .getByRole('button', { name: 'Submit Order' })
+      .click()
+
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          shopOrders?: Array<{ id: string; comments?: string; status?: string }>
+        }
+        const order = state.shopOrders?.find((entry) => entry.id === 'order-draft')
+        return { comments: order?.comments ?? '', status: order?.status ?? '' }
+      }))
+      .toEqual({ comments: 'Project manager order', status: 'submitted' })
+    await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
   })
 
   test('project managers can edit assigned jobs and assign foremen without delete or archive access', async ({ page }) => {
@@ -667,7 +692,8 @@ test.describe('route access control', () => {
 
     await gotoPhase2App(page, '/jobs', fixture)
 
-    await expect(page).toHaveURL(/\/login$/)
+    await expect(page).toHaveURL(/\/login\?redirect=%2Fjobs$|\/login\?redirect=\/jobs$/)
+    await expect(page).toHaveURL((url) => url.searchParams.get('redirect') === '/jobs')
     await expect(page.getByRole('heading', { name: 'Phase 2 Web Application' })).toBeVisible()
   })
 })

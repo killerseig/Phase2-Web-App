@@ -2,7 +2,8 @@ import type { RouteLocationRaw } from 'vue-router'
 import { readFirstQueryParam } from '@/utils/routerQuery'
 
 export const passwordCreatedLoginMessage = 'Password created. Sign in with your new password.'
-export const invalidSetupLinkMessage = 'Invalid setup link. Please request a new password creation link.'
+export const invalidSetupLinkMessage =
+  'Invalid setup link. Please request a new password creation link.'
 
 export function buildForgotPasswordTarget(email: string): RouteLocationRaw {
   const nextEmail = email.trim()
@@ -18,6 +19,20 @@ export function getPasswordCreatedLoginInfo(value: unknown) {
 
 export function getAuthEmailQueryPrefill(query: { email?: unknown }) {
   return readFirstQueryParam(query.email)
+}
+
+export function getWorkspaceRedirectTarget(value: unknown) {
+  const target = readFirstQueryParam(value)
+  if (!target.startsWith('/') || target.startsWith('//')) return '/jobs'
+
+  try {
+    const baseUrl = 'https://phase2.invalid'
+    const parsed = new URL(target, baseUrl)
+    if (parsed.origin !== baseUrl || parsed.pathname === '/login') return '/jobs'
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return '/jobs'
+  }
 }
 
 export async function redirectToWorkspaceIfAllowed(options: {

@@ -36,6 +36,8 @@ export {
   updateDailyLogRecordCallable,
 } from './dailyLogRecordFunctions'
 
+export { getPublicDailyLogGallery } from './dailyLogGalleryFunctions'
+
 export {
   createShopOrderRecordCallable,
   deleteShopOrderRecordCallable,

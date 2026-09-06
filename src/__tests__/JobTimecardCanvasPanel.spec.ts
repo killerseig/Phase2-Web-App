@@ -105,7 +105,6 @@ const WorkbookStub = {
     'weekEndDate',
     'burden',
     'readOnly',
-    'employeeHeaderLocked',
     'showEmployeeWage',
   ],
   emits: ['changed'],
@@ -128,7 +127,6 @@ function mountPanel(overrides = {}) {
       burden: 0.33,
       canEditWeek: true,
       actionLoading: false,
-      canManageJobTimecards: true,
       isCardCompact: (cardId: string) => cardId === 'card-1',
       isCardReadOnly: (cardId: string) => cardId === 'readonly-card',
       getCardShellStyle: (cardId: string) => ({ minHeight: cardId === 'card-1' ? '100px' : '200px' }),
@@ -166,6 +164,8 @@ describe('JobTimecardCanvasPanel', () => {
       'data-has-footer': 'true',
       'data-compact': 'false',
     })
+    expect(wrapper.get('[data-testid="timecard-card-source-card-1"]').text()).toBe('EMPLOYEE')
+    expect(wrapper.get('[data-testid="timecard-card-source-custom-card"]').text()).toBe('ONE-OFF')
   })
 
   it('combines loading flags before passing them to the shared canvas shell', () => {
@@ -180,7 +180,6 @@ describe('JobTimecardCanvasPanel', () => {
   it('forwards workbook props and emits workbook/remove/canvas events', async () => {
     const wrapper = mountPanel()
     const employeeWorkbook = wrapper.getComponent({ name: 'TimecardWorkbookCard' })
-    const customWorkbook = wrapper.findAllComponents({ name: 'TimecardWorkbookCard' })[1]
 
     expect(employeeWorkbook.props()).toMatchObject({
       card: cards[0],
@@ -188,10 +187,8 @@ describe('JobTimecardCanvasPanel', () => {
       weekEndDate: '2026-06-20',
       burden: 0.33,
       readOnly: false,
-      employeeHeaderLocked: false,
       showEmployeeWage: true,
     })
-    expect(customWorkbook?.props('employeeHeaderLocked')).toBe(false)
 
     await wrapper.get('[data-testid="emit-select-card-1"]').trigger('click')
     await wrapper.get('[data-testid="emit-toggle-card-1"]').trigger('click')
@@ -208,14 +205,4 @@ describe('JobTimecardCanvasPanel', () => {
     expect(wrapper.emitted('removeCard')).toEqual([[cards[1]]])
   })
 
-  it('locks employee headers when the user cannot manage job timecards', () => {
-    const wrapper = mountPanel({
-      canManageJobTimecards: false,
-      cards: [cards[0], cards[1]],
-    })
-    const workbooks = wrapper.findAllComponents({ name: 'TimecardWorkbookCard' })
-
-    expect(workbooks[0]?.props('employeeHeaderLocked')).toBe(true)
-    expect(workbooks[1]?.props('employeeHeaderLocked')).toBe(false)
-  })
 })

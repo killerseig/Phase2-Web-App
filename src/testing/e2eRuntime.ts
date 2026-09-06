@@ -16,6 +16,7 @@ import type {
   JobRecord,
   NotificationModuleKey,
   NotificationRecipients,
+  PublicDailyLogGalleryRecord,
   ShopCatalogItemRecord,
   ShopCategoryRecord,
   ShopOrderItemRecord,
@@ -84,6 +85,7 @@ export interface Phase2E2EState {
   shopCatalogItems: ShopCatalogItemRecord[]
   shopOrders: ShopOrderRecord[]
   dailyLogs?: DailyLogRecord[]
+  publicDailyLogGalleries?: Record<string, PublicDailyLogGalleryRecord>
   timecardWeeks?: TimecardWeekRecord[]
   timecardCards?: Phase2E2ETimecardCardState[]
   globalNotificationRecipients?: NotificationRecipients
@@ -185,6 +187,10 @@ function normalizeState(state: Phase2E2EState): Phase2E2EState {
     users: Array.isArray(cloned.users) ? cloned.users : [cloned.auth.profile],
     employees: Array.isArray(cloned.employees) ? cloned.employees : [],
     dailyLogs: Array.isArray(cloned.dailyLogs) ? cloned.dailyLogs : [],
+    publicDailyLogGalleries:
+      cloned.publicDailyLogGalleries && typeof cloned.publicDailyLogGalleries === 'object'
+        ? cloned.publicDailyLogGalleries
+        : {},
     timecardWeeks: Array.isArray(cloned.timecardWeeks) ? cloned.timecardWeeks : [],
     timecardCards: Array.isArray(cloned.timecardCards) ? cloned.timecardCards : [],
     globalNotificationRecipients: normalizeNotificationRecipients(cloned.globalNotificationRecipients),
@@ -897,6 +903,11 @@ export function subscribeE2EDailyLogsForDate(
   return () => {
     dailyLogListeners.delete(entry)
   }
+}
+
+export function getE2EPublicDailyLogGallery(shareId: string): PublicDailyLogGalleryRecord | null {
+  const gallery = requireState().publicDailyLogGalleries?.[shareId]
+  return gallery ? cloneValue(gallery) : null
 }
 
 export function subscribeE2ETimecardWeeks(

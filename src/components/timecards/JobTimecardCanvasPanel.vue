@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { StyleValue } from 'vue'
 import TimecardCanvasPanel from '@/components/timecards/TimecardCanvasPanel.vue'
+import TimecardSourceBadge from '@/components/timecards/TimecardSourceBadge.vue'
 import TimecardWorkbookCard from '@/components/timecards/TimecardWorkbookCard.vue'
 import type { TimecardCardRecord } from '@/types/domain'
 
@@ -14,7 +15,6 @@ defineProps<{
   burden: number
   canEditWeek: boolean
   actionLoading: boolean
-  canManageJobTimecards: boolean
   isCardCompact: (cardId: string) => boolean
   isCardReadOnly: (cardId: string) => boolean
   getCardShellStyle: (cardId: string) => StyleValue | undefined
@@ -62,6 +62,13 @@ function formatPanelDate(value: string) {
         </div>
     </template>
 
+    <template #itemActions="{ card }">
+      <TimecardSourceBadge
+        :source-type="card.sourceType"
+        :test-id="`timecard-card-source-${card.id}`"
+      />
+    </template>
+
     <template #card="{ card }">
       <TimecardWorkbookCard
         :card="card"
@@ -69,7 +76,6 @@ function formatPanelDate(value: string) {
         :week-end-date="selectedWeekEndDate"
         :burden="burden"
         :read-only="isCardReadOnly(card.id)"
-        :employee-header-locked="card.sourceType !== 'custom' && (!canManageJobTimecards || isCardReadOnly(card.id))"
         :show-employee-wage="true"
         @changed="emit('workbookChanged', card)"
       />

@@ -3,6 +3,7 @@ export { createUserByAdmin, deleteUser, handleUserAccessRevocationCleanup, listA
 export { notifySecretExpiration } from './secretMonitoring';
 export { createTimecardCardRecord, deleteTimecardCardRecord, deleteTimecardWeekRecord, ensureTimecardWeekRecord, listTimecardCardsForCurrentUser, listTimecardWeeksForCurrentUser, reopenTimecardWeekRecord, submitTimecardWeekRecord, updateTimecardCardRecord, } from './timecardWeekFunctions';
 export { createDailyLogRecordCallable, deleteDailyLogRecordCallable, listDailyLogsForCurrentUser, updateDailyLogRecordCallable, } from './dailyLogRecordFunctions';
+export { getPublicDailyLogGallery } from './dailyLogGalleryFunctions';
 export { createShopOrderRecordCallable, deleteShopOrderRecordCallable, listShopOrdersForCurrentUser, updateShopOrderRecordCallable, } from './shopOrderRecordFunctions';
 export { createJobRecordCallable, getVisibleJobForCurrentUser, listVisibleJobsForCurrentUser, updateJobRecordCallable, } from './jobFunctions';
 //# sourceMappingURL=index.d.ts.map

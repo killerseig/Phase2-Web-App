@@ -4,13 +4,11 @@ import {
   type TimecardExportSortMode,
 } from '@/features/timecards/exportViewHelpers'
 import { recalculateCardTotals } from '@/features/timecards/workbook'
-import type { TimecardCardRecord } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseTimecardExportCardWorkspaceActionsOptions {
   clearCardMeasurements: () => void
   collator: Intl.Collator
-  isCardReadOnly: (cardId: string) => boolean
   pruneCardEditStates: (validIds: Set<string>) => void
   pruneCardMeasurements: (validIds: Set<string>) => void
   pruneSaveQueueToIds: (validIds: Set<string>) => void
@@ -31,7 +29,6 @@ interface UseTimecardExportCardWorkspaceActionsOptions {
 export function useTimecardExportCardWorkspaceActions({
   clearCardMeasurements,
   collator,
-  isCardReadOnly,
   pruneCardEditStates,
   pruneCardMeasurements,
   pruneSaveQueueToIds,
@@ -80,13 +77,8 @@ export function useTimecardExportCardWorkspaceActions({
     })
   }
 
-  function isEmployeeHeaderLocked(card: TimecardCardRecord) {
-    return card.sourceType !== 'custom' && isCardReadOnly(card.id)
-  }
-
   return {
     handleWorkbookChanged,
-    isEmployeeHeaderLocked,
     resetCardWorkspaceState,
     resetPageAndSaveMessages,
     scrollCardIntoView,

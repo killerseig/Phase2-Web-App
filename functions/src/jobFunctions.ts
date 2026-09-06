@@ -1,5 +1,5 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
-import * as admin from 'firebase-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { COLLECTIONS } from './constants'
 import { isFunctionShopJob } from './jobIdentity'
 import {
@@ -351,7 +351,7 @@ export const createJobRecordCallable = onCall(async (request) => {
     finishDate: input.finishDate,
     productionBurden: input.productionBurden,
     active: nextActive,
-    archivedAt: nextActive ? null : admin.firestore.FieldValue.serverTimestamp(),
+    archivedAt: nextActive ? null : FieldValue.serverTimestamp(),
     assignedForemanIds,
     timecardStatus: 'pending',
     timecardSubmittedAt: null,
@@ -360,8 +360,8 @@ export const createJobRecordCallable = onCall(async (request) => {
     notificationRecipients: input.notificationRecipients,
     adminDailyLogRecipients: [],
     dailyLogRecipients: input.notificationRecipients.dailyLogs,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   })
 
   await assignmentBatch.commit()

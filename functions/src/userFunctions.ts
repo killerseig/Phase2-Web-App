@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import * as admin from 'firebase-admin'
+import { FieldValue, type DocumentData } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import {
@@ -63,7 +63,7 @@ function normalizeAssignedJobIds(value: unknown): string[] {
   )
 }
 
-function normalizeAssignableUser(id: string, data: admin.firestore.DocumentData) {
+function normalizeAssignableUser(id: string, data: DocumentData) {
   const role = normalizeStoredRole(data.role)
   if (!targetFunctionRoleCanBeAssignedJobs(role)) return null
 
@@ -117,7 +117,7 @@ async function sendUserInvite(options: {
 
   await userRef.update({
     inviteStatus: 'sent',
-    inviteSentAt: admin.firestore.FieldValue.serverTimestamp(),
+    inviteSentAt: FieldValue.serverTimestamp(),
     inviteSentByUid: options.sentByUid ?? null,
   })
 }
@@ -319,7 +319,7 @@ export const createUserByAdmin = onCall({ secrets: getGraphEmailSecrets() }, asy
       lastName,
       role: userRole,
       active: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       setupToken: null,
       setupTokenExpiry: null,
       inviteStatus: 'pending',
@@ -552,7 +552,7 @@ export const setUserPassword = onCall(async (request) => {
       setupToken: null,
       setupTokenExpiry: null,
       inviteStatus: 'accepted',
-      inviteAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      inviteAcceptedAt: FieldValue.serverTimestamp(),
     })
 
     return {

@@ -25,6 +25,53 @@ async function confirmRemoveOrderItem(page: Page) {
 }
 
 test.describe('shop order workspace regressions', () => {
+  test('side navigation collapses on compact laptop screens', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 800 })
+    await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', createShopOrdersFixture())
+
+    const navigation = page.locator('#app-shell-navigation')
+    const menuButton = page.getByRole('button', { name: 'Open navigation' })
+    await expect(navigation).toBeInViewport()
+    await expect(menuButton).toBeHidden()
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await expect(menuButton).toBeVisible()
+    await expect(navigation).not.toBeInViewport()
+
+    await menuButton.click()
+    await expect(navigation).toBeInViewport()
+  })
+
+  test('catalog tree stays tall and item names wrap on compact laptops', async ({ page }) => {
+    const fixture = createShopOrdersFixture()
+    fixture.shopCatalogItems.push({
+      id: 'item-long-name',
+      description: 'Extra Long Construction Supply Item Name That Needs Another Line To Stay Readable',
+      categoryId: 'cat-all-purpose',
+      sku: null,
+      price: 25,
+      active: true,
+    })
+
+    await page.setViewportSize({ width: 960, height: 720 })
+    await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', fixture)
+    await expandAllCatalogFolders(page)
+
+    const catalogTree = page.getByTestId('shoporder-catalog-tree')
+    await expect(catalogTree).toBeVisible()
+    await expect
+      .poll(async () => catalogTree.evaluate((element) => element.clientHeight))
+      .toBeGreaterThanOrEqual(320)
+
+    const longName = page
+      .getByTestId('shoporder-item-item-long-name')
+      .locator('.shop-orders-tree-node__label')
+    await expect(longName).toBeVisible()
+    await expect
+      .poll(async () => longName.evaluate((element) => getComputedStyle(element).whiteSpace))
+      .toBe('normal')
+  })
+
   test('draft orders start with the next Thursday delivery date', async ({ page }) => {
     await gotoShopOrderApp(page)
 

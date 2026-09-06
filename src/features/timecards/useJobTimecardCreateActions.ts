@@ -108,7 +108,7 @@ export function useJobTimecardCreateActions({
       closeCreateTray()
       scrollCardIntoView(cardId)
     } catch (error) {
-      setPageError(error, 'Failed to add the custom timecard.')
+      setPageError(error, 'Failed to add the one-off timecard.')
     } finally {
       actionLoading.value = false
     }

@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import { type DocumentReference, type DocumentSnapshot } from 'firebase-admin/firestore';
 import { buildSubmittedEmailStatusUpdate } from './emailStatus';
 import { getJobDetails } from './firestoreService';
 import { claimSubmittedEmailOperation } from './submittedEmailOperations';
@@ -16,9 +16,9 @@ interface CallableRequestLike {
 }
 declare function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser>;
 declare function getWeekDoc(weekId: string): Promise<{
-    weekRef: admin.firestore.DocumentReference<admin.firestore.DocumentData, admin.firestore.DocumentData>;
-    weekSnap: admin.firestore.DocumentSnapshot<admin.firestore.DocumentData, admin.firestore.DocumentData>;
-    week: admin.firestore.DocumentData;
+    weekRef: DocumentReference<FirebaseFirestore.DocumentData, FirebaseFirestore.DocumentData>;
+    weekSnap: DocumentSnapshot<FirebaseFirestore.DocumentData, FirebaseFirestore.DocumentData>;
+    week: FirebaseFirestore.DocumentData;
     jobId: string;
 }>;
 export declare const listTimecardWeeksForCurrentUser: import("firebase-functions/v2/https").CallableFunction<any, Promise<{

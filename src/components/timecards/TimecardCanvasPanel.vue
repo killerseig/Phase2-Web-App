@@ -192,6 +192,8 @@ function shouldShowFooter(card: TCard) {
 
 .timecards-canvas__item-header {
   display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 0.45rem;
   margin: 0 0 0.4rem;
   min-width: 0;
@@ -213,8 +215,8 @@ function shouldShowFooter(card: TCard) {
 }
 
 .timecards-canvas__item-header-button--collapse {
-  flex: 1 1 auto;
-  width: 100%;
+  flex: 1 1 10rem;
+  width: auto;
   justify-content: flex-end;
 }
 

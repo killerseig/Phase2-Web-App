@@ -3,15 +3,15 @@
  * Reusable queries and data fetching functions
  */
 
-import * as admin from 'firebase-admin'
+import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 import { COLLECTIONS, DEFAULTS } from './constants'
 
 // Lazy initialize db on first use
-let db: admin.firestore.Firestore | null = null
+let db: Firestore | null = null
 
-function getDb(): admin.firestore.Firestore {
+function getDb(): Firestore {
   if (!db) {
-    db = admin.firestore()
+    db = getFirestore()
   }
   return db
 }

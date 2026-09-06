@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TimecardEmployeePicker from '@/components/timecards/TimecardEmployeePicker.vue'
+import TimecardOneOffCardAction from '@/components/timecards/TimecardOneOffCardAction.vue'
 import type { EmployeeRecord } from '@/types/domain'
 
 defineProps<{
@@ -12,6 +13,7 @@ defineProps<{
 const emit = defineEmits<{
   updateSearch: [value: string]
   addEmployee: [employee: EmployeeRecord]
+  createOneOffCard: []
 }>()
 </script>
 
@@ -31,6 +33,11 @@ const emit = defineEmits<{
       test-id-prefix="timecards-add-employee-"
       @update-search="emit('updateSearch', $event)"
       @add-employee="emit('addEmployee', $event)"
+    />
+
+    <TimecardOneOffCardAction
+      :disabled="disabled"
+      @select="emit('createOneOffCard')"
     />
   </div>
 </template>

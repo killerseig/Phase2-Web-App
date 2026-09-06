@@ -300,3 +300,23 @@ Implications:
 - Visual refactor slices should make `main.css` smaller or more foundational over time.
 - Shared components should use tokens and local scoped styles instead of depending on page-specific classes.
 - CSS movement should be incremental and protected by targeted e2e, not a big-bang stylesheet rewrite.
+
+## 2026-08-20 - Daily Log Attachment Rules Avoid Cross-Product Authorization Joins
+
+Decision:
+
+- Firestore Rules and Cloud Functions remain responsible for authorizing access to Daily Log records and job workflows.
+- Cloud Storage independently permits authenticated Daily Log image creation only when the path, uploader UID, and required attachment metadata agree and the resized object meets image/type/size validation.
+- Attachment reads and deletes require an authenticated app session; object updates remain denied.
+- Storage Rules must not use `firestore.get()` or `firestore.exists()` for this attachment path.
+
+Why:
+
+- Storage-to-Firestore rule lookups require a separate Firebase IAM connection and repeatedly denied valid Foreman and Project Manager uploads in production even while those users could edit the parent Daily Log.
+- The application already authorizes the parent record through callable functions before upload, and generated download URLs are tokenized, so repeating the full role/job join at the object boundary added a fragile failure point without improving the workflow.
+
+Implications:
+
+- Deploy `storage.rules` whenever this boundary changes; deploying Hosting or Functions alone cannot fix attachment permission failures.
+- Keep uploader UID, Daily Log ID, and job ID in upload metadata.
+- Run the focused upload tests, Firebase rules compiler dry run, and `npm run test:storage-rules` where Java-backed Firebase emulators are available.

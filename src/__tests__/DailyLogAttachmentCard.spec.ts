@@ -15,9 +15,13 @@ const attachments: DailyLogAttachmentRecord[] = [
   },
 ]
 
-const uploadHandler = vi.fn(async () => undefined)
+const uploadHandler = vi.fn<(entries: Array<{ file: File; description: string }>) => Promise<void>>(
+  async () => undefined,
+)
 
-function mountAttachmentCard(overrides: Partial<InstanceType<typeof DailyLogAttachmentCard>['$props']> = {}) {
+function mountAttachmentCard(
+  overrides: Partial<InstanceType<typeof DailyLogAttachmentCard>['$props']> = {},
+) {
   return shallowMount(DailyLogAttachmentCard, {
     props: {
       attachments,
@@ -34,8 +38,8 @@ function mountAttachmentCard(overrides: Partial<InstanceType<typeof DailyLogAtta
     global: {
       stubs: {
         AppCard: {
-          props: ['as'],
-          template: '<article><slot /></article>',
+          props: ['as', 'id'],
+          template: '<article :id="id"><slot /></article>',
         },
         ImageUploadPicker: {
           props: [
@@ -83,15 +87,21 @@ function mountAttachmentCard(overrides: Partial<InstanceType<typeof DailyLogAtta
 describe('DailyLogAttachmentCard', () => {
   it('passes attachment picker configuration and state through to the upload picker', () => {
     const wrapper = mountAttachmentCard({
+      anchorId: 'daily-log-photos',
       busy: true,
       disabled: true,
     })
 
+    expect(wrapper.get('article').attributes('id')).toBe('daily-log-photos')
     expect(wrapper.text()).toContain('Photos')
     expect(wrapper.get('[data-testid="picker-choose-label"]').text()).toBe('Choose Photos')
     expect(wrapper.get('[data-testid="picker-description-label"]').text()).toBe('Description')
-    expect(wrapper.get('[data-testid="picker-empty-label"]').text()).toBe('Drag and drop photos here to upload.')
-    expect(wrapper.get('[data-testid="picker-helper-text"]').text()).toBe('Choose one or more photos.')
+    expect(wrapper.get('[data-testid="picker-empty-label"]').text()).toBe(
+      'Drag and drop photos here to upload.',
+    )
+    expect(wrapper.get('[data-testid="picker-helper-text"]').text()).toBe(
+      'Choose one or more photos.',
+    )
     expect(wrapper.get('[data-testid="picker-disabled"]').text()).toBe('true')
     expect(wrapper.get('[data-testid="picker-busy"]').text()).toBe('true')
     expect(wrapper.get('[data-testid="picker-count"]').text()).toBe('1')

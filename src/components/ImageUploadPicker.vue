@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import FileUpload, { type FileUploadSelectEvent, type FileUploadUploaderEvent } from 'primevue/fileupload'
+import { computed, nextTick, ref, watch } from 'vue'
+import FileUpload, { type FileUploadUploaderEvent } from 'primevue/fileupload'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppTextarea from '@/components/common/AppTextarea.vue'
@@ -11,25 +11,27 @@ export interface ImageUploadEntry {
   description: string
 }
 
-const props = withDefaults(defineProps<{
-  attachments: DailyLogAttachmentRecord[]
-  chooseLabel?: string
-  descriptionLabel?: string
-  emptyLabel?: string
-  helperText?: string
-  disabled?: boolean
-  busy?: boolean
-  maxFileSize?: number
-  uploadHandler: (entries: ImageUploadEntry[]) => Promise<void>
-}>(), {
-  chooseLabel: 'Choose Images',
-  descriptionLabel: 'Description',
-  emptyLabel: 'Drag and drop files here to upload.',
-  helperText: 'Choose one or more images. Use the image button again to add more.',
-  disabled: false,
-  busy: false,
-  maxFileSize: 10 * 1024 * 1024,
-})
+const props = withDefaults(
+  defineProps<{
+    attachments: DailyLogAttachmentRecord[]
+    chooseLabel?: string
+    descriptionLabel?: string
+    emptyLabel?: string
+    helperText?: string
+    disabled?: boolean
+    busy?: boolean
+    maxFileSize?: number
+    uploadHandler: (entries: ImageUploadEntry[]) => Promise<void>
+  }>(),
+  {
+    chooseLabel: 'Choose Images',
+    descriptionLabel: 'Description',
+    emptyLabel: 'Drag and drop files here to upload.',
+    helperText: 'Choose one or more images. Use the image button again to add more.',
+    disabled: false,
+    busy: false,
+  },
+)
 
 const emit = defineEmits<{
   updateDescription: [payload: { path: string; description: string }]
@@ -38,15 +40,23 @@ const emit = defineEmits<{
 }>()
 
 const uploader = ref<{ clear: () => void } | null>(null)
+const lightbox = ref<HTMLElement | null>(null)
 const localMessages = ref<string[]>([])
-const previewImage = ref<{ src: string; name: string } | null>(null)
+const previewIndex = ref<number | null>(null)
+const previewTrigger = ref<HTMLElement | null>(null)
+const previewAttachments = computed(() => props.attachments.filter((attachment) => attachment.url))
+const previewImage = computed(() => {
+  if (previewIndex.value === null) return null
+  return previewAttachments.value[previewIndex.value] ?? null
+})
+const previewPosition = computed(() => (previewIndex.value ?? 0) + 1)
 
 function toFiles(files: unknown) {
   if (Array.isArray(files)) return files as File[]
   return files instanceof File ? [files] : []
 }
 
-function handleSelect(_event: FileUploadSelectEvent) {
+function handleSelect() {
   localMessages.value = []
 }
 
@@ -78,18 +88,51 @@ async function handleUploader(event: FileUploadUploaderEvent) {
   }
 }
 
-function openPreview(src: string | undefined, name: string) {
-  if (!src) return
-  previewImage.value = { src, name }
+function openPreview(path: string) {
+  const index = previewAttachments.value.findIndex((attachment) => attachment.path === path)
+  if (index < 0) return
+
+  previewTrigger.value =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null
+  previewIndex.value = index
 }
 
-function closePreview() {
-  previewImage.value = null
+async function closePreview() {
+  previewIndex.value = null
+  await nextTick()
+  previewTrigger.value?.focus()
+  previewTrigger.value = null
+}
+
+function movePreview(offset: number) {
+  if (previewIndex.value === null || previewAttachments.value.length < 2) return
+  previewIndex.value =
+    (previewIndex.value + offset + previewAttachments.value.length) %
+    previewAttachments.value.length
+}
+
+function handleLightboxKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    void closePreview()
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    movePreview(-1)
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    movePreview(1)
+  }
 }
 
 function handleUploadedDescriptionUpdate(path: string, description: string) {
   emit('updateDescription', { path, description })
 }
+
+watch(previewImage, async (currentPreview) => {
+  if (!currentPreview) return
+  await nextTick()
+  lightbox.value?.focus()
+})
 </script>
 
 <template>
@@ -109,9 +152,11 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
     >
       <template #header="{ chooseCallback }">
         <div class="image-upload-picker__header">
-          <div class="image-upload-picker__buttons">
+          <div v-if="!disabled" class="image-upload-picker__buttons">
             <AppButton
               class="image-upload-picker__icon-button"
+              :aria-label="chooseLabel"
+              :title="chooseLabel"
               :disabled="disabled || busy"
               @click="chooseCallback()"
             >
@@ -119,10 +164,7 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
             </AppButton>
           </div>
 
-          <div
-            v-if="busy"
-            class="image-upload-picker__progress-shell"
-          >
+          <div v-if="!disabled && busy" class="image-upload-picker__progress-shell">
             <div class="image-upload-picker__progress-track">
               <div class="image-upload-picker__progress-value"></div>
             </div>
@@ -153,15 +195,24 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
                 <button
                   type="button"
                   class="image-upload-picker__preview-button"
-                  @click="openPreview(attachment.url, attachment.name)"
+                  :aria-label="`View ${attachment.name}`"
+                  :title="`View ${attachment.name}`"
+                  @click="openPreview(attachment.path)"
                 >
-                  <img :src="attachment.url" :alt="attachment.name" />
+                  <img
+                    :src="attachment.url"
+                    :alt="attachment.name"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </button>
 
                 <span class="image-upload-picker__name">{{ attachment.name }}</span>
-                <div class="image-upload-picker__meta">Saved to draft</div>
+                <div class="image-upload-picker__meta">
+                  {{ disabled ? 'Attached photo' : 'Saved to draft' }}
+                </div>
 
-                <label class="image-upload-picker__field">
+                <label v-if="!disabled" class="image-upload-picker__field">
                   <span>{{ descriptionLabel }}</span>
                   <AppTextarea
                     :model-value="attachment.description"
@@ -173,7 +224,16 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
                   />
                 </label>
 
+                <div
+                  v-else-if="attachment.description"
+                  class="image-upload-picker__readonly-description"
+                >
+                  <strong>{{ descriptionLabel }}</strong>
+                  <span>{{ attachment.description }}</span>
+                </div>
+
                 <AppButton
+                  v-if="!disabled"
                   class="image-upload-picker__remove"
                   variant="danger"
                   :disabled="disabled || busy"
@@ -185,36 +245,69 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
             </div>
           </section>
 
-          <div
-            v-else-if="!busy"
-            class="image-upload-picker__empty"
-          >
+          <div v-else-if="!busy" class="image-upload-picker__empty">
             <div class="image-upload-picker__empty-icon">
               <i class="pi pi-cloud-upload" aria-hidden="true"></i>
             </div>
-            <p>{{ emptyLabel }}</p>
-            <span>{{ chooseLabel }}</span>
+            <p>{{ disabled ? 'No photos were attached.' : emptyLabel }}</p>
+            <span v-if="!disabled">{{ chooseLabel }}</span>
           </div>
         </div>
       </template>
     </FileUpload>
 
-    <div v-if="previewImage" class="image-upload-picker__lightbox" @click.self="closePreview">
+    <div
+      v-if="previewImage"
+      ref="lightbox"
+      class="image-upload-picker__lightbox"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="`Photo viewer: ${previewImage.name}`"
+      tabindex="-1"
+      @click.self="closePreview"
+      @keydown="handleLightboxKeydown"
+    >
       <AppButton
         class="image-upload-picker__lightbox-close"
+        aria-label="Close photo viewer"
+        title="Close photo viewer"
         @click="closePreview"
       >
         <i class="pi pi-times" aria-hidden="true"></i>
       </AppButton>
 
+      <AppButton
+        v-if="previewAttachments.length > 1"
+        class="image-upload-picker__lightbox-previous image-upload-picker__lightbox-navigation"
+        aria-label="Previous photo"
+        title="Previous photo"
+        @click="movePreview(-1)"
+      >
+        <i class="pi pi-chevron-left" aria-hidden="true"></i>
+      </AppButton>
+
       <div class="image-upload-picker__lightbox-body">
         <img
           class="image-upload-picker__lightbox-image"
-          :src="previewImage.src"
+          :src="previewImage.url"
           :alt="previewImage.name"
         />
-        <span class="image-upload-picker__lightbox-caption">{{ previewImage.name }}</span>
+        <div class="image-upload-picker__lightbox-caption">
+          <strong>{{ previewImage.name }}</strong>
+          <span v-if="previewImage.description">{{ previewImage.description }}</span>
+          <small>{{ previewPosition }} of {{ previewAttachments.length }}</small>
+        </div>
       </div>
+
+      <AppButton
+        v-if="previewAttachments.length > 1"
+        class="image-upload-picker__lightbox-next image-upload-picker__lightbox-navigation"
+        aria-label="Next photo"
+        title="Next photo"
+        @click="movePreview(1)"
+      >
+        <i class="pi pi-chevron-right" aria-hidden="true"></i>
+      </AppButton>
     </div>
   </div>
 </template>
@@ -364,6 +457,19 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
   font-size: 0.78rem;
 }
 
+.image-upload-picker__readonly-description {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.image-upload-picker__readonly-description strong {
+  color: var(--text-soft);
+}
+
 .image-upload-picker__empty {
   display: grid;
   place-items: center;
@@ -403,6 +509,7 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
   padding: 2rem;
   background: rgba(4, 10, 16, 0.82);
   backdrop-filter: blur(6px);
+  outline: none;
 }
 
 .image-upload-picker__lightbox-close {
@@ -412,6 +519,23 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
   width: 2.9rem;
   min-width: 2.9rem;
   padding: 0;
+}
+
+.image-upload-picker__lightbox-navigation {
+  position: absolute;
+  top: 50%;
+  width: 3.25rem;
+  min-width: 3.25rem;
+  padding: 0;
+  transform: translateY(-50%);
+}
+
+.image-upload-picker__lightbox-previous {
+  left: 1.5rem;
+}
+
+.image-upload-picker__lightbox-next {
+  right: 1.5rem;
 }
 
 .image-upload-picker__lightbox-body {
@@ -430,8 +554,22 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
 }
 
 .image-upload-picker__lightbox-caption {
+  display: grid;
+  gap: 0.25rem;
+  max-width: min(90vw, 48rem);
+  text-align: center;
   color: #f0f6fb;
-  font-weight: 600;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.image-upload-picker__lightbox-caption strong {
+  font-weight: 700;
+}
+
+.image-upload-picker__lightbox-caption span,
+.image-upload-picker__lightbox-caption small {
+  color: rgba(240, 246, 251, 0.78);
 }
 
 @keyframes image-upload-picker-progress {
@@ -456,6 +594,33 @@ function handleUploadedDescriptionUpdate(path: string, description: string) {
 
   .image-upload-picker__card {
     width: 100%;
+  }
+
+  .image-upload-picker__lightbox {
+    padding: 4.75rem 0.75rem 5.25rem;
+  }
+
+  .image-upload-picker__lightbox-close {
+    top: 1rem;
+    right: 1rem;
+  }
+
+  .image-upload-picker__lightbox-image {
+    max-height: 68vh;
+  }
+
+  .image-upload-picker__lightbox-navigation {
+    top: auto;
+    bottom: 1rem;
+    transform: none;
+  }
+
+  .image-upload-picker__lightbox-previous {
+    left: calc(50% - 4rem);
+  }
+
+  .image-upload-picker__lightbox-next {
+    right: calc(50% - 4rem);
   }
 }
 </style>

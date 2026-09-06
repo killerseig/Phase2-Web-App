@@ -1,7 +1,31 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import { getRouteAccessDecision, getRouteParamJobId, getRouteRequiresAuth } from '@/router/routeAccess'
+import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
+import { getWorkspaceRedirectTarget } from '@/features/auth/authViewHelpers'
+import {
+  getRouteAccessDecision,
+  getRouteParamJobId,
+  getRouteRequiresAuth,
+} from '@/router/routeAccess'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
+
+function routeQueryText(value: unknown): string {
+  const candidate = Array.isArray(value) ? value[0] : value
+  return typeof candidate === 'string' ? candidate.trim() : ''
+}
+
+function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
+  if (to.name !== 'daily-logs' || to.hash !== '#daily-log-photos') return null
+
+  const jobId = getRouteParamJobId(to.params.jobId)
+  const dailyLogId = routeQueryText(to.query.logId)
+  if (!jobId || !dailyLogId) return null
+
+  return {
+    name: 'daily-log-gallery-legacy',
+    params: { jobId, dailyLogId },
+    replace: true,
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,6 +59,24 @@ const router = createRouter({
       meta: {
         requiresAuth: false,
         title: 'Set Password',
+      },
+    },
+    {
+      path: '/daily-log-gallery/legacy/:jobId/:dailyLogId',
+      name: 'daily-log-gallery-legacy',
+      component: () => import('@/views/DailyLogGalleryView.vue'),
+      meta: {
+        requiresAuth: false,
+        title: 'Daily Log Photos',
+      },
+    },
+    {
+      path: '/daily-log-gallery/:shareId',
+      name: 'daily-log-gallery',
+      component: () => import('@/views/DailyLogGalleryView.vue'),
+      meta: {
+        requiresAuth: false,
+        title: 'Daily Log Photos',
       },
     },
     {
@@ -152,8 +194,15 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  const legacyGalleryRedirect = getLegacyDailyLogGalleryRedirect(to)
+  if (legacyGalleryRedirect) return legacyGalleryRedirect
+
+  // Public gallery links must not wait for or depend on an authenticated app session.
+  if (to.name === 'daily-log-gallery' || to.name === 'daily-log-gallery-legacy') return true
+
   const auth = useAuthStore()
   const jobs = useJobsStore()
+
   await auth.init()
   const routeJobId = getRouteParamJobId(to.params.jobId)
 
@@ -164,7 +213,11 @@ router.beforeEach(async (to) => {
     void jobs.subscribeVisibleJobs()
   }
 
-  return getRouteAccessDecision({
+  if (to.name === 'login' && auth.hasWorkspaceAccess) {
+    return getWorkspaceRedirectTarget(to.query.redirect)
+  }
+
+  const decision = getRouteAccessDecision({
     assignedJobIds: auth.assignedJobIds,
     currentUserId: auth.currentUser?.uid ?? null,
     hasWorkspaceAccess: auth.hasWorkspaceAccess,
@@ -175,6 +228,15 @@ router.beforeEach(async (to) => {
     routeName: to.name,
     visibleJobs: jobs.jobs,
   })
+
+  if (decision !== true && decision.name === 'login') {
+    return {
+      name: 'login',
+      query: { redirect: to.fullPath },
+    }
+  }
+
+  return decision
 })
 
 router.afterEach((to) => {

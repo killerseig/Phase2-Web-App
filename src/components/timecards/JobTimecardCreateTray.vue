@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import JobTimecardCustomCardPanel from '@/components/timecards/JobTimecardCustomCardPanel.vue'
 import JobTimecardEmployeePanel from '@/components/timecards/JobTimecardEmployeePanel.vue'
 import type { EmployeeRecord } from '@/types/domain'
@@ -29,20 +30,25 @@ const emit = defineEmits<{
   addCustomCard: []
 }>()
 
+const createMode = ref<'employee' | 'one-off'>('employee')
+
 </script>
 
 <template>
-  <section class="timecards-create">
+  <section class="timecards-create timecards-create--single-panel">
     <JobTimecardEmployeePanel
+      v-if="createMode === 'employee'"
       :search="employeeSearch"
       :employees="employees"
       :loading="employeesLoading"
       :disabled="actionLoading || !canEditWeek"
       @update-search="emit('updateEmployeeSearch', $event)"
       @add-employee="emit('addEmployee', $event)"
+      @create-one-off-card="createMode = 'one-off'"
     />
 
     <JobTimecardCustomCardPanel
+      v-else
       :first-name="customFirstName"
       :last-name="customLastName"
       :employee-number="customEmployeeNumber"
@@ -57,6 +63,7 @@ const emit = defineEmits<{
       @update-wage-rate="emit('updateCustomWageRate', $event)"
       @update-is-contractor="emit('updateCustomIsContractor', $event)"
       @add-custom-card="emit('addCustomCard')"
+      @back-to-employee-search="createMode = 'employee'"
     />
   </section>
 </template>

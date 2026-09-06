@@ -1,4 +1,11 @@
-import * as admin from 'firebase-admin'
+import {
+  FieldValue,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Query,
+  type QueryDocumentSnapshot,
+  type QuerySnapshot,
+} from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { buildTimecardEmailSubject, buildTimecardsEmail, isEmailEnabled, sendEmail } from './emailService'
 import {
@@ -207,14 +214,14 @@ function serializeFirestoreValue(value: any): any {
   return value
 }
 
-function normalizeWeekForResponse(doc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot) {
+function normalizeWeekForResponse(doc: QueryDocumentSnapshot | DocumentSnapshot) {
   return {
     id: doc.id,
     ...serializeFirestoreValue(doc.data() || {}),
   }
 }
 
-function normalizeCardForResponse(doc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot) {
+function normalizeCardForResponse(doc: QueryDocumentSnapshot | DocumentSnapshot) {
   return {
     id: doc.id,
     ...serializeFirestoreValue(doc.data() || {}),
@@ -322,7 +329,7 @@ function sanitizeCardPayload(card: any, weekStartDate: string, sortIndexFallback
       productionTotal: numberOrZero(totals.productionTotal),
       lineTotal: numberOrZero(totals.lineTotal),
     },
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   }
 }
 
@@ -425,7 +432,7 @@ export const listTimecardWeeksForCurrentUser = onCall(async (request) => {
     throw new HttpsError('permission-denied', 'Your account does not have access to this job timecard.')
   }
 
-  let weekQuery: admin.firestore.Query = db
+  let weekQuery: Query = db
     .collection('timecardWeeks')
     .where('jobId', '==', jobId)
 
@@ -481,7 +488,7 @@ export const listTimecardCardsForCurrentUser = onCall(async (request) => {
 
 async function copyPreviousWeekCardsIntoDraft(input: {
   targetWeekId: string
-  targetWeekRef: admin.firestore.DocumentReference
+  targetWeekRef: DocumentReference
   jobId: string
   weekEndDate: string
   weekStartDate: string
@@ -512,7 +519,7 @@ async function copyPreviousWeekCardsIntoDraft(input: {
     )
   })
 
-  let previousCardsSnap: admin.firestore.QuerySnapshot | null = null
+  let previousCardsSnap: QuerySnapshot | null = null
   for (const previousWeekDoc of previousWeekDocs) {
     const candidateCardsSnap = await db
       .collection('timecardWeeks')
@@ -535,13 +542,13 @@ async function copyPreviousWeekCardsIntoDraft(input: {
       const nextCardRef = db.collection('timecardWeeks').doc(input.targetWeekId).collection('cards').doc()
       batch.set(nextCardRef, {
         ...sanitizeCardPayload(cloneCardForNewWeek(cardDoc.data(), input.weekStartDate), input.weekStartDate, index),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
       })
     })
 
   batch.update(input.targetWeekRef, {
     employeeCardCount: previousCardsSnap.size,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   })
 
   await batch.commit()
@@ -721,8 +728,8 @@ export const ensureTimecardWeekRecord = onCall(async (request) => {
     updatedByUserId: request.auth.uid,
     submittedByUserId: null,
     submittedAt: null,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   })
 
   await copyPreviousWeekCardsIntoDraft({
@@ -759,12 +766,12 @@ export const createTimecardCardRecord = onCall(async (request) => {
   const createdRef = db.collection('timecardWeeks').doc(weekId).collection('cards').doc()
   await createdRef.set({
     ...sanitizeCardPayload(card, weekStartDate),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   })
 
   await weekRef.update({
-    employeeCardCount: admin.firestore.FieldValue.increment(1),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    employeeCardCount: FieldValue.increment(1),
+    updatedAt: FieldValue.serverTimestamp(),
     updatedByUserId: request.auth.uid,
   })
 
@@ -801,7 +808,7 @@ export const updateTimecardCardRecord = onCall(async (request) => {
 
   await cardRef.update(sanitizeCardPayload(card, weekStartDate))
   await weekRef.update({
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
     updatedByUserId: request.auth.uid,
   })
 
@@ -834,8 +841,8 @@ export const deleteTimecardCardRecord = onCall(async (request) => {
 
   await cardRef.delete()
   await weekRef.update({
-    employeeCardCount: admin.firestore.FieldValue.increment(-1),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    employeeCardCount: FieldValue.increment(-1),
+    updatedAt: FieldValue.serverTimestamp(),
     updatedByUserId: request.auth.uid,
   })
 
@@ -894,12 +901,12 @@ export const reopenTimecardWeekRecord = onCall(async (request) => {
     submittedAt: null,
     submittedByName: null,
     submittedByUserId: null,
-    submittedEmailAttemptedAt: admin.firestore.FieldValue.delete(),
-    submittedEmailError: admin.firestore.FieldValue.delete(),
-    submittedEmailInProgressAt: admin.firestore.FieldValue.delete(),
-    submittedEmailOperationId: admin.firestore.FieldValue.delete(),
-    submittedEmailSentAt: admin.firestore.FieldValue.delete(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    submittedEmailAttemptedAt: FieldValue.delete(),
+    submittedEmailError: FieldValue.delete(),
+    submittedEmailInProgressAt: FieldValue.delete(),
+    submittedEmailOperationId: FieldValue.delete(),
+    submittedEmailSentAt: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
     updatedByUserId: request.auth.uid,
   })
 
@@ -961,11 +968,11 @@ export async function handleSubmitTimecardWeekRecord(
 
   await weekRef.update({
     status: 'submitted',
-    submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+    submittedAt: FieldValue.serverTimestamp(),
     submittedByUserId,
     submittedByName,
     updatedByUserId: request.auth.uid,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   })
 
   try {
@@ -980,7 +987,7 @@ export async function handleSubmitTimecardWeekRecord(
       emailSent: emailResult.emailSent,
       emailMessage: emailResult.emailMessage,
       operationId,
-    }, admin.firestore.FieldValue))
+    }, FieldValue))
 
     return emailResult
   } catch (error: any) {
@@ -991,7 +998,7 @@ export async function handleSubmitTimecardWeekRecord(
       emailSent: false,
       emailMessage,
       operationId,
-    }, admin.firestore.FieldValue))
+    }, FieldValue))
 
     return {
       success: true,

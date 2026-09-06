@@ -498,13 +498,7 @@ watch(() => route.fullPath, () => {
   align-items: center;
 }
 
-@media (max-width: 1100px) {
-  .app-shell {
-    grid-template-columns: 236px minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 820px) {
+@media (max-width: 1500px) {
   .app-shell {
     grid-template-columns: 1fr;
     position: relative;
@@ -553,21 +547,8 @@ watch(() => route.fullPath, () => {
     place-items: center;
   }
 
-  .app-shell__topbar {
-    min-height: 3.75rem;
-  }
-
   .app-shell__menu-button {
     display: inline-flex;
-  }
-
-  .app-shell__topbar-title {
-    display: none;
-  }
-
-  .app-shell__topbar-meta {
-    justify-content: flex-end;
-    min-width: 0;
   }
 
   .app-shell__nav {
@@ -577,6 +558,21 @@ watch(() => route.fullPath, () => {
 
   .app-shell__nav-link {
     min-height: 2.4rem;
+  }
+}
+
+@media (max-width: 820px) {
+  .app-shell__topbar {
+    min-height: 3.75rem;
+  }
+
+  .app-shell__topbar-title {
+    display: none;
+  }
+
+  .app-shell__topbar-meta {
+    justify-content: flex-end;
+    min-width: 0;
   }
 }
 

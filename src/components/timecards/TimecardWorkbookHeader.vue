@@ -8,23 +8,15 @@ import {
 import type { TimecardCardRecord } from '@/types/domain'
 import { readInputValue } from '@/utils/domEvents'
 
-type TimecardWorkbookHeaderField =
-  | 'firstName'
-  | 'lastName'
-  | 'employeeNumber'
-  | 'occupation'
-
 defineProps<{
   card: TimecardCardRecord
   weekEndDate: string
   readOnly: boolean
-  employeeHeaderLocked: boolean
   showEmployeeWage: boolean
   wageInputValue: string
 }>()
 
 const emit = defineEmits<{
-  'update-field': [field: TimecardWorkbookHeaderField, value: string]
   'update-wage': [value: string]
   'commit-wage': []
   'filter-wage-key': [event: KeyboardEvent]
@@ -37,59 +29,29 @@ const emit = defineEmits<{
 
   <div class="timecard-card__field-row timecard-card__field-row--name">
     <span class="timecard-card__field-label timecard-card__field-label--name">EMP. NAME:</span>
-    <div v-if="employeeHeaderLocked" class="timecard-card__field-value timecard-card__field-value--name">
+    <div
+      class="timecard-card__field-value timecard-card__field-value--name"
+      data-testid="timecard-employee-name"
+    >
       {{ formatTimecardEmployeeHeaderName(card) }}
-    </div>
-    <div v-else class="timecard-card__field-value timecard-card__field-value--name timecard-card__field-value--split">
-      <input
-        class="timecard-card__inline-input"
-        :disabled="readOnly"
-        :value="card.lastName"
-        type="text"
-        placeholder="Last Name"
-        @input="emit('update-field', 'lastName', readInputValue($event))"
-      />
-      <input
-        class="timecard-card__inline-input"
-        :disabled="readOnly"
-        :value="card.firstName"
-        type="text"
-        placeholder="First Name"
-        @input="emit('update-field', 'firstName', readInputValue($event))"
-      />
     </div>
 
     <span class="timecard-card__field-label timecard-card__field-label--employee-number">EMPLOYEE#</span>
-    <div class="timecard-card__field-value timecard-card__field-value--employee-number">
-      <template v-if="employeeHeaderLocked">
-        {{ card.employeeNumber || '-' }}
-      </template>
-      <template v-else>
-        <input
-          class="timecard-card__header-input timecard-card__header-input--center"
-          :disabled="readOnly"
-          :value="card.employeeNumber"
-          type="text"
-          @input="emit('update-field', 'employeeNumber', readInputValue($event))"
-        />
-      </template>
+    <div
+      class="timecard-card__field-value timecard-card__field-value--employee-number"
+      data-testid="timecard-employee-number"
+    >
+      {{ card.employeeNumber || '-' }}
     </div>
   </div>
 
   <div class="timecard-card__field-row timecard-card__field-row--occupation">
     <span class="timecard-card__field-label timecard-card__field-label--occupation">OCCUPATION:</span>
-    <div class="timecard-card__field-value timecard-card__field-value--occupation">
-      <template v-if="employeeHeaderLocked">
-        {{ card.occupation || '-' }}
-      </template>
-      <input
-        v-else
-        class="timecard-card__header-input"
-        :disabled="readOnly"
-        :value="card.occupation"
-        type="text"
-        @input="emit('update-field', 'occupation', readInputValue($event))"
-      />
+    <div
+      class="timecard-card__field-value timecard-card__field-value--occupation"
+      data-testid="timecard-occupation"
+    >
+      {{ card.occupation || '-' }}
     </div>
 
     <span class="timecard-card__field-label timecard-card__field-label--wage">WAGE</span>
@@ -120,7 +82,10 @@ const emit = defineEmits<{
   <div class="timecard-card__field-row timecard-card__field-row--week-ending">
     <div class="timecard-card__field-filler"></div>
     <span class="timecard-card__field-label timecard-card__field-label--week-ending">WEEK ENDING</span>
-    <div class="timecard-card__field-value timecard-card__field-value--week-ending">
+    <div
+      class="timecard-card__field-value timecard-card__field-value--week-ending"
+      data-testid="timecard-week-ending"
+    >
       {{ formatTimecardWeekEnding(weekEndDate) }}
     </div>
   </div>
@@ -175,13 +140,6 @@ const emit = defineEmits<{
   overflow: hidden;
   padding: 0 0.08rem 0.03rem;
   line-height: 1;
-}
-
-.timecard-card__field-value--split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.22rem;
-  padding: 0;
 }
 
 .timecard-card__field-value--employee-number,
@@ -241,7 +199,6 @@ const emit = defineEmits<{
   align-self: end;
 }
 
-.timecard-card__inline-input,
 .timecard-card__header-input {
   width: 100%;
   border: 0;
@@ -261,13 +218,11 @@ const emit = defineEmits<{
   text-align: center;
 }
 
-.timecard-card__inline-input:focus,
 .timecard-card__header-input:focus {
   background: rgba(255, 245, 196, 0.48);
   box-shadow: inset 0 -1px 0 rgba(146, 117, 24, 0.5);
 }
 
-.timecard-card__inline-input:disabled,
 .timecard-card__header-input:disabled {
   color: inherit;
   -webkit-text-fill-color: currentColor;

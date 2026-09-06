@@ -14,6 +14,7 @@ import {
   getAuthEmailQueryPrefill,
   getLoginValidationMessage,
   getPasswordCreatedLoginInfo,
+  getWorkspaceRedirectTarget,
   redirectToWorkspaceIfAllowed,
 } from '@/features/auth/authViewHelpers'
 import { hasConfiguredFirebase } from '@/services/firebaseConfig'
@@ -30,6 +31,7 @@ const info = ref('')
 const loading = ref(false)
 const initializing = computed(() => !auth.ready)
 const forgotPasswordTarget = computed(() => buildForgotPasswordTarget(email.value))
+const workspaceTarget = computed(() => getWorkspaceRedirectTarget(route.query.redirect))
 
 useToastMessages([
   { source: error, severity: 'error', summary: 'Login' },
@@ -40,6 +42,7 @@ async function routeIntoWorkspaceIfAllowed() {
   await redirectToWorkspaceIfAllowed({
     hasWorkspaceAccess: auth.hasWorkspaceAccess,
     replace: (target) => router.replace(target),
+    workspaceTarget: workspaceTarget.value,
   })
 }
 
@@ -86,9 +89,7 @@ async function handleLogin() {
 
 <template>
   <AuthCard eyebrow="Phase 2" title="Phase 2 Web Application">
-    <AuthStatusMessage v-if="initializing">
-      Checking your current session...
-    </AuthStatusMessage>
+    <AuthStatusMessage v-if="initializing"> Checking your current session... </AuthStatusMessage>
 
     <form v-else @submit.prevent="handleLogin">
       <AppField class="auth-field" label="Email">
@@ -118,12 +119,9 @@ async function handleLogin() {
         :loading="loading"
       />
 
-      <AuthTextLink :to="forgotPasswordTarget">
-        Forgot Password?
-      </AuthTextLink>
+      <AuthTextLink :to="forgotPasswordTarget"> Forgot Password? </AuthTextLink>
     </form>
 
     <AuthFirebaseConfigWarning v-if="!hasConfiguredFirebase" />
   </AuthCard>
 </template>
-

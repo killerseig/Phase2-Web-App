@@ -262,7 +262,6 @@ const formatWorkbookDate = formatTimecardExportDate
 const cardWorkspaceActions = useTimecardExportCardWorkspaceActions({
   clearCardMeasurements,
   collator,
-  isCardReadOnly,
   pruneCardEditStates,
   pruneCardMeasurements,
   pruneSaveQueueToIds,
@@ -279,7 +278,6 @@ const cardWorkspaceActions = useTimecardExportCardWorkspaceActions({
 setCardsChangedHandler(cardWorkspaceActions.syncCardUiState)
 const {
   handleWorkbookChanged,
-  isEmployeeHeaderLocked,
   resetCardWorkspaceState,
   resetPageAndSaveMessages,
   scrollCardIntoView,
@@ -464,7 +462,6 @@ useTimecardExportLifecycle({
         :is-card-compact="isCardCompact"
         :is-card-editable="isCardEditable"
         :is-card-read-only="isCardReadOnly"
-        :is-employee-header-locked="isEmployeeHeaderLocked"
         :get-card-shell-style="getCardShellStyle"
         :get-card-scale-style="getCardScaleStyle"
         :set-card-shell-element="setCardShellElement"

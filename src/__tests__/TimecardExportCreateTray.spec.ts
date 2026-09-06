@@ -29,11 +29,12 @@ const TargetPanelStub = {
 const EmployeePanelStub = {
   name: 'TimecardExportEmployeePanel',
   props: ['search', 'employees', 'loading', 'searchDisabled', 'employeeDisabled'],
-  emits: ['update-search', 'add-employee'],
+  emits: ['update-search', 'add-employee', 'create-one-off-card'],
   template: `
     <section data-testid="employee-panel">
       <button type="button" data-testid="emit-search" @click="$emit('update-search', 'vince')" />
       <button type="button" data-testid="emit-employee" @click="$emit('add-employee', employees[0])" />
+      <button type="button" data-testid="emit-one-off" @click="$emit('create-one-off-card')" />
     </section>
   `,
 }
@@ -58,6 +59,7 @@ const CustomCardPanelStub = {
     'update-wage-rate',
     'update-is-contractor',
     'add-custom-card',
+    'back-to-employee-search',
   ],
   template: `
     <section data-testid="custom-panel">
@@ -68,6 +70,7 @@ const CustomCardPanelStub = {
       <button type="button" data-testid="emit-wage" @click="$emit('update-wage-rate', '42.50')" />
       <button type="button" data-testid="emit-contractor" @click="$emit('update-is-contractor', true)" />
       <button type="button" data-testid="emit-add-custom" @click="$emit('add-custom-card')" />
+      <button type="button" data-testid="emit-back" @click="$emit('back-to-employee-search')" />
     </section>
   `,
 }
@@ -114,7 +117,7 @@ describe('TimecardExportCreateTray', () => {
     expect(wrapper.find('[data-testid="custom-panel"]').exists()).toBe(false)
   })
 
-  it('forwards target, employee, and custom-card state to child panels', () => {
+  it('shows target and employee selection first, then reveals the one-off form', async () => {
     const wrapper = mountTray()
 
     expect(wrapper.getComponent({ name: 'TimecardExportTargetPanel' }).props()).toMatchObject({
@@ -131,6 +134,9 @@ describe('TimecardExportCreateTray', () => {
       searchDisabled: false,
       employeeDisabled: false,
     })
+    expect(wrapper.findComponent({ name: 'TimecardExportCustomCardPanel' }).exists()).toBe(false)
+
+    await wrapper.get('[data-testid="emit-one-off"]').trigger('click')
     expect(wrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props()).toMatchObject({
       firstName: 'Custom',
       lastName: 'Employee',
@@ -141,33 +147,46 @@ describe('TimecardExportCreateTray', () => {
       disabled: false,
       addDisabled: false,
     })
+
+    await wrapper.get('[data-testid="emit-back"]').trigger('click')
+    expect(wrapper.findComponent({ name: 'TimecardExportEmployeePanel' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'TimecardExportCustomCardPanel' }).exists()).toBe(false)
   })
 
-  it('requires a target job and either an existing week or selected foreman before card creation', () => {
+  it('requires a target job and either an existing week or selected foreman before card creation', async () => {
     const noTarget = mountTray({ jobId: '', targetWeekExists: true, foremanId: '' })
     const needsForeman = mountTray({ jobId: 'job-1', targetWeekExists: false, foremanId: '' })
     const hasForeman = mountTray({ jobId: 'job-1', targetWeekExists: false, foremanId: 'foreman-1' })
 
     expect(noTarget.getComponent({ name: 'TimecardExportEmployeePanel' }).props('employeeDisabled')).toBe(true)
-    expect(noTarget.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
     expect(needsForeman.getComponent({ name: 'TimecardExportEmployeePanel' }).props('employeeDisabled')).toBe(true)
-    expect(needsForeman.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
     expect(hasForeman.getComponent({ name: 'TimecardExportEmployeePanel' }).props('employeeDisabled')).toBe(false)
+
+    await noTarget.get('[data-testid="emit-one-off"]').trigger('click')
+    await needsForeman.get('[data-testid="emit-one-off"]').trigger('click')
+    await hasForeman.get('[data-testid="emit-one-off"]').trigger('click')
+    expect(noTarget.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
+    expect(needsForeman.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
     expect(hasForeman.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(false)
   })
 
-  it('disables search, fields, and create actions while loading or read-only', () => {
+  it('disables search, fields, and create actions while loading or read-only', async () => {
     const loadingWrapper = mountTray({ actionLoading: true })
     const readOnlyWrapper = mountTray({ canEditWeek: false })
 
     expect(loadingWrapper.getComponent({ name: 'TimecardExportEmployeePanel' }).props('searchDisabled')).toBe(true)
     expect(loadingWrapper.getComponent({ name: 'TimecardExportEmployeePanel' }).props('employeeDisabled')).toBe(true)
-    expect(loadingWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('disabled')).toBe(true)
-    expect(loadingWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
     expect(readOnlyWrapper.getComponent({ name: 'TimecardExportEmployeePanel' }).props('searchDisabled')).toBe(true)
     expect(readOnlyWrapper.getComponent({ name: 'TimecardExportEmployeePanel' }).props('employeeDisabled')).toBe(true)
-    expect(readOnlyWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('disabled')).toBe(true)
-    expect(readOnlyWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
+
+    const oneOffWrapper = mountTray()
+    await oneOffWrapper.get('[data-testid="emit-one-off"]').trigger('click')
+    await oneOffWrapper.setProps({ actionLoading: true })
+    expect(oneOffWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('disabled')).toBe(true)
+    expect(oneOffWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
+    await oneOffWrapper.setProps({ actionLoading: false, canEditWeek: false })
+    expect(oneOffWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('disabled')).toBe(true)
+    expect(oneOffWrapper.getComponent({ name: 'TimecardExportCustomCardPanel' }).props('addDisabled')).toBe(true)
   })
 
   it('forwards child panel events to the parent contract', async () => {
@@ -177,6 +196,7 @@ describe('TimecardExportCreateTray', () => {
     await wrapper.get('[data-testid="emit-foreman"]').trigger('click')
     await wrapper.get('[data-testid="emit-search"]').trigger('click')
     await wrapper.get('[data-testid="emit-employee"]').trigger('click')
+    await wrapper.get('[data-testid="emit-one-off"]').trigger('click')
     await wrapper.get('[data-testid="emit-first-name"]').trigger('click')
     await wrapper.get('[data-testid="emit-last-name"]').trigger('click')
     await wrapper.get('[data-testid="emit-number"]').trigger('click')

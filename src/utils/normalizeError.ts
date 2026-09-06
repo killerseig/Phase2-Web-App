@@ -19,9 +19,13 @@ const AUTH_MESSAGES: Record<string, string> = {
 }
 
 const FIREBASE_MESSAGES: Record<string, string> = {
-  'permission-denied': 'Permission denied. Your account may not have access yet, or Firestore rules may still need to be deployed.',
-  'firestore/permission-denied': 'Permission denied. Your account may not have access yet, or Firestore rules may still need to be deployed.',
-  'storage/unauthorized': 'Storage access is not allowed yet. Storage rules may still need to be deployed for this feature.',
+  'permission-denied':
+    'Permission denied. Your account may not have access yet, or Firestore rules may still need to be deployed.',
+  'firestore/permission-denied':
+    'Permission denied. Your account may not have access yet, or Firestore rules may still need to be deployed.',
+  'storage/unauthorized': 'You do not have permission to add or view this photo.',
+  'storage/unauthenticated': 'Sign in again to add or view this photo.',
+  'storage/retry-limit-exceeded': 'The photo upload was interrupted by the network.',
 }
 
 export function normalizeError(error: unknown, fallback: string): string {

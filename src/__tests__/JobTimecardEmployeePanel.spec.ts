@@ -64,17 +64,20 @@ describe('JobTimecardEmployeePanel', () => {
     expect(wrapper.get('[data-testid="employee-picker"]').attributes('data-prefix')).toBe('timecards-add-employee-')
     expect((wrapper.get('input').element as HTMLInputElement).value).toBe('cj')
     expect(wrapper.get('input').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="employee-picker"] button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="timecards-show-one-off-card"]').attributes('disabled')).toBeDefined()
   })
 
-  it('emits picker search and employee add events', async () => {
+  it('emits picker actions and the one-off request', async () => {
     const wrapper = mountPanel()
 
     await wrapper.get('input').setValue('vince')
-    await wrapper.get('button').trigger('click')
+    await wrapper.get('[data-testid="employee-picker"] button').trigger('click')
+    await wrapper.get('[data-testid="timecards-show-one-off-card"]').trigger('click')
 
     expect(wrapper.emitted('updateSearch')?.[0]).toEqual(['vince'])
     expect(wrapper.emitted('addEmployee')?.[0]).toEqual([employees[0]])
+    expect(wrapper.emitted('createOneOffCard')).toHaveLength(1)
   })
 
   it('passes loading state to the picker', () => {

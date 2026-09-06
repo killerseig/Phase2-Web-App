@@ -20,15 +20,20 @@ const emit = defineEmits<{
   updateWageRate: [value: string]
   updateIsContractor: [value: boolean]
   addCustomCard: []
+  backToEmployeeSearch: []
 }>()
 </script>
 
 <template>
   <div class="timecards-create__panel timecards-create__panel--custom">
     <div class="timecards-create__header">
-      <span class="timecards-create__eyebrow">Custom Card</span>
-      <h2>Create One-Off Card</h2>
+      <span class="timecards-create__eyebrow">One-Off Card</span>
+      <h2>Create a One-Off Card</h2>
     </div>
+
+    <p class="timecards-create__guidance">
+      Use a one-off card only when the worker is not available in the employee list. Search for the employee first to avoid duplicate or incorrect cards.
+    </p>
 
     <TimecardCustomCardFields
       :first-name="firstName"
@@ -46,13 +51,23 @@ const emit = defineEmits<{
       @update-is-contractor="emit('updateIsContractor', $event)"
     />
 
-    <TimecardButton
-      variant="primary"
-      :disabled="disabled"
-      @click="emit('addCustomCard')"
-    >
-      Add Custom Card
-    </TimecardButton>
+    <div class="timecards-create__actions">
+      <TimecardButton
+        data-testid="timecards-back-to-employee-search"
+        :disabled="disabled"
+        @click="emit('backToEmployeeSearch')"
+      >
+        Back to Employee Search
+      </TimecardButton>
+      <TimecardButton
+        data-testid="timecards-add-one-off-card"
+        variant="primary"
+        :disabled="disabled"
+        @click="emit('addCustomCard')"
+      >
+        Add One-Off Card
+      </TimecardButton>
+    </div>
   </div>
 </template>
 

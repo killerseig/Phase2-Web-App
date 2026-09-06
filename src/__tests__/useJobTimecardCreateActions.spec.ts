@@ -398,7 +398,7 @@ describe('useJobTimecardCreateActions', () => {
     const [errorArg, fallbackMessage] = setPageError.mock.calls[0]!
     expect(errorArg).toBeInstanceOf(Error)
     expect((errorArg as Error).message).toBe('Custom denied')
-    expect(fallbackMessage).toBe('Failed to add the custom timecard.')
+    expect(fallbackMessage).toBe('Failed to add the one-off timecard.')
     expect(actionLoading.value).toBe(false)
   })
 })

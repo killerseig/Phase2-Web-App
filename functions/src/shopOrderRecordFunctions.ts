@@ -1,4 +1,8 @@
-import * as admin from 'firebase-admin'
+import {
+  FieldValue,
+  type DocumentSnapshot,
+  type QueryDocumentSnapshot,
+} from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import {
   type CurrentFunctionUser,
@@ -117,7 +121,7 @@ async function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser> {
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman'])) {
+  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])) {
     throw new HttpsError('permission-denied', 'Your account does not have access to shop orders.')
   }
 
@@ -202,7 +206,7 @@ function serializeFirestoreValue(value: any): any {
   return value
 }
 
-function normalizeOrderForResponse(doc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot) {
+function normalizeOrderForResponse(doc: QueryDocumentSnapshot | DocumentSnapshot) {
   return {
     id: doc.id,
     ...serializeFirestoreValue(doc.data() || {}),
@@ -274,8 +278,8 @@ export const createShopOrderRecordCallable = onCall(async (request) => {
     updatedByUserId: request.auth.uid,
     submittedByUserId: null,
     items: [],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
     submittedAt: null,
   })
 
@@ -303,7 +307,7 @@ export const updateShopOrderRecordCallable = onCall(async (request) => {
   }
 
   const payload: Record<string, unknown> = {
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
     updatedByUserId: request.auth.uid,
   }
 
@@ -324,7 +328,7 @@ export const updateShopOrderRecordCallable = onCall(async (request) => {
     payload.status = status
 
     if (status === 'submitted') {
-      payload.submittedAt = admin.firestore.FieldValue.serverTimestamp()
+      payload.submittedAt = FieldValue.serverTimestamp()
       payload.submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid)
       payload.submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName)
     }

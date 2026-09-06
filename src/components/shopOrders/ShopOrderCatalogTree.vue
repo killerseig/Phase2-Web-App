@@ -115,6 +115,7 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
   <div
     class="shop-orders-tree-pane__list"
     :class="{ 'shop-orders-tree-pane__list--collapsed': props.listCollapsed }"
+    data-testid="shoporder-catalog-tree"
   >
     <ShopOrderCatalogTreeNodeRow
       :active="rootActive"
@@ -249,5 +250,12 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
   border-radius: 12px;
   color: var(--text-muted);
   text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .shop-orders-tree-pane__list:not(.shop-orders-tree-pane__list--collapsed) {
+    flex: 0 0 clamp(20rem, 50dvh, 32rem);
+    min-height: clamp(20rem, 50dvh, 32rem);
+  }
 }
 </style>

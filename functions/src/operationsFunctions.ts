@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin'
+import { FieldValue, type DocumentReference } from 'firebase-admin/firestore'
 import PDFDocument from 'pdfkit'
 import { onCall } from 'firebase-functions/v2/https'
 import { HttpsError } from 'firebase-functions/v2/https'
@@ -15,7 +15,6 @@ import {
   buildDailyLogEmail,
   buildDailyLogEmailSubject,
   buildDailyLogAutoSubmitEmail,
-  normalizeDailyLogEmailPayload,
   buildShopOrderEmail,
   buildShopOrderEmailSubject,
   buildShopOrderPdfBuffer,
@@ -32,29 +31,23 @@ import {
   claimSubmittedEmailOperation,
   getSubmittedEmailClaimShortCircuitMessage,
 } from './submittedEmailOperations'
-import {
-  ERROR_MESSAGES,
-  EMAIL,
-  COLLECTIONS,
-  EMAIL_STYLES,
-} from './constants'
-import { getGraphEmailSecrets } from './functionConfig'
+import { ERROR_MESSAGES, EMAIL, COLLECTIONS, EMAIL_STYLES } from './constants'
+import { getAppBaseUrl, getGraphEmailSecrets } from './functionConfig'
 import {
   type CurrentFunctionRole,
   buildCurrentFunctionUser,
   currentFunctionUserHasAnyRole,
 } from './roleAccess'
-import { db, storageBucket } from './runtime'
+import { db } from './runtime'
 import { canWriteFieldWorkflowForJob } from './fieldWorkflowAccess'
+import { ensureDailyLogGalleryShare } from './dailyLogGalleryFunctions'
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
-const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024
-const MAX_ATTACHMENT_COUNT = 10
 const DEFAULT_PRODUCTION_BURDEN = 0.33
 
 function normalizeRecipients(...groups: any[]): string[] {
-  const merged = groups.flatMap(group => (Array.isArray(group) ? group : []))
+  const merged = groups.flatMap((group) => (Array.isArray(group) ? group : []))
   const cleaned = merged
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
     .filter(Boolean)
@@ -62,15 +55,19 @@ function normalizeRecipients(...groups: any[]): string[] {
 }
 
 async function getShopOrderCostCodesByCatalogItemId(items: any[]): Promise<Record<string, string>> {
-  const catalogItemIds = Array.from(new Set(
-    (Array.isArray(items) ? items : [])
-      .map((item) => String(item?.catalogItemId || '').trim())
-      .filter(Boolean)
-  ))
+  const catalogItemIds = Array.from(
+    new Set(
+      (Array.isArray(items) ? items : [])
+        .map((item) => String(item?.catalogItemId || '').trim())
+        .filter(Boolean),
+    ),
+  )
 
   if (!catalogItemIds.length) return {}
 
-  const refs = catalogItemIds.map((catalogItemId) => db.collection('shopCatalog').doc(catalogItemId))
+  const refs = catalogItemIds.map((catalogItemId) =>
+    db.collection('shopCatalog').doc(catalogItemId),
+  )
   const snapshots = await db.getAll(...refs)
 
   return snapshots.reduce<Record<string, string>>((costCodesByCatalogItemId, snapshot) => {
@@ -82,7 +79,11 @@ async function getShopOrderCostCodesByCatalogItemId(items: any[]): Promise<Recor
   }, {})
 }
 
-function assertActiveRoleUser(user: any, allowedRoles: readonly CurrentFunctionRole[], errorMessage: string) {
+function assertActiveRoleUser(
+  user: any,
+  allowedRoles: readonly CurrentFunctionRole[],
+  errorMessage: string,
+) {
   if (!user) {
     throw new HttpsError('failed-precondition', ERROR_MESSAGES.USER_PROFILE_NOT_FOUND)
   }
@@ -107,7 +108,11 @@ function assertCanSendSubmittedFieldWorkflowEmail(
   jobDetails: Awaited<ReturnType<typeof getJobDetails>>,
   errorMessage: string,
 ) {
-  const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman', 'shop-foreman'], errorMessage)
+  const authorizedUser = assertActiveRoleUser(
+    user,
+    ['admin', 'foreman', 'shop-foreman', 'project-manager'],
+    errorMessage,
+  )
 
   if (!canWriteFieldWorkflowForJob(authorizedUser, jobId, jobDetails, 'submit')) {
     throw new HttpsError('permission-denied', errorMessage)
@@ -117,11 +122,11 @@ function assertCanSendSubmittedFieldWorkflowEmail(
 }
 
 async function recordSubmittedEmailStatus(
-  refs: admin.firestore.DocumentReference[],
+  refs: DocumentReference[],
   result: SubmittedEmailStatusResult,
   context: Record<string, unknown>,
 ) {
-  const payload = buildSubmittedEmailStatusUpdate(result, admin.firestore.FieldValue)
+  const payload = buildSubmittedEmailStatusUpdate(result, FieldValue)
   let updatedCount = 0
 
   try {
@@ -144,7 +149,7 @@ async function recordSubmittedEmailStatus(
 }
 
 async function hasSubmittedEmailOperationAlreadySent(
-  refs: admin.firestore.DocumentReference[],
+  refs: DocumentReference[],
   operationId: string,
   context: Record<string, unknown>,
 ): Promise<boolean> {
@@ -167,14 +172,20 @@ async function hasSubmittedEmailOperationAlreadySent(
   return false
 }
 
-function dailyLogEmailStatusRefs(jobId: string, dailyLogId: string): admin.firestore.DocumentReference[] {
+function dailyLogEmailStatusRefs(
+  jobId: string,
+  dailyLogId: string,
+): DocumentReference[] {
   return [
     db.collection(COLLECTIONS.DAILY_LOGS).doc(dailyLogId),
     db.collection(COLLECTIONS.JOBS).doc(jobId).collection('dailyLogs').doc(dailyLogId),
   ]
 }
 
-function shopOrderEmailStatusRefs(jobId: string, shopOrderId: string): admin.firestore.DocumentReference[] {
+function shopOrderEmailStatusRefs(
+  jobId: string,
+  shopOrderId: string,
+): DocumentReference[] {
   return [
     db.collection(COLLECTIONS.SHOP_ORDERS).doc(shopOrderId),
     db.collection(COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId),
@@ -228,7 +239,7 @@ function formatPlexxisDate(dateString: string): string {
   return `${Number(month)}/${Number(day)}/${year}`
 }
 
-function buildEmptyDayDateRecord(): Record<typeof DAY_KEYS[number], string> {
+function buildEmptyDayDateRecord(): Record<(typeof DAY_KEYS)[number], string> {
   return {
     sun: '',
     mon: '',
@@ -240,7 +251,7 @@ function buildEmptyDayDateRecord(): Record<typeof DAY_KEYS[number], string> {
   }
 }
 
-function buildWeekDateRecord(weekStartDate: string): Record<typeof DAY_KEYS[number], string> {
+function buildWeekDateRecord(weekStartDate: string): Record<(typeof DAY_KEYS)[number], string> {
   const dates = buildEmptyDayDateRecord()
   const trimmed = String(weekStartDate || '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return dates
@@ -258,14 +269,12 @@ function buildWeekDateRecord(weekStartDate: string): Record<typeof DAY_KEYS[numb
   return dates
 }
 
-function mergeDayDates(
-  target: Record<typeof DAY_KEYS[number], string>,
-  sourceDays: any[],
-): void {
+function mergeDayDates(target: Record<(typeof DAY_KEYS)[number], string>, sourceDays: any[]): void {
   for (const day of Array.isArray(sourceDays) ? sourceDays : []) {
-    const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
-      ? day.dayOfWeek
-      : sourceDays.indexOf(day)
+    const idx =
+      typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
+        ? day.dayOfWeek
+        : sourceDays.indexOf(day)
     const key = DAY_KEYS[idx]
     if (key === undefined) continue
 
@@ -277,7 +286,10 @@ function mergeDayDates(
 function formatPlexxisNumber(value: any, blankWhenZero = false): string {
   const numeric = toNumber(value)
   if (blankWhenZero && numeric === 0) return ''
-  return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+  return numeric
+    .toFixed(2)
+    .replace(/\.00$/, '')
+    .replace(/(\.\d)0$/, '$1')
 }
 
 function escapeCsvValue(value: any): string {
@@ -319,7 +331,11 @@ function formatWeekEndingLabel(value: string): string {
   return formatPlexxisDate(normalized)
 }
 
-function deriveEmployeeNameParts(timecard: any): { firstName: string; lastName: string; employeeName: string } {
+function deriveEmployeeNameParts(timecard: any): {
+  firstName: string
+  lastName: string
+  employeeName: string
+} {
   const firstName = String(timecard?.firstName || '').trim()
   const lastName = String(timecard?.lastName || '').trim()
 
@@ -327,7 +343,10 @@ function deriveEmployeeNameParts(timecard: any): { firstName: string; lastName: 
     return {
       firstName,
       lastName,
-      employeeName: `${firstName} ${lastName}`.trim() || String(timecard?.employeeName || '').trim() || 'Unnamed Employee',
+      employeeName:
+        `${firstName} ${lastName}`.trim() ||
+        String(timecard?.employeeName || '').trim() ||
+        'Unnamed Employee',
     }
   }
 
@@ -397,21 +416,21 @@ async function hydrateTimecardIdentityFields(timecards: any[]): Promise<any[]> {
   const entries = Array.isArray(timecards) ? timecards : []
   if (!entries.length) return []
 
-  const employeeIds = Array.from(new Set(
-    entries
-      .map((timecard) => String(timecard?.employeeId || '').trim())
-      .filter(Boolean),
-  ))
+  const employeeIds = Array.from(
+    new Set(entries.map((timecard) => String(timecard?.employeeId || '').trim()).filter(Boolean)),
+  )
 
-  const rosterKeys = Array.from(new Set(
-    entries
-      .map((timecard) => {
-        const jobId = String(timecard?.jobId || timecard?.__jobId || '').trim()
-        const rosterId = String(timecard?.employeeRosterId || '').trim()
-        return jobId && rosterId ? `${jobId}:${rosterId}` : ''
-      })
-      .filter(Boolean),
-  ))
+  const rosterKeys = Array.from(
+    new Set(
+      entries
+        .map((timecard) => {
+          const jobId = String(timecard?.jobId || timecard?.__jobId || '').trim()
+          const rosterId = String(timecard?.employeeRosterId || '').trim()
+          return jobId && rosterId ? `${jobId}:${rosterId}` : ''
+        })
+        .filter(Boolean),
+    ),
+  )
 
   const employeeDirectory = new Map<string, any>()
   const rosterDirectory = new Map<string, any>()
@@ -439,7 +458,12 @@ async function hydrateTimecardIdentityFields(timecards: any[]): Promise<any[]> {
         const rosterId = key.slice(separatorIndex + 1)
         return {
           key,
-          snap: await db.collection(COLLECTIONS.JOBS).doc(jobId).collection('roster').doc(rosterId).get(),
+          snap: await db
+            .collection(COLLECTIONS.JOBS)
+            .doc(jobId)
+            .collection('roster')
+            .doc(rosterId)
+            .get(),
         }
       }),
     )
@@ -457,49 +481,40 @@ async function hydrateTimecardIdentityFields(timecards: any[]): Promise<any[]> {
     const rosterId = String(timecard?.employeeRosterId || '').trim()
     const rosterKey = jobId && rosterId ? `${jobId}:${rosterId}` : ''
     const employeeRecord = employeeDirectory.get(employeeId) || {}
-    const rosterRecord = rosterKey ? (rosterDirectory.get(rosterKey) || {}) : {}
+    const rosterRecord = rosterKey ? rosterDirectory.get(rosterKey) || {} : {}
 
     const firstName = String(
-      timecard?.firstName
-      || employeeRecord?.firstName
-      || rosterRecord?.firstName
-      || '',
+      timecard?.firstName || employeeRecord?.firstName || rosterRecord?.firstName || '',
     ).trim()
     const lastName = String(
-      timecard?.lastName
-      || employeeRecord?.lastName
-      || rosterRecord?.lastName
-      || '',
+      timecard?.lastName || employeeRecord?.lastName || rosterRecord?.lastName || '',
     ).trim()
     const fallbackFullName = [firstName, lastName].filter(Boolean).join(' ').trim()
     const fullName = String(
-      timecard?.fullName
-      || timecard?.employeeName
-      || fallbackFullName
-      || [employeeRecord?.firstName, employeeRecord?.lastName].filter(Boolean).join(' ')
-      || [rosterRecord?.firstName, rosterRecord?.lastName].filter(Boolean).join(' ')
-      || '',
+      timecard?.fullName ||
+        timecard?.employeeName ||
+        fallbackFullName ||
+        [employeeRecord?.firstName, employeeRecord?.lastName].filter(Boolean).join(' ') ||
+        [rosterRecord?.firstName, rosterRecord?.lastName].filter(Boolean).join(' ') ||
+        '',
     ).trim()
     const employeeName = String(timecard?.employeeName || fullName).trim()
     const employeeNumber = String(
-      timecard?.employeeNumber
-      || timecard?.employeeCode
-      || employeeRecord?.employeeNumber
-      || rosterRecord?.employeeNumber
-      || '',
+      timecard?.employeeNumber ||
+        timecard?.employeeCode ||
+        employeeRecord?.employeeNumber ||
+        rosterRecord?.employeeNumber ||
+        '',
     ).trim()
     const occupation = String(
-      timecard?.occupation
-      || employeeRecord?.occupation
-      || rosterRecord?.occupation
-      || '',
+      timecard?.occupation || employeeRecord?.occupation || rosterRecord?.occupation || '',
     ).trim()
     const wageRate = toNullableNumber(
-      timecard?.wageRate
-      ?? timecard?.employeeWage
-      ?? timecard?.wage
-      ?? employeeRecord?.wageRate
-      ?? rosterRecord?.wageRate,
+      timecard?.wageRate ??
+        timecard?.employeeWage ??
+        timecard?.wage ??
+        employeeRecord?.wageRate ??
+        rosterRecord?.wageRate,
     )
 
     return {
@@ -522,7 +537,11 @@ export async function prepareTimecardsForPdfCsvExport(timecards: any[]): Promise
   return hydratedTimecards.map(normalizeTimecardForEmail)
 }
 
-function getLineDaySum(line: any, key: 'hours' | 'production', dayKey: typeof DAY_KEYS[number]): number {
+function getLineDaySum(
+  line: any,
+  key: 'hours' | 'production',
+  dayKey: (typeof DAY_KEYS)[number],
+): number {
   if (key === 'hours') return toNumber(line?.[dayKey])
   return toNumber(line?.production?.[dayKey])
 }
@@ -575,12 +594,7 @@ function getLineActivityCode(line: any): string {
 }
 
 function getLineCostCode(line: any): string {
-  return pickFirstNonEmptyValue(line, [
-    'costCode',
-    'cost_code',
-    'cost',
-    'costcode',
-  ])
+  return pickFirstNonEmptyValue(line, ['costCode', 'cost_code', 'cost', 'costcode'])
 }
 
 function sanitizeLeakedCodeValue(value: any, disallowedValues: any[]): string {
@@ -588,23 +602,27 @@ function sanitizeLeakedCodeValue(value: any, disallowedValues: any[]): string {
   if (!raw) return ''
   const disallowed = new Set(
     (Array.isArray(disallowedValues) ? disallowedValues : [])
-      .map((v) => String(v || '').trim().toLowerCase())
-      .filter(Boolean)
+      .map((v) =>
+        String(v || '')
+          .trim()
+          .toLowerCase(),
+      )
+      .filter(Boolean),
   )
   if (disallowed.has(raw.toLowerCase())) return ''
   return raw
 }
 
-function sanitizeActivityCode(
-  value: any,
-  line: any,
-  disallowedValues: any[]
-): string {
+function sanitizeActivityCode(value: any, line: any, disallowedValues: any[]): string {
   const raw = sanitizeLeakedCodeValue(value, disallowedValues)
   if (!raw) return ''
 
   const difValues = [line?.difH, line?.difP, line?.difC]
-    .map((v) => String(v || '').trim().toLowerCase())
+    .map((v) =>
+      String(v || '')
+        .trim()
+        .toLowerCase(),
+    )
     .filter(Boolean)
   if (difValues.includes(raw.toLowerCase())) return ''
 
@@ -635,15 +653,24 @@ function parseOptionalHoursOverride(value: any): number | null {
 }
 
 function getLineMonSatHours(line: any): number {
-  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line?.[key]), 0)
+  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce(
+    (sum, key) => sum + toNumber(line?.[key]),
+    0,
+  )
 }
 
 function getLineMonSatProduction(line: any): number {
-  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line?.production?.[key]), 0)
+  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce(
+    (sum, key) => sum + toNumber(line?.production?.[key]),
+    0,
+  )
 }
 
 function getLineMonSatCost(line: any): number {
-  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce((sum, key) => sum + toNumber(line?.unitCost?.[key]), 0)
+  return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].reduce(
+    (sum, key) => sum + toNumber(line?.unitCost?.[key]),
+    0,
+  )
 }
 
 function getLineTotalHoursForForm(line: any): number {
@@ -660,12 +687,7 @@ function getLineSummaryCostForForm(line: any, employeeWage: any, productionBurde
   const totalHours = getLineTotalHoursForForm(line)
   const totalProduction = getLineTotalProductionForForm(line)
   if (totalHours <= 0 || totalProduction <= 0) return 0
-  return calculateUnitCostForExport(
-    employeeWage,
-    totalHours,
-    totalProduction,
-    productionBurden,
-  )
+  return calculateUnitCostForExport(employeeWage, totalHours, totalProduction, productionBurden)
 }
 
 function getLineTotalCostForForm(line: any, employeeWage?: any, productionBurden?: any): number {
@@ -685,7 +707,14 @@ function hasMeaningfulLineDataForPdf(line: any): boolean {
   const offHours = getLineOffHours(line)
   const offProduction = getLineOffProduction(line)
   const offCost = getLineOffCost(line)
-  return totalHours > 0 || totalProduction > 0 || totalCost > 0 || offHours > 0 || offProduction > 0 || offCost > 0
+  return (
+    totalHours > 0 ||
+    totalProduction > 0 ||
+    totalCost > 0 ||
+    offHours > 0 ||
+    offProduction > 0 ||
+    offCost > 0
+  )
 }
 
 function hasMeaningfulLineDataForCsv(line: any): boolean {
@@ -699,7 +728,12 @@ function hasMeaningfulLineDataForCsv(line: any): boolean {
 
 function hasMeaningfulTimecard(tc: any): boolean {
   const lines = Array.isArray(tc?.lines) ? tc.lines : []
-  if (lines.some((line: any) => hasMeaningfulLineDataForCsv(line) || hasMeaningfulLineDataForPdf(line))) return true
+  if (
+    lines.some(
+      (line: any) => hasMeaningfulLineDataForCsv(line) || hasMeaningfulLineDataForPdf(line),
+    )
+  )
+    return true
   const hoursTotal = toNumber(tc?.totals?.hoursTotal)
   const productionTotal = toNumber(tc?.totals?.productionTotal)
   return hoursTotal > 0 || productionTotal > 0
@@ -723,63 +757,20 @@ function validatePdfCsvHourParity(timecards: any[]): void {
       .reduce((sum: number, line: any) => sum + getLineTotalHoursForForm(line), 0)
 
     if (Math.abs(roundToHundredths(pdfHours) - roundToHundredths(csvHours)) > 0.001) {
-      const employeeName = formatPlexxisEmployeeName(tc) || getTimecardDisplayEmployeeCode(tc) || 'Unknown employee'
-      mismatches.push(`${employeeName}: PDF ${roundToHundredths(pdfHours)} vs CSV ${roundToHundredths(csvHours)}`)
+      const employeeName =
+        formatPlexxisEmployeeName(tc) || getTimecardDisplayEmployeeCode(tc) || 'Unknown employee'
+      mismatches.push(
+        `${employeeName}: PDF ${roundToHundredths(pdfHours)} vs CSV ${roundToHundredths(csvHours)}`,
+      )
     }
   }
 
   if (mismatches.length) {
-    throw new HttpsError('internal', `Hour parity validation failed: ${mismatches.slice(0, 8).join('; ')}`)
+    throw new HttpsError(
+      'internal',
+      `Hour parity validation failed: ${mismatches.slice(0, 8).join('; ')}`,
+    )
   }
-}
-
-async function loadDailyLogAttachments(log: any) {
-  const attachments: Array<{ name: string; contentType?: string; contentBytes: string }> = []
-  const dailyLogPayload = normalizeDailyLogEmailPayload(log)
-  const files = Array.isArray(dailyLogPayload.attachments) ? dailyLogPayload.attachments : []
-  let totalBytes = 0
-
-  for (const att of files) {
-    if (!att?.path) continue
-    if (attachments.length >= MAX_ATTACHMENT_COUNT) {
-      console.warn('[sendDailyLogEmail] Skipping extra attachments beyond limit', { limit: MAX_ATTACHMENT_COUNT })
-      break
-    }
-
-    try {
-      const file = storageBucket.file(att.path)
-      const [exists] = await file.exists()
-      if (!exists) {
-        console.warn('[sendDailyLogEmail] Attachment missing in storage', { path: att.path })
-        continue
-      }
-
-      const [metadata] = await file.getMetadata()
-      const size = Number(metadata?.size) || 0
-      if (totalBytes + size > MAX_ATTACHMENT_TOTAL_BYTES) {
-        console.warn('[sendDailyLogEmail] Skipping attachment to respect size budget', {
-          path: att.path,
-          size,
-          totalBytes,
-          max: MAX_ATTACHMENT_TOTAL_BYTES,
-        })
-        continue
-      }
-
-      const [buffer] = await file.download()
-      totalBytes += buffer.length
-
-      attachments.push({
-        name: att?.name || file.name.split('/').pop() || 'attachment',
-        contentType: metadata?.contentType || 'application/octet-stream',
-        contentBytes: buffer.toString('base64'),
-      })
-    } catch (err) {
-      console.warn('[sendDailyLogEmail] Failed to load attachment', { path: att?.path, err })
-    }
-  }
-
-  return attachments
 }
 
 interface CallableRequestLike {
@@ -796,8 +787,9 @@ interface SendDailyLogEmailDependencies {
   getDailyLog: typeof getDailyLog
   getEmailSettings: typeof getEmailSettings
   getJobNotificationRecipients: typeof getJobNotificationRecipients
+  getAppBaseUrl: typeof getAppBaseUrl
+  ensureDailyLogGalleryShare: typeof ensureDailyLogGalleryShare
   buildDailyLogEmail: typeof buildDailyLogEmail
-  loadDailyLogAttachments: typeof loadDailyLogAttachments
   sendEmail: typeof sendEmail
   recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus
 }
@@ -811,22 +803,20 @@ const defaultSendDailyLogEmailDependencies: SendDailyLogEmailDependencies = {
   getDailyLog,
   getEmailSettings,
   getJobNotificationRecipients,
+  getAppBaseUrl,
+  ensureDailyLogGalleryShare,
   buildDailyLogEmail,
-  loadDailyLogAttachments,
   sendEmail,
   recordSubmittedEmailStatus,
 }
 
 export function normalizeTimecardForEmail(tc: any) {
   const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage)
-  const sourceLines = Array.isArray(tc?.lines) && tc.lines.length
-    ? tc.lines
-    : Array.isArray(tc?.jobs)
-      ? tc.jobs
-      : []
+  const sourceLines =
+    Array.isArray(tc?.lines) && tc.lines.length ? tc.lines : Array.isArray(tc?.jobs) ? tc.jobs : []
 
   const lines = sourceLines.map((source: any) => {
-    const hoursByDay: Record<typeof DAY_KEYS[number], number> = {
+    const hoursByDay: Record<(typeof DAY_KEYS)[number], number> = {
       sun: 0,
       mon: 0,
       tue: 0,
@@ -835,7 +825,7 @@ export function normalizeTimecardForEmail(tc: any) {
       fri: 0,
       sat: 0,
     }
-    const productionByDay: Record<typeof DAY_KEYS[number], number> = {
+    const productionByDay: Record<(typeof DAY_KEYS)[number], number> = {
       sun: 0,
       mon: 0,
       tue: 0,
@@ -844,7 +834,7 @@ export function normalizeTimecardForEmail(tc: any) {
       fri: 0,
       sat: 0,
     }
-    const unitCostByDay: Record<typeof DAY_KEYS[number], number> = {
+    const unitCostByDay: Record<(typeof DAY_KEYS)[number], number> = {
       sun: 0,
       mon: 0,
       tue: 0,
@@ -860,9 +850,10 @@ export function normalizeTimecardForEmail(tc: any) {
     mergeDayDates(datesByDay, timecardDays)
     mergeDayDates(datesByDay, days)
     for (const day of days) {
-      const idx = typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
-        ? day.dayOfWeek
-        : days.indexOf(day)
+      const idx =
+        typeof day?.dayOfWeek === 'number' && day.dayOfWeek >= 0 && day.dayOfWeek < DAY_KEYS.length
+          ? day.dayOfWeek
+          : days.indexOf(day)
       const key = DAY_KEYS[idx]
       if (key === undefined) continue
       hoursByDay[key] = Number(day?.hours) || 0
@@ -894,7 +885,9 @@ export function normalizeTimecardForEmail(tc: any) {
     const lineSubSection = getLineSubSection(source)
     const lineCostCode = getLineCostCode(source)
     const lineJobCode = String(source?.jobNumber || tc?.jobCode || tc?.__jobCode || '').trim()
-    const employeeCode = String(tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '').trim()
+    const employeeCode = String(
+      tc?.employeeCode || tc?.employeeId || tc?.employeeNumber || '',
+    ).trim()
     const rawActivityCode = getLineActivityCode(source)
     const sanitizedActivityCode = sanitizeActivityCode(rawActivityCode, source, [
       lineJobCode,
@@ -923,7 +916,7 @@ export function normalizeTimecardForEmail(tc: any) {
       unitCost: unitCostByDay,
     }
 
-    DAY_KEYS.forEach(k => {
+    DAY_KEYS.forEach((k) => {
       line[k] = hoursByDay[k]
     })
 
@@ -943,9 +936,12 @@ export function normalizeTimecardForEmail(tc: any) {
     }
 
     const finalTotalHours = DAY_KEYS.reduce((sum, key) => sum + toNumber(line[key]), 0)
-    const finalTotalProduction = DAY_KEYS.reduce((sum, key) => sum + toNumber(productionByDay[key]), 0)
+    const finalTotalProduction = DAY_KEYS.reduce(
+      (sum, key) => sum + toNumber(productionByDay[key]),
+      0,
+    )
     let totalLine = 0
-    DAY_KEYS.forEach(k => {
+    DAY_KEYS.forEach((k) => {
       totalLine += (productionByDay[k] || 0) * (unitCostByDay[k] || 0)
     })
 
@@ -965,7 +961,7 @@ export function normalizeTimecardForEmail(tc: any) {
       agg.lineTotal += Number(line?.totals?.lineTotal) || 0
       return agg
     },
-    { hoursTotal: 0, productionTotal: 0, lineTotal: 0 }
+    { hoursTotal: 0, productionTotal: 0, lineTotal: 0 },
   )
 
   return {
@@ -1003,7 +999,7 @@ export async function handleSendDailyLogEmail(
       user,
       jobId,
       requestedJob,
-      'Only admins or assigned foremen can send daily log emails'
+      'Only admins or assigned field users can send daily log emails',
     )
     const statusRefs = deps.dailyLogEmailStatusRefs(jobId, dailyLogId)
     const operationId = buildSubmittedEmailOperationId('dailyLogSubmittedEmail', dailyLogId)
@@ -1014,7 +1010,12 @@ export async function handleSendDailyLogEmail(
       operationId,
     }
 
-    const claimStatus = await deps.claimSubmittedEmailOperation(db, statusRefs, operationId, operationContext)
+    const claimStatus = await deps.claimSubmittedEmailOperation(
+      db,
+      statusRefs,
+      operationId,
+      operationContext,
+    )
     const claimMessage = getSubmittedEmailClaimShortCircuitMessage(claimStatus)
     if (claimMessage) {
       return { success: true, message: claimMessage }
@@ -1035,10 +1036,16 @@ export async function handleSendDailyLogEmail(
     if (!log) {
       throw new Error(ERROR_MESSAGES.DAILY_LOG_NOT_FOUND)
     }
-    if (String(log?.status || '').trim().toLowerCase() !== 'submitted') {
+    if (
+      String(log?.status || '')
+        .trim()
+        .toLowerCase() !== 'submitted'
+    ) {
       throw new HttpsError('failed-precondition', 'Only submitted daily logs can be emailed')
     }
-    const logOwnerUserId = String(log?.foremanUserId || log?.uid || log?.createdByUserId || '').trim()
+    const logOwnerUserId = String(
+      log?.foremanUserId || log?.uid || log?.createdByUserId || '',
+    ).trim()
     if (authorizedUser.role !== 'admin' && logOwnerUserId !== callerUid) {
       throw new HttpsError('permission-denied', 'Field users can only email their own daily logs')
     }
@@ -1051,31 +1058,54 @@ export async function handleSendDailyLogEmail(
     )
 
     if (!recipients.length) {
-      await deps.recordSubmittedEmailStatus(statusRefs, {
-        emailSent: false,
-        emailMessage: ERROR_MESSAGES.RECIPIENTS_REQUIRED,
-        operationId,
-      }, operationContext)
+      await deps.recordSubmittedEmailStatus(
+        statusRefs,
+        {
+          emailSent: false,
+          emailMessage: ERROR_MESSAGES.RECIPIENTS_REQUIRED,
+          operationId,
+        },
+        operationContext,
+      )
       throw new HttpsError('failed-precondition', ERROR_MESSAGES.RECIPIENTS_REQUIRED)
     }
 
     try {
-      const job = requestedJob || await deps.getJobDetails(log?.jobId || '')
-      const emailHtml = deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log)
-      const attachments = await deps.loadDailyLogAttachments(log)
+      const job = requestedJob || (await deps.getJobDetails(log?.jobId || ''))
+      const logDate = log?.logDate || new Date().toISOString()
+      const galleryShareId = await deps.ensureDailyLogGalleryShare({
+        dailyLogId,
+        jobId,
+        jobDetails: job,
+        log,
+      })
+      const dailyLogUrl = `${deps.getAppBaseUrl()}/daily-log-gallery/${encodeURIComponent(galleryShareId)}`
+      const emailHtml = deps.buildDailyLogEmail(
+        job || { id: '', name: 'Unknown Job', number: '' },
+        logDate,
+        log,
+        { dailyLogUrl },
+      )
 
       await deps.sendEmail({
         to: recipients,
-        subject: buildDailyLogEmailSubject(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log),
+        subject: buildDailyLogEmailSubject(
+          job || { id: '', name: 'Unknown Job', number: '' },
+          logDate,
+          log,
+        ),
         html: emailHtml,
-        ...(attachments.length ? { attachments } : {}),
       })
     } catch (emailError: any) {
-      await deps.recordSubmittedEmailStatus(statusRefs, {
-        emailSent: false,
-        emailMessage: emailError?.message || 'Failed to send daily log email',
-        operationId,
-      }, operationContext)
+      await deps.recordSubmittedEmailStatus(
+        statusRefs,
+        {
+          emailSent: false,
+          emailMessage: emailError?.message || 'Failed to send daily log email',
+          operationId,
+        },
+        operationContext,
+      )
       throw emailError
     }
 
@@ -1097,12 +1127,28 @@ export async function handleSendDailyLogEmail(
 /**
  * Send Daily Log via email
  */
-export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) => (
-  handleSendDailyLogEmail(request)
-))
+export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) =>
+  handleSendDailyLogEmail(request),
+)
 
-export function buildTimecardCsv(timecards: any[], weekStart: string, defaultJobCode?: string): string {
-  const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', '']
+export function buildTimecardCsv(
+  timecards: any[],
+  weekStart: string,
+  defaultJobCode?: string,
+): string {
+  const headers = [
+    'Employee Name',
+    'Employee Code',
+    'Job Code',
+    'DETAIL_DATE',
+    'Sub-Section',
+    'Activity Code',
+    'Cost Code',
+    'H_Hours',
+    'P_HOURS',
+    '',
+    '',
+  ]
   const fixedDataRowCount = 108
   const blankRow = Array(headers.length).fill('')
   const rows: Array<Array<string | number>> = [headers, [...blankRow]]
@@ -1120,7 +1166,9 @@ export function buildTimecardCsv(timecards: any[], weekStart: string, defaultJob
         getTimecardDisplayEmployeeCode(tc),
       ])
       const costCode = getLineCostCode(line)
-      const rowJobCode = String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '').trim()
+      const rowJobCode = String(
+        line?.jobNumber || tc?.jobCode || tc?.__jobCode || defaultJobCode || '',
+      ).trim()
       for (const key of DAY_KEYS) {
         const dayHours = toNumber(line?.[key])
         const dayProduction = toNumber(line?.production?.[key])
@@ -1132,7 +1180,9 @@ export function buildTimecardCsv(timecards: any[], weekStart: string, defaultJob
           employeeName,
           employeeCode,
           rowJobCode,
-          formatPlexxisDate(String(line?.dates?.[key] || fallbackDates[key] || tc?.weekEndingDate || '')),
+          formatPlexxisDate(
+            String(line?.dates?.[key] || fallbackDates[key] || tc?.weekEndingDate || ''),
+          ),
           subSection,
           activityCode,
           costCode,
@@ -1149,9 +1199,7 @@ export function buildTimecardCsv(timecards: any[], weekStart: string, defaultJob
     rows.push([...blankRow])
   }
 
-  return rows
-    .map((row) => row.map((value) => escapeCsvValue(value)).join(','))
-    .join('\r\n')
+  return rows.map((row) => row.map((value) => escapeCsvValue(value)).join(',')).join('\r\n')
 }
 
 function buildTimecardExportPeriodLabel(startWeek: string, endWeek?: string): string {
@@ -1173,13 +1221,21 @@ function buildTimecardExportPeriodLabel(startWeek: string, endWeek?: string): st
     : `${normalizedStartWeek || 'start'}_to_${normalizedEndWeek || 'end'}`
 }
 
-export function buildTimecardCsvFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
+export function buildTimecardCsvFilename(
+  startWeek: string,
+  endWeek?: string,
+  jobCode?: string,
+): string {
   const periodLabel = buildTimecardExportPeriodLabel(startWeek, endWeek)
   const normalizedJobCode = String(jobCode || '').trim()
   return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.csv` : `${periodLabel}.csv`
 }
 
-export function buildTimecardPdfFilename(startWeek: string, endWeek?: string, jobCode?: string): string {
+export function buildTimecardPdfFilename(
+  startWeek: string,
+  endWeek?: string,
+  jobCode?: string,
+): string {
   const periodLabel = buildTimecardExportPeriodLabel(startWeek, endWeek)
   const normalizedJobCode = String(jobCode || '').trim()
   return normalizedJobCode ? `${periodLabel} ${normalizedJobCode}.pdf` : `${periodLabel}.pdf`
@@ -1199,13 +1255,16 @@ export interface TimecardPdfBuildOptions {
   onCardHeader?: (event: TimecardPdfCardHeaderEvent) => void
 }
 
-export async function buildTimecardPdfBuffer(payload: {
-  jobName?: string
-  jobNumber?: string
-  submittedBy?: string
-  weekStart?: string
-  timecards: any[]
-}, options: TimecardPdfBuildOptions = {}): Promise<Buffer> {
+export async function buildTimecardPdfBuffer(
+  payload: {
+    jobName?: string
+    jobNumber?: string
+    submittedBy?: string
+    weekStart?: string
+    timecards: any[]
+  },
+  options: TimecardPdfBuildOptions = {},
+): Promise<Buffer> {
   // Use a true landscape page so the emailed PDF prints in the same orientation
   // as the legacy workbook instead of relying on rotated portrait content.
   const doc = new PDFDocument({ margin: 24, size: 'LETTER', layout: 'landscape' })
@@ -1217,7 +1276,10 @@ export async function buildTimecardPdfBuffer(payload: {
   const fmt = (value: any, blankWhenZero = false) => {
     const numeric = toNumber(value)
     if (blankWhenZero && numeric === 0) return ''
-    return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+    return numeric
+      .toFixed(2)
+      .replace(/\.00$/, '')
+      .replace(/(\.\d)0$/, '$1')
   }
   const fmtWorkbookEntry = (value: any, decimals = 2, blankWhenZero = false) => {
     const numeric = toNumber(value)
@@ -1248,7 +1310,8 @@ export async function buildTimecardPdfBuffer(payload: {
   }
 
   const weekStartDate = payload.weekStart ? new Date(`${payload.weekStart}T00:00:00Z`) : null
-  const weekEndDate = weekStartDate && !Number.isNaN(weekStartDate.getTime()) ? new Date(weekStartDate) : null
+  const weekEndDate =
+    weekStartDate && !Number.isNaN(weekStartDate.getTime()) ? new Date(weekStartDate) : null
   if (weekEndDate) weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6)
   const weekEndingLabel = weekEndDate
     ? formatWeekEndingLabel(formatDateOnly(weekEndDate))
@@ -1259,13 +1322,11 @@ export async function buildTimecardPdfBuffer(payload: {
     doc.on('end', () => resolve())
     doc.on('error', (err) => reject(err))
 
-    const sumWidths = (widths: number[], startIndex: number, endIndexExclusive: number) => (
+    const sumWidths = (widths: number[], startIndex: number, endIndexExclusive: number) =>
       widths.slice(startIndex, endIndexExclusive).reduce((sum, current) => sum + current, 0)
-    )
 
-    const getColumnX = (x: number, colWidths: number[], index: number) => (
+    const getColumnX = (x: number, colWidths: number[], index: number) =>
       x + sumWidths(colWidths, 0, index)
-    )
 
     const drawCell = (
       x: number,
@@ -1291,17 +1352,18 @@ export async function buildTimecardPdfBuffer(payload: {
       const fontSize = options?.fontSize ?? 6.0
       const lineHeight = fontSize * 1.15
       const textOffsetY = options?.textOffsetY ?? 0
-      const textY = (options?.verticalAlign === 'middle'
-        ? y + Math.max((height - lineHeight) / 2, paddingY)
-        : y + paddingY) + textOffsetY
+      const textY =
+        (options?.verticalAlign === 'middle'
+          ? y + Math.max((height - lineHeight) / 2, paddingY)
+          : y + paddingY) + textOffsetY
 
       doc
         .font(options?.fontName || (options?.bold ? 'Helvetica-Bold' : 'Helvetica'))
         .fontSize(fontSize)
         .fillColor('#111111')
         .text(text, x + paddingX, textY, {
-          width: Math.max(width - (paddingX * 2), 0),
-          height: Math.max(height - (paddingY * 2), 0),
+          width: Math.max(width - paddingX * 2, 0),
+          height: Math.max(height - paddingY * 2, 0),
           align: options?.align ?? 'center',
           ellipsis: true,
         })
@@ -1318,7 +1380,7 @@ export async function buildTimecardPdfBuffer(payload: {
         align?: Array<'left' | 'center' | 'right'>
         fontSize?: number
         fontName?: 'Helvetica' | 'Helvetica-Bold' | 'Helvetica-Oblique'
-      }
+      },
     ) => {
       let cx = x
       const aligns = options?.align || []
@@ -1448,8 +1510,8 @@ export async function buildTimecardPdfBuffer(payload: {
           .font('Helvetica')
           .fontSize(fontSize)
           .fillColor('#111111')
-          .text(value, x + paddingX, y + (rowHeight * index) + lineInsetY, {
-            width: Math.max(width - (paddingX * 2), 0),
+          .text(value, x + paddingX, y + rowHeight * index + lineInsetY, {
+            width: Math.max(width - paddingX * 2, 0),
             align,
             ellipsis: true,
           })
@@ -1514,10 +1576,25 @@ export async function buildTimecardPdfBuffer(payload: {
     ) => {
       const leftWidth = Math.round(width * 0.62 * 1000) / 1000
       drawUnderlinedField(x, y, leftWidth, rowHeight, leftField.label, leftField.value, 'left')
-      drawUnderlinedField(x + leftWidth, y, width - leftWidth, rowHeight, rightField.label, rightField.value, 'right')
+      drawUnderlinedField(
+        x + leftWidth,
+        y,
+        width - leftWidth,
+        rowHeight,
+        rightField.label,
+        rightField.value,
+        'right',
+      )
     }
 
-    const drawTimecardCard = (tc: any, x: number, y: number, width: number, height: number, renderBlankTemplate = false) => {
+    const drawTimecardCard = (
+      tc: any,
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      renderBlankTemplate = false,
+    ) => {
       const pad = 6
       const innerX = x + pad
       const innerY = y + pad
@@ -1540,10 +1617,17 @@ export async function buildTimecardPdfBuffer(payload: {
       const occupation = renderBlankTemplate ? '' : String(tc?.occupation || '').trim()
       const wageNumeric = toNumber(tc?.employeeWage ?? tc?.wage)
       const wageSource = tc?.employeeWage ?? tc?.wage ?? ''
-      const wageLabel = renderBlankTemplate ? '' : (wageNumeric > 0 ? `$${wageNumeric.toFixed(2)}` : (String(wageSource).trim() || '-'))
-      const cardWeekEnding = String(tc?.weekEndingDate || '').trim()
-        || getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim())
-      const weekEnding = renderBlankTemplate ? '' : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel
+      const wageLabel = renderBlankTemplate
+        ? ''
+        : wageNumeric > 0
+          ? `$${wageNumeric.toFixed(2)}`
+          : String(wageSource).trim() || '-'
+      const cardWeekEnding =
+        String(tc?.weekEndingDate || '').trim() ||
+        getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim())
+      const weekEnding = renderBlankTemplate
+        ? ''
+        : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel
       options.onCardHeader?.({
         cardId: typeof tc?.id === 'string' ? tc.id : undefined,
         employeeName,
@@ -1555,29 +1639,50 @@ export async function buildTimecardPdfBuffer(payload: {
       })
 
       const fieldRowHeight = 11.5
-      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
-        label: 'EMP. NAME:',
-        value: employeeName,
-      }, {
-        label: 'EMPLOYEE#',
-        value: employeeCode,
-      })
+      drawHeaderFieldRow(
+        innerX,
+        cursorY,
+        innerWidth,
+        fieldRowHeight,
+        {
+          label: 'EMP. NAME:',
+          value: employeeName,
+        },
+        {
+          label: 'EMPLOYEE#',
+          value: employeeCode,
+        },
+      )
       cursorY += fieldRowHeight
-      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
-        label: 'OCCUPATION:',
-        value: occupation,
-      }, {
-        label: 'Wage',
-        value: wageLabel,
-      })
+      drawHeaderFieldRow(
+        innerX,
+        cursorY,
+        innerWidth,
+        fieldRowHeight,
+        {
+          label: 'OCCUPATION:',
+          value: occupation,
+        },
+        {
+          label: 'Wage',
+          value: wageLabel,
+        },
+      )
       cursorY += fieldRowHeight
-      drawHeaderFieldRow(innerX, cursorY, innerWidth, fieldRowHeight, {
-        label: '',
-        value: '',
-      }, {
-        label: 'WEEK ENDING',
-        value: weekEnding,
-      })
+      drawHeaderFieldRow(
+        innerX,
+        cursorY,
+        innerWidth,
+        fieldRowHeight,
+        {
+          label: '',
+          value: '',
+        },
+        {
+          label: 'WEEK ENDING',
+          value: weekEnding,
+        },
+      )
       cursorY += fieldRowHeight + 2
 
       const footerHeight = 98
@@ -1588,7 +1693,10 @@ export async function buildTimecardPdfBuffer(payload: {
       const maxLineGroups = 13
       const rowHeight = Math.max(5.5, (gridHeight - tableHeaderHeight) / (maxLineGroups * 3))
       const lineGroupHeight = rowHeight * 3
-      const columnWidths = percentWidths(innerWidth, [11.5, 5.5, 4, 9.5, 5.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 8.5, 8.5, 8.5])
+      const columnWidths = percentWidths(
+        innerWidth,
+        [11.5, 5.5, 4, 9.5, 5.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 8.5, 8.5, 8.5],
+      )
       const detailFontSize = rowHeight >= 6.25 ? 5.8 : 4.9
       const costFontSize = rowHeight >= 6.25 ? 5.5 : 4.6
 
@@ -1597,34 +1705,74 @@ export async function buildTimecardPdfBuffer(payload: {
         gridTop,
         columnWidths,
         tableHeaderHeight,
-        ['JOB #', '1', '', 'ACCT', 'DIF', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'TOTAL', 'PROD', 'OFF'],
+        [
+          'JOB #',
+          '1',
+          '',
+          'ACCT',
+          'DIF',
+          'MON',
+          'TUE',
+          'WED',
+          'THU',
+          'FRI',
+          'SAT',
+          'TOTAL',
+          'PROD',
+          'OFF',
+        ],
         {
           fontSize: rowHeight >= 6.25 ? 5.9 : 5.1,
           fontName: 'Helvetica-Oblique',
-          align: ['left', 'center', 'center', 'left', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center'],
-        }
+          align: [
+            'left',
+            'center',
+            'center',
+            'left',
+            'center',
+            'center',
+            'center',
+            'center',
+            'center',
+            'center',
+            'center',
+            'center',
+            'center',
+            'center',
+          ],
+        },
       )
       let cursorDataY = gridTop + tableHeaderHeight
-      const lines = renderBlankTemplate ? [] : (Array.isArray(tc?.lines) ? tc.lines.filter((line: any) => hasMeaningfulLineDataForPdf(line)) : [])
+      const lines = renderBlankTemplate
+        ? []
+        : Array.isArray(tc?.lines)
+          ? tc.lines.filter((line: any) => hasMeaningfulLineDataForPdf(line))
+          : []
       const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage)
 
       for (let lineIndex = 0; lineIndex < maxLineGroups; lineIndex++) {
         const line = lines[lineIndex]
         const hasLine = !!line
-        const jobCode = hasLine ? String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || '').trim() : ''
+        const jobCode = hasLine
+          ? String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || '').trim()
+          : ''
         const account = hasLine
           ? sanitizeActivityCode(getLineActivityCode(line), line, [
-            jobCode,
-            getTimecardDisplayEmployeeCode(tc),
-          ])
+              jobCode,
+              getTimecardDisplayEmployeeCode(tc),
+            ])
           : ''
         const lineHoursTotal = hasLine ? getLineTotalHoursForForm(line) : 0
         const lineProdTotal = hasLine ? getLineTotalProductionForForm(line) : 0
-        const lineCostTotal = hasLine ? getLineTotalCostForForm(line, employeeWage, tc?.productionBurden) : 0
+        const lineCostTotal = hasLine
+          ? getLineTotalCostForForm(line, employeeWage, tc?.productionBurden)
+          : 0
         const offHours = hasLine ? getLineOffHours(line) : 0
         const offProduction = hasLine ? getLineOffProduction(line) : 0
         const offCost = hasLine ? getLineOffCost(line) : 0
-        const subsectionArea = hasLine ? String(line?.subsectionArea || line?.area || '').trim() : ''
+        const subsectionArea = hasLine
+          ? String(line?.subsectionArea || line?.area || '').trim()
+          : ''
         const groupHeight = rowHeight * 3
         const mergedColumns = [
           { index: 0, text: jobCode, align: 'center' as const },
@@ -1668,7 +1816,7 @@ export async function buildTimecardPdfBuffer(payload: {
         ]
 
         rowDefinitions.forEach((rowDef, rowIndex) => {
-          const rowY = cursorDataY + (rowIndex * rowHeight)
+          const rowY = cursorDataY + rowIndex * rowHeight
           drawCell(
             getColumnX(innerX, columnWidths, 2),
             rowY,
@@ -1694,7 +1842,6 @@ export async function buildTimecardPdfBuffer(payload: {
               verticalAlign: 'middle',
             },
           )
-
         })
 
         monSatKeys.forEach((key, dayOffset) => {
@@ -1722,11 +1869,7 @@ export async function buildTimecardPdfBuffer(payload: {
           cursorDataY,
           columnWidths[11] || 0,
           rowHeight,
-          [
-            hasLine ? fmtWorkbookHoursTotal(lineHoursTotal, true) : '',
-            '',
-            '',
-          ],
+          [hasLine ? fmtWorkbookHoursTotal(lineHoursTotal, true) : '', '', ''],
           {
             fontSize: detailFontSize,
             align: 'center',
@@ -1769,17 +1912,23 @@ export async function buildTimecardPdfBuffer(payload: {
         cursorDataY += groupHeight
       }
 
-      const footerTop = gridTop + tableHeaderHeight + (maxLineGroups * lineGroupHeight)
+      const footerTop = gridTop + tableHeaderHeight + maxLineGroups * lineGroupHeight
       const mondayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.mon), 0)
       const tuesdayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.tue), 0)
       const wednesdayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.wed), 0)
       const thursdayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.thu), 0)
       const fridayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.fri), 0)
       const saturdayHours = lines.reduce((sum: number, line: any) => sum + toNumber(line?.sat), 0)
-      const weekTotalHours = mondayHours + tuesdayHours + wednesdayHours + thursdayHours + fridayHours + saturdayHours
+      const weekTotalHours =
+        mondayHours + tuesdayHours + wednesdayHours + thursdayHours + fridayHours + saturdayHours
 
       const totalsRowHeight = 11
-      drawWorkbookDaySeparators(innerX, gridTop + tableHeaderHeight, footerTop + totalsRowHeight, columnWidths)
+      drawWorkbookDaySeparators(
+        innerX,
+        gridTop + tableHeaderHeight,
+        footerTop + totalsRowHeight,
+        columnWidths,
+      )
       drawCell(innerX, footerTop, sumWidths(columnWidths, 0, 5), totalsRowHeight, 'TOTAL HOURS', {
         bold: true,
         fontSize: 5.8,
@@ -1828,14 +1977,29 @@ export async function buildTimecardPdfBuffer(payload: {
           textOffsetY: 0.45,
         },
       )
-      drawCell(getColumnX(innerX, columnWidths, 12), footerTop, columnWidths[12] || 0, totalsRowHeight, '', { bold: true })
-      drawCell(getColumnX(innerX, columnWidths, 13), footerTop, columnWidths[13] || 0, totalsRowHeight, '', { bold: true })
+      drawCell(
+        getColumnX(innerX, columnWidths, 12),
+        footerTop,
+        columnWidths[12] || 0,
+        totalsRowHeight,
+        '',
+        { bold: true },
+      )
+      drawCell(
+        getColumnX(innerX, columnWidths, 13),
+        footerTop,
+        columnWidths[13] || 0,
+        totalsRowHeight,
+        '',
+        { bold: true },
+      )
 
       const totalHoursForFooter = Math.max(0, toNumber(weekTotalHours))
       const regularOverride = toNumber(tc?.regularHoursOverride)
       const overtimeOverride = toNumber(tc?.overtimeHoursOverride)
       const hasRegularOverride = tc?.regularHoursOverride != null && tc?.regularHoursOverride !== ''
-      const hasOvertimeOverride = tc?.overtimeHoursOverride != null && tc?.overtimeHoursOverride !== ''
+      const hasOvertimeOverride =
+        tc?.overtimeHoursOverride != null && tc?.overtimeHoursOverride !== ''
 
       let otHours = ''
       let regHours = ''
@@ -1911,12 +2075,28 @@ export async function buildTimecardPdfBuffer(payload: {
       const otRegX = getColumnX(innerX, columnWidths, 10)
       const otRegWidth = sumWidths(columnWidths, 10, 12)
       const otRegRowHeight = 8.5
-      drawFooterUnderlinedValue(otRegX, footerLabelRowY + 0.8, otRegWidth, otRegRowHeight, 'OT', otHours, {
-        valueOffsetY: -0.45,
-      })
-      drawFooterUnderlinedValue(otRegX, footerSecondRowY + 1.2, otRegWidth, otRegRowHeight, 'REG', regHours, {
-        valueOffsetY: -0.45,
-      })
+      drawFooterUnderlinedValue(
+        otRegX,
+        footerLabelRowY + 0.8,
+        otRegWidth,
+        otRegRowHeight,
+        'OT',
+        otHours,
+        {
+          valueOffsetY: -0.45,
+        },
+      )
+      drawFooterUnderlinedValue(
+        otRegX,
+        footerSecondRowY + 1.2,
+        otRegWidth,
+        otRegRowHeight,
+        'REG',
+        regHours,
+        {
+          valueOffsetY: -0.45,
+        },
+      )
 
       const notesY = Math.max(footerSecondRowY + footerInputRowHeight + 12, bottom - 18)
       const notesLabel = 'NOTES:'
@@ -1952,7 +2132,9 @@ export async function buildTimecardPdfBuffer(payload: {
       }
     }
 
-    const timecards = (Array.isArray(payload.timecards) ? payload.timecards : []).filter((tc) => hasMeaningfulTimecard(tc))
+    const timecards = (Array.isArray(payload.timecards) ? payload.timecards : []).filter((tc) =>
+      hasMeaningfulTimecard(tc),
+    )
     const pageWidth = doc.page.width
     const pageHeight = doc.page.height
     const marginLeft = doc.page.margins.left || 24
@@ -2060,7 +2242,7 @@ export async function handleSendShopOrderEmail(
       user,
       jobId,
       requestedJob,
-      'Only admins or assigned foremen can send shop order emails'
+      'Only admins or assigned field users can send shop order emails',
     )
     const statusRefs = deps.shopOrderEmailStatusRefs(jobId, shopOrderId)
     const operationId = buildSubmittedEmailOperationId('shopOrderSubmittedEmail', shopOrderId)
@@ -2071,7 +2253,12 @@ export async function handleSendShopOrderEmail(
       operationId,
     }
 
-    const claimStatus = await deps.claimSubmittedEmailOperation(db, statusRefs, operationId, operationContext)
+    const claimStatus = await deps.claimSubmittedEmailOperation(
+      db,
+      statusRefs,
+      operationId,
+      operationContext,
+    )
     const claimMessage = getSubmittedEmailClaimShortCircuitMessage(claimStatus)
     if (claimMessage) {
       return { success: true, message: claimMessage }
@@ -2098,11 +2285,15 @@ export async function handleSendShopOrderEmail(
       await deps.getJobNotificationRecipients(jobId, 'shopOrders'),
     )
     if (!recipients.length) {
-      await deps.recordSubmittedEmailStatus(statusRefs, {
-        emailSent: false,
-        emailMessage: ERROR_MESSAGES.RECIPIENTS_REQUIRED,
-        operationId,
-      }, operationContext)
+      await deps.recordSubmittedEmailStatus(
+        statusRefs,
+        {
+          emailSent: false,
+          emailMessage: ERROR_MESSAGES.RECIPIENTS_REQUIRED,
+          operationId,
+        },
+        operationContext,
+      )
       throw new HttpsError('failed-precondition', ERROR_MESSAGES.RECIPIENTS_REQUIRED)
     }
 
@@ -2140,9 +2331,10 @@ export async function handleSendShopOrderEmail(
       throw new HttpsError('permission-denied', 'Shop order does not belong to the requested job')
     }
 
-    const job = resolvedJobId && resolvedJobId !== String(jobId).trim()
-      ? await deps.getJobDetails(resolvedJobId)
-      : requestedJob || await deps.getJobDetails(resolvedJobId || jobId)
+    const job =
+      resolvedJobId && resolvedJobId !== String(jobId).trim()
+        ? await deps.getJobDetails(resolvedJobId)
+        : requestedJob || (await deps.getJobDetails(resolvedJobId || jobId))
     try {
       const costCodesByCatalogItemId = await deps.getShopOrderCostCodesByCatalogItemId(order?.items)
       const emailHtml = deps.buildShopOrderEmail(order, costCodesByCatalogItemId)
@@ -2161,11 +2353,15 @@ export async function handleSendShopOrderEmail(
         ],
       })
     } catch (emailError: any) {
-      await deps.recordSubmittedEmailStatus(statusRefs, {
-        emailSent: false,
-        emailMessage: emailError?.message || 'Failed to send shop order email',
-        operationId,
-      }, operationContext)
+      await deps.recordSubmittedEmailStatus(
+        statusRefs,
+        {
+          emailSent: false,
+          emailMessage: emailError?.message || 'Failed to send shop order email',
+          operationId,
+        },
+        operationContext,
+      )
       throw emailError
     }
 
@@ -2184,7 +2380,6 @@ export async function handleSendShopOrderEmail(
   }
 }
 
-export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) => (
-  handleSendShopOrderEmail(request)
-))
-
+export const sendShopOrderEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) =>
+  handleSendShopOrderEmail(request),
+)

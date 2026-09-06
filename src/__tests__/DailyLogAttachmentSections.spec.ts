@@ -24,7 +24,9 @@ const ptpAttachments: DailyLogAttachmentRecord[] = [
   },
 ]
 
-function mountAttachmentSections(overrides: Partial<InstanceType<typeof DailyLogAttachmentSections>['$props']> = {}) {
+function mountAttachmentSections(
+  overrides: Partial<InstanceType<typeof DailyLogAttachmentSections>['$props']> = {},
+) {
   return shallowMount(DailyLogAttachmentSections, {
     props: {
       disabled: false,
@@ -32,8 +34,12 @@ function mountAttachmentSections(overrides: Partial<InstanceType<typeof DailyLog
       photoBusy: false,
       ptpAttachments,
       ptpBusy: false,
-      uploadPhoto: vi.fn(async () => undefined),
-      uploadPtp: vi.fn(async () => undefined),
+      uploadPhoto: vi.fn<(entries: Array<{ file: File; description: string }>) => Promise<void>>(
+        async () => undefined,
+      ),
+      uploadPtp: vi.fn<(entries: Array<{ file: File; description: string }>) => Promise<void>>(
+        async () => undefined,
+      ),
       ...overrides,
     },
     global: {
@@ -41,6 +47,7 @@ function mountAttachmentSections(overrides: Partial<InstanceType<typeof DailyLog
         DailyLogAttachmentCard: {
           props: [
             'attachments',
+            'anchorId',
             'busy',
             'chooseLabel',
             'descriptionLabel',
@@ -52,7 +59,7 @@ function mountAttachmentSections(overrides: Partial<InstanceType<typeof DailyLog
           ],
           emits: ['remove', 'update-description'],
           template: `
-            <section data-testid="attachment-card">
+            <section data-testid="attachment-card" :data-anchor-id="anchorId">
               <strong data-testid="attachment-title">{{ title }}</strong>
               <span data-testid="attachment-choose-label">{{ chooseLabel }}</span>
               <span data-testid="attachment-description-label">{{ descriptionLabel }}</span>
@@ -90,9 +97,16 @@ describe('DailyLogAttachmentSections', () => {
     expect(cards).toHaveLength(2)
     expect(photoCard.find('[data-testid="attachment-title"]').text()).toBe('Photos')
     expect(photoCard.find('[data-testid="attachment-choose-label"]').text()).toBe('Choose Photos')
-    expect(photoCard.find('[data-testid="attachment-description-label"]').text()).toBe('Description')
-    expect(photoCard.find('[data-testid="attachment-empty-label"]').text()).toBe('Drag and drop photos here to upload.')
-    expect(photoCard.find('[data-testid="attachment-helper-text"]').text()).toContain('Click Save Draft')
+    expect(photoCard.find('[data-testid="attachment-description-label"]').text()).toBe(
+      'Description',
+    )
+    expect(photoCard.find('[data-testid="attachment-empty-label"]').text()).toBe(
+      'Drag and drop photos here to upload.',
+    )
+    expect(photoCard.attributes('data-anchor-id')).toBe('daily-log-photos')
+    expect(photoCard.find('[data-testid="attachment-helper-text"]').text()).toBe(
+      'Select a photo to view it full screen.',
+    )
     expect(photoCard.find('[data-testid="attachment-disabled"]').text()).toBe('true')
     expect(photoCard.find('[data-testid="attachment-busy"]').text()).toBe('true')
     expect(photoCard.find('[data-testid="attachment-count"]').text()).toBe('1')
@@ -101,8 +115,12 @@ describe('DailyLogAttachmentSections', () => {
     expect(ptpCard.find('[data-testid="attachment-title"]').text()).toBe('PTP Photos')
     expect(ptpCard.find('[data-testid="attachment-choose-label"]').text()).toBe('Choose PTP Photos')
     expect(ptpCard.find('[data-testid="attachment-description-label"]').text()).toBe('Note')
-    expect(ptpCard.find('[data-testid="attachment-empty-label"]').text()).toBe('Drag and drop PTP photos here to upload.')
-    expect(ptpCard.find('[data-testid="attachment-helper-text"]').text()).toContain('editing notes')
+    expect(ptpCard.find('[data-testid="attachment-empty-label"]').text()).toBe(
+      'Drag and drop PTP photos here to upload.',
+    )
+    expect(ptpCard.find('[data-testid="attachment-helper-text"]').text()).toBe(
+      'Select a PTP photo to view it full screen.',
+    )
     expect(ptpCard.find('[data-testid="attachment-disabled"]').text()).toBe('true')
     expect(ptpCard.find('[data-testid="attachment-busy"]').text()).toBe('false')
     expect(ptpCard.find('[data-testid="attachment-count"]').text()).toBe('1')

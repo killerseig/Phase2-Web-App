@@ -73,15 +73,16 @@ describe('TimecardExportCustomCardPanel', () => {
   it('renders custom-card copy and forwards field state', () => {
     const wrapper = mountPanel({ disabled: true, addDisabled: true })
     const inputs = wrapper.findAll('input')
-    const button = wrapper.get('button')
+    const addButton = wrapper.get('[data-testid="timecards-add-one-off-card"]')
 
-    expect(wrapper.get('legend').text()).toBe('Custom Card')
-    expect(wrapper.text()).toContain('Create One-Off Card')
+    expect(wrapper.get('legend').text()).toBe('One-Off Card')
+    expect(wrapper.text()).toContain('Create a One-Off Card')
+    expect(wrapper.text()).toContain('Use a one-off card only when the worker is not available in the employee list.')
     expect((inputs[0]!.element as HTMLInputElement).value).toBe('Chris')
     expect(inputs[0]!.attributes('disabled')).toBeDefined()
-    expect(button.text()).toBe('Add Custom Card')
-    expect(button.attributes('disabled')).toBeDefined()
-    expect(button.attributes('data-variant')).toBe('primary')
+    expect(addButton.text()).toBe('Add One-Off Card')
+    expect(addButton.attributes('disabled')).toBeDefined()
+    expect(addButton.attributes('data-variant')).toBe('primary')
   })
 
   it('emits custom-card field updates', async () => {
@@ -106,8 +107,16 @@ describe('TimecardExportCustomCardPanel', () => {
   it('emits the add custom card action', async () => {
     const wrapper = mountPanel()
 
-    await wrapper.get('button').trigger('click')
+    await wrapper.get('[data-testid="timecards-add-one-off-card"]').trigger('click')
 
     expect(wrapper.emitted('addCustomCard')).toHaveLength(1)
+  })
+
+  it('provides a route back to employee search', async () => {
+    const wrapper = mountPanel()
+
+    await wrapper.get('[data-testid="timecards-back-to-employee-search"]').trigger('click')
+
+    expect(wrapper.emitted('backToEmployeeSearch')).toHaveLength(1)
   })
 })

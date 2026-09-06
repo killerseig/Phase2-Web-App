@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { StyleValue } from 'vue'
 import TimecardCanvasPanel from '@/components/timecards/TimecardCanvasPanel.vue'
+import TimecardSourceBadge from '@/components/timecards/TimecardSourceBadge.vue'
 import TimecardWorkbookCard from '@/components/timecards/TimecardWorkbookCard.vue'
 import type { TimecardExportArchiveCardRecord } from '@/features/timecards/exportViewHelpers'
-import type { TimecardCardRecord } from '@/types/domain'
 
 defineProps<{
   cards: TimecardExportArchiveCardRecord[]
@@ -22,7 +22,6 @@ defineProps<{
   isCardCompact: (cardId: string) => boolean
   isCardEditable: (cardId: string) => boolean
   isCardReadOnly: (cardId: string) => boolean
-  isEmployeeHeaderLocked: (card: TimecardCardRecord) => boolean
   getCardShellStyle: (cardId: string) => StyleValue
   getCardScaleStyle: (cardId: string) => StyleValue
   setCardShellElement: (cardId: string, element: Element | null) => void
@@ -68,6 +67,10 @@ const emit = defineEmits<{
     </template>
 
     <template #itemActions="{ card }">
+      <TimecardSourceBadge
+        :source-type="card.sourceType"
+        :test-id="`timecard-card-source-${card.id}`"
+      />
       <button
         v-if="canEditWeek"
         class="timecards-canvas__item-header-button timecards-canvas__item-header-button--edit"
@@ -86,7 +89,6 @@ const emit = defineEmits<{
         :week-end-date="card.archiveWeekEndDate"
         :burden="card.archiveBurden"
         :read-only="isCardReadOnly(card.id)"
-        :employee-header-locked="isEmployeeHeaderLocked(card)"
         :show-employee-wage="showEmployeeWage"
         :show-cost-values="showCostValues"
         @changed="emit('workbookChanged', card)"

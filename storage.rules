@@ -6,185 +6,9 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function userDoc() {
-      return signedIn()
-        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
-        : null;
-    }
-
-    function userDocExists() {
-      return userDoc() != null && userDoc().data != null;
-    }
-
-    function userRole() {
-      return userDocExists() ? userDoc().data.role : null;
-    }
-
-    function hasAdminRole() {
-      return userRole() in ['admin', 'Admin'];
-    }
-
-    function hasPayrollRole() {
-      return userRole() in ['payroll', 'Payroll'];
-    }
-
-    function hasShopForemanRole() {
-      return userRole() in ['shop-foreman', 'shop_foreman', 'shop foreman', 'shopForeman', 'Shop Foreman'];
-    }
-
-    function hasProjectManagerRole() {
-      return userRole() in ['project-manager', 'project_manager', 'project manager', 'projectManager', 'Project Manager'];
-    }
-
-    function hasForemanRole() {
-      return userRole() in ['foreman', 'Foreman'];
-    }
-
-    function hasFieldAssigneeRole() {
-      return hasForemanRole() || hasShopForemanRole() || hasProjectManagerRole();
-    }
-
-    function userIsActive() {
-      return userDocExists() && userDoc().data.active != false;
-    }
-
-    function activeAppUser() {
-      return signedIn() &&
-             userDocExists() &&
-             userIsActive() &&
-             (hasAdminRole() ||
-              hasPayrollRole() ||
-              hasShopForemanRole() ||
-              hasForemanRole() ||
-              hasProjectManagerRole());
-    }
-
-    function isAdmin() {
-      return activeAppUser() && hasAdminRole();
-    }
-
-    function isShopForeman() {
-      return activeAppUser() && hasShopForemanRole();
-    }
-
-    function dailyLogDoc(logId) {
-      return firestore.get(/databases/(default)/documents/dailyLogs/$(logId));
-    }
-
-    function dailyLogExists(logId) {
-      return dailyLogDoc(logId) != null && dailyLogDoc(logId).data != null;
-    }
-
-    function dailyLogOwnerUid(logId) {
-      return dailyLogExists(logId) ? dailyLogDoc(logId).data.foremanUserId : null;
-    }
-
-    function dailyLogStatus(logId) {
-      return dailyLogExists(logId) ? dailyLogDoc(logId).data.status : null;
-    }
-
-    function dailyLogJobId(logId) {
-      return dailyLogExists(logId) ? dailyLogDoc(logId).data.jobId : null;
-    }
-
-    function jobDoc(jobId) {
-      return firestore.get(/databases/(default)/documents/jobs/$(jobId));
-    }
-
-    function jobExists(jobId) {
-      return jobDoc(jobId) != null && jobDoc(jobId).data != null;
-    }
-
-    function foremanAssignedInJobData(jobData) {
-      return jobData.assignedForemanIds is list &&
-             request.auth.uid in jobData.assignedForemanIds;
-    }
-
-    function isShopJobData(jobData) {
-      return jobData.code in ['736', 736] ||
-             jobData.number in ['736', 736] ||
-             jobData.name in ['Shop', 'shop'];
-    }
-
-    function userAssignedJobs() {
-      return userDocExists() && userDoc().data.assignedJobIds is list
-        ? userDoc().data.assignedJobIds
-        : [];
-    }
-
-    function userCanReadFieldJob(jobId) {
-      return jobId != null &&
-             hasFieldAssigneeRole() &&
-             (
-               userAssignedJobs().hasAny([jobId]) ||
-               (jobExists(jobId) && foremanAssignedInJobData(jobDoc(jobId).data)) ||
-               (isShopForeman() && jobExists(jobId) && isShopJobData(jobDoc(jobId).data))
-             );
-    }
-
-    function isFieldWorkflowEditorRole() {
-      return activeAppUser() &&
-             (hasForemanRole() || hasShopForemanRole() || hasProjectManagerRole());
-    }
-
-    function userCanWriteFieldJob(jobId) {
-      return jobId != null &&
-             isFieldWorkflowEditorRole() &&
-             (
-               userAssignedJobs().hasAny([jobId]) ||
-               (jobExists(jobId) && foremanAssignedInJobData(jobDoc(jobId).data)) ||
-               (isShopForeman() && jobExists(jobId) && isShopJobData(jobDoc(jobId).data))
-             );
-    }
-
-    function canReadDailyLogAttachment(logId) {
-      return activeAppUser() &&
-             dailyLogExists(logId) &&
-             (
-               isAdmin() ||
-               dailyLogOwnerUid(logId) == request.auth.uid ||
-               userCanReadFieldJob(dailyLogJobId(logId))
-             );
-    }
-
-    function canCreateDailyLogAttachment(logId) {
-      return activeAppUser() &&
-             request.resource != null &&
-             request.resource.metadata != null &&
-             dailyLogExists(logId) &&
-             request.resource.metadata.jobId == dailyLogJobId(logId) &&
-             request.resource.metadata.dailyLogId == logId &&
-             request.resource.metadata.uploadedBy == request.auth.uid &&
-             (
-               isAdmin() ||
-               (
-                 dailyLogStatus(logId) == 'draft' &&
-                 (
-                   dailyLogOwnerUid(logId) == request.auth.uid ||
-                   userCanWriteFieldJob(dailyLogJobId(logId))
-                 )
-               )
-             );
-    }
-
-    function canDeleteDailyLogAttachment(logId) {
-      return activeAppUser() &&
-             resource != null &&
-             dailyLogExists(logId) &&
-             (
-               isAdmin() ||
-               (
-                 dailyLogStatus(logId) == 'draft' &&
-                 (
-                   dailyLogOwnerUid(logId) == request.auth.uid ||
-                   userCanWriteFieldJob(dailyLogJobId(logId))
-                 )
-               )
-             );
-    }
-
     function requestHasDailyLogAttachmentMetadata(logId) {
       return request.resource.metadata != null &&
+             'jobId' in request.resource.metadata &&
              'dailyLogId' in request.resource.metadata &&
              'uploadedBy' in request.resource.metadata &&
              request.resource.metadata.dailyLogId == logId &&
@@ -200,11 +24,13 @@ service firebase.storage {
     }
 
     match /daily-logs/{logId}/{allPaths=**} {
-      allow read: if signedIn() || canReadDailyLogAttachment(logId);
-      allow write: if (signedIn() && isSupportedDailyLogAttachmentUpload(logId)) ||
-                   (signedIn() && request.resource == null && resource != null) ||
-                   (resource == null && canCreateDailyLogAttachment(logId)) ||
-                   (request.resource == null && canDeleteDailyLogAttachment(logId));
+      // Firestore and callable functions authorize access to the parent daily log.
+      // Keeping object rules self-contained avoids a separate cross-product IAM
+      // dependency that can reject valid field users before an upload begins.
+      allow read: if signedIn();
+      allow create: if signedIn() && isSupportedDailyLogAttachmentUpload(logId);
+      allow delete: if signedIn();
+      allow update: if false;
     }
 
     match /{allPaths=**} {

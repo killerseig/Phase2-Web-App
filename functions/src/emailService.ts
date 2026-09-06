@@ -49,7 +49,7 @@ async function getGraphAuthToken(): Promise<string> {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-      }
+      },
     )
 
     const token = response.data.access_token
@@ -95,14 +95,17 @@ export function buildGraphSenderRecipient(senderEmail: string) {
 }
 
 function compactEmailText(value: any): string {
-  return String(value ?? '').replace(/\s+/g, ' ').trim()
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function buildSubjectJobLabel(jobNumber: any, jobName: any): string {
   const normalizedJobNumber = compactEmailText(jobNumber)
   const normalizedJobName = compactEmailText(jobName)
 
-  if (normalizedJobNumber && normalizedJobName) return `#${normalizedJobNumber} ${normalizedJobName}`
+  if (normalizedJobNumber && normalizedJobName)
+    return `#${normalizedJobNumber} ${normalizedJobName}`
   if (normalizedJobNumber) return `#${normalizedJobNumber}`
   return normalizedJobName
 }
@@ -127,7 +130,11 @@ function renderHiddenEmailPreheader(preheader: string): string {
   `
 }
 
-export function buildDailyLogEmailSubject(jobDetails: JobDetails, logDate: string, dailyLog: any = {}): string {
+export function buildDailyLogEmailSubject(
+  jobDetails: JobDetails,
+  logDate: string,
+  dailyLog: any = {},
+): string {
   const dailyLogPayload = normalizeDailyLogEmailPayload(dailyLog || {})
   return buildEmailSubject([
     EMAIL.SUBJECTS.DAILY_LOG,
@@ -140,14 +147,14 @@ export function buildDailyLogEmailSubject(jobDetails: JobDetails, logDate: strin
   ])
 }
 
-export function buildShopOrderEmailSubject(order: any, jobDetails?: Partial<JobDetails> | null): string {
+export function buildShopOrderEmailSubject(
+  order: any,
+  jobDetails?: Partial<JobDetails> | null,
+): string {
   return buildEmailSubject([
     EMAIL.SUBJECTS.SHOP_ORDER,
     order?.submittedByName || order?.foremanName,
-    buildSubjectJobLabel(
-      order?.jobCode || jobDetails?.number,
-      order?.jobName || jobDetails?.name,
-    ),
+    buildSubjectJobLabel(order?.jobCode || jobDetails?.number, order?.jobName || jobDetails?.name),
     `Order #${getShopOrderDisplayNumber(order)}`,
   ])
 }
@@ -190,9 +197,10 @@ function renderMultilineDisplayValue(value: any, fallback = 'N/A'): string {
 }
 
 function renderDailyLogResponseBlock(label: string, value: any, fallback = 'N/A'): string {
+  const labelSuffix = /[?!:]$/.test(label.trim()) ? '' : ':'
   return `
     <div style="margin: 0 0 14px 0;">
-      <div style="font-weight: bold; margin-bottom: 4px;">${escapeHtml(label)}:</div>
+      <div style="font-weight: bold; margin-bottom: 4px;">${escapeHtml(label)}${labelSuffix}</div>
       <div style="line-height: 1.45;">${renderMultilineDisplayValue(value, fallback)}</div>
     </div>
   `
@@ -267,7 +275,7 @@ export function buildWelcomeEmail(firstName: string, resetLink: string): string 
         <p style="color: #999; font-size: 12px;"><strong>Note:</strong> This link expires in 7 days.</p>
       </div>
       <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+        <p>&copy; ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>
   `
@@ -300,7 +308,7 @@ export function buildPasswordResetEmail(displayName: string, resetLink: string):
         <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not request a password reset, you can ignore this email.</p>
       </div>
       <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+        <p>&copy; ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>
   `
@@ -329,7 +337,7 @@ export function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, logDate: st
         <p>A daily log has been auto-submitted for this job. Please review the Phase 2 application for full details.</p>
       </div>
       <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+        <p>&copy; ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>
   `
@@ -338,58 +346,63 @@ export function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, logDate: st
 /**
  * Build HTML template for daily log email
  */
-export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dailyLog: any): string {
+export function buildDailyLogEmail(
+  jobDetails: JobDetails,
+  logDate: string,
+  dailyLog: any,
+  options: { dailyLogUrl?: string } = {},
+): string {
   const formattedDate = formatAnyDate(logDate)
   const dailyLogPayload = normalizeDailyLogEmailPayload(dailyLog)
   const preheader = buildDailyLogEmailSubject(jobDetails, logDate, dailyLog)
 
-  const manpowerLines = (Array.isArray(dailyLogPayload.manpowerLines) && dailyLogPayload.manpowerLines.length
-    ? dailyLogPayload.manpowerLines
-    : [{ trade: '', count: 0, areas: '' }])
-    .map((line: any) => `
+  const manpowerLines = (
+    Array.isArray(dailyLogPayload.manpowerLines) && dailyLogPayload.manpowerLines.length
+      ? dailyLogPayload.manpowerLines
+      : [{ trade: '', count: 0, areas: '' }]
+  )
+    .map(
+      (line: any) => `
     <tr>
       <td style="padding: 8px; border: 1px solid #ddd;">${renderEmailText(line.trade)}</td>
       <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(line.count)}</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${renderEmailText(line.areas)}</td>
     </tr>
-  `).join('')
+  `,
+    )
+    .join('')
 
-  const indoorClimateRows = (Array.isArray(dailyLogPayload.indoorClimateReadings) && dailyLogPayload.indoorClimateReadings.length
-    ? dailyLogPayload.indoorClimateReadings
-    : [{ area: '', high: '', low: '', humidity: '' }])
-    .map((reading: any) => `
+  const indoorClimateRows = (
+    Array.isArray(dailyLogPayload.indoorClimateReadings) &&
+    dailyLogPayload.indoorClimateReadings.length
+      ? dailyLogPayload.indoorClimateReadings
+      : [{ area: '', high: '', low: '', humidity: '' }]
+  )
+    .map(
+      (reading: any) => `
     <tr>
       <td style="padding: 8px; border: 1px solid #ddd;">${renderEmailText(reading.area)}</td>
       <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(reading.high)}</td>
       <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(reading.low)}</td>
       <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${renderEmailText(reading.humidity)}</td>
     </tr>
-  `).join('')
-
-  const attachments = (dailyLogPayload.attachments || [])
-    .map((att: any) => {
-      const label = att?.type === 'ptp'
-        ? 'PTP Photo'
-        : att?.type === 'photo'
-          ? 'Photo'
-          : att?.type === 'qc'
-            ? 'QC Photo'
-            : 'Attachment'
-      const name = att?.name || att?.path || 'Attachment'
-      const url = att?.url || '#'
-      const description = renderMultilineDisplayValue(att?.description)
-      const hasImagePreview = typeof url === 'string' && /^https?:\/\//i.test(url)
-      return `
-        <li style="margin-bottom: 12px;">
-          <div style="margin-bottom: 4px;"><strong>${escapeHtml(label)}:</strong> <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${renderEmailText(name)}</a></div>
-          <div style="margin-bottom: 6px;"><strong>${att?.type === 'ptp' ? 'Note' : 'Description'}:</strong> ${description}</div>
-          ${hasImagePreview
-            ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(url)}" alt="${renderEmailText(name)}" style="max-width: 180px; max-height: 120px; border: 1px solid #ddd; border-radius: 4px; display: block;" /></a>`
-            : ''}
-        </li>
-      `
-    })
+  `,
+    )
     .join('')
+
+  const attachmentRecords = Array.isArray(dailyLogPayload.attachments)
+    ? dailyLogPayload.attachments
+    : []
+  const dailyLogUrl = String(options.dailyLogUrl || '').trim()
+  const attachmentGalleryLink = dailyLogUrl && attachmentRecords.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: auto; border-collapse: separate; margin: 8px 0 0 0; border: 0;">
+        <tr>
+          <td bgcolor="#007bff" style="padding: 0; border: 0; border-radius: 4px; background-color: #007bff; text-align: center;">
+            <a href="${escapeHtml(dailyLogUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 16px; color: #ffffff !important; text-decoration: none; font-size: 14px; line-height: 18px; font-weight: bold;">View Photo Gallery (${attachmentRecords.length})</a>
+          </td>
+        </tr>
+      </table>`
+    : ''
 
   return `
     ${EMAIL_STYLES}
@@ -433,8 +446,8 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
           <thead>
             <tr style="background-color: #f5f5f5;">
               <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Floor / Area</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">High (°F)</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Low (°F)</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">High (&deg;F)</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Low (&deg;F)</th>
               <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Humidity (%)</th>
             </tr>
           </thead>
@@ -474,12 +487,15 @@ export function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dail
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Attachments</h3>
-        ${attachments
-          ? `<ul style="padding-left: 18px; margin: 0; list-style: disc;">${attachments}</ul>`
-          : '<p>N/A</p>'}
+        ${
+          attachmentRecords.length
+            ? `<p style="margin: 0 0 10px 0;"><strong>${attachmentRecords.length} photo${attachmentRecords.length === 1 ? '' : 's'} saved with this daily log.</strong></p>
+             ${attachmentGalleryLink}`
+            : '<p>N/A</p>'
+        }
       </div>
       <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+        <p>&copy; ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>
   `
@@ -493,12 +509,16 @@ export function buildTimecardsEmail(payload: {
   timecards: any[]
 }): string {
   const emailSummaryStart = payload.weekStart ? new Date(`${payload.weekStart}T00:00:00`) : null
-  const emailSummaryEnd = emailSummaryStart && !Number.isNaN(emailSummaryStart.getTime()) ? new Date(emailSummaryStart) : null
+  const emailSummaryEnd =
+    emailSummaryStart && !Number.isNaN(emailSummaryStart.getTime())
+      ? new Date(emailSummaryStart)
+      : null
   if (emailSummaryEnd) emailSummaryEnd.setDate(emailSummaryEnd.getDate() + 6)
 
-  const emailWeekLabel = emailSummaryStart && emailSummaryEnd
-    ? `${emailSummaryStart.getMonth() + 1}/${emailSummaryStart.getDate()}/${emailSummaryStart.getFullYear()} - ${emailSummaryEnd.getMonth() + 1}/${emailSummaryEnd.getDate()}/${emailSummaryEnd.getFullYear()}`
-    : 'N/A'
+  const emailWeekLabel =
+    emailSummaryStart && emailSummaryEnd
+      ? `${emailSummaryStart.getMonth() + 1}/${emailSummaryStart.getDate()}/${emailSummaryStart.getFullYear()} - ${emailSummaryEnd.getMonth() + 1}/${emailSummaryEnd.getDate()}/${emailSummaryEnd.getFullYear()}`
+      : 'N/A'
 
   const timecardCount = Array.isArray(payload.timecards) ? payload.timecards.length : 0
   const jobHeading = `${escapeHtml(displayValue(payload.jobName))}${payload.jobNumber ? ` (#${escapeHtml(String(payload.jobNumber).trim())})` : ''}`
@@ -527,11 +547,24 @@ export function buildTimecardsEmail(payload: {
   const visibleDayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
   const visibleDayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
   const columnWidthPercents = [
-    '7.33', '3.49', '3.49', '8.96', '4.35',
-    '7.33', '7.33', '7.33', '7.33', '7.33', '7.33',
-    '9.46', '9.46', '9.46',
+    '7.33',
+    '3.49',
+    '3.49',
+    '8.96',
+    '4.35',
+    '7.33',
+    '7.33',
+    '7.33',
+    '7.33',
+    '7.33',
+    '7.33',
+    '9.46',
+    '9.46',
+    '9.46',
   ]
-  const cardColgroupHtml = columnWidthPercents.map((percent) => `<col style="width:${percent}%;" />`).join('')
+  const cardColgroupHtml = columnWidthPercents
+    .map((percent) => `<col style="width:${percent}%;" />`)
+    .join('')
   const scaleLength = (value: string): string => {
     const matched = /^(-?\d*\.?\d+)([a-zA-Z%]+)$/.exec(value.trim())
     if (!matched) return value
@@ -550,11 +583,12 @@ export function buildTimecardsEmail(payload: {
       }
     }
 
-    const parsed = typeof value?.toDate === 'function'
-      ? value.toDate()
-      : value instanceof Date
-        ? value
-        : new Date(value)
+    const parsed =
+      typeof value?.toDate === 'function'
+        ? value.toDate()
+        : value instanceof Date
+          ? value
+          : new Date(value)
 
     if (Number.isNaN(parsed.getTime())) return ''
     return `${parsed.getMonth() + 1}/${parsed.getDate()}/${parsed.getFullYear()}`
@@ -562,7 +596,8 @@ export function buildTimecardsEmail(payload: {
 
   const formatFixedNumber = (value: any, decimals = 2, blankWhenZero = false): string => {
     const numeric = Number(value ?? 0)
-    if (!Number.isFinite(numeric) || Number.isNaN(numeric)) return blankWhenZero ? '' : (0).toFixed(decimals)
+    if (!Number.isFinite(numeric) || Number.isNaN(numeric))
+      return blankWhenZero ? '' : (0).toFixed(decimals)
     if (blankWhenZero && numeric === 0) return ''
     return numeric.toFixed(decimals)
   }
@@ -573,9 +608,8 @@ export function buildTimecardsEmail(payload: {
     return fixed.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
   }
 
-  const formatHours = (value: any, blankWhenZero = false): string => (
+  const formatHours = (value: any, blankWhenZero = false): string =>
     formatFixedNumber(value, 1, blankWhenZero)
-  )
 
   const displayText = (value: any, fallback = ''): string => {
     const text = String(value ?? '').trim()
@@ -587,7 +621,10 @@ export function buildTimecardsEmail(payload: {
     return text ? escapeHtml(text) : '&nbsp;'
   }
 
-  const renderAlignedValue = (value: any, align: 'left' | 'center' | 'right' = 'center'): string => {
+  const renderAlignedValue = (
+    value: any,
+    align: 'left' | 'center' | 'right' = 'center',
+  ): string => {
     const text = String(value ?? '').trim()
     return `<span style="display:block; text-align:${align};">${text ? escapeHtml(text) : '&nbsp;'}</span>`
   }
@@ -626,17 +663,22 @@ export function buildTimecardsEmail(payload: {
       return true
     }
 
-    if (visibleDayKeys.some((key) => Number(line?.[key]) || Number(line?.production?.[key]) || Number(line?.unitCost?.[key]))) {
+    if (
+      visibleDayKeys.some(
+        (key) =>
+          Number(line?.[key]) || Number(line?.production?.[key]) || Number(line?.unitCost?.[key]),
+      )
+    ) {
       return true
     }
 
     return Boolean(
-      Number(line?.offHours)
-      || Number(line?.offProduction)
-      || Number(line?.offCost)
-      || Number(line?.totals?.hours)
-      || Number(line?.totals?.production)
-      || Number(line?.totals?.lineTotal)
+      Number(line?.offHours) ||
+      Number(line?.offProduction) ||
+      Number(line?.offCost) ||
+      Number(line?.totals?.hours) ||
+      Number(line?.totals?.production) ||
+      Number(line?.totals?.lineTotal),
     )
   }
 
@@ -658,7 +700,15 @@ export function buildTimecardsEmail(payload: {
     const matched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cardWeekStart)
     if (!matched) return ''
 
-    const nextDate = new Date(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3]), 12, 0, 0, 0)
+    const nextDate = new Date(
+      Number(matched[1]),
+      Number(matched[2]) - 1,
+      Number(matched[3]),
+      12,
+      0,
+      0,
+      0,
+    )
     if (Number.isNaN(nextDate.getTime())) return ''
 
     nextDate.setDate(nextDate.getDate() + 6)
@@ -674,7 +724,10 @@ export function buildTimecardsEmail(payload: {
     return String(tc?.employeeWage ?? tc?.wageRate ?? tc?.wage ?? '').trim()
   }
 
-  const getRegularAndOvertime = (tc: any, hoursTotal: number): { regular: number; overtime: number } => {
+  const getRegularAndOvertime = (
+    tc: any,
+    hoursTotal: number,
+  ): { regular: number; overtime: number } => {
     const regularOverride = Number(tc?.regularHoursOverride)
     const overtimeOverride = Number(tc?.overtimeHoursOverride)
 
@@ -692,12 +745,14 @@ export function buildTimecardsEmail(payload: {
   }
 
   const summaryStart = payload.weekStart ? new Date(`${payload.weekStart}T00:00:00`) : null
-  const validSummaryStart = summaryStart instanceof Date && !Number.isNaN(summaryStart!.getTime()) ? summaryStart : null
+  const validSummaryStart =
+    summaryStart instanceof Date && !Number.isNaN(summaryStart!.getTime()) ? summaryStart : null
   const summaryEnd = validSummaryStart !== null ? new Date(validSummaryStart!.getTime()) : null
   if (summaryEnd !== null) summaryEnd!.setDate(summaryEnd!.getDate() + 6)
-  const weekLabel = validSummaryStart !== null && summaryEnd !== null
-    ? `${validSummaryStart!.getMonth() + 1}/${validSummaryStart!.getDate()}/${validSummaryStart!.getFullYear()} - ${summaryEnd!.getMonth() + 1}/${summaryEnd!.getDate()}/${summaryEnd!.getFullYear()}`
-    : 'N/A'
+  const weekLabel =
+    validSummaryStart !== null && summaryEnd !== null
+      ? `${validSummaryStart!.getMonth() + 1}/${validSummaryStart!.getDate()}/${validSummaryStart!.getFullYear()} - ${summaryEnd!.getMonth() + 1}/${summaryEnd!.getDate()}/${summaryEnd!.getFullYear()}`
+      : 'N/A'
   const lineRowKinds = [
     { key: 'hours', label: 'H', diffField: 'difH' },
     { key: 'production', label: 'P', diffField: 'difP' },
@@ -707,19 +762,27 @@ export function buildTimecardsEmail(payload: {
   const singleSheetWidth = scaleLength('5.4in')
   const doubleSheetWidth = '10.95in'
   const cardMarkupList = (Array.isArray(payload.timecards) ? payload.timecards : []).map((tc) => {
-    const lines = (Array.isArray(tc?.lines) ? tc.lines : []).filter((line: any) => isMeaningfulLine(line))
+    const lines = (Array.isArray(tc?.lines) ? tc.lines : []).filter((line: any) =>
+      isMeaningfulLine(line),
+    )
 
-    const totalHoursByDay = visibleDayKeys.map((key) => (
-      lines.reduce((sum: number, line: any) => sum + (Number(line?.[key]) || 0), 0)
-    ))
+    const totalHoursByDay = visibleDayKeys.map((key) =>
+      lines.reduce((sum: number, line: any) => sum + (Number(line?.[key]) || 0), 0),
+    )
     const computedHoursTotal = totalHoursByDay.reduce((sum, value) => sum + value, 0)
     const hoursTotal = Number(tc?.totals?.hoursTotal) || computedHoursTotal
-    const productionTotal = Number(tc?.totals?.productionTotal) || lines.reduce((sum: number, line: any) => (
-      sum + (
-        Number(line?.totals?.production)
-        || visibleDayKeys.reduce((lineSum, key) => lineSum + (Number(line?.production?.[key]) || 0), 0)
+    const productionTotal =
+      Number(tc?.totals?.productionTotal) ||
+      lines.reduce(
+        (sum: number, line: any) =>
+          sum +
+          (Number(line?.totals?.production) ||
+            visibleDayKeys.reduce(
+              (lineSum, key) => lineSum + (Number(line?.production?.[key]) || 0),
+              0,
+            )),
+        0,
       )
-    ), 0)
     const { regular, overtime } = getRegularAndOvertime(tc, hoursTotal)
 
     const thinBorder = '1px solid #111111'
@@ -755,9 +818,11 @@ export function buildTimecardsEmail(payload: {
     const headerCell = `border:${thinBorder}; padding:0; height:${gridHeaderHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:${headerFontSize}; font-style:italic; font-weight:400;`
     const totalCell = `border:${thinBorder}; padding:0; height:${gridTotalHeight}; text-align:center; vertical-align:middle; line-height:1; font-family:'Times New Roman', Times, serif; font-size:${totalFontSize}; font-weight:700;`
     const formLabelCell = `border:0; height:${headerRowHeight}; padding:0 ${fieldPadX} ${fieldPadBottom} 0; white-space:nowrap; text-align:right; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-style:italic; font-weight:400; line-height:1;`
-    const renderFormValueCell = (align: 'left' | 'center' | 'right' = 'left', fontSize = '0.105in') => (
+    const renderFormValueCell = (
+      align: 'left' | 'center' | 'right' = 'left',
+      fontSize = '0.105in',
+    ) =>
       `border:0; border-bottom:1px solid #111111; height:${headerRowHeight}; padding:0 ${fieldPadX} ${fieldPadBottom}; text-align:${align}; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${scaleLength(fontSize)}; font-weight:700; line-height:1;`
-    )
     const footerLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-weight:400; line-height:1;`
     const footerStatLabelCell = `border:0; height:${footerLabelRowHeight}; padding:0 0 2px; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${labelFontSize}; font-weight:400; line-height:1;`
     const footerStatValueCell = `border:0; border-bottom:1px solid #111111; height:${footerLabelRowHeight}; padding:0 0 ${footerValuePadBottom}; text-align:center; vertical-align:bottom; font-family:'Times New Roman', Times, serif; font-size:${footerValueFontSize}; font-weight:700; line-height:1;`
@@ -779,65 +844,71 @@ export function buildTimecardsEmail(payload: {
       const line = lines[lineIndex]
       const hasLine = Boolean(line)
       const lineHoursTotal = hasLine
-        ? Number(line?.totals?.hours)
-          || visibleDayKeys.reduce((sum, key) => sum + (Number(line?.[key]) || 0), 0)
+        ? Number(line?.totals?.hours) ||
+          visibleDayKeys.reduce((sum, key) => sum + (Number(line?.[key]) || 0), 0)
         : 0
       const lineProductionTotal = hasLine
-        ? Number(line?.totals?.production)
-          || visibleDayKeys.reduce((sum, key) => sum + (Number(line?.production?.[key]) || 0), 0)
+        ? Number(line?.totals?.production) ||
+          visibleDayKeys.reduce((sum, key) => sum + (Number(line?.production?.[key]) || 0), 0)
         : 0
       const lineCostTotal = hasLine
-        ? Number(line?.totals?.lineTotal)
-          || visibleDayKeys.reduce((sum, key) => {
+        ? Number(line?.totals?.lineTotal) ||
+          visibleDayKeys.reduce((sum, key) => {
             const production = Number(line?.production?.[key]) || 0
             const unitCost = Number(line?.unitCost?.[key]) || 0
-            return sum + (production * unitCost)
+            return sum + production * unitCost
           }, 0)
         : 0
 
-      return lineRowKinds.map((rowKind, rowKindIndex) => {
-        const diffValue = hasLine ? line?.[rowKind.diffField] : ''
-        const productionCell = rowKind.key === 'hours'
-          ? ''
-          : rowKind.key === 'production'
-            ? formatTrimmedNumber(lineProductionTotal, 3, true)
-            : formatFixedNumber(lineCostTotal, 3, true)
-        const offCell = hasLine
-          ? rowKind.key === 'hours'
-            ? formatTrimmedNumber(line?.offHours, 2, true)
-            : rowKind.key === 'production'
-              ? formatTrimmedNumber(line?.offProduction, 2, true)
-              : formatTrimmedNumber(line?.offCost, 2, true)
-          : ''
-        const topBorder = rowKind.key === 'hours' ? thickBorder : '0'
-        const bottomBorder = rowKind.key === 'hours' ? '0' : rowKind.key === 'production' ? '0' : thinBorder
+      return lineRowKinds
+        .map((rowKind, rowKindIndex) => {
+          const diffValue = hasLine ? line?.[rowKind.diffField] : ''
+          const productionCell =
+            rowKind.key === 'hours'
+              ? ''
+              : rowKind.key === 'production'
+                ? formatTrimmedNumber(lineProductionTotal, 3, true)
+                : formatFixedNumber(lineCostTotal, 3, true)
+          const offCell = hasLine
+            ? rowKind.key === 'hours'
+              ? formatTrimmedNumber(line?.offHours, 2, true)
+              : rowKind.key === 'production'
+                ? formatTrimmedNumber(line?.offProduction, 2, true)
+                : formatTrimmedNumber(line?.offCost, 2, true)
+            : ''
+          const topBorder = rowKind.key === 'hours' ? thickBorder : '0'
+          const bottomBorder =
+            rowKind.key === 'hours' ? '0' : rowKind.key === 'production' ? '0' : thinBorder
 
-        const detailStyle = `${baseCell} border-top:${topBorder}; border-bottom:${bottomBorder};`
-        const labelStyle = `${baseCell} font-weight:700; border-top:${rowKind.key === 'hours' ? thickBorder : rowKind.key === 'production' ? thinBorder : '0'}; border-bottom:${rowKind.key === 'hours' ? '0' : thinBorder};`
+          const detailStyle = `${baseCell} border-top:${topBorder}; border-bottom:${bottomBorder};`
+          const labelStyle = `${baseCell} font-weight:700; border-top:${rowKind.key === 'hours' ? thickBorder : rowKind.key === 'production' ? thinBorder : '0'}; border-bottom:${rowKind.key === 'hours' ? '0' : thinBorder};`
 
-        return `
+          return `
           <tr>
             ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? line?.jobNumber : '')}</td>` : ''}
-            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? (line?.subsectionArea || line?.area) : '')}</td>` : ''}
+            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? line?.subsectionArea || line?.area : '')}</td>` : ''}
             <td style="${labelStyle}">${rowKind.label}</td>
-            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? (line?.account || line?.acct || line?.activityCode) : '')}</td>` : ''}
+            ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:middle;">${renderOptionalText(hasLine ? line?.account || line?.acct || line?.activityCode : '')}</td>` : ''}
             <td style="${detailStyle}">${renderOptionalText(diffValue)}</td>
-            ${visibleDayKeys.map((key) => {
-              const dayValue = hasLine
-                ? rowKind.key === 'hours'
-                  ? formatFixedNumber(line?.[key], 2, true)
-                  : rowKind.key === 'production'
-                    ? formatFixedNumber(line?.production?.[key], 2, true)
-                    : formatFixedNumber(line?.unitCost?.[key], 2, true)
-                : ''
-              return `<td style="${detailStyle}">${renderOptionalText(dayValue)}</td>`
-            }).join('')}
+            ${visibleDayKeys
+              .map((key) => {
+                const dayValue = hasLine
+                  ? rowKind.key === 'hours'
+                    ? formatFixedNumber(line?.[key], 2, true)
+                    : rowKind.key === 'production'
+                      ? formatFixedNumber(line?.production?.[key], 2, true)
+                      : formatFixedNumber(line?.unitCost?.[key], 2, true)
+                  : ''
+                return `<td style="${detailStyle}">${renderOptionalText(dayValue)}</td>`
+              })
+              .join('')}
             ${rowKindIndex === 0 ? `<td rowspan="${lineRowKinds.length}" style="${baseCell} border-top:${thickBorder}; vertical-align:top; padding-top:${summaryPadTop}; font-weight:700;">${renderOptionalText(hasLine ? formatHours(lineHoursTotal, true) : '')}</td>` : ''}
             <td style="${detailStyle}">${renderOptionalText(productionCell)}</td>
             <td style="${detailStyle}">${renderOptionalText(offCell)}</td>
           </tr>
         `
-      }).join('')
+        })
+        .join('')
     }).join('')
 
     return `
@@ -1001,9 +1072,9 @@ export function buildTimecardsEmail(payload: {
       ${cardsHtml}
     </div>
   `
-/*      </div>
+  /*      </div>
       <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+        <p>&copy; ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>
     </div>
@@ -1023,11 +1094,12 @@ function resolveOrderEmailDate(value: any): Date | null {
         return new Date(year, month, day, 12, 0, 0, 0)
       }
     }
-    const dateValue = typeof value?.toDate === 'function'
-      ? value.toDate()
-      : value instanceof Date
-        ? value
-        : new Date(value)
+    const dateValue =
+      typeof value?.toDate === 'function'
+        ? value.toDate()
+        : value instanceof Date
+          ? value
+          : new Date(value)
     return Number.isNaN(dateValue.getTime()) ? null : dateValue
   } catch {
     return null
@@ -1086,11 +1158,12 @@ function normalizeShopOrderNumber(value: any): string {
 function buildTimestampShopOrderNumber(value: any): string {
   try {
     if (!value) return ''
-    const dateValue = typeof value?.toDate === 'function'
-      ? value.toDate()
-      : value instanceof Date
-        ? value
-        : new Date(value)
+    const dateValue =
+      typeof value?.toDate === 'function'
+        ? value.toDate()
+        : value instanceof Date
+          ? value
+          : new Date(value)
 
     if (Number.isNaN(dateValue.getTime())) return ''
 
@@ -1109,11 +1182,11 @@ function buildTimestampShopOrderNumber(value: any): string {
 
 function getShopOrderDisplayNumber(order: any): string {
   return (
-    normalizeShopOrderNumber(order?.orderNumber)
-    || buildTimestampShopOrderNumber(order?.orderDate)
-    || buildTimestampShopOrderNumber(order?.createdAt)
-    || buildTimestampShopOrderNumber(order?.updatedAt)
-    || 'Unnumbered'
+    normalizeShopOrderNumber(order?.orderNumber) ||
+    buildTimestampShopOrderNumber(order?.orderDate) ||
+    buildTimestampShopOrderNumber(order?.createdAt) ||
+    buildTimestampShopOrderNumber(order?.updatedAt) ||
+    'Unnumbered'
   )
 }
 
@@ -1167,7 +1240,9 @@ function getShopOrderItemPendingQuantity(item: any): number {
 }
 
 function getShopOrderStatusLabel(status: any): string {
-  const normalized = String(status || '').trim().toLowerCase()
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase()
   if (normalized === 'submitted' || normalized === 'order') return 'Submitted'
   if (normalized === 'partial') return 'Partial'
   if (normalized === 'backordered') return 'Backordered'
@@ -1213,12 +1288,12 @@ function shouldStripControlRootLabel(rootLabel: string | null): boolean {
   if (!rootLabel) return false
   const normalized = normalizeRootFolderLabel(rootLabel)
   return (
-    normalized === 'shop'
-    || normalized.startsWith('shop ')
-    || normalized === 'pm'
-    || normalized === 'pms'
-    || normalized === 'project manager'
-    || normalized === 'project managers'
+    normalized === 'shop' ||
+    normalized.startsWith('shop ') ||
+    normalized === 'pm' ||
+    normalized === 'pms' ||
+    normalized === 'project manager' ||
+    normalized === 'project managers'
   )
 }
 
@@ -1261,7 +1336,11 @@ function formatCompactOrderEmailDate(value: any): string {
   })
 }
 
-function renderPrintedOrderMetaField(label: string, value: string, align: 'left' | 'right' = 'left') {
+function renderPrintedOrderMetaField(
+  label: string,
+  value: string,
+  align: 'left' | 'right' = 'left',
+) {
   return `
     <div style="font-size: 14px; color: #202020; text-align: ${align};">
       <strong>${escapeHtml(label)}:</strong> ${renderEmailText(value)}
@@ -1279,7 +1358,7 @@ function renderPrintedOrderPlainField(value: string, align: 'left' | 'right' = '
 
 const SHOP_ORDER_DOCUMENT_WIDTH = 980
 const SHOP_ORDER_DOCUMENT_PADDING = 14
-const SHOP_ORDER_TABLE_WIDTH = SHOP_ORDER_DOCUMENT_WIDTH - (SHOP_ORDER_DOCUMENT_PADDING * 2)
+const SHOP_ORDER_TABLE_WIDTH = SHOP_ORDER_DOCUMENT_WIDTH - SHOP_ORDER_DOCUMENT_PADDING * 2
 const SHOP_ORDER_TABLE_BORDER = '#9b9b9b'
 const SHOP_ORDER_EMAIL_COLUMN_WIDTHS = {
   pulledBy: 68,
@@ -1388,7 +1467,9 @@ function renderPrintedShopOrderItemsTable(items: ShopOrderEmailLine[], marginTop
         </tr>
       </thead>
       <tbody style="display: table-row-group !important;">
-        ${items.map((item) => `
+        ${items
+          .map(
+            (item) => `
           <tr style="page-break-inside: avoid !important; break-inside: avoid-page !important;">
             <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
             <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
@@ -1399,7 +1480,9 @@ function renderPrintedShopOrderItemsTable(items: ShopOrderEmailLine[], marginTop
             <td style="height: 30px; padding: 5px 7px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; vertical-align: middle; font-size: 12px; line-height: 1.25; color: #333333; word-break: normal; overflow-wrap: break-word;">${renderOptionalEmailText(item.note)}</td>
             <td style="height: 30px; padding: 5px 5px; border: 1px solid ${SHOP_ORDER_TABLE_BORDER}; text-align: center; vertical-align: middle; font-size: 12px; line-height: 1.2;">&nbsp;</td>
           </tr>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </tbody>
     </table>
   `
@@ -1458,13 +1541,15 @@ function renderPrintedShopOrderSection(
         </tbody>
       </table>
 
-      ${comments
-        ? `
+      ${
+        comments
+          ? `
           <div style="margin-top: 6px; font-size: 13px; line-height: 1.35; color: #222222;">
             <strong>Comments:</strong> ${renderEmailText(comments)}
           </div>
         `
-        : ''}
+          : ''
+      }
 
       ${renderPrintedShopOrderItemsTable(items)}
     </div>
@@ -1478,43 +1563,46 @@ function buildShopOrderDocumentModel(
   void costCodesByCatalogItemId
   const items = Array.isArray(order?.items) ? order.items : []
   const orderIdentifier = getShopOrderDisplayNumber(order)
-  const orderDate = formatCompactOrderEmailDate(order?.orderDate || order?.createdAt || order?.updatedAt)
+  const orderDate = formatCompactOrderEmailDate(
+    order?.orderDate || order?.createdAt || order?.updatedAt,
+  )
   const deliveryDate = getShopOrderRequestedDeliveryDateValue(order)
-  const deliveryDateLabel = deliveryDate
-    ? formatCompactOrderEmailDate(deliveryDate)
-    : 'N/A'
+  const deliveryDateLabel = deliveryDate ? formatCompactOrderEmailDate(deliveryDate) : 'N/A'
   const jobName = String(order?.jobName || '').trim()
   const jobNumber = String(order?.jobCode || '').trim()
   const jobLabel = getJobDisplayLabel(order)
   const comments = String(order?.comments || '').trim()
-  const orderBy = String(order?.foremanName || order?.submittedByName || '').trim() || 'Phase 2 Foreman'
+  const orderBy =
+    String(order?.foremanName || order?.submittedByName || '').trim() || 'Phase 2 Foreman'
 
-  const lines: ShopOrderEmailLine[] = items.map((item: any) => {
-    const descriptionSegments = getShopOrderDescriptionSegments(item?.description)
-    const rootLabel = descriptionSegments[0] || null
-    const remainingSegments = shouldStripControlRootLabel(rootLabel)
-      ? descriptionSegments.slice(1)
-      : descriptionSegments
-    const fallbackDescription = String(item?.description || '').trim() || 'Untitled Item'
-    const displayDescription =
-      remainingSegments[remainingSegments.length - 1] ||
-      descriptionSegments[descriptionSegments.length - 1] ||
-      fallbackDescription
+  const lines: ShopOrderEmailLine[] = items
+    .map((item: any) => {
+      const descriptionSegments = getShopOrderDescriptionSegments(item?.description)
+      const rootLabel = descriptionSegments[0] || null
+      const remainingSegments = shouldStripControlRootLabel(rootLabel)
+        ? descriptionSegments.slice(1)
+        : descriptionSegments
+      const fallbackDescription = String(item?.description || '').trim() || 'Untitled Item'
+      const displayDescription =
+        remainingSegments[remainingSegments.length - 1] ||
+        descriptionSegments[descriptionSegments.length - 1] ||
+        fallbackDescription
 
-    return {
-      displayDescription,
-      note: String(item?.note || item?.notes || '').trim(),
-      orderedQuantity: normalizeShopOrderQuantity(item?.quantity),
-      pendingQuantity: getShopOrderItemPendingQuantity(item),
-      receivedQuantity: getShopOrderItemReceivedQuantity(item),
-      backorderedQuantity: getShopOrderItemBackorderedQuantity(item),
-    }
-  }).sort((left: ShopOrderEmailLine, right: ShopOrderEmailLine) =>
-    left.displayDescription.localeCompare(right.displayDescription, undefined, {
-      numeric: true,
-      sensitivity: 'base',
-    }),
-  )
+      return {
+        displayDescription,
+        note: String(item?.note || item?.notes || '').trim(),
+        orderedQuantity: normalizeShopOrderQuantity(item?.quantity),
+        pendingQuantity: getShopOrderItemPendingQuantity(item),
+        receivedQuantity: getShopOrderItemReceivedQuantity(item),
+        backorderedQuantity: getShopOrderItemBackorderedQuantity(item),
+      }
+    })
+    .sort((left: ShopOrderEmailLine, right: ShopOrderEmailLine) =>
+      left.displayDescription.localeCompare(right.displayDescription, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      }),
+    )
 
   return {
     orderIdentifier,
@@ -1545,14 +1633,14 @@ export function buildShopOrderEmail(
   })
   const itemsHtml = model.lines.length
     ? renderPrintedShopOrderSection(
-      model.orderIdentifier,
-      model.orderBy,
-      model.orderDate,
-      model.deliveryDateLabel,
-      model.jobLabel,
-      model.comments,
-      model.lines,
-    )
+        model.orderIdentifier,
+        model.orderBy,
+        model.orderDate,
+        model.deliveryDateLabel,
+        model.jobLabel,
+        model.comments,
+        model.lines,
+      )
     : '<p style="margin: 16px 0 0;"><em>No items in this order.</em></p>'
   const endOfOrderHtml = `
     <div style="margin-top: 12px; padding: 0 12px; font-size: 15px; color: #303030;">
@@ -1582,7 +1670,8 @@ function sanitizeShopOrderPdfFilenamePart(value: any): string {
 }
 
 export function buildShopOrderPdfFilename(order: any): string {
-  const orderIdentifier = sanitizeShopOrderPdfFilenamePart(getShopOrderDisplayNumber(order)) || 'Unnumbered'
+  const orderIdentifier =
+    sanitizeShopOrderPdfFilenamePart(getShopOrderDisplayNumber(order)) || 'Unnumbered'
   return `Online Shop Order ${orderIdentifier}.pdf`
 }
 
@@ -1608,7 +1697,7 @@ export async function buildShopOrderPdfBuffer(
   const pageTop = 28
   const pageBottom = doc.page.height - pageMargin
   const tableX = pageMargin
-  const tableWidth = doc.page.width - (pageMargin * 2)
+  const tableWidth = doc.page.width - pageMargin * 2
   const colWidths = [
     SHOP_ORDER_EMAIL_COLUMN_WIDTHS.pulledBy,
     SHOP_ORDER_EMAIL_COLUMN_WIDTHS.verifiedBy,
@@ -1628,9 +1717,8 @@ export async function buildShopOrderPdfBuffer(
     return text || fallback
   }
 
-  const sumWidths = (start: number, end: number) => (
+  const sumWidths = (start: number, end: number) =>
     scaledColWidths.slice(start, end).reduce((sum, width) => sum + width, 0)
-  )
 
   const columnX = (index: number) => tableX + sumWidths(0, index)
 
@@ -1664,15 +1752,24 @@ export async function buildShopOrderPdfBuffer(
         .fontSize(fontSize)
         .fillColor('#111111')
         .text(text, x + paddingX, y + paddingY, {
-          width: Math.max(width - (paddingX * 2), 0),
-          height: Math.max(height - (paddingY * 2), 0),
+          width: Math.max(width - paddingX * 2, 0),
+          height: Math.max(height - paddingY * 2, 0),
           align: options?.align ?? 'left',
         })
     }
 
     const drawTableHeader = (y: number) => {
       const headerHeight = 32
-      const headers = ['Pulled', 'Verified', '133/513', 'Part#', 'Item Name', 'Quantity', 'Notes', '']
+      const headers = [
+        'Pulled',
+        'Verified',
+        '133/513',
+        'Part#',
+        'Item Name',
+        'Quantity',
+        'Notes',
+        '',
+      ]
       options.onTableHeader?.({ pageNumber, y })
       headers.forEach((header, index) => {
         drawCell(columnX(index), y, scaledColWidths[index] || 0, headerHeight, header, {
@@ -1699,9 +1796,18 @@ export async function buildShopOrderPdfBuffer(
       y += 36
 
       doc.font('Helvetica').fontSize(11)
-      doc.text(pdfText(model.orderBy, 'Phase 2 Foreman'), pageMargin, y, { width: tableWidth / 2, align: 'left' })
-      doc.font('Helvetica-Bold').text('Date Ordered:', pageMargin + (tableWidth / 2), y, { width: tableWidth / 4, align: 'right' })
-      doc.font('Helvetica').text(model.orderDate, pageMargin + (tableWidth * 0.75) + 4, y, { width: (tableWidth / 4) - 4, align: 'left' })
+      doc.text(pdfText(model.orderBy, 'Phase 2 Foreman'), pageMargin, y, {
+        width: tableWidth / 2,
+        align: 'left',
+      })
+      doc.font('Helvetica-Bold').text('Date Ordered:', pageMargin + tableWidth / 2, y, {
+        width: tableWidth / 4,
+        align: 'right',
+      })
+      doc.font('Helvetica').text(model.orderDate, pageMargin + tableWidth * 0.75 + 4, y, {
+        width: tableWidth / 4 - 4,
+        align: 'left',
+      })
       y += 18
 
       const metaLines = [
@@ -1711,13 +1817,19 @@ export async function buildShopOrderPdfBuffer(
       ]
 
       metaLines.forEach(([label, value]) => {
-        doc.font('Helvetica-Bold').fontSize(11).text(`${label}:`, pageMargin, y, { continued: true })
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(11)
+          .text(`${label}:`, pageMargin, y, { continued: true })
         doc.font('Helvetica').text(` ${pdfText(value)}`)
         y += 18
       })
 
       if (model.comments) {
-        doc.font('Helvetica-Bold').fontSize(11).text('Comments:', pageMargin, y, { continued: true })
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(11)
+          .text('Comments:', pageMargin, y, { continued: true })
         doc.font('Helvetica').text(` ${model.comments}`, { width: tableWidth })
         y += Math.max(18, doc.heightOfString(model.comments, { width: tableWidth - 70 }) + 4)
       }
@@ -1744,7 +1856,10 @@ export async function buildShopOrderPdfBuffer(
 
     if (!model.lines.length) {
       ensureSpace(28)
-      drawCell(tableX, cursorY, tableWidth, 28, 'No items in this order.', { fontSize: 10, paddingX: 6 })
+      drawCell(tableX, cursorY, tableWidth, 28, 'No items in this order.', {
+        fontSize: 10,
+        paddingX: 6,
+      })
       cursorY += 28
     }
 
@@ -1752,7 +1867,9 @@ export async function buildShopOrderPdfBuffer(
       const itemWidth = Math.max(20, (scaledColWidths[4] ?? 0) - 10)
       const notesWidth = Math.max(20, (scaledColWidths[6] ?? 0) - 10)
       doc.font('Helvetica').fontSize(10)
-      const itemHeight = doc.heightOfString(pdfText(line.displayDescription, 'Untitled Item'), { width: itemWidth })
+      const itemHeight = doc.heightOfString(pdfText(line.displayDescription, 'Untitled Item'), {
+        width: itemWidth,
+      })
       const noteHeight = line.note ? doc.heightOfString(line.note, { width: notesWidth }) : 0
       const rowHeight = Math.max(30, itemHeight + 10, noteHeight + 10)
 
@@ -1762,9 +1879,27 @@ export async function buildShopOrderPdfBuffer(
       drawCell(columnX(1), cursorY, scaledColWidths[1] || 0, rowHeight, '', { align: 'center' })
       drawCell(columnX(2), cursorY, scaledColWidths[2] || 0, rowHeight, '', { align: 'center' })
       drawCell(columnX(3), cursorY, scaledColWidths[3] || 0, rowHeight, '', { align: 'center' })
-      drawCell(columnX(4), cursorY, scaledColWidths[4] || 0, rowHeight, pdfText(line.displayDescription, 'Untitled Item'), { fontSize: 10, paddingX: 5, paddingY: 5 })
-      drawCell(columnX(5), cursorY, scaledColWidths[5] || 0, rowHeight, String(line.orderedQuantity), { align: 'center', fontSize: 10, paddingY: 5 })
-      drawCell(columnX(6), cursorY, scaledColWidths[6] || 0, rowHeight, line.note, { fontSize: 9, paddingX: 5, paddingY: 5 })
+      drawCell(
+        columnX(4),
+        cursorY,
+        scaledColWidths[4] || 0,
+        rowHeight,
+        pdfText(line.displayDescription, 'Untitled Item'),
+        { fontSize: 10, paddingX: 5, paddingY: 5 },
+      )
+      drawCell(
+        columnX(5),
+        cursorY,
+        scaledColWidths[5] || 0,
+        rowHeight,
+        String(line.orderedQuantity),
+        { align: 'center', fontSize: 10, paddingY: 5 },
+      )
+      drawCell(columnX(6), cursorY, scaledColWidths[6] || 0, rowHeight, line.note, {
+        fontSize: 9,
+        paddingX: 5,
+        paddingY: 5,
+      })
       drawCell(columnX(7), cursorY, scaledColWidths[7] || 0, rowHeight, '', { align: 'center' })
       cursorY += rowHeight
     })
@@ -1820,7 +1955,7 @@ export function buildSecretExpirationEmail(): string {
         </p>
       </div>
       <div class="footer">
-        <p>© ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
+        <p>&copy; ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
       </div>
     </div>
   `
@@ -1860,7 +1995,7 @@ export async function sendEmail(options: {
     }
 
     // Validate email addresses
-    const invalidEmails = recipients.filter(email => !isValidEmailFormat(email.trim()))
+    const invalidEmails = recipients.filter((email) => !isValidEmailFormat(email.trim()))
     if (invalidEmails.length > 0) {
       throw new Error(`Invalid email addresses: ${invalidEmails.join(', ')}`)
     }
@@ -1880,14 +2015,14 @@ export async function sendEmail(options: {
           contentType: 'HTML',
           content: options.html,
         },
-        toRecipients: recipients.map(email => ({
+        toRecipients: recipients.map((email) => ({
           emailAddress: {
             address: email.trim(),
           },
         })),
         ...(options.attachments && options.attachments.length
           ? {
-              attachments: options.attachments.map(att => ({
+              attachments: options.attachments.map((att) => ({
                 '@odata.type': '#microsoft.graph.fileAttachment',
                 name: att.name,
                 contentType: att.contentType || 'application/octet-stream',
@@ -1944,7 +2079,7 @@ export async function sendDailyLogEmailNotification(
   recipients: string[],
   jobDetails: JobDetails,
   logDate: string,
-  dailyLog?: any
+  dailyLog?: any,
 ): Promise<void> {
   const html = buildDailyLogEmail(jobDetails, logDate, dailyLog || {})
   await sendEmail({
@@ -1959,7 +2094,7 @@ export async function sendDailyLogEmailNotification(
  */
 export async function sendShopOrderEmailNotification(
   recipients: string[],
-  order: any
+  order: any,
 ): Promise<void> {
   const html = buildShopOrderEmail(order)
   const pdfBuffer = await buildShopOrderPdfBuffer(order)

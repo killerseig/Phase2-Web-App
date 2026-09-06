@@ -58,14 +58,11 @@ function makeCard(overrides: Partial<TimecardExportArchiveCardRecord> = {}): Tim
 }
 
 function mountWorkspaceActions(options: {
-  readOnlyIds?: string[]
   sortMode?: TimecardExportSortMode
 } = {}) {
-  const readOnlyIds = new Set(options.readOnlyIds ?? ['card-1'])
   const saveError = ref('Needs attention.')
   const sortMode = ref<TimecardExportSortMode>(options.sortMode ?? 'number')
   const clearCardMeasurements = vi.fn()
-  const isCardReadOnly = vi.fn((cardId: string) => readOnlyIds.has(cardId))
   const pruneCardEditStates = vi.fn()
   const pruneCardMeasurements = vi.fn()
   const pruneSaveQueueToIds = vi.fn()
@@ -79,7 +76,6 @@ function mountWorkspaceActions(options: {
   const actions = useTimecardExportCardWorkspaceActions({
     clearCardMeasurements,
     collator: new Intl.Collator('en-US', { numeric: true, sensitivity: 'base' }),
-    isCardReadOnly,
     pruneCardEditStates,
     pruneCardMeasurements,
     pruneSaveQueueToIds,
@@ -97,7 +93,6 @@ function mountWorkspaceActions(options: {
   return {
     actions,
     clearCardMeasurements,
-    isCardReadOnly,
     pruneCardEditStates,
     pruneCardMeasurements,
     pruneSaveQueueToIds,
@@ -225,30 +220,4 @@ describe('useTimecardExportCardWorkspaceActions', () => {
     expect(element.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
   })
 
-  it('locks employee headers only for read-only employee-sourced cards', () => {
-    const employeeCard = makeCard({
-      id: 'card-1',
-      sourceType: 'employee',
-    })
-    const editableEmployeeCard = makeCard({
-      id: 'card-2',
-      sourceType: 'employee',
-    })
-    const customCard = makeCard({
-      id: 'card-1',
-      sourceType: 'custom',
-    })
-    const {
-      actions,
-      isCardReadOnly,
-    } = mountWorkspaceActions({
-      readOnlyIds: ['card-1'],
-    })
-
-    expect(actions.isEmployeeHeaderLocked(employeeCard)).toBe(true)
-    expect(actions.isEmployeeHeaderLocked(editableEmployeeCard)).toBe(false)
-    expect(actions.isEmployeeHeaderLocked(customCard)).toBe(false)
-    expect(isCardReadOnly).toHaveBeenCalledWith('card-1')
-    expect(isCardReadOnly).toHaveBeenCalledWith('card-2')
-  })
 })

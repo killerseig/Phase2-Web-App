@@ -1,37 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -45,7 +12,7 @@ exports.buildTimecardCsvFilename = buildTimecardCsvFilename;
 exports.buildTimecardPdfFilename = buildTimecardPdfFilename;
 exports.buildTimecardPdfBuffer = buildTimecardPdfBuffer;
 exports.handleSendShopOrderEmail = handleSendShopOrderEmail;
-const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-admin/firestore");
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const https_1 = require("firebase-functions/v2/https");
 const https_2 = require("firebase-functions/v2/https");
@@ -58,12 +25,11 @@ const functionConfig_1 = require("./functionConfig");
 const roleAccess_1 = require("./roleAccess");
 const runtime_1 = require("./runtime");
 const fieldWorkflowAccess_1 = require("./fieldWorkflowAccess");
+const dailyLogGalleryFunctions_1 = require("./dailyLogGalleryFunctions");
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const MAX_ATTACHMENT_TOTAL_BYTES = 15 * 1024 * 1024;
-const MAX_ATTACHMENT_COUNT = 10;
 const DEFAULT_PRODUCTION_BURDEN = 0.33;
 function normalizeRecipients(...groups) {
-    const merged = groups.flatMap(group => (Array.isArray(group) ? group : []));
+    const merged = groups.flatMap((group) => (Array.isArray(group) ? group : []));
     const cleaned = merged
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter(Boolean);
@@ -102,14 +68,14 @@ function assertActiveRoleUser(user, allowedRoles, errorMessage) {
     };
 }
 function assertCanSendSubmittedFieldWorkflowEmail(user, jobId, jobDetails, errorMessage) {
-    const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman', 'shop-foreman'], errorMessage);
+    const authorizedUser = assertActiveRoleUser(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'], errorMessage);
     if (!(0, fieldWorkflowAccess_1.canWriteFieldWorkflowForJob)(authorizedUser, jobId, jobDetails, 'submit')) {
         throw new https_2.HttpsError('permission-denied', errorMessage);
     }
     return authorizedUser;
 }
 async function recordSubmittedEmailStatus(refs, result, context) {
-    const payload = (0, emailStatus_1.buildSubmittedEmailStatusUpdate)(result, admin.firestore.FieldValue);
+    const payload = (0, emailStatus_1.buildSubmittedEmailStatusUpdate)(result, firestore_1.FieldValue);
     let updatedCount = 0;
     try {
         for (const ref of refs) {
@@ -242,7 +208,10 @@ function formatPlexxisNumber(value, blankWhenZero = false) {
     const numeric = toNumber(value);
     if (blankWhenZero && numeric === 0)
         return '';
-    return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    return numeric
+        .toFixed(2)
+        .replace(/\.00$/, '')
+        .replace(/(\.\d)0$/, '$1');
 }
 function escapeCsvValue(value) {
     const str = String(value ?? '');
@@ -290,7 +259,9 @@ function deriveEmployeeNameParts(timecard) {
         return {
             firstName,
             lastName,
-            employeeName: `${firstName} ${lastName}`.trim() || String(timecard?.employeeName || '').trim() || 'Unnamed Employee',
+            employeeName: `${firstName} ${lastName}`.trim() ||
+                String(timecard?.employeeName || '').trim() ||
+                'Unnamed Employee',
         };
     }
     const employeeName = String(timecard?.employeeName || '').trim();
@@ -356,9 +327,7 @@ async function hydrateTimecardIdentityFields(timecards) {
     const entries = Array.isArray(timecards) ? timecards : [];
     if (!entries.length)
         return [];
-    const employeeIds = Array.from(new Set(entries
-        .map((timecard) => String(timecard?.employeeId || '').trim())
-        .filter(Boolean)));
+    const employeeIds = Array.from(new Set(entries.map((timecard) => String(timecard?.employeeId || '').trim()).filter(Boolean)));
     const rosterKeys = Array.from(new Set(entries
         .map((timecard) => {
         const jobId = String(timecard?.jobId || timecard?.__jobId || '').trim();
@@ -386,7 +355,12 @@ async function hydrateTimecardIdentityFields(timecards) {
             const rosterId = key.slice(separatorIndex + 1);
             return {
                 key,
-                snap: await runtime_1.db.collection(constants_1.COLLECTIONS.JOBS).doc(jobId).collection('roster').doc(rosterId).get(),
+                snap: await runtime_1.db
+                    .collection(constants_1.COLLECTIONS.JOBS)
+                    .doc(jobId)
+                    .collection('roster')
+                    .doc(rosterId)
+                    .get(),
             };
         }));
         rosterSnapshots.forEach(({ key, snap }) => {
@@ -401,37 +375,28 @@ async function hydrateTimecardIdentityFields(timecards) {
         const rosterId = String(timecard?.employeeRosterId || '').trim();
         const rosterKey = jobId && rosterId ? `${jobId}:${rosterId}` : '';
         const employeeRecord = employeeDirectory.get(employeeId) || {};
-        const rosterRecord = rosterKey ? (rosterDirectory.get(rosterKey) || {}) : {};
-        const firstName = String(timecard?.firstName
-            || employeeRecord?.firstName
-            || rosterRecord?.firstName
-            || '').trim();
-        const lastName = String(timecard?.lastName
-            || employeeRecord?.lastName
-            || rosterRecord?.lastName
-            || '').trim();
+        const rosterRecord = rosterKey ? rosterDirectory.get(rosterKey) || {} : {};
+        const firstName = String(timecard?.firstName || employeeRecord?.firstName || rosterRecord?.firstName || '').trim();
+        const lastName = String(timecard?.lastName || employeeRecord?.lastName || rosterRecord?.lastName || '').trim();
         const fallbackFullName = [firstName, lastName].filter(Boolean).join(' ').trim();
-        const fullName = String(timecard?.fullName
-            || timecard?.employeeName
-            || fallbackFullName
-            || [employeeRecord?.firstName, employeeRecord?.lastName].filter(Boolean).join(' ')
-            || [rosterRecord?.firstName, rosterRecord?.lastName].filter(Boolean).join(' ')
-            || '').trim();
+        const fullName = String(timecard?.fullName ||
+            timecard?.employeeName ||
+            fallbackFullName ||
+            [employeeRecord?.firstName, employeeRecord?.lastName].filter(Boolean).join(' ') ||
+            [rosterRecord?.firstName, rosterRecord?.lastName].filter(Boolean).join(' ') ||
+            '').trim();
         const employeeName = String(timecard?.employeeName || fullName).trim();
-        const employeeNumber = String(timecard?.employeeNumber
-            || timecard?.employeeCode
-            || employeeRecord?.employeeNumber
-            || rosterRecord?.employeeNumber
-            || '').trim();
-        const occupation = String(timecard?.occupation
-            || employeeRecord?.occupation
-            || rosterRecord?.occupation
-            || '').trim();
-        const wageRate = toNullableNumber(timecard?.wageRate
-            ?? timecard?.employeeWage
-            ?? timecard?.wage
-            ?? employeeRecord?.wageRate
-            ?? rosterRecord?.wageRate);
+        const employeeNumber = String(timecard?.employeeNumber ||
+            timecard?.employeeCode ||
+            employeeRecord?.employeeNumber ||
+            rosterRecord?.employeeNumber ||
+            '').trim();
+        const occupation = String(timecard?.occupation || employeeRecord?.occupation || rosterRecord?.occupation || '').trim();
+        const wageRate = toNullableNumber(timecard?.wageRate ??
+            timecard?.employeeWage ??
+            timecard?.wage ??
+            employeeRecord?.wageRate ??
+            rosterRecord?.wageRate);
         return {
             ...timecard,
             firstName,
@@ -503,19 +468,16 @@ function getLineActivityCode(line) {
     ]);
 }
 function getLineCostCode(line) {
-    return pickFirstNonEmptyValue(line, [
-        'costCode',
-        'cost_code',
-        'cost',
-        'costcode',
-    ]);
+    return pickFirstNonEmptyValue(line, ['costCode', 'cost_code', 'cost', 'costcode']);
 }
 function sanitizeLeakedCodeValue(value, disallowedValues) {
     const raw = String(value || '').trim();
     if (!raw)
         return '';
     const disallowed = new Set((Array.isArray(disallowedValues) ? disallowedValues : [])
-        .map((v) => String(v || '').trim().toLowerCase())
+        .map((v) => String(v || '')
+        .trim()
+        .toLowerCase())
         .filter(Boolean));
     if (disallowed.has(raw.toLowerCase()))
         return '';
@@ -526,7 +488,9 @@ function sanitizeActivityCode(value, line, disallowedValues) {
     if (!raw)
         return '';
     const difValues = [line?.difH, line?.difP, line?.difC]
-        .map((v) => String(v || '').trim().toLowerCase())
+        .map((v) => String(v || '')
+        .trim()
+        .toLowerCase())
         .filter(Boolean);
     if (difValues.includes(raw.toLowerCase()))
         return '';
@@ -596,7 +560,12 @@ function hasMeaningfulLineDataForPdf(line) {
     const offHours = getLineOffHours(line);
     const offProduction = getLineOffProduction(line);
     const offCost = getLineOffCost(line);
-    return totalHours > 0 || totalProduction > 0 || totalCost > 0 || offHours > 0 || offProduction > 0 || offCost > 0;
+    return (totalHours > 0 ||
+        totalProduction > 0 ||
+        totalCost > 0 ||
+        offHours > 0 ||
+        offProduction > 0 ||
+        offCost > 0);
 }
 function hasMeaningfulLineDataForCsv(line) {
     const totalHours = getLineTotalHoursForForm(line);
@@ -636,50 +605,6 @@ function validatePdfCsvHourParity(timecards) {
         throw new https_2.HttpsError('internal', `Hour parity validation failed: ${mismatches.slice(0, 8).join('; ')}`);
     }
 }
-async function loadDailyLogAttachments(log) {
-    const attachments = [];
-    const dailyLogPayload = (0, emailService_1.normalizeDailyLogEmailPayload)(log);
-    const files = Array.isArray(dailyLogPayload.attachments) ? dailyLogPayload.attachments : [];
-    let totalBytes = 0;
-    for (const att of files) {
-        if (!att?.path)
-            continue;
-        if (attachments.length >= MAX_ATTACHMENT_COUNT) {
-            console.warn('[sendDailyLogEmail] Skipping extra attachments beyond limit', { limit: MAX_ATTACHMENT_COUNT });
-            break;
-        }
-        try {
-            const file = runtime_1.storageBucket.file(att.path);
-            const [exists] = await file.exists();
-            if (!exists) {
-                console.warn('[sendDailyLogEmail] Attachment missing in storage', { path: att.path });
-                continue;
-            }
-            const [metadata] = await file.getMetadata();
-            const size = Number(metadata?.size) || 0;
-            if (totalBytes + size > MAX_ATTACHMENT_TOTAL_BYTES) {
-                console.warn('[sendDailyLogEmail] Skipping attachment to respect size budget', {
-                    path: att.path,
-                    size,
-                    totalBytes,
-                    max: MAX_ATTACHMENT_TOTAL_BYTES,
-                });
-                continue;
-            }
-            const [buffer] = await file.download();
-            totalBytes += buffer.length;
-            attachments.push({
-                name: att?.name || file.name.split('/').pop() || 'attachment',
-                contentType: metadata?.contentType || 'application/octet-stream',
-                contentBytes: buffer.toString('base64'),
-            });
-        }
-        catch (err) {
-            console.warn('[sendDailyLogEmail] Failed to load attachment', { path: att?.path, err });
-        }
-    }
-    return attachments;
-}
 const defaultSendDailyLogEmailDependencies = {
     getUserProfile: firestoreService_1.getUserProfile,
     getJobDetails: firestoreService_1.getJobDetails,
@@ -689,18 +614,15 @@ const defaultSendDailyLogEmailDependencies = {
     getDailyLog: firestoreService_1.getDailyLog,
     getEmailSettings: firestoreService_1.getEmailSettings,
     getJobNotificationRecipients: firestoreService_1.getJobNotificationRecipients,
+    getAppBaseUrl: functionConfig_1.getAppBaseUrl,
+    ensureDailyLogGalleryShare: dailyLogGalleryFunctions_1.ensureDailyLogGalleryShare,
     buildDailyLogEmail: emailService_1.buildDailyLogEmail,
-    loadDailyLogAttachments,
     sendEmail: emailService_1.sendEmail,
     recordSubmittedEmailStatus,
 };
 function normalizeTimecardForEmail(tc) {
     const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage);
-    const sourceLines = Array.isArray(tc?.lines) && tc.lines.length
-        ? tc.lines
-        : Array.isArray(tc?.jobs)
-            ? tc.jobs
-            : [];
+    const sourceLines = Array.isArray(tc?.lines) && tc.lines.length ? tc.lines : Array.isArray(tc?.jobs) ? tc.jobs : [];
     const lines = sourceLines.map((source) => {
         const hoursByDay = {
             sun: 0,
@@ -788,7 +710,7 @@ function normalizeTimecardForEmail(tc) {
             production: productionByDay,
             unitCost: unitCostByDay,
         };
-        DAY_KEYS.forEach(k => {
+        DAY_KEYS.forEach((k) => {
             line[k] = hoursByDay[k];
         });
         const totalHours = DAY_KEYS.reduce((sum, key) => sum + toNumber(hoursByDay[key]), 0);
@@ -808,7 +730,7 @@ function normalizeTimecardForEmail(tc) {
         const finalTotalHours = DAY_KEYS.reduce((sum, key) => sum + toNumber(line[key]), 0);
         const finalTotalProduction = DAY_KEYS.reduce((sum, key) => sum + toNumber(productionByDay[key]), 0);
         let totalLine = 0;
-        DAY_KEYS.forEach(k => {
+        DAY_KEYS.forEach((k) => {
             totalLine += (productionByDay[k] || 0) * (unitCostByDay[k] || 0);
         });
         line.totals = {
@@ -847,7 +769,7 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
     try {
         const user = await deps.getUserProfile(callerUid);
         const requestedJob = await deps.getJobDetails(jobId);
-        const authorizedUser = assertCanSendSubmittedFieldWorkflowEmail(user, jobId, requestedJob, 'Only admins or assigned foremen can send daily log emails');
+        const authorizedUser = assertCanSendSubmittedFieldWorkflowEmail(user, jobId, requestedJob, 'Only admins or assigned field users can send daily log emails');
         const statusRefs = deps.dailyLogEmailStatusRefs(jobId, dailyLogId);
         const operationId = (0, emailStatus_1.buildSubmittedEmailOperationId)('dailyLogSubmittedEmail', dailyLogId);
         const operationContext = {
@@ -875,7 +797,9 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
         if (!log) {
             throw new Error(constants_1.ERROR_MESSAGES.DAILY_LOG_NOT_FOUND);
         }
-        if (String(log?.status || '').trim().toLowerCase() !== 'submitted') {
+        if (String(log?.status || '')
+            .trim()
+            .toLowerCase() !== 'submitted') {
             throw new https_2.HttpsError('failed-precondition', 'Only submitted daily logs can be emailed');
         }
         const logOwnerUserId = String(log?.foremanUserId || log?.uid || log?.createdByUserId || '').trim();
@@ -893,14 +817,20 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
             throw new https_2.HttpsError('failed-precondition', constants_1.ERROR_MESSAGES.RECIPIENTS_REQUIRED);
         }
         try {
-            const job = requestedJob || await deps.getJobDetails(log?.jobId || '');
-            const emailHtml = deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log);
-            const attachments = await deps.loadDailyLogAttachments(log);
+            const job = requestedJob || (await deps.getJobDetails(log?.jobId || ''));
+            const logDate = log?.logDate || new Date().toISOString();
+            const galleryShareId = await deps.ensureDailyLogGalleryShare({
+                dailyLogId,
+                jobId,
+                jobDetails: job,
+                log,
+            });
+            const dailyLogUrl = `${deps.getAppBaseUrl()}/daily-log-gallery/${encodeURIComponent(galleryShareId)}`;
+            const emailHtml = deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, logDate, log, { dailyLogUrl });
             await deps.sendEmail({
                 to: recipients,
-                subject: (0, emailService_1.buildDailyLogEmailSubject)(job || { id: '', name: 'Unknown Job', number: '' }, log?.logDate || new Date().toISOString(), log),
+                subject: (0, emailService_1.buildDailyLogEmailSubject)(job || { id: '', name: 'Unknown Job', number: '' }, logDate, log),
                 html: emailHtml,
-                ...(attachments.length ? { attachments } : {}),
             });
         }
         catch (emailError) {
@@ -930,9 +860,21 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
 /**
  * Send Daily Log via email
  */
-exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => (handleSendDailyLogEmail(request)));
+exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => handleSendDailyLogEmail(request));
 function buildTimecardCsv(timecards, weekStart, defaultJobCode) {
-    const headers = ['Employee Name', 'Employee Code', 'Job Code', 'DETAIL_DATE', 'Sub-Section', 'Activity Code', 'Cost Code', 'H_Hours', 'P_HOURS', '', ''];
+    const headers = [
+        'Employee Name',
+        'Employee Code',
+        'Job Code',
+        'DETAIL_DATE',
+        'Sub-Section',
+        'Activity Code',
+        'Cost Code',
+        'H_Hours',
+        'P_HOURS',
+        '',
+        '',
+    ];
     const fixedDataRowCount = 108;
     const blankRow = Array(headers.length).fill('');
     const rows = [headers, [...blankRow]];
@@ -974,9 +916,7 @@ function buildTimecardCsv(timecards, weekStart, defaultJobCode) {
     while (rows.length < fixedDataRowCount + 1) {
         rows.push([...blankRow]);
     }
-    return rows
-        .map((row) => row.map((value) => escapeCsvValue(value)).join(','))
-        .join('\r\n');
+    return rows.map((row) => row.map((value) => escapeCsvValue(value)).join(',')).join('\r\n');
 }
 function buildTimecardExportPeriodLabel(startWeek, endWeek) {
     const normalizedStartWeek = String(startWeek || '').trim();
@@ -1014,7 +954,10 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
         const numeric = toNumber(value);
         if (blankWhenZero && numeric === 0)
             return '';
-        return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+        return numeric
+            .toFixed(2)
+            .replace(/\.00$/, '')
+            .replace(/(\.\d)0$/, '$1');
     };
     const fmtWorkbookEntry = (value, decimals = 2, blankWhenZero = false) => {
         const numeric = toNumber(value);
@@ -1058,8 +1001,8 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
         doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
         doc.on('end', () => resolve());
         doc.on('error', (err) => reject(err));
-        const sumWidths = (widths, startIndex, endIndexExclusive) => (widths.slice(startIndex, endIndexExclusive).reduce((sum, current) => sum + current, 0));
-        const getColumnX = (x, colWidths, index) => (x + sumWidths(colWidths, 0, index));
+        const sumWidths = (widths, startIndex, endIndexExclusive) => widths.slice(startIndex, endIndexExclusive).reduce((sum, current) => sum + current, 0);
+        const getColumnX = (x, colWidths, index) => x + sumWidths(colWidths, 0, index);
         const drawCell = (x, y, width, height, text, options) => {
             doc.lineWidth(0.5).strokeColor('#111111').rect(x, y, width, height).stroke();
             const paddingX = options?.paddingX ?? 1.2;
@@ -1075,8 +1018,8 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
                 .fontSize(fontSize)
                 .fillColor('#111111')
                 .text(text, x + paddingX, textY, {
-                width: Math.max(width - (paddingX * 2), 0),
-                height: Math.max(height - (paddingY * 2), 0),
+                width: Math.max(width - paddingX * 2, 0),
+                height: Math.max(height - paddingY * 2, 0),
                 align: options?.align ?? 'center',
                 ellipsis: true,
             });
@@ -1180,8 +1123,8 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
                     .font('Helvetica')
                     .fontSize(fontSize)
                     .fillColor('#111111')
-                    .text(value, x + paddingX, y + (rowHeight * index) + lineInsetY, {
-                    width: Math.max(width - (paddingX * 2), 0),
+                    .text(value, x + paddingX, y + rowHeight * index + lineInsetY, {
+                    width: Math.max(width - paddingX * 2, 0),
                     align,
                     ellipsis: true,
                 });
@@ -1246,10 +1189,16 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
             const occupation = renderBlankTemplate ? '' : String(tc?.occupation || '').trim();
             const wageNumeric = toNumber(tc?.employeeWage ?? tc?.wage);
             const wageSource = tc?.employeeWage ?? tc?.wage ?? '';
-            const wageLabel = renderBlankTemplate ? '' : (wageNumeric > 0 ? `$${wageNumeric.toFixed(2)}` : (String(wageSource).trim() || '-'));
-            const cardWeekEnding = String(tc?.weekEndingDate || '').trim()
-                || getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim());
-            const weekEnding = renderBlankTemplate ? '' : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel;
+            const wageLabel = renderBlankTemplate
+                ? ''
+                : wageNumeric > 0
+                    ? `$${wageNumeric.toFixed(2)}`
+                    : String(wageSource).trim() || '-';
+            const cardWeekEnding = String(tc?.weekEndingDate || '').trim() ||
+                getWeekEndingFromWeekStart(String(tc?.weekStartDate || '').trim());
+            const weekEnding = renderBlankTemplate
+                ? ''
+                : formatWeekEndingLabel(cardWeekEnding) || weekEndingLabel;
             options.onCardHeader?.({
                 cardId: typeof tc?.id === 'string' ? tc.id : undefined,
                 employeeName,
@@ -1295,18 +1244,54 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
             const columnWidths = percentWidths(innerWidth, [11.5, 5.5, 4, 9.5, 5.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 8.5, 8.5, 8.5]);
             const detailFontSize = rowHeight >= 6.25 ? 5.8 : 4.9;
             const costFontSize = rowHeight >= 6.25 ? 5.5 : 4.6;
-            drawGridRow(innerX, gridTop, columnWidths, tableHeaderHeight, ['JOB #', '1', '', 'ACCT', 'DIF', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'TOTAL', 'PROD', 'OFF'], {
+            drawGridRow(innerX, gridTop, columnWidths, tableHeaderHeight, [
+                'JOB #',
+                '1',
+                '',
+                'ACCT',
+                'DIF',
+                'MON',
+                'TUE',
+                'WED',
+                'THU',
+                'FRI',
+                'SAT',
+                'TOTAL',
+                'PROD',
+                'OFF',
+            ], {
                 fontSize: rowHeight >= 6.25 ? 5.9 : 5.1,
                 fontName: 'Helvetica-Oblique',
-                align: ['left', 'center', 'center', 'left', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center'],
+                align: [
+                    'left',
+                    'center',
+                    'center',
+                    'left',
+                    'center',
+                    'center',
+                    'center',
+                    'center',
+                    'center',
+                    'center',
+                    'center',
+                    'center',
+                    'center',
+                    'center',
+                ],
             });
             let cursorDataY = gridTop + tableHeaderHeight;
-            const lines = renderBlankTemplate ? [] : (Array.isArray(tc?.lines) ? tc.lines.filter((line) => hasMeaningfulLineDataForPdf(line)) : []);
+            const lines = renderBlankTemplate
+                ? []
+                : Array.isArray(tc?.lines)
+                    ? tc.lines.filter((line) => hasMeaningfulLineDataForPdf(line))
+                    : [];
             const employeeWage = toNumber(tc?.employeeWage ?? tc?.wage);
             for (let lineIndex = 0; lineIndex < maxLineGroups; lineIndex++) {
                 const line = lines[lineIndex];
                 const hasLine = !!line;
-                const jobCode = hasLine ? String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || '').trim() : '';
+                const jobCode = hasLine
+                    ? String(line?.jobNumber || tc?.jobCode || tc?.__jobCode || '').trim()
+                    : '';
                 const account = hasLine
                     ? sanitizeActivityCode(getLineActivityCode(line), line, [
                         jobCode,
@@ -1315,11 +1300,15 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
                     : '';
                 const lineHoursTotal = hasLine ? getLineTotalHoursForForm(line) : 0;
                 const lineProdTotal = hasLine ? getLineTotalProductionForForm(line) : 0;
-                const lineCostTotal = hasLine ? getLineTotalCostForForm(line, employeeWage, tc?.productionBurden) : 0;
+                const lineCostTotal = hasLine
+                    ? getLineTotalCostForForm(line, employeeWage, tc?.productionBurden)
+                    : 0;
                 const offHours = hasLine ? getLineOffHours(line) : 0;
                 const offProduction = hasLine ? getLineOffProduction(line) : 0;
                 const offCost = hasLine ? getLineOffCost(line) : 0;
-                const subsectionArea = hasLine ? String(line?.subsectionArea || line?.area || '').trim() : '';
+                const subsectionArea = hasLine
+                    ? String(line?.subsectionArea || line?.area || '').trim()
+                    : '';
                 const groupHeight = rowHeight * 3;
                 const mergedColumns = [
                     { index: 0, text: jobCode, align: 'center' },
@@ -1354,7 +1343,7 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
                     },
                 ];
                 rowDefinitions.forEach((rowDef, rowIndex) => {
-                    const rowY = cursorDataY + (rowIndex * rowHeight);
+                    const rowY = cursorDataY + rowIndex * rowHeight;
                     drawCell(getColumnX(innerX, columnWidths, 2), rowY, columnWidths[2] || 0, rowHeight, rowDef.label, {
                         bold: true,
                         fontSize: detailFontSize,
@@ -1379,11 +1368,7 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
                         paddingX: 1.6,
                     });
                 });
-                drawWorkbookGroupCell(getColumnX(innerX, columnWidths, 11), cursorDataY, columnWidths[11] || 0, rowHeight, [
-                    hasLine ? fmtWorkbookHoursTotal(lineHoursTotal, true) : '',
-                    '',
-                    '',
-                ], {
+                drawWorkbookGroupCell(getColumnX(innerX, columnWidths, 11), cursorDataY, columnWidths[11] || 0, rowHeight, [hasLine ? fmtWorkbookHoursTotal(lineHoursTotal, true) : '', '', ''], {
                     fontSize: detailFontSize,
                     align: 'center',
                     paddingX: 1.6,
@@ -1408,7 +1393,7 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
                 });
                 cursorDataY += groupHeight;
             }
-            const footerTop = gridTop + tableHeaderHeight + (maxLineGroups * lineGroupHeight);
+            const footerTop = gridTop + tableHeaderHeight + maxLineGroups * lineGroupHeight;
             const mondayHours = lines.reduce((sum, line) => sum + toNumber(line?.mon), 0);
             const tuesdayHours = lines.reduce((sum, line) => sum + toNumber(line?.tue), 0);
             const wednesdayHours = lines.reduce((sum, line) => sum + toNumber(line?.wed), 0);
@@ -1640,7 +1625,7 @@ async function handleSendShopOrderEmail(request, deps = defaultSendShopOrderEmai
     try {
         const user = await deps.getUserProfile(request.auth.uid);
         const requestedJob = await deps.getJobDetails(jobId);
-        assertCanSendSubmittedFieldWorkflowEmail(user, jobId, requestedJob, 'Only admins or assigned foremen can send shop order emails');
+        assertCanSendSubmittedFieldWorkflowEmail(user, jobId, requestedJob, 'Only admins or assigned field users can send shop order emails');
         const statusRefs = deps.shopOrderEmailStatusRefs(jobId, shopOrderId);
         const operationId = (0, emailStatus_1.buildSubmittedEmailOperationId)('shopOrderSubmittedEmail', shopOrderId);
         const operationContext = {
@@ -1708,7 +1693,7 @@ async function handleSendShopOrderEmail(request, deps = defaultSendShopOrderEmai
         }
         const job = resolvedJobId && resolvedJobId !== String(jobId).trim()
             ? await deps.getJobDetails(resolvedJobId)
-            : requestedJob || await deps.getJobDetails(resolvedJobId || jobId);
+            : requestedJob || (await deps.getJobDetails(resolvedJobId || jobId));
         try {
             const costCodesByCatalogItemId = await deps.getShopOrderCostCodesByCatalogItemId(order?.items);
             const emailHtml = deps.buildShopOrderEmail(order, costCodesByCatalogItemId);
@@ -1750,5 +1735,5 @@ async function handleSendShopOrderEmail(request, deps = defaultSendShopOrderEmai
         throw new https_2.HttpsError('internal', error?.message || 'Failed to send shop order email');
     }
 }
-exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => (handleSendShopOrderEmail(request)));
+exports.sendShopOrderEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => handleSendShopOrderEmail(request));
 //# sourceMappingURL=operationsFunctions.js.map

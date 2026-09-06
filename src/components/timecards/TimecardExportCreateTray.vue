@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import TimecardExportCustomCardPanel from '@/components/timecards/TimecardExportCustomCardPanel.vue'
 import TimecardExportEmployeePanel from '@/components/timecards/TimecardExportEmployeePanel.vue'
 import TimecardExportTargetPanel from '@/components/timecards/TimecardExportTargetPanel.vue'
@@ -56,6 +56,7 @@ const targetReady = computed(() => (
 const createDisabled = computed(() => (
   props.actionLoading || !props.canEditWeek || !targetReady.value
 ))
+const createMode = ref<'employee' | 'one-off'>('employee')
 
 </script>
 
@@ -77,6 +78,7 @@ const createDisabled = computed(() => (
       />
 
       <TimecardExportEmployeePanel
+        v-if="createMode === 'employee'"
         :search="employeeSearch"
         :employees="employees"
         :loading="employeesLoading"
@@ -84,9 +86,11 @@ const createDisabled = computed(() => (
         :employee-disabled="createDisabled"
         @update-search="emit('updateEmployeeSearch', $event)"
         @add-employee="emit('addEmployee', $event)"
+        @create-one-off-card="createMode = 'one-off'"
       />
 
       <TimecardExportCustomCardPanel
+        v-else
         :first-name="customFirstName"
         :last-name="customLastName"
         :employee-number="customEmployeeNumber"
@@ -102,6 +106,7 @@ const createDisabled = computed(() => (
         @update-wage-rate="emit('updateCustomWageRate', $event)"
         @update-is-contractor="emit('updateCustomIsContractor', $event)"
         @add-custom-card="emit('addCustomCard')"
+        @back-to-employee-search="createMode = 'employee'"
       />
     </template>
   </section>

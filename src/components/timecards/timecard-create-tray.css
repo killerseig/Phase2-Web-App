@@ -100,6 +100,26 @@
   text-align: left;
 }
 
+.timecards-create--single-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.timecards-create__guidance {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-left: 3px solid rgba(157, 102, 24, 0.46);
+  background: rgba(253, 241, 207, 0.58);
+  color: rgba(56, 46, 25, 0.84);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.timecards-create__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
 .timecards-create__panel--custom {
   --timecards-custom-card-grid-gap: 0.55rem;
 }
@@ -110,6 +130,12 @@
 
 @media (max-width: 960px) {
   .timecards-create {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .timecards-create__actions {
     grid-template-columns: 1fr;
   }
 }

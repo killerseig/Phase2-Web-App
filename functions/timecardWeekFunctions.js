@@ -1,41 +1,8 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.submitTimecardWeekRecord = exports.reopenTimecardWeekRecord = exports.deleteTimecardWeekRecord = exports.deleteTimecardCardRecord = exports.updateTimecardCardRecord = exports.createTimecardCardRecord = exports.ensureTimecardWeekRecord = exports.listTimecardCardsForCurrentUser = exports.listTimecardWeeksForCurrentUser = void 0;
 exports.handleSubmitTimecardWeekRecord = handleSubmitTimecardWeekRecord;
-const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const emailService_1 = require("./emailService");
 const emailStatus_1 = require("./emailStatus");
@@ -264,7 +231,7 @@ function sanitizeCardPayload(card, weekStartDate, sortIndexFallback = 0) {
             productionTotal: numberOrZero(totals.productionTotal),
             lineTotal: numberOrZero(totals.lineTotal),
         },
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
     };
 }
 function cloneLineForNewWeek(line, weekDates) {
@@ -442,12 +409,12 @@ async function copyPreviousWeekCardsIntoDraft(input) {
         const nextCardRef = runtime_1.db.collection('timecardWeeks').doc(input.targetWeekId).collection('cards').doc();
         batch.set(nextCardRef, {
             ...sanitizeCardPayload(cloneCardForNewWeek(cardDoc.data(), input.weekStartDate), input.weekStartDate, index),
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: firestore_1.FieldValue.serverTimestamp(),
         });
     });
     batch.update(input.targetWeekRef, {
         employeeCardCount: previousCardsSnap.size,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
     });
     await batch.commit();
     return previousCardsSnap.size;
@@ -602,8 +569,8 @@ exports.ensureTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
         updatedByUserId: request.auth.uid,
         submittedByUserId: null,
         submittedAt: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore_1.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
     });
     await copyPreviousWeekCardsIntoDraft({
         targetWeekId: createdRef.id,
@@ -637,11 +604,11 @@ exports.createTimecardCardRecord = (0, https_1.onCall)(async (request) => {
     const createdRef = runtime_1.db.collection('timecardWeeks').doc(weekId).collection('cards').doc();
     await createdRef.set({
         ...sanitizeCardPayload(card, weekStartDate),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore_1.FieldValue.serverTimestamp(),
     });
     await weekRef.update({
-        employeeCardCount: admin.firestore.FieldValue.increment(1),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        employeeCardCount: firestore_1.FieldValue.increment(1),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
         updatedByUserId: request.auth.uid,
     });
     return { id: createdRef.id };
@@ -675,7 +642,7 @@ exports.updateTimecardCardRecord = (0, https_1.onCall)(async (request) => {
     }
     await cardRef.update(sanitizeCardPayload(card, weekStartDate));
     await weekRef.update({
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
         updatedByUserId: request.auth.uid,
     });
     return { success: true };
@@ -703,8 +670,8 @@ exports.deleteTimecardCardRecord = (0, https_1.onCall)(async (request) => {
     }
     await cardRef.delete();
     await weekRef.update({
-        employeeCardCount: admin.firestore.FieldValue.increment(-1),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        employeeCardCount: firestore_1.FieldValue.increment(-1),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
         updatedByUserId: request.auth.uid,
     });
     return { success: true };
@@ -753,12 +720,12 @@ exports.reopenTimecardWeekRecord = (0, https_1.onCall)(async (request) => {
         submittedAt: null,
         submittedByName: null,
         submittedByUserId: null,
-        submittedEmailAttemptedAt: admin.firestore.FieldValue.delete(),
-        submittedEmailError: admin.firestore.FieldValue.delete(),
-        submittedEmailInProgressAt: admin.firestore.FieldValue.delete(),
-        submittedEmailOperationId: admin.firestore.FieldValue.delete(),
-        submittedEmailSentAt: admin.firestore.FieldValue.delete(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        submittedEmailAttemptedAt: firestore_1.FieldValue.delete(),
+        submittedEmailError: firestore_1.FieldValue.delete(),
+        submittedEmailInProgressAt: firestore_1.FieldValue.delete(),
+        submittedEmailOperationId: firestore_1.FieldValue.delete(),
+        submittedEmailSentAt: firestore_1.FieldValue.delete(),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
         updatedByUserId: request.auth.uid,
     });
     return { success: true };
@@ -801,11 +768,11 @@ async function handleSubmitTimecardWeekRecord(request, deps = defaultSubmitTimec
     const submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName);
     await weekRef.update({
         status: 'submitted',
-        submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+        submittedAt: firestore_1.FieldValue.serverTimestamp(),
         submittedByUserId,
         submittedByName,
         updatedByUserId: request.auth.uid,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
     });
     try {
         const emailResult = await deps.sendSubmittedWeekEmail(weekId, {
@@ -818,7 +785,7 @@ async function handleSubmitTimecardWeekRecord(request, deps = defaultSubmitTimec
             emailSent: emailResult.emailSent,
             emailMessage: emailResult.emailMessage,
             operationId,
-        }, admin.firestore.FieldValue));
+        }, firestore_1.FieldValue));
         return emailResult;
     }
     catch (error) {
@@ -828,7 +795,7 @@ async function handleSubmitTimecardWeekRecord(request, deps = defaultSubmitTimec
             emailSent: false,
             emailMessage,
             operationId,
-        }, admin.firestore.FieldValue));
+        }, firestore_1.FieldValue));
         return {
             success: true,
             emailSent: false,

@@ -20,16 +20,22 @@ import {
   savedDailyLogFieldKeys,
   type DailyLogSiteInfoDisplay,
 } from '@/features/dailyLogs/viewHelpers'
-import type {
-  DailyLogAttachmentRecord,
-  DailyLogPayload,
-  DailyLogRecord,
-} from '@/types/domain'
+import type { DailyLogAttachmentRecord, DailyLogPayload, DailyLogRecord } from '@/types/domain'
 
-type AttachmentUploadHandler = (entries: Array<{ file: File; description: string }>) => Promise<void>
+type AttachmentUploadHandler = (
+  entries: Array<{ file: File; description: string }>,
+) => Promise<void>
 type AttachmentDescriptionPayload = { path: string; description: string }
-type ManpowerFieldUpdate = { index: number; field: DailyLogManpowerFieldKey; value: string | number }
-type IndoorClimateFieldUpdate = { index: number; field: DailyLogIndoorClimateFieldKey; value: string }
+type ManpowerFieldUpdate = {
+  index: number
+  field: DailyLogManpowerFieldKey
+  value: string | number
+}
+type IndoorClimateFieldUpdate = {
+  index: number
+  field: DailyLogIndoorClimateFieldKey
+  value: string
+}
 
 defineProps<{
   canEditSelectedLog: boolean
@@ -72,10 +78,7 @@ const notesSection = getDailyLogTextSection('notes-actions')
 
 <template>
   <section class="daily-logs-main">
-    <DailyLogSiteInfoCard
-      :fields="DAILY_LOG_SITE_INFO_FIELDS"
-      :site-info="siteInfo"
-    />
+    <DailyLogSiteInfoCard :fields="DAILY_LOG_SITE_INFO_FIELDS" :site-info="siteInfo" />
 
     <DailyLogManpowerCard
       :columns="DAILY_LOG_MANPOWER_COLUMNS"
@@ -148,7 +151,11 @@ const notesSection = getDailyLogTextSection('notes-actions')
       choose-label="Choose QC Photos"
       description-label="Description"
       empty-label="Drag and drop QC photos here to upload."
-      helper-text="Choose one or more QC photos. Photos upload right away. Click Save Draft after editing descriptions."
+      :helper-text="
+        canEditSelectedLog
+          ? 'Large photos are resized automatically, and you can add 100+ photos. Click Save Draft after editing descriptions.'
+          : 'Select a QC photo to view it full screen.'
+      "
       :attachments="qcAttachments"
       :disabled="!canEditSelectedLog"
       :busy="qcAttachmentBusy"

@@ -613,12 +613,6 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 
 @media (max-width: 1180px) {
   .shop-orders-tree-pane {
-    max-height: 34rem;
-  }
-}
-
-@media (max-width: 820px) {
-  .shop-orders-tree-pane {
     --app-pane-height: auto;
     --app-pane-grid-template-rows: auto auto;
     --app-pane-overflow: visible;
@@ -627,6 +621,12 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 
   .shop-orders-tree-pane__body {
     overflow: visible;
+  }
+}
+
+@media (max-width: 820px) {
+  .shop-orders-tree-pane {
+    --app-pane-gap: 0.75rem;
   }
 
   .shop-orders-pane__header {
