@@ -37,16 +37,13 @@ const paneClasses = computed(() => [
   grid-template-rows: var(--app-pane-grid-template-rows, auto minmax(0, 1fr));
   gap: var(--app-pane-gap, 1rem);
   min-height: var(--app-pane-min-height, 0);
+  min-width: 0;
   height: var(--app-pane-height, 100%);
   overflow: var(--app-pane-overflow, hidden);
   padding: var(--app-pane-padding, var(--space-4));
   border: var(--app-pane-border, 1px solid var(--color-border));
   border-radius: var(--app-pane-radius, var(--radius-md));
-  background: var(
-    --app-pane-background,
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    var(--color-surface-raised)
-  );
+  background: var(--app-pane-background, var(--panel-background));
   color: var(--app-pane-color, var(--color-text));
   box-shadow: var(--app-pane-shadow, var(--shadow-md));
 }
@@ -75,9 +72,7 @@ const paneClasses = computed(() => [
 }
 
 .app-pane--tone-accent {
-  --app-pane-background:
-    linear-gradient(180deg, rgba(99, 199, 230, 0.095), rgba(255, 255, 255, 0.018)),
-    var(--color-surface-raised);
+  --app-pane-background: var(--bg-accent);
   --app-pane-border: 1px solid var(--color-border-strong);
 }
 </style>

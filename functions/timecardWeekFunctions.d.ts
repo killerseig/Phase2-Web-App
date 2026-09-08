@@ -1,4 +1,4 @@
-import { type DocumentReference, type DocumentSnapshot } from 'firebase-admin/firestore';
+import { type DocumentReference, type DocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { buildSubmittedEmailStatusUpdate } from './emailStatus';
 import { getJobDetails } from './firestoreService';
 import { claimSubmittedEmailOperation } from './submittedEmailOperations';
@@ -8,12 +8,20 @@ interface SubmitTimecardWeekResponse {
     emailSent: boolean;
     emailMessage: string;
 }
+export interface TimecardRequiredFieldIssue {
+    cardId: string;
+    employeeName: string;
+    lineNumber: number;
+    missingFields: string[];
+}
 interface CallableRequestLike {
     auth?: {
         uid: string;
     } | null;
     data?: any;
 }
+export declare function findTimecardRequiredFieldIssues(value: unknown): TimecardRequiredFieldIssue[];
+export declare function buildTimecardRequiredFieldsMessage(issues: TimecardRequiredFieldIssue[]): string;
 declare function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser>;
 declare function getWeekDoc(weekId: string): Promise<{
     weekRef: DocumentReference<FirebaseFirestore.DocumentData, FirebaseFirestore.DocumentData>;
@@ -21,6 +29,7 @@ declare function getWeekDoc(weekId: string): Promise<{
     week: FirebaseFirestore.DocumentData;
     jobId: string;
 }>;
+declare function listWeekCards(weekId: string): Promise<any[]>;
 export declare const listTimecardWeeksForCurrentUser: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     weeks: any[];
 }>, unknown>;
@@ -43,13 +52,24 @@ export declare const deleteTimecardCardRecord: import("firebase-functions/v2/htt
 export declare const deleteTimecardWeekRecord: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
 }>, unknown>;
+interface ReopenTimecardWeekDependencies {
+    getWeekDoc: typeof getWeekDoc;
+    getAuthorizedUser: typeof getAuthorizedUser;
+    runTransaction<T>(updateFunction: (transaction: Transaction) => Promise<T>): Promise<T>;
+}
+export declare function handleReopenTimecardWeekRecord(request: CallableRequestLike, deps?: ReopenTimecardWeekDependencies): Promise<{
+    success: boolean;
+    reopened: boolean;
+}>;
 export declare const reopenTimecardWeekRecord: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
+    reopened: boolean;
 }>, unknown>;
 interface SubmitTimecardWeekDependencies {
     getWeekDoc: typeof getWeekDoc;
     getAuthorizedUser: typeof getAuthorizedUser;
     getJobDetails: typeof getJobDetails;
+    listWeekCards: typeof listWeekCards;
     claimSubmittedEmailOperation: typeof claimSubmittedEmailOperation;
     sendSubmittedWeekEmail: typeof sendSubmittedWeekEmail;
     buildSubmittedEmailStatusUpdate: typeof buildSubmittedEmailStatusUpdate;

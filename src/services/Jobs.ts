@@ -26,7 +26,14 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
-import type { JobRecord, JobType, NotificationModuleKey, NotificationRecipients } from '@/types/domain'
+import type {
+  GlobalNotificationModuleKey,
+  GlobalNotificationRecipients,
+  JobRecord,
+  JobType,
+  NotificationModuleKey,
+  NotificationRecipients,
+} from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
 export interface JobUpsertInput {
@@ -43,13 +50,21 @@ export interface JobUpsertInput {
   active: boolean
 }
 
-export const NOTIFICATION_MODULE_KEYS: NotificationModuleKey[] = ['dailyLogs', 'timecards', 'shopOrders']
+export const NOTIFICATION_MODULE_KEYS: NotificationModuleKey[] = [
+  'dailyLogs',
+  'timecards',
+  'shopOrders',
+]
 
 function normalizeAssignedIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
 
   return Array.from(
-    new Set(value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)),
+    new Set(
+      value.filter(
+        (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0,
+      ),
+    ),
   )
 }
 
@@ -95,6 +110,19 @@ function normalizeNotificationRecipients(
   }
 }
 
+function normalizeGlobalNotificationRecipients(
+  value: unknown,
+  legacyFallbacks?: Partial<NotificationRecipients>,
+): GlobalNotificationRecipients {
+  const data = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+
+  return {
+    ...normalizeNotificationRecipients(data, legacyFallbacks),
+    newJobs: normalizeNotificationRecipientList(data.newJobs),
+    fieldUserAssignments: normalizeNotificationRecipientList(data.fieldUserAssignments),
+  }
+}
+
 function normalizeJob(id: string, data: DocumentData): JobRecord {
   const notificationRecipients = normalizeNotificationRecipients(data.notificationRecipients, {
     dailyLogs: data.dailyLogRecipients,
@@ -115,13 +143,18 @@ function normalizeJob(id: string, data: DocumentData): JobRecord {
     active: data.active !== false,
     assignedForemanIds: normalizeAssignedIds(data.assignedForemanIds),
     timecardStatus: typeof data.timecardStatus === 'string' ? data.timecardStatus : null,
-    timecardPeriodEndDate: typeof data.timecardPeriodEndDate === 'string' ? data.timecardPeriodEndDate : null,
+    timecardPeriodEndDate:
+      typeof data.timecardPeriodEndDate === 'string' ? data.timecardPeriodEndDate : null,
     notificationRecipients,
     adminDailyLogRecipients: Array.isArray(data.adminDailyLogRecipients)
-      ? data.adminDailyLogRecipients.filter((entry: unknown): entry is string => typeof entry === 'string')
+      ? data.adminDailyLogRecipients.filter(
+          (entry: unknown): entry is string => typeof entry === 'string',
+        )
       : [],
     dailyLogRecipients: Array.isArray(data.dailyLogRecipients)
-      ? data.dailyLogRecipients.filter((entry: unknown): entry is string => typeof entry === 'string')
+      ? data.dailyLogRecipients.filter(
+          (entry: unknown): entry is string => typeof entry === 'string',
+        )
       : [],
   }
 }
@@ -134,7 +167,8 @@ function sortJobs(jobs: JobRecord[]): JobRecord[] {
 
     const leftCode = left.code ?? ''
     const rightCode = right.code ?? ''
-    if (leftCode !== rightCode) return leftCode.localeCompare(rightCode, undefined, { numeric: true })
+    if (leftCode !== rightCode)
+      return leftCode.localeCompare(rightCode, undefined, { numeric: true })
 
     return left.name.localeCompare(right.name)
   })
@@ -158,7 +192,9 @@ async function listVisibleJobsFromFunction(): Promise<JobRecord[]> {
   )
   const result = await callable({})
   const jobs = Array.isArray(result.data?.jobs) ? result.data.jobs : []
-  return sortJobs(jobs.map((entry) => normalizeCallableJob(entry)).filter((entry): entry is JobRecord => !!entry))
+  return sortJobs(
+    jobs.map((entry) => normalizeCallableJob(entry)).filter((entry): entry is JobRecord => !!entry),
+  )
 }
 
 async function getVisibleJobFromFunction(jobId: string): Promise<JobRecord | null> {
@@ -174,7 +210,10 @@ async function getVisibleJobFromFunction(jobId: string): Promise<JobRecord | nul
 function buildJobsQuery(assignedOnlyForUid?: string) {
   const { db } = requireFirebaseServices()
   if (assignedOnlyForUid) {
-    return query(collection(db, 'jobs'), where('assignedForemanIds', 'array-contains', assignedOnlyForUid))
+    return query(
+      collection(db, 'jobs'),
+      where('assignedForemanIds', 'array-contains', assignedOnlyForUid),
+    )
   }
 
   return query(collection(db, 'jobs'))
@@ -217,7 +256,9 @@ async function removeJobAssignments(jobId: string) {
     const userSnapshot = await getDoc(userRef)
     if (!userSnapshot.exists()) continue
 
-    const nextAssignedJobIds = normalizeAssignedIds(userSnapshot.data().assignedJobIds).filter((entry) => entry !== jobId)
+    const nextAssignedJobIds = normalizeAssignedIds(userSnapshot.data().assignedJobIds).filter(
+      (entry) => entry !== jobId,
+    )
     batch.update(userRef, { assignedJobIds: nextAssignedJobIds })
   }
 
@@ -320,7 +361,7 @@ export function subscribeJob(
 }
 
 export function subscribeGlobalNotificationRecipients(
-  onUpdate: (recipients: NotificationRecipients) => void,
+  onUpdate: (recipients: GlobalNotificationRecipients) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
   if (isE2EActive()) {
@@ -334,14 +375,11 @@ export function subscribeGlobalNotificationRecipients(
     (snapshot) => {
       const data = snapshot.exists() ? snapshot.data() : {}
       onUpdate(
-        normalizeNotificationRecipients(
-          data?.globalNotificationRecipients,
-          {
-            dailyLogs: data?.dailyLogSubmitRecipients,
-            timecards: data?.timecardSubmitRecipients,
-            shopOrders: data?.shopOrderSubmitRecipients,
-          },
-        ),
+        normalizeGlobalNotificationRecipients(data?.globalNotificationRecipients, {
+          dailyLogs: data?.dailyLogSubmitRecipients,
+          timecards: data?.timecardSubmitRecipients,
+          shopOrders: data?.shopOrderSubmitRecipients,
+        }),
       )
     },
     (error) => {
@@ -426,7 +464,10 @@ export async function deleteJobRecord(jobId: string): Promise<void> {
   }
 }
 
-export async function updateJobDailyLogRecipients(jobId: string, recipients: string[]): Promise<void> {
+export async function updateJobDailyLogRecipients(
+  jobId: string,
+  recipients: string[],
+): Promise<void> {
   try {
     const { db } = requireFirebaseServices()
     await updateDoc(doc(db, 'jobs', jobId), {
@@ -438,7 +479,10 @@ export async function updateJobDailyLogRecipients(jobId: string, recipients: str
   }
 }
 
-export async function updateJobAdminDailyLogRecipients(jobId: string, recipients: string[]): Promise<void> {
+export async function updateJobAdminDailyLogRecipients(
+  jobId: string,
+  recipients: string[],
+): Promise<void> {
   try {
     const { db } = requireFirebaseServices()
     await updateDoc(doc(db, 'jobs', jobId), {
@@ -477,7 +521,7 @@ export async function updateJobNotificationRecipients(
 }
 
 export async function updateGlobalNotificationRecipients(
-  moduleKey: NotificationModuleKey,
+  moduleKey: GlobalNotificationModuleKey,
   recipients: string[],
 ): Promise<void> {
   if (isE2EActive()) {

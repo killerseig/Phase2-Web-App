@@ -1,6 +1,14 @@
 import { targetRoleCanBeAssignedJobs } from '@/auth/targetRoleCapabilities'
 import { formatJobTypeLabel } from '@/types/domain'
-import type { JobRecord, JobType, NotificationModuleKey, NotificationRecipients, UserProfile } from '@/types/domain'
+import type {
+  GlobalNotificationModuleKey,
+  GlobalNotificationRecipients,
+  JobRecord,
+  JobType,
+  NotificationModuleKey,
+  NotificationRecipients,
+  UserProfile,
+} from '@/types/domain'
 import { shouldHydrateDirtySnapshot } from '@/utils/dirtySnapshotGuard'
 import { filterDirectoryRecords, type DirectoryStatusFilter } from '@/utils/directoryFilters'
 
@@ -20,20 +28,37 @@ export type JobFormTextField = Exclude<keyof JobFormState, 'assignedForemanIds'>
 
 export const ALL_JOBS_ID = '__all_jobs__'
 
-const DEFAULT_JOB_TYPES = ['paint', 'acoustics', 'drywall', 'small-jobs', 'general', 'subcontractor']
+const DEFAULT_JOB_TYPES = [
+  'paint',
+  'acoustics',
+  'drywall',
+  'small-jobs',
+  'general',
+  'subcontractor',
+]
 
-export const JOB_NOTIFICATION_MODULES: Array<{ key: NotificationModuleKey; label: string }> = [
+export const JOB_NOTIFICATION_MODULES: Array<{ key: GlobalNotificationModuleKey; label: string }> =
+  [
+    { key: 'dailyLogs', label: 'Daily Logs' },
+    { key: 'timecards', label: 'Timecards' },
+    { key: 'shopOrders', label: 'Shop Orders' },
+    { key: 'newJobs', label: 'New Jobs' },
+    { key: 'fieldUserAssignments', label: 'Field User Assignments' },
+  ]
+
+export const JOB_SPECIFIC_NOTIFICATION_MODULES: Array<{
+  key: NotificationModuleKey
+  label: string
+}> = [
   { key: 'dailyLogs', label: 'Daily Logs' },
-  { key: 'timecards', label: 'Timecards' },
   { key: 'shopOrders', label: 'Shop Orders' },
 ]
 
-export const JOB_SPECIFIC_NOTIFICATION_MODULES: Array<{ key: NotificationModuleKey; label: string }> = [
-  { key: 'dailyLogs', label: 'Daily Logs' },
-  { key: 'shopOrders', label: 'Shop Orders' },
+export const JOB_NOTIFICATION_MODULE_KEYS: NotificationModuleKey[] = [
+  'dailyLogs',
+  'timecards',
+  'shopOrders',
 ]
-
-export const JOB_NOTIFICATION_MODULE_KEYS = JOB_NOTIFICATION_MODULES.map((module) => module.key)
 
 export function createEmptyNotificationRecipients(): NotificationRecipients {
   return {
@@ -43,11 +68,27 @@ export function createEmptyNotificationRecipients(): NotificationRecipients {
   }
 }
 
+export function createEmptyGlobalNotificationRecipients(): GlobalNotificationRecipients {
+  return {
+    ...createEmptyNotificationRecipients(),
+    newJobs: [],
+    fieldUserAssignments: [],
+  }
+}
+
 export function createRecipientInputState(): Record<NotificationModuleKey, string> {
   return {
     dailyLogs: '',
     timecards: '',
     shopOrders: '',
+  }
+}
+
+export function createGlobalRecipientInputState(): Record<GlobalNotificationModuleKey, string> {
+  return {
+    ...createRecipientInputState(),
+    newJobs: '',
+    fieldUserAssignments: '',
   }
 }
 
@@ -137,18 +178,13 @@ export function filterJobsForDirectory(
   statusFilter: DirectoryStatusFilter,
   search: string,
 ) {
-  return filterDirectoryRecords(
-    jobs.slice(),
-    statusFilter,
-    search,
-    (job) => [
-      job.name,
-      job.code ?? '',
-      formatJobTypeLabel(job.type),
-      job.gc ?? '',
-      job.jobAddress ?? '',
-    ],
-  )
+  return filterDirectoryRecords(jobs.slice(), statusFilter, search, (job) => [
+    job.name,
+    job.code ?? '',
+    formatJobTypeLabel(job.type),
+    job.gc ?? '',
+    job.jobAddress ?? '',
+  ])
 }
 
 export function getSelectedJobForJobsView(
@@ -200,9 +236,7 @@ export function getJobStatusCounts(jobs: readonly JobRecord[]) {
 }
 
 export function buildJobTypeOptions(jobs: readonly JobRecord[]) {
-  const liveTypes = jobs
-    .map((job) => String(job.type ?? '').trim())
-    .filter(Boolean)
+  const liveTypes = jobs.map((job) => String(job.type ?? '').trim()).filter(Boolean)
 
   return Array.from(new Set([...DEFAULT_JOB_TYPES, ...liveTypes]))
 }
@@ -256,10 +290,7 @@ export function shouldHydrateJobDetailForm(options: {
     lastSavedSignature: options.lastSavedSignature,
     localSignature,
     protectLocalMismatch: options.editDrawerOpen && !options.isCreateMode,
-    trackUnsavedLocalChanges:
-      options.canEditJob
-      && options.editDrawerOpen
-      && !options.isCreateMode,
+    trackUnsavedLocalChanges: options.canEditJob && options.editDrawerOpen && !options.isCreateMode,
   })
 }
 
@@ -282,9 +313,9 @@ export function resolveJobsViewSelectionAfterVisibleJobsChange(options: {
   }
 
   const selectedStillVisible =
-    typeof options.selectedJobId === 'string'
-    && options.selectedJobId !== ALL_JOBS_ID
-    && options.nextJobs.some((job) => job.id === options.selectedJobId)
+    typeof options.selectedJobId === 'string' &&
+    options.selectedJobId !== ALL_JOBS_ID &&
+    options.nextJobs.some((job) => job.id === options.selectedJobId)
 
   if (selectedStillVisible) return undefined
   return options.editDrawerOpen && options.canManageGlobalJobDefaults ? ALL_JOBS_ID : null
@@ -297,7 +328,7 @@ export function validateJobForm(form: JobFormState) {
   return ''
 }
 
-export function getNotificationModuleLabel(moduleKey: NotificationModuleKey) {
+export function getNotificationModuleLabel(moduleKey: GlobalNotificationModuleKey) {
   return JOB_NOTIFICATION_MODULES.find((module) => module.key === moduleKey)?.label ?? moduleKey
 }
 

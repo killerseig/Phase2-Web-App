@@ -36,11 +36,12 @@ function handleInput(event: Event) {
 <style scoped>
 .app-text-input {
   width: 100%;
-  min-height: var(--app-text-input-min-height, 2.8rem);
-  padding: 0 var(--app-text-input-padding-x, 0.9rem);
+  min-width: 0;
+  min-height: var(--app-text-input-min-height, var(--control-height-form));
+  padding: 0 var(--app-text-input-padding-x, var(--control-padding-x));
   border: 1px solid var(--app-text-input-border, var(--border));
-  border-radius: var(--app-text-input-radius, 12px);
-  background: var(--app-text-input-background, rgba(255, 255, 255, 0.045));
+  border-radius: var(--app-text-input-radius, var(--control-radius));
+  background: var(--app-text-input-background, var(--control-background));
   color: var(--app-text-input-color, var(--text));
   color-scheme: var(--app-text-input-color-scheme, dark);
   box-sizing: border-box;
@@ -57,11 +58,7 @@ function handleInput(event: Event) {
   outline: var(--app-text-input-focus-outline, none);
   outline-offset: var(--app-text-input-focus-outline-offset, 0);
   background: var(--app-text-input-focus-background, var(--field-hover));
-  box-shadow: var(
-    --app-text-input-focus-box-shadow,
-    var(--focus-ring),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05)
-  );
+  box-shadow: var(--app-text-input-focus-box-shadow, var(--control-focus-shadow));
 }
 
 .app-text-input::placeholder {

@@ -85,13 +85,13 @@ const isSubmitDisabled = computed(() => props.submitDisabled ?? props.disabled)
 
 <style scoped>
 .shop-order-custom-item-form {
-  --app-pane-header-eyebrow-font-size: 0.66rem;
-  --app-pane-header-eyebrow-letter-spacing: 0.14em;
+  --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-pane-header-title-margin: 0.12rem 0 0;
   --app-pane-header-title-font-size: 0.95rem;
   display: grid;
   align-content: start;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   padding: 0.55rem 0 0;
   border-top: 1px solid var(--shop-line-soft);
   background: transparent;
@@ -104,7 +104,7 @@ const isSubmitDisabled = computed(() => props.submitDisabled ?? props.disabled)
 .shop-order-custom-item-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: var(--form-gap);
 }
 
 .shop-order-custom-item-form__field {
@@ -122,9 +122,7 @@ const isSubmitDisabled = computed(() => props.submitDisabled ?? props.disabled)
   --app-text-input-border: var(--shop-line);
   --app-text-input-radius: var(--shop-radius-md);
   --app-text-input-background: var(--shop-field);
-  --app-text-input-box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 5px 12px rgba(3, 10, 16, 0.08);
+  --app-text-input-box-shadow: none;
 }
 
 .shop-order-custom-item-form__field--full {

@@ -1,19 +1,29 @@
 .p-toast .p-toast-message {
-  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
 }
 
 .p-toast .p-toast-message.p-toast-message-success {
-  background: rgba(236, 253, 243, 0.66);
+  background: #202b21;
+  border-color: #3e5740;
+  color: var(--success);
 }
 
 .p-toast .p-toast-message.p-toast-message-info {
-  background: rgba(239, 246, 255, 0.66);
+  background: var(--bg-accent);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .p-toast .p-toast-message.p-toast-message-warn {
-  background: rgba(254, 252, 232, 0.7);
+  background: #332d1f;
+  border-color: #665631;
+  color: var(--warning);
 }
 
 .p-toast .p-toast-message.p-toast-message-error {
-  background: rgba(254, 242, 242, 0.7);
+  background: #3b2925;
+  border-color: #72493f;
+  color: var(--danger);
 }

@@ -47,6 +47,7 @@ function makePayload(overrides: Partial<DailyLogPayload> = {}): DailyLogPayload 
         description: 'PTP image',
         name: 'ptp.jpg',
         path: 'dailyLogs/job-1/log-1/ptp.jpg',
+        thumbnailPath: 'dailyLogs/job-1/log-1/thumbnails/ptp.jpg',
         type: 'ptp',
       }),
       makeAttachment({
@@ -412,7 +413,10 @@ describe('useDailyLogAttachments', () => {
     deleteDeferred.resolve(undefined)
     await deletePromise
 
-    expect(deleteDailyLogAttachmentMock).toHaveBeenCalledWith('dailyLogs/job-1/log-1/ptp.jpg')
+    expect(deleteDailyLogAttachmentMock).toHaveBeenCalledWith(
+      'dailyLogs/job-1/log-1/ptp.jpg',
+      'dailyLogs/job-1/log-1/thumbnails/ptp.jpg',
+    )
     expect(form.value.attachments.some((attachment) => attachment.path.endsWith('/ptp.jpg'))).toBe(
       false,
     )

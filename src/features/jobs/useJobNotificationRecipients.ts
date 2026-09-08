@@ -1,17 +1,29 @@
 import { ref } from 'vue'
 import { useRecipientEditor } from '@/composables/useRecipientEditor'
-import {
-  getNotificationModuleLabel,
-} from '@/features/jobs/jobViewHelpers'
+import { getNotificationModuleLabel } from '@/features/jobs/jobViewHelpers'
 import {
   updateGlobalNotificationRecipients,
   updateJobNotificationRecipients,
 } from '@/services/jobs'
-import type { JobRecord, NotificationModuleKey, NotificationRecipients } from '@/types/domain'
+import type {
+  GlobalNotificationModuleKey,
+  GlobalNotificationRecipients,
+  JobRecord,
+  NotificationModuleKey,
+  NotificationRecipients,
+} from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import { normalizeError } from '@/utils/normalizeError'
 
 type JobRecipientTargetMode = 'create' | 'job' | 'all'
+type RecipientLists = Partial<Record<GlobalNotificationModuleKey, string[]>>
+type RecipientInputs = Partial<Record<GlobalNotificationModuleKey, string>>
+
+function isJobNotificationModuleKey(
+  moduleKey: GlobalNotificationModuleKey,
+): moduleKey is NotificationModuleKey {
+  return moduleKey === 'dailyLogs' || moduleKey === 'timecards' || moduleKey === 'shopOrders'
+}
 
 interface UseJobNotificationRecipientsOptions {
   createError: WritableRef<string>
@@ -22,8 +34,8 @@ interface UseJobNotificationRecipientsOptions {
   detailInfo: WritableRef<string>
   detailNotificationRecipients: NotificationRecipients
   detailRecipientInputs: Record<NotificationModuleKey, string>
-  globalNotificationRecipients: WritableRef<NotificationRecipients>
-  globalRecipientInputs: Record<NotificationModuleKey, string>
+  globalNotificationRecipients: WritableRef<GlobalNotificationRecipients>
+  globalRecipientInputs: Record<GlobalNotificationModuleKey, string>
   selectedJob: ReadonlyRef<JobRecord | null>
 }
 
@@ -41,35 +53,38 @@ export function useJobNotificationRecipients({
   selectedJob,
 }: UseJobNotificationRecipientsOptions) {
   const recipientSaving = ref(false)
-  const {
-    appendRecipient,
-    getRecipientValueAddResult,
-    removeRecipient,
-  } = useRecipientEditor()
+  const { appendRecipient, getRecipientValueAddResult, removeRecipient } = useRecipientEditor()
 
-  function getRecipientTargets(mode: JobRecipientTargetMode) {
+  function getRecipientTargets(mode: JobRecipientTargetMode): {
+    errorTarget: WritableRef<string>
+    infoTarget: WritableRef<string>
+    inputs: RecipientInputs
+    recipients: RecipientLists
+  } {
     return {
       errorTarget: mode === 'create' ? createError : detailError,
       infoTarget: mode === 'create' ? createInfo : detailInfo,
-      inputs: mode === 'create'
-        ? createRecipientInputs
-        : mode === 'job'
-          ? detailRecipientInputs
-          : globalRecipientInputs,
-      recipients: mode === 'create'
-        ? createNotificationRecipients
-        : mode === 'job'
-          ? detailNotificationRecipients
-          : globalNotificationRecipients.value,
+      inputs:
+        mode === 'create'
+          ? createRecipientInputs
+          : mode === 'job'
+            ? detailRecipientInputs
+            : globalRecipientInputs,
+      recipients:
+        mode === 'create'
+          ? createNotificationRecipients
+          : mode === 'job'
+            ? detailNotificationRecipients
+            : globalNotificationRecipients.value,
     }
   }
 
   async function persistRecipients(
     mode: Exclude<JobRecipientTargetMode, 'create'>,
-    moduleKey: NotificationModuleKey,
+    moduleKey: GlobalNotificationModuleKey,
     nextRecipients: string[],
   ) {
-    if (mode === 'job' && selectedJob.value) {
+    if (mode === 'job' && selectedJob.value && isJobNotificationModuleKey(moduleKey)) {
       await updateJobNotificationRecipients(selectedJob.value.id, moduleKey, nextRecipients)
       detailNotificationRecipients[moduleKey] = nextRecipients
       return
@@ -86,15 +101,15 @@ export function useJobNotificationRecipients({
 
   async function addRecipientToTarget(
     mode: JobRecipientTargetMode,
-    moduleKey: NotificationModuleKey,
+    moduleKey: GlobalNotificationModuleKey,
   ) {
-    const {
-      errorTarget,
-      infoTarget,
-      inputs,
-      recipients,
-    } = getRecipientTargets(mode)
-    const result = getRecipientValueAddResult(inputs[moduleKey], recipients[moduleKey])
+    const { errorTarget, infoTarget, inputs, recipients } = getRecipientTargets(mode)
+    if (mode !== 'all' && !isJobNotificationModuleKey(moduleKey)) {
+      errorTarget.value = 'That email option is available only under All Jobs.'
+      return
+    }
+
+    const result = getRecipientValueAddResult(inputs[moduleKey] ?? '', recipients[moduleKey] ?? [])
 
     errorTarget.value = ''
 
@@ -114,7 +129,7 @@ export function useJobNotificationRecipients({
       return
     }
 
-    const nextRecipients = appendRecipient(recipients[moduleKey], result.email)
+    const nextRecipients = appendRecipient(recipients[moduleKey] ?? [], result.email)
 
     if (mode === 'create') {
       recipients[moduleKey] = nextRecipients
@@ -130,7 +145,10 @@ export function useJobNotificationRecipients({
       inputs[moduleKey] = ''
       infoTarget.value = 'Recipient added.'
     } catch (error) {
-      errorTarget.value = normalizeError(error, `Failed to add the ${getNotificationModuleLabel(moduleKey)} recipient.`)
+      errorTarget.value = normalizeError(
+        error,
+        `Failed to add the ${getNotificationModuleLabel(moduleKey)} recipient.`,
+      )
     } finally {
       recipientSaving.value = false
     }
@@ -138,15 +156,16 @@ export function useJobNotificationRecipients({
 
   async function removeRecipientFromTarget(
     mode: JobRecipientTargetMode,
-    moduleKey: NotificationModuleKey,
+    moduleKey: GlobalNotificationModuleKey,
     email: string,
   ) {
-    const {
-      errorTarget,
-      infoTarget,
-      recipients,
-    } = getRecipientTargets(mode)
-    const nextRecipients = removeRecipient(recipients[moduleKey], email)
+    const { errorTarget, infoTarget, recipients } = getRecipientTargets(mode)
+    if (mode !== 'all' && !isJobNotificationModuleKey(moduleKey)) {
+      errorTarget.value = 'That email option is available only under All Jobs.'
+      return
+    }
+
+    const nextRecipients = removeRecipient(recipients[moduleKey] ?? [], email)
 
     errorTarget.value = ''
 
@@ -162,7 +181,10 @@ export function useJobNotificationRecipients({
       await persistRecipients(mode, moduleKey, nextRecipients)
       infoTarget.value = 'Recipient removed.'
     } catch (error) {
-      errorTarget.value = normalizeError(error, `Failed to remove the ${getNotificationModuleLabel(moduleKey)} recipient.`)
+      errorTarget.value = normalizeError(
+        error,
+        `Failed to remove the ${getNotificationModuleLabel(moduleKey)} recipient.`,
+      )
     } finally {
       recipientSaving.value = false
     }

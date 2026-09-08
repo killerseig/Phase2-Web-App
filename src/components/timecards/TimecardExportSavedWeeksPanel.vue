@@ -6,6 +6,7 @@ defineProps<{
   weeks: readonly TimecardWeekRecord[]
   weeksLoading: boolean
   canUseTimecardExport: boolean
+  canReopenSubmittedWeeks: boolean
   actionLoading: boolean
   mobileActive: boolean
   formatDate: (value: string) => string
@@ -76,11 +77,11 @@ const emit = defineEmits<{
             <i class="pi pi-trash" aria-hidden="true"></i>
           </button>
           <button
-            v-if="week.status === 'submitted'"
+            v-if="week.status === 'submitted' && canReopenSubmittedWeeks"
             class="timecard-export-saved-weeks__action"
             type="button"
-            aria-label="Undo Submitted"
-            title="Undo Submitted"
+            aria-label="Re-open for Corrections"
+            title="Re-open for Corrections"
             :disabled="actionLoading"
             :data-testid="`timecard-export-reopen-week-${week.id}`"
             @click="emit('reopenWeek', week)"

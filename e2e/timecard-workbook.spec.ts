@@ -554,6 +554,37 @@ test.describe('timecard workbook regressions', () => {
       })
   })
 
+  test('submission requires Job #, Area, and Acct on each line with hours', async ({ page }) => {
+    const fixture = createTimecardsFixture({ seededCard: true })
+    fixture.timecardCards[0]!.lines[0]!.days[1]!.hours = 8
+
+    await gotoPhase2App(page, '/jobs/job-e2e/timecards', fixture)
+    await selectWeekEnding(page)
+
+    await page.getByRole('button', { name: 'Submit Week' }).click()
+
+    await expect(page.getByRole('alert')).toContainText(
+      'Casey Brown, line 1 has hours but is missing Area and Acct.',
+    )
+    await expect(page.getByRole('dialog', { name: 'Submit week?' })).toHaveCount(0)
+    await expect
+      .poll(async () => page.evaluate(() => {
+        const state = window.__PHASE2_E2E_STATE__ as {
+          timecardWeeks?: Array<{ id?: string; status?: string }>
+        }
+        return state.timecardWeeks?.find((week) => week.id === 'week-e2e')?.status ?? null
+      }))
+      .toBe('draft')
+
+    const firstCard = page.getByTestId('timecards-card-card-e2e')
+    await firstCard.locator('input[data-nav-col="1"]').first().fill('2')
+    await firstCard.getByTestId('timecard-account-0').fill('716')
+    await page.getByRole('button', { name: 'Submit Week' }).click()
+    await confirmSubmitWeek(page)
+
+    await expect(page.getByText('Week submitted and emailed to 1 recipient.')).toBeVisible()
+  })
+
   test('submitting a week reports the notification email result', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/timecards', createTimecardsFixture({ seededCard: true }))
     await selectWeekEnding(page)

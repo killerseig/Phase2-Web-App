@@ -41,8 +41,27 @@ test.describe('daily log draft regressions', () => {
           {
             name: 'lobby-progress.jpg',
             url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+            thumbnailUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
             type: 'photo',
             description: 'Lobby ceiling progress',
+          },
+          {
+            name: 'ptp-board.jpg',
+            url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+            type: 'ptp',
+            description: 'Morning PTP board',
+          },
+          {
+            name: 'qc-grid-1.jpg',
+            url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+            type: 'qc',
+            description: 'First QC inspection',
+          },
+          {
+            name: 'qc-grid-2.jpg',
+            url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+            type: 'qc',
+            description: 'Second QC inspection',
           },
         ],
       },
@@ -53,11 +72,18 @@ test.describe('daily log draft regressions', () => {
 
     await expect(page).toHaveURL(/\/daily-log-gallery\/gallery-e2e$/)
     await expect(page.getByTestId('public-daily-log-gallery')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Phase 2 Company Acoustical remodel (#1A)' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Phase 2 Company Acoustical remodel (#1A)' }),
+    ).toBeVisible()
     await expect(page.getByText('Chris (CJ) Larsen')).toBeVisible()
-    await expect(page.getByText('Select a photo to view it larger.')).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Photo sections' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Photos (1)', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'PTP Photos (1)', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'QC Photos (2)', exact: true })).toBeVisible()
+    await expect(page.getByTestId('gallery-section-photo')).toContainText('Lobby ceiling progress')
+    await expect(page.getByTestId('gallery-section-ptp')).toContainText('Morning PTP board')
+    await expect(page.getByTestId('gallery-section-qc')).toContainText('Second QC inspection')
     await expect(page.locator('.app-shell')).toHaveCount(0)
-    await expect(page.getByRole('navigation')).toHaveCount(0)
     await expect(page.getByText('Email Recipients')).toHaveCount(0)
     await expect(page.getByText('History', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Sign In', { exact: true })).toHaveCount(0)
@@ -75,6 +101,7 @@ test.describe('daily log draft regressions', () => {
     await expect(viewerImage).toBeVisible()
     await expect(viewerImage).toHaveCSS('object-fit', 'contain')
     await expect(viewer.getByText('Lobby ceiling progress')).toBeVisible()
+    await expect(viewer.getByText('Photos: 1 of 1')).toBeVisible()
 
     const imageBounds = await viewerImage.boundingBox()
     expect(imageBounds).not.toBeNull()
@@ -85,6 +112,19 @@ test.describe('daily log draft regressions', () => {
 
     await viewer.getByRole('button', { name: 'Close photo viewer' }).click()
     await expect(viewer).toBeHidden()
+
+    await page.getByRole('button', { name: 'View qc-grid-1.jpg' }).click()
+    const qcViewer = page.getByRole('dialog', { name: 'Photo viewer: qc-grid-1.jpg' })
+    await expect(qcViewer.getByText('QC Photos: 1 of 2')).toBeVisible()
+    await qcViewer.getByRole('button', { name: 'Next photo' }).click()
+    await expect(page.getByRole('dialog', { name: 'Photo viewer: qc-grid-2.jpg' })).toBeVisible()
+    await expect(page.getByText('QC Photos: 2 of 2')).toBeVisible()
+    await page.getByRole('button', { name: 'Close photo viewer' }).click()
+
+    await page.locator('body').evaluate(() => {
+      window.location.hash = '#gallery-ptp-1'
+    })
+    await expect(page.getByRole('dialog', { name: 'Photo viewer: ptp-board.jpg' })).toBeVisible()
   })
 
   test('public photo galleries scroll through long albums on small screens', async ({ page }) => {
@@ -155,9 +195,7 @@ test.describe('daily log draft regressions', () => {
       fixture,
     )
 
-    await expect(page).toHaveURL(
-      /\/daily-log-gallery\/legacy\/job-e2e\/daily-log-1$/,
-    )
+    await expect(page).toHaveURL(/\/daily-log-gallery\/legacy\/job-e2e\/daily-log-1$/)
     await expect(page.getByTestId('public-daily-log-gallery')).toBeVisible()
     await expect(page.locator('.app-shell')).toHaveCount(0)
     await expect(page.getByRole('navigation')).toHaveCount(0)

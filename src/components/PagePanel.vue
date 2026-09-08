@@ -26,25 +26,22 @@ defineProps<{
 
 <style scoped>
 .page-panel {
-  border: 1px solid rgba(168, 190, 209, 0.18);
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at 8% 0%, rgba(99, 199, 230, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
-    var(--surface);
-  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel-background);
+  box-shadow: var(--shadow-md);
 }
 
 .page-panel__header {
-  --app-pane-header-eyebrow-font-size: 0.74rem;
-  --app-pane-header-eyebrow-letter-spacing: 0.08em;
-  --app-pane-header-title-margin: 0.45rem 0 0;
-  --app-pane-header-title-font-size: 1.2rem;
+  --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
+  --app-pane-header-title-margin: 0.35rem 0 0;
+  --app-pane-header-title-font-size: var(--font-size-pane-title);
   --app-pane-header-description-margin: 0.45rem 0 0;
-  padding: 1.1rem 1.25rem 0;
+  padding: var(--space-4) var(--space-4) 0;
 }
 
 .page-panel__body {
-  padding: 1.25rem;
+  padding: var(--space-4);
 }
 </style>

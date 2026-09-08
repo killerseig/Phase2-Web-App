@@ -34,9 +34,7 @@ defineProps<{
   padding: 1.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background:
-    radial-gradient(circle at top right, rgba(99, 199, 230, 0.15), transparent 32%),
-    linear-gradient(180deg, rgba(31, 45, 58, 0.96), rgba(20, 31, 42, 0.96));
+  background: var(--panel-background);
 }
 
 .module-placeholder__eyebrow {
@@ -68,14 +66,10 @@ defineProps<{
   padding: 1rem;
   border: 1px solid rgba(168, 190, 209, 0.16);
   border-radius: var(--radius);
-  background:
-    radial-gradient(circle at 8% 0%, rgba(99, 199, 230, 0.06), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0)),
-    rgba(255, 255, 255, 0.038);
-  box-shadow: 0 10px 24px rgba(3, 10, 16, 0.1);
+  background: var(--panel-background);
+  box-shadow: none;
   transition:
     transform 0.2s ease,
-    box-shadow 0.2s ease,
     border-color 0.2s ease,
     background 0.2s ease;
 }

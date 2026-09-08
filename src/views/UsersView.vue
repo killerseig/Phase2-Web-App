@@ -70,6 +70,7 @@ const saveLoading = ref(false)
 const deleteLoading = ref(false)
 const deleteConfirmOpen = ref(false)
 const inviteLoading = ref(false)
+const emailAction = ref<'invite' | 'reset' | null>(null)
 
 useToastMessages([
   { source: usersError, severity: 'error', summary: 'Users' },
@@ -129,10 +130,7 @@ const {
   users,
 })
 
-const {
-  handleCreateUser,
-  handleSendPendingInvites,
-} = useUserCreateActions({
+const { handleCreateUser, handleSendPendingInvites } = useUserCreateActions({
   createAction,
   createForm,
   inviteLoading,
@@ -151,11 +149,14 @@ const {
   handleAutoSaveUser,
   handleDeleteUser,
   handleDetailAssignedJobToggle,
+  handleResendInvite,
+  handleSendPasswordReset,
   queueDetailSave,
 } = useUserDetailActions({
   deleteConfirmOpen,
   deleteLoading,
   detailError,
+  emailAction,
   detailForm,
   editingSelf,
   hasUnsavedDetailChanges,
@@ -234,8 +235,10 @@ useUserAdminViewSync({
         :selected-user="selectedUser"
         :editing-self="editingSelf"
         :create-action="createAction"
+        :email-action="emailAction"
         :save-loading="saveLoading"
         :delete-loading="deleteLoading"
+        :delete-confirm-open="deleteConfirmOpen"
         :detail-info="detailInfo"
         :create-jobs="filteredCreateJobs"
         :detail-jobs="filteredDetailJobs"
@@ -245,6 +248,8 @@ useUserAdminViewSync({
         @create-user="handleCreateUser"
         @delete-user="handleDeleteUser"
         @detail-submit="handleAutoSaveUser"
+        @resend-invite="handleResendInvite"
+        @send-password-reset="handleSendPasswordReset"
         @update-create-text-field="updateCreateTextField"
         @update-create-role="updateCreateRole"
         @toggle-create-assigned-job="toggleCreateAssignedJob"
@@ -266,5 +271,3 @@ useUserAdminViewSync({
     />
   </DirectoryEditorWorkspaceShell>
 </template>
-
-

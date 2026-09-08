@@ -13,6 +13,8 @@ import type {
   DailyLogAttachmentType,
   DailyLogRecord,
   EmployeeRecord,
+  GlobalNotificationModuleKey,
+  GlobalNotificationRecipients,
   JobRecord,
   NotificationModuleKey,
   NotificationRecipients,
@@ -88,14 +90,14 @@ export interface Phase2E2EState {
   publicDailyLogGalleries?: Record<string, PublicDailyLogGalleryRecord>
   timecardWeeks?: TimecardWeekRecord[]
   timecardCards?: Phase2E2ETimecardCardState[]
-  globalNotificationRecipients?: NotificationRecipients
+  globalNotificationRecipients?: GlobalNotificationRecipients
 }
 
 type JobsListener = (jobs: JobRecord[]) => void
 type JobListener = (job: JobRecord | null) => void
 type UsersListener = (users: UserProfile[]) => void
 type EmployeesListener = (employees: EmployeeRecord[]) => void
-type GlobalRecipientsListener = (recipients: NotificationRecipients) => void
+type GlobalRecipientsListener = (recipients: GlobalNotificationRecipients) => void
 type CategoriesListener = (categories: ShopCategoryRecord[]) => void
 type CatalogItemsListener = (items: ShopCatalogItemRecord[]) => void
 type ShopOrdersListener = (orders: ShopOrderRecord[]) => void
@@ -147,16 +149,46 @@ function cloneValue<T>(value: T): T {
 }
 
 function normalizeNotificationRecipients(value: unknown): NotificationRecipients {
-  const source = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
+  const source =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   return {
     dailyLogs: Array.isArray(source.dailyLogs)
-      ? source.dailyLogs.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim().toLowerCase()).filter(Boolean)
+      ? source.dailyLogs
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
       : [],
     timecards: Array.isArray(source.timecards)
-      ? source.timecards.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim().toLowerCase()).filter(Boolean)
+      ? source.timecards
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
       : [],
     shopOrders: Array.isArray(source.shopOrders)
-      ? source.shopOrders.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim().toLowerCase()).filter(Boolean)
+      ? source.shopOrders
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
+      : [],
+  }
+}
+
+function normalizeGlobalNotificationRecipients(value: unknown): GlobalNotificationRecipients {
+  const source =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return {
+    ...normalizeNotificationRecipients(source),
+    newJobs: Array.isArray(source.newJobs)
+      ? source.newJobs
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
+      : [],
+    fieldUserAssignments: Array.isArray(source.fieldUserAssignments)
+      ? source.fieldUserAssignments
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
       : [],
   }
 }
@@ -193,7 +225,9 @@ function normalizeState(state: Phase2E2EState): Phase2E2EState {
         : {},
     timecardWeeks: Array.isArray(cloned.timecardWeeks) ? cloned.timecardWeeks : [],
     timecardCards: Array.isArray(cloned.timecardCards) ? cloned.timecardCards : [],
-    globalNotificationRecipients: normalizeNotificationRecipients(cloned.globalNotificationRecipients),
+    globalNotificationRecipients: normalizeGlobalNotificationRecipients(
+      cloned.globalNotificationRecipients,
+    ),
   }
 }
 
@@ -230,7 +264,8 @@ function sortJobs(jobs: JobRecord[]) {
 
     const leftCode = left.code ?? ''
     const rightCode = right.code ?? ''
-    if (leftCode !== rightCode) return leftCode.localeCompare(rightCode, undefined, { numeric: true })
+    if (leftCode !== rightCode)
+      return leftCode.localeCompare(rightCode, undefined, { numeric: true })
 
     return left.name.localeCompare(right.name)
   })
@@ -264,47 +299,54 @@ function sortEmployees(employees: EmployeeRecord[]) {
 }
 
 function sortShopOrders(orders: ShopOrderRecord[]) {
-  return orders
-    .slice()
-    .sort((left, right) => {
-      const rightTimestamp = toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
-      const leftTimestamp = toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
-      if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
-      return right.id.localeCompare(left.id)
-    })
+  return orders.slice().sort((left, right) => {
+    const rightTimestamp =
+      toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
+    const leftTimestamp =
+      toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
+    if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
+    return right.id.localeCompare(left.id)
+  })
 }
 
 function sortDailyLogs(logs: DailyLogRecord[]) {
-  return logs
-    .slice()
-    .sort((left, right) => {
-      const rank = (status: string) => (status === 'submitted' ? 0 : 1)
-      if (rank(left.status) !== rank(right.status)) return rank(left.status) - rank(right.status)
+  return logs.slice().sort((left, right) => {
+    const rank = (status: string) => (status === 'submitted' ? 0 : 1)
+    if (rank(left.status) !== rank(right.status)) return rank(left.status) - rank(right.status)
 
-      const rightTimestamp = toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
-      const leftTimestamp = toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
-      if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
+    const rightTimestamp =
+      toAppMillis(right.submittedAt) || toAppMillis(right.updatedAt) || toAppMillis(right.createdAt)
+    const leftTimestamp =
+      toAppMillis(left.submittedAt) || toAppMillis(left.updatedAt) || toAppMillis(left.createdAt)
+    if (rightTimestamp !== leftTimestamp) return rightTimestamp - leftTimestamp
 
-      if (right.sequenceNumber !== left.sequenceNumber) return right.sequenceNumber - left.sequenceNumber
-      return right.id.localeCompare(left.id)
-    })
+    if (right.sequenceNumber !== left.sequenceNumber)
+      return right.sequenceNumber - left.sequenceNumber
+    return right.id.localeCompare(left.id)
+  })
 }
 
 function sortWeeks(weeks: TimecardWeekRecord[]) {
-  return weeks.slice().sort((left, right) => (
-    right.weekEndDate.localeCompare(left.weekEndDate)
-    || Number(right.status === 'submitted') - Number(left.status === 'submitted')
-    || Number(right.employeeCardCount ?? 0) - Number(left.employeeCardCount ?? 0)
-    || right.id.localeCompare(left.id)
-  ))
+  return weeks
+    .slice()
+    .sort(
+      (left, right) =>
+        right.weekEndDate.localeCompare(left.weekEndDate) ||
+        Number(right.status === 'submitted') - Number(left.status === 'submitted') ||
+        Number(right.employeeCardCount ?? 0) - Number(left.employeeCardCount ?? 0) ||
+        right.id.localeCompare(left.id),
+    )
 }
 
 function sortCards(cards: TimecardCardRecord[]) {
-  return cards.slice().sort((left, right) => (
-    left.sortIndex - right.sortIndex
-    || buildCardDisplayName(left).localeCompare(buildCardDisplayName(right))
-    || left.id.localeCompare(right.id)
-  ))
+  return cards
+    .slice()
+    .sort(
+      (left, right) =>
+        left.sortIndex - right.sortIndex ||
+        buildCardDisplayName(left).localeCompare(buildCardDisplayName(right)) ||
+        left.id.localeCompare(right.id),
+    )
 }
 
 function filterVisibleJobs(
@@ -314,10 +356,11 @@ function filterVisibleJobs(
   const assignedJobIds = Array.isArray(options?.assignedJobIds) ? options.assignedJobIds : []
   const assignedOnlyForUid = options?.assignedOnlyForUid
   if (assignedJobIds.length > 0 || assignedOnlyForUid) {
-    return jobs.filter((job) => (
-      assignedJobIds.includes(job.id)
-      || (!!assignedOnlyForUid && job.assignedForemanIds.includes(assignedOnlyForUid))
-    ))
+    return jobs.filter(
+      (job) =>
+        assignedJobIds.includes(job.id) ||
+        (!!assignedOnlyForUid && job.assignedForemanIds.includes(assignedOnlyForUid)),
+    )
   }
 
   return jobs
@@ -338,7 +381,9 @@ function getShopOrdersForJob(jobId: string) {
 }
 
 function getDailyLogsForDate(jobId: string, logDate: string) {
-  return sortDailyLogs(requireState().dailyLogs?.filter((log) => log.jobId === jobId && log.logDate === logDate) ?? [])
+  return sortDailyLogs(
+    requireState().dailyLogs?.filter((log) => log.jobId === jobId && log.logDate === logDate) ?? [],
+  )
 }
 
 function getTimecardWeeksForJob(
@@ -348,11 +393,12 @@ function getTimecardWeeksForJob(
 ) {
   const weeks = requireState().timecardWeeks ?? []
   return sortWeeks(
-    weeks.filter((week) => (
-      week.jobId === jobId
-      && (!ownerForemanUserId || week.ownerForemanUserId === ownerForemanUserId)
-      && (!statusFilter || week.status === statusFilter)
-    )),
+    weeks.filter(
+      (week) =>
+        week.jobId === jobId &&
+        (!ownerForemanUserId || week.ownerForemanUserId === ownerForemanUserId) &&
+        (!statusFilter || week.status === statusFilter),
+    ),
   )
 }
 
@@ -409,21 +455,31 @@ function notifyAssignedJobsChanged(changedJobIds: string[]) {
 }
 
 function notifyGlobalRecipientsListeners() {
-  const recipients = cloneValue(requireState().globalNotificationRecipients ?? normalizeNotificationRecipients(null))
+  const recipients = cloneValue(
+    requireState().globalNotificationRecipients ?? normalizeGlobalNotificationRecipients(null),
+  )
   for (const listener of globalRecipientsListeners) {
     listener(recipients)
   }
 }
 
 function notifyCategoryListeners() {
-  const categories = cloneValue(requireState().shopCategories.slice().sort((left, right) => left.name.localeCompare(right.name)))
+  const categories = cloneValue(
+    requireState()
+      .shopCategories.slice()
+      .sort((left, right) => left.name.localeCompare(right.name)),
+  )
   for (const listener of categoryListeners) {
     listener(categories)
   }
 }
 
 function notifyCatalogItemListeners() {
-  const items = cloneValue(requireState().shopCatalogItems.slice().sort((left, right) => left.description.localeCompare(right.description)))
+  const items = cloneValue(
+    requireState()
+      .shopCatalogItems.slice()
+      .sort((left, right) => left.description.localeCompare(right.description)),
+  )
   for (const listener of catalogItemListeners) {
     listener(items)
   }
@@ -440,7 +496,9 @@ function notifyShopOrderListeners(jobId: string) {
 }
 
 function notifyDailyLogListeners(jobId: string, logDate: string) {
-  const matchingListeners = Array.from(dailyLogListeners).filter((entry) => entry.jobId === jobId && entry.logDate === logDate)
+  const matchingListeners = Array.from(dailyLogListeners).filter(
+    (entry) => entry.jobId === jobId && entry.logDate === logDate,
+  )
   if (!matchingListeners.length) return
 
   const logs = cloneValue(getDailyLogsForDate(jobId, logDate))
@@ -450,15 +508,15 @@ function notifyDailyLogListeners(jobId: string, logDate: string) {
 }
 
 function notifyTimecardWeekListeners(jobId: string) {
-  const matchingListeners = Array.from(timecardWeekListeners).filter((entry) => entry.jobId === jobId)
+  const matchingListeners = Array.from(timecardWeekListeners).filter(
+    (entry) => entry.jobId === jobId,
+  )
   if (!matchingListeners.length) return
 
   for (const entry of matchingListeners) {
-    entry.listener(cloneValue(getTimecardWeeksForJob(
-      jobId,
-      entry.ownerForemanUserId,
-      entry.statusFilter,
-    )))
+    entry.listener(
+      cloneValue(getTimecardWeeksForJob(jobId, entry.ownerForemanUserId, entry.statusFilter)),
+    )
   }
 }
 
@@ -472,7 +530,9 @@ function notifyAllTimecardWeekListeners() {
 }
 
 function notifyTimecardCardListeners(weekId: string) {
-  const matchingListeners = Array.from(timecardCardListeners).filter((entry) => entry.weekId === weekId)
+  const matchingListeners = Array.from(timecardCardListeners).filter(
+    (entry) => entry.weekId === weekId,
+  )
   if (!matchingListeners.length) return
 
   for (const entry of matchingListeners) {
@@ -578,25 +638,35 @@ function sanitizeAttachmentType(value: unknown): DailyLogAttachmentType {
 }
 
 function normalizeItems(items: ShopOrderItemRecord[]): ShopOrderItemRecord[] {
-  return sortShopOrderItems(items
-    .map((item): ShopOrderItemRecord => ({
-      ...item,
-      id: String(item.id || '').trim() || makeId('item'),
-      description: item.description.trim(),
-      note: item.note.trim(),
-      quantity: normalizeQuantity(item.quantity),
-      price: normalizePrice(item.price),
-      catalogItemId: item.catalogItemId?.trim() || null,
-      categoryId: item.categoryId?.trim() || null,
-      sku: item.sku?.trim() || null,
-      sourceType: item.sourceType === 'custom' ? 'custom' : 'catalog',
-    }))
-    .filter((item) => item.description.length > 0))
+  return sortShopOrderItems(
+    items
+      .map(
+        (item): ShopOrderItemRecord => ({
+          ...item,
+          id: String(item.id || '').trim() || makeId('item'),
+          description: item.description.trim(),
+          note: item.note.trim(),
+          quantity: normalizeQuantity(item.quantity),
+          price: normalizePrice(item.price),
+          catalogItemId: item.catalogItemId?.trim() || null,
+          categoryId: item.categoryId?.trim() || null,
+          sku: item.sku?.trim() || null,
+          sourceType: item.sourceType === 'custom' ? 'custom' : 'catalog',
+        }),
+      )
+      .filter((item) => item.description.length > 0),
+  )
 }
 
 function getNextDailyLogSequence(jobId: string, logDate: string) {
-  const matchingLogs = requireState().dailyLogs?.filter((log) => log.jobId === jobId && log.logDate === logDate) ?? []
-  return matchingLogs.reduce((maxValue, log) => Math.max(maxValue, Number(log.sequenceNumber ?? 0) || 0), 0) + 1
+  const matchingLogs =
+    requireState().dailyLogs?.filter((log) => log.jobId === jobId && log.logDate === logDate) ?? []
+  return (
+    matchingLogs.reduce(
+      (maxValue, log) => Math.max(maxValue, Number(log.sequenceNumber ?? 0) || 0),
+      0,
+    ) + 1
+  )
 }
 
 function updateUserAssignments(jobId: string, nextAssignedForemanIds: string[]) {
@@ -626,13 +696,16 @@ function syncE2EUserJobAssignments(
   nextAssignedJobIds: string[],
 ) {
   const state = requireState()
-  const effectiveAssignedJobIds = currentRoleCanBeAssignedJobs(role) ? normalizeStringList(nextAssignedJobIds) : []
+  const effectiveAssignedJobIds = currentRoleCanBeAssignedJobs(role)
+    ? normalizeStringList(nextAssignedJobIds)
+    : []
   const changedJobIds: string[] = []
 
   state.jobs = state.jobs.map((job) => {
     const nextAssignedForemanIds = new Set(job.assignedForemanIds)
     const hadUser = nextAssignedForemanIds.has(uid)
-    const shouldHaveUser = currentRoleCanBeAssignedJobs(role) && effectiveAssignedJobIds.includes(job.id)
+    const shouldHaveUser =
+      currentRoleCanBeAssignedJobs(role) && effectiveAssignedJobIds.includes(job.id)
 
     if (shouldHaveUser) {
       nextAssignedForemanIds.add(uid)
@@ -653,7 +726,9 @@ function syncE2EUserJobAssignments(
     return job
   })
 
-  return effectiveAssignedJobIds.length ? Array.from(new Set([...changedJobIds, ...effectiveAssignedJobIds])) : changedJobIds
+  return effectiveAssignedJobIds.length
+    ? Array.from(new Set([...changedJobIds, ...effectiveAssignedJobIds]))
+    : changedJobIds
 }
 
 function getCurrentE2EWeekEndDate() {
@@ -729,7 +804,11 @@ export function subscribeE2EEmployees(onUpdate: EmployeesListener) {
 
 export function subscribeE2EGlobalNotificationRecipients(onUpdate: GlobalRecipientsListener) {
   globalRecipientsListeners.add(onUpdate)
-  onUpdate(cloneValue(requireState().globalNotificationRecipients ?? normalizeNotificationRecipients(null)))
+  onUpdate(
+    cloneValue(
+      requireState().globalNotificationRecipients ?? normalizeGlobalNotificationRecipients(null),
+    ),
+  )
 
   return () => {
     globalRecipientsListeners.delete(onUpdate)
@@ -805,9 +884,9 @@ export async function deleteE2EShopCategory(categoryId: string) {
   }
 
   state.shopCategories = state.shopCategories.filter((category) => category.id !== categoryId)
-  state.shopCatalogItems = state.shopCatalogItems.map((item) => (
-    item.categoryId === categoryId ? { ...item, categoryId: null } : item
-  ))
+  state.shopCatalogItems = state.shopCatalogItems.map((item) =>
+    item.categoryId === categoryId ? { ...item, categoryId: null } : item,
+  )
 
   notifyCategoryListeners()
   notifyCatalogItemListeners()
@@ -1082,18 +1161,19 @@ export async function updateE2EJobNotificationRecipients(
   state.jobs[index] = {
     ...existingJob,
     notificationRecipients,
-    dailyLogRecipients: moduleKey === 'dailyLogs' ? sanitized : existingJob.dailyLogRecipients ?? [],
+    dailyLogRecipients:
+      moduleKey === 'dailyLogs' ? sanitized : (existingJob.dailyLogRecipients ?? []),
   }
 
   notifyJobsChanged(jobId)
 }
 
 export async function updateE2EGlobalNotificationRecipients(
-  moduleKey: NotificationModuleKey,
+  moduleKey: GlobalNotificationModuleKey,
   recipients: string[],
 ) {
   const state = requireState()
-  state.globalNotificationRecipients = normalizeNotificationRecipients({
+  state.globalNotificationRecipients = normalizeGlobalNotificationRecipients({
     ...(state.globalNotificationRecipients ?? {}),
     [moduleKey]: recipients,
   })
@@ -1122,8 +1202,15 @@ export async function createE2EUser(input: {
   }
 
   const uid = makeId('user')
-  const role = input.role === 'admin' ? 'admin' : input.role === 'project-manager' ? 'project-manager' : 'foreman'
-  const assignedJobIds = currentRoleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
+  const role =
+    input.role === 'admin'
+      ? 'admin'
+      : input.role === 'project-manager'
+        ? 'project-manager'
+        : 'foreman'
+  const assignedJobIds = currentRoleCanBeAssignedJobs(role)
+    ? normalizeStringList(input.assignedJobIds)
+    : []
   const inviteSent = input.sendInvite === true
   const now = getNowValue().toISOString()
 
@@ -1168,7 +1255,9 @@ export async function updateE2EUser(
 
   const existingUser = state.users[index]!
   const role = normalizeStoredRoleKey(input.role)
-  const assignedJobIds = currentRoleCanBeAssignedJobs(role) ? normalizeStringList(input.assignedJobIds) : []
+  const assignedJobIds = currentRoleCanBeAssignedJobs(role)
+    ? normalizeStringList(input.assignedJobIds)
+    : []
 
   state.users[index] = {
     ...existingUser,
@@ -1234,6 +1323,51 @@ export async function sendE2EPendingUserInvites() {
   }
 }
 
+export async function resendE2EUserInvite(uid: string) {
+  const state = requireState()
+  const index = state.users?.findIndex((user) => user.id === uid) ?? -1
+  if (index === -1 || !state.users) {
+    throw new Error('User not found.')
+  }
+
+  const user = state.users[index]!
+  const email = normalizeEmailAddress(user.email)
+  if (!email) {
+    throw new Error('This user does not have an email address.')
+  }
+
+  state.users[index] = {
+    ...user,
+    inviteStatus: user.inviteStatus === 'accepted' ? 'accepted' : 'sent',
+    inviteSentAt: getNowValue().toISOString(),
+  }
+  notifyUserListeners()
+
+  return {
+    success: true,
+    email,
+    message: `Invite email sent to ${email}.`,
+  }
+}
+
+export async function sendE2EUserPasswordReset(uid: string) {
+  const user = requireState().users?.find((entry) => entry.id === uid)
+  if (!user) {
+    throw new Error('User not found.')
+  }
+
+  const email = normalizeEmailAddress(user.email)
+  if (!email) {
+    throw new Error('This user does not have an email address.')
+  }
+
+  return {
+    success: true,
+    email,
+    message: `Password reset email sent to ${email}.`,
+  }
+}
+
 export async function createE2EEmployee(input: {
   employeeNumber: string
   firstName: string
@@ -1284,7 +1418,9 @@ export async function updateE2EEmployee(
   }
 
   const employeeNumber = String(input.employeeNumber).trim()
-  const duplicate = state.employees.find((employee) => employee.id !== employeeId && employee.employeeNumber.trim() === employeeNumber)
+  const duplicate = state.employees.find(
+    (employee) => employee.id !== employeeId && employee.employeeNumber.trim() === employeeNumber,
+  )
   if (duplicate) {
     throw new Error(`Employee number ${employeeNumber} already exists.`)
   }
@@ -1471,7 +1607,9 @@ export async function createE2EDailyLog(input: {
     status: 'draft',
     foremanUserId: input.foremanUserId,
     foremanName: input.foremanName,
-    additionalRecipients: Array.isArray(input.additionalRecipients) ? [...input.additionalRecipients] : [],
+    additionalRecipients: Array.isArray(input.additionalRecipients)
+      ? [...input.additionalRecipients]
+      : [],
     payload: cloneValue(input.payload),
     createdAt: now,
     updatedAt: now,
@@ -1523,7 +1661,9 @@ export async function updateE2EDailyLog(
   }
 
   if ('additionalRecipients' in input && Array.isArray(input.additionalRecipients)) {
-    nextLog.additionalRecipients = input.additionalRecipients.map((entry) => entry.trim().toLowerCase()).filter(Boolean)
+    nextLog.additionalRecipients = input.additionalRecipients
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean)
   }
 
   if ('status' in input && input.status) {
@@ -1566,9 +1706,10 @@ export async function uploadE2EDailyLogAttachment(
 
   return {
     name: file.name,
-    url: typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
-      ? URL.createObjectURL(file)
-      : `data:${file.type || 'application/octet-stream'},`,
+    url:
+      typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+        ? URL.createObjectURL(file)
+        : `data:${file.type || 'application/octet-stream'},`,
     path: attachmentPath,
     type: sanitizeAttachmentType(type),
     description: description.trim(),
@@ -1591,16 +1732,21 @@ function copyPreviousE2ETimecardCardsIntoDraft(
   const targetHasCards = timecardCards.some((card) => card.weekId === targetWeek.id)
   if (targetHasCards) return 0
 
-  const previousWeeks = sortWeeks(state.timecardWeeks?.filter((week) => (
-    week.jobId === targetWeek.jobId
-    && week.weekEndDate === getPreviousWeekEndDate(targetWeek.weekEndDate)
-  )) ?? [])
+  const previousWeeks = sortWeeks(
+    state.timecardWeeks?.filter(
+      (week) =>
+        week.jobId === targetWeek.jobId &&
+        week.weekEndDate === getPreviousWeekEndDate(targetWeek.weekEndDate),
+    ) ?? [],
+  )
 
   const now = getNowValue().toISOString()
   const previousCards = previousWeeks
-    .map((week) => timecardCards
-      .filter((card) => card.weekId === week.id)
-      .sort((left, right) => left.sortIndex - right.sortIndex))
+    .map((week) =>
+      timecardCards
+        .filter((card) => card.weekId === week.id)
+        .sort((left, right) => left.sortIndex - right.sortIndex),
+    )
     .find((weekCards) => weekCards.length > 0)
   if (!previousCards?.length) return 0
 
@@ -1669,10 +1815,9 @@ export async function ensureE2ETimecardWeek(input: {
   state.timecardWeeks ??= []
   state.timecardCards ??= []
 
-  const existingWeek = state.timecardWeeks.find((week) => (
-    week.jobId === input.jobId
-    && week.weekEndDate === input.weekEndDate
-  ))
+  const existingWeek = state.timecardWeeks.find(
+    (week) => week.jobId === input.jobId && week.weekEndDate === input.weekEndDate,
+  )
 
   if (existingWeek) {
     if (existingWeek.status !== 'submitted') {
@@ -1771,7 +1916,9 @@ export async function updateE2ETimecardCard(
   const state = requireState()
   state.timecardCards ??= []
 
-  const index = state.timecardCards.findIndex((entry) => entry.weekId === weekId && entry.id === cardId)
+  const index = state.timecardCards.findIndex(
+    (entry) => entry.weekId === weekId && entry.id === cardId,
+  )
   if (index === -1) {
     throw new Error('Timecard card not found.')
   }
@@ -1805,7 +1952,9 @@ export async function deleteE2ETimecardCard(weekId: string, cardId: string) {
     throw new Error('Timecard week not found.')
   }
 
-  state.timecardCards = state.timecardCards.filter((entry) => !(entry.weekId === weekId && entry.id === cardId))
+  state.timecardCards = state.timecardCards.filter(
+    (entry) => !(entry.weekId === weekId && entry.id === cardId),
+  )
   const weekIndex = state.timecardWeeks.findIndex((entry) => entry.id === weekId)
   state.timecardWeeks[weekIndex] = {
     ...week,

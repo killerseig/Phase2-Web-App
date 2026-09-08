@@ -313,8 +313,8 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
   min-height: 2.1rem;
   padding: 0 0.85rem;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  background: var(--field);
   color: var(--text-muted);
 }
 
@@ -327,7 +327,7 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 .employees-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: var(--form-gap);
 }
 
 .employees-form__field--full {
@@ -342,7 +342,7 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 .employees-toggle-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: var(--field-gap);
 }
 
 .employees-toggle-row {
@@ -359,17 +359,17 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 
 .employees-settings-panel {
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
   display: grid;
-  gap: 0.85rem;
+  gap: var(--form-gap);
   min-height: 0;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  background: var(--field);
 }
 
 .employees-settings-panel__header-meta,
@@ -380,13 +380,13 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 .employees-settings-panel__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.85rem;
+  gap: var(--form-gap);
 }
 
 .employees-detail__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: var(--action-gap);
 }
 
 @media (max-width: 900px) {
@@ -395,6 +395,9 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
     height: auto;
     min-height: 0;
     overflow: visible;
+  }
+
+  .employees-detail__body {
     padding-right: 0;
   }
 
@@ -404,7 +407,7 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
   }
 
   .employees-detail__mobile-back {
-    display: inline-flex;
+    display: flex;
     margin-bottom: 0.55rem;
   }
 

@@ -25,17 +25,10 @@ defineProps<{
 .module-launcher-card {
   --app-link-card-gap: 0.35rem;
   --app-link-card-border: 1px solid rgba(168, 190, 209, 0.16);
-  --app-link-card-background:
-    radial-gradient(circle at 8% 0%, rgba(99, 199, 230, 0.06), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0)),
-    rgba(255, 255, 255, 0.038);
-  --app-link-card-shadow: 0 10px 24px rgba(3, 10, 16, 0.1);
-  --app-link-card-hover-background:
-    linear-gradient(180deg, rgba(99, 199, 230, 0.13), rgba(33, 52, 65, 0.18)),
-    rgba(255, 255, 255, 0.045);
-  --app-link-card-hover-shadow:
-    0 14px 30px rgba(3, 10, 16, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.018);
+  --app-link-card-background: var(--panel-background);
+  --app-link-card-shadow: none;
+  --app-link-card-hover-background: var(--field-hover);
+  --app-link-card-hover-shadow: none;
 }
 
 .module-launcher-card__eyebrow {

@@ -149,20 +149,7 @@ watch(() => route.fullPath, () => {
   grid-template-columns: 278px minmax(0, 1fr);
   height: 100vh;
   position: relative;
-  background:
-    linear-gradient(90deg, rgba(145, 220, 255, 0.045) 0 1px, transparent 1px 100%),
-    linear-gradient(180deg, rgba(145, 220, 255, 0.035) 0 1px, transparent 1px 100%),
-    radial-gradient(circle at 30% -10%, rgba(99, 199, 230, 0.12), transparent 34%),
-    radial-gradient(circle at 95% 12%, rgba(239, 180, 93, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0)),
-    var(--bg);
-  background-size:
-    72px 72px,
-    72px 72px,
-    auto,
-    auto,
-    auto,
-    auto;
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -175,14 +162,9 @@ watch(() => route.fullPath, () => {
   flex-direction: column;
   gap: var(--space-4);
   padding: 1.25rem 1.1rem 0.95rem;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(99, 199, 230, 0.16), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0)),
-    rgba(12, 21, 30, 0.975);
-  border-right: 1px solid rgba(168, 190, 209, 0.2);
-  box-shadow:
-    inset -1px 0 0 rgba(255, 255, 255, 0.045),
-    18px 0 52px rgba(2, 7, 12, 0.26);
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border-soft);
+  box-shadow: none;
   min-height: 0;
   overflow: hidden;
 }
@@ -227,15 +209,15 @@ watch(() => route.fullPath, () => {
 .app-shell__sidebar-close:hover,
 .app-shell__menu-button:hover {
   border-color: rgba(186, 198, 211, 0.14);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--field);
   color: rgba(238, 244, 250, 0.96);
 }
 
 .app-shell__sidebar-close:focus-visible,
 .app-shell__menu-button:focus-visible {
   outline: none;
-  border-color: rgba(123, 183, 223, 0.28);
-  box-shadow: 0 0 0 2px rgba(88, 186, 233, 0.14);
+  border-color: var(--border-strong);
+  box-shadow: var(--focus-ring);
 }
 
 .app-shell__control-icon {
@@ -248,7 +230,7 @@ watch(() => route.fullPath, () => {
   align-items: center;
   gap: 0.95rem;
   padding: 0.2rem 0.1rem 1.05rem;
-  border-bottom: 1px solid rgba(168, 190, 209, 0.16);
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .app-shell__logo {
@@ -256,17 +238,11 @@ watch(() => route.fullPath, () => {
   place-items: center;
   width: 2.85rem;
   height: 2.85rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 15px;
-  color: var(--accent-strong);
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.24), transparent 26%),
-    linear-gradient(145deg, rgba(145, 220, 255, 0.32), rgba(99, 199, 230, 0.06)),
-    rgba(255, 255, 255, 0.035);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    0 12px 28px rgba(0, 0, 0, 0.26),
-    var(--glow-accent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--field);
+  box-shadow: none;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -286,14 +262,14 @@ watch(() => route.fullPath, () => {
   color: var(--text-soft);
   font-size: 0.76rem;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: var(--letter-spacing-eyebrow);
 }
 
 .app-shell__section-label {
   color: var(--text-soft);
   font-size: 0.66rem;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: var(--letter-spacing-eyebrow);
   padding: 0.2rem 0.28rem 0;
 }
 
@@ -308,35 +284,40 @@ watch(() => route.fullPath, () => {
   align-items: center;
   min-height: 2.7rem;
   padding: 0 0.95rem;
-  border: 1px solid rgba(168, 190, 209, 0.09);
-  border-radius: 15px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.006)),
-    rgba(255, 255, 255, 0.018);
-  font-weight: 600;
+  background: transparent;
+  font-weight: 500;
   letter-spacing: -0.015em;
   transition:
     border-color 0.2s ease,
     color 0.2s ease,
     background 0.2s ease,
-    box-shadow 0.2s ease,
     transform 0.2s ease;
 }
 
-.app-shell__nav-link:hover,
-.app-shell__nav-link--active {
+.app-shell__nav-link:hover {
   color: var(--text);
-  border-color: rgba(145, 220, 255, 0.38);
-  background:
-    radial-gradient(circle at 12% 16%, rgba(145, 220, 255, 0.14), transparent 28%),
-    linear-gradient(135deg, rgba(45, 77, 96, 0.96), rgba(23, 41, 54, 0.96)),
-    rgba(99, 199, 230, 0.12);
-  box-shadow:
-    inset 3px 0 0 rgba(145, 220, 255, 0.92),
-    0 10px 22px rgba(3, 10, 16, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.025);
-  transform: translateY(-1px);
+  border-color: transparent;
+  background: var(--field-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+.app-shell__nav-link--active,
+.app-shell__nav-link--active:hover {
+  color: var(--text);
+  border-color: transparent;
+  background: var(--bg-accent);
+  box-shadow: none;
+  transform: none;
+  border-left-color: var(--border-strong);
+}
+
+.app-shell__nav-link:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .app-shell__sidebar-admin {
@@ -344,7 +325,7 @@ watch(() => route.fullPath, () => {
   flex-direction: column;
   gap: 0.45rem;
   padding-top: 0.85rem;
-  border-top: 1px solid rgba(168, 190, 209, 0.14);
+  border-top: 1px solid var(--border-soft);
 }
 
 .app-shell__sidebar-footer {
@@ -354,7 +335,7 @@ watch(() => route.fullPath, () => {
   flex: 0 0 auto;
   margin-top: auto;
   padding-top: 0.85rem;
-  border-top: 1px solid rgba(168, 190, 209, 0.14);
+  border-top: 1px solid var(--border-soft);
 }
 
 .app-shell__sidebar-footer .app-shell__sidebar-admin {
@@ -388,12 +369,9 @@ watch(() => route.fullPath, () => {
   gap: 1rem;
   min-height: 4.25rem;
   padding: 0.6rem 1.35rem;
-  border-bottom: 1px solid rgba(168, 190, 209, 0.17);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0)),
-    rgba(13, 22, 31, 0.82);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 16px 36px rgba(2, 7, 12, 0.16);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-elevated);
+  box-shadow: none;
 }
 
 .app-shell__topbar-leading {
@@ -413,7 +391,7 @@ watch(() => route.fullPath, () => {
   color: var(--accent);
   font-size: 0.66rem;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: var(--letter-spacing-eyebrow);
   line-height: 1;
   text-transform: uppercase;
 }
@@ -444,30 +422,26 @@ watch(() => route.fullPath, () => {
   align-items: center;
   min-height: 1.9rem;
   padding: 0 0.78rem;
-  border: 1px solid rgba(168, 190, 209, 0.17);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
-    rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--field);
   color: var(--text-muted);
   font-size: 0.69rem;
-  font-weight: 750;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--letter-spacing-eyebrow);
 }
 
 .app-shell__topbar-chip--role {
-  color: var(--accent-strong);
-  border-color: rgba(99, 199, 230, 0.36);
-  background:
-    linear-gradient(180deg, rgba(99, 199, 230, 0.2), rgba(29, 79, 95, 0.16)),
-    rgba(29, 79, 95, 0.24);
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: var(--field);
 }
 
 :slotted(.app-shell__topbar-button) {
   min-height: 1.95rem;
   padding: 0 0.9rem;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 
 .app-shell__content {
@@ -475,11 +449,7 @@ watch(() => route.fullPath, () => {
   min-height: 0;
   padding: 1.15rem;
   overflow: auto;
-  background:
-    radial-gradient(circle at 72% -14%, rgba(99, 199, 230, 0.1), transparent 30%),
-    radial-gradient(circle at 98% 96%, rgba(239, 180, 93, 0.055), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.012), rgba(255, 255, 255, 0)),
-    transparent;
+  background: var(--bg);
 }
 
 .app-shell__statusbar {
@@ -488,13 +458,13 @@ watch(() => route.fullPath, () => {
   gap: 1rem;
   min-height: 2rem;
   padding: 0.25rem 1.1rem;
-  border-top: 1px solid rgba(168, 190, 209, 0.13);
-  background: rgba(10, 18, 26, 0.92);
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elevated);
   color: var(--text-soft);
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: var(--letter-spacing-eyebrow);
   align-items: center;
 }
 
@@ -515,7 +485,7 @@ watch(() => route.fullPath, () => {
     padding-bottom: 1rem;
     border-right: 1px solid var(--border);
     border-bottom: 0;
-    box-shadow: var(--shadow);
+    box-shadow: none;
     overflow: hidden;
     transform: translateX(calc(-100% - 1rem));
     transition: transform 0.22s ease;

@@ -91,10 +91,18 @@ describe('DailyLogMainColumn', () => {
       'value',
       'Hang grid on level 2.',
     )
-    expect(wrapper.get('[data-testid="dailylog-saved-weeklySchedule"]').text()).toBe('Saved schedule notes.')
-    expect(wrapper.get('[data-testid="dailylog-saved-safetyConcerns"]').text()).toBe('Saved safety notes.')
-    expect(wrapper.get('[data-testid="dailylog-saved-budgetConcerns"]').text()).toBe('Saved budget notes.')
-    expect(wrapper.get('[data-testid="dailylog-saved-deliveriesNeeded"]').text()).toBe('Saved delivery notes.')
+    expect(wrapper.get('[data-testid="dailylog-saved-weeklySchedule"]').text()).toBe(
+      'Saved schedule notes.',
+    )
+    expect(wrapper.get('[data-testid="dailylog-saved-safetyConcerns"]').text()).toBe(
+      'Saved safety notes.',
+    )
+    expect(wrapper.get('[data-testid="dailylog-saved-budgetConcerns"]').text()).toBe(
+      'Saved budget notes.',
+    )
+    expect(wrapper.get('[data-testid="dailylog-saved-deliveriesNeeded"]').text()).toBe(
+      'Saved delivery notes.',
+    )
   })
 
   it('forwards field, repeater, attachment, and submit events to the parent route', async () => {
@@ -109,9 +117,7 @@ describe('DailyLogMainColumn', () => {
     expect(wrapper.emitted('updateTextField')).toEqual([
       ['weeklySchedule', 'Updated schedule notes.'],
     ])
-    expect(wrapper.emitted('blurTextField')).toEqual([
-      ['weeklySchedule'],
-    ])
+    expect(wrapper.emitted('blurTextField')).toEqual([['weeklySchedule']])
     expect(wrapper.emitted('addManpowerLine')).toHaveLength(1)
     expect(wrapper.emitted('addIndoorClimateReading')).toHaveLength(1)
     expect(wrapper.emitted('submit')).toHaveLength(1)
@@ -122,7 +128,18 @@ describe('DailyLogMainColumn', () => {
       canEditSelectedLog: false,
     })
 
-    expect(wrapper.get('[data-testid="dailylog-weeklySchedule"]').attributes('disabled')).toBeDefined()
+    expect(
+      wrapper.get('[data-testid="dailylog-weeklySchedule"]').attributes('disabled'),
+    ).toBeDefined()
     expect(wrapper.get('button.daily-logs-submit-button').attributes('disabled')).toBeDefined()
   })
+
+  it.each(['photoAttachmentBusy', 'ptpAttachmentBusy', 'qcAttachmentBusy'] as const)(
+    'disables submit while %s is active',
+    (busyProp) => {
+      const wrapper = mountMainColumn({ [busyProp]: true })
+
+      expect(wrapper.get('button.daily-logs-submit-button').attributes('disabled')).toBeDefined()
+    },
+  )
 })

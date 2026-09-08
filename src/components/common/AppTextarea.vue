@@ -32,11 +32,12 @@ function handleInput(event: Event) {
 <style scoped>
 .app-textarea {
   width: 100%;
+  min-width: 0;
   min-height: var(--app-textarea-min-height, 7rem);
   padding: var(--app-textarea-padding, 0.75rem 0.85rem);
   border: 1px solid var(--app-textarea-border, var(--border));
-  border-radius: var(--app-textarea-radius, 12px);
-  background: var(--app-textarea-background, rgba(255, 255, 255, 0.045));
+  border-radius: var(--app-textarea-radius, var(--control-radius));
+  background: var(--app-textarea-background, var(--control-background));
   color: var(--app-textarea-color, var(--text));
   color-scheme: var(--app-textarea-color-scheme, dark);
   box-shadow: var(--app-textarea-box-shadow, none);
@@ -58,10 +59,6 @@ function handleInput(event: Event) {
   outline: var(--app-textarea-focus-outline, none);
   outline-offset: var(--app-textarea-focus-outline-offset, 0);
   background: var(--app-textarea-focus-background, var(--field-hover));
-  box-shadow: var(
-    --app-textarea-focus-box-shadow,
-    var(--focus-ring),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05)
-  );
+  box-shadow: var(--app-textarea-focus-box-shadow, var(--control-focus-shadow));
 }
 </style>

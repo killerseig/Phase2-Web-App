@@ -644,6 +644,14 @@ test.describe('route access control', () => {
     await expect(page.getByText(/missing or insufficient permissions/i)).toHaveCount(0)
   })
 
+  test('payroll keeps timecard export editing but cannot re-open submitted weeks', async ({ page }) => {
+    await gotoPhase2App(page, '/exports/timecards', createPayrollAdminFixture())
+
+    await expect(page.getByTestId('timecard-export-page')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Edit Card' }).first()).toBeVisible()
+    await expect(page.locator('[data-testid^="timecard-export-reopen-week-"]')).toHaveCount(0)
+  })
+
   test('payroll cannot open field workflow forms', async ({ page }) => {
     await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', createPayrollAdminFixture())
 

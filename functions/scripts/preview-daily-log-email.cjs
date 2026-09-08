@@ -16,17 +16,28 @@ const defaultOutputPath = path.resolve(__dirname, '..', 'tmp', 'daily-log-email-
 function main() {
   const outputArg = process.argv[2]
   const outputPath = outputArg ? path.resolve(process.cwd(), outputArg) : defaultOutputPath
-  const dailyLogUrl =
-    'https://phase2-website.web.app/daily-log-gallery/daily-log-preview-gallery'
+  const dailyLogUrl = 'https://phase2-website.web.app/daily-log-gallery/daily-log-preview-gallery'
   const attachments = Array.from({ length: 12 }, (_, index) => ({
     name: `job-progress-${String(index + 1).padStart(2, '0')}.jpg`,
-    url: '',
+    url: `https://placehold.co/1280x960.jpg?text=Original+${index + 1}`,
+    thumbnailUrl: `https://placehold.co/480x360.jpg?text=Preview+${index + 1}`,
     path: `daily-logs/daily-log-preview/job-progress-${index + 1}.jpg`,
-    type: index % 4 === 0 ? 'ptp' : 'photo',
+    type: index >= 10 ? 'qc' : index >= 7 ? 'ptp' : 'photo',
     description: index === 0 ? 'Lobby ceiling grid progress.' : '',
   }))
+  const inlinePhotoPreviews = ['photo', 'ptp', 'qc'].flatMap((section) =>
+    attachments
+      .filter((attachment) => attachment.type === section)
+      .slice(0, 6)
+      .map((attachment, index) => ({
+        section,
+        position: index + 1,
+        contentId: `daily-log-${section}-${index + 1}@phase2.local`,
+        previewUrl: attachment.thumbnailUrl,
+      })),
+  )
 
-  const html = buildDailyLogEmail(
+  const emailHtml = buildDailyLogEmail(
     { id: 'job-preview', name: 'Phase 2 Company Acoustical Remodel', number: '1A' },
     '2026-08-20',
     {
@@ -59,7 +70,11 @@ function main() {
         attachments,
       },
     },
-    { dailyLogUrl },
+    { dailyLogUrl, inlinePhotoPreviews },
+  )
+  const html = inlinePhotoPreviews.reduce(
+    (previewHtml, preview) => previewHtml.replace(`cid:${preview.contentId}`, preview.previewUrl),
+    emailHtml,
   )
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true })
@@ -67,8 +82,9 @@ function main() {
 
   console.log(`Preview HTML: ${outputPath}`)
   console.log(`Gallery link: ${dailyLogUrl}`)
-  console.log(`Contains gallery CTA: ${html.includes('View Photo Gallery (12)')}`)
-  console.log(`Contains hidden overflow count: ${html.includes('Plus 2 more photos')}`)
+  console.log(`Contains Photos overflow CTA: ${html.includes('View All 7 Photos')}`)
+  console.log(`Contains PTP section: ${html.includes('PTP Photos')}`)
+  console.log(`Contains QC section: ${html.includes('QC Photos')}`)
 }
 
 main()

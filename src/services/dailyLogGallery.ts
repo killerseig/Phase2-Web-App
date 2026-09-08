@@ -1,10 +1,7 @@
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
 import { getE2EPublicDailyLogGallery, isE2EActive } from '@/testing/e2eRuntime'
-import type {
-  DailyLogAttachmentType,
-  PublicDailyLogGalleryRecord,
-} from '@/types/domain'
+import type { DailyLogAttachmentType, PublicDailyLogGalleryRecord } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
 function text(value: unknown): string {
@@ -24,12 +21,15 @@ function normalizeGallery(value: unknown): PublicDailyLogGalleryRecord {
     const url = text(item.url)
     if (!url) return []
 
-    return [{
-      name: text(item.name) || 'Daily log photo',
-      url,
-      type: normalizeAttachmentType(item.type),
-      description: text(item.description),
-    }]
+    return [
+      {
+        name: text(item.name) || 'Daily log photo',
+        url,
+        thumbnailUrl: text(item.thumbnailUrl) || undefined,
+        type: normalizeAttachmentType(item.type),
+        description: text(item.description),
+      },
+    ]
   })
   const sequenceNumber = Number(record.sequenceNumber)
 
@@ -81,9 +81,7 @@ export async function fetchLegacyPublicDailyLogGallery(
   }
 
   if (isE2EActive()) {
-    const gallery = getE2EPublicDailyLogGallery(
-      `legacy:${normalizedJobId}:${normalizedDailyLogId}`,
-    )
+    const gallery = getE2EPublicDailyLogGallery(`legacy:${normalizedJobId}:${normalizedDailyLogId}`)
     if (!gallery) throw new Error('This photo gallery is unavailable.')
     return normalizeGallery(gallery)
   }

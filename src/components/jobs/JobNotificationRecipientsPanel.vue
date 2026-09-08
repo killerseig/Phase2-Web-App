@@ -1,21 +1,29 @@
 <script setup lang="ts">
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import RecipientEditor from '@/components/RecipientEditor.vue'
-import type { NotificationModuleKey, NotificationRecipients } from '@/types/domain'
+import type { GlobalNotificationModuleKey } from '@/types/domain'
 
-defineProps<{
+const props = defineProps<{
   description: string
-  modules: ReadonlyArray<{ key: NotificationModuleKey; label: string }>
-  recipients: NotificationRecipients
-  inputs: Record<NotificationModuleKey, string>
+  modules: ReadonlyArray<{ key: GlobalNotificationModuleKey; label: string }>
+  recipients: Partial<Record<GlobalNotificationModuleKey, string[]>>
+  inputs: Partial<Record<GlobalNotificationModuleKey, string>>
   disabled?: boolean
 }>()
 
 const emit = defineEmits<{
-  updateInput: [moduleKey: NotificationModuleKey, value: string]
-  addRecipient: [moduleKey: NotificationModuleKey]
-  removeRecipient: [moduleKey: NotificationModuleKey, email: string]
+  updateInput: [moduleKey: GlobalNotificationModuleKey, value: string]
+  addRecipient: [moduleKey: GlobalNotificationModuleKey]
+  removeRecipient: [moduleKey: GlobalNotificationModuleKey, email: string]
 }>()
+
+function getInput(moduleKey: GlobalNotificationModuleKey) {
+  return props.inputs[moduleKey] ?? ''
+}
+
+function getRecipients(moduleKey: GlobalNotificationModuleKey) {
+  return props.recipients[moduleKey] ?? []
+}
 </script>
 
 <template>
@@ -31,10 +39,10 @@ const emit = defineEmits<{
       v-for="module in modules"
       :key="module.key"
       class="jobs-recipient-section"
-      :model-value="inputs[module.key]"
+      :model-value="getInput(module.key)"
       :disabled="disabled"
       :title="module.label"
-      :recipients="recipients[module.key]"
+      :recipients="getRecipients(module.key)"
       empty-label="No recipients yet."
       @update:model-value="emit('updateInput', module.key, $event)"
       @add="emit('addRecipient', module.key)"
@@ -46,13 +54,13 @@ const emit = defineEmits<{
 <style scoped>
 .jobs-notifications-panel {
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
   --app-section-header-description-font-size: 0.92rem;
   display: grid;
-  gap: 0.85rem;
+  gap: var(--form-gap);
   align-content: start;
   min-width: 0;
   min-height: 0;
@@ -61,8 +69,8 @@ const emit = defineEmits<{
   overflow: auto;
   scrollbar-gutter: stable;
   border: 1px solid var(--border);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  background: var(--field);
 }
 
 .jobs-recipient-section {

@@ -91,7 +91,7 @@ describe('TimecardWorkbookCard', () => {
     expect(wrapper.text()).toContain('Larsen, Chris')
     expect(wrapper.findAll('thead th').map((cell) => cell.text())).toEqual([
       'JOB #',
-      '1',
+      'AREA',
       '',
       'ACCT',
       'DIF',

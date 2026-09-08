@@ -6,14 +6,27 @@ import type { EmployeeFormState } from '@/features/employees/employeeViewHelpers
 import { useUserCreateActions } from '@/features/users/useUserCreateActions'
 import { useUserDetailActions } from '@/features/users/useUserDetailActions'
 import type { UserCreateFormState, UserDetailFormState } from '@/features/users/userViewHelpers'
-import { createEmployeeRecord, deleteEmployeeRecord, updateEmployeeRecord } from '@/services/employees'
-import { createUserByAdmin, deleteUserByAdmin, sendPendingInvitesByAdmin, updateUser } from '@/services/users'
+import {
+  createEmployeeRecord,
+  deleteEmployeeRecord,
+  updateEmployeeRecord,
+} from '@/services/employees'
+import {
+  createUserByAdmin,
+  deleteUserByAdmin,
+  resendUserInviteByAdmin,
+  sendPendingInvitesByAdmin,
+  sendUserPasswordResetByAdmin,
+  updateUser,
+} from '@/services/users'
 import type { EmployeeRecord, UserProfile } from '@/types/domain'
 
 vi.mock('@/services/users', () => ({
   createUserByAdmin: vi.fn(),
   deleteUserByAdmin: vi.fn(),
+  resendUserInviteByAdmin: vi.fn(),
   sendPendingInvitesByAdmin: vi.fn(),
+  sendUserPasswordResetByAdmin: vi.fn(),
   updateUser: vi.fn(),
 }))
 
@@ -25,7 +38,9 @@ vi.mock('@/services/employees', () => ({
 
 const createUserByAdminMock = vi.mocked(createUserByAdmin)
 const deleteUserByAdminMock = vi.mocked(deleteUserByAdmin)
+const resendUserInviteByAdminMock = vi.mocked(resendUserInviteByAdmin)
 const sendPendingInvitesByAdminMock = vi.mocked(sendPendingInvitesByAdmin)
+const sendUserPasswordResetByAdminMock = vi.mocked(sendUserPasswordResetByAdmin)
 const updateUserMock = vi.mocked(updateUser)
 
 const createEmployeeRecordMock = vi.mocked(createEmployeeRecord)
@@ -120,16 +135,19 @@ function mountUserCreateActions() {
   }
 }
 
-function mountUserDetailActions(options: {
-  editingSelf?: boolean
-  hasUnsavedDetailChanges?: boolean
-  isCreateMode?: boolean
-  selectedUser?: UserProfile | null
-  syncingDetailForm?: boolean
-} = {}) {
+function mountUserDetailActions(
+  options: {
+    editingSelf?: boolean
+    hasUnsavedDetailChanges?: boolean
+    isCreateMode?: boolean
+    selectedUser?: UserProfile | null
+    syncingDetailForm?: boolean
+  } = {},
+) {
   const deleteConfirmOpen = ref(false)
   const deleteLoading = ref(false)
   const detailError = ref('')
+  const emailAction = ref<'invite' | 'reset' | null>(null)
   const detailForm: UserDetailFormState = {
     active: false,
     assignedJobIds: ['job-shop'],
@@ -161,6 +179,7 @@ function mountUserDetailActions(options: {
     deleteConfirmOpen,
     deleteLoading,
     detailError,
+    emailAction,
     detailForm,
     editingSelf,
     hasUnsavedDetailChanges,
@@ -188,6 +207,7 @@ function mountUserDetailActions(options: {
     detailErrors,
     detailForm,
     detailInfos,
+    emailAction,
     editingSelf,
     hasUnsavedDetailChanges,
     resetCreateForm,
@@ -198,11 +218,13 @@ function mountUserDetailActions(options: {
   }
 }
 
-function mountEmployeeActions(options: {
-  hasUnsavedDetailChanges?: boolean
-  selectedEmployee?: EmployeeRecord | null
-  syncingDetailForm?: boolean
-} = {}) {
+function mountEmployeeActions(
+  options: {
+    hasUnsavedDetailChanges?: boolean
+    selectedEmployee?: EmployeeRecord | null
+    syncingDetailForm?: boolean
+  } = {},
+) {
   const createForm = makeEmployeeForm()
   const createLoading = ref(false)
   const deleteConfirmOpen = ref(false)
@@ -279,14 +301,30 @@ describe('admin user actions', () => {
   beforeEach(() => {
     createUserByAdminMock.mockReset()
     deleteUserByAdminMock.mockReset()
+    resendUserInviteByAdminMock.mockReset()
     sendPendingInvitesByAdminMock.mockReset()
+    sendUserPasswordResetByAdminMock.mockReset()
     updateUserMock.mockReset()
-    createUserByAdminMock.mockResolvedValue({ message: 'User created.', success: true, uid: 'user-new' })
+    createUserByAdminMock.mockResolvedValue({
+      message: 'User created.',
+      success: true,
+      uid: 'user-new',
+    })
     deleteUserByAdminMock.mockResolvedValue({ message: 'User deleted.', success: true })
+    resendUserInviteByAdminMock.mockResolvedValue({
+      email: 'cj.blanchard@phase2co.com',
+      message: 'Invite email sent to cj.blanchard@phase2co.com.',
+      success: true,
+    })
     sendPendingInvitesByAdminMock.mockResolvedValue({
       message: 'Pending invites sent.',
       sentCount: 2,
       skippedCount: 0,
+      success: true,
+    })
+    sendUserPasswordResetByAdminMock.mockResolvedValue({
+      email: 'cj.blanchard@phase2co.com',
+      message: 'Password reset email sent to cj.blanchard@phase2co.com.',
       success: true,
     })
     updateUserMock.mockResolvedValue(undefined)
@@ -307,7 +345,8 @@ describe('admin user actions', () => {
   })
 
   it('creates users with assigned jobs only for assignable roles and clears loading state', async () => {
-    const { actions, createAction, createForm, createInfos, selectedUserId } = mountUserCreateActions()
+    const { actions, createAction, createForm, createInfos, selectedUserId } =
+      mountUserCreateActions()
     createForm.email = 'pm@example.com'
     createForm.firstName = 'Project'
     createForm.lastName = 'Manager'
@@ -333,14 +372,17 @@ describe('admin user actions', () => {
 
     await actions.handleCreateUser(false)
 
-    expect(createUserByAdminMock).toHaveBeenLastCalledWith(expect.objectContaining({
-      assignedJobIds: [],
-      sendInvite: false,
-    }))
+    expect(createUserByAdminMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        assignedJobIds: [],
+        sendInvite: false,
+      }),
+    )
   })
 
   it('sends pending invites and forwards invite failures', async () => {
-    const { actions, inviteErrors, inviteInfos, inviteLoading, resetInviteMessages } = mountUserCreateActions()
+    const { actions, inviteErrors, inviteInfos, inviteLoading, resetInviteMessages } =
+      mountUserCreateActions()
 
     await actions.handleSendPendingInvites()
 
@@ -361,7 +403,7 @@ describe('admin user actions', () => {
   it('autosaves user detail changes, validates names, and suppresses unchanged saves', async () => {
     const unchanged = mountUserDetailActions({ hasUnsavedDetailChanges: false })
 
-    await unchanged.actions.handleAutoSaveUser()
+    await expect(unchanged.actions.handleAutoSaveUser()).resolves.toBe(true)
 
     expect(updateUserMock).not.toHaveBeenCalled()
     expect(unchanged.hasUnsavedDetailChanges).toHaveBeenCalledWith(unchanged.selectedUser.value)
@@ -370,14 +412,14 @@ describe('admin user actions', () => {
     const invalid = mountUserDetailActions()
     invalid.detailForm.firstName = ''
 
-    await invalid.actions.handleAutoSaveUser()
+    await expect(invalid.actions.handleAutoSaveUser()).resolves.toBe(false)
 
     expect(invalid.detailErrorMessages).toContain('Enter the first name and last name.')
     expect(updateUserMock).not.toHaveBeenCalled()
 
     const changed = mountUserDetailActions()
 
-    await changed.actions.handleAutoSaveUser()
+    await expect(changed.actions.handleAutoSaveUser()).resolves.toBe(true)
 
     expect(updateUserMock).toHaveBeenCalledWith('user-cj', {
       active: false,
@@ -441,9 +483,12 @@ describe('admin user actions', () => {
     await Promise.resolve()
 
     expect(changed.toggleDetailAssignedJob).toHaveBeenCalledWith('job-lucky')
-    expect(updateUserMock).toHaveBeenCalledWith('user-cj', expect.objectContaining({
-      assignedJobIds: ['job-shop', 'job-lucky'],
-    }))
+    expect(updateUserMock).toHaveBeenCalledWith(
+      'user-cj',
+      expect.objectContaining({
+        assignedJobIds: ['job-shop', 'job-lucky'],
+      }),
+    )
 
     const createMode = mountUserDetailActions({ isCreateMode: true })
     createMode.actions.handleDetailAssignedJobToggle('job-lucky')
@@ -460,8 +505,175 @@ describe('admin user actions', () => {
     expect(updateUserMock).toHaveBeenCalledTimes(1)
   })
 
+  it('resends an individual invite and sends a password reset with distinct feedback', async () => {
+    const callOrder: string[] = []
+    updateUserMock.mockImplementation(async () => {
+      callOrder.push('save')
+    })
+    resendUserInviteByAdminMock.mockImplementation(async () => {
+      callOrder.push('invite')
+      return {
+        email: 'cj.blanchard@phase2co.com',
+        message: 'Invite email sent to cj.blanchard@phase2co.com.',
+        success: true,
+      }
+    })
+    sendUserPasswordResetByAdminMock.mockImplementation(async () => {
+      callOrder.push('reset')
+      return {
+        email: 'cj.blanchard@phase2co.com',
+        message: 'Password reset email sent to cj.blanchard@phase2co.com.',
+        success: true,
+      }
+    })
+    const resend = mountUserDetailActions()
+
+    await resend.actions.handleResendInvite()
+
+    expect(resendUserInviteByAdminMock).toHaveBeenCalledWith('user-cj')
+    expect(resend.detailInfos).toContain('Invite email sent to cj.blanchard@phase2co.com.')
+    expect(resend.emailAction.value).toBeNull()
+
+    await resend.actions.handleSendPasswordReset()
+
+    expect(sendUserPasswordResetByAdminMock).toHaveBeenCalledWith('user-cj')
+    expect(resend.detailInfos).toContain('Password reset email sent to cj.blanchard@phase2co.com.')
+    expect(resend.emailAction.value).toBeNull()
+    expect(callOrder).toEqual(['save', 'invite', 'save', 'reset'])
+  })
+
+  it('does not send account emails when pending profile changes cannot be saved', async () => {
+    const invalid = mountUserDetailActions()
+    invalid.detailForm.firstName = ''
+
+    await invalid.actions.handleResendInvite()
+    await invalid.actions.handleSendPasswordReset()
+
+    expect(updateUserMock).not.toHaveBeenCalled()
+    expect(resendUserInviteByAdminMock).not.toHaveBeenCalled()
+    expect(sendUserPasswordResetByAdminMock).not.toHaveBeenCalled()
+    expect(invalid.detailErrorMessages).toContain('Enter the first name and last name.')
+
+    const saveError = new Error('Profile save failed')
+    updateUserMock.mockRejectedValue(saveError)
+    const failedSave = mountUserDetailActions()
+
+    await failedSave.actions.handleResendInvite()
+    await failedSave.actions.handleSendPasswordReset()
+
+    expect(updateUserMock).toHaveBeenCalledTimes(2)
+    expect(resendUserInviteByAdminMock).not.toHaveBeenCalled()
+    expect(sendUserPasswordResetByAdminMock).not.toHaveBeenCalled()
+    expect(failedSave.detailErrors).toEqual([
+      { error: saveError, fallback: 'Failed to update user.' },
+      { error: saveError, fallback: 'Failed to update user.' },
+    ])
+  })
+
+  it('keeps delete and account email actions from overlapping', async () => {
+    const guarded = mountUserDetailActions({ hasUnsavedDetailChanges: false })
+
+    guarded.emailAction.value = 'invite'
+    await guarded.actions.handleDeleteUser()
+    guarded.deleteConfirmOpen.value = true
+    await guarded.actions.confirmDeleteUser()
+
+    expect(deleteUserByAdminMock).not.toHaveBeenCalled()
+
+    guarded.emailAction.value = null
+    await guarded.actions.handleResendInvite()
+    await guarded.actions.handleSendPasswordReset()
+
+    expect(resendUserInviteByAdminMock).not.toHaveBeenCalled()
+    expect(sendUserPasswordResetByAdminMock).not.toHaveBeenCalled()
+  })
+
+  it('does not show account email results after the admin selects another user', async () => {
+    let resolveInvite!: (value: { email: string; message: string; success: boolean }) => void
+    const inviteResult = new Promise<{
+      email: string
+      message: string
+      success: boolean
+    }>((resolve) => {
+      resolveInvite = resolve
+    })
+    resendUserInviteByAdminMock.mockReturnValueOnce(inviteResult)
+    const invite = mountUserDetailActions({ hasUnsavedDetailChanges: false })
+
+    const pendingInvite = invite.actions.handleResendInvite()
+    await vi.waitFor(() => expect(resendUserInviteByAdminMock).toHaveBeenCalledTimes(1))
+    invite.selectedUser.value = makeUser({ id: 'user-other', email: 'other@example.com' })
+    invite.selectedUserId.value = 'user-other'
+    resolveInvite({
+      email: 'cj.blanchard@phase2co.com',
+      message: 'Invite email sent to cj.blanchard@phase2co.com.',
+      success: true,
+    })
+    await pendingInvite
+
+    expect(invite.detailInfos).not.toContain('Invite email sent to cj.blanchard@phase2co.com.')
+
+    let rejectReset!: (error: unknown) => void
+    const resetResult = new Promise<never>((_resolve, reject) => {
+      rejectReset = reject
+    })
+    sendUserPasswordResetByAdminMock.mockReturnValueOnce(resetResult)
+    const reset = mountUserDetailActions({ hasUnsavedDetailChanges: false })
+    const resetError = new Error('Reset failed')
+
+    const pendingReset = reset.actions.handleSendPasswordReset()
+    await vi.waitFor(() => expect(sendUserPasswordResetByAdminMock).toHaveBeenCalledTimes(1))
+    reset.selectedUser.value = makeUser({ id: 'user-other', email: 'other@example.com' })
+    reset.selectedUserId.value = 'user-other'
+    rejectReset(resetError)
+    await pendingReset
+
+    expect(reset.detailErrors).toEqual([])
+  })
+
+  it('guards unavailable emails and reports invite and reset failures separately', async () => {
+    const unavailable = mountUserDetailActions({
+      selectedUser: makeUser({ email: null }),
+    })
+
+    await unavailable.actions.handleResendInvite()
+    await unavailable.actions.handleSendPasswordReset()
+
+    expect(unavailable.detailErrorMessages).toContain('This user does not have an email address.')
+    expect(resendUserInviteByAdminMock).not.toHaveBeenCalled()
+    expect(sendUserPasswordResetByAdminMock).not.toHaveBeenCalled()
+
+    const failures = mountUserDetailActions()
+    const inviteError = new Error('Invite delivery failed')
+    const resetError = new Error('Reset delivery failed')
+    resendUserInviteByAdminMock.mockRejectedValueOnce(inviteError)
+    sendUserPasswordResetByAdminMock.mockRejectedValueOnce(resetError)
+
+    await failures.actions.handleResendInvite()
+    await failures.actions.handleSendPasswordReset()
+
+    expect(failures.detailErrors).toEqual([
+      {
+        error: inviteError,
+        fallback: 'Failed to resend invite email to cj.blanchard@phase2co.com.',
+      },
+      {
+        error: resetError,
+        fallback: 'Failed to send password reset email to cj.blanchard@phase2co.com.',
+      },
+    ])
+    expect(failures.emailAction.value).toBeNull()
+  })
+
   it('opens, confirms, and guards user deletion', async () => {
-    const { actions, deleteConfirmOpen, deleteLoading, detailInfos, resetCreateForm, selectedUserId } = mountUserDetailActions()
+    const {
+      actions,
+      deleteConfirmOpen,
+      deleteLoading,
+      detailInfos,
+      resetCreateForm,
+      selectedUserId,
+    } = mountUserDetailActions()
 
     await actions.handleDeleteUser()
 
@@ -482,6 +694,28 @@ describe('admin user actions', () => {
 
     expect(editingSelf.deleteConfirmOpen.value).toBe(false)
     expect(deleteUserByAdminMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not clear a newly selected user or show stale feedback after deletion finishes', async () => {
+    let resolveDelete!: (value: { message: string; success: boolean }) => void
+    deleteUserByAdminMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDelete = resolve
+      }),
+    )
+    const deletion = mountUserDetailActions()
+
+    await deletion.actions.handleDeleteUser()
+    const pendingDelete = deletion.actions.confirmDeleteUser()
+    await vi.waitFor(() => expect(deleteUserByAdminMock).toHaveBeenCalledWith('user-cj'))
+    deletion.selectedUser.value = makeUser({ id: 'user-other', email: 'other@example.com' })
+    deletion.selectedUserId.value = 'user-other'
+    resolveDelete({ message: 'User deleted.', success: true })
+    await pendingDelete
+
+    expect(deletion.selectedUserId.value).toBe('user-other')
+    expect(deletion.detailInfos).not.toContain('User deleted.')
+    expect(deletion.deleteConfirmOpen.value).toBe(false)
   })
 })
 
@@ -506,7 +740,8 @@ describe('admin employee actions', () => {
   })
 
   it('creates employees with the editable form payload and selects the new employee', async () => {
-    const { actions, createForm, createInfos, createLoading, selectedEmployeeId } = mountEmployeeActions()
+    const { actions, createForm, createInfos, createLoading, selectedEmployeeId } =
+      mountEmployeeActions()
     Object.assign(createForm, {
       active: true,
       employeeNumber: '5133',

@@ -35,9 +35,7 @@ const statusClasses = computed(() => [
   border: 1px solid rgba(168, 190, 209, 0.18);
   border-radius: var(--radius-sm);
   padding: 0.75rem 0.9rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
-    rgba(255, 255, 255, 0.035);
+  background: var(--panel-background);
   color: var(--text-muted);
 }
 

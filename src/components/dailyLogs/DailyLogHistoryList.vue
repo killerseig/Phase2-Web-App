@@ -88,10 +88,10 @@ const emit = defineEmits<{
 <style scoped>
 .daily-log-history-card {
   --app-section-header-copy-gap: 0.2rem;
-  --app-section-header-eyebrow-font-size: 0.68rem;
-  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
@@ -115,14 +115,14 @@ const emit = defineEmits<{
   min-height: 8rem;
   padding: 1rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   text-align: center;
 }
 
 .daily-log-history-list {
   display: grid;
-  gap: 0.65rem;
+  gap: var(--action-gap);
   max-height: 22rem;
   overflow: auto;
   padding-right: 0.2rem;
@@ -131,12 +131,12 @@ const emit = defineEmits<{
 
 .daily-log-history-row {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   width: 100%;
   padding: 0.8rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  background: var(--field);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -149,10 +149,8 @@ const emit = defineEmits<{
 .daily-log-history-row:hover,
 .daily-log-history-row--active {
   border-color: rgba(88, 186, 233, 0.24);
-  background:
-    linear-gradient(180deg, rgba(49, 83, 105, 0.35), rgba(33, 49, 62, 0.28)),
-    rgba(255, 255, 255, 0.04);
-  transform: translateY(-1px);
+  background: var(--bg-accent);
+  transform: none;
 }
 
 .daily-log-history-row__main {

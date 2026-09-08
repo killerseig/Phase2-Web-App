@@ -2,7 +2,11 @@
 
 ## Purpose
 
+Current direction (September 8, 2026): employees and the customer are comfortable with the existing workflows. Follow KISS. Standardize the current styling through shared tokens and components; preserve control labels, actions, navigation, field order, and editing behavior. Discuss broader styling or layout changes before implementing them. Do not add tabs, modes, settings, or other choices as part of visual cleanup. Timecards must retain their Excel-like appearance and interaction, including the workbook and print layouts.
+
 This document defines the visual direction for the refactor.
+
+Approved visual direction: a flat desktop application appearance inspired by the reviewed VS Code-like preview. Use solid charcoal surfaces, thin dividers, small corners, and a solid blue action/selection accent. Remove decorative gradients, glows, glass blur, raised bevels, and hover lift. Use crisp focus outlines and retain status colors. Keep the existing workflows and the Excel-like timecard workbook and print layouts.
 
 The goal is not just to make the app cleaner. The app should feel modern, professional, and dependable for field/construction operations.
 
@@ -38,8 +42,8 @@ That makes the app harder to modernize consistently.
 
 Phase 2 should feel like:
 
-- a focused operations command center
-- sturdy and field-ready
+- a quiet, flat desktop workspace
+- straightforward for field users
 - crisp enough for office/admin workflows
 - dense but not cramped
 - modern without looking trendy for its own sake
@@ -60,10 +64,10 @@ Keep the dark operational app shell unless the company asks for a full theme cha
 
 Recommended direction:
 
-- deep navy/charcoal base
-- restrained cyan/steel-blue accent
+- solid charcoal base
+- restrained blue action and selection accent
 - warm success/danger/warning tones
-- subtle depth through borders and shadows
+- separation through thin borders and spacing
 - clear focus states for keyboard-heavy workflows
 
 Timecards may keep their lighter paper/workbook visual language where it supports the Excel-origin workflow.
@@ -109,7 +113,7 @@ Standardize:
 - pane borders
 - card borders
 - active row treatment
-- shadows
+- flat surfaces without decorative shadows
 - focus rings
 
 The app should not have every page inventing a different panel/card style.

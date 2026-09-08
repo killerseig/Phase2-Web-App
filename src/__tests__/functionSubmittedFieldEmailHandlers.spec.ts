@@ -73,6 +73,24 @@ function emailSettings(dailyLogs: string[] = [], shopOrders: string[] = []) {
 
 function makeDailyLogDeps(overrides: Record<string, unknown> = {}) {
   const statusRefs = [{ id: 'daily-log-status' }]
+  const inlinePhotos = {
+    previews: [
+      {
+        section: 'photo',
+        position: 1,
+        contentId: 'daily-log-photo-1@phase2.local',
+      },
+    ],
+    attachments: [
+      {
+        name: 'daily-log-photo-1.jpg',
+        contentType: 'image/jpeg',
+        contentBytes: 'inline-jpeg',
+        contentId: 'daily-log-photo-1@phase2.local',
+        isInline: true,
+      },
+    ],
+  }
   return {
     getUserProfile: vi.fn(async () => assignedForeman),
     getJobDetails: vi.fn(async () => job),
@@ -89,11 +107,21 @@ function makeDailyLogDeps(overrides: Record<string, unknown> = {}) {
       jobCode: '5229',
       jobName: 'Lucky 3 Ranch',
       additionalRecipients: [],
+      payload: {
+        attachments: [
+          {
+            name: 'photo.jpg',
+            path: 'daily-logs/daily-log-1/photo.jpg',
+            type: 'photo',
+          },
+        ],
+      },
     })),
     getEmailSettings: vi.fn(async () => emailSettings(['global-daily@phase2co.com'])),
     getJobNotificationRecipients: vi.fn(async () => ['job-daily@phase2co.com']),
     getAppBaseUrl: vi.fn(() => 'https://phase2-website.web.app'),
     ensureDailyLogGalleryShare: vi.fn(async () => 'gallery-share-id'),
+    prepareDailyLogInlinePhotos: vi.fn(async () => inlinePhotos),
     buildDailyLogEmail: vi.fn(() => '<p>daily log</p>'),
     sendEmail: vi.fn(async () => undefined),
     recordSubmittedEmailStatus: vi.fn(async () => undefined),
@@ -140,23 +168,35 @@ describe('submitted field email callable handlers', () => {
     const deps = makeDailyLogDeps()
 
     await expect(
-      handleSendDailyLogEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
-      }, deps as never),
+      handleSendDailyLogEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
+        },
+        deps as never,
+      ),
     ).resolves.toEqual({ success: true, message: 'Email sent successfully' })
 
-    expect(deps.sendEmail).toHaveBeenCalledWith(expect.objectContaining({
-      to: ['global-daily@phase2co.com', 'job-daily@phase2co.com'],
-      subject: 'Daily Log Report | Vince Hintz | #5229 Lucky 3 Ranch | 6/17/2026',
-      html: '<p>daily log</p>',
-    }))
+    expect(deps.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['global-daily@phase2co.com', 'job-daily@phase2co.com'],
+        subject: 'Daily Log Report | Vince Hintz | #5229 Lucky 3 Ranch | 6/17/2026',
+        html: '<p>daily log</p>',
+      }),
+    )
     expect(deps.buildDailyLogEmail).toHaveBeenCalledWith(
       job,
       '2026-06-17',
       expect.objectContaining({ id: 'daily-log-1' }),
       {
         dailyLogUrl: 'https://phase2-website.web.app/daily-log-gallery/gallery-share-id',
+        inlinePhotoPreviews: [
+          {
+            section: 'photo',
+            position: 1,
+            contentId: 'daily-log-photo-1@phase2.local',
+          },
+        ],
       },
     )
     expect(deps.ensureDailyLogGalleryShare).toHaveBeenCalledWith({
@@ -165,9 +205,20 @@ describe('submitted field email callable handlers', () => {
       jobDetails: job,
       log: expect.objectContaining({ id: 'daily-log-1' }),
     })
-    expect(deps.sendEmail).not.toHaveBeenCalledWith(expect.objectContaining({
-      attachments: expect.anything(),
-    }))
+    expect(deps.prepareDailyLogInlinePhotos).toHaveBeenCalledWith(
+      'daily-log-1',
+      expect.objectContaining({ id: 'daily-log-1' }),
+    )
+    expect(deps.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          expect.objectContaining({
+            contentId: 'daily-log-photo-1@phase2.local',
+            isInline: true,
+          }),
+        ],
+      }),
+    )
     expect(deps.recordSubmittedEmailStatus).toHaveBeenLastCalledWith(
       expect.any(Array),
       expect.objectContaining({
@@ -191,10 +242,13 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendDailyLogEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
-      }, deps as never),
+      handleSendDailyLogEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
+        },
+        deps as never,
+      ),
     ).rejects.toMatchObject({
       code: 'permission-denied',
     })
@@ -208,10 +262,13 @@ describe('submitted field email callable handlers', () => {
       claimSubmittedEmailOperation: vi.fn(async () => 'already-sent'),
     })
     await expect(
-      handleSendDailyLogEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
-      }, alreadySentDeps as never),
+      handleSendDailyLogEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
+        },
+        alreadySentDeps as never,
+      ),
     ).resolves.toEqual({ success: true, message: SUBMITTED_EMAIL_ALREADY_SENT_MESSAGE })
     expect(alreadySentDeps.getDailyLog).not.toHaveBeenCalled()
     expect(alreadySentDeps.sendEmail).not.toHaveBeenCalled()
@@ -220,10 +277,13 @@ describe('submitted field email callable handlers', () => {
       claimSubmittedEmailOperation: vi.fn(async () => 'in-progress'),
     })
     await expect(
-      handleSendDailyLogEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
-      }, inProgressDeps as never),
+      handleSendDailyLogEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
+        },
+        inProgressDeps as never,
+      ),
     ).resolves.toEqual({ success: true, message: SUBMITTED_EMAIL_IN_PROGRESS_MESSAGE })
     expect(inProgressDeps.getDailyLog).not.toHaveBeenCalled()
     expect(inProgressDeps.sendEmail).not.toHaveBeenCalled()
@@ -235,10 +295,13 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendDailyLogEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
-      }, deps as never),
+      handleSendDailyLogEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
+        },
+        deps as never,
+      ),
     ).resolves.toEqual({ success: true, message: 'Email sending disabled. Skipped.' })
 
     expect(deps.getDailyLog).not.toHaveBeenCalled()
@@ -260,10 +323,13 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendDailyLogEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
-      }, deps as never),
+      handleSendDailyLogEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
+        },
+        deps as never,
+      ),
     ).rejects.toMatchObject({
       code: 'failed-precondition',
       message: ERROR_MESSAGES.RECIPIENTS_REQUIRED,
@@ -288,10 +354,13 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendDailyLogEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
-      }, deps as never),
+      handleSendDailyLogEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', dailyLogId: 'daily-log-1' },
+        },
+        deps as never,
+      ),
     ).rejects.toMatchObject({
       code: 'internal',
       message: 'SMTP offline',
@@ -313,28 +382,33 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendShopOrderEmail({
-        auth: { uid: 'admin-1' },
-        data: {
-          jobId: 'job-1',
-          shopOrderId: 'order-1',
-          recipients: ['requested-shop@phase2co.com'],
+      handleSendShopOrderEmail(
+        {
+          auth: { uid: 'admin-1' },
+          data: {
+            jobId: 'job-1',
+            shopOrderId: 'order-1',
+            recipients: ['requested-shop@phase2co.com'],
+          },
         },
-      }, deps as never),
+        deps as never,
+      ),
     ).resolves.toEqual({ success: true, message: 'Email sent successfully' })
 
-    expect(deps.sendEmail).toHaveBeenCalledWith(expect.objectContaining({
-      to: ['requested-shop@phase2co.com', 'global-shop@phase2co.com', 'job-shop@phase2co.com'],
-      subject: 'Shop Order | CJ Blanchard | #5229 Lucky 3 Ranch | Order #20260617000000',
-      html: '<p>shop order</p>',
-      attachments: [
-        {
-          name: 'Shop Order.pdf',
-          contentType: 'application/pdf',
-          contentBytes: Buffer.from('pdf-body').toString('base64'),
-        },
-      ],
-    }))
+    expect(deps.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['requested-shop@phase2co.com', 'global-shop@phase2co.com', 'job-shop@phase2co.com'],
+        subject: 'Shop Order | CJ Blanchard | #5229 Lucky 3 Ranch | Order #20260617000000',
+        html: '<p>shop order</p>',
+        attachments: [
+          {
+            name: 'Shop Order.pdf',
+            contentType: 'application/pdf',
+            contentBytes: Buffer.from('pdf-body').toString('base64'),
+          },
+        ],
+      }),
+    )
     expect(deps.recordSubmittedEmailStatus).toHaveBeenLastCalledWith(
       expect.any(Array),
       expect.objectContaining({
@@ -355,13 +429,16 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendShopOrderEmail({
-        auth: { uid: 'project-manager-1' },
-        data: {
-          jobId: 'job-1',
-          shopOrderId: 'order-1',
+      handleSendShopOrderEmail(
+        {
+          auth: { uid: 'project-manager-1' },
+          data: {
+            jobId: 'job-1',
+            shopOrderId: 'order-1',
+          },
         },
-      }, deps as never),
+        deps as never,
+      ),
     ).resolves.toEqual({ success: true, message: 'Email sent successfully' })
 
     expect(deps.claimSubmittedEmailOperation).toHaveBeenCalled()
@@ -377,13 +454,16 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendShopOrderEmail({
-        auth: { uid: 'project-manager-1' },
-        data: {
-          jobId: 'job-1',
-          shopOrderId: 'order-1',
+      handleSendShopOrderEmail(
+        {
+          auth: { uid: 'project-manager-1' },
+          data: {
+            jobId: 'job-1',
+            shopOrderId: 'order-1',
+          },
         },
-      }, deps as never),
+        deps as never,
+      ),
     ).rejects.toMatchObject({
       code: 'permission-denied',
     })
@@ -402,10 +482,13 @@ describe('submitted field email callable handlers', () => {
     })
 
     await expect(
-      handleSendShopOrderEmail({
-        auth: { uid: 'foreman-1' },
-        data: { jobId: 'job-1', shopOrderId: 'order-1' },
-      }, deps as never),
+      handleSendShopOrderEmail(
+        {
+          auth: { uid: 'foreman-1' },
+          data: { jobId: 'job-1', shopOrderId: 'order-1' },
+        },
+        deps as never,
+      ),
     ).rejects.toMatchObject({
       code: 'permission-denied',
       message: 'Shop order does not belong to the requested job',

@@ -322,8 +322,8 @@ watch(previewImage, async (currentPreview) => {
   gap: 1rem;
   padding: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-sm);
+  background: var(--field);
 }
 
 .image-upload-picker :deep(input[type='file']) {
@@ -363,7 +363,7 @@ watch(previewImage, async (currentPreview) => {
   height: 100%;
   width: 36%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(88, 186, 233, 0.9), rgba(103, 213, 157, 0.9));
+  background: var(--button-primary);
   animation: image-upload-picker-progress 1.15s ease-in-out infinite;
 }
 
@@ -380,7 +380,7 @@ watch(previewImage, async (currentPreview) => {
 .image-upload-picker__message {
   padding: 0.75rem 0.9rem;
   border: 1px solid rgba(255, 125, 107, 0.24);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   color: var(--danger);
   background: rgba(255, 125, 107, 0.08);
 }
@@ -400,7 +400,7 @@ watch(previewImage, async (currentPreview) => {
   --app-card-gap: 0.55rem;
   --app-card-padding: 0.75rem;
   --app-card-border: 1px solid rgba(255, 255, 255, 0.08);
-  --app-card-radius: 14px;
+  --app-card-radius: var(--radius-sm);
   --app-card-background: rgba(255, 255, 255, 0.03);
   --app-card-shadow: none;
   flex: 0 1 220px;
@@ -414,9 +414,9 @@ watch(previewImage, async (currentPreview) => {
   height: 118px;
   padding: 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--field);
   cursor: pointer;
 }
 
@@ -477,7 +477,7 @@ watch(previewImage, async (currentPreview) => {
   min-height: 13rem;
   padding: 1rem;
   border: 1px dashed var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   text-align: center;
   color: var(--text-muted);
 }
@@ -508,7 +508,6 @@ watch(previewImage, async (currentPreview) => {
   place-items: center;
   padding: 2rem;
   background: rgba(4, 10, 16, 0.82);
-  backdrop-filter: blur(6px);
   outline: none;
 }
 
@@ -549,8 +548,8 @@ watch(previewImage, async (currentPreview) => {
   display: block;
   max-width: 100%;
   max-height: 82vh;
-  border-radius: 16px;
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
 }
 
 .image-upload-picker__lightbox-caption {

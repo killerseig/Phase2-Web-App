@@ -90,7 +90,9 @@ function sanitizeAttachmentType(value: unknown): DailyLogAttachmentType {
 function summarizeManpowerLines(lines: Array<{ trade: string; count: number; areas: string }>) {
   const summary = lines
     .filter((line) => line.trade.length > 0 && line.count > 0)
-    .map((line) => (line.areas ? `${line.trade}: ${line.count} (${line.areas})` : `${line.trade}: ${line.count}`))
+    .map((line) =>
+      line.areas ? `${line.trade}: ${line.count} (${line.areas})` : `${line.trade}: ${line.count}`,
+    )
 
   return summary.join('; ')
 }
@@ -99,11 +101,25 @@ function isBlankManpowerLine(line: { trade: string; count: number; areas: string
   return !line.trade && !line.count && !line.areas
 }
 
-function isBlankIndoorClimateReading(reading: { area: string; high: string; low: string; humidity: string }) {
+function isBlankIndoorClimateReading(reading: {
+  area: string
+  high: string
+  low: string
+  humidity: string
+}) {
   return !reading.area && !reading.high && !reading.low && !reading.humidity
 }
 
-function sanitizePayload(payload: any) {
+function expectedDailyLogThumbnailPath(path: string, dailyLogId: string) {
+  const prefix = `daily-logs/${dailyLogId}/`
+  if (!path.startsWith(prefix)) return ''
+
+  const fileName = path.slice(prefix.length)
+  if (!fileName || fileName.includes('/')) return ''
+  return `${prefix}thumbnails/${fileName}`
+}
+
+function sanitizePayload(payload: any, dailyLogId: string) {
   const manpowerLines = Array.isArray(payload?.manpowerLines)
     ? payload.manpowerLines
         .map((line: any) => ({
@@ -112,7 +128,9 @@ function sanitizePayload(payload: any) {
           areas: text(line?.areas),
           addedByUserId: textOrNull(line?.addedByUserId),
         }))
-        .filter((line: { trade: string; count: number; areas: string }) => !isBlankManpowerLine(line))
+        .filter(
+          (line: { trade: string; count: number; areas: string }) => !isBlankManpowerLine(line),
+        )
     : []
 
   const indoorClimateReadings = Array.isArray(payload?.indoorClimateReadings)
@@ -123,22 +141,40 @@ function sanitizePayload(payload: any) {
           low: text(reading?.low),
           humidity: text(reading?.humidity),
         }))
-        .filter((reading: { area: string; high: string; low: string; humidity: string }) => (
-          !isBlankIndoorClimateReading(reading)
-        ))
+        .filter(
+          (reading: { area: string; high: string; low: string; humidity: string }) =>
+            !isBlankIndoorClimateReading(reading),
+        )
     : []
 
   const attachments = Array.isArray(payload?.attachments)
     ? payload.attachments
-        .map((attachment: any) => ({
-          name: text(attachment?.name),
-          url: text(attachment?.url),
-          path: text(attachment?.path),
-          type: sanitizeAttachmentType(attachment?.type),
-          description: text(attachment?.description),
-          createdAt: attachment?.createdAt ?? null,
-        }))
-        .filter((attachment: { name: string; url: string; path: string }) => attachment.name && attachment.url && attachment.path)
+        .map((attachment: any) => {
+          const thumbnailUrl = text(attachment?.thumbnailUrl)
+          const path = text(attachment?.path)
+          const expectedThumbnailPath = expectedDailyLogThumbnailPath(path, dailyLogId)
+          const suppliedThumbnailPath = text(attachment?.thumbnailPath)
+          const thumbnailPath =
+            suppliedThumbnailPath && suppliedThumbnailPath === expectedThumbnailPath
+              ? suppliedThumbnailPath
+              : ''
+          return {
+            name: text(attachment?.name),
+            url: text(attachment?.url),
+            ...(thumbnailUrl && thumbnailPath ? { thumbnailUrl } : {}),
+            path,
+            ...(thumbnailPath ? { thumbnailPath } : {}),
+            type: sanitizeAttachmentType(attachment?.type),
+            description: text(attachment?.description),
+            createdAt: attachment?.createdAt ?? null,
+          }
+        })
+        .filter(
+          (attachment: { name: string; url: string; path: string }) =>
+            attachment.name &&
+            attachment.url &&
+            Boolean(expectedDailyLogThumbnailPath(attachment.path, dailyLogId)),
+        )
     : []
 
   return {
@@ -182,7 +218,9 @@ async function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser> {
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])) {
+  if (
+    !currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])
+  ) {
     throw new HttpsError('permission-denied', 'Your account does not have access to daily logs.')
   }
 
@@ -202,7 +240,9 @@ async function getAuthorizedReader(uid: string): Promise<CurrentFunctionUser> {
     throw new HttpsError('permission-denied', 'Your account is inactive.')
   }
 
-  if (!currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])) {
+  if (
+    !currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])
+  ) {
     throw new HttpsError('permission-denied', 'Your account does not have access to daily logs.')
   }
 
@@ -238,8 +278,7 @@ function assertCanWriteJob(
 function userOwnsDraftDailyLog(user: CurrentFunctionUser, log: Record<string, unknown>) {
   if (toStatus(log.status) !== 'draft') return false
 
-  return [log.foremanUserId, log.createdByUserId]
-    .some((value) => text(value) === user.uid)
+  return [log.foremanUserId, log.createdByUserId].some((value) => text(value) === user.uid)
 }
 
 function canWriteExistingDailyLog(
@@ -253,9 +292,11 @@ function canWriteExistingDailyLog(
 
   // If the user was allowed to create the draft, do not strand them if job
   // assignment metadata is stale or shaped differently than expected.
-  return (action === 'edit-draft' || action === 'submit')
-    && currentFunctionUserHasAnyRole(user, ['foreman', 'shop-foreman', 'project-manager'])
-    && userOwnsDraftDailyLog(user, log)
+  return (
+    (action === 'edit-draft' || action === 'submit') &&
+    currentFunctionUserHasAnyRole(user, ['foreman', 'shop-foreman', 'project-manager']) &&
+    userOwnsDraftDailyLog(user, log)
+  )
 }
 
 function assertCanWriteExistingDailyLog(
@@ -338,12 +379,15 @@ function getLogSortTimestamp(log: any) {
 function sortLogResponses(logs: any[]) {
   const rank = (status: unknown) => (text(status) === 'submitted' ? 0 : 1)
 
-  return logs.slice().sort((left, right) => (
-    rank(left.status) - rank(right.status)
-    || getLogSortTimestamp(right) - getLogSortTimestamp(left)
-    || Number(right.sequenceNumber || 0) - Number(left.sequenceNumber || 0)
-    || text(right.id).localeCompare(text(left.id))
-  ))
+  return logs
+    .slice()
+    .sort(
+      (left, right) =>
+        rank(left.status) - rank(right.status) ||
+        getLogSortTimestamp(right) - getLogSortTimestamp(left) ||
+        Number(right.sequenceNumber || 0) - Number(left.sequenceNumber || 0) ||
+        text(right.id).localeCompare(text(left.id)),
+    )
 }
 
 export const listDailyLogsForCurrentUser = onCall(async (request) => {
@@ -363,7 +407,10 @@ export const listDailyLogsForCurrentUser = onCall(async (request) => {
   const user = await getAuthorizedReader(request.auth.uid)
   const jobDetails = await getJobDetails(jobId)
   if (!canReadJobDailyLogs(user, jobId, jobDetails)) {
-    throw new HttpsError('permission-denied', 'Your account does not have access to this job daily log workspace.')
+    throw new HttpsError(
+      'permission-denied',
+      'Your account does not have access to this job daily log workspace.',
+    )
   }
 
   const snapshot = await db
@@ -392,7 +439,8 @@ export const createDailyLogRecordCallable = onCall(async (request) => {
   assertCanWriteJob(user, jobId, jobDetails, 'create')
 
   const sequenceNumber = await getNextSequenceNumber(jobId, logDate)
-  const created = await db.collection('dailyLogs').add({
+  const created = db.collection('dailyLogs').doc()
+  await created.set({
     jobId,
     jobCode: textOrNull(request.data?.jobCode),
     jobName: textOrNull(request.data?.jobName),
@@ -405,7 +453,7 @@ export const createDailyLogRecordCallable = onCall(async (request) => {
     updatedByUserId: request.auth.uid,
     submittedByUserId: null,
     additionalRecipients: normalizeRecipientList(request.data?.additionalRecipients),
-    payload: sanitizePayload(request.data?.payload),
+    payload: sanitizePayload(request.data?.payload, created.id),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     submittedAt: null,
@@ -425,13 +473,17 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
   const { logRef, log, jobId } = await getDailyLogDoc(dailyLogId)
   const user = await getAuthorizedUser(request.auth.uid)
   const jobDetails = await getJobDetails(jobId)
-  const writeAction: FieldWorkflowWriteAction = (
+  const writeAction: FieldWorkflowWriteAction =
     'status' in request.data && toStatus(request.data?.status) === 'submitted'
-  ) ? 'submit' : 'edit-draft'
+      ? 'submit'
+      : 'edit-draft'
   assertCanWriteExistingDailyLog(user, jobId, jobDetails, writeAction, log)
 
   if (toStatus(log.status) === 'submitted' && user.role !== 'admin') {
-    throw new HttpsError('failed-precondition', 'Submitted daily logs cannot be changed by field users.')
+    throw new HttpsError(
+      'failed-precondition',
+      'Submitted daily logs cannot be changed by field users.',
+    )
   }
 
   const payload: Record<string, unknown> = {
@@ -440,11 +492,14 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
   }
 
   if ('payload' in request.data && request.data?.payload) {
-    payload.payload = sanitizePayload(request.data.payload)
+    payload.payload = sanitizePayload(request.data.payload, dailyLogId)
   }
 
   if ('payloadFields' in request.data && request.data?.payloadFields) {
-    if (typeof request.data.payloadFields !== 'object' || Array.isArray(request.data.payloadFields)) {
+    if (
+      typeof request.data.payloadFields !== 'object' ||
+      Array.isArray(request.data.payloadFields)
+    ) {
       throw new HttpsError('invalid-argument', 'payloadFields must be an object.')
     }
 
@@ -494,7 +549,10 @@ export const deleteDailyLogRecordCallable = onCall(async (request) => {
   assertCanWriteExistingDailyLog(user, jobId, jobDetails, 'edit-draft', log)
 
   if (toStatus(log.status) === 'submitted' && user.role !== 'admin') {
-    throw new HttpsError('failed-precondition', 'Submitted daily logs cannot be deleted by field users.')
+    throw new HttpsError(
+      'failed-precondition',
+      'Submitted daily logs cannot be deleted by field users.',
+    )
   }
 
   await logRef.delete()

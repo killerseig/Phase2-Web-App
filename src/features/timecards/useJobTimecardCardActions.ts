@@ -3,6 +3,10 @@ import {
   type JobTimecardConfirmAction,
   type JobTimecardSortMode,
 } from '@/features/timecards/jobViewHelpers'
+import {
+  findTimecardSubmissionValidationIssues,
+  formatTimecardSubmissionValidationMessage,
+} from '@/features/timecards/submissionValidation'
 import { buildCardDisplayName } from '@/features/timecards/workbook'
 import { deleteTimecardCard, submitTimecardWeek, updateTimecardCard } from '@/services/timecards'
 import type { TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
@@ -17,11 +21,13 @@ interface UseJobTimecardCardActionsOptions {
   flushPendingSaves: () => Promise<void>
   getSubmitActor: () => { userId: string | null; displayName: string | null }
   resetPageAndSaveMessages: () => void
+  revealCard: (cardId: string) => void
   selectCard: (cardId: string) => void
   selectedWeek: ReadonlyRef<TimecardWeekRecord | null>
   selectedWeekEndDate: ReadonlyRef<string>
   selectedWeekStartDate: ReadonlyRef<string>
   setPageError: (error: unknown, fallback: string) => void
+  setPageErrorMessage: (message: string) => void
   setPageInfo: (message: string) => void
   sortMode: ReadonlyRef<JobTimecardSortMode>
   timecardConfirmAction: WritableRef<JobTimecardConfirmAction | null>
@@ -36,15 +42,27 @@ export function useJobTimecardCardActions({
   flushPendingSaves,
   getSubmitActor,
   resetPageAndSaveMessages,
+  revealCard,
   selectCard,
   selectedWeek,
   selectedWeekEndDate,
   selectedWeekStartDate,
   setPageError,
+  setPageErrorMessage,
   setPageInfo,
   sortMode,
   timecardConfirmAction,
 }: UseJobTimecardCardActionsOptions) {
+  function validateCardsForSubmission() {
+    const issues = findTimecardSubmissionValidationIssues(cards.value)
+    const firstIssue = issues[0]
+    if (!firstIssue) return true
+
+    revealCard(firstIssue.cardId)
+    setPageErrorMessage(formatTimecardSubmissionValidationMessage(issues))
+    return false
+  }
+
   function handleRemoveCard(card: TimecardCardRecord) {
     if (!selectedWeek.value || !canEditWeek.value) return
 
@@ -100,6 +118,8 @@ export function useJobTimecardCardActions({
 
   function handleSubmitWeek() {
     if (!selectedWeek.value || !cards.value.length || !canEditWeek.value) return
+    resetPageAndSaveMessages()
+    if (!validateCardsForSubmission()) return
 
     timecardConfirmAction.value = {
       kind: 'submit-week',
@@ -113,6 +133,7 @@ export function useJobTimecardCardActions({
     resetPageAndSaveMessages()
     try {
       await flushPendingSaves()
+      if (!validateCardsForSubmission()) return
       const result = await submitTimecardWeek(action.weekId, getSubmitActor())
       setPageInfo(result.emailMessage || 'Week submitted.')
     } catch (error) {

@@ -61,10 +61,8 @@ const emit = defineEmits<{
   min-height: 2.55rem;
   padding: 0 0.95rem;
   border: 1px solid rgba(168, 190, 209, 0.11);
-  border-radius: 15px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.008)),
-    rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-sm);
+  background: var(--panel-background);
   color: var(--text-muted);
   box-shadow: none;
   font-size: 0.84rem;
@@ -74,7 +72,6 @@ const emit = defineEmits<{
     border-color 0.2s ease,
     color 0.2s ease,
     background 0.2s ease,
-    box-shadow 0.2s ease,
     transform 0.2s ease;
 }
 
@@ -86,27 +83,15 @@ const emit = defineEmits<{
 .jobs-edit-mode-button:hover:not(:disabled) {
   color: var(--text);
   border-color: rgba(145, 220, 255, 0.38);
-  background:
-    radial-gradient(circle at 12% 16%, rgba(145, 220, 255, 0.14), transparent 28%),
-    linear-gradient(135deg, rgba(45, 77, 96, 0.96), rgba(23, 41, 54, 0.96)),
-    rgba(99, 199, 230, 0.12);
-  box-shadow:
-    inset 3px 0 0 rgba(145, 220, 255, 0.92),
-    0 10px 22px rgba(3, 10, 16, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.025);
-  transform: translateY(-1px);
+  background: var(--field-hover);
+  box-shadow: none;
+  transform: none;
 }
 
 .jobs-edit-mode-button--active {
   color: var(--text);
   border-color: rgba(145, 220, 255, 0.38);
-  background:
-    radial-gradient(circle at 12% 16%, rgba(145, 220, 255, 0.14), transparent 28%),
-    linear-gradient(135deg, rgba(45, 77, 96, 0.96), rgba(23, 41, 54, 0.96)),
-    rgba(99, 199, 230, 0.12);
-  box-shadow:
-    inset 3px 0 0 rgba(145, 220, 255, 0.92),
-    0 10px 22px rgba(3, 10, 16, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.025);
+  background: var(--bg-accent);
+  box-shadow: none;
 }
 </style>

@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   constrainImageDimensions,
+  DAILY_LOG_EMAIL_THUMBNAIL_TARGET_BYTES,
   DAILY_LOG_PHOTO_SOURCE_MAX_BYTES,
   DAILY_LOG_PHOTO_TARGET_BYTES,
   DAILY_LOG_PHOTO_UPLOAD_MAX_BYTES,
   isSupportedDailyLogPhotoFile,
+  prepareDailyLogEmailThumbnail,
   prepareDailyLogPhotoForUpload,
 } from '@/features/dailyLogs/photoUpload'
 
@@ -100,6 +102,19 @@ describe('daily log photo upload preparation', () => {
     expect(fillRect).toHaveBeenCalledWith(0, 0, 1920, 1440)
     expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1920, 1440)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:daily-log-photo')
+  })
+
+  it('creates a separate small JPEG derivative for email and gallery previews', async () => {
+    const { drawImage, fillRect } = installImageResizeMocks()
+    const photo = new File(['gallery photo'], 'progress.png', { type: 'image/png' })
+
+    const thumbnail = await prepareDailyLogEmailThumbnail(photo)
+
+    expect(thumbnail.name).toBe('progress.jpg')
+    expect(thumbnail.type).toBe('image/jpeg')
+    expect(thumbnail.size).toBeLessThanOrEqual(DAILY_LOG_EMAIL_THUMBNAIL_TARGET_BYTES)
+    expect(fillRect).toHaveBeenCalledWith(0, 0, 480, 360)
+    expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 480, 360)
   })
 
   it('keeps reducing a photo when an iPad canvas attempt fails', async () => {

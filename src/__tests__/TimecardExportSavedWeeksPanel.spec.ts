@@ -37,6 +37,7 @@ function mountPanel(overrides = {}) {
       ],
       weeksLoading: false,
       canUseTimecardExport: true,
+      canReopenSubmittedWeeks: true,
       actionLoading: false,
       mobileActive: true,
       formatDate,
@@ -69,7 +70,7 @@ describe('TimecardExportSavedWeeksPanel', () => {
     )
   })
 
-  it('shows saved-week actions for editable draft and submitted weeks', async () => {
+  it('shows draft actions for export users and reopen actions for admins', async () => {
     const draftWeek = makeWeek({ id: 'draft-week', status: 'draft' })
     const submittedWeek = makeWeek({ id: 'submitted-week', status: 'submitted' })
     const wrapper = mountPanel({ weeks: [draftWeek, submittedWeek] })
@@ -87,6 +88,10 @@ describe('TimecardExportSavedWeeksPanel', () => {
       wrapper.find('[data-testid="timecard-export-reopen-week-submitted-week"]').exists(),
     ).toBe(true)
     expect(
+      wrapper.get('[data-testid="timecard-export-reopen-week-submitted-week"]')
+        .attributes('aria-label'),
+    ).toBe('Re-open for Corrections')
+    expect(
       wrapper.find('[data-testid="timecard-export-submit-week-submitted-week"]').exists(),
     ).toBe(false)
 
@@ -97,6 +102,27 @@ describe('TimecardExportSavedWeeksPanel', () => {
     expect(wrapper.emitted('submitWeek')?.[0]).toEqual([draftWeek])
     expect(wrapper.emitted('deleteWeek')?.[0]).toEqual([draftWeek])
     expect(wrapper.emitted('reopenWeek')?.[0]).toEqual([submittedWeek])
+  })
+
+  it('keeps Payroll draft actions while hiding the admin-only reopen action', () => {
+    const wrapper = mountPanel({
+      canUseTimecardExport: true,
+      canReopenSubmittedWeeks: false,
+      weeks: [
+        makeWeek({ id: 'draft-week', status: 'draft' }),
+        makeWeek({ id: 'submitted-week', status: 'submitted' }),
+      ],
+    })
+
+    expect(wrapper.find('[data-testid="timecard-export-submit-week-draft-week"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-testid="timecard-export-delete-week-draft-week"]').exists()).toBe(
+      true,
+    )
+    expect(
+      wrapper.find('[data-testid="timecard-export-reopen-week-submitted-week"]').exists(),
+    ).toBe(false)
   })
 
   it('hides saved-week actions when the user cannot use Timecard Export', () => {

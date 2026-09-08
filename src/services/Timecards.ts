@@ -522,6 +522,6 @@ export async function reopenTimecardWeek(weekId: string): Promise<void> {
     )
     await callable({ weekId })
   } catch (error) {
-    throw new Error(normalizeError(error, 'Failed to undo the submitted timecard week.'))
+    throw new Error(normalizeError(error, 'Failed to re-open the submitted timecard week for corrections.'))
   }
 }

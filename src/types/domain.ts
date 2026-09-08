@@ -1,4 +1,10 @@
-export type RawRoleKey = 'admin' | 'payroll' | 'shop-foreman' | 'foreman' | 'project-manager' | 'none'
+export type RawRoleKey =
+  | 'admin'
+  | 'payroll'
+  | 'shop-foreman'
+  | 'foreman'
+  | 'project-manager'
+  | 'none'
 export type EffectiveRoleKey = 'admin' | 'foreman' | 'none'
 export type RoleKey = RawRoleKey
 
@@ -14,20 +20,20 @@ export interface UserProfile {
   inviteSentAt?: unknown
 }
 
-export type JobType =
-  | 'paint'
-  | 'acoustics'
-  | 'drywall'
-  | 'small-jobs'
-  | 'general'
-  | 'subcontractor'
+export type JobType = 'paint' | 'acoustics' | 'drywall' | 'small-jobs' | 'general' | 'subcontractor'
 
 export type NotificationModuleKey = 'dailyLogs' | 'timecards' | 'shopOrders'
+export type GlobalNotificationModuleKey = NotificationModuleKey | 'newJobs' | 'fieldUserAssignments'
 
 export interface NotificationRecipients {
   dailyLogs: string[]
   timecards: string[]
   shopOrders: string[]
+}
+
+export interface GlobalNotificationRecipients extends NotificationRecipients {
+  newJobs: string[]
+  fieldUserAssignments: string[]
 }
 
 export interface JobRecord {
@@ -197,7 +203,9 @@ export type DailyLogAttachmentType = 'photo' | 'ptp' | 'qc' | 'other'
 export interface DailyLogAttachmentRecord {
   name: string
   url: string
+  thumbnailUrl?: string
   path: string
+  thumbnailPath?: string
   type: DailyLogAttachmentType
   description: string
   createdAt?: unknown
@@ -210,7 +218,9 @@ export interface PublicDailyLogGalleryRecord {
   sequenceNumber: number
   foremanName: string
   submittedAt: string | null
-  attachments: Array<Pick<DailyLogAttachmentRecord, 'name' | 'url' | 'type' | 'description'>>
+  attachments: Array<
+    Pick<DailyLogAttachmentRecord, 'name' | 'url' | 'thumbnailUrl' | 'type' | 'description'>
+  >
 }
 
 export interface DailyLogManpowerLineRecord {

@@ -126,7 +126,7 @@ function handleStatusFilterUpdate(value: string) {
 
 .employees-browser__filter {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   color: var(--text-muted);
   font-size: 0.74rem;
   letter-spacing: 0.1em;
@@ -135,17 +135,17 @@ function handleStatusFilterUpdate(value: string) {
 
 .employees-browser__filter .app-select {
   --app-select-border: var(--border);
-  --app-select-min-height: 2.8rem;
-  --app-select-padding-x: 0.9rem;
-  --app-select-radius: 12px;
-  --app-select-background: rgba(255, 255, 255, 0.045);
+  --app-select-min-height: var(--control-height-form);
+  --app-select-padding-x: var(--control-padding-x);
+  --app-select-radius: var(--control-radius);
+  --app-select-background: var(--control-background);
   text-transform: none;
   letter-spacing: normal;
 }
 
 .employees-browser__list {
   display: grid;
-  gap: 0.55rem;
+  gap: var(--list-gap);
   align-content: start;
   min-height: 0;
   overflow: auto;
@@ -170,7 +170,7 @@ function handleStatusFilterUpdate(value: string) {
 .employees-browser__row-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: var(--field-gap);
 }
 
 @media (max-width: 900px) {

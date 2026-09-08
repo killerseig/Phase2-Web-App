@@ -211,11 +211,9 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
   min-width: 13rem;
   padding: 0.35rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(33, 48, 61, 0.98), rgba(18, 28, 38, 0.98)),
-    rgba(18, 24, 33, 0.96);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-sm);
+  background: var(--panel-background);
+  box-shadow: none;
 }
 
 .shop-orders-context-menu__item {
@@ -225,7 +223,7 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
   min-height: 2.25rem;
   padding: 0.5rem 0.7rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -247,7 +245,7 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
   min-height: 8.5rem;
   padding: 0.85rem;
   border: 1px dashed rgba(140, 162, 186, 0.1);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   text-align: center;
 }

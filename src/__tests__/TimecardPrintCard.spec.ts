@@ -110,7 +110,7 @@ describe('TimecardPrintCard', () => {
 
     expect(headerText).toEqual([
       'JOB #',
-      '1',
+      'AREA',
       '',
       'ACCT',
       'DIF',

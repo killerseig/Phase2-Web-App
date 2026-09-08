@@ -20,10 +20,11 @@ withDefaults(defineProps<{
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: var(--app-readonly-field-min-height, 2.8rem);
-  padding: var(--app-readonly-field-padding-y, 0) var(--app-readonly-field-padding-x, 0.9rem);
+  min-width: 0;
+  min-height: var(--app-readonly-field-min-height, var(--control-height-form));
+  padding: var(--app-readonly-field-padding-y, 0) var(--app-readonly-field-padding-x, var(--control-padding-x));
   border: 1px solid var(--app-readonly-field-border, var(--border));
-  border-radius: var(--app-readonly-field-radius, 12px);
+  border-radius: var(--app-readonly-field-radius, var(--control-radius));
   background: var(--app-readonly-field-background, rgba(255, 255, 255, 0.035));
   color: var(--app-readonly-field-color, var(--text));
   box-sizing: border-box;
@@ -33,7 +34,7 @@ withDefaults(defineProps<{
 
 .app-readonly-field--multiline {
   align-items: flex-start;
-  min-height: var(--app-readonly-field-multiline-min-height, var(--app-readonly-field-min-height, 2.8rem));
+  min-height: var(--app-readonly-field-multiline-min-height, var(--app-readonly-field-min-height, var(--control-height-form)));
   padding-top: var(--app-readonly-field-multiline-padding-y, 0.55rem);
   padding-bottom: var(--app-readonly-field-multiline-padding-y, 0.55rem);
   white-space: pre-wrap;

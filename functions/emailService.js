@@ -23,6 +23,7 @@ exports.buildShopOrderEmail = buildShopOrderEmail;
 exports.buildShopOrderPdfFilename = buildShopOrderPdfFilename;
 exports.buildShopOrderPdfBuffer = buildShopOrderPdfBuffer;
 exports.buildSecretExpirationEmail = buildSecretExpirationEmail;
+exports.buildEmailSendLogSummary = buildEmailSendLogSummary;
 exports.sendEmail = sendEmail;
 exports.sendDailyLogEmailNotification = sendDailyLogEmailNotification;
 exports.sendShopOrderEmailNotification = sendShopOrderEmailNotification;
@@ -31,6 +32,7 @@ const axios_1 = __importDefault(require("axios"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const constants_1 = require("./constants");
 const functionConfig_1 = require("./functionConfig");
+const emailDeliveryErrors_1 = require("./emailDeliveryErrors");
 // Token cache
 let cachedToken = null;
 /**
@@ -68,10 +70,14 @@ async function getGraphAuthToken() {
         return token;
     }
     catch (error) {
-        console.error('[getGraphAuthToken] Error getting token');
-        console.error('[getGraphAuthToken] Error status:', error.response?.status);
-        console.error('[getGraphAuthToken] Error details:', error.response?.data);
-        throw new Error(`Failed to get Graph API token: ${error.message}`);
+        const failure = new emailDeliveryErrors_1.EmailDeliveryError(`Failed to get Graph API token: ${error.message}`, {
+            httpStatus: error.response?.status,
+        });
+        console.error('[getGraphAuthToken] Token request failed', {
+            httpStatus: failure.httpStatus ?? null,
+            retryable: failure.retryable,
+        });
+        throw failure;
     }
 }
 /**
@@ -210,6 +216,101 @@ function normalizeDailyLogEmailPayload(dailyLog) {
         attachments,
     };
 }
+const DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT = 6;
+function safeWebUrl(value) {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    if (!normalized || normalized.length > 4096)
+        return '';
+    try {
+        const parsed = new URL(normalized);
+        return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : '';
+    }
+    catch {
+        return '';
+    }
+}
+function normalizeDailyLogPhotoSection(value) {
+    if (value === 'ptp' || value === 'qc')
+        return value;
+    // "other", missing, and unknown legacy types were historically shown with Photos.
+    return 'photo';
+}
+function normalizeDailyLogEmailAttachments(value) {
+    if (!Array.isArray(value))
+        return [];
+    return value.flatMap((attachment) => {
+        if (!attachment || typeof attachment !== 'object')
+            return [];
+        const record = attachment;
+        return [
+            {
+                name: compactEmailText(record.name) || 'Daily log photo',
+                description: typeof record.description === 'string' ? record.description.trim() : '',
+                section: normalizeDailyLogPhotoSection(record.type),
+            },
+        ];
+    });
+}
+function buildDailyLogGalleryTarget(dailyLogUrl, section, position) {
+    const safeUrl = safeWebUrl(dailyLogUrl);
+    if (!safeUrl)
+        return '';
+    const parsed = new URL(safeUrl);
+    parsed.hash = `gallery-${section}${position ? `-${position}` : ''}`;
+    return parsed.toString();
+}
+function renderDailyLogPhotoSection(title, section, allAttachments, dailyLogUrl, inlinePreviews) {
+    const attachments = allAttachments.filter((attachment) => attachment.section === section);
+    if (!attachments.length) {
+        return `
+      <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">${escapeHtml(title)}</h3>
+      <p>N/A</p>
+    `;
+    }
+    const previewAttachments = attachments.slice(0, DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT);
+    const previewCells = previewAttachments.map((attachment, index) => {
+        const targetUrl = buildDailyLogGalleryTarget(dailyLogUrl, section, index + 1);
+        const inlinePreview = inlinePreviews.find((preview) => preview.section === section && preview.position === index + 1);
+        const safeContentId = /^[A-Za-z0-9._@-]{1,128}$/.test(inlinePreview?.contentId || '')
+            ? inlinePreview?.contentId
+            : '';
+        const image = safeContentId
+            ? `<img src="cid:${escapeHtml(safeContentId)}" width="240" alt="${escapeHtml(attachment.name)}" style="display: block; width: 100%; max-width: 240px; height: auto; max-height: 240px; border: 0; border-radius: 6px; object-fit: contain; background: #f5f5f5;" />`
+            : `<span style="display: block; padding: 28px 12px; border: 1px solid #dddddd; border-radius: 6px; color: #555555; background: #f5f5f5; text-align: center;">Open photo in gallery</span>`;
+        const linkedImage = targetUrl
+            ? `<a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="display: block; color: #007bff; text-decoration: none;">${image}</a>`
+            : image;
+        return `<td width="50%" valign="top" style="width: 50%; padding: 0 8px 14px 0; vertical-align: top;">
+        ${linkedImage}
+        <div style="max-width: 240px; padding-top: 6px; line-height: 1.4; overflow-wrap: anywhere;">
+          <strong>${escapeHtml(attachment.name)}</strong>
+          ${attachment.description ? `<div style="color: #555555;">${renderMultilineDisplayValue(attachment.description, '')}</div>` : ''}
+        </div>
+      </td>`;
+    });
+    const previewRows = [];
+    for (let index = 0; index < previewCells.length; index += 2) {
+        previewRows.push(`<tr>${previewCells[index]}${previewCells[index + 1] || '<td width="50%"></td>'}</tr>`);
+    }
+    const sectionUrl = buildDailyLogGalleryTarget(dailyLogUrl, section);
+    const overflowButton = attachments.length > DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT && sectionUrl
+        ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: auto; border-collapse: separate; margin: 4px 0 0 0; border: 0;">
+        <tr>
+          <td bgcolor="#007bff" style="padding: 0; border: 0; border-radius: 4px; background-color: #007bff; text-align: center;">
+            <a href="${escapeHtml(sectionUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 16px; color: #ffffff !important; text-decoration: none; font-size: 14px; line-height: 18px; font-weight: bold;">View All ${attachments.length} ${escapeHtml(title)}</a>
+          </td>
+        </tr>
+      </table>`
+        : '';
+    return `
+    <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">${escapeHtml(title)}</h3>
+    <p style="margin: 0 0 10px 0;"><strong>${attachments.length} ${attachments.length === 1 ? 'photo' : 'photos'}</strong></p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0; border: 0;">
+      ${previewRows.join('')}
+    </table>
+    ${overflowButton}
+  `;
+}
 // ============================================================================
 // EMAIL TEMPLATES
 // ============================================================================
@@ -218,6 +319,9 @@ function normalizeDailyLogEmailPayload(dailyLog) {
  */
 function buildWelcomeEmail(firstName, resetLink) {
     const appUrl = (0, functionConfig_1.getAppBaseUrl)();
+    const safeAppUrl = escapeHtml(appUrl);
+    const safeFirstName = escapeHtml(firstName || 'User');
+    const safeResetLink = escapeHtml(resetLink);
     return `
     ${constants_1.EMAIL_STYLES}
     <div class="email-container">
@@ -225,7 +329,7 @@ function buildWelcomeEmail(firstName, resetLink) {
         <h1>Welcome to Phase 2</h1>
       </div>
       <div class="content">
-        <p>Welcome, ${firstName || 'User'}!</p>
+        <p>Welcome, ${safeFirstName}!</p>
         <p>Your account has been created in the Phase 2 application. To get started, please follow these steps:</p>
         
         <h2 style="color: #333; margin-top: 20px; font-size: 18px;">Getting Started:</h2>
@@ -236,11 +340,11 @@ function buildWelcomeEmail(firstName, resetLink) {
         </ol>
         
         <div style="margin: 25px 0; text-align: center;">
-          <p style="margin-bottom: 15px;"><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Set Your Password</a></p>
+          <p style="margin-bottom: 15px;"><a href="${safeResetLink}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Set Your Password</a></p>
         </div>
         
         <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
-          <p style="margin: 0; color: #666;"><strong>Or visit us directly:</strong> <a href="${appUrl}" style="color: #007bff; text-decoration: none;">${appUrl}</a></p>
+          <p style="margin: 0; color: #666;"><strong>Or visit us directly:</strong> <a href="${safeAppUrl}" style="color: #007bff; text-decoration: none;">${safeAppUrl}</a></p>
         </div>
         
         <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not create this account, please ignore this email.</p>
@@ -257,6 +361,9 @@ function buildWelcomeEmail(firstName, resetLink) {
  */
 function buildPasswordResetEmail(displayName, resetLink) {
     const appUrl = (0, functionConfig_1.getAppBaseUrl)();
+    const safeDisplayName = escapeHtml(displayName);
+    const safeLoginUrl = escapeHtml(`${appUrl}/login`);
+    const safeResetLink = escapeHtml(resetLink);
     return `
     ${constants_1.EMAIL_STYLES}
     <div class="email-container">
@@ -264,16 +371,16 @@ function buildPasswordResetEmail(displayName, resetLink) {
         <h1>Reset Your Password</h1>
       </div>
       <div class="content">
-        <p>Hello${displayName ? ` ${displayName}` : ''},</p>
+        <p>Hello${safeDisplayName ? ` ${safeDisplayName}` : ''},</p>
         <p>We received a request to reset your Phase 2 password.</p>
         <p>If you made this request, use the button below to choose a new password.</p>
 
         <div style="margin: 25px 0; text-align: center;">
-          <p style="margin-bottom: 15px;"><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Reset Password</a></p>
+          <p style="margin-bottom: 15px;"><a href="${safeResetLink}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Reset Password</a></p>
         </div>
 
         <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
-          <p style="margin: 0; color: #666;"><strong>Need to sign in after resetting?</strong> <a href="${appUrl}/login" style="color: #007bff; text-decoration: none;">Go to Phase 2 Login</a></p>
+          <p style="margin: 0; color: #666;"><strong>Need to sign in after resetting?</strong> <a href="${safeLoginUrl}" style="color: #007bff; text-decoration: none;">Go to Phase 2 Login</a></p>
         </div>
 
         <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not request a password reset, you can ignore this email.</p>
@@ -342,19 +449,14 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog, options = {}) {
     </tr>
   `)
         .join('');
-    const attachmentRecords = Array.isArray(dailyLogPayload.attachments)
-        ? dailyLogPayload.attachments
-        : [];
     const dailyLogUrl = String(options.dailyLogUrl || '').trim();
-    const attachmentGalleryLink = dailyLogUrl && attachmentRecords.length
-        ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: auto; border-collapse: separate; margin: 8px 0 0 0; border: 0;">
-        <tr>
-          <td bgcolor="#007bff" style="padding: 0; border: 0; border-radius: 4px; background-color: #007bff; text-align: center;">
-            <a href="${escapeHtml(dailyLogUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 16px; color: #ffffff !important; text-decoration: none; font-size: 14px; line-height: 18px; font-weight: bold;">View Photo Gallery (${attachmentRecords.length})</a>
-          </td>
-        </tr>
-      </table>`
-        : '';
+    const inlinePhotoPreviews = Array.isArray(options.inlinePhotoPreviews)
+        ? options.inlinePhotoPreviews
+        : [];
+    const emailAttachments = normalizeDailyLogEmailAttachments(dailyLogPayload.attachments);
+    const photosSection = renderDailyLogPhotoSection('Photos', 'photo', emailAttachments, dailyLogUrl, inlinePhotoPreviews);
+    const ptpPhotosSection = renderDailyLogPhotoSection('PTP Photos', 'ptp', emailAttachments, dailyLogUrl, inlinePhotoPreviews);
+    const qcPhotosSection = renderDailyLogPhotoSection('QC Photos', 'qc', emailAttachments, dailyLogUrl, inlinePhotoPreviews);
     return `
     ${constants_1.EMAIL_STYLES}
     ${renderHiddenEmailPreheader(preheader)}
@@ -366,19 +468,17 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog, options = {}) {
         <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">${renderEmailText(jobDetails.name, 'Unnamed Job')} ${jobDetails.number ? `(#${renderEmailText(jobDetails.number)})` : ''}</h2>
         <p><strong>Date:</strong> ${formattedDate}</p>
 
-        <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Site Information</h3>
+        <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Site Info</h3>
         <p><strong>Project Name:</strong> ${renderEmailText(dailyLogPayload.projectName)}</p>
         <p><strong>Job Number:</strong> ${renderEmailText(dailyLogPayload.jobSiteNumbers || jobDetails?.number)}</p>
-        <p><strong>Foreman:</strong> ${renderEmailText(dailyLogPayload.foremanOnSite)}</p>
-        <p><strong>Project Manager:</strong> ${renderEmailText(dailyLogPayload.siteForemanAssistant)}</p>
+        <p><strong>Project Manager:</strong> ${renderEmailText(dailyLogPayload.siteForemanAssistant || jobDetails?.projectManager)}</p>
+        <p><strong>Foreman:</strong> ${renderEmailText(dailyLogPayload.foremanOnSite || jobDetails?.foreman)}</p>
+        <p><strong>General Contractor:</strong> ${renderEmailText(dailyLogPayload.generalContractor || jobDetails?.gc)}</p>
+        <p><strong>Job Address:</strong> ${renderEmailText(dailyLogPayload.jobAddress || dailyLogPayload.address || jobDetails?.jobAddress)}</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
-        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Manpower</h3>
-        ${renderDailyLogResponseBlock('Manpower Summary', dailyLogPayload.manpower)}
-        ${renderDailyLogResponseBlock('Weekly Schedule', dailyLogPayload.weeklySchedule)}
-        ${renderDailyLogResponseBlock('Manpower Assessment', dailyLogPayload.manpowerAssessment)}
-
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Crew On Site</h3>
         <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
           <thead>
             <tr style="background-color: #f5f5f5;">
@@ -392,7 +492,15 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog, options = {}) {
           </tbody>
         </table>
 
-        <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Indoor Climate</h3>
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
+
+        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Schedule &amp; Assessment</h3>
+        ${renderDailyLogResponseBlock('Weekly Schedule', dailyLogPayload.weeklySchedule)}
+        ${renderDailyLogResponseBlock('Manpower Assessment', dailyLogPayload.manpowerAssessment)}
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
+
+        <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">Indoor Temperature Readings</h3>
         <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
           <thead>
             <tr style="background-color: #f5f5f5;">
@@ -417,6 +525,14 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog, options = {}) {
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
+        ${photosSection}
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
+
+        ${ptpPhotosSection}
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
+
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Deliveries & Materials</h3>
         ${renderDailyLogResponseBlock('Deliveries Received', dailyLogPayload.deliveriesReceived)}
         ${renderDailyLogResponseBlock('Deliveries Needed', dailyLogPayload.deliveriesNeeded)}
@@ -432,16 +548,13 @@ function buildDailyLogEmail(jobDetails, logDate, dailyLog, options = {}) {
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
 
+        ${qcPhotosSection}
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
+
         <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Notes & Action Items</h3>
         ${renderDailyLogResponseBlock('Notes & Correspondence', dailyLogPayload.notesCorrespondence)}
         ${renderDailyLogResponseBlock('Action Items', dailyLogPayload.actionItems)}
-
-        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;" />
-        <h3 style="color: #555; font-size: 16px; margin: 15px 0 10px 0;">Attachments</h3>
-        ${attachmentRecords.length
-        ? `<p style="margin: 0 0 10px 0;"><strong>${attachmentRecords.length} photo${attachmentRecords.length === 1 ? '' : 's'} saved with this daily log.</strong></p>
-             ${attachmentGalleryLink}`
-        : '<p>N/A</p>'}
       </div>
       <div class="footer">
         <p>&copy; ${new Date().getFullYear()} Phase 2. All rights reserved.</p>
@@ -825,7 +938,7 @@ function buildTimecardsEmail(payload) {
                 <thead>
                   <tr>
                     <th style="${headerCell}">JOB #</th>
-                    <th style="${headerCell}">1</th>
+                    <th style="${headerCell}">AREA</th>
                     <th style="${headerCell}">&nbsp;</th>
                     <th style="${headerCell}">ACCT</th>
                     <th style="${headerCell}">DIF</th>
@@ -1653,34 +1766,32 @@ function buildSecretExpirationEmail() {
     </div>
   `;
 }
-// ============================================================================
-// EMAIL SENDING
-// ============================================================================
-/**
- * Send email via Microsoft Graph API
- */
+function buildEmailSendLogSummary(options) {
+    return {
+        recipientCount: Array.isArray(options.to) ? options.to.length : options.to ? 1 : 0,
+        attachmentCount: options.attachments?.length ?? 0,
+        hasHtmlBody: Boolean(options.html),
+    };
+}
 async function sendEmail(options) {
     if (!isEmailEnabled()) {
         console.log('[sendEmail] Email sending disabled. Skipping send.');
         return;
     }
+    const recipients = Array.isArray(options.to) ? options.to : [options.to];
+    if (recipients.length === 0) {
+        throw new emailDeliveryErrors_1.EmailDeliveryError('No recipients provided', { retryable: false });
+    }
+    const invalidRecipientCount = recipients.filter((email) => !isValidEmailFormat(email.trim())).length;
+    if (invalidRecipientCount > 0) {
+        throw new emailDeliveryErrors_1.EmailDeliveryError(`${invalidRecipientCount} invalid email ${invalidRecipientCount === 1 ? 'address was' : 'addresses were'} provided.`, { retryable: false });
+    }
     try {
         // Get access token
         const token = await getGraphAuthToken();
-        // Ensure to is an array
-        const recipients = Array.isArray(options.to) ? options.to : [options.to];
-        if (recipients.length === 0) {
-            throw new Error('No recipients provided');
-        }
-        // Validate email addresses
-        const invalidEmails = recipients.filter((email) => !isValidEmailFormat(email.trim()));
-        if (invalidEmails.length > 0) {
-            throw new Error(`Invalid email addresses: ${invalidEmails.join(', ')}`);
-        }
         const senderEmail = functionConfig_1.outlookSenderEmail.value();
         const senderRecipient = buildGraphSenderRecipient(senderEmail);
-        console.log(`[sendEmail] Sending email to ${recipients.join(', ')} from ${senderEmail}`);
-        console.log(`[sendEmail] Subject: ${options.subject}`);
+        console.log('[sendEmail] Sending message:', buildEmailSendLogSummary(options));
         // Build Graph API request payload
         const payload = {
             message: {
@@ -1702,13 +1813,14 @@ async function sendEmail(options) {
                             name: att.name,
                             contentType: att.contentType || 'application/octet-stream',
                             contentBytes: att.contentBytes,
+                            ...(att.contentId ? { contentId: att.contentId } : {}),
+                            ...(typeof att.isInline === 'boolean' ? { isInline: att.isInline } : {}),
                         })),
                     }
                     : {}),
             },
             saveToSentItems: true,
         };
-        console.log('[sendEmail] Payload:', JSON.stringify(payload, null, 2));
         const graphEndpoint = `https://graph.microsoft.com/v1.0/users/${senderEmail}/sendMail`;
         console.log('[sendEmail] Using endpoint:', graphEndpoint);
         // Send via Graph API
@@ -1721,12 +1833,17 @@ async function sendEmail(options) {
         console.log(`[sendEmail] Email sent successfully. Status: ${response.status}`);
     }
     catch (error) {
-        console.error('[sendEmail] Error sending email');
-        console.error('[sendEmail] Error status:', error.response?.status);
-        console.error('[sendEmail] Error headers:', error.response?.headers);
-        console.error('[sendEmail] Error data:', JSON.stringify(error.response?.data, null, 2));
-        console.error('[sendEmail] Full error message:', error.message);
-        throw new Error(`Failed to send email: ${error.message}`);
+        const failure = error instanceof emailDeliveryErrors_1.EmailDeliveryError
+            ? error
+            : new emailDeliveryErrors_1.EmailDeliveryError(`Failed to send email: ${error.message}`, {
+                httpStatus: error.response?.status,
+            });
+        console.error('[sendEmail] Delivery failed', {
+            httpStatus: failure.httpStatus ?? null,
+            retryable: failure.retryable,
+            message: failure.message,
+        });
+        throw failure;
     }
 }
 /**

@@ -62,10 +62,10 @@ function handleUpdate(fieldKey: DailyLogTextFieldKey, value: string) {
 <style scoped>
 .daily-log-text-card {
   --app-section-header-copy-gap: 0.2rem;
-  --app-section-header-eyebrow-font-size: 0.68rem;
-  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
@@ -73,12 +73,12 @@ function handleUpdate(fieldKey: DailyLogTextFieldKey, value: string) {
 
 .daily-log-text-card__stack {
   display: grid;
-  gap: 0.85rem;
+  gap: var(--form-gap);
 }
 
 .daily-log-text-card__field {
   --app-field-color: var(--text-muted);
-  --app-textarea-background: rgba(255, 255, 255, 0.045);
+  --app-textarea-background: var(--control-background);
 }
 
 @media (max-width: 920px) {

@@ -2,7 +2,8 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes } from 'node:crypto'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { getJobDetails } from './firestoreService'
-import { db } from './runtime'
+import { db, storageBucket } from './runtime'
+import { getExpectedDailyLogThumbnailPath } from './dailyLogEmailPhotos'
 
 const GALLERY_SHARES_COLLECTION = 'dailyLogGalleryShares'
 const GALLERY_SHARE_ID_PATTERN = /^[A-Za-z0-9_-]{43}$/
@@ -13,6 +14,7 @@ type GalleryAttachmentType = 'photo' | 'ptp' | 'qc' | 'other'
 interface GalleryAttachment {
   name: string
   url: string
+  thumbnailUrl?: string
   type: GalleryAttachmentType
   description: string
 }
@@ -38,20 +40,63 @@ function normalizeAttachmentType(value: unknown): GalleryAttachmentType {
   return value === 'ptp' || value === 'qc' || value === 'other' ? value : 'photo'
 }
 
-function normalizeAttachment(value: unknown): GalleryAttachment | null {
+export function isTrustedStorageObjectUrl(value: string, objectPath: string, bucketName: string) {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'https:') return false
+
+    if (parsed.hostname === 'firebasestorage.googleapis.com') {
+      const match = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(parsed.pathname)
+      if (!match) return false
+      return (
+        decodeURIComponent(match[1] || '') === bucketName &&
+        decodeURIComponent(match[2] || '') === objectPath
+      )
+    }
+
+    if (parsed.hostname === 'storage.googleapis.com') {
+      const expectedPath = `/${encodeURIComponent(bucketName)}/${objectPath
+        .split('/')
+        .map((part) => encodeURIComponent(part))
+        .join('/')}`
+      return parsed.pathname === expectedPath
+    }
+
+    return false
+  } catch {
+    return false
+  }
+}
+
+function normalizeAttachment(
+  value: unknown,
+  dailyLogId: string,
+  bucketName: string,
+): GalleryAttachment | null {
   if (!value || typeof value !== 'object') return null
 
   const record = value as Record<string, unknown>
   const name = text(record.name) || 'Daily log photo'
   const url = text(record.url)
+  const thumbnailUrl = text(record.thumbnailUrl)
+  const path = text(record.path)
+  const expectedThumbnailPath = getExpectedDailyLogThumbnailPath(path, dailyLogId)
+  const thumbnailPath = text(record.thumbnailPath)
 
   // Gallery images are served from Firebase download URLs. Reject non-web
   // schemes so a stored value can never become an executable public link.
-  if (!/^https:\/\//i.test(url)) return null
+  if (!expectedThumbnailPath || !isTrustedStorageObjectUrl(url, path, bucketName)) {
+    return null
+  }
+
+  const hasTrustedThumbnail =
+    (!thumbnailPath || thumbnailPath === expectedThumbnailPath) &&
+    isTrustedStorageObjectUrl(thumbnailUrl, expectedThumbnailPath, bucketName)
 
   return {
     name,
     url,
+    ...(hasTrustedThumbnail ? { thumbnailUrl } : {}),
     type: normalizeAttachmentType(record.type),
     description: text(record.description),
   }
@@ -74,7 +119,11 @@ function serializeDate(value: unknown): string | null {
   return null
 }
 
-function getDailyLogAttachments(log: any): GalleryAttachment[] {
+function getDailyLogAttachments(
+  log: any,
+  dailyLogId: string,
+  bucketName: string,
+): GalleryAttachment[] {
   const payload = log?.payload && typeof log.payload === 'object' ? log.payload : log
   const attachments = Array.isArray(payload?.attachments)
     ? payload.attachments
@@ -82,15 +131,24 @@ function getDailyLogAttachments(log: any): GalleryAttachment[] {
       ? log.attachments
       : []
   return attachments
-    .map((attachment: unknown) => normalizeAttachment(attachment))
-    .filter((attachment: GalleryAttachment | null): attachment is GalleryAttachment => attachment !== null)
+    .map((attachment: unknown) => normalizeAttachment(attachment, dailyLogId, bucketName))
+    .filter(
+      (attachment: GalleryAttachment | null): attachment is GalleryAttachment =>
+        attachment !== null,
+    )
 }
 
-export function buildPublicDailyLogGalleryPayload(jobDetails: any, log: any) {
+export function buildPublicDailyLogGalleryPayload(
+  jobDetails: any,
+  log: any,
+  dailyLogId = text(log?.id),
+  bucketName = storageBucket.name,
+) {
   const payload = log?.payload && typeof log.payload === 'object' ? log.payload : log
 
   return {
-    jobName: text(jobDetails?.name) || text(log?.jobName) || text(payload?.projectName) || 'Phase 2 Job',
+    jobName:
+      text(jobDetails?.name) || text(log?.jobName) || text(payload?.projectName) || 'Phase 2 Job',
     jobCode: text(jobDetails?.number) || text(jobDetails?.code) || text(log?.jobCode),
     logDate: text(log?.logDate),
     sequenceNumber: normalizeSequenceNumber(log?.sequenceNumber),
@@ -100,7 +158,7 @@ export function buildPublicDailyLogGalleryPayload(jobDetails: any, log: any) {
       text(log?.submittedByName) ||
       'Phase 2 Foreman',
     submittedAt: serializeDate(log?.submittedAt),
-    attachments: getDailyLogAttachments(log),
+    attachments: getDailyLogAttachments(log, dailyLogId, bucketName),
   }
 }
 
@@ -204,7 +262,7 @@ export async function loadPublicDailyLogGallery(shareId: string) {
   }
 
   const jobDetails = await getJobDetails(jobId)
-  return buildPublicDailyLogGalleryPayload(jobDetails, log)
+  return buildPublicDailyLogGalleryPayload(jobDetails, log, logSnapshot.id)
 }
 
 export async function loadLegacyPublicDailyLogGallery(jobId: string, dailyLogId: string) {
@@ -229,15 +287,12 @@ export async function loadLegacyPublicDailyLogGallery(jobId: string, dailyLogId:
   }
 
   const jobDetails = await getJobDetails(normalizedJobId)
-  return buildPublicDailyLogGalleryPayload(jobDetails, log)
+  return buildPublicDailyLogGalleryPayload(jobDetails, log, logSnapshot.id)
 }
 
 export const getPublicDailyLogGallery = onCall(async (request) => {
   const shareId = text(request.data?.shareId)
   if (shareId) return loadPublicDailyLogGallery(shareId)
 
-  return loadLegacyPublicDailyLogGallery(
-    text(request.data?.jobId),
-    text(request.data?.dailyLogId),
-  )
+  return loadLegacyPublicDailyLogGallery(text(request.data?.jobId), text(request.data?.dailyLogId))
 })

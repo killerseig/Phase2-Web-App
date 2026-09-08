@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPublicDailyLogGallery = void 0;
+exports.isTrustedStorageObjectUrl = isTrustedStorageObjectUrl;
 exports.buildPublicDailyLogGalleryPayload = buildPublicDailyLogGalleryPayload;
 exports.ensureDailyLogGalleryShare = ensureDailyLogGalleryShare;
 exports.loadPublicDailyLogGallery = loadPublicDailyLogGallery;
@@ -10,6 +11,7 @@ const node_crypto_1 = require("node:crypto");
 const https_1 = require("firebase-functions/v2/https");
 const firestoreService_1 = require("./firestoreService");
 const runtime_1 = require("./runtime");
+const dailyLogEmailPhotos_1 = require("./dailyLogEmailPhotos");
 const GALLERY_SHARES_COLLECTION = 'dailyLogGalleryShares';
 const GALLERY_SHARE_ID_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const FIRESTORE_DOCUMENT_ID_PATTERN = /^[^/]{1,128}$/;
@@ -25,19 +27,52 @@ function normalizeSequenceNumber(value) {
 function normalizeAttachmentType(value) {
     return value === 'ptp' || value === 'qc' || value === 'other' ? value : 'photo';
 }
-function normalizeAttachment(value) {
+function isTrustedStorageObjectUrl(value, objectPath, bucketName) {
+    try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== 'https:')
+            return false;
+        if (parsed.hostname === 'firebasestorage.googleapis.com') {
+            const match = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(parsed.pathname);
+            if (!match)
+                return false;
+            return (decodeURIComponent(match[1] || '') === bucketName &&
+                decodeURIComponent(match[2] || '') === objectPath);
+        }
+        if (parsed.hostname === 'storage.googleapis.com') {
+            const expectedPath = `/${encodeURIComponent(bucketName)}/${objectPath
+                .split('/')
+                .map((part) => encodeURIComponent(part))
+                .join('/')}`;
+            return parsed.pathname === expectedPath;
+        }
+        return false;
+    }
+    catch {
+        return false;
+    }
+}
+function normalizeAttachment(value, dailyLogId, bucketName) {
     if (!value || typeof value !== 'object')
         return null;
     const record = value;
     const name = text(record.name) || 'Daily log photo';
     const url = text(record.url);
+    const thumbnailUrl = text(record.thumbnailUrl);
+    const path = text(record.path);
+    const expectedThumbnailPath = (0, dailyLogEmailPhotos_1.getExpectedDailyLogThumbnailPath)(path, dailyLogId);
+    const thumbnailPath = text(record.thumbnailPath);
     // Gallery images are served from Firebase download URLs. Reject non-web
     // schemes so a stored value can never become an executable public link.
-    if (!/^https:\/\//i.test(url))
+    if (!expectedThumbnailPath || !isTrustedStorageObjectUrl(url, path, bucketName)) {
         return null;
+    }
+    const hasTrustedThumbnail = (!thumbnailPath || thumbnailPath === expectedThumbnailPath) &&
+        isTrustedStorageObjectUrl(thumbnailUrl, expectedThumbnailPath, bucketName);
     return {
         name,
         url,
+        ...(hasTrustedThumbnail ? { thumbnailUrl } : {}),
         type: normalizeAttachmentType(record.type),
         description: text(record.description),
     };
@@ -55,7 +90,7 @@ function serializeDate(value) {
     }
     return null;
 }
-function getDailyLogAttachments(log) {
+function getDailyLogAttachments(log, dailyLogId, bucketName) {
     const payload = log?.payload && typeof log.payload === 'object' ? log.payload : log;
     const attachments = Array.isArray(payload?.attachments)
         ? payload.attachments
@@ -63,10 +98,10 @@ function getDailyLogAttachments(log) {
             ? log.attachments
             : [];
     return attachments
-        .map((attachment) => normalizeAttachment(attachment))
+        .map((attachment) => normalizeAttachment(attachment, dailyLogId, bucketName))
         .filter((attachment) => attachment !== null);
 }
-function buildPublicDailyLogGalleryPayload(jobDetails, log) {
+function buildPublicDailyLogGalleryPayload(jobDetails, log, dailyLogId = text(log?.id), bucketName = runtime_1.storageBucket.name) {
     const payload = log?.payload && typeof log.payload === 'object' ? log.payload : log;
     return {
         jobName: text(jobDetails?.name) || text(log?.jobName) || text(payload?.projectName) || 'Phase 2 Job',
@@ -78,7 +113,7 @@ function buildPublicDailyLogGalleryPayload(jobDetails, log) {
             text(log?.submittedByName) ||
             'Phase 2 Foreman',
         submittedAt: serializeDate(log?.submittedAt),
-        attachments: getDailyLogAttachments(log),
+        attachments: getDailyLogAttachments(log, dailyLogId, bucketName),
     };
 }
 async function getDailyLogReference(jobId, dailyLogId) {
@@ -155,7 +190,7 @@ async function loadPublicDailyLogGallery(shareId) {
         throw new https_1.HttpsError('not-found', 'Photo gallery not found.');
     }
     const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
-    return buildPublicDailyLogGalleryPayload(jobDetails, log);
+    return buildPublicDailyLogGalleryPayload(jobDetails, log, logSnapshot.id);
 }
 async function loadLegacyPublicDailyLogGallery(jobId, dailyLogId) {
     const normalizedJobId = text(jobId);
@@ -173,7 +208,7 @@ async function loadLegacyPublicDailyLogGallery(jobId, dailyLogId) {
         throw new https_1.HttpsError('not-found', 'Photo gallery not found.');
     }
     const jobDetails = await (0, firestoreService_1.getJobDetails)(normalizedJobId);
-    return buildPublicDailyLogGalleryPayload(jobDetails, log);
+    return buildPublicDailyLogGalleryPayload(jobDetails, log, logSnapshot.id);
 }
 exports.getPublicDailyLogGallery = (0, https_1.onCall)(async (request) => {
     const shareId = text(request.data?.shareId);

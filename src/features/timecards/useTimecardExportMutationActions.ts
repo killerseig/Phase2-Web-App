@@ -4,6 +4,10 @@ import {
   type TimecardExportArchiveCardRecord,
   type TimecardExportConfirmAction,
 } from '@/features/timecards/exportViewHelpers'
+import {
+  findTimecardSubmissionValidationIssues,
+  formatTimecardSubmissionValidationMessage,
+} from '@/features/timecards/submissionValidation'
 import { buildCardDisplayName } from '@/features/timecards/workbook'
 import {
   deleteTimecardCard,
@@ -17,12 +21,16 @@ import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 interface UseTimecardExportMutationActionsOptions {
   actionLoading: WritableRef<boolean>
   canEditWeek: ReadonlyRef<boolean>
+  cards: ReadonlyRef<TimecardExportArchiveCardRecord[]>
   deleteWeekCache: (weekId: string) => void
   flushPendingSaves: () => Promise<void>
+  getCanReopenSubmittedWeeks: () => boolean
   getCanUseTimecardExport: () => boolean
   resetPageAndSaveMessages: () => void
+  revealCard: (cardId: string) => void
   selectCard: (cardId: string) => void
   setPageError: (error: unknown, fallback: string) => void
+  setPageErrorMessage: (message: string) => void
   setPageInfo: (message: string) => void
   timecardExportConfirmAction: WritableRef<TimecardExportConfirmAction | null>
 }
@@ -30,15 +38,30 @@ interface UseTimecardExportMutationActionsOptions {
 export function useTimecardExportMutationActions({
   actionLoading,
   canEditWeek,
+  cards,
   deleteWeekCache,
   flushPendingSaves,
+  getCanReopenSubmittedWeeks,
   getCanUseTimecardExport,
   resetPageAndSaveMessages,
+  revealCard,
   selectCard,
   setPageError,
+  setPageErrorMessage,
   setPageInfo,
   timecardExportConfirmAction,
 }: UseTimecardExportMutationActionsOptions) {
+  function validateWeekForSubmission(weekId: string) {
+    const issues = findTimecardSubmissionValidationIssues(
+      cards.value.filter((card) => card.archiveWeekId === weekId),
+    )
+    if (!issues.length) return true
+
+    revealCard(issues[0]!.cardId)
+    setPageErrorMessage(formatTimecardSubmissionValidationMessage(issues))
+    return false
+  }
+
   function handleRemoveCard(card: TimecardExportArchiveCardRecord) {
     if (!canEditWeek.value) return
 
@@ -80,6 +103,8 @@ export function useTimecardExportMutationActions({
 
   function handleSubmitWeek(week: TimecardWeekRecord) {
     if (!getCanUseTimecardExport() || week.status !== 'draft') return
+    resetPageAndSaveMessages()
+    if (!validateWeekForSubmission(week.id)) return
 
     timecardExportConfirmAction.value = {
       kind: 'submit-week',
@@ -90,7 +115,7 @@ export function useTimecardExportMutationActions({
   }
 
   function handleReopenWeek(week: TimecardWeekRecord) {
-    if (!getCanUseTimecardExport() || week.status !== 'submitted') return
+    if (!getCanReopenSubmittedWeeks() || week.status !== 'submitted') return
 
     timecardExportConfirmAction.value = {
       kind: 'reopen-week',
@@ -121,6 +146,7 @@ export function useTimecardExportMutationActions({
     resetPageAndSaveMessages()
     try {
       await flushPendingSaves()
+      if (!validateWeekForSubmission(action.weekId)) return
       await submitTimecardWeek(action.weekId)
       setPageInfo('Week submitted.')
     } catch (error) {
@@ -132,14 +158,19 @@ export function useTimecardExportMutationActions({
   }
 
   async function confirmReopenWeek(action: Extract<TimecardExportConfirmAction, { kind: 'reopen-week' }>) {
+    if (!getCanReopenSubmittedWeeks()) {
+      timecardExportConfirmAction.value = null
+      return
+    }
+
     actionLoading.value = true
     resetPageAndSaveMessages()
     try {
       await flushPendingSaves()
       await reopenTimecardWeek(action.weekId)
-      setPageInfo('Submitted week moved back to draft.')
+      setPageInfo('Week re-opened for corrections.')
     } catch (error) {
-      setPageError(error, 'Failed to undo the submitted week.')
+      setPageError(error, 'Failed to re-open the submitted week for corrections.')
     } finally {
       actionLoading.value = false
       timecardExportConfirmAction.value = null

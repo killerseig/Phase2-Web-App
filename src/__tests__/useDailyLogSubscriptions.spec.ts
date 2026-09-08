@@ -7,6 +7,7 @@ import { subscribeDailyLogsForDate } from '@/services/dailyLogs'
 import { subscribeGlobalNotificationRecipients } from '@/services/jobs'
 import type {
   DailyLogRecord,
+  GlobalNotificationRecipients,
   NotificationRecipients,
 } from '@/types/domain'
 
@@ -21,11 +22,24 @@ vi.mock('@/services/jobs', () => ({
 const subscribeDailyLogsForDateMock = vi.mocked(subscribeDailyLogsForDate)
 const subscribeGlobalNotificationRecipientsMock = vi.mocked(subscribeGlobalNotificationRecipients)
 
-function makeNotificationRecipients(overrides: Partial<NotificationRecipients> = {}): NotificationRecipients {
+function makeNotificationRecipients(
+  overrides: Partial<NotificationRecipients> = {},
+): NotificationRecipients {
   return {
     dailyLogs: [],
     shopOrders: [],
     timecards: [],
+    ...overrides,
+  }
+}
+
+function makeGlobalNotificationRecipients(
+  overrides: Partial<GlobalNotificationRecipients> = {},
+): GlobalNotificationRecipients {
+  return {
+    ...makeNotificationRecipients(),
+    newJobs: [],
+    fieldUserAssignments: [],
     ...overrides,
   }
 }
@@ -47,13 +61,15 @@ function makeLog(overrides: Partial<DailyLogRecord> = {}): DailyLogRecord {
   }
 }
 
-function mountSubscriptions(options: {
-  canViewAllDailyLogs?: boolean
-  currentUserId?: string | null
-  jobId?: string | null
-  selectedDate?: string
-  selectedLogId?: string | null
-} = {}) {
+function mountSubscriptions(
+  options: {
+    canViewAllDailyLogs?: boolean
+    currentUserId?: string | null
+    jobId?: string | null
+    selectedDate?: string
+    selectedLogId?: string | null
+  } = {},
+) {
   const canViewAllDailyLogs = ref(options.canViewAllDailyLogs ?? false)
   const currentUserId = ref<string | null>(
     options.currentUserId === undefined ? 'user-1' : options.currentUserId,
@@ -110,13 +126,17 @@ describe('useDailyLogSubscriptions', () => {
     expect(subscribeGlobalNotificationRecipientsMock).toHaveBeenCalledTimes(1)
 
     const [onUpdate] = subscribeGlobalNotificationRecipientsMock.mock.calls[0]!
-    onUpdate(makeNotificationRecipients({
-      dailyLogs: ['daily@example.com'],
-      shopOrders: ['shop@example.com'],
-    }))
+    onUpdate(
+      makeGlobalNotificationRecipients({
+        dailyLogs: ['daily@example.com'],
+        shopOrders: ['shop@example.com'],
+      }),
+    )
 
     expect(subscriptions.globalNotificationRecipients.value).toEqual({
       dailyLogs: ['daily@example.com'],
+      fieldUserAssignments: [],
+      newJobs: [],
       shopOrders: ['shop@example.com'],
       timecards: [],
     })

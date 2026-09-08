@@ -89,7 +89,7 @@ function getWorkspaceTitle(job: JobRecord | null) {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: flex-start;
-  gap: 0.45rem;
+  gap: var(--field-gap);
 }
 
 .shop-order-workspace-header__submit {
@@ -106,12 +106,10 @@ function getWorkspaceTitle(job: JobRecord | null) {
   padding: 0.38rem 0.7rem 0.42rem;
   border: 1px solid rgba(99, 199, 230, 0.28);
   border-radius: var(--shop-radius-md);
-  background:
-    linear-gradient(180deg, rgba(99, 199, 230, 0.12), rgba(99, 199, 230, 0.035)),
-    rgba(255, 255, 255, 0.025);
+  background: var(--panel-background);
   color: var(--text);
   text-align: right;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: none;
 }
 
 .shop-order-workspace-header__total span {

@@ -31,7 +31,7 @@ async function main() {
       {
         jobNumber: '9411',
         subsectionArea: 'Level 1',
-        account: '133/513',
+        account: '716',
         difH: '',
         difP: '',
         difC: '',
@@ -55,8 +55,40 @@ async function main() {
 
   assert.equal(normalized.lines.length, 1, 'normalized workbook card should keep its line count')
   assert.equal(normalized.lines[0].jobNumber, '9411', 'job number should be preserved')
-  assert.equal(normalized.lines[0].account, '133/513', 'account code should be preserved')
+  assert.equal(normalized.lines[0].account, '716', 'three-digit numeric account code should be preserved')
   assert.equal(normalized.totals.hoursTotal > 0, true, 'normalized workbook card should have total hours')
+
+  for (const account of ['7', '71', '716']) {
+    const shortNumericAccountCard = normalizeTimecardForEmail({
+      ...workbookCard,
+      lines: [{ ...workbookCard.lines[0], account }],
+    })
+    assert.equal(
+      shortNumericAccountCard.lines[0].account,
+      account,
+      `${account.length}-digit numeric account code should be preserved`,
+    )
+  }
+
+  const leakedJobCodeCard = normalizeTimecardForEmail({
+    ...workbookCard,
+    lines: [{ ...workbookCard.lines[0], account: '9411' }],
+  })
+  assert.equal(
+    leakedJobCodeCard.lines[0].account,
+    '',
+    'job codes leaked into the account field should still be removed',
+  )
+
+  const leakedDifCodeCard = normalizeTimecardForEmail({
+    ...workbookCard,
+    lines: [{ ...workbookCard.lines[0], account: '716', difH: '716' }],
+  })
+  assert.equal(
+    leakedDifCodeCard.lines[0].account,
+    '',
+    'DIF codes leaked into the account field should still be removed',
+  )
 
   const html = buildTimecardsEmail({
     jobName: 'Phase 2 Company Acoustical remodel',
@@ -79,6 +111,7 @@ async function main() {
   const csv = buildTimecardCsv([normalized], '2026-06-01', '1A')
   assert.equal(csv.includes('9411'), true, 'csv export should include the workbook job number')
   assert.equal(csv.includes('Chris'), true, 'csv export should include the employee name')
+  assert.equal(csv.includes(',716,'), true, 'csv export should include a three-digit numeric account code')
 
   const cardHeaderEvents = []
   const pdfBuffer = await buildTimecardPdfBuffer({

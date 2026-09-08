@@ -2,7 +2,9 @@ import { expect, test } from './helpers/test.js'
 import { createAdminWorkspaceFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
 test.describe('admin management workflows', () => {
-  test('admins can create a user and then send pending invites from the real users page', async ({ page }) => {
+  test('admins can create a user and then send pending invites from the real users page', async ({
+    page,
+  }) => {
     await gotoPhase2App(page, '/users', createAdminWorkspaceFixture())
 
     await page.getByRole('button', { name: 'New User' }).click()
@@ -19,16 +21,23 @@ test.describe('admin management workflows', () => {
 
     await expect(page.getByText('Invited')).toBeVisible()
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          users?: Array<{ email?: string | null; inviteStatus?: string | null }>
-        }
-        return state.users?.find((user) => user.email === 'zoe.foreman@example.com')?.inviteStatus ?? null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            users?: Array<{ email?: string | null; inviteStatus?: string | null }>
+          }
+          return (
+            state.users?.find((user) => user.email === 'zoe.foreman@example.com')?.inviteStatus ??
+            null
+          )
+        }),
+      )
       .toBe('sent')
   })
 
-  test('admins can create, edit, and delete an employee on the real employees page', async ({ page }) => {
+  test('admins can create, edit, and delete an employee on the real employees page', async ({
+    page,
+  }) => {
     await gotoPhase2App(page, '/employees', createAdminWorkspaceFixture())
 
     await page.getByRole('button', { name: 'New Employee' }).click()
@@ -39,7 +48,9 @@ test.describe('admin management workflows', () => {
     await page.getByRole('button', { name: 'Create Employee', exact: true }).click()
 
     await page.getByTestId('employees-search').fill('3001')
-    const employeeDirectoryCode = page.locator('.employees-browser__secondary').filter({ hasText: 'Employee #3001' })
+    const employeeDirectoryCode = page
+      .locator('.employees-browser__secondary')
+      .filter({ hasText: 'Employee #3001' })
     await expect(employeeDirectoryCode).toBeVisible()
 
     const occupationInput = page.getByLabel('Occupation')
@@ -48,12 +59,17 @@ test.describe('admin management workflows', () => {
 
     await expect(page.getByText('All changes saved.')).toBeVisible()
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          employees?: Array<{ employeeNumber?: string; occupation?: string }>
-        }
-        return state.employees?.find((employee) => employee.employeeNumber === '3001')?.occupation ?? null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            employees?: Array<{ employeeNumber?: string; occupation?: string }>
+          }
+          return (
+            state.employees?.find((employee) => employee.employeeNumber === '3001')?.occupation ??
+            null
+          )
+        }),
+      )
       .toBe('Lead Installer')
 
     await page.getByRole('button', { name: 'Delete Employee' }).click()
@@ -78,23 +94,31 @@ test.describe('admin management workflows', () => {
 
     await expect(page.locator('.users-jobs-panel')).toHaveCount(0)
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          users?: Array<{ email?: string | null; role?: string | null; assignedJobIds?: string[] }>
-        }
-        const user = state.users?.find((entry) => entry.email === 'sam@example.com')
-        return user
-          ? { role: user.role ?? null, assignedJobIds: user.assignedJobIds ?? [] }
-          : null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            users?: Array<{
+              email?: string | null
+              role?: string | null
+              assignedJobIds?: string[]
+            }>
+          }
+          const user = state.users?.find((entry) => entry.email === 'sam@example.com')
+          return user
+            ? { role: user.role ?? null, assignedJobIds: user.assignedJobIds ?? [] }
+            : null
+        }),
+      )
       .toEqual({ role: 'admin', assignedJobIds: [] })
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ id?: string; assignedForemanIds?: string[] }>
-        }
-        return state.jobs?.find((job) => job.id === 'job-2')?.assignedForemanIds ?? []
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{ id?: string; assignedForemanIds?: string[] }>
+          }
+          return state.jobs?.find((job) => job.id === 'job-2')?.assignedForemanIds ?? []
+        }),
+      )
       .toEqual([])
 
     await page.getByRole('button', { name: 'Delete User', exact: true }).click()
@@ -106,12 +130,64 @@ test.describe('admin management workflows', () => {
     await expect(page.getByText('User deleted.')).toBeVisible()
     await expect(samRow).toHaveCount(0)
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          users?: Array<{ email?: string | null }>
-        }
-        return state.users?.some((user) => user.email === 'sam@example.com') ?? false
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            users?: Array<{ email?: string | null }>
+          }
+          return state.users?.some((user) => user.email === 'sam@example.com') ?? false
+        }),
+      )
       .toBe(false)
+  })
+
+  test('admins can resend an invite and send a password reset from the selected user editor', async ({
+    page,
+  }) => {
+    const fixture = createAdminWorkspaceFixture()
+    const sam = (fixture.users ?? []).find((user) => user.email === 'sam@example.com')!
+    sam.inviteStatus = 'accepted'
+    await gotoPhase2App(page, '/users', fixture)
+
+    await page.getByTestId('users-search').fill('sam@example.com')
+    await page.locator('.users-browser__row').filter({ hasText: 'sam@example.com' }).click()
+
+    const resendInvite = page.getByRole('button', { name: 'Resend Invite' })
+    const sendPasswordReset = page.getByRole('button', { name: 'Send Password Reset' })
+    await expect(resendInvite).toBeVisible()
+    await expect(sendPasswordReset).toBeVisible()
+
+    await page.locator('input[autocomplete="given-name"]').fill('Samuel')
+    await resendInvite.click()
+    await expect(page.getByText('Invite email sent to sam@example.com.')).toBeVisible()
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            users?: Array<{
+              email?: string | null
+              firstName?: string | null
+              inviteStatus?: string | null
+            }>
+          }
+          const user = state.users?.find((entry) => entry.email === 'sam@example.com')
+          return user ? { firstName: user.firstName, inviteStatus: user.inviteStatus } : null
+        }),
+      )
+      .toEqual({ firstName: 'Samuel', inviteStatus: 'accepted' })
+
+    await page.locator('input[autocomplete="family-name"]').fill('Foreman Updated')
+    await sendPasswordReset.click()
+    await expect(page.getByText('Password reset email sent to sam@example.com.')).toBeVisible()
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            users?: Array<{ email?: string | null; lastName?: string | null }>
+          }
+          return state.users?.find((user) => user.email === 'sam@example.com')?.lastName ?? null
+        }),
+      )
+      .toBe('Foreman Updated')
   })
 })

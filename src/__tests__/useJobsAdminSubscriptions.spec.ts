@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useJobsAdminSubscriptions } from '@/features/jobs/useJobsAdminSubscriptions'
 import { subscribeGlobalNotificationRecipients } from '@/services/jobs'
 import { subscribeAssignableUsers } from '@/services/users'
-import type { NotificationRecipients, UserProfile } from '@/types/domain'
+import type { GlobalNotificationRecipients, UserProfile } from '@/types/domain'
 
 vi.mock('@/services/jobs', () => ({
   subscribeGlobalNotificationRecipients: vi.fn(),
@@ -30,19 +30,25 @@ function makeUser(overrides: Partial<UserProfile> = {}): UserProfile {
   }
 }
 
-function makeRecipients(overrides: Partial<NotificationRecipients> = {}): NotificationRecipients {
+function makeRecipients(
+  overrides: Partial<GlobalNotificationRecipients> = {},
+): GlobalNotificationRecipients {
   return {
     dailyLogs: ['daily@example.com'],
     shopOrders: ['shop@example.com'],
     timecards: ['time@example.com'],
+    newJobs: ['jobs@example.com'],
+    fieldUserAssignments: ['assignments@example.com'],
     ...overrides,
   }
 }
 
-function mountAdminSubscriptions(options: {
-  canLoadAssignableUsers?: boolean
-  canManageGlobalRecipients?: boolean
-} = {}) {
+function mountAdminSubscriptions(
+  options: {
+    canLoadAssignableUsers?: boolean
+    canManageGlobalRecipients?: boolean
+  } = {},
+) {
   const canLoadAssignableUsers = ref(options.canLoadAssignableUsers ?? true)
   const canManageGlobalRecipients = ref(options.canManageGlobalRecipients ?? true)
   const detailErrors: Array<{ error: unknown; fallbackMessage: string }> = []
@@ -97,7 +103,7 @@ describe('useJobsAdminSubscriptions', () => {
     const stopUsers = vi.fn()
     const stopRecipients = vi.fn()
     let emitUsers: (users: UserProfile[]) => void = () => {}
-    let emitRecipients: (recipients: NotificationRecipients) => void = () => {}
+    let emitRecipients: (recipients: GlobalNotificationRecipients) => void = () => {}
     subscribeAssignableUsersMock.mockImplementation((next) => {
       emitUsers = next
       return stopUsers
@@ -126,6 +132,8 @@ describe('useJobsAdminSubscriptions', () => {
     expect(subscriptions.usersError.value).toBe('')
     expect(subscriptions.globalNotificationRecipients.value).toEqual({
       dailyLogs: ['daily@example.com'],
+      fieldUserAssignments: ['assignments@example.com'],
+      newJobs: ['jobs@example.com'],
       shopOrders: ['shop-orders@example.com'],
       timecards: ['time@example.com'],
     })
@@ -189,6 +197,8 @@ describe('useJobsAdminSubscriptions', () => {
     ])
     expect(subscriptions.globalNotificationRecipients.value).toEqual({
       dailyLogs: [],
+      fieldUserAssignments: [],
+      newJobs: [],
       shopOrders: [],
       timecards: [],
     })

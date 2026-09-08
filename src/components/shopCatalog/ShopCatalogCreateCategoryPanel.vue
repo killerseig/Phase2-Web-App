@@ -91,14 +91,14 @@ function getSelectValue(value: string) {
 }
 
 .shop-catalog-create-panel__header {
-  --app-pane-header-eyebrow-font-size: 0.68rem;
-  --app-pane-header-eyebrow-letter-spacing: 0.12em;
-  --app-pane-header-title-font-size: 1.2rem;
+  --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
+  --app-pane-header-title-font-size: var(--font-size-pane-title);
   --app-pane-header-title-margin: 0.25rem 0 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.85rem;
+  gap: var(--form-gap);
   padding-bottom: 0.2rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -120,12 +120,12 @@ function getSelectValue(value: string) {
 
 .shop-catalog-create-panel__field .app-text-input,
 .shop-catalog-create-panel__field .app-select {
-  --app-text-input-min-height: 2.55rem;
+  --app-text-input-min-height: var(--control-height-form);
   --app-text-input-padding-x: 0.85rem;
-  --app-text-input-background: rgba(255, 255, 255, 0.045);
-  --app-select-min-height: 2.55rem;
+  --app-text-input-background: var(--control-background);
+  --app-select-min-height: var(--control-height-form);
   --app-select-padding-x: 0.85rem;
-  --app-select-background: rgba(255, 255, 255, 0.045);
+  --app-select-background: var(--control-background);
 }
 
 .shop-catalog-create-panel__toggle-row span {
@@ -136,7 +136,7 @@ function getSelectValue(value: string) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.55rem;
+  gap: var(--list-gap);
   color: var(--text-muted);
 }
 

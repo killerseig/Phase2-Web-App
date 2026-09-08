@@ -114,8 +114,16 @@ describe('role workflow contract', () => {
   })
 
   it('keeps Project Managers assigned-job scoped with field workflow access but no timecard editing', () => {
-    const assignedInput = { role: 'project-manager' as const, jobId: 'job-a', assignedJobIds: ['job-a'] }
-    const unassignedInput = { role: 'project-manager' as const, jobId: 'job-a', assignedJobIds: ['job-b'] }
+    const assignedInput = {
+      role: 'project-manager' as const,
+      jobId: 'job-a',
+      assignedJobIds: ['job-a'],
+    }
+    const unassignedInput = {
+      role: 'project-manager' as const,
+      jobId: 'job-a',
+      assignedJobIds: ['job-b'],
+    }
 
     expect(targetRoleCanSeeJobListEntry(assignedInput)).toBe(true)
     expect(targetRoleCanOpenJobDashboard(assignedInput)).toBe(true)
@@ -135,26 +143,31 @@ describe('role workflow contract', () => {
   it('keeps Firestore rules aligned with the role contract at the critical predicates', () => {
     const rules = readFileSync(resolve(process.cwd(), 'firestore.rules'), 'utf8')
 
-    expect(rules).toContain("function hasFieldAssigneeRole()")
-    expect(rules).toContain("hasForemanRole() || hasShopForemanRole() || hasProjectManagerRole()")
-    expect(rules).toContain("function isFieldEditorRole()")
-    expect(rules).toContain("hasForemanRole() || hasShopForemanRole()")
-    expect(rules).toContain("function hasFieldWorkflowWriteAccess(jobId)")
-    expect(rules).toContain("isFieldWorkflowEditorRole() && isForemanAssigned(jobId)")
-    expect(rules).toContain("function canViewAllJobs()")
-    expect(rules).toContain("hasAdminRole() || hasPayrollRole() || hasShopForemanRole()")
-    expect(rules).toContain("function canUseTimecardExport()")
-    expect(rules).toContain("isAdmin() || isPayroll()")
-    expect(rules).toContain("function foremanCanWorkWeek(weekData)")
-    expect(rules).toContain("return canUseTimecards() && hasJobWriteAccess(weekData.jobId);")
-    expect(rules).toContain("match /dailyLogs/{logId}")
-    expect(rules).toContain("match /shopOrders/{orderId}")
-    expect(rules).toContain("match /timecardWeeks/{weekId}")
+    expect(rules).toContain('function hasFieldAssigneeRole()')
+    expect(rules).toContain('hasForemanRole() || hasShopForemanRole() || hasProjectManagerRole()')
+    expect(rules).toContain('function isFieldEditorRole()')
+    expect(rules).toContain('hasForemanRole() || hasShopForemanRole()')
+    expect(rules).toContain('function hasFieldWorkflowWriteAccess(jobId)')
+    expect(rules).toContain('isFieldWorkflowEditorRole() && isForemanAssigned(jobId)')
+    expect(rules).toContain('function canViewAllJobs()')
+    expect(rules).toContain('hasAdminRole() || hasPayrollRole() || hasShopForemanRole()')
+    expect(rules).toContain('function canUseTimecardExport()')
+    expect(rules).toContain('isAdmin() || isPayroll()')
+    expect(rules).toContain('function foremanCanWorkWeek(weekData)')
+    expect(rules).toContain('return canUseTimecards() && hasJobWriteAccess(weekData.jobId);')
+    expect(rules).toContain('request.resource.data.status == resource.data.status')
+    expect(rules).toContain('match /dailyLogs/{logId}')
+    expect(rules).toContain('match /shopOrders/{orderId}')
+    expect(rules).toContain('match /timecardWeeks/{weekId}')
   })
 
   it('keeps shop order callables open to assigned Project Managers', () => {
-    const source = readFileSync(resolve(process.cwd(), 'functions/src/shopOrderRecordFunctions.ts'), 'utf8')
-    const shopOrderFieldRoleList = "currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])"
+    const source = readFileSync(
+      resolve(process.cwd(), 'functions/src/shopOrderRecordFunctions.ts'),
+      'utf8',
+    )
+    const shopOrderFieldRoleList =
+      "currentFunctionUserHasAnyRole(user, ['admin', 'foreman', 'shop-foreman', 'project-manager'])"
 
     expect(source.split(shopOrderFieldRoleList).length - 1).toBe(2)
   })
@@ -162,17 +175,25 @@ describe('role workflow contract', () => {
   it('keeps daily log attachment uploads independent from cross-product rule lookups', () => {
     const rules = readFileSync(resolve(process.cwd(), 'storage.rules'), 'utf8')
 
-    expect(rules).toContain("function isSupportedDailyLogAttachmentUpload(logId)")
-    expect(rules).toContain("request.resource.size < 10 * 1024 * 1024")
+    expect(rules).toContain('function isSupportedDailyLogAttachmentUpload(logId)')
+    expect(rules).toContain('request.resource.size < 10 * 1024 * 1024')
     expect(rules).toContain("request.resource.contentType.matches('image/.*')")
-    expect(rules).toContain("request.resource.metadata.dailyLogId == logId")
-    expect(rules).toContain("request.resource.metadata.uploadedBy == request.auth.uid")
-    expect(rules).toContain("allow read: if signedIn();")
-    expect(rules).toContain("allow create: if signedIn() && isSupportedDailyLogAttachmentUpload(logId);")
-    expect(rules).toContain("allow delete: if signedIn();")
-    expect(rules).toContain("allow update: if false;")
-    expect(rules).not.toContain("firestore.get(")
-    expect(rules).not.toContain("firestore.exists(")
-    expect(rules).toContain("match /daily-logs/{logId}/{allPaths=**}")
+    expect(rules).toContain("request.resource.metadata.variant == 'gallery-photo'")
+    expect(rules).toContain('function isSupportedDailyLogThumbnailUpload(logId)')
+    expect(rules).toContain('request.resource.size <= 300 * 1024')
+    expect(rules).toContain("request.resource.contentType == 'image/jpeg'")
+    expect(rules).toContain("request.resource.metadata.variant == 'email-thumbnail'")
+    expect(rules).toContain('request.resource.metadata.dailyLogId == logId')
+    expect(rules).toContain('request.resource.metadata.uploadedBy == request.auth.uid')
+    expect(rules).toContain('allow read: if signedIn();')
+    expect(rules).toContain(
+      'allow create: if signedIn() && isSupportedDailyLogAttachmentUpload(logId);',
+    )
+    expect(rules).toContain('allow delete: if signedIn();')
+    expect(rules).toContain('allow update: if false;')
+    expect(rules).not.toContain('firestore.get(')
+    expect(rules).not.toContain('firestore.exists(')
+    expect(rules).toContain('match /daily-logs/{logId}/thumbnails/{fileName}')
+    expect(rules).toContain('match /daily-logs/{logId}/{fileName}')
   })
 })

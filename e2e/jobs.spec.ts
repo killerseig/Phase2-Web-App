@@ -13,7 +13,10 @@ function usePayrollAuth(fixture: ReturnType<typeof createJobsFixture>) {
   fixture.auth.profile.assignedJobIds = []
 }
 
-function useProjectManagerAuth(fixture: ReturnType<typeof createJobsFixture>, assignedJobIds = ['job-1']) {
+function useProjectManagerAuth(
+  fixture: ReturnType<typeof createJobsFixture>,
+  assignedJobIds = ['job-1'],
+) {
   fixture.auth.user.uid = 'pm-e2e'
   fixture.auth.user.email = 'pm@example.com'
   fixture.auth.user.displayName = 'Pat Project Manager'
@@ -57,16 +60,20 @@ test.describe('jobs page regressions', () => {
     await expect(page.getByTestId('job-card-4D')).toContainText('Capstone')
     await expect(page.getByText('Assign at least one foreman.')).toHaveCount(0)
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ code?: string | null; assignedForemanIds?: string[] }>
-        }
-        return state.jobs?.find((job) => job.code === '4D')?.assignedForemanIds ?? null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{ code?: string | null; assignedForemanIds?: string[] }>
+          }
+          return state.jobs?.find((job) => job.code === '4D')?.assignedForemanIds ?? null
+        }),
+      )
       .toEqual([])
   })
 
-  test('payroll can create jobs from the real jobs page without admin edit controls', async ({ page }) => {
+  test('payroll can create jobs from the real jobs page without admin edit controls', async ({
+    page,
+  }) => {
     const fixture = createJobsFixture()
     usePayrollAuth(fixture)
 
@@ -79,9 +86,13 @@ test.describe('jobs page regressions', () => {
     await expect(page.getByRole('button', { name: /All Jobs/ })).toHaveCount(0)
 
     await page.getByTestId('job-card-1A').click()
-    await expect(page.locator('.jobs-detail')).toContainText('This role can view this job, but cannot edit its setup.')
+    await expect(page.locator('.jobs-detail')).toContainText(
+      'This role can view this job, but cannot edit its setup.',
+    )
     await expect(page.getByLabel('Job Name')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Archive Job|Delete Job|Restore Job/ })).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: /Archive Job|Delete Job|Restore Job/ }),
+    ).toHaveCount(0)
 
     await page.getByTestId('jobs-new-button').click()
     await page.getByTestId('jobs-create-name').fill('Payroll Created Job')
@@ -92,16 +103,20 @@ test.describe('jobs page regressions', () => {
 
     await expect(page.getByTestId('job-card-5E')).toBeVisible()
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ code?: string | null; name?: string | null }>
-        }
-        return state.jobs?.find((job) => job.code === '5E')?.name ?? null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{ code?: string | null; name?: string | null }>
+          }
+          return state.jobs?.find((job) => job.code === '5E')?.name ?? null
+        }),
+      )
       .toBe('Payroll Created Job')
   })
 
-  test('project managers can edit assigned jobs and do not see unassigned jobs', async ({ page }) => {
+  test('project managers can edit assigned jobs and do not see unassigned jobs', async ({
+    page,
+  }) => {
     const fixture = createJobsFixture()
     useProjectManagerAuth(fixture, ['job-1'])
 
@@ -116,20 +131,28 @@ test.describe('jobs page regressions', () => {
     await page.getByTestId('job-card-1A').click()
     const jobName = page.getByLabel('Job Name')
     await expect(jobName).toBeVisible()
-    await expect(page.locator('.jobs-detail').getByRole('button', { name: /Archive Job|Delete Job|Restore Job/ })).toHaveCount(0)
+    await expect(
+      page
+        .locator('.jobs-detail')
+        .getByRole('button', { name: /Archive Job|Delete Job|Restore Job/ }),
+    ).toHaveCount(0)
 
     await jobName.fill('PM Updated Assigned Job')
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ id?: string; name?: string | null }>
-        }
-        return state.jobs?.find((job) => job.id === 'job-1')?.name ?? null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{ id?: string; name?: string | null }>
+          }
+          return state.jobs?.find((job) => job.id === 'job-1')?.name ?? null
+        }),
+      )
       .toBe('PM Updated Assigned Job')
   })
 
-  test('job detail keeps the latest typed text while autosave responses arrive late', async ({ page }) => {
+  test('job detail keeps the latest typed text while autosave responses arrive late', async ({
+    page,
+  }) => {
     const fixture = createJobsFixture()
     fixture.delays = { jobUpdateMs: 700 }
 
@@ -157,24 +180,26 @@ test.describe('jobs page regressions', () => {
     await expect(startDate).toHaveValue(nextStartDate)
     await expect(burden).toHaveValue(nextBurden)
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{
-            id?: string
-            name?: string | null
-            startDate?: string | null
-            productionBurden?: number | null
-          }>
-        }
-        const job = state.jobs?.find((entry) => entry.id === 'job-1')
-        return job
-          ? {
-              name: job.name ?? null,
-              startDate: job.startDate ?? null,
-              productionBurden: job.productionBurden ?? null,
-            }
-          : null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{
+              id?: string
+              name?: string | null
+              startDate?: string | null
+              productionBurden?: number | null
+            }>
+          }
+          const job = state.jobs?.find((entry) => entry.id === 'job-1')
+          return job
+            ? {
+                name: job.name ?? null,
+                startDate: job.startDate ?? null,
+                productionBurden: job.productionBurden ?? null,
+              }
+            : null
+        }),
+      )
       .toEqual({
         name: nextName,
         startDate: nextStartDate,
@@ -185,7 +210,9 @@ test.describe('jobs page regressions', () => {
     await expect(burden).toHaveValue(nextBurden)
   })
 
-  test('job editor saves module-specific email recipients for the selected job', async ({ page }) => {
+  test('job editor saves module-specific email recipients for the selected job', async ({
+    page,
+  }) => {
     await gotoPhase2App(page, '/jobs', createJobsFixture())
 
     await page.getByTestId('jobs-edit-mode').click()
@@ -197,7 +224,15 @@ test.describe('jobs page regressions', () => {
       { section: 'Shop Orders', email: 'shop-office@example.com', stateKey: 'shopOrders' },
     ] as const
 
-    await expect(detailPanel.locator('.jobs-recipient-section', { hasText: 'Timecards' })).toHaveCount(0)
+    await expect(
+      detailPanel.locator('.jobs-recipient-section', { hasText: 'Timecards' }),
+    ).toHaveCount(0)
+    await expect(
+      detailPanel.locator('.jobs-recipient-section', { hasText: 'New Jobs' }),
+    ).toHaveCount(0)
+    await expect(
+      detailPanel.locator('.jobs-recipient-section', { hasText: 'Field User Assignments' }),
+    ).toHaveCount(0)
 
     for (const recipient of recipients) {
       const section = detailPanel.locator('.jobs-recipient-section', { hasText: recipient.section })
@@ -208,20 +243,22 @@ test.describe('jobs page regressions', () => {
     }
 
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{
-            id?: string
-            notificationRecipients?: {
-              dailyLogs?: string[]
-              timecards?: string[]
-              shopOrders?: string[]
-            }
-          }>
-        }
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{
+              id?: string
+              notificationRecipients?: {
+                dailyLogs?: string[]
+                timecards?: string[]
+                shopOrders?: string[]
+              }
+            }>
+          }
 
-        return state.jobs?.find((job) => job.id === 'job-1')?.notificationRecipients ?? null
-      }))
+          return state.jobs?.find((job) => job.id === 'job-1')?.notificationRecipients ?? null
+        }),
+      )
       .toEqual({
         dailyLogs: ['daily-log-office@example.com'],
         timecards: [],
@@ -229,7 +266,9 @@ test.describe('jobs page regressions', () => {
       })
   })
 
-  test('job editor archives, restores, and deletes jobs from the real admin view', async ({ page }) => {
+  test('job editor archives, restores, and deletes jobs from the real admin view', async ({
+    page,
+  }) => {
     await gotoPhase2App(page, '/jobs', createJobsFixture())
 
     await page.getByTestId('jobs-edit-mode').click()
@@ -238,45 +277,60 @@ test.describe('jobs page regressions', () => {
     const detailPanel = page.locator('.jobs-detail')
 
     await detailPanel.getByRole('button', { name: 'Archive Job' }).click()
-    await page.getByRole('dialog', { name: 'Archive job?' }).getByRole('button', { name: 'Archive Job' }).click()
+    await page
+      .getByRole('dialog', { name: 'Archive job?' })
+      .getByRole('button', { name: 'Archive Job' })
+      .click()
     await expect(page.getByTestId('job-card-3C')).toHaveCount(0)
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ id?: string; active?: boolean }>
-        }
-        return state.jobs?.find((job) => job.id === 'job-3')?.active ?? null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{ id?: string; active?: boolean }>
+          }
+          return state.jobs?.find((job) => job.id === 'job-3')?.active ?? null
+        }),
+      )
       .toBe(false)
 
     await page.getByTestId('jobs-status-filter').selectOption('inactive')
     await page.getByTestId('job-card-3C').click()
     await detailPanel.getByRole('button', { name: 'Restore Job' }).click()
-    await page.getByRole('dialog', { name: 'Restore job?' }).getByRole('button', { name: 'Restore Job' }).click()
+    await page
+      .getByRole('dialog', { name: 'Restore job?' })
+      .getByRole('button', { name: 'Restore Job' })
+      .click()
     await page.getByTestId('jobs-status-filter').selectOption('active')
 
     await expect(page.getByTestId('job-card-3C')).toBeVisible()
     await page.getByTestId('job-card-3C').click()
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ id?: string; active?: boolean }>
-        }
-        return state.jobs?.find((job) => job.id === 'job-3')?.active ?? null
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{ id?: string; active?: boolean }>
+          }
+          return state.jobs?.find((job) => job.id === 'job-3')?.active ?? null
+        }),
+      )
       .toBe(true)
 
     await detailPanel.getByRole('button', { name: 'Delete Job' }).click()
-    await page.getByRole('dialog', { name: 'Delete job?' }).getByRole('button', { name: 'Delete Job' }).click()
+    await page
+      .getByRole('dialog', { name: 'Delete job?' })
+      .getByRole('button', { name: 'Delete Job' })
+      .click()
 
     await expect(page.getByTestId('job-card-3C')).toHaveCount(0)
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          jobs?: Array<{ id?: string }>
-        }
-        return state.jobs?.some((job) => job.id === 'job-3') ?? false
-      }))
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            jobs?: Array<{ id?: string }>
+          }
+          return state.jobs?.some((job) => job.id === 'job-3') ?? false
+        }),
+      )
       .toBe(false)
   })
 
@@ -291,6 +345,8 @@ test.describe('jobs page regressions', () => {
       { section: 'Daily Logs', email: 'daily-default@example.com' },
       { section: 'Timecards', email: 'timecard-default@example.com' },
       { section: 'Shop Orders', email: 'shop-default@example.com' },
+      { section: 'New Jobs', email: 'new-jobs-default@example.com' },
+      { section: 'Field User Assignments', email: 'assignments-default@example.com' },
     ] as const
 
     for (const recipient of recipients) {
@@ -300,24 +356,32 @@ test.describe('jobs page regressions', () => {
       await expect(section.getByText(recipient.email)).toBeVisible()
     }
 
-    const dailyLogsSection = detailPanel.locator('.jobs-recipient-section', { hasText: 'Daily Logs' })
+    const dailyLogsSection = detailPanel.locator('.jobs-recipient-section', {
+      hasText: 'Daily Logs',
+    })
     await dailyLogsSection.getByLabel('Remove recipient').click()
     await expect(dailyLogsSection.getByText('daily-default@example.com')).toHaveCount(0)
 
     await expect
-      .poll(async () => page.evaluate(() => {
-        const state = window.__PHASE2_E2E_STATE__ as {
-          globalNotificationRecipients?: {
-            dailyLogs?: string[]
-            timecards?: string[]
-            shopOrders?: string[]
+      .poll(async () =>
+        page.evaluate(() => {
+          const state = window.__PHASE2_E2E_STATE__ as {
+            globalNotificationRecipients?: {
+              dailyLogs?: string[]
+              timecards?: string[]
+              shopOrders?: string[]
+              newJobs?: string[]
+              fieldUserAssignments?: string[]
+            }
           }
-        }
 
-        return state.globalNotificationRecipients ?? null
-      }))
+          return state.globalNotificationRecipients ?? null
+        }),
+      )
       .toEqual({
         dailyLogs: [],
+        fieldUserAssignments: ['assignments-default@example.com'],
+        newJobs: ['new-jobs-default@example.com'],
         timecards: ['timecard-default@example.com'],
         shopOrders: ['shop-default@example.com'],
       })

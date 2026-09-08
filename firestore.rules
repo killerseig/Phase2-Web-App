@@ -327,14 +327,11 @@ service cloud.firestore {
                     (canUseTimecards() &&
                      resource.data.status == 'draft' &&
                      hasJobWriteAccess(resource.data.jobId) &&
+                     request.resource.data.status == resource.data.status &&
                      request.resource.data.diff(resource.data).changedKeys().hasOnly([
-                       'status',
                        'employeeCardCount',
-                       'submittedAt',
                        'updatedAt',
-                       'updatedByUserId',
-                       'submittedByUserId',
-                       'submittedByName'
+                       'updatedByUserId'
                      ]));
       allow delete: if isAdmin() ||
                     (isPayroll() && resource.data.status == 'draft') ||

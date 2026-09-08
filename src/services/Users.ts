@@ -16,7 +16,9 @@ import {
   createE2EUser,
   deleteE2EUser,
   isE2EActive,
+  resendE2EUserInvite,
   sendE2EPendingUserInvites,
+  sendE2EUserPasswordReset,
   subscribeE2EUsers,
   updateE2EUser,
 } from '@/testing/e2eRuntime'
@@ -60,6 +62,12 @@ export interface SendPendingUserInvitesResult {
   skippedCount: number
 }
 
+export interface UserEmailActionResult {
+  success: boolean
+  message: string
+  email: string
+}
+
 interface CreateUserByAdminResponse {
   success: boolean
   message: string
@@ -74,7 +82,11 @@ function normalizeAssignedJobIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
 
   return Array.from(
-    new Set(value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)),
+    new Set(
+      value.filter(
+        (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0,
+      ),
+    ),
   )
 }
 
@@ -208,7 +220,9 @@ export function subscribeAssignableUsers(
   }
 }
 
-export async function createUserByAdmin(input: CreateUserInput): Promise<CreateUserByAdminResponse> {
+export async function createUserByAdmin(
+  input: CreateUserInput,
+): Promise<CreateUserByAdminResponse> {
   if (isE2EActive()) {
     const sanitizedRole = normalizeEditableUserRole(input.role)
     return createE2EUser({
@@ -216,14 +230,19 @@ export async function createUserByAdmin(input: CreateUserInput): Promise<CreateU
       firstName: input.firstName,
       lastName: input.lastName,
       role: sanitizedRole,
-      assignedJobIds: currentRoleCanBeAssignedJobs(sanitizedRole) ? normalizeAssignedJobIds(input.assignedJobIds) : [],
+      assignedJobIds: currentRoleCanBeAssignedJobs(sanitizedRole)
+        ? normalizeAssignedJobIds(input.assignedJobIds)
+        : [],
       sendInvite: input.sendInvite === true,
     })
   }
 
   try {
     const { functions } = requireFirebaseServices()
-    const callable = httpsCallable<CreateUserInput, CreateUserByAdminResponse>(functions, 'createUserByAdmin')
+    const callable = httpsCallable<CreateUserInput, CreateUserByAdminResponse>(
+      functions,
+      'createUserByAdmin',
+    )
     const sanitizedRole = normalizeEditableUserRole(input.role)
     const sanitizedAssignedJobIds = normalizeAssignedJobIds(input.assignedJobIds)
     const result = await callable({
@@ -261,7 +280,9 @@ export async function updateUser(uid: string, input: UpdateUserInput): Promise<v
       lastName: input.lastName,
       role: sanitizedRole,
       active: input.active,
-      assignedJobIds: currentRoleCanBeAssignedJobs(sanitizedRole) ? normalizeAssignedJobIds(input.assignedJobIds) : [],
+      assignedJobIds: currentRoleCanBeAssignedJobs(sanitizedRole)
+        ? normalizeAssignedJobIds(input.assignedJobIds)
+        : [],
     })
     return
   }
@@ -306,10 +327,49 @@ export async function sendPendingInvitesByAdmin(): Promise<SendPendingUserInvite
 
   try {
     const { functions } = requireFirebaseServices()
-    const callable = httpsCallable<Record<string, never>, SendPendingUserInvitesResult>(functions, 'sendPendingUserInvites')
+    const callable = httpsCallable<Record<string, never>, SendPendingUserInvitesResult>(
+      functions,
+      'sendPendingUserInvites',
+    )
     const result = await callable({})
     return result.data
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to send pending invites.'))
+  }
+}
+
+export async function resendUserInviteByAdmin(uid: string): Promise<UserEmailActionResult> {
+  if (isE2EActive()) {
+    return resendE2EUserInvite(uid)
+  }
+
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<{ uid: string }, UserEmailActionResult>(
+      functions,
+      'resendUserInviteByAdmin',
+    )
+    const result = await callable({ uid })
+    return result.data
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to resend invite email.'))
+  }
+}
+
+export async function sendUserPasswordResetByAdmin(uid: string): Promise<UserEmailActionResult> {
+  if (isE2EActive()) {
+    return sendE2EUserPasswordReset(uid)
+  }
+
+  try {
+    const { functions } = requireFirebaseServices()
+    const callable = httpsCallable<{ uid: string }, UserEmailActionResult>(
+      functions,
+      'sendUserPasswordResetByAdmin',
+    )
+    const result = await callable({ uid })
+    return result.data
+  } catch (error) {
+    throw new Error(normalizeError(error, 'Failed to send password reset email.'))
   }
 }

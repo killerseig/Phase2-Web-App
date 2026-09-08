@@ -89,10 +89,10 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
 <style scoped>
 .daily-log-climate-card {
   --app-section-header-copy-gap: 0.2rem;
-  --app-section-header-eyebrow-font-size: 0.68rem;
-  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
@@ -106,8 +106,8 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
   --app-text-input-min-height: 2.55rem;
   --app-text-input-padding-x: 0.85rem;
   --app-text-input-border: var(--border);
-  --app-text-input-radius: 12px;
-  --app-text-input-background: rgba(255, 255, 255, 0.045);
+  --app-text-input-radius: var(--control-radius);
+  --app-text-input-background: var(--control-background);
   width: 100%;
   border-collapse: collapse;
 }

@@ -19,13 +19,13 @@ withDefaults(defineProps<{
 
 <style scoped>
 .shop-orders-explorer {
-  --shop-line: rgba(168, 190, 209, 0.16);
-  --shop-line-soft: rgba(168, 190, 209, 0.08);
+  --shop-line: var(--border);
+  --shop-line-soft: var(--border-soft);
   --shop-surface: rgba(255, 255, 255, 0.018);
   --shop-surface-soft: rgba(255, 255, 255, 0.035);
-  --shop-field: rgba(237, 245, 248, 0.052);
-  --shop-radius-md: 10px;
-  --shop-radius-lg: 12px;
+  --shop-field: var(--control-background);
+  --shop-radius-md: var(--control-radius);
+  --shop-radius-lg: var(--radius-sm);
   --shop-control-height: 1.9rem;
   display: grid;
   grid-template-columns: minmax(340px, 0.92fr) minmax(540px, 1.08fr);

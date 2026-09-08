@@ -43,16 +43,16 @@ const emit = defineEmits<{
 }
 
 .shop-catalog-tree-filters__input {
-  --app-search-input-min-height: 2.55rem;
+  --app-search-input-min-height: var(--control-height-form);
   --app-search-input-padding-x: 0.85rem;
-  --app-search-input-background: rgba(255, 255, 255, 0.045);
+  --app-search-input-background: var(--control-background);
 }
 
 .shop-catalog-tree-filters__toggle-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   padding: 0 0.2rem;
   color: var(--text-muted);
 }

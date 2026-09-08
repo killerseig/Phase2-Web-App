@@ -5,6 +5,7 @@ import { type SubmittedEmailStatusResult } from './emailStatus';
 import { claimSubmittedEmailOperation } from './submittedEmailOperations';
 import { getAppBaseUrl } from './functionConfig';
 import { ensureDailyLogGalleryShare } from './dailyLogGalleryFunctions';
+import { prepareDailyLogInlinePhotos } from './dailyLogEmailPhotos';
 declare function getShopOrderCostCodesByCatalogItemId(items: any[]): Promise<Record<string, string>>;
 declare function recordSubmittedEmailStatus(refs: DocumentReference[], result: SubmittedEmailStatusResult, context: Record<string, unknown>): Promise<void>;
 declare function dailyLogEmailStatusRefs(jobId: string, dailyLogId: string): DocumentReference[];
@@ -28,6 +29,7 @@ interface SendDailyLogEmailDependencies {
     getJobNotificationRecipients: typeof getJobNotificationRecipients;
     getAppBaseUrl: typeof getAppBaseUrl;
     ensureDailyLogGalleryShare: typeof ensureDailyLogGalleryShare;
+    prepareDailyLogInlinePhotos: typeof prepareDailyLogInlinePhotos;
     buildDailyLogEmail: typeof buildDailyLogEmail;
     sendEmail: typeof sendEmail;
     recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus;

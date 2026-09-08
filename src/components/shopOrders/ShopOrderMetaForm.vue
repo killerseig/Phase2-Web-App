@@ -95,7 +95,7 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
 .shop-order-meta-form {
   display: grid;
   grid-template-columns: minmax(9rem, 10.5rem) minmax(9rem, 10.5rem) minmax(12rem, 1fr);
-  gap: 0.45rem;
+  gap: var(--field-gap);
   align-items: center;
 }
 
@@ -105,9 +105,7 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
   --app-text-input-border: var(--shop-line);
   --app-text-input-radius: var(--shop-radius-md);
   --app-text-input-background: var(--shop-field);
-  --app-text-input-box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 5px 12px rgba(3, 10, 16, 0.08);
+  --app-text-input-box-shadow: none;
   --app-readonly-field-min-height: var(--shop-control-height);
   --app-readonly-field-padding-x: 0.8rem;
   --app-readonly-field-border: var(--shop-line-soft);
@@ -157,9 +155,7 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
   font-weight: 500;
   font-size: 0.95rem;
   line-height: 1;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 5px 12px rgba(3, 10, 16, 0.08);
+  box-shadow: none;
   transition:
     border-color 0.18s ease,
     background 0.18s ease,
@@ -184,7 +180,7 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
 
 @media (max-width: 820px) {
   .shop-order-meta-form {
-    gap: 0.55rem;
+    gap: var(--list-gap);
   }
 
   .shop-order-meta-form__field > span {

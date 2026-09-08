@@ -14,6 +14,8 @@ import {
   type JobFormTextField,
 } from '@/features/jobs/jobViewHelpers'
 import type {
+  GlobalNotificationModuleKey,
+  GlobalNotificationRecipients,
   JobRecord,
   NotificationModuleKey,
   NotificationRecipients,
@@ -35,11 +37,11 @@ defineProps<{
   detailRecipientInputs: Record<NotificationModuleKey, string>
   filteredForemen: UserProfile[]
   foremanSearchTerm: string
-  globalNotificationRecipients: NotificationRecipients
-  globalRecipientInputs: Record<NotificationModuleKey, string>
+  globalNotificationRecipients: GlobalNotificationRecipients
+  globalRecipientInputs: Record<GlobalNotificationModuleKey, string>
   isAllJobsMode: boolean
   isCreateMode: boolean
-  globalNotificationModules: ReadonlyArray<{ key: NotificationModuleKey; label: string }>
+  globalNotificationModules: ReadonlyArray<{ key: GlobalNotificationModuleKey; label: string }>
   jobNotificationModules: ReadonlyArray<{ key: NotificationModuleKey; label: string }>
   jobTypeOptions: string[]
   recipientSaving: boolean
@@ -51,13 +53,13 @@ defineProps<{
 const emit = defineEmits<{
   addCreateRecipient: [moduleKey: NotificationModuleKey]
   addDetailRecipient: [moduleKey: NotificationModuleKey]
-  addGlobalRecipient: [moduleKey: NotificationModuleKey]
+  addGlobalRecipient: [moduleKey: GlobalNotificationModuleKey]
   createJob: []
   deleteJob: []
   requestToggleArchive: []
   removeCreateRecipient: [moduleKey: NotificationModuleKey, email: string]
   removeDetailRecipient: [moduleKey: NotificationModuleKey, email: string]
-  removeGlobalRecipient: [moduleKey: NotificationModuleKey, email: string]
+  removeGlobalRecipient: [moduleKey: GlobalNotificationModuleKey, email: string]
   saveJob: []
   toggleCreateForeman: [userId: string]
   toggleDetailForeman: [userId: string]
@@ -66,8 +68,38 @@ const emit = defineEmits<{
   updateDetailField: [field: JobFormTextField, value: string]
   updateDetailRecipientInput: [moduleKey: NotificationModuleKey, value: string]
   updateForemanSearchTerm: [value: string]
-  updateGlobalRecipientInput: [moduleKey: NotificationModuleKey, value: string]
+  updateGlobalRecipientInput: [moduleKey: GlobalNotificationModuleKey, value: string]
 }>()
+
+function isJobNotificationModuleKey(
+  moduleKey: GlobalNotificationModuleKey,
+): moduleKey is NotificationModuleKey {
+  return moduleKey === 'dailyLogs' || moduleKey === 'timecards' || moduleKey === 'shopOrders'
+}
+
+function forwardCreateRecipientInput(moduleKey: GlobalNotificationModuleKey, value: string) {
+  if (isJobNotificationModuleKey(moduleKey)) emit('updateCreateRecipientInput', moduleKey, value)
+}
+
+function forwardDetailRecipientInput(moduleKey: GlobalNotificationModuleKey, value: string) {
+  if (isJobNotificationModuleKey(moduleKey)) emit('updateDetailRecipientInput', moduleKey, value)
+}
+
+function forwardCreateRecipientAdd(moduleKey: GlobalNotificationModuleKey) {
+  if (isJobNotificationModuleKey(moduleKey)) emit('addCreateRecipient', moduleKey)
+}
+
+function forwardDetailRecipientAdd(moduleKey: GlobalNotificationModuleKey) {
+  if (isJobNotificationModuleKey(moduleKey)) emit('addDetailRecipient', moduleKey)
+}
+
+function forwardCreateRecipientRemove(moduleKey: GlobalNotificationModuleKey, email: string) {
+  if (isJobNotificationModuleKey(moduleKey)) emit('removeCreateRecipient', moduleKey, email)
+}
+
+function forwardDetailRecipientRemove(moduleKey: GlobalNotificationModuleKey, email: string) {
+  if (isJobNotificationModuleKey(moduleKey)) emit('removeDetailRecipient', moduleKey, email)
+}
 </script>
 
 <template>
@@ -99,9 +131,9 @@ const emit = defineEmits<{
             :modules="jobNotificationModules"
             :recipients="createNotificationRecipients"
             :inputs="createRecipientInputs"
-            @update-input="(moduleKey, value) => emit('updateCreateRecipientInput', moduleKey, value)"
-            @add-recipient="emit('addCreateRecipient', $event)"
-            @remove-recipient="(moduleKey, email) => emit('removeCreateRecipient', moduleKey, email)"
+            @update-input="forwardCreateRecipientInput"
+            @add-recipient="forwardCreateRecipientAdd"
+            @remove-recipient="forwardCreateRecipientRemove"
           />
 
           <div class="jobs-detail__actions">
@@ -129,7 +161,7 @@ const emit = defineEmits<{
 
       <div class="jobs-detail__body">
         <JobNotificationRecipientsPanel
-          description="Sent for every job unless that job adds more recipients"
+          description="Global recipients for submitted forms and job activity across all jobs"
           :modules="globalNotificationModules"
           :recipients="globalNotificationRecipients"
           :inputs="globalRecipientInputs"
@@ -142,11 +174,7 @@ const emit = defineEmits<{
     </template>
 
     <template v-else-if="selectedJob && canEditSelectedJob">
-      <AppPaneHeader
-        eyebrow="Selected Job"
-        :title="getJobDisplayName(selectedJob)"
-        title-tag="h2"
-      >
+      <AppPaneHeader eyebrow="Selected Job" :title="getJobDisplayName(selectedJob)" title-tag="h2">
         <template #actions>
           <div class="jobs-detail__status-group">
             <AppBadge :tone="selectedJob.active ? 'success' : 'danger'">
@@ -179,9 +207,9 @@ const emit = defineEmits<{
             :recipients="detailNotificationRecipients"
             :inputs="detailRecipientInputs"
             :disabled="recipientSaving"
-            @update-input="(moduleKey, value) => emit('updateDetailRecipientInput', moduleKey, value)"
-            @add-recipient="emit('addDetailRecipient', $event)"
-            @remove-recipient="(moduleKey, email) => emit('removeDetailRecipient', moduleKey, email)"
+            @update-input="forwardDetailRecipientInput"
+            @add-recipient="forwardDetailRecipientAdd"
+            @remove-recipient="forwardDetailRecipientRemove"
           />
 
           <div v-if="canDeleteOrArchiveJobs" class="jobs-detail__actions">
@@ -212,11 +240,7 @@ const emit = defineEmits<{
     </template>
 
     <template v-else-if="selectedJob">
-      <AppPaneHeader
-        eyebrow="Selected Job"
-        :title="getJobDisplayName(selectedJob)"
-        title-tag="h2"
-      >
+      <AppPaneHeader eyebrow="Selected Job" :title="getJobDisplayName(selectedJob)" title-tag="h2">
         <template #actions>
           <div class="jobs-detail__status-group">
             <AppBadge :tone="selectedJob.active ? 'success' : 'danger'">
@@ -264,7 +288,7 @@ const emit = defineEmits<{
 .jobs-detail__status-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: var(--field-gap);
 }
 
 .jobs-form {
@@ -280,13 +304,13 @@ const emit = defineEmits<{
   min-height: 12rem;
   padding: 1.5rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   text-align: center;
 }
 
 .jobs-detail__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: var(--action-gap);
 }
 </style>

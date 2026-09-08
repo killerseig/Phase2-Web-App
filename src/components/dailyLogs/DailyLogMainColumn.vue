@@ -180,7 +180,14 @@ const notesSection = getDailyLogTextSection('notes-actions')
         loading-label="Submitting..."
         variant="success"
         :loading="submittingLog"
-        :disabled="!canEditSelectedLog || submittingLog || savingDraft"
+        :disabled="
+          !canEditSelectedLog ||
+          submittingLog ||
+          savingDraft ||
+          photoAttachmentBusy ||
+          ptpAttachmentBusy ||
+          qcAttachmentBusy
+        "
         @click="emit('submit')"
       />
     </div>
@@ -212,7 +219,7 @@ const notesSection = getDailyLogTextSection('notes-actions')
 .daily-logs-submit-button {
   width: 100%;
   min-height: 3.4rem;
-  border-radius: 16px;
+  border-radius: var(--radius-sm);
   font-weight: 700;
   font-size: 1rem;
 }

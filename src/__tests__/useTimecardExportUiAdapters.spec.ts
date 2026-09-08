@@ -152,7 +152,7 @@ describe('useTimecardExportConfirmDialog', () => {
     expect(dialog.timecardExportConfirmAction.value).toBeNull()
   })
 
-  it('adapts submit and undo confirmations to Timecard Export copy', () => {
+  it('adapts submit and reopen confirmations to Timecard Export copy', () => {
     const dialog = useTimecardExportConfirmDialog(ref(false))
 
     dialog.timecardExportConfirmAction.value = {
@@ -175,10 +175,10 @@ describe('useTimecardExportConfirmDialog', () => {
       weekLabel: 'Shop / CJ Blanchard',
     }
 
-    expect(dialog.timecardExportConfirmTitle.value).toBe('Undo submitted week?')
+    expect(dialog.timecardExportConfirmTitle.value).toBe('Re-open submitted week for corrections?')
     expect(dialog.timecardExportConfirmMessage.value).toBe(
-      'Move the submitted week ending 6/20/2026 for Shop / CJ Blanchard back to draft?',
+      'Re-open the submitted week ending 6/20/2026 for Shop / CJ Blanchard so it can be corrected and resubmitted?',
     )
-    expect(dialog.timecardExportConfirmLabel.value).toBe('Undo Submitted')
+    expect(dialog.timecardExportConfirmLabel.value).toBe('Re-open for Corrections')
   })
 })

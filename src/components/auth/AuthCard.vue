@@ -29,17 +29,15 @@ defineProps<{
   width: min(100%, 460px);
   padding: 2rem;
   border: 1px solid var(--border);
-  border-radius: 22px;
-  background:
-    radial-gradient(circle at top right, rgba(99, 199, 230, 0.12), transparent 34%),
-    var(--surface-raised);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 
 .auth-card__eyebrow {
   color: var(--accent-strong);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
+  font-size: var(--font-size-eyebrow);
+  letter-spacing: var(--letter-spacing-eyebrow);
   text-transform: uppercase;
 }
 
@@ -55,12 +53,12 @@ defineProps<{
 }
 
 :global(.auth-field) {
-  --app-text-input-min-height: 2.9rem;
-  --app-text-input-padding-x: 0.95rem;
-  --app-text-input-background: var(--field);
+  --app-text-input-min-height: var(--control-height-form);
+  --app-text-input-padding-x: var(--control-padding-x);
+  --app-text-input-background: var(--control-background);
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   margin-bottom: 1rem;
   color: var(--text-muted);
 }
@@ -87,6 +85,7 @@ defineProps<{
 @media (max-width: 560px) {
   .auth-card {
     padding: 1.4rem;
+    background: var(--surface);
   }
 }
 </style>

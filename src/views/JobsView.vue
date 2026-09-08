@@ -13,6 +13,7 @@ import {
   JOB_NOTIFICATION_MODULES,
   JOB_SPECIFIC_NOTIFICATION_MODULES,
   createEmptyNotificationRecipients,
+  createGlobalRecipientInputState,
   createRecipientInputState,
   shouldShowJobDetailSuccessToast,
   toggleAssignedForeman,
@@ -31,7 +32,11 @@ import { useJobsSideEffects } from '@/features/jobs/useJobsSideEffects'
 import { useJobsViewState } from '@/features/jobs/useJobsViewState'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
-import type { NotificationModuleKey, NotificationRecipients } from '@/types/domain'
+import type {
+  GlobalNotificationModuleKey,
+  NotificationModuleKey,
+  NotificationRecipients,
+} from '@/types/domain'
 import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
 
 const auth = useAuthStore()
@@ -86,9 +91,15 @@ const {
 } = useJobCreateForm({
   clearCreateMessages: resetCreateMessages,
 })
-const detailNotificationRecipients = reactive<NotificationRecipients>(createEmptyNotificationRecipients())
-const detailRecipientInputs = reactive<Record<NotificationModuleKey, string>>(createRecipientInputState())
-const globalRecipientInputs = reactive<Record<NotificationModuleKey, string>>(createRecipientInputState())
+const detailNotificationRecipients = reactive<NotificationRecipients>(
+  createEmptyNotificationRecipients(),
+)
+const detailRecipientInputs = reactive<Record<NotificationModuleKey, string>>(
+  createRecipientInputState(),
+)
+const globalRecipientInputs = reactive<Record<GlobalNotificationModuleKey, string>>(
+  createGlobalRecipientInputState(),
+)
 
 const {
   activeJobCount,
@@ -102,8 +113,16 @@ const {
   showAllJobsEntry,
   visibleJobs,
 } = useJobsViewState({
-  activeJobs: { get value() { return jobsStore.activeJobs } },
-  allJobs: { get value() { return jobsStore.jobs } },
+  activeJobs: {
+    get value() {
+      return jobsStore.activeJobs
+    },
+  },
+  allJobs: {
+    get value() {
+      return jobsStore.jobs
+    },
+  },
   editDrawerOpen,
   foremanSearchTerm,
   getCanCreateJobs: () => canCreateJobs.value,
@@ -114,15 +133,11 @@ const {
   selectedJobId,
   users,
 })
-const {
-  canCreateJobs,
-  canDeleteOrArchiveJobs,
-  canEditSelectedJobSetup,
-  canUseJobSetupEditor,
-} = useJobsCapabilities({
-  auth,
-  selectedJob,
-})
+const { canCreateJobs, canDeleteOrArchiveJobs, canEditSelectedJobSetup, canUseJobSetupEditor } =
+  useJobsCapabilities({
+    auth,
+    selectedJob,
+  })
 const {
   archiveConfirmOpen,
   archiveJobConfirmLabel,
@@ -141,32 +156,28 @@ const {
   deleteBusy: deleteLoading,
   selectedJob,
 })
-const {
-  handleCreateJob,
-  handleDeleteJob,
-  handleToggleArchive,
-  persistJobDetail,
-} = useJobCrudActions({
-  archiveLoading,
-  closeArchiveConfirm,
-  closeDeleteConfirm,
-  createForm,
-  createLoading,
-  createNotificationRecipients,
-  deleteLoading,
-  detailNotificationRecipients,
-  resetCreateMessages,
-  resetDetailMessages,
-  saveLoading,
-  selectedJob,
-  selectedJobId,
-  setCreateError,
-  setCreateErrorMessage,
-  setCreateInfo,
-  setDetailError,
-  setDetailInfo,
-  visibleJobs,
-})
+const { handleCreateJob, handleDeleteJob, handleToggleArchive, persistJobDetail } =
+  useJobCrudActions({
+    archiveLoading,
+    closeArchiveConfirm,
+    closeDeleteConfirm,
+    createForm,
+    createLoading,
+    createNotificationRecipients,
+    deleteLoading,
+    detailNotificationRecipients,
+    resetCreateMessages,
+    resetDetailMessages,
+    saveLoading,
+    selectedJob,
+    selectedJobId,
+    setCreateError,
+    setCreateErrorMessage,
+    setCreateInfo,
+    setDetailError,
+    setDetailInfo,
+    visibleJobs,
+  })
 const {
   applySelectedJobToForm,
   clearDetailAutosaveTimer,
@@ -186,37 +197,30 @@ const {
   setDetailError: setDetailErrorMessage,
   setDetailInfo,
 })
-const {
-  addRecipientToTarget,
-  recipientSaving,
-  removeRecipientFromTarget,
-} = useJobNotificationRecipients({
-  createError,
-  createInfo,
-  createNotificationRecipients,
-  createRecipientInputs,
-  detailError,
-  detailInfo,
-  detailNotificationRecipients,
-  detailRecipientInputs,
-  globalNotificationRecipients,
-  globalRecipientInputs,
-  selectedJob,
-})
-const {
-  closeEditDrawer,
-  handleJobPrimaryAction,
-  openCreateMode,
-  openEditDrawer,
-} = useJobsNavigationActions({
-  editDrawerOpen,
-  getCanCreateJobs: () => canCreateJobs.value,
-  getCanManageGlobalJobDefaults: () => auth.canManageJobs,
-  getCanUseJobSetupEditor: () => canUseJobSetupEditor.value,
-  resetCreateForm,
-  router,
-  selectedJobId,
-})
+const { addRecipientToTarget, recipientSaving, removeRecipientFromTarget } =
+  useJobNotificationRecipients({
+    createError,
+    createInfo,
+    createNotificationRecipients,
+    createRecipientInputs,
+    detailError,
+    detailInfo,
+    detailNotificationRecipients,
+    detailRecipientInputs,
+    globalNotificationRecipients,
+    globalRecipientInputs,
+    selectedJob,
+  })
+const { closeEditDrawer, handleJobPrimaryAction, openCreateMode, openEditDrawer } =
+  useJobsNavigationActions({
+    editDrawerOpen,
+    getCanCreateJobs: () => canCreateJobs.value,
+    getCanManageGlobalJobDefaults: () => auth.canManageJobs,
+    getCanUseJobSetupEditor: () => canUseJobSetupEditor.value,
+    resetCreateForm,
+    router,
+    selectedJobId,
+  })
 useJobsSelectionSync({
   applySelectedJobToForm,
   clearDetailAutosaveTimer,
@@ -321,19 +325,31 @@ useJobsLifecycle({
         @add-global-recipient="addRecipientToTarget('all', $event)"
         @create-job="handleCreateJob"
         @delete-job="requestDeleteJob"
-        @remove-create-recipient="(moduleKey, email) => removeRecipientFromTarget('create', moduleKey, email)"
-        @remove-detail-recipient="(moduleKey, email) => removeRecipientFromTarget('job', moduleKey, email)"
-        @remove-global-recipient="(moduleKey, email) => removeRecipientFromTarget('all', moduleKey, email)"
+        @remove-create-recipient="
+          (moduleKey, email) => removeRecipientFromTarget('create', moduleKey, email)
+        "
+        @remove-detail-recipient="
+          (moduleKey, email) => removeRecipientFromTarget('job', moduleKey, email)
+        "
+        @remove-global-recipient="
+          (moduleKey, email) => removeRecipientFromTarget('all', moduleKey, email)
+        "
         @request-toggle-archive="requestToggleArchive"
         @save-job="handleSaveJob"
         @toggle-create-foreman="toggleAssignedForeman(createForm.assignedForemanIds, $event)"
         @toggle-detail-foreman="toggleAssignedForeman(detailForm.assignedForemanIds, $event)"
         @update-create-field="updateCreateFormField"
-        @update-create-recipient-input="(moduleKey, value) => (createRecipientInputs[moduleKey] = value)"
+        @update-create-recipient-input="
+          (moduleKey, value) => (createRecipientInputs[moduleKey] = value)
+        "
         @update-detail-field="updateDetailFormField"
-        @update-detail-recipient-input="(moduleKey, value) => (detailRecipientInputs[moduleKey] = value)"
+        @update-detail-recipient-input="
+          (moduleKey, value) => (detailRecipientInputs[moduleKey] = value)
+        "
         @update-foreman-search-term="foremanSearchTerm = $event"
-        @update-global-recipient-input="(moduleKey, value) => (globalRecipientInputs[moduleKey] = value)"
+        @update-global-recipient-input="
+          (moduleKey, value) => (globalRecipientInputs[moduleKey] = value)
+        "
       />
     </template>
 

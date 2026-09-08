@@ -298,7 +298,7 @@ test.describe('admin page coverage', () => {
     await expect(page.getByTestId('timecard-export-week-week-e2e')).toHaveCount(0)
   })
 
-  test('timecard export lets admins submit draft weeks and undo submitted weeks', async ({ page }) => {
+  test('timecard export lets admins submit drafts and re-open submitted weeks for corrections', async ({ page }) => {
     await gotoPhase2App(page, '/exports/timecards', createAdminWorkspaceFixture())
 
     await expect(page.getByTestId('timecard-export-submit-week-week-e2e')).toBeVisible()
@@ -323,11 +323,11 @@ test.describe('admin page coverage', () => {
 
     await page.getByTestId('timecard-export-reopen-week-week-admin-2').click()
     await page
-      .getByRole('dialog', { name: 'Undo submitted week?' })
-      .getByRole('button', { name: 'Undo Submitted' })
+      .getByRole('dialog', { name: 'Re-open submitted week for corrections?' })
+      .getByRole('button', { name: 'Re-open for Corrections' })
       .click()
 
-    await expect(page.getByText('Submitted week moved back to draft.')).toBeVisible()
+    await expect(page.getByText('Week re-opened for corrections.')).toBeVisible()
     await expect
       .poll(async () => page.evaluate(() => {
         const state = window.__PHASE2_E2E_STATE__ as {

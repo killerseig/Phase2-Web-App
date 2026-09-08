@@ -318,11 +318,17 @@ const {
     displayName: auth.displayName ?? null,
   }),
   resetPageAndSaveMessages,
+  revealCard: (cardId) => {
+    cardSearchTerm.value = ''
+    expandAndSelectCard(cardId)
+    scrollCardIntoView(cardId)
+  },
   selectCard,
   selectedWeek,
   selectedWeekEndDate,
   selectedWeekStartDate,
   setPageError,
+  setPageErrorMessage,
   setPageInfo,
   sortMode,
   timecardConfirmAction,

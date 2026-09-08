@@ -109,7 +109,7 @@ function removeRecipient(email: string) {
 <style scoped>
 .recipient-editor {
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
@@ -142,7 +142,7 @@ function removeRecipient(email: string) {
   width: auto;
   --app-text-input-min-height: 2.25rem;
   --app-text-input-padding-x: 0.8rem;
-  --app-text-input-radius: 9px;
+  --app-text-input-radius: var(--radius-sm);
   font-size: 0.92rem;
 }
 
@@ -151,7 +151,7 @@ function removeRecipient(email: string) {
   min-width: 4.25rem;
   min-height: 2.25rem;
   padding: 0 0.95rem;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
@@ -163,14 +163,14 @@ function removeRecipient(email: string) {
   min-width: 0;
   padding: 0.9rem 1rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   text-align: center;
 }
 
 .recipient-editor__list {
   display: grid;
-  gap: 0.55rem;
+  gap: var(--list-gap);
   width: min(100%, 42rem);
   max-width: 100%;
   min-width: 0;
@@ -183,8 +183,8 @@ function removeRecipient(email: string) {
   align-items: center;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
+  border-radius: var(--radius-sm);
+  background: var(--field);
   color: var(--text-muted);
 }
 

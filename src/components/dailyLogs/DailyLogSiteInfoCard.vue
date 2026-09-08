@@ -36,10 +36,10 @@ defineProps<{
 <style scoped>
 .daily-log-site-info-card {
   --app-section-header-copy-gap: 0.2rem;
-  --app-section-header-eyebrow-font-size: 0.68rem;
-  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
@@ -48,12 +48,12 @@ defineProps<{
 .daily-log-site-info-card__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: var(--form-gap);
 }
 
 .daily-log-site-info-card__field {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   color: var(--text-muted);
 }
 

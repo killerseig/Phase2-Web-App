@@ -97,7 +97,7 @@ const ActionsPanelStub = {
 
 const SavedWeeksStub = {
   name: 'TimecardExportSavedWeeksPanel',
-  props: ['weeks', 'weeksLoading', 'canUseTimecardExport', 'actionLoading', 'mobileActive', 'formatDate', 'formatSubtitle'],
+  props: ['weeks', 'weeksLoading', 'canUseTimecardExport', 'canReopenSubmittedWeeks', 'actionLoading', 'mobileActive', 'formatDate', 'formatSubtitle'],
   emits: ['delete-week', 'reopen-week', 'submit-week'],
   template: `
     <section data-testid="saved-weeks">
@@ -141,6 +141,7 @@ function mountToolbar(overrides = {}) {
       ],
       sortMode: 'name',
       canUseTimecardExport: true,
+      canReopenSubmittedWeeks: true,
       actionLoading: false,
       showCreateTray: false,
       filteredWeeks: [makeWeek(), makeWeek({ id: 'week-2', status: 'submitted' })],
@@ -192,6 +193,7 @@ describe('TimecardExportToolbar', () => {
       actionLoading: true,
       showCreateTray: true,
       canUseTimecardExport: false,
+      canReopenSubmittedWeeks: false,
     })
 
     expect(wrapper.getComponent({ name: 'TimecardExportWeekFiltersPanel' }).props()).toMatchObject({
@@ -225,6 +227,7 @@ describe('TimecardExportToolbar', () => {
       weeks,
       weeksLoading: true,
       canUseTimecardExport: false,
+      canReopenSubmittedWeeks: false,
       actionLoading: true,
     })
     expect(wrapper.getComponent({ name: 'TimecardExportSavedWeeksPanel' }).props('formatDate')('2026-06-20')).toBe('formatted 2026-06-20')

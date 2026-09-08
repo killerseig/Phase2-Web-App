@@ -6,7 +6,10 @@ import {
   ref as storageRef,
   uploadBytesResumable,
 } from 'firebase/storage'
-import { prepareDailyLogPhotoForUpload } from '@/features/dailyLogs/photoUpload'
+import {
+  prepareDailyLogEmailThumbnail,
+  prepareDailyLogPhotoForUpload,
+} from '@/features/dailyLogs/photoUpload'
 import { requireFirebaseServices } from '@/firebase'
 import {
   createEmptyDailyLogPayload,
@@ -113,10 +116,14 @@ function sanitizeIndoorClimateReading(
 }
 
 function sanitizeAttachment(attachment: DailyLogAttachmentRecord): DailyLogAttachmentRecord {
+  const thumbnailUrl = attachment.thumbnailUrl?.trim()
+  const thumbnailPath = attachment.thumbnailPath?.trim()
   return {
     name: attachment.name.trim(),
     url: attachment.url.trim(),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
     path: attachment.path.trim(),
+    ...(thumbnailPath ? { thumbnailPath } : {}),
     type: sanitizeAttachmentType(attachment.type),
     description: attachment.description.trim(),
     createdAt: attachment.createdAt,
@@ -239,10 +246,14 @@ function normalizeAttachment(value: unknown): DailyLogAttachmentRecord | null {
 
   if (!name || !url || !path) return null
 
+  const thumbnailUrl = typeof record.thumbnailUrl === 'string' ? record.thumbnailUrl.trim() : ''
+  const thumbnailPath = typeof record.thumbnailPath === 'string' ? record.thumbnailPath.trim() : ''
   return {
     name,
     url,
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
     path,
+    ...(thumbnailPath ? { thumbnailPath } : {}),
     type: sanitizeAttachmentType(record.type),
     description: typeof record.description === 'string' ? record.description.trim() : '',
     createdAt: record.createdAt,
@@ -551,27 +562,71 @@ export async function uploadDailyLogAttachment(
     }
 
     const preparedFile = await prepareDailyLogPhotoForUpload(file)
+    let thumbnailFile: File | null = null
+    try {
+      thumbnailFile = await prepareDailyLogEmailThumbnail(preparedFile)
+    } catch {
+      // Some otherwise-valid formats cannot be rasterized consistently by every mobile browser.
+      // Keep their gallery upload usable; the email will show a safe gallery link fallback.
+    }
     const safeName = preparedFile.name.replace(/[^A-Za-z0-9._-]/g, '_')
-    const storagePath = `daily-logs/${dailyLogId}/${Date.now()}-${safeName}`
+    const timestampedName = `${Date.now()}-${safeName}`
+    const storagePath = `daily-logs/${dailyLogId}/${timestampedName}`
     const reference = storageRef(storage, storagePath)
+    const thumbnailPath = `daily-logs/${dailyLogId}/thumbnails/${timestampedName}`
+    const thumbnailReference = storageRef(storage, thumbnailPath)
 
-    // Resumable uploads let the Firebase SDK recover from brief mobile-network interruptions.
-    await uploadBytesResumable(reference, preparedFile, {
-      contentType: preparedFile.type || undefined,
-      customMetadata: {
-        jobId,
-        dailyLogId,
-        type,
-        description: description.trim(),
-        uploadedBy: currentUserId,
-        uploadedAt: new Date().toISOString(),
-      },
-    })
+    let thumbnailUrl = ''
+    let thumbnailUploaded = false
+    let galleryUploaded = false
+    let galleryUrl = ''
+    try {
+      if (thumbnailFile) {
+        await uploadBytesResumable(thumbnailReference, thumbnailFile, {
+          contentType: 'image/jpeg',
+          customMetadata: {
+            jobId,
+            dailyLogId,
+            type,
+            variant: 'email-thumbnail',
+            description: description.trim(),
+            uploadedBy: currentUserId,
+            uploadedAt: new Date().toISOString(),
+          },
+        })
+        thumbnailUploaded = true
+        thumbnailUrl = await getDownloadURL(thumbnailReference)
+      }
+
+      // Resumable uploads let the Firebase SDK recover from brief mobile-network interruptions.
+      await uploadBytesResumable(reference, preparedFile, {
+        contentType: preparedFile.type || undefined,
+        customMetadata: {
+          jobId,
+          dailyLogId,
+          type,
+          variant: 'gallery-photo',
+          description: description.trim(),
+          uploadedBy: currentUserId,
+          uploadedAt: new Date().toISOString(),
+        },
+      })
+      galleryUploaded = true
+      galleryUrl = await getDownloadURL(reference)
+    } catch (error) {
+      await Promise.allSettled([
+        ...(galleryUploaded ? [deleteObject(reference)] : []),
+        ...(thumbnailUploaded ? [deleteObject(thumbnailReference)] : []),
+      ])
+      throw error
+    }
 
     return {
       name: file.name,
-      url: await getDownloadURL(reference),
+      url: galleryUrl,
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
       path: storagePath,
+      ...(thumbnailFile ? { thumbnailPath } : {}),
       type,
       description: description.trim(),
       createdAt: new Date(),
@@ -581,7 +636,24 @@ export async function uploadDailyLogAttachment(
   }
 }
 
-export async function deleteDailyLogAttachment(path: string): Promise<void> {
+function isMissingStorageObject(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String(error.code) : ''
+  return code === 'storage/object-not-found' || code === 'object-not-found'
+}
+
+async function deleteStorageObjectIfPresent(reference: ReturnType<typeof storageRef>) {
+  try {
+    await deleteObject(reference)
+  } catch (error) {
+    if (!isMissingStorageObject(error)) throw error
+  }
+}
+
+export async function deleteDailyLogAttachment(
+  path: string,
+  storedThumbnailPath?: string,
+): Promise<void> {
   if (isE2EActive()) {
     await deleteE2EDailyLogAttachment(path)
     return
@@ -589,7 +661,21 @@ export async function deleteDailyLogAttachment(path: string): Promise<void> {
 
   try {
     const { storage } = requireFirebaseServices()
-    await deleteObject(storageRef(storage, path))
+    const pathParts = path.split('/')
+    if (pathParts.length >= 3 && pathParts[pathParts.length - 2] !== 'thumbnails') {
+      const fileName = pathParts.pop()
+      const derivedThumbnailPath = [...pathParts, 'thumbnails', fileName].join('/')
+      const normalizedStoredThumbnailPath = storedThumbnailPath?.trim()
+      const thumbnailPath =
+        normalizedStoredThumbnailPath === derivedThumbnailPath
+          ? normalizedStoredThumbnailPath
+          : derivedThumbnailPath
+      // Delete the public email derivative first. Only a genuinely missing object is safe to
+      // ignore; auth and network failures must keep the database reference available for retry.
+      await deleteStorageObjectIfPresent(storageRef(storage, thumbnailPath))
+    }
+
+    await deleteStorageObjectIfPresent(storageRef(storage, path))
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to delete daily log attachment.'))
   }

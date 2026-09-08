@@ -20,42 +20,25 @@ defineProps<{
   padding: var(--app-link-card-padding, 1rem);
   border: var(--app-link-card-border, 1px solid var(--border));
   border-radius: var(--app-link-card-radius, var(--radius));
-  background: var(
-    --app-link-card-background,
-    linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0)),
-    rgba(255, 255, 255, 0.038)
-  );
+  background: var(--app-link-card-background, var(--surface));
   box-shadow: var(--app-link-card-shadow, var(--shadow-soft));
   color: inherit;
   text-decoration: none;
   transition:
     transform 0.2s ease,
-    box-shadow 0.2s ease,
     border-color 0.2s ease,
     background 0.2s ease;
 }
 
 .app-link-card:hover {
-  transform: var(--app-link-card-hover-transform, translateY(-2px));
+  transform: none;
   border-color: var(--app-link-card-hover-border-color, var(--border-strong));
-  background: var(
-    --app-link-card-hover-background,
-    linear-gradient(180deg, rgba(99, 199, 230, 0.13), rgba(33, 52, 65, 0.18)),
-    rgba(255, 255, 255, 0.045)
-  );
-  box-shadow: var(
-    --app-link-card-hover-shadow,
-    0 14px 30px rgba(3, 10, 16, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.018)
-  );
+  background: var(--app-link-card-hover-background, var(--field-hover));
+  box-shadow: var(--app-link-card-hover-shadow, none);
 }
 
 .app-link-card:focus-visible {
   outline: none;
-  box-shadow: var(
-    --app-link-card-focus-shadow,
-    0 0 0 3px rgba(99, 199, 230, 0.2),
-    var(--app-link-card-hover-shadow, 0 14px 30px rgba(3, 10, 16, 0.18))
-  );
+  box-shadow: var(--app-link-card-focus-shadow, var(--focus-ring));
 }
 </style>

@@ -79,23 +79,21 @@ const emit = defineEmits<{
 
 <style scoped>
 .daily-logs-header {
-  --app-pane-header-eyebrow-font-size: 0.68rem;
-  --app-pane-header-eyebrow-letter-spacing: 0.12em;
+  --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-pane-header-title-margin: 0.35rem 0 0;
   --app-pane-header-title-font-size: 1.5rem;
-  padding: 1rem 1.1rem;
+  padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(29, 38, 49, 0.92);
+  background: var(--panel-background);
   box-shadow: var(--shadow);
 }
 
 .daily-logs-header__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: var(--action-gap);
   justify-content: flex-end;
 }
 
@@ -119,7 +117,7 @@ const emit = defineEmits<{
 .daily-logs-message {
   padding: 0.95rem 1rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
 }
 
 .daily-logs-message--info {

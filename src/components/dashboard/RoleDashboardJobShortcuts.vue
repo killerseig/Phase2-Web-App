@@ -83,9 +83,7 @@ defineProps<{
   padding: 1rem;
   border: 1px solid rgba(168, 190, 209, 0.16);
   border-radius: var(--radius);
-  background:
-    radial-gradient(circle at 0% 0%, rgba(99, 199, 230, 0.055), transparent 34%),
-    rgba(255, 255, 255, 0.026);
+  background: var(--panel-background);
 }
 
 .role-dashboard-job-shortcuts__header {
@@ -112,7 +110,7 @@ defineProps<{
 .role-dashboard-job-shortcut__badge {
   align-self: start;
   border: 1px solid rgba(99, 199, 230, 0.35);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--accent-strong);
   font-size: 0.76rem;
   font-weight: 700;
@@ -139,10 +137,8 @@ defineProps<{
   min-width: 0;
   padding: 0.9rem;
   border: 1px solid rgba(168, 190, 209, 0.14);
-  border-radius: calc(var(--radius) - 0.2rem);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
-    rgba(255, 255, 255, 0.026);
+  border-radius: var(--radius-sm);
+  background: var(--panel-background);
 }
 
 .role-dashboard-job-shortcut__body {
@@ -174,7 +170,7 @@ defineProps<{
 
 .role-dashboard-job-shortcut__actions a {
   border: 1px solid rgba(99, 199, 230, 0.24);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--accent-strong);
   font-size: 0.82rem;
   font-weight: 700;

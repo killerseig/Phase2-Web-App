@@ -2,6 +2,7 @@ type GalleryAttachmentType = 'photo' | 'ptp' | 'qc' | 'other';
 interface GalleryAttachment {
     name: string;
     url: string;
+    thumbnailUrl?: string;
     type: GalleryAttachmentType;
     description: string;
 }
@@ -11,7 +12,8 @@ interface EnsureDailyLogGalleryShareInput {
     jobDetails?: any;
     log?: any;
 }
-export declare function buildPublicDailyLogGalleryPayload(jobDetails: any, log: any): {
+export declare function isTrustedStorageObjectUrl(value: string, objectPath: string, bucketName: string): boolean;
+export declare function buildPublicDailyLogGalleryPayload(jobDetails: any, log: any, dailyLogId?: string, bucketName?: string): {
     jobName: string;
     jobCode: string;
     logDate: string;

@@ -93,24 +93,28 @@ function makeLog(overrides: Partial<DailyLogRecord> = {}): DailyLogRecord {
   }
 }
 
-function mountActions(options: {
-  canDelete?: boolean
-  canEdit?: boolean
-  currentUserId?: string | null
-  form?: DailyLogPayload
-  hasUnsavedDraftChanges?: boolean
-  job?: JobRecord | null
-  jobId?: string | null
-  saveDraftResult?: boolean
-  selectedDate?: string
-  selectedDateIsFuture?: boolean
-  selectedLog?: DailyLogRecord | null
-  selectedLogId?: string | null
-  visibleLogs?: DailyLogRecord[]
-} = {}) {
+function mountActions(
+  options: {
+    canDelete?: boolean
+    canEdit?: boolean
+    currentUserId?: string | null
+    form?: DailyLogPayload
+    hasUnsavedDraftChanges?: boolean
+    job?: JobRecord | null
+    jobId?: string | null
+    saveDraftResult?: boolean
+    selectedDate?: string
+    selectedDateIsFuture?: boolean
+    selectedLog?: DailyLogRecord | null
+    selectedLogId?: string | null
+    visibleLogs?: DailyLogRecord[]
+  } = {},
+) {
   const canEdit = ref(options.canEdit ?? true)
   const canDelete = ref(options.canDelete ?? canEdit.value)
-  const currentUserId = ref<string | null>(options.currentUserId === undefined ? 'user-1' : options.currentUserId)
+  const currentUserId = ref<string | null>(
+    options.currentUserId === undefined ? 'user-1' : options.currentUserId,
+  )
   const form = ref(options.form ?? makeSubmitReadyPayload())
   const hasUnsavedDraftChanges = ref(options.hasUnsavedDraftChanges ?? true)
   const job = ref<JobRecord | null>(options.job === undefined ? makeJob() : options.job)
@@ -121,14 +125,15 @@ function mountActions(options: {
     options.selectedLog === undefined ? makeLog({ payload: form.value }) : options.selectedLog,
   )
   const selectedLogId = ref<string | null>(
-    options.selectedLogId === undefined ? selectedLog.value?.id ?? null : options.selectedLogId,
+    options.selectedLogId === undefined ? (selectedLog.value?.id ?? null) : options.selectedLogId,
   )
   const visibleLogs = ref<DailyLogRecord[]>(options.visibleLogs ?? [])
   const actionErrors: string[] = []
   const actionInfos: string[] = []
   const clonePreparedPayload = vi.fn((payload = form.value) => createEmptyDailyLogPayload(payload))
   const resetForm = vi.fn()
-  const saveDraftImmediately = vi.fn<() => Promise<boolean>>()
+  const saveDraftImmediately = vi
+    .fn<() => Promise<boolean>>()
     .mockResolvedValue(options.saveDraftResult ?? true)
   const setSavedPayloadSnapshot = vi.fn()
 
@@ -187,27 +192,32 @@ describe('useDailyLogActions', () => {
   })
 
   it('creates a daily log draft for the current job and selects the created log', async () => {
-    const { actionInfos, actions, form, resetForm, selectedLogId, setSavedPayloadSnapshot } = mountActions({
-      selectedLog: null,
-      selectedLogId: null,
-    })
+    const { actionInfos, actions, form, resetForm, selectedLogId, setSavedPayloadSnapshot } =
+      mountActions({
+        selectedLog: null,
+        selectedLogId: null,
+      })
 
     await actions.handleCreateDraft()
 
-    expect(createDailyLogRecordMock).toHaveBeenCalledWith(expect.objectContaining({
-      foremanName: 'Vince Hintz',
-      foremanUserId: 'user-1',
-      jobCode: '5229',
-      jobId: 'job-1',
-      jobName: 'Lucky 3 Ranch',
-      logDate: '2026-07-15',
-    }))
+    expect(createDailyLogRecordMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        foremanName: 'Vince Hintz',
+        foremanUserId: 'user-1',
+        jobCode: '5229',
+        jobId: 'job-1',
+        jobName: 'Lucky 3 Ranch',
+        logDate: '2026-07-15',
+      }),
+    )
     expect(selectedLogId.value).toBe('created-log')
     expect(resetForm).toHaveBeenCalledTimes(1)
-    expect(form.value).toEqual(expect.objectContaining({
-      projectName: '',
-      weeklySchedule: '',
-    }))
+    expect(form.value).toEqual(
+      expect.objectContaining({
+        projectName: '',
+        weeklySchedule: '',
+      }),
+    )
     expect(setSavedPayloadSnapshot).toHaveBeenCalledWith(form.value)
     expect(actionInfos).toContain('Daily log draft created.')
     expect(actions.creatingDraft.value).toBe(false)
@@ -257,9 +267,11 @@ describe('useDailyLogActions', () => {
 
     await actions.handleCreateDraft()
 
-    expect(createDailyLogRecordMock).toHaveBeenCalledWith(expect.objectContaining({
-      logDate: '2026-07-14',
-    }))
+    expect(createDailyLogRecordMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logDate: '2026-07-14',
+      }),
+    )
   })
 
   it('reports save status based on whether the draft had unsaved changes', async () => {
@@ -302,12 +314,7 @@ describe('useDailyLogActions', () => {
   })
 
   it('submits valid logs, saves the payload snapshot, and reports email success', async () => {
-    const {
-      actionInfos,
-      actions,
-      form,
-      setSavedPayloadSnapshot,
-    } = mountActions()
+    const { actionInfos, actions, form, setSavedPayloadSnapshot } = mountActions()
 
     await actions.handleSubmit()
 
@@ -338,7 +345,9 @@ describe('useDailyLogActions', () => {
 
     await failedEmail.actions.handleSubmit()
 
-    expect(failedEmail.actionErrors).toContain('Daily log submitted, but email failed. SMTP offline')
+    expect(failedEmail.actionErrors).toContain(
+      'Daily log submitted, but email failed. SMTP offline',
+    )
     expect(updateDailyLogRecordMock).toHaveBeenCalledTimes(2)
   })
 
@@ -370,6 +379,7 @@ describe('useDailyLogActions', () => {
             description: 'Photo',
             name: 'photo.jpg',
             path: 'dailyLogs/job-1/photo.jpg',
+            thumbnailPath: 'dailyLogs/job-1/thumbnails/photo.jpg',
             type: 'photo',
             url: 'https://example.test/photo.jpg',
           },
@@ -383,7 +393,10 @@ describe('useDailyLogActions', () => {
 
     await actions.confirmDeleteSelectedLog()
 
-    expect(deleteDailyLogAttachmentMock).toHaveBeenCalledWith('dailyLogs/job-1/photo.jpg')
+    expect(deleteDailyLogAttachmentMock).toHaveBeenCalledWith(
+      'dailyLogs/job-1/photo.jpg',
+      'dailyLogs/job-1/thumbnails/photo.jpg',
+    )
     expect(deleteDailyLogRecordMock).toHaveBeenCalledWith('daily-log-1')
     expect(selectedLogId.value).toBeNull()
     expect(actionInfos).toContain('Daily log draft deleted.')
@@ -400,5 +413,33 @@ describe('useDailyLogActions', () => {
     expect(actionErrors).toContain('Delete denied')
     expect(actions.deleteDraftConfirmOpen.value).toBe(false)
     expect(actions.deletingDraft.value).toBe(false)
+  })
+
+  it('keeps the draft record when attachment cleanup fails so deletion can be retried', async () => {
+    const logWithAttachment = makeLog({
+      payload: makeSubmitReadyPayload({
+        attachments: [
+          {
+            description: 'Photo',
+            name: 'photo.jpg',
+            path: 'daily-logs/daily-log-1/photo.jpg',
+            thumbnailPath: 'daily-logs/daily-log-1/thumbnails/photo.jpg',
+            type: 'photo',
+            url: 'https://example.test/photo.jpg',
+          },
+        ],
+      }),
+    })
+    deleteDailyLogAttachmentMock.mockRejectedValueOnce(new Error('Storage unavailable'))
+    const { actionErrors, actions, selectedLogId } = mountActions({
+      selectedLog: logWithAttachment,
+      selectedLogId: logWithAttachment.id,
+    })
+
+    await actions.confirmDeleteSelectedLog()
+
+    expect(deleteDailyLogRecordMock).not.toHaveBeenCalled()
+    expect(selectedLogId.value).toBe('daily-log-1')
+    expect(actionErrors).toContain('Storage unavailable')
   })
 })

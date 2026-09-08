@@ -41,6 +41,7 @@ import {
 import { db } from './runtime'
 import { canWriteFieldWorkflowForJob } from './fieldWorkflowAccess'
 import { ensureDailyLogGalleryShare } from './dailyLogGalleryFunctions'
+import { prepareDailyLogInlinePhotos } from './dailyLogEmailPhotos'
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
@@ -172,20 +173,14 @@ async function hasSubmittedEmailOperationAlreadySent(
   return false
 }
 
-function dailyLogEmailStatusRefs(
-  jobId: string,
-  dailyLogId: string,
-): DocumentReference[] {
+function dailyLogEmailStatusRefs(jobId: string, dailyLogId: string): DocumentReference[] {
   return [
     db.collection(COLLECTIONS.DAILY_LOGS).doc(dailyLogId),
     db.collection(COLLECTIONS.JOBS).doc(jobId).collection('dailyLogs').doc(dailyLogId),
   ]
 }
 
-function shopOrderEmailStatusRefs(
-  jobId: string,
-  shopOrderId: string,
-): DocumentReference[] {
+function shopOrderEmailStatusRefs(jobId: string, shopOrderId: string): DocumentReference[] {
   return [
     db.collection(COLLECTIONS.SHOP_ORDERS).doc(shopOrderId),
     db.collection(COLLECTIONS.JOBS).doc(jobId).collection('shop_orders').doc(shopOrderId),
@@ -626,9 +621,8 @@ function sanitizeActivityCode(value: any, line: any, disallowedValues: any[]): s
     .filter(Boolean)
   if (difValues.includes(raw.toLowerCase())) return ''
 
-  // Reject short numeric fragments that are commonly leaked from non-activity fields.
-  if (/^\d{1,3}$/.test(raw)) return ''
-
+  // Numeric Acct codes can legitimately contain only one to three digits.
+  // Leak protection is therefore limited to the explicit job, employee, and DIF matches above.
   return raw
 }
 
@@ -789,6 +783,7 @@ interface SendDailyLogEmailDependencies {
   getJobNotificationRecipients: typeof getJobNotificationRecipients
   getAppBaseUrl: typeof getAppBaseUrl
   ensureDailyLogGalleryShare: typeof ensureDailyLogGalleryShare
+  prepareDailyLogInlinePhotos: typeof prepareDailyLogInlinePhotos
   buildDailyLogEmail: typeof buildDailyLogEmail
   sendEmail: typeof sendEmail
   recordSubmittedEmailStatus: typeof recordSubmittedEmailStatus
@@ -805,6 +800,7 @@ const defaultSendDailyLogEmailDependencies: SendDailyLogEmailDependencies = {
   getJobNotificationRecipients,
   getAppBaseUrl,
   ensureDailyLogGalleryShare,
+  prepareDailyLogInlinePhotos,
   buildDailyLogEmail,
   sendEmail,
   recordSubmittedEmailStatus,
@@ -1080,11 +1076,15 @@ export async function handleSendDailyLogEmail(
         log,
       })
       const dailyLogUrl = `${deps.getAppBaseUrl()}/daily-log-gallery/${encodeURIComponent(galleryShareId)}`
+      const inlinePhotos = await deps.prepareDailyLogInlinePhotos(dailyLogId, log)
       const emailHtml = deps.buildDailyLogEmail(
         job || { id: '', name: 'Unknown Job', number: '' },
         logDate,
         log,
-        { dailyLogUrl },
+        {
+          dailyLogUrl,
+          inlinePhotoPreviews: inlinePhotos.previews,
+        },
       )
 
       await deps.sendEmail({
@@ -1095,6 +1095,7 @@ export async function handleSendDailyLogEmail(
           log,
         ),
         html: emailHtml,
+        ...(inlinePhotos.attachments.length ? { attachments: inlinePhotos.attachments } : {}),
       })
     } catch (emailError: any) {
       await deps.recordSubmittedEmailStatus(
@@ -1109,7 +1110,10 @@ export async function handleSendDailyLogEmail(
       throw emailError
     }
 
-    console.log(`Daily log ${dailyLogId} emailed to ${recipients.join(', ')}`)
+    console.log('[sendDailyLogEmail] Message sent successfully', {
+      dailyLogId,
+      recipientCount: recipients.length,
+    })
     const emailResult = {
       emailSent: true,
       emailMessage: 'Email sent successfully',
@@ -1127,8 +1131,13 @@ export async function handleSendDailyLogEmail(
 /**
  * Send Daily Log via email
  */
-export const sendDailyLogEmail = onCall({ secrets: getGraphEmailSecrets() }, async (request) =>
-  handleSendDailyLogEmail(request),
+export const sendDailyLogEmail = onCall(
+  {
+    secrets: getGraphEmailSecrets(),
+    memory: '512MiB',
+    timeoutSeconds: 120,
+  },
+  async (request) => handleSendDailyLogEmail(request),
 )
 
 export function buildTimecardCsv(
@@ -1707,7 +1716,7 @@ export async function buildTimecardPdfBuffer(
         tableHeaderHeight,
         [
           'JOB #',
-          '1',
+          'AREA',
           '',
           'ACCT',
           'DIF',

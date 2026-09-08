@@ -59,6 +59,7 @@ function makeSubmitDeps(overrides: Record<string, unknown> = {}) {
       name: 'Lucky 3 Ranch',
       number: '5229',
     })),
+    listWeekCards: vi.fn(async () => []),
     claimSubmittedEmailOperation: vi.fn(async () => 'claimed'),
     sendSubmittedWeekEmail: vi.fn(async () => ({
       success: true,
@@ -269,6 +270,86 @@ describe('timecard week submit handler', () => {
 
     expect(deps.claimSubmittedEmailOperation).not.toHaveBeenCalled()
     expect(weekRef.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects lines with daily hours when Job #, Area, or Acct is blank', async () => {
+    const { deps, weekRef } = makeSubmitDeps({
+      listWeekCards: vi.fn(async () => [{
+        id: 'card-1',
+        fullName: 'Rosa Toruno Castellon',
+        lines: [{
+          jobNumber: '7539',
+          subsectionArea: '   ',
+          account: '',
+          offHours: 0,
+          days: [{ hours: 4 }, { hours: 0 }],
+        }],
+      }]),
+    })
+
+    await expect(
+      handleSubmitTimecardWeekRecord({
+        auth: { uid: 'foreman-1' },
+        data: { weekId: 'week-1' },
+      }, deps as never),
+    ).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Rosa Toruno Castellon, line 1 is missing Area and Acct. Complete Job #, Area, and Acct for every line with hours before submitting.',
+      details: {
+        issues: [{
+          cardId: 'card-1',
+          employeeName: 'Rosa Toruno Castellon',
+          lineNumber: 1,
+          missingFields: ['Area', 'Acct'],
+        }],
+      },
+    })
+
+    expect(deps.claimSubmittedEmailOperation).not.toHaveBeenCalled()
+    expect(deps.sendSubmittedWeekEmail).not.toHaveBeenCalled()
+    expect(weekRef.update).not.toHaveBeenCalled()
+  })
+
+  it('treats OFF hours as hours and allows blank rows without hours', async () => {
+    const invalidOffHours = makeSubmitDeps({
+      listWeekCards: vi.fn(async () => [{
+        id: 'card-off',
+        employeeNumber: '20090',
+        lines: [
+          { jobNumber: '', subsectionArea: '', account: '', offHours: 0, days: [] },
+          { jobNumber: '7539', subsectionArea: '2', account: '', offHours: 2, days: [] },
+        ],
+      }]),
+    })
+
+    await expect(
+      handleSubmitTimecardWeekRecord({
+        auth: { uid: 'foreman-1' },
+        data: { weekId: 'week-1' },
+      }, invalidOffHours.deps as never),
+    ).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Employee #20090, line 2 is missing Acct. Complete Job #, Area, and Acct for every line with hours before submitting.',
+    })
+
+    const complete = makeSubmitDeps({
+      listWeekCards: vi.fn(async () => [{
+        id: 'card-complete',
+        fullName: 'Rosa Toruno Castellon',
+        lines: [
+          { jobNumber: '', subsectionArea: '', account: '', offHours: 0, days: [] },
+          { jobNumber: '7539', subsectionArea: '2', account: '712', offHours: 1, days: [] },
+        ],
+      }]),
+    })
+
+    await expect(
+      handleSubmitTimecardWeekRecord({
+        auth: { uid: 'foreman-1' },
+        data: { weekId: 'week-1' },
+      }, complete.deps as never),
+    ).resolves.toMatchObject({ success: true })
+    expect(complete.deps.claimSubmittedEmailOperation).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the week submitted and records a failure result when notification sending fails', async () => {

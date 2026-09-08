@@ -86,7 +86,6 @@ function confirmAction() {
   inset: 0;
   border: 0;
   background: rgba(3, 8, 13, 0.72);
-  backdrop-filter: blur(10px);
 }
 
 .confirm-dialog__panel {
@@ -96,12 +95,10 @@ function confirmAction() {
   gap: 1.25rem;
   width: min(100%, 32rem);
   padding: 1.25rem;
-  border: 1px solid rgba(114, 203, 245, 0.28);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg, 20px);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
-    rgba(25, 34, 44, 0.98);
-  box-shadow: var(--shadow-hard, 0 24px 80px rgba(0, 0, 0, 0.42));
+  background: var(--surface-raised);
+  box-shadow: none;
 }
 
 .confirm-dialog__content {

@@ -3,6 +3,8 @@ const MB = 1024 * 1024
 export const DAILY_LOG_PHOTO_SOURCE_MAX_BYTES = 50 * MB
 export const DAILY_LOG_PHOTO_UPLOAD_MAX_BYTES = 8 * MB
 export const DAILY_LOG_PHOTO_TARGET_BYTES = 2 * MB
+export const DAILY_LOG_EMAIL_THUMBNAIL_TARGET_BYTES = 120 * 1024
+export const DAILY_LOG_EMAIL_THUMBNAIL_MAX_BYTES = 300 * 1024
 
 const DAILY_LOG_PHOTO_SKIP_OPTIMIZATION_BYTES = 750 * 1024
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([
@@ -34,6 +36,13 @@ const RESIZE_ATTEMPTS: ResizeAttempt[] = [
   { maxDimension: 1280, quality: 0.68 },
   { maxDimension: 1024, quality: 0.6 },
   { maxDimension: 800, quality: 0.52 },
+]
+
+const EMAIL_THUMBNAIL_RESIZE_ATTEMPTS: ResizeAttempt[] = [
+  { maxDimension: 480, quality: 0.7 },
+  { maxDimension: 400, quality: 0.62 },
+  { maxDimension: 320, quality: 0.54 },
+  { maxDimension: 240, quality: 0.46 },
 ]
 
 function fileExtension(name: string) {
@@ -188,4 +197,49 @@ export async function prepareDailyLogPhotoForUpload(file: File): Promise<File> {
   throw resizeError instanceof Error
     ? resizeError
     : new Error(`${file.name} could not be resized automatically.`)
+}
+
+/**
+ * Create the small derivative used by submitted Daily Log emails and gallery grids.
+ * This always rasterizes to a bounded JPEG instead of reusing the larger gallery file.
+ */
+export async function prepareDailyLogEmailThumbnail(file: File): Promise<File> {
+  if (!isSupportedDailyLogPhotoFile(file)) {
+    throw new Error(`${file.name} is not a supported image.`)
+  }
+
+  const { image, release } = await loadImage(file)
+  let smallestBlob: Blob | null = null
+  let resizeError: unknown = null
+
+  try {
+    for (const attempt of EMAIL_THUMBNAIL_RESIZE_ATTEMPTS) {
+      try {
+        const blob = await resizeToJpeg(image, attempt)
+        if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob
+
+        if (blob.size <= DAILY_LOG_EMAIL_THUMBNAIL_TARGET_BYTES) {
+          return new File([blob], jpegFileName(file.name), {
+            type: 'image/jpeg',
+            lastModified: file.lastModified,
+          })
+        }
+      } catch (error) {
+        resizeError = error
+      }
+    }
+  } finally {
+    release()
+  }
+
+  if (smallestBlob && smallestBlob.size <= DAILY_LOG_EMAIL_THUMBNAIL_MAX_BYTES) {
+    return new File([smallestBlob], jpegFileName(file.name), {
+      type: 'image/jpeg',
+      lastModified: file.lastModified,
+    })
+  }
+
+  throw resizeError instanceof Error
+    ? resizeError
+    : new Error(`${file.name} could not be prepared as an email thumbnail.`)
 }

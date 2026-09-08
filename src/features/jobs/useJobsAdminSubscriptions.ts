@@ -1,9 +1,9 @@
 import { useSubscribedRecords } from '@/composables/useSubscribedRecords'
 import { useSubscribedValue } from '@/composables/useSubscribedValue'
-import { createEmptyNotificationRecipients } from '@/features/jobs/jobViewHelpers'
+import { createEmptyGlobalNotificationRecipients } from '@/features/jobs/jobViewHelpers'
 import { subscribeGlobalNotificationRecipients } from '@/services/jobs'
 import { subscribeAssignableUsers } from '@/services/users'
-import type { NotificationRecipients, UserProfile } from '@/types/domain'
+import type { GlobalNotificationRecipients, UserProfile } from '@/types/domain'
 
 interface UseJobsAdminSubscriptionsOptions {
   getCanLoadAssignableUsers: () => boolean
@@ -30,9 +30,9 @@ export function useJobsAdminSubscriptions({
     start: startGlobalNotificationRecipientsSubscription,
     stop: stopGlobalNotificationRecipientsSubscription,
     value: globalNotificationRecipients,
-  } = useSubscribedValue<NotificationRecipients>(
+  } = useSubscribedValue<GlobalNotificationRecipients>(
     subscribeGlobalNotificationRecipients,
-    createEmptyNotificationRecipients(),
+    createEmptyGlobalNotificationRecipients(),
     {
       errorMessage: 'Failed to load all-jobs recipients.',
       initialLoading: false,

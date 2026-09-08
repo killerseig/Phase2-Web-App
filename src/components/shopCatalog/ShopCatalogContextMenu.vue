@@ -46,12 +46,9 @@ defineProps<{
   min-width: 13rem;
   padding: 0.35rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
-    rgba(28, 36, 46, 0.98);
-  box-shadow: 0 18px 34px rgba(4, 9, 15, 0.38);
-  backdrop-filter: blur(10px);
+  border-radius: var(--radius-sm);
+  background: var(--panel-background);
+  box-shadow: none;
 }
 
 .shop-catalog-context-menu__item {
@@ -61,7 +58,7 @@ defineProps<{
   min-height: 2.2rem;
   padding: 0 0.7rem;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   text-align: left;

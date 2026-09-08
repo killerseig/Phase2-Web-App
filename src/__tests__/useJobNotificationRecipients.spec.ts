@@ -2,12 +2,23 @@ import { computed, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useJobNotificationRecipients } from '@/features/jobs/useJobNotificationRecipients'
-import { createEmptyNotificationRecipients, createRecipientInputState } from '@/features/jobs/jobViewHelpers'
+import {
+  createEmptyGlobalNotificationRecipients,
+  createEmptyNotificationRecipients,
+  createGlobalRecipientInputState,
+  createRecipientInputState,
+} from '@/features/jobs/jobViewHelpers'
 import {
   updateGlobalNotificationRecipients,
   updateJobNotificationRecipients,
 } from '@/services/jobs'
-import type { JobRecord, NotificationModuleKey, NotificationRecipients } from '@/types/domain'
+import type {
+  GlobalNotificationModuleKey,
+  GlobalNotificationRecipients,
+  JobRecord,
+  NotificationModuleKey,
+  NotificationRecipients,
+} from '@/types/domain'
 
 vi.mock('@/services/jobs', () => ({
   updateGlobalNotificationRecipients: vi.fn(),
@@ -35,19 +46,33 @@ function makeJob(overrides: Partial<JobRecord> = {}): JobRecord {
   }
 }
 
-function mountNotificationRecipients(options: {
-  selectedJob?: JobRecord | null
-} = {}) {
+function mountNotificationRecipients(
+  options: {
+    selectedJob?: JobRecord | null
+  } = {},
+) {
   const createError = ref('')
   const createInfo = ref('')
   const detailError = ref('')
   const detailInfo = ref('')
-  const createNotificationRecipients = reactive<NotificationRecipients>(createEmptyNotificationRecipients())
-  const detailNotificationRecipients = reactive<NotificationRecipients>(createEmptyNotificationRecipients())
-  const globalNotificationRecipients = ref<NotificationRecipients>(createEmptyNotificationRecipients())
-  const createRecipientInputs = reactive<Record<NotificationModuleKey, string>>(createRecipientInputState())
-  const detailRecipientInputs = reactive<Record<NotificationModuleKey, string>>(createRecipientInputState())
-  const globalRecipientInputs = reactive<Record<NotificationModuleKey, string>>(createRecipientInputState())
+  const createNotificationRecipients = reactive<NotificationRecipients>(
+    createEmptyNotificationRecipients(),
+  )
+  const detailNotificationRecipients = reactive<NotificationRecipients>(
+    createEmptyNotificationRecipients(),
+  )
+  const globalNotificationRecipients = ref<GlobalNotificationRecipients>(
+    createEmptyGlobalNotificationRecipients(),
+  )
+  const createRecipientInputs = reactive<Record<NotificationModuleKey, string>>(
+    createRecipientInputState(),
+  )
+  const detailRecipientInputs = reactive<Record<NotificationModuleKey, string>>(
+    createRecipientInputState(),
+  )
+  const globalRecipientInputs = reactive<Record<GlobalNotificationModuleKey, string>>(
+    createGlobalRecipientInputState(),
+  )
   const selectedJob = ref<JobRecord | null>(options.selectedJob ?? makeJob())
 
   const recipients = useJobNotificationRecipients({
@@ -116,12 +141,8 @@ describe('useJobNotificationRecipients', () => {
   })
 
   it('adds and removes create recipients locally', async () => {
-    const {
-      createInfo,
-      createNotificationRecipients,
-      createRecipientInputs,
-      recipients,
-    } = mountNotificationRecipients()
+    const { createInfo, createNotificationRecipients, createRecipientInputs, recipients } =
+      mountNotificationRecipients()
     createRecipientInputs.shopOrders = ' SHOP@Example.COM '
 
     await recipients.addRecipientToTarget('create', 'shopOrders')
@@ -139,74 +160,92 @@ describe('useJobNotificationRecipients', () => {
   })
 
   it('persists selected-job recipients and updates local detail state after the service succeeds', async () => {
-    const {
-      detailInfo,
-      detailNotificationRecipients,
-      detailRecipientInputs,
-      recipients,
-    } = mountNotificationRecipients({ selectedJob: makeJob({ id: 'job-alpha' }) })
+    const { detailInfo, detailNotificationRecipients, detailRecipientInputs, recipients } =
+      mountNotificationRecipients({ selectedJob: makeJob({ id: 'job-alpha' }) })
     detailNotificationRecipients.timecards.push('existing@example.com')
     detailRecipientInputs.timecards = ' NEW@Example.com '
 
     await recipients.addRecipientToTarget('job', 'timecards')
 
-    expect(updateJobNotificationRecipientsMock).toHaveBeenCalledWith(
-      'job-alpha',
-      'timecards',
-      ['existing@example.com', 'new@example.com'],
-    )
-    expect(detailNotificationRecipients.timecards).toEqual(['existing@example.com', 'new@example.com'])
+    expect(updateJobNotificationRecipientsMock).toHaveBeenCalledWith('job-alpha', 'timecards', [
+      'existing@example.com',
+      'new@example.com',
+    ])
+    expect(detailNotificationRecipients.timecards).toEqual([
+      'existing@example.com',
+      'new@example.com',
+    ])
     expect(detailRecipientInputs.timecards).toBe('')
     expect(detailInfo.value).toBe('Recipient added.')
     expect(recipients.recipientSaving.value).toBe(false)
 
     await recipients.removeRecipientFromTarget('job', 'timecards', 'existing@example.com')
 
-    expect(updateJobNotificationRecipientsMock).toHaveBeenLastCalledWith(
-      'job-alpha',
-      'timecards',
-      ['new@example.com'],
-    )
+    expect(updateJobNotificationRecipientsMock).toHaveBeenLastCalledWith('job-alpha', 'timecards', [
+      'new@example.com',
+    ])
     expect(detailNotificationRecipients.timecards).toEqual(['new@example.com'])
     expect(detailInfo.value).toBe('Recipient removed.')
   })
 
   it('persists all-jobs recipient defaults and replaces only the edited module list', async () => {
-    const {
-      detailInfo,
-      globalNotificationRecipients,
-      globalRecipientInputs,
-      recipients,
-    } = mountNotificationRecipients()
+    const { detailInfo, globalNotificationRecipients, globalRecipientInputs, recipients } =
+      mountNotificationRecipients()
     globalNotificationRecipients.value = {
       dailyLogs: ['daily@example.com'],
       timecards: ['time@example.com'],
       shopOrders: ['shop@example.com'],
+      newJobs: ['jobs@example.com'],
+      fieldUserAssignments: ['assignments@example.com'],
     }
     globalRecipientInputs.dailyLogs = ' default@EXAMPLE.com '
 
     await recipients.addRecipientToTarget('all', 'dailyLogs')
 
-    expect(updateGlobalNotificationRecipientsMock).toHaveBeenCalledWith(
-      'dailyLogs',
-      ['daily@example.com', 'default@example.com'],
-    )
+    expect(updateGlobalNotificationRecipientsMock).toHaveBeenCalledWith('dailyLogs', [
+      'daily@example.com',
+      'default@example.com',
+    ])
     expect(globalNotificationRecipients.value).toEqual({
       dailyLogs: ['daily@example.com', 'default@example.com'],
       timecards: ['time@example.com'],
       shopOrders: ['shop@example.com'],
+      newJobs: ['jobs@example.com'],
+      fieldUserAssignments: ['assignments@example.com'],
     })
     expect(globalRecipientInputs.dailyLogs).toBe('')
     expect(detailInfo.value).toBe('Recipient added.')
 
     await recipients.removeRecipientFromTarget('all', 'dailyLogs', 'daily@example.com')
 
-    expect(updateGlobalNotificationRecipientsMock).toHaveBeenLastCalledWith(
-      'dailyLogs',
-      ['default@example.com'],
-    )
+    expect(updateGlobalNotificationRecipientsMock).toHaveBeenLastCalledWith('dailyLogs', [
+      'default@example.com',
+    ])
     expect(globalNotificationRecipients.value.dailyLogs).toEqual(['default@example.com'])
     expect(detailInfo.value).toBe('Recipient removed.')
+  })
+
+  it('persists job-event recipients only in the all-jobs target', async () => {
+    const { createError, globalNotificationRecipients, globalRecipientInputs, recipients } =
+      mountNotificationRecipients()
+    globalRecipientInputs.fieldUserAssignments = ' assignments@EXAMPLE.com '
+
+    await recipients.addRecipientToTarget('all', 'fieldUserAssignments')
+
+    expect(updateGlobalNotificationRecipientsMock).toHaveBeenCalledWith('fieldUserAssignments', [
+      'assignments@example.com',
+    ])
+    expect(globalNotificationRecipients.value.fieldUserAssignments).toEqual([
+      'assignments@example.com',
+    ])
+
+    await recipients.addRecipientToTarget('create', 'newJobs')
+    expect(createError.value).toBe('That email option is available only under All Jobs.')
+    expect(updateJobNotificationRecipientsMock).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'newJobs',
+      expect.anything(),
+    )
   })
 
   it('keeps pending input and local recipients unchanged when selected-job persistence fails', async () => {
@@ -223,11 +262,10 @@ describe('useJobNotificationRecipients', () => {
 
     await recipients.addRecipientToTarget('job', 'shopOrders')
 
-    expect(updateJobNotificationRecipientsMock).toHaveBeenCalledWith(
-      'job-alpha',
-      'shopOrders',
-      ['existing@example.com', 'new@example.com'],
-    )
+    expect(updateJobNotificationRecipientsMock).toHaveBeenCalledWith('job-alpha', 'shopOrders', [
+      'existing@example.com',
+      'new@example.com',
+    ])
     expect(detailNotificationRecipients.shopOrders).toEqual(['existing@example.com'])
     expect(detailRecipientInputs.shopOrders).toBe('new@example.com')
     expect(detailInfo.value).toBe('')

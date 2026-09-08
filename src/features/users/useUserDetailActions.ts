@@ -1,9 +1,11 @@
 import { currentRoleCanBeAssignedJobs } from '@/auth/roles'
+import { getUserDetailUpdateRole, type UserDetailFormState } from '@/features/users/userViewHelpers'
 import {
-  getUserDetailUpdateRole,
-  type UserDetailFormState,
-} from '@/features/users/userViewHelpers'
-import { deleteUserByAdmin, updateUser } from '@/services/users'
+  deleteUserByAdmin,
+  resendUserInviteByAdmin,
+  sendUserPasswordResetByAdmin,
+  updateUser,
+} from '@/services/users'
 import type { UserProfile } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
@@ -11,6 +13,7 @@ interface UseUserDetailActionsOptions {
   deleteConfirmOpen: WritableRef<boolean>
   deleteLoading: WritableRef<boolean>
   detailError: ReadonlyRef<string>
+  emailAction: WritableRef<'invite' | 'reset' | null>
   detailForm: UserDetailFormState
   editingSelf: ReadonlyRef<boolean>
   hasUnsavedDetailChanges: (user: UserProfile | null) => boolean
@@ -30,6 +33,7 @@ export function useUserDetailActions({
   deleteConfirmOpen,
   deleteLoading,
   detailError,
+  emailAction,
   detailForm,
   editingSelf,
   hasUnsavedDetailChanges,
@@ -53,27 +57,28 @@ export function useUserDetailActions({
     }
   }
 
-  async function handleAutoSaveUser() {
-    if (!selectedUser.value) return
+  async function handleAutoSaveUser(): Promise<boolean> {
+    const user = selectedUser.value
+    if (!user || saveLoading.value) return false
 
     clearDetailSaveTimer()
     setDetailErrorMessage('')
 
-    if (!hasUnsavedDetailChanges(selectedUser.value)) {
+    if (!hasUnsavedDetailChanges(user)) {
       setDetailInfo('Changes save automatically.')
-      return
+      return true
     }
 
     if (!detailForm.firstName.trim() || !detailForm.lastName.trim()) {
       setDetailErrorMessage('Enter the first name and last name.')
-      return
+      return false
     }
 
     saveLoading.value = true
     setDetailInfo('Saving changes...')
     try {
-      const role = getUserDetailUpdateRole(selectedUser.value, detailForm.role)
-      await updateUser(selectedUser.value.id, {
+      const role = getUserDetailUpdateRole(user, detailForm.role)
+      await updateUser(user.id, {
         firstName: detailForm.firstName,
         lastName: detailForm.lastName,
         role,
@@ -81,9 +86,15 @@ export function useUserDetailActions({
         assignedJobIds: currentRoleCanBeAssignedJobs(role) ? detailForm.assignedJobIds : [],
       })
 
-      setDetailInfo('All changes saved.')
+      if (selectedUser.value?.id === user.id) {
+        setDetailInfo('All changes saved.')
+      }
+      return true
     } catch (error) {
-      setDetailError(error, 'Failed to update user.')
+      if (selectedUser.value?.id === user.id) {
+        setDetailError(error, 'Failed to update user.')
+      }
+      return false
     } finally {
       saveLoading.value = false
     }
@@ -111,27 +122,43 @@ export function useUserDetailActions({
   }
 
   async function handleDeleteUser() {
-    if (!selectedUser.value || editingSelf.value) return
+    if (
+      !selectedUser.value ||
+      editingSelf.value ||
+      deleteLoading.value ||
+      emailAction.value !== null ||
+      saveLoading.value
+    )
+      return
     deleteConfirmOpen.value = true
   }
 
   async function confirmDeleteUser() {
-    if (!selectedUser.value || editingSelf.value) {
+    const user = selectedUser.value
+    if (!user || editingSelf.value) {
       deleteConfirmOpen.value = false
       return
     }
+    if (deleteLoading.value || emailAction.value !== null || saveLoading.value) return
 
     setDetailErrorMessage('')
     deleteLoading.value = true
     try {
-      const result = await deleteUserByAdmin(selectedUser.value.id)
-      setDetailInfo(result.message || 'User deleted.')
-      selectedUserId.value = null
-      resetCreateForm()
+      const result = await deleteUserByAdmin(user.id)
+      if (selectedUserId.value === user.id || selectedUserId.value === null) {
+        setDetailInfo(result.message || 'User deleted.')
+        selectedUserId.value = null
+        resetCreateForm()
+      }
       deleteConfirmOpen.value = false
     } catch (error) {
-      setDetailError(error, 'Failed to delete user.')
+      if (selectedUser.value?.id === user.id) {
+        setDetailError(error, 'Failed to delete user.')
+      }
     } finally {
+      if (selectedUser.value?.id !== user.id) {
+        deleteConfirmOpen.value = false
+      }
       deleteLoading.value = false
     }
   }
@@ -144,12 +171,86 @@ export function useUserDetailActions({
     void handleAutoSaveUser()
   }
 
+  async function handleResendInvite() {
+    const user = selectedUser.value
+    const email = user?.email?.trim()
+    if (
+      !user ||
+      deleteConfirmOpen.value ||
+      deleteLoading.value ||
+      emailAction.value !== null ||
+      saveLoading.value
+    )
+      return
+
+    setDetailErrorMessage('')
+    setDetailInfo('')
+    if (!email) {
+      setDetailErrorMessage('This user does not have an email address.')
+      return
+    }
+
+    if (!(await handleAutoSaveUser()) || selectedUser.value?.id !== user.id) return
+
+    emailAction.value = 'invite'
+    try {
+      const result = await resendUserInviteByAdmin(user.id)
+      if (selectedUser.value?.id === user.id) {
+        setDetailInfo(result.message || `Invite email sent to ${email}.`)
+      }
+    } catch (error) {
+      if (selectedUser.value?.id === user.id) {
+        setDetailError(error, `Failed to resend invite email to ${email}.`)
+      }
+    } finally {
+      emailAction.value = null
+    }
+  }
+
+  async function handleSendPasswordReset() {
+    const user = selectedUser.value
+    const email = user?.email?.trim()
+    if (
+      !user ||
+      deleteConfirmOpen.value ||
+      deleteLoading.value ||
+      emailAction.value !== null ||
+      saveLoading.value
+    )
+      return
+
+    setDetailErrorMessage('')
+    setDetailInfo('')
+    if (!email) {
+      setDetailErrorMessage('This user does not have an email address.')
+      return
+    }
+
+    if (!(await handleAutoSaveUser()) || selectedUser.value?.id !== user.id) return
+
+    emailAction.value = 'reset'
+    try {
+      const result = await sendUserPasswordResetByAdmin(user.id)
+      if (selectedUser.value?.id === user.id) {
+        setDetailInfo(result.message || `Password reset email sent to ${email}.`)
+      }
+    } catch (error) {
+      if (selectedUser.value?.id === user.id) {
+        setDetailError(error, `Failed to send password reset email to ${email}.`)
+      }
+    } finally {
+      emailAction.value = null
+    }
+  }
+
   return {
     clearDetailSaveTimer,
     confirmDeleteUser,
     handleAutoSaveUser,
     handleDeleteUser,
     handleDetailAssignedJobToggle,
+    handleResendInvite,
+    handleSendPasswordReset,
     queueDetailSave,
   }
 }

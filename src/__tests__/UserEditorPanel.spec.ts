@@ -53,8 +53,10 @@ function mountEditor(overrides: Partial<InstanceType<typeof UserEditorPanel>['$p
       selectedUser,
       editingSelf: false,
       createAction: null,
+      emailAction: null,
       saveLoading: false,
       deleteLoading: false,
+      deleteConfirmOpen: false,
       detailInfo: 'All changes saved.',
       createJobs: [makeJob()],
       detailJobs: [makeJob()],
@@ -79,10 +81,16 @@ describe('UserEditorPanel', () => {
     expect(wrapper.text()).toContain('Create User & Send Invite')
     expect(wrapper.text()).toContain('Assigned Jobs')
     expect(wrapper.text()).toContain('1 selected')
-    expect(wrapper.get<HTMLInputElement>('input[type="email"]').element.value).toBe('new.user@example.com')
+    expect(wrapper.get<HTMLInputElement>('input[type="email"]').element.value).toBe(
+      'new.user@example.com',
+    )
     expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('project-manager')
-    expect(wrapper.get<HTMLInputElement>('input[autocomplete="given-name"]').element.value).toBe('New')
-    expect(wrapper.get<HTMLInputElement>('input[autocomplete="family-name"]').element.value).toBe('User')
+    expect(wrapper.get<HTMLInputElement>('input[autocomplete="given-name"]').element.value).toBe(
+      'New',
+    )
+    expect(wrapper.get<HTMLInputElement>('input[autocomplete="family-name"]').element.value).toBe(
+      'User',
+    )
 
     await wrapper.get('input[type="email"]').setValue('other@example.com')
     await wrapper.get('select').setValue('admin')
@@ -128,8 +136,12 @@ describe('UserEditorPanel', () => {
     expect(wrapper.text()).toContain('Project Manager')
     expect(wrapper.text()).toContain('Active')
     expect(wrapper.text()).toContain('Delete User')
+    expect(wrapper.text()).toContain('Resend Invite')
+    expect(wrapper.text()).toContain('Send Password Reset')
     expect(wrapper.text()).toContain('All changes saved.')
-    expect(wrapper.get<HTMLInputElement>('input[type="email"]').attributes('readonly')).toBeDefined()
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="email"]').attributes('readonly'),
+    ).toBeDefined()
     expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('project-manager')
 
     await wrapper.get('select').setValue('foreman')
@@ -139,6 +151,9 @@ describe('UserEditorPanel', () => {
     await wrapper.get('input[type="search"]').setValue('office')
     await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(false)
     await wrapper.get('form').trigger('submit')
+    const emailActionButtons = wrapper.findAll('.users-detail__email-actions button')
+    await emailActionButtons[0]!.trigger('click')
+    await emailActionButtons[1]!.trigger('click')
     await wrapper.get('button.app-button--danger').trigger('click')
 
     expect(wrapper.emitted('updateDetailRole')).toEqual([['foreman']])
@@ -150,7 +165,52 @@ describe('UserEditorPanel', () => {
     expect(wrapper.emitted('updateDetailJobSearchTerm')).toEqual([['office']])
     expect(wrapper.emitted('toggleDetailAssignedJob')).toEqual([['job-1']])
     expect(wrapper.emitted('detailSubmit')).toHaveLength(1)
+    expect(wrapper.emitted('resendInvite')).toHaveLength(1)
+    expect(wrapper.emitted('sendPasswordReset')).toHaveLength(1)
     expect(wrapper.emitted('deleteUser')).toHaveLength(1)
+  })
+
+  it('keeps account email actions visible and locks them while sending, saving, or without an email', () => {
+    const sending = mountEditor({ emailAction: 'invite' })
+    const sendingButtons = sending.findAll('.users-detail__email-actions button')
+
+    expect(sendingButtons).toHaveLength(2)
+    expect(sendingButtons[0]!.text()).toBe('Sending Invite...')
+    expect(sendingButtons[0]!.attributes('aria-busy')).toBe('true')
+    expect(sendingButtons[0]!.attributes('disabled')).toBeDefined()
+    expect(sendingButtons[1]!.attributes('disabled')).toBeDefined()
+    expect(sending.get('button.app-button--danger').attributes('disabled')).toBeDefined()
+
+    const saving = mountEditor({ saveLoading: true })
+    const savingButtons = saving.findAll('.users-detail__email-actions button')
+
+    expect(savingButtons).toHaveLength(2)
+    expect(savingButtons.every((button) => button.attributes('disabled') !== undefined)).toBe(true)
+
+    const deleting = mountEditor({ deleteLoading: true })
+    expect(
+      deleting
+        .findAll('.users-detail__email-actions button')
+        .every((button) => button.attributes('disabled') !== undefined),
+    ).toBe(true)
+
+    const confirmingDelete = mountEditor({ deleteConfirmOpen: true })
+    expect(
+      confirmingDelete
+        .findAll('.users-detail__email-actions button')
+        .every((button) => button.attributes('disabled') !== undefined),
+    ).toBe(true)
+
+    const withoutEmail = mountEditor({
+      selectedUser: makeUser({ email: null }),
+    })
+    const unavailableButtons = withoutEmail.findAll('.users-detail__email-actions button')
+
+    expect(unavailableButtons).toHaveLength(2)
+    expect(unavailableButtons.every((button) => button.attributes('disabled') !== undefined)).toBe(
+      true,
+    )
+    expect(withoutEmail.text()).toContain('This user does not have an email address.')
   })
 
   it('locks self-edit role, active state, and delete controls to avoid account lockout', () => {
@@ -165,6 +225,9 @@ describe('UserEditorPanel', () => {
     expect(wrapper.get('select').classes()).toContain('users-form__control--locked')
     expect(wrapper.findAll('input[type="checkbox"]')[0]!.attributes('aria-disabled')).toBe('true')
     expect(wrapper.findAll('input[type="checkbox"]')[0]!.attributes('tabindex')).toBe('-1')
+    expect(wrapper.findAll('.users-detail__email-actions button')).toHaveLength(2)
+    expect(wrapper.text()).toContain('Resend Invite')
+    expect(wrapper.text()).toContain('Send Password Reset')
   })
 
   it('renders save-loading state and hides assigned jobs for non-assignable roles', () => {
@@ -206,7 +269,11 @@ describe('UserEditorPanel', () => {
 
     expect(wrapper.text()).toContain('No Access')
     expect(wrapper.find('select').exists()).toBe(false)
-    expect(wrapper.findAll<HTMLInputElement>('input[readonly]').some((input) => input.element.value === 'No Access')).toBe(true)
+    expect(
+      wrapper
+        .findAll<HTMLInputElement>('input[readonly]')
+        .some((input) => input.element.value === 'No Access'),
+    ).toBe(true)
     expect(wrapper.text()).not.toContain('Assigned Jobs')
   })
 

@@ -62,6 +62,7 @@ const mobileToolbarTabs = timecardExportMobileToolbarTabs
 const auth = useAuthStore()
 const jobsStore = useJobsStore()
 const router = useRouter()
+const canReopenSubmittedWeeks = computed(() => auth.rawRole === 'admin')
 
 const {
   pageError,
@@ -328,12 +329,20 @@ const {
 } = useTimecardExportMutationActions({
   actionLoading,
   canEditWeek,
+  cards,
   deleteWeekCache,
   flushPendingSaves,
+  getCanReopenSubmittedWeeks: () => canReopenSubmittedWeeks.value,
   getCanUseTimecardExport: () => auth.canUseTimecardExport,
   resetPageAndSaveMessages,
+  revealCard: (cardId) => {
+    filters.cardSearch = ''
+    expandAndSelectCard(cardId)
+    scrollCardIntoView(cardId)
+  },
   selectCard,
   setPageError,
+  setPageErrorMessage,
   setPageInfo,
   timecardExportConfirmAction,
 })
@@ -392,6 +401,7 @@ useTimecardExportLifecycle({
         :week-status-options="weekStatusOptions"
         :sort-mode="sortMode"
         :can-use-timecard-export="auth.canUseTimecardExport"
+        :can-reopen-submitted-weeks="canReopenSubmittedWeeks"
         :action-loading="actionLoading"
         :show-create-tray="showCreateTray"
         :filtered-weeks="filteredWeeks"

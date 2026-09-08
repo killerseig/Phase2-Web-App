@@ -223,9 +223,7 @@ function getOrderItemLineTotalLabel(item: ShopOrderItemRecord) {
 }
 
 .shop-orders-item-card--line:nth-of-type(even) {
-  background:
-    linear-gradient(90deg, rgba(99, 199, 230, 0.055), transparent 42%),
-    rgba(255, 255, 255, 0.025);
+  background: var(--panel-background);
 }
 
 .shop-orders-item-card--line:nth-of-type(odd) {
@@ -233,9 +231,7 @@ function getOrderItemLineTotalLabel(item: ShopOrderItemRecord) {
 }
 
 .shop-orders-item-card--line:hover {
-  background:
-    linear-gradient(90deg, rgba(99, 199, 230, 0.09), transparent 46%),
-    rgba(255, 255, 255, 0.04);
+  background: var(--field-hover);
 }
 
 .shop-orders-item-card--readonly {
@@ -277,7 +273,7 @@ function getOrderItemLineTotalLabel(item: ShopOrderItemRecord) {
   --app-text-input-border: var(--shop-line);
   --app-text-input-radius: var(--shop-radius-md);
   --app-text-input-background: var(--shop-field);
-  --app-text-input-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --app-text-input-box-shadow: none;
 }
 
 .shop-orders-item-card__qty-input {
@@ -318,7 +314,7 @@ function getOrderItemLineTotalLabel(item: ShopOrderItemRecord) {
   min-height: 8.5rem;
   padding: 0.85rem;
   border: 1px dashed rgba(140, 162, 186, 0.1);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   text-align: center;
 }

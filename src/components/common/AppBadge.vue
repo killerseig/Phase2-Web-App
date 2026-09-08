@@ -27,19 +27,19 @@ withDefaults(defineProps<{
   min-height: var(--app-badge-min-height, 1.85rem);
   padding: var(--app-badge-padding, 0 0.6rem);
   border: 1px solid var(--app-badge-border-color, var(--border));
-  border-radius: var(--app-badge-border-radius, 999px);
+  border-radius: var(--app-badge-border-radius, var(--radius-sm));
   background: var(--app-badge-background, rgba(255, 255, 255, 0.035));
   color: var(--app-badge-color, var(--text-muted));
   font-size: var(--app-badge-font-size, 0.7rem);
-  letter-spacing: var(--app-badge-letter-spacing, 0.12em);
+  letter-spacing: var(--app-badge-letter-spacing, 0.04em);
   text-transform: var(--app-badge-text-transform, uppercase);
   white-space: var(--app-badge-white-space, normal);
 }
 
 .app-badge--accent {
-  border-color: var(--app-badge-accent-border-color, rgba(88, 186, 233, 0.24));
-  background: var(--app-badge-accent-background, rgba(38, 74, 96, 0.28));
-  color: var(--app-badge-accent-color, var(--accent));
+  border-color: var(--app-badge-accent-border-color, var(--border));
+  background: var(--app-badge-accent-background, var(--field));
+  color: var(--app-badge-accent-color, var(--text-muted));
 }
 
 .app-badge--success {

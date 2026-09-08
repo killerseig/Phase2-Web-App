@@ -55,10 +55,27 @@ function normalizeNotificationRecipients(
   }
 }
 
+function normalizeGlobalNotificationRecipients(
+  value: unknown,
+  legacyFallbacks?: Partial<NotificationRecipients>,
+): GlobalNotificationRecipients {
+  const data = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+
+  return {
+    ...normalizeNotificationRecipients(data, legacyFallbacks),
+    newJobs: normalizeRecipientList(data.newJobs),
+    fieldUserAssignments: normalizeRecipientList(data.fieldUserAssignments),
+  }
+}
+
 export interface JobDetails {
   id: string
   name: string
   number: string | number
+  projectManager?: string | null
+  foreman?: string | null
+  gc?: string | null
+  jobAddress?: string | null
   assignedForemanIds?: string[]
   productionBurden?: number | null
 }
@@ -71,11 +88,16 @@ export interface NotificationRecipients {
   shopOrders: string[]
 }
 
+export interface GlobalNotificationRecipients extends NotificationRecipients {
+  newJobs: string[]
+  fieldUserAssignments: string[]
+}
+
 export interface EmailSettings {
   timecardSubmitRecipients?: string[]
   shopOrderSubmitRecipients?: string[]
   dailyLogSubmitRecipients?: string[]
-  globalNotificationRecipients: NotificationRecipients
+  globalNotificationRecipients: GlobalNotificationRecipients
 }
 
 export interface UserProfile {
@@ -95,12 +117,17 @@ export interface UserProfile {
 export async function getJobDetails(jobId: string): Promise<JobDetails | null> {
   const jobSnap = await getDb().collection(COLLECTIONS.JOBS).doc(jobId).get()
   if (!jobSnap.exists) return null
-  
+
   const data = jobSnap.data()
   return {
     id: jobSnap.id,
     name: data?.name || DEFAULTS.JOB_NAME,
     number: data?.number || data?.code || '',
+    projectManager:
+      typeof data?.projectManager === 'string' ? data.projectManager.trim() || null : null,
+    foreman: typeof data?.foreman === 'string' ? data.foreman.trim() || null : null,
+    gc: typeof data?.gc === 'string' ? data.gc.trim() || null : null,
+    jobAddress: typeof data?.jobAddress === 'string' ? data.jobAddress.trim() || null : null,
     assignedForemanIds: normalizeIdList(data?.assignedForemanIds),
     productionBurden: typeof data?.productionBurden === 'number' ? data.productionBurden : null,
   }
@@ -112,7 +139,7 @@ export async function getJobDetails(jobId: string): Promise<JobDetails | null> {
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const userSnap = await getDb().collection(COLLECTIONS.USERS).doc(uid).get()
   if (!userSnap.exists) return null
-  
+
   const data = userSnap.data()
   return {
     uid: userSnap.id,
@@ -132,7 +159,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 export async function getUserDisplayName(uid: string, fallback?: string): Promise<string> {
   const user = await getUserProfile(uid)
   if (!user) return fallback || DEFAULTS.USER_NAME
-  
+
   if (user.firstName && user.lastName) {
     return `${user.firstName} ${user.lastName}`
   }
@@ -172,7 +199,12 @@ export async function getDailyLog(jobId: string, dailyLogId: string): Promise<an
     }
   }
 
-  const logSnap = await getDb().collection('jobs').doc(jobId).collection('dailyLogs').doc(dailyLogId).get()
+  const logSnap = await getDb()
+    .collection('jobs')
+    .doc(jobId)
+    .collection('dailyLogs')
+    .doc(dailyLogId)
+    .get()
   if (!logSnap.exists) return null
   return {
     id: logSnap.id,
@@ -207,6 +239,8 @@ export async function getEmailSettings(): Promise<EmailSettings> {
         dailyLogs: [],
         timecards: [],
         shopOrders: [],
+        newJobs: [],
+        fieldUserAssignments: [],
       },
     }
   }
@@ -219,11 +253,14 @@ export async function getEmailSettings(): Promise<EmailSettings> {
     timecardSubmitRecipients,
     shopOrderSubmitRecipients,
     dailyLogSubmitRecipients,
-    globalNotificationRecipients: normalizeNotificationRecipients(data.globalNotificationRecipients, {
-      dailyLogs: dailyLogSubmitRecipients,
-      timecards: timecardSubmitRecipients,
-      shopOrders: shopOrderSubmitRecipients,
-    }),
+    globalNotificationRecipients: normalizeGlobalNotificationRecipients(
+      data.globalNotificationRecipients,
+      {
+        dailyLogs: dailyLogSubmitRecipients,
+        timecards: timecardSubmitRecipients,
+        shopOrders: shopOrderSubmitRecipients,
+      },
+    ),
   }
 }
 
@@ -239,14 +276,10 @@ export async function getJobNotificationRecipients(
     dailyLogs: data.dailyLogRecipients,
   })
 
-  const legacyOfficeDailyLogRecipients = moduleKey === 'dailyLogs'
-    ? normalizeRecipientList(data.adminDailyLogRecipients)
-    : []
+  const legacyOfficeDailyLogRecipients =
+    moduleKey === 'dailyLogs' ? normalizeRecipientList(data.adminDailyLogRecipients) : []
 
   return Array.from(
-    new Set([
-      ...notificationRecipients[moduleKey],
-      ...legacyOfficeDailyLogRecipients,
-    ]),
+    new Set([...notificationRecipients[moduleKey], ...legacyOfficeDailyLogRecipients]),
   )
 }

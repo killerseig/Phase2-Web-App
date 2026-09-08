@@ -34,7 +34,7 @@ code {
 }
 
 * {
-  scrollbar-color: rgba(154, 176, 195, 0.48) rgba(255, 255, 255, 0.06);
+  scrollbar-color: #555555 var(--bg);
   scrollbar-width: thin;
 }
 
@@ -44,27 +44,23 @@ code {
 }
 
 *::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.045);
-  border-radius: 999px;
+  background: var(--bg);
+  border-radius: 0;
 }
 
 *::-webkit-scrollbar-thumb {
-  background:
-    linear-gradient(180deg, rgba(145, 220, 255, 0.55), rgba(111, 136, 157, 0.45));
-  border: 2px solid rgba(15, 23, 31, 0.72);
-  border-radius: 999px;
+  background: #555555;
+  border: 2px solid var(--bg);
+  border-radius: 0;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background:
-    linear-gradient(180deg, rgba(145, 220, 255, 0.76), rgba(111, 136, 157, 0.62));
+  background: #707070;
 }
 
 :where(input:not([type="checkbox"]):not([type="radio"]), textarea):focus-visible {
   outline: none;
   border-color: var(--border-strong);
   background: var(--field-hover);
-  box-shadow:
-    var(--focus-ring),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: var(--control-focus-shadow);
 }

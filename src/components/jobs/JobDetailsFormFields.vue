@@ -116,7 +116,7 @@ function handleSelectInput(field: JobDetailsField, value: string) {
 .jobs-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: var(--form-gap);
 }
 
 .jobs-form__field--full {
@@ -124,9 +124,9 @@ function handleSelectInput(field: JobDetailsField, value: string) {
 }
 
 .app-field .app-select {
-  --app-select-min-height: 2.8rem;
-  --app-select-padding-x: 0.9rem;
-  --app-select-background: rgba(255, 255, 255, 0.045);
+  --app-select-min-height: var(--control-height-form);
+  --app-select-padding-x: var(--control-padding-x);
+  --app-select-background: var(--control-background);
 }
 
 @media (max-width: 760px) {

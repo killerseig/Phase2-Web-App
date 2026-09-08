@@ -74,9 +74,9 @@ export function useDailyLogActions({
 
     const existingDraft = visibleLogs.value.find(
       (log) =>
-        log.status === 'draft'
-        && log.logDate === selectedDate.value
-        && log.foremanUserId === currentUserId.value,
+        log.status === 'draft' &&
+        log.logDate === selectedDate.value &&
+        log.foremanUserId === currentUserId.value,
     )
     if (existingDraft) {
       selectedLogId.value = existingDraft.id
@@ -120,7 +120,9 @@ export function useDailyLogActions({
     const saved = await saveDraftImmediately()
     if (!saved) return
 
-    setActionInfo(hadUnsavedChanges ? 'Daily log draft saved.' : 'Daily log draft is already saved.')
+    setActionInfo(
+      hadUnsavedChanges ? 'Daily log draft saved.' : 'Daily log draft is already saved.',
+    )
   }
 
   async function handleSubmit() {
@@ -166,7 +168,9 @@ export function useDailyLogActions({
 
         setActionInfo('Daily log submitted and emailed.')
       } catch (emailError) {
-        setActionError(`Daily log submitted, but email failed. ${normalizeError(emailError, 'Failed to send the daily log email.')}`)
+        setActionError(
+          `Daily log submitted, but email failed. ${normalizeError(emailError, 'Failed to send the daily log email.')}`,
+        )
       }
     } catch (error) {
       setActionError(normalizeError(error, 'Failed to submit the daily log.'))
@@ -188,8 +192,12 @@ export function useDailyLogActions({
     setActionError('')
 
     try {
-      const attachmentPaths = selectedLog.value.payload.attachments.map((attachment) => attachment.path)
-      await Promise.allSettled(attachmentPaths.map((path) => deleteDailyLogAttachment(path)))
+      const attachments = selectedLog.value.payload.attachments
+      await Promise.all(
+        attachments.map((attachment) =>
+          deleteDailyLogAttachment(attachment.path, attachment.thumbnailPath),
+        ),
+      )
       await deleteDailyLogRecord(selectedLog.value.id)
       selectedLogId.value = null
       setActionInfo('Daily log draft deleted.')

@@ -453,7 +453,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
             <thead>
               <tr>
                 <th>JOB #</th>
-                <th>1</th>
+                <th>AREA</th>
                 <th></th>
                 <th>ACCT</th>
                 <th>DIF</th>

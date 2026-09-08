@@ -48,21 +48,21 @@ withDefaults(defineProps<{
 }
 
 .app-section-header__eyebrow {
-  color: var(--app-section-header-eyebrow-color, var(--accent-strong));
-  font-size: var(--app-section-header-eyebrow-font-size, 0.72rem);
+  color: var(--app-section-header-eyebrow-color, var(--text-muted));
+  font-size: var(--app-section-header-eyebrow-font-size, var(--font-size-eyebrow));
   font-weight: var(--app-section-header-eyebrow-font-weight, 500);
   line-height: var(--app-section-header-eyebrow-line-height, 1.2);
-  letter-spacing: var(--app-section-header-eyebrow-letter-spacing, 0.14em);
+  letter-spacing: var(--app-section-header-eyebrow-letter-spacing, var(--letter-spacing-eyebrow));
   text-transform: var(--app-section-header-eyebrow-text-transform, uppercase);
 }
 
 .app-section-header__title {
   margin: 0;
   color: var(--app-section-header-title-color, var(--accent-strong));
-  font-size: var(--app-section-header-title-font-size, 0.72rem);
+  font-size: var(--app-section-header-title-font-size, var(--font-size-eyebrow));
   font-weight: var(--app-section-header-title-font-weight, 500);
   line-height: var(--app-section-header-title-line-height, 1.2);
-  letter-spacing: var(--app-section-header-title-letter-spacing, 0.14em);
+  letter-spacing: var(--app-section-header-title-letter-spacing, var(--letter-spacing-eyebrow));
   text-transform: var(--app-section-header-title-text-transform, uppercase);
 }
 

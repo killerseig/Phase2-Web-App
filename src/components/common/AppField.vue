@@ -21,7 +21,8 @@ defineProps<{
 <style scoped>
 .app-field {
   display: grid;
-  gap: var(--app-field-gap, 0.45rem);
+  min-width: 0;
+  gap: var(--app-field-gap, var(--field-gap));
   color: var(--app-field-color, var(--text-muted));
 }
 

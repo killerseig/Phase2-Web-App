@@ -41,15 +41,49 @@ const nestedDailyLogRecord = {
       {
         name: 'level-1-photo.jpg',
         url: 'https://example.com/level-1-photo.jpg',
+        thumbnailUrl: 'https://example.com/thumbnails/level-1-photo.jpg',
         path: 'daily-logs/daily-log-1/level-1-photo.jpg',
         type: 'photo',
         description: 'Level 1 progress photo',
+      },
+      ...Array.from({ length: 6 }, (_, index) => ({
+        name: `progress-${index + 2}.jpg`,
+        url: `https://example.com/originals/progress-${index + 2}.jpg`,
+        thumbnailUrl: `https://example.com/thumbnails/progress-${index + 2}.jpg`,
+        path: `daily-logs/daily-log-1/progress-${index + 2}.jpg`,
+        type: 'photo',
+        description: `Progress view ${index + 2}`,
+      })),
+      {
+        name: 'ptp-board.jpg',
+        url: 'https://example.com/originals/ptp-board.jpg',
+        thumbnailUrl: 'https://example.com/thumbnails/ptp-board.jpg',
+        path: 'daily-logs/daily-log-1/ptp-board.jpg',
+        type: 'ptp',
+        description: 'Signed PTP board',
+      },
+      {
+        name: 'qc-ceiling.jpg',
+        url: 'https://example.com/originals/qc-ceiling.jpg',
+        thumbnailUrl: 'https://example.com/thumbnails/qc-ceiling.jpg',
+        path: 'daily-logs/daily-log-1/qc-ceiling.jpg',
+        type: 'qc',
+        description: 'Completed ceiling inspection',
       },
     ],
   },
 }
 
 const normalizedPayload = normalizeDailyLogEmailPayload(nestedDailyLogRecord)
+const inlinePhotoPreviews = [
+  ...Array.from({ length: 6 }, (_, index) => ({
+    section: 'photo',
+    position: index + 1,
+    contentId: `daily-log-photo-${index + 1}@phase2.local`,
+  })),
+  { section: 'ptp', position: 1, contentId: 'daily-log-ptp-1@phase2.local' },
+  { section: 'qc', position: 1, contentId: 'daily-log-qc-1@phase2.local' },
+]
 
 assert.equal(
   normalizedPayload.projectName,
@@ -61,15 +95,15 @@ assert.equal(
   'Chris (CJ) Larsen',
   'nested payload foreman should normalize',
 )
-assert.equal(normalizedPayload.attachments.length, 1, 'nested payload attachments should normalize')
+assert.equal(normalizedPayload.attachments.length, 9, 'nested payload attachments should normalize')
 
 const html = buildDailyLogEmail(
   { id: 'job-1', name: 'Warehouse Retrofit', number: '9411' },
   nestedDailyLogRecord.logDate,
   nestedDailyLogRecord,
   {
-    dailyLogUrl:
-      'https://phase2-website.web.app/daily-log-gallery/daily-log-gallery-share',
+    dailyLogUrl: 'https://phase2-website.web.app/daily-log-gallery/daily-log-gallery-share',
+    inlinePhotoPreviews,
   },
 )
 
@@ -79,7 +113,6 @@ for (const expectedText of [
   '9411',
   'Chris (CJ) Larsen',
   'Dan Project Manager',
-  'Four installers on site',
   'Finish layout and hang grid',
   'Crew size is on track',
   'Acoustics',
@@ -94,8 +127,12 @@ for (const expectedText of [
   'Tile replaced before closeout',
   'GC requested early start tomorrow',
   'Confirm delivery time with shop',
-  '1 photo saved with this daily log.',
-  'View Photo Gallery (1)',
+  '7 photos',
+  '1 photo',
+  'View All 7 Photos',
+  'Level 1 progress photo',
+  'Signed PTP board',
+  'Completed ceiling inspection',
 ]) {
   assert.equal(
     html.includes(expectedText),
@@ -131,13 +168,29 @@ assert.equal(
 )
 assert.equal(
   html.includes('Level 1 progress photo'),
-  false,
-  'photo descriptions should stay in the gallery instead of lengthening the email',
+  true,
+  'photo descriptions should remain beside email thumbnails',
+)
+assert.equal(html.includes('<img '), true, 'email should include lightweight photo previews')
+assert.equal(
+  html.includes('src="cid:daily-log-photo-1@phase2.local"'),
+  true,
+  'email previews should use inline CID sources instead of remote URLs',
 )
 assert.equal(
-  html.includes('<img '),
+  (html.match(/<img /g) || []).length,
+  8,
+  'email should cap Photos at six while independently previewing PTP and QC photos',
+)
+assert.equal(
+  html.includes('https://example.com/level-1-photo.jpg'),
   false,
-  'photo previews should stay in the gallery instead of lengthening the email',
+  'email should never load a larger gallery original',
+)
+assert.equal(
+  html.includes('View All 1 PTP Photos'),
+  false,
+  'sections at or below six photos should not include an overflow button',
 )
 assert.equal(
   html.includes('What areas were inspected?:'),

@@ -38,6 +38,7 @@ defineProps<{
   weekStatusOptions: { label: string; value: WeekStatusFilter }[]
   sortMode: SortMode
   canUseTimecardExport: boolean
+  canReopenSubmittedWeeks: boolean
   actionLoading: boolean
   showCreateTray: boolean
   filteredWeeks: readonly TimecardWeekRecord[]
@@ -113,6 +114,7 @@ const emit = defineEmits<{
       :weeks="filteredWeeks"
       :weeks-loading="weeksLoading"
       :can-use-timecard-export="canUseTimecardExport"
+      :can-reopen-submitted-weeks="canReopenSubmittedWeeks"
       :action-loading="actionLoading"
       :mobile-active="activeMobileToolbarTab === 'saved'"
       :format-date="formatDate"
@@ -129,42 +131,9 @@ const emit = defineEmits<{
 <style src="./timecard-toolbar-content.css" scoped></style>
 
 <style scoped>
-@media (min-width: 1280px) {
+@media (min-width: 961px) {
   .timecards-toolbar {
-    grid-template-columns:
-      minmax(18rem, 1.22fr)
-      minmax(18rem, 1.22fr)
-      minmax(17rem, 1.04fr)
-      minmax(16.5rem, 1.05fr)
-      minmax(17rem, 1.1fr);
-    grid-template-areas:
-      'weeks archive sort actions saved'
-      'weeks archive sort actions saved'
-      'status status status status status';
-  }
-
-  .timecards-toolbar__group--weeks {
-    grid-area: weeks;
-  }
-
-  .timecards-toolbar__group--archive {
-    grid-area: archive;
-  }
-
-  .timecards-toolbar__group--sort {
-    grid-area: sort;
-  }
-
-  .timecards-toolbar__group--actions {
-    grid-area: actions;
-  }
-
-  .timecards-toolbar__group--history {
-    grid-area: saved;
-  }
-
-  .timecards-toolbar__group--status-bar {
-    grid-area: status;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
   }
 }
 

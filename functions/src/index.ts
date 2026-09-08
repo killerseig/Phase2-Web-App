@@ -1,7 +1,4 @@
-export {
-  sendDailyLogEmail,
-  sendShopOrderEmail,
-} from './operationsFunctions'
+export { sendDailyLogEmail, sendShopOrderEmail } from './operationsFunctions'
 
 export {
   createUserByAdmin,
@@ -10,7 +7,9 @@ export {
   listAssignableFieldUsers,
   removeEmailFromAllRecipientLists,
   requestPasswordResetEmail,
+  resendUserInviteByAdmin,
   sendPendingUserInvites,
+  sendUserPasswordResetByAdmin,
   setUserPassword,
   verifySetupToken,
 } from './userFunctions'
@@ -51,3 +50,8 @@ export {
   listVisibleJobsForCurrentUser,
   updateJobRecordCallable,
 } from './jobFunctions'
+
+export {
+  sendFieldUserAssignmentNotification,
+  sendNewJobNotification,
+} from './jobNotificationFunctions'

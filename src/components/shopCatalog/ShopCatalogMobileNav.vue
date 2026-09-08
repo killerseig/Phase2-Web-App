@@ -51,8 +51,8 @@ const emit = defineEmits<{
   min-height: 2.45rem;
   padding: 0 1rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
+  background: var(--field);
   color: var(--text-muted);
   font-weight: 600;
   cursor: pointer;

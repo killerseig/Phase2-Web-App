@@ -36,8 +36,10 @@ defineProps<{
   selectedUser: UserProfile | null
   editingSelf: boolean
   createAction: 'queue' | 'send' | null
+  emailAction: 'invite' | 'reset' | null
   saveLoading: boolean
   deleteLoading: boolean
+  deleteConfirmOpen: boolean
   detailInfo: string
   createJobs: readonly JobRecord[]
   detailJobs: readonly JobRecord[]
@@ -50,6 +52,8 @@ const emit = defineEmits<{
   createUser: [sendInvite: boolean]
   deleteUser: []
   detailSubmit: []
+  resendInvite: []
+  sendPasswordReset: []
   updateCreateTextField: [field: UserCreateTextField, value: string]
   updateCreateRole: [value: EditableUserRole]
   toggleCreateAssignedJob: [jobId: string]
@@ -178,7 +182,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
               loading-label="Deleting..."
               variant="danger"
               :loading="deleteLoading"
-              :disabled="deleteLoading || saveLoading"
+              :disabled="deleteLoading || saveLoading || emailAction !== null"
               @click="emit('deleteUser')"
             />
           </div>
@@ -236,6 +240,42 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
             </AppField>
           </div>
 
+          <div class="users-detail__email-actions" aria-label="User email actions">
+            <AppLoadingButton
+              label="Resend Invite"
+              loading-label="Sending Invite..."
+              :loading="emailAction === 'invite'"
+              :disabled="
+                deleteConfirmOpen ||
+                deleteLoading ||
+                emailAction !== null ||
+                saveLoading ||
+                !selectedUser.email?.trim()
+              "
+              type="button"
+              @click="emit('resendInvite')"
+            />
+            <AppLoadingButton
+              label="Send Password Reset"
+              loading-label="Sending Password Reset..."
+              variant="primary"
+              :loading="emailAction === 'reset'"
+              :disabled="
+                deleteConfirmOpen ||
+                deleteLoading ||
+                emailAction !== null ||
+                saveLoading ||
+                !selectedUser.email?.trim()
+              "
+              type="button"
+              @click="emit('sendPasswordReset')"
+            />
+          </div>
+
+          <AppStatusMessage v-if="!selectedUser.email?.trim()" tone="warning">
+            This user does not have an email address. Add one before sending account emails.
+          </AppStatusMessage>
+
           <label :class="['users-toggle-row', { 'users-toggle-row--locked': editingSelf }]">
             <AppCheckbox
               :model-value="detailForm.active"
@@ -262,10 +302,15 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
         </form>
 
         <AppStatusMessage v-if="editingSelf" tone="warning">
-          You are editing the currently signed-in account. Role, active state, and delete are locked to avoid accidental lockout.
+          You are editing the currently signed-in account. Role, active state, and delete are locked
+          to avoid accidental lockout.
         </AppStatusMessage>
         <SaveStatusIndicator
-          v-if="saveLoading || detailInfo === 'All changes saved.' || detailInfo === 'Changes save automatically.'"
+          v-if="
+            saveLoading ||
+            detailInfo === 'All changes saved.' ||
+            detailInfo === 'Changes save automatically.'
+          "
           :saving="saveLoading"
           :message="detailInfo"
           idle-message="Changes save automatically."
@@ -315,13 +360,13 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
 .users-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: var(--form-gap);
 }
 
 .users-form__field .app-select {
-  --app-select-min-height: 2.8rem;
-  --app-select-padding-x: 0.9rem;
-  --app-select-background: rgba(255, 255, 255, 0.045);
+  --app-select-min-height: var(--control-height-form);
+  --app-select-padding-x: var(--control-padding-x);
+  --app-select-background: var(--control-background);
 }
 
 .users-form__field .app-select:disabled {
@@ -343,7 +388,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
 .users-detail__status-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: var(--field-gap);
 }
 
 .users-toggle-row {
@@ -373,7 +418,13 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
 .users-detail__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: var(--action-gap);
+}
+
+.users-detail__email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--action-gap);
 }
 
 @media (max-width: 900px) {
@@ -382,6 +433,9 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
     height: auto;
     min-height: 0;
     overflow: visible;
+  }
+
+  .users-detail__body {
     padding-right: 0;
   }
 
@@ -392,6 +446,10 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
 
   .users-detail__actions .app-button {
     width: 100%;
+  }
+
+  .users-detail__email-actions .app-button {
+    flex: 1 1 12rem;
   }
 }
 

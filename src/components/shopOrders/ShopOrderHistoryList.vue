@@ -87,7 +87,7 @@ const emit = defineEmits<{
 .shop-orders-history-row:hover,
 .shop-orders-history-row--active {
   border-color: rgba(140, 162, 186, 0.06);
-  background: rgba(255, 255, 255, 0.026);
+  background: var(--field);
   transform: none;
 }
 
@@ -130,7 +130,7 @@ const emit = defineEmits<{
   min-height: 8.5rem;
   padding: 0.85rem;
   border: 1px dashed rgba(140, 162, 186, 0.1);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   text-align: center;
 }

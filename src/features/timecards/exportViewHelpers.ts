@@ -539,7 +539,7 @@ export function getTimecardExportConfirmTitle(action: TimecardExportConfirmActio
   if (action.kind === 'remove-card') return 'Delete saved timecard?'
   if (action.kind === 'delete-week') return 'Delete draft week?'
   if (action.kind === 'submit-week') return 'Submit draft week?'
-  return 'Undo submitted week?'
+  return 'Re-open submitted week for corrections?'
 }
 
 export function getTimecardExportConfirmMessage(action: TimecardExportConfirmAction | null) {
@@ -556,7 +556,7 @@ export function getTimecardExportConfirmMessage(action: TimecardExportConfirmAct
     return `Submit the week ending ${action.weekEndDate} for ${action.weekLabel}? The timecards will be marked submitted.`
   }
 
-  return `Move the submitted week ending ${action.weekEndDate} for ${action.weekLabel} back to draft?`
+  return `Re-open the submitted week ending ${action.weekEndDate} for ${action.weekLabel} so it can be corrected and resubmitted?`
 }
 
 export function getTimecardExportConfirmLabel(action: TimecardExportConfirmAction | null) {
@@ -564,7 +564,7 @@ export function getTimecardExportConfirmLabel(action: TimecardExportConfirmActio
   if (action.kind === 'remove-card') return 'Delete Card'
   if (action.kind === 'delete-week') return 'Delete Draft'
   if (action.kind === 'submit-week') return 'Submit Week'
-  return 'Undo Submitted'
+  return 'Re-open for Corrections'
 }
 
 export function sortTimecardExportCardsForMode<T extends TimecardCardRecord>(

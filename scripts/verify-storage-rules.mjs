@@ -27,13 +27,14 @@ connectStorageEmulator(storage, '127.0.0.1', 9199)
 
 const imageBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9])
 
-function imageMetadata(logId, uploadedBy) {
+function imageMetadata(logId, uploadedBy, variant = 'gallery-photo') {
   return {
     contentType: 'image/jpeg',
     customMetadata: {
       jobId: 'job-1',
       dailyLogId: logId,
       uploadedBy,
+      variant,
     },
   }
 }
@@ -57,9 +58,31 @@ try {
   const uploaderUid = uploader.user.uid
   const logId = 'daily-log-rules-check'
   const validPhoto = ref(storage, `daily-logs/${logId}/valid-photo.jpg`)
+  const validThumbnail = ref(storage, `daily-logs/${logId}/thumbnails/valid-photo.jpg`)
 
   await uploadBytes(validPhoto, imageBytes, imageMetadata(logId, uploaderUid))
+  await uploadBytes(
+    validThumbnail,
+    imageBytes,
+    imageMetadata(logId, uploaderUid, 'email-thumbnail'),
+  )
   await getBytes(validPhoto)
+  await getBytes(validThumbnail)
+
+  await expectDenied('Oversized email thumbnail', () =>
+    uploadBytes(
+      ref(storage, `daily-logs/${logId}/thumbnails/oversized.jpg`),
+      new Uint8Array(300 * 1024 + 1),
+      imageMetadata(logId, uploaderUid, 'email-thumbnail'),
+    ),
+  )
+
+  await expectDenied('Incorrect email thumbnail content type', () =>
+    uploadBytes(ref(storage, `daily-logs/${logId}/thumbnails/not-jpeg.png`), imageBytes, {
+      ...imageMetadata(logId, uploaderUid, 'email-thumbnail'),
+      contentType: 'image/png',
+    }),
+  )
 
   await expectDenied('Mismatched uploader metadata', () =>
     uploadBytes(
@@ -95,9 +118,13 @@ try {
 
   await signInAnonymously(auth)
   await getBytes(validPhoto)
+  await getBytes(validThumbnail)
+  await deleteObject(validThumbnail)
   await deleteObject(validPhoto)
 
-  console.log('Storage rules verified: valid field upload/read/delete allowed; invalid requests denied.')
+  console.log(
+    'Storage rules verified: valid field upload/read/delete allowed; invalid requests denied.',
+  )
 } finally {
   await deleteApp(app)
 }

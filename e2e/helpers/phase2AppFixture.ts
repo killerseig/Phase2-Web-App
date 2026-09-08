@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import type {
   DailyLogRecord,
   EmployeeRecord,
+  GlobalNotificationRecipients,
   NotificationRecipients,
   ShopCatalogItemRecord,
   ShopCategoryRecord,
@@ -98,12 +99,8 @@ function createDailyLogPayload(overrides: Record<string, unknown> = {}) {
     manpower: '',
     weeklySchedule: '',
     manpowerAssessment: '',
-    indoorClimateReadings: [
-      { area: 'Lobby', high: '72', low: '70', humidity: '35' },
-    ],
-    manpowerLines: [
-      { trade: 'Acoustics', count: 2, areas: 'Lobby', addedByUserId: FOREMAN_ID },
-    ],
+    indoorClimateReadings: [{ area: 'Lobby', high: '72', low: '70', humidity: '35' }],
+    manpowerLines: [{ trade: 'Acoustics', count: 2, areas: 'Lobby', addedByUserId: FOREMAN_ID }],
     safetyConcerns: '',
     ahaReviewed: 'Reviewed',
     scheduleConcerns: '',
@@ -233,7 +230,9 @@ function createBaseFixture(authKind: FixtureAuthKind, assignedJobIds = [JOB_ID])
       dailyLogs: [],
       timecards: [],
       shopOrders: [],
-    } as NotificationRecipients,
+      newJobs: [],
+      fieldUserAssignments: [],
+    } as GlobalNotificationRecipients,
   }
 }
 
@@ -251,7 +250,13 @@ export function createJobsFixture() {
     },
   ]
   fixture.jobs = [
-    createJob({ id: 'job-1', code: '1A', name: 'Acoustical Remodel', type: 'acoustics', gc: 'Phase 2' }),
+    createJob({
+      id: 'job-1',
+      code: '1A',
+      name: 'Acoustical Remodel',
+      type: 'acoustics',
+      gc: 'Phase 2',
+    }),
     createJob({ id: 'job-2', code: '2B', name: 'Drywall Buildout', type: 'drywall', gc: 'Summit' }),
     createJob({ id: 'job-3', code: '3C', name: 'Paint Finish', type: 'paint', gc: 'Lark' }),
   ]
@@ -345,12 +350,38 @@ export function createShopOrdersFixture() {
     { id: 'cat-drywall', name: 'Drywall Mud', parentId: null, active: true },
     { id: 'cat-all-purpose', name: 'All Purpose Mud', parentId: 'cat-drywall', active: true },
     { id: 'cat-anchors', name: 'Anchors', parentId: null, active: true },
-    { id: 'cat-concrete-wedge', name: 'Concrete Wedge Anchors', parentId: 'cat-anchors', active: true },
+    {
+      id: 'cat-concrete-wedge',
+      name: 'Concrete Wedge Anchors',
+      parentId: 'cat-anchors',
+      active: true,
+    },
   ]
   fixture.shopCatalogItems = [
-    { id: 'item-box', description: 'Box', categoryId: 'cat-all-purpose', sku: null, price: 12.5, active: true },
-    { id: 'item-bucket', description: 'Bucket', categoryId: 'cat-all-purpose', sku: null, price: 18, active: true },
-    { id: 'item-half-inch', description: '1/2"', categoryId: 'cat-concrete-wedge', sku: null, price: 4.25, active: true },
+    {
+      id: 'item-box',
+      description: 'Box',
+      categoryId: 'cat-all-purpose',
+      sku: null,
+      price: 12.5,
+      active: true,
+    },
+    {
+      id: 'item-bucket',
+      description: 'Bucket',
+      categoryId: 'cat-all-purpose',
+      sku: null,
+      price: 18,
+      active: true,
+    },
+    {
+      id: 'item-half-inch',
+      description: '1/2"',
+      categoryId: 'cat-concrete-wedge',
+      sku: null,
+      price: 4.25,
+      active: true,
+    },
   ]
   fixture.shopOrders = [
     {
@@ -513,8 +544,22 @@ export function createAdminWorkspaceFixture() {
     { id: 'cat-anchor', name: 'Anchors', parentId: 'cat-fasteners', active: true },
   ]
   fixture.shopCatalogItems = [
-    { id: 'catalog-1', description: 'Wedge Anchor 1/2"', categoryId: 'cat-anchor', sku: 'WA-12', price: 4.5, active: true },
-    { id: 'catalog-2', description: 'Self Tap Screws', categoryId: 'cat-fasteners', sku: 'STS-01', price: 12, active: true },
+    {
+      id: 'catalog-1',
+      description: 'Wedge Anchor 1/2"',
+      categoryId: 'cat-anchor',
+      sku: 'WA-12',
+      price: 4.5,
+      active: true,
+    },
+    {
+      id: 'catalog-2',
+      description: 'Self Tap Screws',
+      categoryId: 'cat-fasteners',
+      sku: 'STS-01',
+      price: 12,
+      active: true,
+    },
   ]
   fixture.timecardWeeks = [
     {
@@ -581,7 +626,4 @@ export async function gotoPhase2App(page: Page, route: string, fixture: Record<s
   await page.goto(route)
 }
 
-export {
-  JOB_ID,
-  WEEK_END_DATE,
-}
+export { JOB_ID, WEEK_END_DATE }

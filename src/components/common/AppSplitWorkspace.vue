@@ -74,7 +74,7 @@ const workspaceStyle = computed(() => ({
   grid-template-columns: minmax(0, 1fr);
 }
 
-@media (max-width: 1180px) {
+@media (min-width: 901px) and (max-width: 1180px) {
   .app-split-workspace {
     grid-template-columns: 1fr;
   }
@@ -86,6 +86,7 @@ const workspaceStyle = computed(() => ({
 
 @media (max-width: 900px) {
   .app-split-workspace {
+    grid-template-columns: minmax(0, 1fr);
     height: auto;
     overflow: visible;
   }
@@ -97,6 +98,7 @@ const workspaceStyle = computed(() => ({
 
   .app-split-workspace :slotted(.app-split-workspace__primary-pane),
   .app-split-workspace :slotted(.app-split-workspace__secondary-pane) {
+    min-width: 0;
     height: auto;
     min-height: 0;
     overflow: visible;

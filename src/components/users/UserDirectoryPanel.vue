@@ -167,7 +167,7 @@ function handleStatusFilterUpdate(value: string) {
   display: flex;
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   width: 100%;
 }
 
@@ -180,18 +180,18 @@ function handleStatusFilterUpdate(value: string) {
 .users-browser__invite-summary {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   min-height: 1.9rem;
   padding: 0 0.7rem;
   border: 1px solid rgba(88, 186, 233, 0.18);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: rgba(38, 74, 96, 0.18);
   color: var(--text-muted);
 }
 
 .users-browser__invite-summary--empty {
   border-color: var(--border);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--field);
 }
 
 .users-browser__invite-label {
@@ -216,7 +216,7 @@ function handleStatusFilterUpdate(value: string) {
 
 .users-browser__filter {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   color: var(--text-muted);
   font-size: 0.74rem;
   letter-spacing: 0.1em;
@@ -225,17 +225,17 @@ function handleStatusFilterUpdate(value: string) {
 
 .users-browser__filter .app-select {
   --app-select-border: var(--border);
-  --app-select-min-height: 2.8rem;
-  --app-select-padding-x: 0.9rem;
-  --app-select-radius: 12px;
-  --app-select-background: rgba(255, 255, 255, 0.045);
+  --app-select-min-height: var(--control-height-form);
+  --app-select-padding-x: var(--control-padding-x);
+  --app-select-radius: var(--control-radius);
+  --app-select-background: var(--control-background);
   text-transform: none;
   letter-spacing: normal;
 }
 
 .users-browser__list {
   display: grid;
-  gap: 0.55rem;
+  gap: var(--list-gap);
   align-content: start;
   min-height: 0;
   overflow: auto;
@@ -255,7 +255,7 @@ function handleStatusFilterUpdate(value: string) {
 .users-browser__row-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: var(--field-gap);
 }
 
 @media (max-width: 900px) {
@@ -280,7 +280,7 @@ function handleStatusFilterUpdate(value: string) {
     align-items: center;
     justify-content: flex-end;
     width: auto;
-    gap: 0.45rem;
+    gap: var(--field-gap);
   }
 
   .users-browser__header-topline {
@@ -298,7 +298,7 @@ function handleStatusFilterUpdate(value: string) {
     flex-wrap: wrap;
     justify-content: flex-end;
     width: auto;
-    gap: 0.45rem;
+    gap: var(--field-gap);
   }
 
   .users-browser__header-buttons .app-button {

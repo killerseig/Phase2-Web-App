@@ -4,13 +4,17 @@ exports.removeEmailFromRecipientLists = removeEmailFromRecipientLists;
 const constants_1 = require("./constants");
 const runtime_1 = require("./runtime");
 async function removeEmailFromRecipientLists(email) {
-    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const normalizedEmail = String(email || '')
+        .trim()
+        .toLowerCase();
     if (!normalizedEmail) {
         return { settingsUpdated: false, jobsUpdated: 0 };
     }
     const filterRecipientList = (values) => {
         const list = Array.isArray(values) ? values : [];
-        return list.filter((value) => String(value || '').trim().toLowerCase() !== normalizedEmail);
+        return list.filter((value) => String(value || '')
+            .trim()
+            .toLowerCase() !== normalizedEmail);
     };
     let settingsUpdated = false;
     let jobsUpdated = 0;
@@ -21,18 +25,35 @@ async function removeEmailFromRecipientLists(email) {
         const nextTimecard = filterRecipientList(data.timecardSubmitRecipients);
         const nextShopOrder = filterRecipientList(data.shopOrderSubmitRecipients);
         const nextDailyLog = filterRecipientList(data.dailyLogSubmitRecipients);
-        const globalRecipients = typeof data.globalNotificationRecipients === 'object' && data.globalNotificationRecipients !== null
+        const globalRecipients = typeof data.globalNotificationRecipients === 'object' &&
+            data.globalNotificationRecipients !== null
             ? data.globalNotificationRecipients
             : {};
         const nextGlobalDailyLogs = filterRecipientList(globalRecipients.dailyLogs);
         const nextGlobalTimecards = filterRecipientList(globalRecipients.timecards);
         const nextGlobalShopOrders = filterRecipientList(globalRecipients.shopOrders);
-        const changed = nextTimecard.length !== (Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients.length : 0) ||
-            nextShopOrder.length !== (Array.isArray(data.shopOrderSubmitRecipients) ? data.shopOrderSubmitRecipients.length : 0) ||
-            nextDailyLog.length !== (Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients.length : 0) ||
-            nextGlobalDailyLogs.length !== (Array.isArray(globalRecipients.dailyLogs) ? globalRecipients.dailyLogs.length : 0) ||
-            nextGlobalTimecards.length !== (Array.isArray(globalRecipients.timecards) ? globalRecipients.timecards.length : 0) ||
-            nextGlobalShopOrders.length !== (Array.isArray(globalRecipients.shopOrders) ? globalRecipients.shopOrders.length : 0);
+        const nextGlobalNewJobs = filterRecipientList(globalRecipients.newJobs);
+        const nextGlobalFieldUserAssignments = filterRecipientList(globalRecipients.fieldUserAssignments);
+        const changed = nextTimecard.length !==
+            (Array.isArray(data.timecardSubmitRecipients) ? data.timecardSubmitRecipients.length : 0) ||
+            nextShopOrder.length !==
+                (Array.isArray(data.shopOrderSubmitRecipients)
+                    ? data.shopOrderSubmitRecipients.length
+                    : 0) ||
+            nextDailyLog.length !==
+                (Array.isArray(data.dailyLogSubmitRecipients) ? data.dailyLogSubmitRecipients.length : 0) ||
+            nextGlobalDailyLogs.length !==
+                (Array.isArray(globalRecipients.dailyLogs) ? globalRecipients.dailyLogs.length : 0) ||
+            nextGlobalTimecards.length !==
+                (Array.isArray(globalRecipients.timecards) ? globalRecipients.timecards.length : 0) ||
+            nextGlobalShopOrders.length !==
+                (Array.isArray(globalRecipients.shopOrders) ? globalRecipients.shopOrders.length : 0) ||
+            nextGlobalNewJobs.length !==
+                (Array.isArray(globalRecipients.newJobs) ? globalRecipients.newJobs.length : 0) ||
+            nextGlobalFieldUserAssignments.length !==
+                (Array.isArray(globalRecipients.fieldUserAssignments)
+                    ? globalRecipients.fieldUserAssignments.length
+                    : 0);
         if (changed) {
             await settingsRef.set({
                 timecardSubmitRecipients: nextTimecard,
@@ -42,6 +63,8 @@ async function removeEmailFromRecipientLists(email) {
                     dailyLogs: nextGlobalDailyLogs,
                     timecards: nextGlobalTimecards,
                     shopOrders: nextGlobalShopOrders,
+                    newJobs: nextGlobalNewJobs,
+                    fieldUserAssignments: nextGlobalFieldUserAssignments,
                 },
             }, { merge: true });
             settingsUpdated = true;
@@ -51,21 +74,38 @@ async function removeEmailFromRecipientLists(email) {
     const batch = runtime_1.db.batch();
     jobsSnap.docs.forEach((jobDoc) => {
         const data = jobDoc.data() || {};
-        const currentDailyLogRecipients = Array.isArray(data.dailyLogRecipients) ? data.dailyLogRecipients : [];
-        const currentAdminDailyLogRecipients = Array.isArray(data.adminDailyLogRecipients) ? data.adminDailyLogRecipients : [];
+        const currentDailyLogRecipients = Array.isArray(data.dailyLogRecipients)
+            ? data.dailyLogRecipients
+            : [];
+        const currentAdminDailyLogRecipients = Array.isArray(data.adminDailyLogRecipients)
+            ? data.adminDailyLogRecipients
+            : [];
         const notificationRecipients = typeof data.notificationRecipients === 'object' && data.notificationRecipients !== null
             ? data.notificationRecipients
             : {};
-        const nextDailyLogRecipients = currentDailyLogRecipients.filter((value) => String(value || '').trim().toLowerCase() !== normalizedEmail);
-        const nextAdminDailyLogRecipients = currentAdminDailyLogRecipients.filter((value) => String(value || '').trim().toLowerCase() !== normalizedEmail);
+        const nextDailyLogRecipients = currentDailyLogRecipients.filter((value) => String(value || '')
+            .trim()
+            .toLowerCase() !== normalizedEmail);
+        const nextAdminDailyLogRecipients = currentAdminDailyLogRecipients.filter((value) => String(value || '')
+            .trim()
+            .toLowerCase() !== normalizedEmail);
         const nextNotificationDailyLogs = filterRecipientList(notificationRecipients.dailyLogs);
         const nextNotificationTimecards = filterRecipientList(notificationRecipients.timecards);
         const nextNotificationShopOrders = filterRecipientList(notificationRecipients.shopOrders);
         const changed = nextDailyLogRecipients.length !== currentDailyLogRecipients.length ||
             nextAdminDailyLogRecipients.length !== currentAdminDailyLogRecipients.length ||
-            nextNotificationDailyLogs.length !== (Array.isArray(notificationRecipients.dailyLogs) ? notificationRecipients.dailyLogs.length : 0) ||
-            nextNotificationTimecards.length !== (Array.isArray(notificationRecipients.timecards) ? notificationRecipients.timecards.length : 0) ||
-            nextNotificationShopOrders.length !== (Array.isArray(notificationRecipients.shopOrders) ? notificationRecipients.shopOrders.length : 0);
+            nextNotificationDailyLogs.length !==
+                (Array.isArray(notificationRecipients.dailyLogs)
+                    ? notificationRecipients.dailyLogs.length
+                    : 0) ||
+            nextNotificationTimecards.length !==
+                (Array.isArray(notificationRecipients.timecards)
+                    ? notificationRecipients.timecards.length
+                    : 0) ||
+            nextNotificationShopOrders.length !==
+                (Array.isArray(notificationRecipients.shopOrders)
+                    ? notificationRecipients.shopOrders.length
+                    : 0);
         if (changed) {
             batch.update(jobDoc.ref, {
                 dailyLogRecipients: nextDailyLogRecipients,

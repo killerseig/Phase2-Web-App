@@ -1,23 +1,55 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   fetchLegacyPublicDailyLogGallery,
   fetchPublicDailyLogGallery,
 } from '@/services/dailyLogGallery'
-import type { PublicDailyLogGalleryRecord } from '@/types/domain'
+import type { DailyLogAttachmentRecord, PublicDailyLogGalleryRecord } from '@/types/domain'
+
+type GallerySectionKey = 'photo' | 'ptp' | 'qc'
+type GalleryPhoto = Pick<
+  DailyLogAttachmentRecord,
+  'name' | 'url' | 'thumbnailUrl' | 'type' | 'description'
+>
+
+interface GallerySection {
+  key: GallerySectionKey
+  title: string
+  photos: GalleryPhoto[]
+}
 
 const route = useRoute()
 const gallery = ref<PublicDailyLogGalleryRecord | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
+const activePhotoSectionKey = ref<GallerySectionKey | null>(null)
 const activePhotoIndex = ref<number | null>(null)
 const lightbox = ref<HTMLElement | null>(null)
 const currentYear = new Date().getFullYear()
 
+const gallerySections = computed<GallerySection[]>(() => {
+  const attachments = gallery.value?.attachments ?? []
+  const sections: Array<{ key: GallerySectionKey; title: string }> = [
+    { key: 'photo', title: 'Photos' },
+    { key: 'ptp', title: 'PTP Photos' },
+    { key: 'qc', title: 'QC Photos' },
+  ]
+
+  return sections.flatMap((section) => {
+    const photos = attachments.filter((photo) => {
+      if (section.key === 'photo') return photo.type !== 'ptp' && photo.type !== 'qc'
+      return photo.type === section.key
+    })
+    return photos.length ? [{ ...section, photos }] : []
+  })
+})
+const activePhotoSection = computed(() =>
+  gallerySections.value.find((section) => section.key === activePhotoSectionKey.value),
+)
 const activePhoto = computed(() => {
   if (activePhotoIndex.value === null) return null
-  return gallery.value?.attachments[activePhotoIndex.value] ?? null
+  return activePhotoSection.value?.photos[activePhotoIndex.value] ?? null
 })
 const photoPosition = computed(() => (activePhotoIndex.value ?? 0) + 1)
 const jobLabel = computed(() => {
@@ -46,8 +78,7 @@ function readShareId() {
 function readLegacyRouteParams() {
   return {
     jobId: typeof route.params.jobId === 'string' ? route.params.jobId : '',
-    dailyLogId:
-      typeof route.params.dailyLogId === 'string' ? route.params.dailyLogId : '',
+    dailyLogId: typeof route.params.dailyLogId === 'string' ? route.params.dailyLogId : '',
   }
 }
 
@@ -67,22 +98,48 @@ async function loadGallery() {
   } finally {
     loading.value = false
   }
+
+  if (gallery.value && !errorMessage.value) await applyGalleryHash()
 }
 
-async function openPhoto(index: number) {
+async function openPhoto(sectionKey: GallerySectionKey, index: number) {
+  activePhotoSectionKey.value = sectionKey
   activePhotoIndex.value = index
   await nextTick()
   lightbox.value?.focus()
 }
 
 function closePhoto() {
+  activePhotoSectionKey.value = null
   activePhotoIndex.value = null
 }
 
 function movePhoto(offset: number) {
-  const total = gallery.value?.attachments.length ?? 0
+  const total = activePhotoSection.value?.photos.length ?? 0
   if (activePhotoIndex.value === null || total < 2) return
   activePhotoIndex.value = (activePhotoIndex.value + offset + total) % total
+}
+
+async function applyGalleryHash() {
+  const match = /^#gallery-(photo|ptp|qc)(?:-(\d+))?$/.exec(route.hash)
+  if (!match) return
+
+  const sectionKey = match[1] as GallerySectionKey
+  const section = gallerySections.value.find((entry) => entry.key === sectionKey)
+  if (!section) return
+
+  const requestedPosition = match[2] ? Number(match[2]) : null
+  if (
+    requestedPosition !== null &&
+    requestedPosition >= 1 &&
+    requestedPosition <= section.photos.length
+  ) {
+    await openPhoto(sectionKey, requestedPosition - 1)
+    return
+  }
+
+  await nextTick()
+  document.getElementById(`gallery-${sectionKey}`)?.scrollIntoView({ block: 'start' })
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -96,6 +153,13 @@ onMounted(() => {
   void loadGallery()
   window.addEventListener('keydown', handleKeydown)
 })
+
+watch(
+  () => route.hash,
+  () => {
+    if (!loading.value && gallery.value) void applyGalleryHash()
+  },
+)
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
@@ -117,7 +181,10 @@ onBeforeUnmount(() => {
         Loading photo gallery...
       </div>
 
-      <div v-else-if="errorMessage" class="daily-log-gallery__state daily-log-gallery__state--error">
+      <div
+        v-else-if="errorMessage"
+        class="daily-log-gallery__state daily-log-gallery__state--error"
+      >
         <h1>Gallery unavailable</h1>
         <p>{{ errorMessage }}</p>
       </div>
@@ -146,34 +213,66 @@ onBeforeUnmount(() => {
           </dl>
         </header>
 
-        <section class="daily-log-gallery__photos" aria-labelledby="gallery-photos-title">
-          <div class="daily-log-gallery__section-heading">
-            <h2 id="gallery-photos-title">Photos</h2>
-            <span>Select a photo to view it larger.</span>
-          </div>
+        <nav
+          v-if="gallerySections.length > 1"
+          class="daily-log-gallery__section-nav"
+          aria-label="Photo sections"
+        >
+          <a
+            v-for="section in gallerySections"
+            :key="section.key"
+            :href="`#gallery-${section.key}`"
+          >
+            {{ section.title }} ({{ section.photos.length }})
+          </a>
+        </nav>
 
-          <div v-if="gallery.attachments.length" class="daily-log-gallery__grid">
-            <figure
-              v-for="(photo, index) in gallery.attachments"
-              :key="`${photo.url}-${index}`"
-              class="daily-log-gallery__photo"
-            >
-              <button
-                type="button"
-                class="daily-log-gallery__photo-button"
-                :aria-label="`View ${photo.name}`"
-                @click="openPhoto(index)"
+        <template v-if="gallerySections.length">
+          <section
+            v-for="section in gallerySections"
+            :id="`gallery-${section.key}`"
+            :key="section.key"
+            class="daily-log-gallery__photos"
+            :data-testid="`gallery-section-${section.key}`"
+            :aria-labelledby="`gallery-${section.key}-title`"
+          >
+            <div class="daily-log-gallery__section-heading">
+              <h2 :id="`gallery-${section.key}-title`">{{ section.title }}</h2>
+              <span>{{ section.photos.length }} · Select a photo to view it larger.</span>
+            </div>
+
+            <div class="daily-log-gallery__grid">
+              <figure
+                v-for="(photo, index) in section.photos"
+                :id="`gallery-${section.key}-${index + 1}`"
+                :key="`${photo.url}-${index}`"
+                class="daily-log-gallery__photo"
               >
-                <img :src="photo.url" :alt="photo.name" loading="lazy" decoding="async" />
-              </button>
-              <figcaption>
-                <strong>{{ photo.name }}</strong>
-                <span v-if="photo.description">{{ photo.description }}</span>
-              </figcaption>
-            </figure>
-          </div>
+                <button
+                  type="button"
+                  class="daily-log-gallery__photo-button"
+                  :aria-label="`View ${photo.name}`"
+                  @click="openPhoto(section.key, index)"
+                >
+                  <img
+                    :src="photo.thumbnailUrl || photo.url"
+                    :alt="photo.name"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </button>
+                <figcaption>
+                  <strong>{{ photo.name }}</strong>
+                  <span v-if="photo.description">{{ photo.description }}</span>
+                </figcaption>
+              </figure>
+            </div>
+          </section>
+        </template>
 
-          <p v-else class="daily-log-gallery__empty">No photos are attached to this daily log.</p>
+        <section v-else class="daily-log-gallery__photos" aria-labelledby="gallery-empty-title">
+          <h2 id="gallery-empty-title" class="sr-only">Photos</h2>
+          <p class="daily-log-gallery__empty">No photos are attached to this daily log.</p>
         </section>
       </article>
     </main>
@@ -193,7 +292,10 @@ onBeforeUnmount(() => {
       @click.self="closePhoto"
     >
       <div class="daily-log-gallery__lightbox-bar">
-        <span>{{ photoPosition }} of {{ gallery?.attachments.length ?? 0 }}</span>
+        <span>
+          {{ activePhotoSection?.title }}: {{ photoPosition }} of
+          {{ activePhotoSection?.photos.length ?? 0 }}
+        </span>
         <button type="button" aria-label="Close photo viewer" @click="closePhoto">
           <i class="pi pi-times" aria-hidden="true"></i>
         </button>
@@ -201,7 +303,7 @@ onBeforeUnmount(() => {
 
       <div class="daily-log-gallery__lightbox-stage">
         <button
-          v-if="(gallery?.attachments.length ?? 0) > 1"
+          v-if="(activePhotoSection?.photos.length ?? 0) > 1"
           type="button"
           class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--previous"
           aria-label="Previous photo"
@@ -213,7 +315,7 @@ onBeforeUnmount(() => {
         <img :src="activePhoto.url" :alt="activePhoto.name" />
 
         <button
-          v-if="(gallery?.attachments.length ?? 0) > 1"
+          v-if="(activePhotoSection?.photos.length ?? 0) > 1"
           type="button"
           class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--next"
           aria-label="Next photo"
@@ -241,9 +343,7 @@ onBeforeUnmount(() => {
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   color: var(--text);
-  background:
-    radial-gradient(circle at 16% 0%, rgba(99, 199, 230, 0.16), transparent 32rem),
-    linear-gradient(180deg, #132330 0%, #0b151e 100%);
+  background: var(--panel-background);
 }
 
 .daily-log-gallery__masthead,
@@ -267,7 +367,7 @@ onBeforeUnmount(() => {
   width: 2.75rem;
   height: 2.75rem;
   border: 1px solid rgba(145, 220, 255, 0.38);
-  border-radius: 13px;
+  border-radius: var(--radius-sm);
   color: var(--accent-strong);
   background: rgba(99, 199, 230, 0.12);
   font-weight: 800;
@@ -298,9 +398,9 @@ onBeforeUnmount(() => {
 .daily-log-gallery__state {
   overflow: hidden;
   border: 1px solid rgba(168, 190, 209, 0.18);
-  border-radius: 20px;
-  background: rgba(28, 44, 58, 0.94);
-  box-shadow: 0 24px 70px rgba(1, 8, 14, 0.3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .daily-log-gallery__state {
@@ -325,9 +425,7 @@ onBeforeUnmount(() => {
 .daily-log-gallery__header {
   padding: clamp(1.25rem, 4vw, 2.5rem);
   border-bottom: 1px solid rgba(168, 190, 209, 0.14);
-  background:
-    radial-gradient(circle at 90% 0%, rgba(99, 199, 230, 0.12), transparent 24rem),
-    rgba(255, 255, 255, 0.015);
+  background: var(--panel-background);
 }
 
 .daily-log-gallery__eyebrow {
@@ -356,8 +454,8 @@ onBeforeUnmount(() => {
   min-width: 0;
   padding: 0.8rem 0.9rem;
   border: 1px solid rgba(168, 190, 209, 0.13);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.025);
+  border-radius: var(--radius-sm);
+  background: var(--field);
 }
 
 .daily-log-gallery__details dt {
@@ -377,6 +475,29 @@ onBeforeUnmount(() => {
 
 .daily-log-gallery__photos {
   padding: clamp(1rem, 3vw, 2rem);
+  scroll-margin-top: 1rem;
+}
+
+.daily-log-gallery__photos + .daily-log-gallery__photos {
+  border-top: 1px solid rgba(168, 190, 209, 0.14);
+}
+
+.daily-log-gallery__section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  padding: 1rem clamp(1rem, 3vw, 2rem) 0;
+}
+
+.daily-log-gallery__section-nav a {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(145, 220, 255, 0.28);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: rgba(99, 199, 230, 0.08);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .daily-log-gallery__section-heading {
@@ -408,8 +529,8 @@ onBeforeUnmount(() => {
   margin: 0;
   overflow: hidden;
   border: 1px solid rgba(168, 190, 209, 0.16);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
+  border-radius: var(--radius-sm);
+  background: var(--field);
 }
 
 .daily-log-gallery__photo-button {
@@ -449,7 +570,7 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 3rem 1rem;
   border: 1px dashed rgba(168, 190, 209, 0.2);
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   text-align: center;
   color: var(--text-muted);
 }

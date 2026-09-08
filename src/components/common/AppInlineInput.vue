@@ -61,7 +61,7 @@ function handleInputRef(element: TemplateElementRefValue) {
   min-height: var(--app-inline-input-min-height, 1.9rem);
   padding: 0 var(--app-inline-input-padding-x, 0.45rem);
   border: 1px solid var(--app-inline-input-border, var(--border));
-  border-radius: var(--app-inline-input-radius, 8px);
+  border-radius: var(--app-inline-input-radius, var(--radius-sm));
   background: var(--app-inline-input-background, rgba(21, 36, 48, 0.96));
   color: var(--app-inline-input-color, var(--text));
   box-sizing: border-box;

@@ -12,7 +12,7 @@ import {
   reopenTimecardWeek,
   submitTimecardWeek,
 } from '@/services/timecards'
-import type { TimecardWeekRecord } from '@/types/domain'
+import type { TimecardWeekRecord, TimecardWorkbookLineRecord } from '@/types/domain'
 
 vi.mock('@/services/timecards', () => ({
   deleteTimecardCard: vi.fn(),
@@ -87,13 +87,40 @@ function makeCard(overrides: Partial<TimecardExportArchiveCardRecord> = {}): Tim
   }
 }
 
+function makeLine(overrides: Partial<TimecardWorkbookLineRecord> = {}): TimecardWorkbookLineRecord {
+  return {
+    account: '712',
+    days: [{
+      date: '2026-06-15',
+      dayOfWeek: 1,
+      hours: 4,
+      lineTotal: 0,
+      production: 0,
+      unitCost: 0,
+    }],
+    difC: '',
+    difH: '',
+    difP: '',
+    jobNumber: '736',
+    offCost: 0,
+    offHours: 0,
+    offProduction: 0,
+    subsectionArea: '1',
+    ...overrides,
+  }
+}
+
 function mountMutationActions(options: {
+  cards?: TimecardExportArchiveCardRecord[]
   canEditWeek?: boolean
+  canReopenSubmittedWeeks?: boolean
   canUseTimecardExport?: boolean
 } = {}) {
   const actionLoading = ref(false)
   const canEditWeek = ref(options.canEditWeek ?? true)
+  const canReopenSubmittedWeeks = ref(options.canReopenSubmittedWeeks ?? true)
   const canUseTimecardExport = ref(options.canUseTimecardExport ?? true)
+  const cards = ref(options.cards ?? [])
   const timecardExportConfirmAction = ref<TimecardExportConfirmAction | null>(null)
   const calls: string[] = []
   const deleteWeekCache = vi.fn((weekId: string) => {
@@ -105,22 +132,28 @@ function mountMutationActions(options: {
   const resetPageAndSaveMessages = vi.fn(() => {
     calls.push('reset')
   })
+  const revealCard = vi.fn()
   const selectCard = vi.fn((cardId: string) => {
     calls.push(`select:${cardId}`)
   })
   const setPageError = vi.fn()
+  const setPageErrorMessage = vi.fn()
   const setPageInfo = vi.fn((message: string) => {
     calls.push(`info:${message}`)
   })
   const actions = useTimecardExportMutationActions({
     actionLoading,
     canEditWeek: computed(() => canEditWeek.value),
+    cards,
     deleteWeekCache,
     flushPendingSaves,
+    getCanReopenSubmittedWeeks: () => canReopenSubmittedWeeks.value,
     getCanUseTimecardExport: () => canUseTimecardExport.value,
     resetPageAndSaveMessages,
+    revealCard,
     selectCard,
     setPageError,
+    setPageErrorMessage,
     setPageInfo,
     timecardExportConfirmAction,
   })
@@ -128,14 +161,18 @@ function mountMutationActions(options: {
   return {
     actionLoading,
     actions,
+    cards,
     calls,
     canEditWeek,
+    canReopenSubmittedWeeks,
     canUseTimecardExport,
     deleteWeekCache,
     flushPendingSaves,
     resetPageAndSaveMessages,
+    revealCard,
     selectCard,
     setPageError,
+    setPageErrorMessage,
     setPageInfo,
     timecardExportConfirmAction,
   }
@@ -266,7 +303,7 @@ describe('useTimecardExportMutationActions', () => {
     expect(noPermission.timecardExportConfirmAction.value).toBeNull()
   })
 
-  it('opens submit and reopen confirmations for valid export weeks', () => {
+  it('opens submit confirmations for export users and reopen confirmations only for admins', () => {
     const submitCase = mountMutationActions()
     submitCase.actions.handleSubmitWeek(makeWeek({
       id: 'week-draft',
@@ -305,13 +342,60 @@ describe('useTimecardExportMutationActions', () => {
     const invalidReopen = mountMutationActions()
     invalidReopen.actions.handleReopenWeek(makeWeek({ status: 'draft' }))
 
-    const noPermission = mountMutationActions({ canUseTimecardExport: false })
-    noPermission.actions.handleSubmitWeek(makeWeek({ status: 'draft' }))
-    noPermission.actions.handleReopenWeek(makeWeek({ status: 'submitted' }))
+    const noExportPermission = mountMutationActions({ canUseTimecardExport: false })
+    noExportPermission.actions.handleSubmitWeek(makeWeek({ status: 'draft' }))
+
+    const noReopenPermission = mountMutationActions({
+      canReopenSubmittedWeeks: false,
+      canUseTimecardExport: true,
+    })
+    noReopenPermission.actions.handleReopenWeek(makeWeek({ status: 'submitted' }))
 
     expect(invalidSubmit.timecardExportConfirmAction.value).toBeNull()
     expect(invalidReopen.timecardExportConfirmAction.value).toBeNull()
-    expect(noPermission.timecardExportConfirmAction.value).toBeNull()
+    expect(noExportPermission.timecardExportConfirmAction.value).toBeNull()
+    expect(noReopenPermission.timecardExportConfirmAction.value).toBeNull()
+  })
+
+  it('blocks export submission and reveals the first line with hours that is missing required fields', () => {
+    const invalidCard = makeCard({
+      id: 'card-incomplete',
+      lines: [makeLine({ account: '', subsectionArea: ' ' })],
+    })
+    const submission = mountMutationActions({ cards: [invalidCard] })
+
+    submission.actions.handleSubmitWeek(makeWeek())
+
+    expect(submission.timecardExportConfirmAction.value).toBeNull()
+    expect(submission.revealCard).toHaveBeenCalledWith('card-incomplete')
+    expect(submission.setPageErrorMessage).toHaveBeenCalledWith(
+      'CJ Blanchard, line 1 has hours but is missing Area and Acct. Complete Job #, Area, and Acct on every line with hours before submitting.',
+    )
+    expect(submitTimecardWeekMock).not.toHaveBeenCalled()
+  })
+
+  it('rechecks required timecard fields after pending saves are flushed', async () => {
+    const validCard = makeCard({ lines: [makeLine()] })
+    const submission = mountMutationActions({ cards: [validCard] })
+    submission.actions.handleSubmitWeek(makeWeek())
+    expect(submission.timecardExportConfirmAction.value?.kind).toBe('submit-week')
+
+    submission.flushPendingSaves.mockImplementationOnce(async () => {
+      submission.cards.value[0]!.lines[0]!.jobNumber = ''
+    })
+
+    await submission.actions.confirmSubmitWeek(
+      submission.timecardExportConfirmAction.value as Extract<TimecardExportConfirmAction, { kind: 'submit-week' }>,
+    )
+
+    expect(submission.flushPendingSaves).toHaveBeenCalledTimes(1)
+    expect(submission.revealCard).toHaveBeenCalledWith('card-1')
+    expect(submission.setPageErrorMessage).toHaveBeenCalledWith(
+      'CJ Blanchard, line 1 has hours but is missing Job #. Complete Job #, Area, and Acct on every line with hours before submitting.',
+    )
+    expect(submitTimecardWeekMock).not.toHaveBeenCalled()
+    expect(submission.timecardExportConfirmAction.value).toBeNull()
+    expect(submission.actionLoading.value).toBe(false)
   })
 
   it('confirms draft week deletion after flushing pending saves and clearing caches', async () => {
@@ -400,7 +484,7 @@ describe('useTimecardExportMutationActions', () => {
     expect(actionLoading.value).toBe(false)
   })
 
-  it('confirms submitted week undo after flushing pending saves', async () => {
+  it('confirms reopening a submitted week after flushing pending saves', async () => {
     const {
       actionLoading,
       actions,
@@ -423,13 +507,13 @@ describe('useTimecardExportMutationActions', () => {
     expect(resetPageAndSaveMessages).toHaveBeenCalledTimes(1)
     expect(flushPendingSaves).toHaveBeenCalledTimes(1)
     expect(reopenTimecardWeekMock).toHaveBeenCalledWith('week-submitted')
-    expect(setPageInfo).toHaveBeenCalledWith('Submitted week moved back to draft.')
-    expect(calls).toEqual(['reset', 'flush', 'info:Submitted week moved back to draft.'])
+    expect(setPageInfo).toHaveBeenCalledWith('Week re-opened for corrections.')
+    expect(calls).toEqual(['reset', 'flush', 'info:Week re-opened for corrections.'])
     expect(timecardExportConfirmAction.value).toBeNull()
     expect(actionLoading.value).toBe(false)
   })
 
-  it('reports submit and undo failures and clears loading/confirmation state', async () => {
+  it('reports submit and reopen failures and clears loading/confirmation state', async () => {
     submitTimecardWeekMock.mockRejectedValueOnce(new Error('Submit denied'))
     const submitCase = mountMutationActions()
     submitCase.timecardExportConfirmAction.value = {
@@ -448,7 +532,7 @@ describe('useTimecardExportMutationActions', () => {
     expect(submitCase.timecardExportConfirmAction.value).toBeNull()
     expect(submitCase.actionLoading.value).toBe(false)
 
-    reopenTimecardWeekMock.mockRejectedValueOnce(new Error('Undo denied'))
+    reopenTimecardWeekMock.mockRejectedValueOnce(new Error('Reopen denied'))
     const reopenCase = mountMutationActions()
     reopenCase.timecardExportConfirmAction.value = {
       kind: 'reopen-week',
@@ -461,8 +545,25 @@ describe('useTimecardExportMutationActions', () => {
 
     ;[errorArg, fallback] = reopenCase.setPageError.mock.calls[0]!
     expect(errorArg).toBeInstanceOf(Error)
-    expect((errorArg as Error).message).toBe('Undo denied')
-    expect(fallback).toBe('Failed to undo the submitted week.')
+    expect((errorArg as Error).message).toBe('Reopen denied')
+    expect(fallback).toBe('Failed to re-open the submitted week for corrections.')
+    expect(reopenCase.timecardExportConfirmAction.value).toBeNull()
+    expect(reopenCase.actionLoading.value).toBe(false)
+  })
+
+  it('rechecks admin permission before reopening a submitted week', async () => {
+    const reopenCase = mountMutationActions({ canReopenSubmittedWeeks: false })
+    reopenCase.timecardExportConfirmAction.value = {
+      kind: 'reopen-week',
+      weekEndDate: '6/20/2026',
+      weekId: 'week-submitted',
+      weekLabel: '736 \u2022 CJ Blanchard',
+    }
+
+    await reopenCase.actions.confirmReopenWeek(reopenCase.timecardExportConfirmAction.value)
+
+    expect(reopenTimecardWeekMock).not.toHaveBeenCalled()
+    expect(reopenCase.flushPendingSaves).not.toHaveBeenCalled()
     expect(reopenCase.timecardExportConfirmAction.value).toBeNull()
     expect(reopenCase.actionLoading.value).toBe(false)
   })

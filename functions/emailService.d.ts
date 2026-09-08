@@ -3,6 +3,7 @@
  * Handles email sending via Microsoft Graph API
  */
 import type { JobDetails } from './firestoreService';
+import type { DailyLogInlinePhotoPreview } from './dailyLogEmailPhotos';
 /**
  * Check if email sending is enabled
  */
@@ -43,6 +44,7 @@ export declare function buildDailyLogAutoSubmitEmail(jobDetails: JobDetails, log
  */
 export declare function buildDailyLogEmail(jobDetails: JobDetails, logDate: string, dailyLog: any, options?: {
     dailyLogUrl?: string;
+    inlinePhotoPreviews?: DailyLogInlinePhotoPreview[];
 }): string;
 export declare function buildTimecardsEmail(payload: {
     jobName?: string;
@@ -71,7 +73,7 @@ export declare function buildSecretExpirationEmail(): string;
 /**
  * Send email via Microsoft Graph API
  */
-export declare function sendEmail(options: {
+export interface SendEmailOptions {
     to: string | string[];
     subject: string;
     html: string;
@@ -79,8 +81,16 @@ export declare function sendEmail(options: {
         name: string;
         contentType?: string;
         contentBytes: string;
+        contentId?: string;
+        isInline?: boolean;
     }>;
-}): Promise<void>;
+}
+export declare function buildEmailSendLogSummary(options: SendEmailOptions): {
+    recipientCount: number;
+    attachmentCount: number;
+    hasHtmlBody: boolean;
+};
+export declare function sendEmail(options: SendEmailOptions): Promise<void>;
 /**
  * Send daily log email notification
  */

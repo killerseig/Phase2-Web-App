@@ -138,7 +138,9 @@ export function useDailyLogAttachments({
         } catch (error) {
           form.value.attachments = previousAttachments
           await Promise.allSettled(
-            attachmentsToPersist.map((attachment) => deleteDailyLogAttachment(attachment.path)),
+            attachmentsToPersist.map((attachment) =>
+              deleteDailyLogAttachment(attachment.path, attachment.thumbnailPath),
+            ),
           )
           throw error
         }
@@ -219,7 +221,7 @@ export function useDailyLogAttachments({
     clearActionError()
 
     try {
-      await deleteDailyLogAttachment(path)
+      await deleteDailyLogAttachment(path, targetAttachment?.thumbnailPath)
       form.value.attachments = form.value.attachments.filter(
         (attachment) => attachment.path !== path,
       )

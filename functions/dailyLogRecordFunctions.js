@@ -55,7 +55,7 @@ function sanitizeAttachmentType(value) {
 function summarizeManpowerLines(lines) {
     const summary = lines
         .filter((line) => line.trade.length > 0 && line.count > 0)
-        .map((line) => (line.areas ? `${line.trade}: ${line.count} (${line.areas})` : `${line.trade}: ${line.count}`));
+        .map((line) => line.areas ? `${line.trade}: ${line.count} (${line.areas})` : `${line.trade}: ${line.count}`);
     return summary.join('; ');
 }
 function isBlankManpowerLine(line) {
@@ -64,7 +64,16 @@ function isBlankManpowerLine(line) {
 function isBlankIndoorClimateReading(reading) {
     return !reading.area && !reading.high && !reading.low && !reading.humidity;
 }
-function sanitizePayload(payload) {
+function expectedDailyLogThumbnailPath(path, dailyLogId) {
+    const prefix = `daily-logs/${dailyLogId}/`;
+    if (!path.startsWith(prefix))
+        return '';
+    const fileName = path.slice(prefix.length);
+    if (!fileName || fileName.includes('/'))
+        return '';
+    return `${prefix}thumbnails/${fileName}`;
+}
+function sanitizePayload(payload, dailyLogId) {
     const manpowerLines = Array.isArray(payload?.manpowerLines)
         ? payload.manpowerLines
             .map((line) => ({
@@ -83,19 +92,32 @@ function sanitizePayload(payload) {
             low: text(reading?.low),
             humidity: text(reading?.humidity),
         }))
-            .filter((reading) => (!isBlankIndoorClimateReading(reading)))
+            .filter((reading) => !isBlankIndoorClimateReading(reading))
         : [];
     const attachments = Array.isArray(payload?.attachments)
         ? payload.attachments
-            .map((attachment) => ({
-            name: text(attachment?.name),
-            url: text(attachment?.url),
-            path: text(attachment?.path),
-            type: sanitizeAttachmentType(attachment?.type),
-            description: text(attachment?.description),
-            createdAt: attachment?.createdAt ?? null,
-        }))
-            .filter((attachment) => attachment.name && attachment.url && attachment.path)
+            .map((attachment) => {
+            const thumbnailUrl = text(attachment?.thumbnailUrl);
+            const path = text(attachment?.path);
+            const expectedThumbnailPath = expectedDailyLogThumbnailPath(path, dailyLogId);
+            const suppliedThumbnailPath = text(attachment?.thumbnailPath);
+            const thumbnailPath = suppliedThumbnailPath && suppliedThumbnailPath === expectedThumbnailPath
+                ? suppliedThumbnailPath
+                : '';
+            return {
+                name: text(attachment?.name),
+                url: text(attachment?.url),
+                ...(thumbnailUrl && thumbnailPath ? { thumbnailUrl } : {}),
+                path,
+                ...(thumbnailPath ? { thumbnailPath } : {}),
+                type: sanitizeAttachmentType(attachment?.type),
+                description: text(attachment?.description),
+                createdAt: attachment?.createdAt ?? null,
+            };
+        })
+            .filter((attachment) => attachment.name &&
+            attachment.url &&
+            Boolean(expectedDailyLogThumbnailPath(attachment.path, dailyLogId)))
         : [];
     return {
         jobSiteNumbers: text(payload?.jobSiteNumbers),
@@ -173,17 +195,16 @@ function assertCanWriteJob(user, jobId, jobDetails, action) {
 function userOwnsDraftDailyLog(user, log) {
     if (toStatus(log.status) !== 'draft')
         return false;
-    return [log.foremanUserId, log.createdByUserId]
-        .some((value) => text(value) === user.uid);
+    return [log.foremanUserId, log.createdByUserId].some((value) => text(value) === user.uid);
 }
 function canWriteExistingDailyLog(user, jobId, jobDetails, action, log) {
     if ((0, fieldWorkflowAccess_1.canWriteFieldWorkflowForJob)(user, jobId, jobDetails, action))
         return true;
     // If the user was allowed to create the draft, do not strand them if job
     // assignment metadata is stale or shaped differently than expected.
-    return (action === 'edit-draft' || action === 'submit')
-        && (0, roleAccess_1.currentFunctionUserHasAnyRole)(user, ['foreman', 'shop-foreman', 'project-manager'])
-        && userOwnsDraftDailyLog(user, log);
+    return ((action === 'edit-draft' || action === 'submit') &&
+        (0, roleAccess_1.currentFunctionUserHasAnyRole)(user, ['foreman', 'shop-foreman', 'project-manager']) &&
+        userOwnsDraftDailyLog(user, log));
 }
 function assertCanWriteExistingDailyLog(user, jobId, jobDetails, action, log) {
     if (canWriteExistingDailyLog(user, jobId, jobDetails, action, log))
@@ -248,10 +269,12 @@ function getLogSortTimestamp(log) {
 }
 function sortLogResponses(logs) {
     const rank = (status) => (text(status) === 'submitted' ? 0 : 1);
-    return logs.slice().sort((left, right) => (rank(left.status) - rank(right.status)
-        || getLogSortTimestamp(right) - getLogSortTimestamp(left)
-        || Number(right.sequenceNumber || 0) - Number(left.sequenceNumber || 0)
-        || text(right.id).localeCompare(text(left.id))));
+    return logs
+        .slice()
+        .sort((left, right) => rank(left.status) - rank(right.status) ||
+        getLogSortTimestamp(right) - getLogSortTimestamp(left) ||
+        Number(right.sequenceNumber || 0) - Number(left.sequenceNumber || 0) ||
+        text(right.id).localeCompare(text(left.id)));
 }
 exports.listDailyLogsForCurrentUser = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -293,7 +316,8 @@ exports.createDailyLogRecordCallable = (0, https_1.onCall)(async (request) => {
     const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
     assertCanWriteJob(user, jobId, jobDetails, 'create');
     const sequenceNumber = await getNextSequenceNumber(jobId, logDate);
-    const created = await runtime_1.db.collection('dailyLogs').add({
+    const created = runtime_1.db.collection('dailyLogs').doc();
+    await created.set({
         jobId,
         jobCode: textOrNull(request.data?.jobCode),
         jobName: textOrNull(request.data?.jobName),
@@ -306,7 +330,7 @@ exports.createDailyLogRecordCallable = (0, https_1.onCall)(async (request) => {
         updatedByUserId: request.auth.uid,
         submittedByUserId: null,
         additionalRecipients: normalizeRecipientList(request.data?.additionalRecipients),
-        payload: sanitizePayload(request.data?.payload),
+        payload: sanitizePayload(request.data?.payload, created.id),
         createdAt: firestore_1.FieldValue.serverTimestamp(),
         updatedAt: firestore_1.FieldValue.serverTimestamp(),
         submittedAt: null,
@@ -323,7 +347,9 @@ exports.updateDailyLogRecordCallable = (0, https_1.onCall)(async (request) => {
     const { logRef, log, jobId } = await getDailyLogDoc(dailyLogId);
     const user = await getAuthorizedUser(request.auth.uid);
     const jobDetails = await (0, firestoreService_1.getJobDetails)(jobId);
-    const writeAction = ('status' in request.data && toStatus(request.data?.status) === 'submitted') ? 'submit' : 'edit-draft';
+    const writeAction = 'status' in request.data && toStatus(request.data?.status) === 'submitted'
+        ? 'submit'
+        : 'edit-draft';
     assertCanWriteExistingDailyLog(user, jobId, jobDetails, writeAction, log);
     if (toStatus(log.status) === 'submitted' && user.role !== 'admin') {
         throw new https_1.HttpsError('failed-precondition', 'Submitted daily logs cannot be changed by field users.');
@@ -333,10 +359,11 @@ exports.updateDailyLogRecordCallable = (0, https_1.onCall)(async (request) => {
         updatedByUserId: request.auth.uid,
     };
     if ('payload' in request.data && request.data?.payload) {
-        payload.payload = sanitizePayload(request.data.payload);
+        payload.payload = sanitizePayload(request.data.payload, dailyLogId);
     }
     if ('payloadFields' in request.data && request.data?.payloadFields) {
-        if (typeof request.data.payloadFields !== 'object' || Array.isArray(request.data.payloadFields)) {
+        if (typeof request.data.payloadFields !== 'object' ||
+            Array.isArray(request.data.payloadFields)) {
             throw new https_1.HttpsError('invalid-argument', 'payloadFields must be an object.');
         }
         for (const [fieldKey, fieldValue] of Object.entries(request.data.payloadFields)) {

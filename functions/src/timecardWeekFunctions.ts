@@ -5,12 +5,14 @@ import {
   type Query,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
+  type Transaction,
 } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { buildTimecardEmailSubject, buildTimecardsEmail, isEmailEnabled, sendEmail } from './emailService'
 import {
   buildSubmittedEmailOperationId,
   buildSubmittedEmailStatusUpdate,
+  isSubmittedEmailOperationInProgress,
 } from './emailStatus'
 import { getEmailSettings, getJobDetails } from './firestoreService'
 import { getGraphEmailSecrets } from './functionConfig'
@@ -50,6 +52,13 @@ interface SubmitTimecardWeekResponse {
   success: boolean
   emailSent: boolean
   emailMessage: string
+}
+
+export interface TimecardRequiredFieldIssue {
+  cardId: string
+  employeeName: string
+  lineNumber: number
+  missingFields: string[]
 }
 
 interface ListTimecardWeeksInput {
@@ -95,6 +104,74 @@ function numberOrNull(value: unknown) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return null
   return Math.max(0, parsed)
+}
+
+function validationRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
+function getTimecardEmployeeLabel(value: unknown) {
+  const card = validationRecord(value)
+  return text(card.fullName)
+    || [text(card.firstName), text(card.lastName)].filter(Boolean).join(' ')
+    || (text(card.employeeNumber) ? `Employee #${text(card.employeeNumber)}` : '')
+    || 'Unnamed employee'
+}
+
+function lineHasHours(value: unknown) {
+  const line = validationRecord(value)
+  const days = Array.isArray(line.days) ? line.days : []
+  const off = validationRecord(line.off)
+  return days.some((day) => numberOrZero(validationRecord(day).hours) > 0)
+    || numberOrZero(line.offHours ?? off.hours) > 0
+}
+
+export function findTimecardRequiredFieldIssues(value: unknown): TimecardRequiredFieldIssue[] {
+  const issues: TimecardRequiredFieldIssue[] = []
+
+  for (const candidate of Array.isArray(value) ? value : []) {
+    const card = validationRecord(candidate)
+    const lines = Array.isArray(card.lines) ? card.lines : []
+    lines.forEach((candidateLine, lineIndex) => {
+      const line = validationRecord(candidateLine)
+      if (!lineHasHours(line)) return
+
+      const missingFields = [
+        !text(line.jobNumber) ? 'Job #' : '',
+        !text(line.subsectionArea) ? 'Area' : '',
+        !text(line.account) ? 'Acct' : '',
+      ].filter(Boolean)
+
+      if (missingFields.length) {
+        issues.push({
+          cardId: text(card.id),
+          employeeName: getTimecardEmployeeLabel(card),
+          lineNumber: lineIndex + 1,
+          missingFields,
+        })
+      }
+    })
+  }
+
+  return issues
+}
+
+function formatMissingFieldList(fields: string[]) {
+  if (fields.length <= 1) return fields[0] || ''
+  if (fields.length === 2) return `${fields[0]} and ${fields[1]}`
+  return `${fields.slice(0, -1).join(', ')}, and ${fields[fields.length - 1]}`
+}
+
+export function buildTimecardRequiredFieldsMessage(issues: TimecardRequiredFieldIssue[]) {
+  const firstIssue = issues[0]
+  if (!firstIssue) return ''
+
+  const additionalIssueCount = issues.length - 1
+  const additionalIssueMessage = additionalIssueCount > 0
+    ? ` ${additionalIssueCount} other ${additionalIssueCount === 1 ? 'line also needs' : 'lines also need'} attention.`
+    : ''
+
+  return `${firstIssue.employeeName}, line ${firstIssue.lineNumber} is missing ${formatMissingFieldList(firstIssue.missingFields)}.${additionalIssueMessage} Complete Job #, Area, and Acct for every line with hours before submitting.`
 }
 
 function formatIsoDate(date: Date) {
@@ -878,45 +955,91 @@ export const deleteTimecardWeekRecord = onCall(async (request) => {
   return { success: true }
 })
 
-export const reopenTimecardWeekRecord = onCall(async (request) => {
+interface ReopenTimecardWeekDependencies {
+  getWeekDoc: typeof getWeekDoc
+  getAuthorizedUser: typeof getAuthorizedUser
+  runTransaction<T>(updateFunction: (transaction: Transaction) => Promise<T>): Promise<T>
+}
+
+const defaultReopenTimecardWeekDependencies: ReopenTimecardWeekDependencies = {
+  getWeekDoc,
+  getAuthorizedUser,
+  runTransaction: (updateFunction) => db.runTransaction(updateFunction),
+}
+
+export async function handleReopenTimecardWeekRecord(
+  request: CallableRequestLike,
+  deps: ReopenTimecardWeekDependencies = defaultReopenTimecardWeekDependencies,
+) {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be signed in.')
   }
+  const requestingUserId = request.auth.uid
 
   const weekId = text(request.data?.weekId)
   if (!weekId) throw new HttpsError('invalid-argument', 'weekId is required')
 
-  const { weekRef, week } = await getWeekDoc(weekId)
-  const user = await getAuthorizedUser(request.auth.uid)
-  if (!(user.role === 'admin' || user.role === 'payroll')) {
-    throw new HttpsError('permission-denied', 'Only admins or payroll can undo submitted timecard weeks.')
+  const { weekRef } = await deps.getWeekDoc(weekId)
+  const user = await deps.getAuthorizedUser(requestingUserId)
+  if (user.role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Only admins can re-open submitted timecard weeks.')
   }
 
-  if (text(week.status) !== 'submitted') {
-    return { success: true }
-  }
+  return deps.runTransaction(async (transaction) => {
+    const latestWeekSnap = await transaction.get(weekRef)
+    if (!latestWeekSnap.exists) {
+      throw new HttpsError('not-found', 'Timecard week not found.')
+    }
 
-  await weekRef.update({
-    status: 'draft',
-    submittedAt: null,
-    submittedByName: null,
-    submittedByUserId: null,
-    submittedEmailAttemptedAt: FieldValue.delete(),
-    submittedEmailError: FieldValue.delete(),
-    submittedEmailInProgressAt: FieldValue.delete(),
-    submittedEmailOperationId: FieldValue.delete(),
-    submittedEmailSentAt: FieldValue.delete(),
-    updatedAt: FieldValue.serverTimestamp(),
-    updatedByUserId: request.auth.uid,
+    const latestWeek = latestWeekSnap.data() || {}
+    if (text(latestWeek.status) !== 'submitted') {
+      return { success: true, reopened: false }
+    }
+
+    const operationId = buildSubmittedEmailOperationId('timecardWeekSubmittedEmail', weekId)
+    if (isSubmittedEmailOperationInProgress(latestWeek, operationId)) {
+      throw new HttpsError(
+        'failed-precondition',
+        'The submission email is still being prepared. Wait for it to finish before re-opening this week.',
+      )
+    }
+
+    transaction.update(weekRef, {
+      status: 'draft',
+      lastSubmittedAt: latestWeek.submittedAt ?? null,
+      lastSubmittedByName: textOrNull(latestWeek.submittedByName),
+      lastSubmittedByUserId: textOrNull(latestWeek.submittedByUserId),
+      lastSubmittedEmailAttemptedAt: latestWeek.submittedEmailAttemptedAt ?? null,
+      lastSubmittedEmailSentAt: latestWeek.submittedEmailSentAt ?? null,
+      submittedAt: null,
+      submittedByName: null,
+      submittedByUserId: null,
+      submittedEmailAttemptedAt: FieldValue.delete(),
+      submittedEmailError: FieldValue.delete(),
+      submittedEmailInProgressAt: FieldValue.delete(),
+      submittedEmailOperationId: FieldValue.delete(),
+      submittedEmailSentAt: FieldValue.delete(),
+      reopenedAt: FieldValue.serverTimestamp(),
+      reopenedByName: textOrNull(user.displayName),
+      reopenedByUserId: requestingUserId,
+      reopenCount: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedByUserId: requestingUserId,
+    })
+
+    return { success: true, reopened: true }
   })
+}
 
-  return { success: true }
-})
+export const reopenTimecardWeekRecord = onCall(async (request) => (
+  handleReopenTimecardWeekRecord(request)
+))
 
 interface SubmitTimecardWeekDependencies {
   getWeekDoc: typeof getWeekDoc
   getAuthorizedUser: typeof getAuthorizedUser
   getJobDetails: typeof getJobDetails
+  listWeekCards: typeof listWeekCards
   claimSubmittedEmailOperation: typeof claimSubmittedEmailOperation
   sendSubmittedWeekEmail: typeof sendSubmittedWeekEmail
   buildSubmittedEmailStatusUpdate: typeof buildSubmittedEmailStatusUpdate
@@ -926,6 +1049,7 @@ const defaultSubmitTimecardWeekDependencies: SubmitTimecardWeekDependencies = {
   getWeekDoc,
   getAuthorizedUser,
   getJobDetails,
+  listWeekCards,
   claimSubmittedEmailOperation,
   sendSubmittedWeekEmail,
   buildSubmittedEmailStatusUpdate,
@@ -945,6 +1069,16 @@ export async function handleSubmitTimecardWeekRecord(
   const { weekRef, week, jobId } = await deps.getWeekDoc(weekId)
   const user = await deps.getAuthorizedUser(request.auth.uid)
   await assertCanAccessWeek(user, jobId, deps.getJobDetails)
+  const cards = await deps.listWeekCards(weekId)
+  const requiredFieldIssues = findTimecardRequiredFieldIssues(cards)
+  if (requiredFieldIssues.length) {
+    throw new HttpsError(
+      'failed-precondition',
+      buildTimecardRequiredFieldsMessage(requiredFieldIssues),
+      { issues: requiredFieldIssues },
+    )
+  }
+
   const operationId = buildSubmittedEmailOperationId('timecardWeekSubmittedEmail', weekId)
   const operationContext = {
     weekId,

@@ -42,9 +42,9 @@ defineProps<{
 }
 
 .shop-catalog-root-inspector__header {
-  --app-pane-header-eyebrow-font-size: 0.68rem;
-  --app-pane-header-eyebrow-letter-spacing: 0.12em;
-  --app-pane-header-title-font-size: 1.35rem;
+  --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
+  --app-pane-header-title-font-size: var(--font-size-pane-title);
   --app-pane-header-title-margin: 0.3rem 0 0;
   display: flex;
   align-items: flex-start;
@@ -64,7 +64,7 @@ defineProps<{
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--field);
 }
 
 .shop-catalog-root-inspector__card span {

@@ -141,7 +141,7 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
   min-height: 2.25rem;
   padding: 0 0.5rem;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -154,9 +154,7 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 .shop-orders-tree-node:hover,
 .shop-orders-tree-node--active {
   border-color: rgba(145, 220, 255, 0.22);
-  background:
-    linear-gradient(90deg, rgba(99, 199, 230, 0.13), rgba(99, 199, 230, 0.035)),
-    rgba(255, 255, 255, 0.012);
+  background: var(--bg-accent);
 }
 
 .shop-orders-tree-node__indent {
@@ -240,8 +238,8 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
   height: 0.76rem;
   border: 1px solid rgba(193, 208, 225, 0.36);
   border-radius: 0.12rem;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 -0.16rem 0 rgba(88, 186, 233, 0.1);
+  background: var(--field);
+  box-shadow: none;
 }
 
 .shop-orders-tree-node__label {
@@ -285,9 +283,7 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
   --app-text-input-border: var(--shop-line);
   --app-text-input-radius: var(--shop-radius-md);
   --app-text-input-background: var(--shop-field);
-  --app-text-input-box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 5px 12px rgba(3, 10, 16, 0.08);
+  --app-text-input-box-shadow: none;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;

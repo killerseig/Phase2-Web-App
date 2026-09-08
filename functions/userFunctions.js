@@ -1,6 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setUserPassword = exports.requestPasswordResetEmail = exports.verifySetupToken = exports.sendPendingUserInvites = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.listAssignableFieldUsers = exports.removeEmailFromAllRecipientLists = void 0;
+exports.setUserPassword = exports.requestPasswordResetEmail = exports.verifySetupToken = exports.sendPendingUserInvites = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.listAssignableFieldUsers = exports.removeEmailFromAllRecipientLists = exports.sendUserPasswordResetByAdmin = exports.resendUserInviteByAdmin = void 0;
+exports.sendUserInvite = sendUserInvite;
+exports.handleResendUserInviteByAdmin = handleResendUserInviteByAdmin;
+exports.handleSendUserPasswordResetByAdmin = handleSendUserPasswordResetByAdmin;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
@@ -37,6 +40,70 @@ function createSetupTokenRecord() {
         setupTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     };
 }
+const USER_INVITE_STATE_FIELDS = [
+    'setupToken',
+    'setupTokenExpiry',
+    'inviteStatus',
+    'inviteSentAt',
+    'inviteSentByUid',
+    'inviteAcceptedAt',
+];
+const INVITE_DELIVERY_LEASE_DURATION_MS = 2 * 60 * 1000;
+const INVITE_DELIVERY_IN_PROGRESS_MESSAGE = 'An invite email is already being sent for this user. Wait a moment and try again.';
+const INVITE_DELIVERY_OWNERSHIP_LOST_MESSAGE = 'This invite email was superseded before it could be finalized. Send a new invite.';
+function inviteDeliveryLeaseIsActive(data, now) {
+    const deliveryId = String(data.inviteDeliveryId || '').trim();
+    if (!deliveryId)
+        return false;
+    const expiresAt = parseTokenExpiry(data.inviteDeliveryLeaseExpiresAt).getTime();
+    return Number.isFinite(expiresAt) && expiresAt > now.getTime();
+}
+function buildInviteDeliveryLeaseClearUpdate(deleteField) {
+    return {
+        inviteDeliveryId: deleteField(),
+        inviteDeliveryLeaseExpiresAt: deleteField(),
+    };
+}
+function captureUserInviteState(data) {
+    return Object.fromEntries(USER_INVITE_STATE_FIELDS.map((field) => [
+        field,
+        {
+            exists: Object.prototype.hasOwnProperty.call(data, field),
+            value: data[field],
+        },
+    ]));
+}
+function buildUserInviteRestoreUpdate(previousState, deleteField) {
+    return Object.fromEntries(USER_INVITE_STATE_FIELDS.map((field) => [
+        field,
+        previousState[field].exists ? previousState[field].value : deleteField(),
+    ]));
+}
+const firestoreUserInviteStateStore = {
+    async transact(uid, transition) {
+        const userRef = runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(uid);
+        return runtime_1.db.runTransaction(async (transaction) => {
+            const snapshot = await transaction.get(userRef);
+            if (!snapshot.exists) {
+                throw new https_1.HttpsError('not-found', 'User not found.');
+            }
+            const next = transition(snapshot.data() || {});
+            if (next.update) {
+                transaction.update(userRef, next.update);
+            }
+            return next.result;
+        });
+    },
+};
+const sendUserInviteDependencies = {
+    createDeliveryId: () => (0, crypto_1.randomBytes)(16).toString('hex'),
+    createTokenRecord: createSetupTokenRecord,
+    deleteField: () => firestore_1.FieldValue.delete(),
+    deliverEmail: emailService_1.sendEmail,
+    now: () => new Date(),
+    serverTimestamp: () => firestore_1.FieldValue.serverTimestamp(),
+    stateStore: firestoreUserInviteStateStore,
+};
 function normalizeAssignedJobIds(value) {
     if (!Array.isArray(value))
         return [];
@@ -75,21 +142,184 @@ async function getAuthorizedAssignableUserReader(uid) {
     }
     return user;
 }
-async function sendUserInvite(options) {
-    const userRef = runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(options.uid);
-    const tokenRecord = createSetupTokenRecord();
-    await userRef.update(tokenRecord);
-    await (0, emailService_1.sendEmail)({
-        to: options.email,
-        subject: constants_1.EMAIL.SUBJECTS.WELCOME,
-        html: (0, emailService_1.buildWelcomeEmail)(options.firstName || 'there', buildSetupLink(options.uid, tokenRecord.setupToken)),
+async function sendUserInvite(options, dependencies = sendUserInviteDependencies) {
+    const deliveryId = dependencies.createDeliveryId();
+    const deliveryStartedAt = dependencies.now();
+    const deliveryLeaseExpiresAt = new Date(deliveryStartedAt.getTime() + INVITE_DELIVERY_LEASE_DURATION_MS);
+    const tokenRecord = dependencies.createTokenRecord();
+    const previousState = await dependencies.stateStore.transact(options.uid, (current) => {
+        if (inviteDeliveryLeaseIsActive(current, deliveryStartedAt)) {
+            throw new https_1.HttpsError('failed-precondition', INVITE_DELIVERY_IN_PROGRESS_MESSAGE);
+        }
+        return {
+            update: {
+                ...tokenRecord,
+                inviteDeliveryId: deliveryId,
+                inviteDeliveryLeaseExpiresAt: deliveryLeaseExpiresAt,
+            },
+            result: captureUserInviteState(current),
+        };
     });
-    await userRef.update({
-        inviteStatus: 'sent',
-        inviteSentAt: firestore_1.FieldValue.serverTimestamp(),
-        inviteSentByUid: options.sentByUid ?? null,
+    try {
+        await dependencies.deliverEmail({
+            to: options.email,
+            subject: constants_1.EMAIL.SUBJECTS.WELCOME,
+            html: (0, emailService_1.buildWelcomeEmail)(options.firstName || 'there', buildSetupLink(options.uid, tokenRecord.setupToken)),
+        });
+    }
+    catch (deliveryError) {
+        try {
+            await dependencies.stateStore.transact(options.uid, (current) => {
+                if (current.inviteDeliveryId !== deliveryId ||
+                    current.setupToken !== tokenRecord.setupToken) {
+                    return { result: false };
+                }
+                return {
+                    update: {
+                        ...buildUserInviteRestoreUpdate(previousState, dependencies.deleteField),
+                        ...buildInviteDeliveryLeaseClearUpdate(dependencies.deleteField),
+                    },
+                    result: true,
+                };
+            });
+        }
+        catch (rollbackError) {
+            console.error('[sendUserInvite] Failed to restore invite state after delivery failure:', rollbackError instanceof Error ? rollbackError.message : rollbackError);
+        }
+        throw deliveryError;
+    }
+    const finalized = await dependencies.stateStore.transact(options.uid, (current) => {
+        if (current.inviteDeliveryId !== deliveryId || current.setupToken !== tokenRecord.setupToken) {
+            return { result: false };
+        }
+        const preserveAcceptedStatus = previousState.inviteStatus.value === 'accepted' || current.inviteStatus === 'accepted';
+        return {
+            update: {
+                inviteStatus: preserveAcceptedStatus ? 'accepted' : 'sent',
+                inviteSentAt: dependencies.serverTimestamp(),
+                inviteSentByUid: options.sentByUid ?? null,
+                ...buildInviteDeliveryLeaseClearUpdate(dependencies.deleteField),
+            },
+            result: true,
+        };
     });
+    if (!finalized) {
+        throw new https_1.HttpsError('aborted', INVITE_DELIVERY_OWNERSHIP_LOST_MESSAGE);
+    }
 }
+const adminUserEmailActionDependencies = {
+    verifyAdminRole: firestoreService_1.verifyAdminRole,
+    isEmailEnabled: emailService_1.isEmailEnabled,
+    getUserProfile: async (uid) => {
+        const snapshot = await runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(uid).get();
+        return snapshot.exists ? snapshot.data() || null : null;
+    },
+    getAuthUser: (uid) => runtime_1.auth.getUser(uid),
+    sendInvite: sendUserInvite,
+    sendPasswordReset: async ({ email, displayName }) => {
+        const resetLink = await runtime_1.auth.generatePasswordResetLink(email);
+        await (0, emailService_1.sendEmail)({
+            to: email,
+            subject: constants_1.EMAIL.SUBJECTS.PASSWORD_RESET,
+            html: (0, emailService_1.buildPasswordResetEmail)(displayName, resetLink),
+        });
+    },
+};
+function requireAdminUserEmailActionPayload(request) {
+    const actorUid = String(request.auth?.uid || '').trim();
+    if (!actorUid) {
+        throw new https_1.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN_CREATE);
+    }
+    const targetUid = String(request.data?.uid || '').trim();
+    if (!targetUid) {
+        throw new https_1.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.UID_REQUIRED);
+    }
+    return { actorUid, targetUid };
+}
+async function getAdminUserEmailTarget(targetUid, dependencies) {
+    const [profile, authUser] = await Promise.all([
+        dependencies.getUserProfile(targetUid),
+        dependencies.getAuthUser(targetUid),
+    ]);
+    if (!profile) {
+        throw new https_1.HttpsError('not-found', 'User not found.');
+    }
+    const authEmail = String(authUser.email || '').trim();
+    if (!authEmail) {
+        throw new https_1.HttpsError('failed-precondition', "This user's Authentication account does not have an email address.");
+    }
+    const profileEmail = String(profile.email || '').trim();
+    if (!profileEmail || profileEmail.toLowerCase() !== authEmail.toLowerCase()) {
+        throw new https_1.HttpsError('failed-precondition', "This user's profile email does not match their Authentication email. Update the account before sending email.");
+    }
+    const firstName = String(profile.firstName || '').trim();
+    const profileDisplayName = [firstName, String(profile.lastName || '').trim()]
+        .filter(Boolean)
+        .join(' ');
+    return {
+        email: authEmail,
+        firstName,
+        displayName: String(authUser.displayName || '').trim() || profileDisplayName,
+    };
+}
+async function handleResendUserInviteByAdmin(request, dependencies = adminUserEmailActionDependencies) {
+    const { actorUid, targetUid } = requireAdminUserEmailActionPayload(request);
+    await dependencies.verifyAdminRole(actorUid);
+    if (!dependencies.isEmailEnabled()) {
+        throw new https_1.HttpsError('failed-precondition', 'Email sending is disabled.');
+    }
+    try {
+        const target = await getAdminUserEmailTarget(targetUid, dependencies);
+        await dependencies.sendInvite({
+            uid: targetUid,
+            email: target.email,
+            firstName: target.firstName,
+            sentByUid: actorUid,
+        });
+        return {
+            success: true,
+            email: target.email,
+            message: `Invite email sent to ${target.email}.`,
+        };
+    }
+    catch (error) {
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        console.error('[resendUserInviteByAdmin] Error:', error instanceof Error ? error.message : error);
+        throw new https_1.HttpsError('internal', 'Failed to resend invite email.');
+    }
+}
+async function handleSendUserPasswordResetByAdmin(request, dependencies = adminUserEmailActionDependencies) {
+    const { actorUid, targetUid } = requireAdminUserEmailActionPayload(request);
+    await dependencies.verifyAdminRole(actorUid);
+    if (!dependencies.isEmailEnabled()) {
+        throw new https_1.HttpsError('failed-precondition', 'Email sending is disabled.');
+    }
+    try {
+        const target = await getAdminUserEmailTarget(targetUid, dependencies);
+        await dependencies.sendPasswordReset({
+            email: target.email,
+            displayName: target.displayName,
+        });
+        return {
+            success: true,
+            email: target.email,
+            message: `Password reset email sent to ${target.email}.`,
+        };
+    }
+    catch (error) {
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        console.error('[sendUserPasswordResetByAdmin] Error:', error instanceof Error ? error.message : error);
+        throw new https_1.HttpsError('internal', 'Failed to send password reset email.');
+    }
+}
+exports.resendUserInviteByAdmin = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => {
+    return handleResendUserInviteByAdmin(request);
+});
+exports.sendUserPasswordResetByAdmin = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => {
+    return handleSendUserPasswordResetByAdmin(request);
+});
 exports.removeEmailFromAllRecipientLists = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', constants_1.ERROR_MESSAGES.NOT_SIGNED_IN);
@@ -134,8 +364,12 @@ exports.handleUserAccessRevocationCleanup = (0, firestore_2.onDocumentUpdated)('
     const afterData = event.data?.after?.data();
     if (!afterData)
         return;
-    const beforeRole = String(beforeData?.role || '').trim().toLowerCase();
-    const afterRole = String(afterData?.role || '').trim().toLowerCase();
+    const beforeRole = String(beforeData?.role || '')
+        .trim()
+        .toLowerCase();
+    const afterRole = String(afterData?.role || '')
+        .trim()
+        .toLowerCase();
     const beforeActive = typeof beforeData?.active === 'boolean' ? beforeData.active : true;
     const afterActive = typeof afterData?.active === 'boolean' ? afterData.active : true;
     const changedToNoneRole = beforeRole !== afterRole && afterRole === 'none';
@@ -224,7 +458,9 @@ exports.createUserByAdmin = (0, https_1.onCall)({ secrets: (0, functionConfig_1.
     const email = String(request.data?.email || '').trim();
     const firstName = String(request.data?.firstName || '').trim();
     const lastName = String(request.data?.lastName || '').trim();
-    const userRole = String(request.data?.role || 'none').trim().toLowerCase();
+    const userRole = String(request.data?.role || 'none')
+        .trim()
+        .toLowerCase();
     const sendInvite = request.data?.sendInvite === true;
     if (!email) {
         throw new https_1.HttpsError('invalid-argument', constants_1.ERROR_MESSAGES.EMAIL_REQUIRED);
@@ -344,7 +580,9 @@ exports.sendPendingUserInvites = (0, https_1.onCall)({ secrets: (0, functionConf
             const userData = userDoc.data();
             const email = String(userData.email || '').trim();
             const firstName = String(userData.firstName || '').trim();
-            const role = String(userData.role || '').trim().toLowerCase();
+            const role = String(userData.role || '')
+                .trim()
+                .toLowerCase();
             const active = userData.active !== false;
             if (!email || !active || !(0, roleAccess_1.canSendInviteForStoredRole)(role)) {
                 skippedCount += 1;
@@ -404,7 +642,9 @@ exports.verifySetupToken = (0, https_1.onCall)(async (request) => {
     }
 });
 exports.requestPasswordResetEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => {
-    const email = String(request.data?.email || '').trim().toLowerCase();
+    const email = String(request.data?.email || '')
+        .trim()
+        .toLowerCase();
     if (!email) {
         throw new https_1.HttpsError('invalid-argument', 'Enter your email address first.');
     }

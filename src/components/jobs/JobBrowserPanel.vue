@@ -54,11 +54,7 @@ function handleStatusFilterUpdate(value: string) {
   <AppPane class="jobs-browser">
     <AppPaneHeader :eyebrow="canManageJobs ? 'Admin' : 'Field Workspace'" title="Jobs">
       <template v-if="canCreateJobs && editMode" #actions>
-        <AppButton
-          variant="primary"
-          data-testid="jobs-new-button"
-          @click="emit('createJob')"
-        >
+        <AppButton variant="primary" data-testid="jobs-new-button" @click="emit('createJob')">
           New Job
         </AppButton>
       </template>
@@ -108,7 +104,9 @@ function handleStatusFilterUpdate(value: string) {
           <div class="jobs-browser__row-main">
             <strong>All Jobs</strong>
             <span>Global notification defaults</span>
-            <span class="jobs-browser__secondary">Daily Logs / Timecards / Shop Orders</span>
+            <span class="jobs-browser__secondary">
+              Daily Logs / Timecards / Shop Orders / Job Activity
+            </span>
           </div>
         </AppListButton>
 
@@ -146,21 +144,11 @@ function handleStatusFilterUpdate(value: string) {
   min-height: 0;
 }
 
-.jobs-browser__filter .app-select {
-  width: 100%;
-  min-height: 2.8rem;
-  padding: 0 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  color: var(--text);
-}
-
 .jobs-browser__filters {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.85rem;
+  gap: var(--form-gap);
   flex-wrap: wrap;
 }
 
@@ -176,7 +164,7 @@ function handleStatusFilterUpdate(value: string) {
 
 .jobs-browser__filter {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--field-gap);
   color: var(--text-muted);
   font-size: 0.74rem;
   letter-spacing: 0.1em;
@@ -184,16 +172,16 @@ function handleStatusFilterUpdate(value: string) {
 }
 
 .jobs-browser__filter .app-select {
-  --app-select-min-height: 2.4rem;
-  --app-select-padding-x: 0.8rem;
-  --app-select-background: rgba(255, 255, 255, 0.045);
+  --app-select-min-height: var(--control-height-form);
+  --app-select-padding-x: var(--control-padding-x);
+  --app-select-background: var(--control-background);
   text-transform: none;
   letter-spacing: normal;
 }
 
 .jobs-browser__list {
   display: grid;
-  gap: 0.55rem;
+  gap: var(--list-gap);
   align-content: start;
   min-height: 0;
   overflow: auto;
@@ -223,7 +211,7 @@ function handleStatusFilterUpdate(value: string) {
   min-height: 12rem;
   padding: 1.5rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   text-align: center;
 }
 

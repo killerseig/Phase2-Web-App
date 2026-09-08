@@ -26,6 +26,7 @@ const roleAccess_1 = require("./roleAccess");
 const runtime_1 = require("./runtime");
 const fieldWorkflowAccess_1 = require("./fieldWorkflowAccess");
 const dailyLogGalleryFunctions_1 = require("./dailyLogGalleryFunctions");
+const dailyLogEmailPhotos_1 = require("./dailyLogEmailPhotos");
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_PRODUCTION_BURDEN = 0.33;
 function normalizeRecipients(...groups) {
@@ -494,9 +495,8 @@ function sanitizeActivityCode(value, line, disallowedValues) {
         .filter(Boolean);
     if (difValues.includes(raw.toLowerCase()))
         return '';
-    // Reject short numeric fragments that are commonly leaked from non-activity fields.
-    if (/^\d{1,3}$/.test(raw))
-        return '';
+    // Numeric Acct codes can legitimately contain only one to three digits.
+    // Leak protection is therefore limited to the explicit job, employee, and DIF matches above.
     return raw;
 }
 function getLineOffHours(line) {
@@ -616,6 +616,7 @@ const defaultSendDailyLogEmailDependencies = {
     getJobNotificationRecipients: firestoreService_1.getJobNotificationRecipients,
     getAppBaseUrl: functionConfig_1.getAppBaseUrl,
     ensureDailyLogGalleryShare: dailyLogGalleryFunctions_1.ensureDailyLogGalleryShare,
+    prepareDailyLogInlinePhotos: dailyLogEmailPhotos_1.prepareDailyLogInlinePhotos,
     buildDailyLogEmail: emailService_1.buildDailyLogEmail,
     sendEmail: emailService_1.sendEmail,
     recordSubmittedEmailStatus,
@@ -826,11 +827,16 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
                 log,
             });
             const dailyLogUrl = `${deps.getAppBaseUrl()}/daily-log-gallery/${encodeURIComponent(galleryShareId)}`;
-            const emailHtml = deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, logDate, log, { dailyLogUrl });
+            const inlinePhotos = await deps.prepareDailyLogInlinePhotos(dailyLogId, log);
+            const emailHtml = deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, logDate, log, {
+                dailyLogUrl,
+                inlinePhotoPreviews: inlinePhotos.previews,
+            });
             await deps.sendEmail({
                 to: recipients,
                 subject: (0, emailService_1.buildDailyLogEmailSubject)(job || { id: '', name: 'Unknown Job', number: '' }, logDate, log),
                 html: emailHtml,
+                ...(inlinePhotos.attachments.length ? { attachments: inlinePhotos.attachments } : {}),
             });
         }
         catch (emailError) {
@@ -841,7 +847,10 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
             }, operationContext);
             throw emailError;
         }
-        console.log(`Daily log ${dailyLogId} emailed to ${recipients.join(', ')}`);
+        console.log('[sendDailyLogEmail] Message sent successfully', {
+            dailyLogId,
+            recipientCount: recipients.length,
+        });
         const emailResult = {
             emailSent: true,
             emailMessage: 'Email sent successfully',
@@ -860,7 +869,11 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
 /**
  * Send Daily Log via email
  */
-exports.sendDailyLogEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)() }, async (request) => handleSendDailyLogEmail(request));
+exports.sendDailyLogEmail = (0, https_1.onCall)({
+    secrets: (0, functionConfig_1.getGraphEmailSecrets)(),
+    memory: '512MiB',
+    timeoutSeconds: 120,
+}, async (request) => handleSendDailyLogEmail(request));
 function buildTimecardCsv(timecards, weekStart, defaultJobCode) {
     const headers = [
         'Employee Name',
@@ -1246,7 +1259,7 @@ async function buildTimecardPdfBuffer(payload, options = {}) {
             const costFontSize = rowHeight >= 6.25 ? 5.5 : 4.6;
             drawGridRow(innerX, gridTop, columnWidths, tableHeaderHeight, [
                 'JOB #',
-                '1',
+                'AREA',
                 '',
                 'ACCT',
                 'DIF',

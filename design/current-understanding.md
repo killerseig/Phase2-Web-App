@@ -36,6 +36,10 @@
 - Users should not be able to create accounts through a normal public sign-up flow.
 - Account creation should only happen through the admin-created email setup flow.
 - The rebuild should keep using the same working email-based setup system as `v1`.
+- The selected-user editor should always give admins two distinct email actions:
+  - `Resend Invite`, which issues a fresh Phase 2 account-setup link and invalidates the previous setup link
+  - `Send Password Reset`, which sends the normal password-reset email
+- Both user email actions should report clearly which message was sent and which user email address received it, while failures must remain visible as failures.
 
 ## Save Behavior
 
@@ -275,6 +279,14 @@ Based on the workbook structure and formulas:
   - `Small Jobs`
 - `Job Type` should come from a fixed list.
 - Admins should be able to manage the fixed `Job Type` list in the app.
+- The existing Jobs edit-mode `All Jobs` recipient panel is the single global email-default surface.
+- In addition to Daily Logs, Timecards, and Shop Orders, that panel should offer global-only recipient lists for:
+  - new job creation emails
+  - field-user assignment emails
+- A new-job email should include any field users assigned during creation.
+- A later field-user assignment email should be sent only when one or more users are added through the existing assignment workflow; removals and ordinary job edits should not generate it.
+- These two event-email recipient lists should not appear in individual-job recipient settings.
+- Job-event email runs on an at-least-once trigger and uses a leased event claim to suppress duplicate sends. A rare failure after Microsoft Graph accepts the message but before Firestore records completion can still permit a duplicate after the lease expires.
 
 ## Employees
 
@@ -399,8 +411,13 @@ Based on the workbook structure and formulas:
 - Foremen should be able to see all submitted daily log records for jobs they are assigned to for now.
 - Project Managers should be able to browse submitted daily log history for assigned jobs and see counts by job/foreman.
 - Public Daily Log photo galleries must allow visitors to scroll through every attached image on desktop, tablet, and phone without clipping images or exposing authenticated application controls.
-- Daily Log email attachments must remain grouped with the form section where they were added, including normal Photos, PTP Photos, QC Photos, and any future attachment sections.
+- Daily Log emails should follow the same content, label, and section order as the submitted Daily Log form as closely as email-client rendering permits.
+- Daily Log email photos must remain grouped with the form section where they were added, including normal Photos, PTP Photos, QC Photos, and any future attachment sections.
 - Attachment descriptions and section labels must remain visible in email and gallery output so recipients can understand what each image documents.
+- Daily Log emails should show at most six true lightweight thumbnails per photo section, in upload order. Those previews should be bounded JPEG inline attachments so email clients do not have to load external images; the full gallery images must never be attached to the email.
+- A photo section with more than six images should show a section-specific action that opens that section in the complete public gallery; sections with six or fewer images do not need the overflow action.
+- The public gallery should group all images by their Daily Log photo section, preserve every photo and description, and use the useful optimized image for full viewing.
+- Public Daily Log gallery links may remain accessible without authentication through their existing unguessable share identifiers.
 
 ## Daily Log Recipients
 
@@ -448,6 +465,7 @@ Based on the workbook structure and formulas:
 - Records should keep track of who submitted them.
 - This should be built in from the start so access rules can be tightened later without changing the data model.
 - Submitted timecards should keep a full history of changes made after submission.
+- Outbound email logging must never include complete HTML bodies, account setup/reset links, authentication tokens, or attachment bytes.
 
 ## Role Management Direction
 

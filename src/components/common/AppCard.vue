@@ -36,14 +36,11 @@ const cardClasses = computed(() => [
   display: grid;
   gap: var(--app-card-gap, var(--space-3));
   min-height: var(--app-card-min-height, auto);
+  min-width: 0;
   padding: var(--app-card-padding, var(--space-4));
   border: var(--app-card-border, 1px solid var(--color-border));
   border-radius: var(--app-card-radius, var(--radius-md));
-  background: var(
-    --app-card-background,
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    var(--color-surface-raised)
-  );
+  background: var(--app-card-background, var(--panel-background));
   color: var(--app-card-color, var(--color-text));
   box-shadow: var(--app-card-shadow, var(--shadow-md));
 }
@@ -72,9 +69,7 @@ const cardClasses = computed(() => [
 }
 
 .app-card--tone-accent {
-  --app-card-background:
-    linear-gradient(180deg, rgba(99, 199, 230, 0.095), rgba(255, 255, 255, 0.018)),
-    var(--color-surface-raised);
+  --app-card-background: var(--bg-accent);
   --app-card-border: 1px solid var(--color-border-strong);
 }
 </style>

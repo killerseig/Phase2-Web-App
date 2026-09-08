@@ -40,15 +40,16 @@ defineProps<{
 }
 
 .app-pane-header__eyebrow {
-  color: var(--accent-strong);
-  font-size: var(--app-pane-header-eyebrow-font-size, 0.72rem);
-  letter-spacing: var(--app-pane-header-eyebrow-letter-spacing, 0.14em);
+  color: var(--text-muted);
+  font-size: var(--app-pane-header-eyebrow-font-size, var(--font-size-eyebrow));
+  letter-spacing: var(--app-pane-header-eyebrow-letter-spacing, var(--letter-spacing-eyebrow));
   text-transform: uppercase;
 }
 
 .app-pane-header__title {
   margin: var(--app-pane-header-title-margin, 0.35rem 0 0);
-  font-size: var(--app-pane-header-title-font-size, 1.1rem);
+  font-size: var(--app-pane-header-title-font-size, var(--font-size-pane-title));
+  overflow-wrap: anywhere;
 }
 
 .app-pane-header__description {

@@ -538,15 +538,12 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   --app-pane-gap: 0.65rem;
   --app-pane-padding: 0.75rem;
   --app-pane-border: 1px solid var(--shop-line);
-  --app-pane-background:
-    radial-gradient(circle at top right, rgba(99, 199, 230, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006)),
-    rgba(24, 36, 48, 0.9);
-  --app-pane-shadow: var(--shadow-soft);
-  --app-pane-header-eyebrow-font-size: 0.64rem;
-  --app-pane-header-eyebrow-letter-spacing: 0.14em;
+  --app-pane-background: var(--panel-background);
+  --app-pane-shadow: var(--shadow-md);
+  --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-pane-header-title-margin: 0.18rem 0 0;
-  --app-pane-header-title-font-size: 1.08rem;
+  --app-pane-header-title-font-size: var(--font-size-pane-title);
   min-width: 0;
 }
 
@@ -596,9 +593,7 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   --app-search-input-border: var(--shop-line);
   --app-search-input-radius: var(--shop-radius-md);
   --app-search-input-background: var(--shop-field);
-  --app-search-input-box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 5px 12px rgba(3, 10, 16, 0.08);
+  --app-search-input-box-shadow: none;
   display: grid;
   gap: 0.28rem;
   color: var(--text-muted);

@@ -6,6 +6,10 @@ export interface JobDetails {
     id: string;
     name: string;
     number: string | number;
+    projectManager?: string | null;
+    foreman?: string | null;
+    gc?: string | null;
+    jobAddress?: string | null;
     assignedForemanIds?: string[];
     productionBurden?: number | null;
 }
@@ -15,11 +19,15 @@ export interface NotificationRecipients {
     timecards: string[];
     shopOrders: string[];
 }
+export interface GlobalNotificationRecipients extends NotificationRecipients {
+    newJobs: string[];
+    fieldUserAssignments: string[];
+}
 export interface EmailSettings {
     timecardSubmitRecipients?: string[];
     shopOrderSubmitRecipients?: string[];
     dailyLogSubmitRecipients?: string[];
-    globalNotificationRecipients: NotificationRecipients;
+    globalNotificationRecipients: GlobalNotificationRecipients;
 }
 export interface UserProfile {
     uid: string;

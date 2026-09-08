@@ -57,10 +57,10 @@ const emit = defineEmits<{
 <style scoped>
 .daily-log-selected-card {
   --app-section-header-copy-gap: 0.2rem;
-  --app-section-header-eyebrow-font-size: 0.68rem;
-  --app-section-header-eyebrow-letter-spacing: 0.12em;
+  --app-section-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1.05rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
@@ -69,7 +69,7 @@ const emit = defineEmits<{
 .daily-log-selected-card__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: var(--action-gap);
   justify-content: flex-end;
 }
 
@@ -88,7 +88,7 @@ const emit = defineEmits<{
   min-height: 8rem;
   padding: 1rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   text-align: center;
 }
 

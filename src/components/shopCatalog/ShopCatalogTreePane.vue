@@ -196,7 +196,7 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
   min-height: 0;
   overflow: auto;
   padding: 0.15rem 0.2rem 0.2rem;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 
 .catalog-tree-pane__list--drop-target {
@@ -215,7 +215,7 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
   font-size: 0.88rem;
   padding: 1rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   text-align: center;
 }
 

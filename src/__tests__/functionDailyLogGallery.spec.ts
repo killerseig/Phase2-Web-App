@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../functions/src/runtime', () => ({
+  storageBucket: { name: 'phase2-test.appspot.com' },
   db: {
     collection: vi.fn((collectionName: string) => {
       if (collectionName === 'dailyLogs') {
@@ -38,8 +39,13 @@ vi.mock('../../functions/src/firestoreService', () => ({
 
 import {
   buildPublicDailyLogGalleryPayload,
+  isTrustedStorageObjectUrl,
   loadLegacyPublicDailyLogGallery,
 } from '../../functions/src/dailyLogGalleryFunctions'
+
+function storageUrl(path: string) {
+  return `https://firebasestorage.googleapis.com/v0/b/phase2-test.appspot.com/o/${encodeURIComponent(path)}?alt=media&token=test-token`
+}
 
 describe('public daily log gallery payload', () => {
   beforeEach(() => {
@@ -67,8 +73,10 @@ describe('public daily log gallery payload', () => {
           attachments: [
             {
               name: 'north-wall.jpg',
-              url: 'https://storage.example.com/north-wall.jpg',
-              path: 'daily-logs/log-1/north-wall.jpg',
+              url: storageUrl('daily-logs/daily-log-1/north-wall.jpg'),
+              thumbnailUrl: storageUrl('daily-logs/daily-log-1/thumbnails/north-wall.jpg'),
+              path: 'daily-logs/daily-log-1/north-wall.jpg',
+              thumbnailPath: 'daily-logs/daily-log-1/thumbnails/north-wall.jpg',
               type: 'photo',
               description: 'North wall progress',
               createdAt: '2026-08-20T14:00:00.000Z',
@@ -83,6 +91,8 @@ describe('public daily log gallery payload', () => {
           ],
         },
       },
+      'daily-log-1',
+      'phase2-test.appspot.com',
     )
 
     expect(Object.keys(result)).toEqual([
@@ -97,7 +107,8 @@ describe('public daily log gallery payload', () => {
     expect(result.attachments).toEqual([
       {
         name: 'north-wall.jpg',
-        url: 'https://storage.example.com/north-wall.jpg',
+        url: storageUrl('daily-logs/daily-log-1/north-wall.jpg'),
+        thumbnailUrl: storageUrl('daily-logs/daily-log-1/thumbnails/north-wall.jpg'),
         type: 'photo',
         description: 'North wall progress',
       },
@@ -107,8 +118,26 @@ describe('public daily log gallery payload', () => {
     expect(JSON.stringify(result)).not.toContain('Internal report details')
   })
 
+  it('rejects thumbnail URLs outside the app bucket or expected object path', () => {
+    expect(
+      isTrustedStorageObjectUrl(
+        storageUrl('daily-logs/daily-log-1/thumbnails/photo.jpg'),
+        'daily-logs/daily-log-1/thumbnails/photo.jpg',
+        'phase2-test.appspot.com',
+      ),
+    ).toBe(true)
+    expect(
+      isTrustedStorageObjectUrl(
+        'https://tracking.example.com/photo.jpg',
+        'daily-logs/daily-log-1/thumbnails/photo.jpg',
+        'phase2-test.appspot.com',
+      ),
+    ).toBe(false)
+  })
+
   it('serves legacy links only for the exact submitted daily log', async () => {
     mocks.nestedGet.mockResolvedValue({
+      id: 'daily-log-1',
       exists: true,
       data: () => ({
         status: 'submitted',
@@ -119,7 +148,8 @@ describe('public daily log gallery payload', () => {
           attachments: [
             {
               name: 'legacy-photo.jpg',
-              url: 'https://storage.example.com/legacy-photo.jpg',
+              url: storageUrl('daily-logs/daily-log-1/legacy-photo.jpg'),
+              path: 'daily-logs/daily-log-1/legacy-photo.jpg',
               type: 'photo',
               description: 'Legacy photo',
             },
@@ -133,9 +163,7 @@ describe('public daily log gallery payload', () => {
         jobName: 'Lucky 3 Ranch',
         jobCode: '5229',
         foremanName: 'Vince Hintz',
-        attachments: [
-          expect.objectContaining({ name: 'legacy-photo.jpg' }),
-        ],
+        attachments: [expect.objectContaining({ name: 'legacy-photo.jpg' })],
       }),
     )
   })
@@ -146,8 +174,8 @@ describe('public daily log gallery payload', () => {
       data: () => ({ status: 'draft', logDate: '2026-08-20' }),
     })
 
-    await expect(
-      loadLegacyPublicDailyLogGallery('job-1', 'daily-log-1'),
-    ).rejects.toThrow('Photo gallery not found.')
+    await expect(loadLegacyPublicDailyLogGallery('job-1', 'daily-log-1')).rejects.toThrow(
+      'Photo gallery not found.',
+    )
   })
 })

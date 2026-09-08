@@ -71,17 +71,17 @@ const emit = defineEmits<{
 <style scoped>
 .users-jobs-panel {
   --app-section-header-title-color: var(--text);
-  --app-section-header-title-font-size: 1rem;
+  --app-section-header-title-font-size: var(--font-size-section-title);
   --app-section-header-title-font-weight: 700;
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
   display: grid;
-  gap: 0.85rem;
+  gap: var(--form-gap);
   min-height: 0;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  background: var(--field);
 }
 
 .users-jobs-panel__selected-count,
@@ -103,12 +103,12 @@ const emit = defineEmits<{
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: 0.65rem;
+  gap: var(--action-gap);
   min-height: 5.6rem;
   padding: 0.75rem 0.8rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
+  border-radius: var(--radius-sm);
+  background: var(--field);
   color: var(--text-muted);
 }
 

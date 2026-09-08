@@ -31,8 +31,8 @@ const listButtonClasses = computed(() => [
   width: 100%;
   padding: var(--app-list-button-padding, 0.9rem);
   border: 1px solid var(--app-list-button-border, var(--border));
-  border-radius: var(--app-list-button-radius, 13px);
-  background: var(--app-list-button-background, rgba(255, 255, 255, 0.035));
+  border-radius: var(--app-list-button-radius, var(--radius-sm));
+  background: var(--app-list-button-background, transparent);
   color: var(--app-list-button-color, var(--text));
   text-align: left;
   cursor: pointer;
@@ -42,13 +42,22 @@ const listButtonClasses = computed(() => [
     transform 0.2s ease;
 }
 
-.app-list-button:hover,
-.app-list-button--active {
-  border-color: var(--app-list-button-active-border, rgba(88, 186, 233, 0.28));
-  background:
-    linear-gradient(180deg, rgba(49, 83, 105, 0.35), rgba(33, 49, 62, 0.28)),
-    var(--app-list-button-active-background, rgba(255, 255, 255, 0.04));
-  transform: translateY(-1px);
+.app-list-button:hover {
+  border-color: var(--border);
+  background: var(--field-hover);
+  transform: none;
+}
+
+.app-list-button--active,
+.app-list-button--active:hover {
+  border-color: var(--app-list-button-active-border, var(--border-strong));
+  background: var(--app-list-button-active-background, var(--bg-accent));
+  transform: none;
+}
+
+.app-list-button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .app-list-button--dashed {

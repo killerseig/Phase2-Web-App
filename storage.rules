@@ -20,10 +20,29 @@ service firebase.storage {
              resource == null &&
              request.resource.size < 10 * 1024 * 1024 &&
              request.resource.contentType.matches('image/.*') &&
+             request.resource.metadata.variant == 'gallery-photo' &&
              requestHasDailyLogAttachmentMetadata(logId);
     }
 
-    match /daily-logs/{logId}/{allPaths=**} {
+    function isSupportedDailyLogThumbnailUpload(logId) {
+      return request.resource != null &&
+             resource == null &&
+             request.resource.size <= 300 * 1024 &&
+             request.resource.contentType == 'image/jpeg' &&
+             request.resource.metadata.variant == 'email-thumbnail' &&
+             requestHasDailyLogAttachmentMetadata(logId);
+    }
+
+    match /daily-logs/{logId}/thumbnails/{fileName} {
+      // Download tokens are intentionally used for the public gallery. Authenticated app reads
+      // remain available here for field workflows and cleanup.
+      allow read: if signedIn();
+      allow create: if signedIn() && isSupportedDailyLogThumbnailUpload(logId);
+      allow delete: if signedIn();
+      allow update: if false;
+    }
+
+    match /daily-logs/{logId}/{fileName} {
       // Firestore and callable functions authorize access to the parent daily log.
       // Keeping object rules self-contained avoids a separate cross-product IAM
       // dependency that can reject valid field users before an upload begins.

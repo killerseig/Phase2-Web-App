@@ -123,7 +123,7 @@ function lineOffValue(lineIndex: number, rowKind: LineRowKind) {
           <thead>
             <tr>
               <th>JOB #</th>
-              <th>1</th>
+              <th>AREA</th>
               <th></th>
               <th>ACCT</th>
               <th>DIF</th>

@@ -8,14 +8,14 @@ import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 
 <style scoped>
 .shop-catalog-tree-header {
-  --app-pane-header-eyebrow-font-size: 0.68rem;
-  --app-pane-header-eyebrow-letter-spacing: 0.12em;
-  --app-pane-header-title-font-size: 1.2rem;
+  --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
+  --app-pane-header-title-font-size: var(--font-size-pane-title);
   --app-pane-header-title-margin: 0.25rem 0 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.85rem;
+  gap: var(--form-gap);
   padding-bottom: 0.2rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }

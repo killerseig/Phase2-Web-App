@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JobTimecardConfirmAction, JobTimecardSortMode } from '@/features/timecards/jobViewHelpers'
 import { useJobTimecardCardActions } from '@/features/timecards/useJobTimecardCardActions'
 import { deleteTimecardCard, submitTimecardWeek, updateTimecardCard } from '@/services/timecards'
-import type { TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
+import { createEmptyWorkbookLine } from '@/features/timecards/workbook'
+import type { TimecardCardRecord, TimecardWeekRecord, TimecardWorkbookLineRecord } from '@/types/domain'
 
 vi.mock('@/services/timecards', () => ({
   deleteTimecardCard: vi.fn(),
@@ -68,6 +69,15 @@ function makeCard(overrides: Partial<TimecardCardRecord> = {}): TimecardCardReco
   }
 }
 
+function makeLine(
+  overrides: Partial<TimecardWorkbookLineRecord> = {},
+): TimecardWorkbookLineRecord {
+  return {
+    ...createEmptyWorkbookLine('2026-06-14'),
+    ...overrides,
+  }
+}
+
 function mountCardActions(options: {
   burdenValue?: number
   canEditWeek?: boolean
@@ -98,10 +108,16 @@ function mountCardActions(options: {
   const resetPageAndSaveMessages = vi.fn(() => {
     calls.push('reset')
   })
+  const revealCard = vi.fn((cardId: string) => {
+    calls.push(`reveal:${cardId}`)
+  })
   const selectCard = vi.fn((cardId: string) => {
     calls.push(`select:${cardId}`)
   })
   const setPageError = vi.fn()
+  const setPageErrorMessage = vi.fn((message: string) => {
+    calls.push(`error:${message}`)
+  })
   const setPageInfo = vi.fn()
 
   const actions = useJobTimecardCardActions({
@@ -113,11 +129,13 @@ function mountCardActions(options: {
     flushPendingSaves,
     getSubmitActor: () => ({ userId: 'foreman-1', displayName: 'Vince Hintz' }),
     resetPageAndSaveMessages,
+    revealCard,
     selectCard,
     selectedWeek: computed(() => selectedWeek.value),
     selectedWeekEndDate: computed(() => selectedWeekEndDate.value),
     selectedWeekStartDate: computed(() => selectedWeekStartDate.value),
     setPageError,
+    setPageErrorMessage,
     setPageInfo,
     sortMode: computed(() => sortMode.value),
     timecardConfirmAction,
@@ -133,11 +151,13 @@ function mountCardActions(options: {
     closeTimecardConfirm,
     flushPendingSaves,
     resetPageAndSaveMessages,
+    revealCard,
     selectedWeek,
     selectedWeekEndDate,
     selectedWeekStartDate,
     selectCard,
     setPageError,
+    setPageErrorMessage,
     setPageInfo,
     sortMode,
     timecardConfirmAction,
@@ -367,6 +387,28 @@ describe('useJobTimecardCardActions', () => {
     expect(readOnly.timecardConfirmAction.value).toBeNull()
   })
 
+  it('blocks submit confirmation and reveals the first incomplete line with hours', () => {
+    const incompleteLine = makeLine({ jobNumber: '7539', subsectionArea: '2' })
+    incompleteLine.days[1]!.hours = 8
+    const {
+      actions,
+      revealCard,
+      setPageErrorMessage,
+      timecardConfirmAction,
+    } = mountCardActions({
+      cards: [makeCard({ id: 'card-vince', lines: [incompleteLine] })],
+    })
+
+    actions.handleSubmitWeek()
+
+    expect(timecardConfirmAction.value).toBeNull()
+    expect(revealCard).toHaveBeenCalledWith('card-vince')
+    expect(setPageErrorMessage).toHaveBeenCalledWith(
+      'Vince Hintz, line 1 has hours but is missing Acct. Complete Job #, Area, and Acct on every line with hours before submitting.',
+    )
+    expect(submitTimecardWeekMock).not.toHaveBeenCalled()
+  })
+
   it('submits the selected week after pending saves flush and reports the email result', async () => {
     const {
       actionLoading,
@@ -392,6 +434,38 @@ describe('useJobTimecardCardActions', () => {
     expect(setPageInfo).toHaveBeenCalledWith('Email queued.')
     expect(closeTimecardConfirm).toHaveBeenCalledTimes(1)
     expect(actionLoading.value).toBe(false)
+  })
+
+  it('revalidates after pending saves flush and does not submit invalid OFF hours', async () => {
+    const incompleteLine = makeLine({
+      account: '716',
+      jobNumber: '',
+      offHours: 3,
+      subsectionArea: '99',
+    })
+    const {
+      actions,
+      closeTimecardConfirm,
+      flushPendingSaves,
+      revealCard,
+      setPageErrorMessage,
+    } = mountCardActions({
+      cards: [makeCard({ id: 'card-vince', lines: [incompleteLine] })],
+    })
+
+    await actions.confirmSubmitWeek({
+      kind: 'submit-week',
+      weekId: 'week-1',
+      weekEndDate: '2026-06-20',
+    })
+
+    expect(flushPendingSaves).toHaveBeenCalledTimes(1)
+    expect(revealCard).toHaveBeenCalledWith('card-vince')
+    expect(setPageErrorMessage).toHaveBeenCalledWith(
+      'Vince Hintz, line 1 has hours but is missing Job #. Complete Job #, Area, and Acct on every line with hours before submitting.',
+    )
+    expect(submitTimecardWeekMock).not.toHaveBeenCalled()
+    expect(closeTimecardConfirm).toHaveBeenCalledTimes(1)
   })
 
   it('uses the default submit success message when no email message is returned', async () => {
