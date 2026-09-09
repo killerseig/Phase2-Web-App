@@ -151,10 +151,20 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
     color 0.18s ease;
 }
 
-.shop-orders-tree-node:hover,
-.shop-orders-tree-node--active {
-  border-color: rgba(145, 220, 255, 0.22);
+.shop-orders-tree-node:hover {
+  border-color: var(--border);
+  background: var(--field-hover);
+}
+
+.shop-orders-tree-node--active,
+.shop-orders-tree-node--active:hover {
+  border-color: var(--border-strong);
   background: var(--bg-accent);
+}
+
+.shop-orders-tree-node:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .shop-orders-tree-node__indent {
@@ -252,7 +262,7 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 }
 
 .shop-orders-tree-node--root .shop-orders-tree-node__label {
-  font-weight: 700;
+  font-weight: var(--font-weight-heading);
 }
 
 .shop-orders-tree-node__meta {
@@ -267,9 +277,9 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 
 .shop-orders-tree-node__price {
   flex: 0 0 auto;
-  color: var(--accent-blue-bright, #72d3ff);
+  color: var(--text);
   font-size: 0.76rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-heading);
   white-space: nowrap;
 }
 

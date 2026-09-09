@@ -94,10 +94,10 @@ defineProps<{
 }
 
 .role-dashboard-job-shortcuts__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 500;
+  letter-spacing: var(--letter-spacing-eyebrow);
   text-transform: uppercase;
 }
 
@@ -148,7 +148,7 @@ defineProps<{
 
 .role-dashboard-job-shortcut__title {
   color: var(--text);
-  font-weight: 800;
+  font-weight: var(--font-weight-heading);
   text-decoration: none;
 }
 

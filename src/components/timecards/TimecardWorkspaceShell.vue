@@ -30,6 +30,8 @@ withDefaults(defineProps<{
   border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(236, 241, 213, 0.98) 0%, rgba(213, 225, 169, 0.96) 100%);
+  /* Preserve the green's original appearance over the shared navy page background. */
+  background-color: var(--bg);
   color: #1a1a12;
   min-width: 0;
   min-inline-size: 0;

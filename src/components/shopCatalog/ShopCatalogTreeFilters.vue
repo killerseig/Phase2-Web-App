@@ -58,7 +58,7 @@ const emit = defineEmits<{
 }
 
 .shop-catalog-tree-filters__toggle-row span {
-  font-size: 0.82rem;
+  font-size: var(--font-size-help);
   letter-spacing: 0.02em;
 }
 

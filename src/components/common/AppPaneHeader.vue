@@ -40,6 +40,7 @@ defineProps<{
 }
 
 .app-pane-header__eyebrow {
+  display: block;
   color: var(--text-muted);
   font-size: var(--app-pane-header-eyebrow-font-size, var(--font-size-eyebrow));
   letter-spacing: var(--app-pane-header-eyebrow-letter-spacing, var(--letter-spacing-eyebrow));
@@ -49,6 +50,7 @@ defineProps<{
 .app-pane-header__title {
   margin: var(--app-pane-header-title-margin, 0.35rem 0 0);
   font-size: var(--app-pane-header-title-font-size, var(--font-size-pane-title));
+  font-weight: var(--app-pane-header-title-font-weight, var(--font-weight-heading));
   overflow-wrap: anywhere;
 }
 

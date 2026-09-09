@@ -28,10 +28,10 @@ withDefaults(defineProps<{
   padding: var(--app-badge-padding, 0 0.6rem);
   border: 1px solid var(--app-badge-border-color, var(--border));
   border-radius: var(--app-badge-border-radius, var(--radius-sm));
-  background: var(--app-badge-background, rgba(255, 255, 255, 0.035));
+  background: var(--app-badge-background, var(--field));
   color: var(--app-badge-color, var(--text-muted));
-  font-size: var(--app-badge-font-size, 0.7rem);
-  letter-spacing: var(--app-badge-letter-spacing, 0.04em);
+  font-size: var(--app-badge-font-size, var(--font-size-badge));
+  letter-spacing: var(--app-badge-letter-spacing, var(--letter-spacing-eyebrow));
   text-transform: var(--app-badge-text-transform, uppercase);
   white-space: var(--app-badge-white-space, normal);
 }
@@ -43,20 +43,20 @@ withDefaults(defineProps<{
 }
 
 .app-badge--success {
-  border-color: var(--app-badge-success-border-color, rgba(103, 213, 157, 0.2));
-  background: var(--app-badge-success-background, rgba(50, 92, 72, 0.22));
+  border-color: var(--app-badge-success-border-color, var(--success-border));
+  background: var(--app-badge-success-background, var(--success-surface));
   color: var(--app-badge-success-color, var(--success));
 }
 
 .app-badge--danger {
-  border-color: var(--app-badge-danger-border-color, rgba(255, 125, 107, 0.2));
-  background: var(--app-badge-danger-background, rgba(104, 52, 45, 0.22));
+  border-color: var(--app-badge-danger-border-color, var(--danger-border));
+  background: var(--app-badge-danger-background, var(--danger-surface));
   color: var(--app-badge-danger-color, var(--danger));
 }
 
 .app-badge--warning {
-  border-color: var(--app-badge-warning-border-color, rgba(235, 194, 90, 0.22));
-  background: var(--app-badge-warning-background, rgba(107, 88, 31, 0.22));
+  border-color: var(--app-badge-warning-border-color, var(--warning-border));
+  background: var(--app-badge-warning-background, var(--warning-surface));
   color: var(--app-badge-warning-color, #f2d889);
 }
 </style>

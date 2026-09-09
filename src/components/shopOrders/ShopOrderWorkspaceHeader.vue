@@ -104,7 +104,7 @@ function getWorkspaceTitle(job: JobRecord | null) {
   gap: 0.08rem;
   min-height: 2.2rem;
   padding: 0.38rem 0.7rem 0.42rem;
-  border: 1px solid rgba(99, 199, 230, 0.28);
+  border: 1px solid var(--border);
   border-radius: var(--shop-radius-md);
   background: var(--panel-background);
   color: var(--text);
@@ -113,17 +113,18 @@ function getWorkspaceTitle(job: JobRecord | null) {
 }
 
 .shop-order-workspace-header__total span {
-  color: var(--text-soft);
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  line-height: 1;
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 500;
+  letter-spacing: var(--letter-spacing-eyebrow);
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
 .shop-order-workspace-header__total strong {
-  color: #dff7ff;
+  color: var(--text);
   font-size: 1.05rem;
+  font-weight: var(--font-weight-heading);
   line-height: 1.05;
 }
 

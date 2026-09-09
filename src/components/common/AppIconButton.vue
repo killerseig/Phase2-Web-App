@@ -42,7 +42,7 @@ const buttonClasses = computed(() => [
   height: var(--app-icon-button-size, 2rem);
   padding: 0;
   border: 1px solid var(--app-icon-button-border, var(--border));
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--app-icon-button-background, transparent);
   color: var(--app-icon-button-color, var(--text));
   cursor: pointer;
@@ -54,16 +54,25 @@ const buttonClasses = computed(() => [
   opacity: 0.6;
 }
 
+.app-icon-button:hover:not(:disabled) {
+  background: var(--field-hover);
+}
+
+.app-icon-button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .app-icon-button--success {
-  --app-icon-button-border: rgba(103, 213, 157, 0.32);
-  --app-icon-button-background: rgba(103, 213, 157, 0.12);
+  --app-icon-button-border: var(--success-border);
+  --app-icon-button-background: var(--success-surface);
   --app-icon-button-color: var(--success);
   font-size: 1.45rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-heading);
 }
 
 .app-icon-button--danger {
-  --app-icon-button-border: rgba(255, 125, 107, 0.24);
+  --app-icon-button-border: var(--danger-border);
   --app-icon-button-color: var(--danger);
 }
 </style>

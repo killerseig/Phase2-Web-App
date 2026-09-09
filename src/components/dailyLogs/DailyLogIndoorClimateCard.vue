@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './dailyLogRepeater.css'
 import AppCard from '@/components/common/AppCard.vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
@@ -37,7 +38,7 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
     />
 
     <div class="daily-log-climate-card__table-wrapper">
-      <table class="daily-log-climate-card__table">
+      <table class="daily-log-climate-card__table daily-log-repeater">
         <thead>
           <tr>
             <th v-for="column in columns" :key="column.key">{{ column.label }}</th>
@@ -59,9 +60,10 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
             v-for="(reading, index) in readings"
             :key="`climate-${index}`"
           >
-            <td v-for="column in columns" :key="column.key">
+            <td v-for="column in columns" :key="column.key" :data-label="column.label">
               <AppTextInput
                 :model-value="reading[column.key]"
+                :aria-label="column.label"
                 type="text"
                 :disabled="disabled"
                 :placeholder="column.placeholder"
@@ -93,37 +95,13 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
   --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
   --app-section-header-title-font-size: var(--font-size-section-title);
-  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-font-weight: var(--font-weight-heading);
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
 }
 
 .daily-log-climate-card__table-wrapper {
   overflow: auto;
-}
-
-.daily-log-climate-card__table {
-  --app-text-input-min-height: 2.55rem;
-  --app-text-input-padding-x: 0.85rem;
-  --app-text-input-border: var(--border);
-  --app-text-input-radius: var(--control-radius);
-  --app-text-input-background: var(--control-background);
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.daily-log-climate-card__table th,
-.daily-log-climate-card__table td {
-  padding: 0.45rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  text-align: left;
-}
-
-.daily-log-climate-card__table th {
-  color: var(--text-soft);
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .daily-log-climate-card__actions {
@@ -135,6 +113,12 @@ function updateField(index: number, field: DailyLogIndoorClimateFieldKey, value:
   .daily-log-climate-card__header {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .daily-log-climate-card__table tbody td:first-child {
+    grid-column: 1 / -1;
   }
 }
 </style>

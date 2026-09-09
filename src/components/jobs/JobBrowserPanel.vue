@@ -52,7 +52,7 @@ function handleStatusFilterUpdate(value: string) {
 
 <template>
   <AppPane class="jobs-browser">
-    <AppPaneHeader :eyebrow="canManageJobs ? 'Admin' : 'Field Workspace'" title="Jobs">
+    <AppPaneHeader class="app-page-header" :eyebrow="canManageJobs ? 'Admin' : 'Field Workspace'" title="Jobs">
       <template v-if="canCreateJobs && editMode" #actions>
         <AppButton variant="primary" data-testid="jobs-new-button" @click="emit('createJob')">
           New Job
@@ -137,38 +137,43 @@ function handleStatusFilterUpdate(value: string) {
 </template>
 
 <style scoped>
+.jobs-browser {
+  --app-pane-header-title-font-size: 2rem;
+}
+
 .jobs-browser__body {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--space-5);
   min-height: 0;
 }
 
 .jobs-browser__filters {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: var(--form-gap);
-  flex-wrap: wrap;
 }
 
 .jobs-browser__summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-3);
   color: var(--text-soft);
-  font-size: 0.76rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.jobs-browser__summary span + span {
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
 }
 
 .jobs-browser__filter {
   display: grid;
   gap: var(--field-gap);
   color: var(--text-muted);
-  font-size: 0.74rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: var(--font-size-label);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .jobs-browser__filter .app-select {
@@ -181,16 +186,49 @@ function handleStatusFilterUpdate(value: string) {
 
 .jobs-browser__list {
   display: grid;
-  gap: var(--list-gap);
+  gap: var(--space-1);
   align-content: start;
   min-height: 0;
   overflow: auto;
   padding-right: 0.15rem;
 }
 
+.jobs-browser__row {
+  --app-list-button-padding: var(--space-4);
+  --app-list-button-active-background: #252d35;
+  --app-list-button-active-border: transparent;
+  position: relative;
+}
+
+.jobs-browser__row--global {
+  margin-bottom: var(--space-3);
+  border-style: solid;
+  border-color: var(--border-soft);
+}
+
+.jobs-browser__row.app-list-button--active::before {
+  content: "";
+  position: absolute;
+  inset: var(--space-3) auto var(--space-3) 0;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
 .jobs-browser__row-main {
   display: grid;
-  gap: 0.2rem;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.jobs-browser__row-main strong {
+  font-size: 1.0625rem;
+  letter-spacing: -0.015em;
+}
+
+.jobs-browser__row-main > span {
+  font-size: var(--font-size-sm);
 }
 
 .jobs-browser__row-main span,
@@ -199,10 +237,10 @@ function handleStatusFilterUpdate(value: string) {
   color: var(--text-muted);
 }
 
-.jobs-browser__secondary {
-  font-size: 0.84rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.jobs-browser__row-main > .jobs-browser__secondary {
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .jobs-browser__empty {
@@ -215,11 +253,9 @@ function handleStatusFilterUpdate(value: string) {
   text-align: center;
 }
 
-@media (max-width: 760px) {
-  .jobs-browser__header,
-  .jobs-browser__filters {
-    flex-direction: column;
-    align-items: flex-start;
+@media (max-width: 560px) {
+  .jobs-browser {
+    --app-pane-header-title-font-size: 1.75rem;
   }
 }
 </style>

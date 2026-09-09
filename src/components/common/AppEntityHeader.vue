@@ -42,9 +42,9 @@ withDefaults(defineProps<{
 
 .app-entity-header__eyebrow {
   display: inline-flex;
-  color: var(--app-entity-header-eyebrow-color, var(--accent-strong));
+  color: var(--app-entity-header-eyebrow-color, var(--text-muted));
   font-size: var(--app-entity-header-eyebrow-font-size, 0.66rem);
-  letter-spacing: var(--app-entity-header-eyebrow-letter-spacing, 0.14em);
+  letter-spacing: var(--app-entity-header-eyebrow-letter-spacing, var(--letter-spacing-eyebrow));
   text-transform: uppercase;
 }
 

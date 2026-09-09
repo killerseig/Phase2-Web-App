@@ -157,7 +157,7 @@ const emit = defineEmits<{
 }
 
 .shop-catalog-detail-panel__toggle-row span {
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
 }
 
 .shop-catalog-detail-panel__toggle-row,
@@ -180,10 +180,13 @@ const emit = defineEmits<{
 .shop-catalog-detail-panel__card {
   display: grid;
   gap: 0.35rem;
-  padding: 0.95rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--field);
+  padding: 0.95rem 0;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.shop-catalog-detail-panel__card strong {
+  font-weight: var(--font-weight-heading);
 }
 
 .shop-catalog-detail-panel__card span {

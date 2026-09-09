@@ -55,7 +55,7 @@ function getRecipients(moduleKey: GlobalNotificationModuleKey) {
 .jobs-notifications-panel {
   --app-section-header-title-color: var(--text);
   --app-section-header-title-font-size: var(--font-size-section-title);
-  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-font-weight: var(--font-weight-heading);
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
   --app-section-header-description-font-size: 0.92rem;
@@ -65,12 +65,13 @@ function getRecipients(moduleKey: GlobalNotificationModuleKey) {
   min-width: 0;
   min-height: 0;
   max-height: 100%;
-  padding: 1rem;
+  padding: 1rem 0 0;
   overflow: auto;
   scrollbar-gutter: stable;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--field);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  border-top: 1px solid var(--border-soft);
 }
 
 .jobs-recipient-section {

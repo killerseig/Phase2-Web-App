@@ -113,15 +113,13 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
   --app-readonly-field-background: rgba(255, 255, 255, 0.02);
   --app-readonly-field-color: var(--text);
   display: grid;
-  gap: 0.3rem;
+  gap: var(--field-gap);
   color: var(--text-muted);
 }
 
 .shop-order-meta-form__field > span {
   color: var(--text-muted);
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--font-size-label);
 }
 
 .shop-order-meta-form__field--delivery,
@@ -181,10 +179,6 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
 @media (max-width: 820px) {
   .shop-order-meta-form {
     gap: var(--list-gap);
-  }
-
-  .shop-order-meta-form__field > span {
-    font-size: 0.66rem;
   }
 }
 </style>

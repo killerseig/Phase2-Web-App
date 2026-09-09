@@ -41,4 +41,8 @@ defineProps<{
   outline: none;
   box-shadow: var(--app-link-card-focus-shadow, var(--focus-ring));
 }
+
+:slotted(strong) {
+  font-weight: var(--font-weight-heading);
+}
 </style>

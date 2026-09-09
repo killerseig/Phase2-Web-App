@@ -477,8 +477,8 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 
 <template>
   <AppPane class="shop-orders-tree-pane">
-    <AppPaneHeader
-      class="shop-orders-pane__header shop-orders-tree-pane__header"
+  <AppPaneHeader
+      class="app-page-header shop-orders-pane__header shop-orders-tree-pane__header"
       eyebrow="Catalog Browser"
       title="Shop Orders"
     >
@@ -582,9 +582,7 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   flex-wrap: wrap;
   gap: 0.32rem 0.55rem;
   color: var(--text-soft);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--font-size-xs);
 }
 
 .shop-orders-pane__search {
@@ -595,15 +593,13 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   --app-search-input-background: var(--shop-field);
   --app-search-input-box-shadow: none;
   display: grid;
-  gap: 0.28rem;
+  gap: var(--field-gap);
   color: var(--text-muted);
 }
 
 .shop-orders-pane__search > span {
-  color: var(--text-soft);
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--text-muted);
+  font-size: var(--font-size-label);
 }
 
 @media (max-width: 1180px) {

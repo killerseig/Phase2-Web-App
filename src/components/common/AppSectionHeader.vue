@@ -58,7 +58,7 @@ withDefaults(defineProps<{
 
 .app-section-header__title {
   margin: 0;
-  color: var(--app-section-header-title-color, var(--accent-strong));
+  color: var(--app-section-header-title-color, var(--text-muted));
   font-size: var(--app-section-header-title-font-size, var(--font-size-eyebrow));
   font-weight: var(--app-section-header-title-font-weight, 500);
   line-height: var(--app-section-header-title-line-height, 1.2);

@@ -66,7 +66,7 @@ const emit = defineEmits<{
 
 .shop-orders-history-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 6.25rem;
   align-items: center;
   gap: 0.4rem;
   width: 100%;
@@ -84,16 +84,26 @@ const emit = defineEmits<{
     transform 0.2s ease;
 }
 
-.shop-orders-history-row:hover,
-.shop-orders-history-row--active {
-  border-color: rgba(140, 162, 186, 0.06);
-  background: var(--field);
-  transform: none;
+.shop-orders-history-row:hover {
+  background: var(--field-hover);
+}
+
+.shop-orders-history-row--active,
+.shop-orders-history-row--active:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-accent);
+}
+
+.shop-orders-history-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .shop-orders-history-row__main {
   display: grid;
   gap: 0.12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .shop-orders-history-row__main strong {
@@ -115,13 +125,9 @@ const emit = defineEmits<{
 
 .shop-orders-badge {
   --app-badge-flex: 0 0 auto;
-  --app-badge-min-height: 1.55rem;
   --app-badge-padding: 0 0.5rem;
-  --app-badge-font-size: 0.68rem;
-  --app-badge-letter-spacing: 0.08em;
   --app-badge-white-space: nowrap;
-  --app-badge-accent-border-color: rgba(99, 199, 230, 0.25);
-  --app-badge-accent-background: rgba(30, 83, 100, 0.3);
+  justify-content: center;
 }
 
 .shop-orders-pane__empty {
@@ -139,13 +145,4 @@ const emit = defineEmits<{
   min-height: 6rem;
 }
 
-@media (max-width: 820px) {
-  .shop-orders-history-row__meta {
-    gap: 0.12rem;
-  }
-
-  .shop-orders-history-row {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

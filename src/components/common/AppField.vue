@@ -28,7 +28,7 @@ defineProps<{
 
 .app-field__label {
   color: var(--app-field-label-color, inherit);
-  font-size: var(--app-field-label-font-size, 0.9rem);
+  font-size: var(--app-field-label-font-size, var(--font-size-label));
   font-weight: var(--app-field-label-font-weight, inherit);
   letter-spacing: var(--app-field-label-letter-spacing, normal);
   text-transform: var(--app-field-label-text-transform, none);
@@ -36,6 +36,6 @@ defineProps<{
 
 .app-field__help {
   color: var(--text-muted);
-  font-size: var(--app-field-help-font-size, 0.82rem);
+  font-size: var(--app-field-help-font-size, var(--font-size-help));
 }
 </style>

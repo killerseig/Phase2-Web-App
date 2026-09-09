@@ -21,7 +21,7 @@ defineProps<{
 .app-empty-state__title {
   display: block;
   color: var(--text);
-  font-weight: 700;
+  font-weight: var(--font-weight-heading);
 }
 
 .app-empty-state__message {

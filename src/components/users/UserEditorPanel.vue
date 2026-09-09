@@ -378,7 +378,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
 }
 
 .users-toggle-row span {
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
 }
 
 .users-browser__empty {

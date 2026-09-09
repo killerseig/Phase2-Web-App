@@ -28,7 +28,7 @@ const emit = defineEmits<{
 
 <template>
   <AppPaneHeader
-    class="daily-logs-header"
+    class="app-page-header daily-logs-header"
     eyebrow="Daily Logs"
     :title="props.title"
     title-tag="h1"
@@ -101,17 +101,6 @@ const emit = defineEmits<{
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
-}
-
-.daily-logs-badge {
-  --app-badge-min-height: 1.8rem;
-  --app-badge-padding: 0 0.7rem;
-  --app-badge-font-size: 0.72rem;
-  --app-badge-letter-spacing: 0.08em;
-  --app-badge-accent-border-color: rgba(88, 186, 233, 0.22);
-  --app-badge-warning-border-color: rgba(245, 185, 90, 0.38);
-  --app-badge-warning-background: rgba(245, 185, 90, 0.12);
-  --app-badge-warning-color: #f8c878;
 }
 
 .daily-logs-message {

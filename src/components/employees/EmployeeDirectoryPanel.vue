@@ -39,7 +39,7 @@ function handleStatusFilterUpdate(value: string) {
 
 <template>
   <AppPane class="employees-browser">
-    <AppPaneHeader eyebrow="Admin" title="Employees">
+    <AppPaneHeader class="app-page-header" eyebrow="Admin" title="Employees">
       <template #actions>
         <AppButton variant="primary" @click="emit('createEmployee')">
           New Employee
@@ -128,9 +128,9 @@ function handleStatusFilterUpdate(value: string) {
   display: grid;
   gap: var(--field-gap);
   color: var(--text-muted);
-  font-size: 0.74rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: var(--font-size-label);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .employees-browser__filter .app-select {
@@ -164,13 +164,22 @@ function handleStatusFilterUpdate(value: string) {
 }
 
 .employees-browser__secondary {
-  font-size: 0.82rem;
+  font-size: var(--font-size-help);
 }
 
 .employees-browser__row-meta {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.25rem;
   gap: var(--field-gap);
+}
+
+.employees-browser__row-meta .app-badge {
+  --app-badge-min-height: 2.25rem;
+  --app-badge-padding: 0.2rem 0.35rem;
+  min-width: 0;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
 }
 
 @media (max-width: 900px) {

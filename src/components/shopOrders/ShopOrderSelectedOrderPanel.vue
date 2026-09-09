@@ -73,8 +73,8 @@ const emit = defineEmits<{
 
 <style scoped>
 .shop-order-selected-panel {
-  --app-entity-header-eyebrow-font-size: 0.66rem;
-  --app-entity-header-eyebrow-letter-spacing: 0.14em;
+  --app-entity-header-eyebrow-font-size: var(--font-size-eyebrow);
+  --app-entity-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-entity-header-title-font-size: 0.94rem;
   --app-entity-header-title-font-weight: 600;
   --app-entity-header-title-line-height: 1.2;
@@ -99,11 +99,9 @@ const emit = defineEmits<{
   --app-badge-flex: 0 0 auto;
   --app-badge-min-height: 1.55rem;
   --app-badge-padding: 0 0.5rem;
-  --app-badge-font-size: 0.68rem;
-  --app-badge-letter-spacing: 0.08em;
   --app-badge-white-space: nowrap;
-  --app-badge-accent-border-color: rgba(99, 199, 230, 0.25);
-  --app-badge-accent-background: rgba(30, 83, 100, 0.3);
+  --app-badge-accent-border-color: var(--border);
+  --app-badge-accent-background: var(--field);
 }
 
 .shop-order-selected-panel__meta span {
@@ -141,7 +139,6 @@ const emit = defineEmits<{
   .shop-order-selected-panel__badge {
     --app-badge-min-height: 1.42rem;
     --app-badge-padding: 0 0.42rem;
-    --app-badge-font-size: 0.62rem;
   }
 }
 

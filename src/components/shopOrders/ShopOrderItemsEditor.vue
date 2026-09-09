@@ -186,11 +186,9 @@ function getOrderItemLineTotalLabel(item: ShopOrderItemRecord) {
   gap: 0.3rem;
   padding: 0 0.15rem 0.18rem;
   border-bottom: 1px solid var(--shop-line-soft);
-  color: var(--text-soft);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
 }
 
 .shop-orders-items-head--readonly {
@@ -339,7 +337,7 @@ function getOrderItemLineTotalLabel(item: ShopOrderItemRecord) {
     top: 0;
     z-index: 1;
     padding-top: 0.25rem;
-    background: rgba(24, 36, 48, 0.98);
+    background: var(--panel-background);
   }
 }
 </style>

@@ -55,7 +55,7 @@ function handleStatusFilterUpdate(value: string) {
 
 <template>
   <AppPane class="users-browser">
-    <AppPaneHeader class="users-browser__header" eyebrow="Admin" title="Users">
+    <AppPaneHeader class="app-page-header users-browser__header" eyebrow="Admin" title="Users">
       <template #actions>
         <div class="users-browser__header-actions">
           <div class="users-browser__header-topline">
@@ -133,7 +133,7 @@ function handleStatusFilterUpdate(value: string) {
             >
               {{ getInviteStatusLabel(user) }}
             </AppBadge>
-            <AppBadge :tone="user.active ? 'success' : 'danger'">
+            <AppBadge class="users-browser__account-status" :tone="user.active ? 'success' : 'danger'">
               {{ user.active ? 'Active' : 'Inactive' }}
             </AppBadge>
           </div>
@@ -195,15 +195,15 @@ function handleStatusFilterUpdate(value: string) {
 }
 
 .users-browser__invite-label {
-  font-size: 0.68rem;
-  letter-spacing: 0.12em;
+  font-size: var(--font-size-badge);
+  letter-spacing: var(--letter-spacing-eyebrow);
   text-transform: uppercase;
 }
 
 .users-browser__invite-count {
   color: var(--text);
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-heading);
   line-height: 1;
 }
 
@@ -218,9 +218,9 @@ function handleStatusFilterUpdate(value: string) {
   display: grid;
   gap: var(--field-gap);
   color: var(--text-muted);
-  font-size: 0.74rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: var(--font-size-label);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .users-browser__filter .app-select {
@@ -253,9 +253,22 @@ function handleStatusFilterUpdate(value: string) {
 }
 
 .users-browser__row-meta {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 4.25rem;
   gap: var(--field-gap);
+}
+
+.users-browser__row-meta .app-badge {
+  --app-badge-min-height: 2.25rem;
+  --app-badge-padding: 0.2rem 0.35rem;
+  min-width: 0;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.users-browser__account-status {
+  grid-column: 3;
 }
 
 @media (max-width: 900px) {

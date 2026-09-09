@@ -92,7 +92,7 @@ const emit = defineEmits<{
   --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
   --app-section-header-title-font-size: var(--font-size-section-title);
-  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-font-weight: var(--font-weight-heading);
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
 }
@@ -122,7 +122,7 @@ const emit = defineEmits<{
 
 .daily-log-history-list {
   display: grid;
-  gap: var(--action-gap);
+  gap: var(--list-gap);
   max-height: 22rem;
   overflow: auto;
   padding-right: 0.2rem;
@@ -134,9 +134,10 @@ const emit = defineEmits<{
   gap: var(--field-gap);
   width: 100%;
   padding: 0.8rem;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
+  border-bottom-color: var(--border-soft);
   border-radius: var(--radius-sm);
-  background: var(--field);
+  background: transparent;
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -146,16 +147,29 @@ const emit = defineEmits<{
     transform 0.18s ease;
 }
 
-.daily-log-history-row:hover,
-.daily-log-history-row--active {
-  border-color: rgba(88, 186, 233, 0.24);
+.daily-log-history-row:hover {
+  border-color: var(--border);
+  background: var(--field-hover);
+}
+
+.daily-log-history-row--active,
+.daily-log-history-row--active:hover {
+  border-color: var(--border-strong);
   background: var(--bg-accent);
-  transform: none;
+}
+
+.daily-log-history-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .daily-log-history-row__main {
   display: grid;
   gap: 0.25rem;
+}
+
+.daily-log-history-row__main strong {
+  font-weight: var(--font-weight-heading);
 }
 
 .daily-log-history-row__main span {
@@ -164,11 +178,6 @@ const emit = defineEmits<{
 
 .daily-log-history-badge {
   --app-badge-width: max-content;
-  --app-badge-min-height: 1.8rem;
-  --app-badge-padding: 0 0.7rem;
-  --app-badge-font-size: 0.72rem;
-  --app-badge-letter-spacing: 0.08em;
-  --app-badge-accent-border-color: rgba(88, 186, 233, 0.22);
 }
 
 @media (max-width: 920px) {

@@ -8,11 +8,20 @@ import {
   getAppShellWorkspaceNavigationItems,
 } from '@/features/navigation/appShellNavigation'
 import { useAuthStore } from '@/stores/auth'
+import brandLogo from '@/assets/images/phase2-logo.png'
+import '@/styles/brand-workspace.css'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const mobileNavOpen = ref(false)
+
+// Navigation is shared; only worksheet and export content retain the original theme.
+const usesBrandContentTheme = computed(() => ![
+  'timecards',
+  'timecard-export',
+  'timecard-export-print',
+].includes(String(route.name)))
 
 const workspaceNavigationItems = computed(() => getAppShellWorkspaceNavigationItems())
 const adminNavigationItems = computed(() => getAppShellAdminNavigationItems(auth.rawRole))
@@ -38,7 +47,10 @@ watch(() => route.fullPath, () => {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'app-shell--mobile-nav-open': mobileNavOpen }">
+  <div class="app-shell app-shell--branded" :class="{
+    'app-shell--mobile-nav-open': mobileNavOpen,
+    'app-shell--branded-content': usesBrandContentTheme,
+  }">
     <button
       class="app-shell__sidebar-backdrop"
       type="button"
@@ -49,7 +61,9 @@ watch(() => route.fullPath, () => {
 
     <aside id="app-shell-navigation" class="app-shell__sidebar">
       <div class="app-shell__brand">
-        <div class="app-shell__logo">P2</div>
+        <div class="app-shell__brand-mark">
+          <img :src="brandLogo" alt="" width="26" height="42" />
+        </div>
         <div class="app-shell__brand-copy">
           <div class="app-shell__brand-title">Phase 2</div>
           <div class="app-shell__brand-subtitle">Field Operations</div>
@@ -149,7 +163,7 @@ watch(() => route.fullPath, () => {
   grid-template-columns: 278px minmax(0, 1fr);
   height: 100vh;
   position: relative;
-  background: var(--bg);
+  background: var(--brand-workspace-background);
   overflow: hidden;
 }
 
@@ -233,20 +247,6 @@ watch(() => route.fullPath, () => {
   border-bottom: 1px solid var(--border-soft);
 }
 
-.app-shell__logo {
-  display: grid;
-  place-items: center;
-  width: 2.85rem;
-  height: 2.85rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: var(--field);
-  box-shadow: none;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
 .app-shell__brand-copy {
   display: grid;
   gap: 0.08rem;
@@ -254,7 +254,7 @@ watch(() => route.fullPath, () => {
 
 .app-shell__brand-title {
   font-size: 1.06rem;
-  font-weight: 800;
+  font-weight: var(--font-weight-heading);
   letter-spacing: -0.025em;
 }
 
@@ -388,9 +388,9 @@ watch(() => route.fullPath, () => {
 }
 
 .app-shell__topbar-eyebrow {
-  color: var(--accent);
-  font-size: 0.66rem;
-  font-weight: 800;
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 500;
   letter-spacing: var(--letter-spacing-eyebrow);
   line-height: 1;
   text-transform: uppercase;
@@ -401,6 +401,7 @@ watch(() => route.fullPath, () => {
   font-size: 1rem;
   line-height: 1.15;
   letter-spacing: -0.03em;
+  font-weight: var(--font-weight-heading);
 }
 
 .app-shell__menu-button--open {
@@ -449,7 +450,7 @@ watch(() => route.fullPath, () => {
   min-height: 0;
   padding: 1.15rem;
   overflow: auto;
-  background: var(--bg);
+  background: var(--brand-workspace-background);
 }
 
 .app-shell__statusbar {

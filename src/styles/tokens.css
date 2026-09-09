@@ -14,6 +14,10 @@
   --font-size-eyebrow: 0.72rem;
   --font-size-pane-title: 1.1rem;
   --font-size-section-title: 1rem;
+  --font-size-label: 0.9rem;
+  --font-size-help: 0.82rem;
+  --font-size-badge: 0.7rem;
+  --font-weight-heading: 600;
 
   /* App backgrounds */
   --app-root-background: var(--bg);
@@ -44,6 +48,12 @@
   --success: #89d185;
   --danger: #f48771;
   --warning: #eac064;
+  --success-surface: #202b21;
+  --success-border: #3e5740;
+  --danger-surface: #3b2925;
+  --danger-border: #72493f;
+  --warning-surface: #332d1f;
+  --warning-border: #665631;
 
   /* Normalized color tokens for new shared components and feature CSS. */
   --color-bg: var(--bg);
@@ -81,6 +91,7 @@
   --button-primary-hover: #026ec1;
 
   /* Focus and depth */
+  --overlay-backdrop: rgba(0, 0, 0, 0.8);
   --focus-ring: 0 0 0 1px var(--border-strong);
   --control-focus-shadow: var(--focus-ring);
   --shadow: none;

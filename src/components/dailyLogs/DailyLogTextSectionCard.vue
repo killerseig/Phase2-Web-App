@@ -66,7 +66,7 @@ function handleUpdate(fieldKey: DailyLogTextFieldKey, value: string) {
   --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
   --app-section-header-title-font-size: var(--font-size-section-title);
-  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-font-weight: var(--font-weight-heading);
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
 }

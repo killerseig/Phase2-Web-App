@@ -3,7 +3,7 @@ import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 </script>
 
 <template>
-  <AppPaneHeader class="shop-catalog-tree-header" eyebrow="Admin" title="Shop Catalog" />
+  <AppPaneHeader class="app-page-header shop-catalog-tree-header" eyebrow="Admin" title="Shop Catalog" />
 </template>
 
 <style scoped>

@@ -280,7 +280,7 @@ function renderDailyLogPhotoSection(title, section, allAttachments, dailyLogUrl,
         const linkedImage = targetUrl
             ? `<a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="display: block; color: #007bff; text-decoration: none;">${image}</a>`
             : image;
-        return `<td width="50%" valign="top" style="width: 50%; padding: 0 8px 14px 0; vertical-align: top;">
+        return `<td width="50%" valign="top" style="width: 50%; padding: 0 8px 14px 0; border: 0; vertical-align: top;">
         ${linkedImage}
         <div style="max-width: 240px; padding-top: 6px; line-height: 1.4; overflow-wrap: anywhere;">
           <strong>${escapeHtml(attachment.name)}</strong>
@@ -290,7 +290,7 @@ function renderDailyLogPhotoSection(title, section, allAttachments, dailyLogUrl,
     });
     const previewRows = [];
     for (let index = 0; index < previewCells.length; index += 2) {
-        previewRows.push(`<tr>${previewCells[index]}${previewCells[index + 1] || '<td width="50%"></td>'}</tr>`);
+        previewRows.push(`<tr>${previewCells[index]}${previewCells[index + 1] || '<td width="50%" style="width: 50%; padding: 0; border: 0;"></td>'}</tr>`);
     }
     const sectionUrl = buildDailyLogGalleryTarget(dailyLogUrl, section);
     const overflowButton = attachments.length > DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT && sectionUrl
@@ -305,7 +305,7 @@ function renderDailyLogPhotoSection(title, section, allAttachments, dailyLogUrl,
     return `
     <h3 style="color: #555; font-size: 16px; margin: 20px 0 10px 0;">${escapeHtml(title)}</h3>
     <p style="margin: 0 0 10px 0;"><strong>${attachments.length} ${attachments.length === 1 ? 'photo' : 'photos'}</strong></p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0; border: 0;">
+    <table role="presentation" width="496" cellpadding="0" cellspacing="0" border="0" style="width: 496px; max-width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0; border: 0;">
       ${previewRows.join('')}
     </table>
     ${overflowButton}

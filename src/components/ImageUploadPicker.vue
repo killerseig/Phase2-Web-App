@@ -319,11 +319,10 @@ watch(previewImage, async (currentPreview) => {
 
 .image-upload-picker__uploader {
   display: grid;
-  gap: 1rem;
-  padding: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-sm);
-  background: var(--field);
+  gap: var(--space-4);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .image-upload-picker :deep(input[type='file']) {
@@ -338,7 +337,7 @@ watch(previewImage, async (currentPreview) => {
 .image-upload-picker__buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: var(--action-gap);
 }
 
 .image-upload-picker__icon-button {
@@ -355,8 +354,8 @@ watch(previewImage, async (currentPreview) => {
 .image-upload-picker__progress-track {
   overflow: hidden;
   height: 0.95rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  background: var(--field);
 }
 
 .image-upload-picker__progress-value {
@@ -374,15 +373,15 @@ watch(previewImage, async (currentPreview) => {
 
 .image-upload-picker__helper {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-size-help);
 }
 
 .image-upload-picker__message {
   padding: 0.75rem 0.9rem;
-  border: 1px solid rgba(255, 125, 107, 0.24);
+  border: 1px solid var(--danger-border);
   border-radius: var(--radius-sm);
   color: var(--danger);
-  background: rgba(255, 125, 107, 0.08);
+  background: var(--danger-surface);
 }
 
 .image-upload-picker__section {
@@ -393,15 +392,15 @@ watch(previewImage, async (currentPreview) => {
 .image-upload-picker__grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.85rem;
+  gap: var(--space-4);
 }
 
 .image-upload-picker__card {
-  --app-card-gap: 0.55rem;
-  --app-card-padding: 0.75rem;
-  --app-card-border: 1px solid rgba(255, 255, 255, 0.08);
+  --app-card-gap: var(--list-gap);
+  --app-card-padding: 0;
+  --app-card-border: 0;
   --app-card-radius: var(--radius-sm);
-  --app-card-background: rgba(255, 255, 255, 0.03);
+  --app-card-background: transparent;
   --app-card-shadow: none;
   flex: 0 1 220px;
   width: min(100%, 220px);
@@ -412,7 +411,7 @@ watch(previewImage, async (currentPreview) => {
   place-items: center;
   width: 100%;
   height: 118px;
-  padding: 0;
+  padding: var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -422,15 +421,15 @@ watch(previewImage, async (currentPreview) => {
 
 .image-upload-picker__preview-button img {
   display: block;
-  max-width: calc(100% - 0.75rem);
-  max-height: calc(100% - 0.75rem);
-  width: auto;
-  height: auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
 .image-upload-picker__name {
-  font-weight: 600;
+  font-weight: var(--font-weight-heading);
   line-height: 1.25;
   overflow: hidden;
   overflow-wrap: anywhere;
@@ -441,43 +440,43 @@ watch(previewImage, async (currentPreview) => {
 
 .image-upload-picker__meta {
   color: var(--text-muted);
-  font-size: 0.77rem;
+  font-size: var(--font-size-xs);
 }
 
 .image-upload-picker__field {
   --app-textarea-min-height: 3.35rem;
   --app-textarea-padding: 0.6rem 0.75rem;
-  --app-textarea-background: rgba(255, 255, 255, 0.045);
+  --app-textarea-background: var(--control-background);
   display: grid;
-  gap: 0.3rem;
+  gap: var(--field-gap);
   color: var(--text-muted);
 }
 
 .image-upload-picker__field span {
-  font-size: 0.78rem;
+  font-size: var(--font-size-label);
 }
 
 .image-upload-picker__readonly-description {
   display: grid;
   gap: 0.25rem;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-size-help);
   line-height: 1.4;
   white-space: pre-wrap;
 }
 
 .image-upload-picker__readonly-description strong {
-  color: var(--text-soft);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-heading);
 }
 
 .image-upload-picker__empty {
   display: grid;
   place-items: center;
-  gap: 0.65rem;
-  min-height: 13rem;
-  padding: 1rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  align-content: center;
+  gap: var(--field-gap);
+  min-height: 8rem;
+  padding: var(--space-3);
   text-align: center;
   color: var(--text-muted);
 }
@@ -485,12 +484,19 @@ watch(previewImage, async (currentPreview) => {
 .image-upload-picker__empty-icon {
   display: grid;
   place-items: center;
-  width: 5.5rem;
-  height: 5.5rem;
-  border: 2px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  font-size: 2rem;
+  width: 2rem;
+  height: 2rem;
+  font-size: var(--font-size-xl);
   color: var(--text-soft);
+}
+
+.image-upload-picker__empty p {
+  margin: 0;
+}
+
+.image-upload-picker__preview-button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .image-upload-picker__remove {
@@ -507,7 +513,7 @@ watch(previewImage, async (currentPreview) => {
   display: grid;
   place-items: center;
   padding: 2rem;
-  background: rgba(4, 10, 16, 0.82);
+  background: var(--overlay-backdrop);
   outline: none;
 }
 
@@ -557,18 +563,19 @@ watch(previewImage, async (currentPreview) => {
   gap: 0.25rem;
   max-width: min(90vw, 48rem);
   text-align: center;
-  color: #f0f6fb;
+  color: var(--text);
   line-height: 1.4;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .image-upload-picker__lightbox-caption strong {
-  font-weight: 700;
+  font-weight: var(--font-weight-heading);
 }
 
 .image-upload-picker__lightbox-caption span,
 .image-upload-picker__lightbox-caption small {
-  color: rgba(240, 246, 251, 0.78);
+  color: var(--text-muted);
 }
 
 @keyframes image-upload-picker-progress {

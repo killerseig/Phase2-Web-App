@@ -204,7 +204,7 @@ const emit = defineEmits<{
 .shop-orders-draft-delete-button {
   min-height: 1.75rem;
   padding: 0 0.55rem;
-  font-size: 0.82rem;
+  font-size: var(--font-size-help);
 }
 
 @media (max-width: 820px) {

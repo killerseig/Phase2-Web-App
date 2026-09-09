@@ -272,8 +272,9 @@ function forwardDetailRecipientRemove(moduleKey: GlobalNotificationModuleKey, em
 <style scoped>
 .jobs-detail {
   --app-pane-grid-template-rows: auto minmax(0, 1fr);
-  --app-pane-gap: 1rem;
-  --app-pane-padding: 1rem;
+  --app-pane-gap: var(--space-5);
+  --app-pane-padding: var(--space-4) var(--space-4) var(--space-4) var(--space-6);
+  border-left: 1px solid var(--border-soft);
 }
 
 .jobs-detail__body {
@@ -293,7 +294,7 @@ function forwardDetailRecipientRemove(moduleKey: GlobalNotificationModuleKey, em
 
 .jobs-form {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-6);
   align-content: start;
 }
 
@@ -312,5 +313,19 @@ function forwardDetailRecipientRemove(moduleKey: GlobalNotificationModuleKey, em
   display: flex;
   flex-wrap: wrap;
   gap: var(--action-gap);
+}
+
+@media (max-width: 1180px) {
+  .jobs-detail {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    --app-pane-padding: var(--space-6) var(--space-4) var(--space-4);
+  }
+}
+
+@media (max-width: 560px) {
+  .jobs-detail {
+    --app-pane-padding: var(--space-6) 0 0;
+  }
 }
 </style>

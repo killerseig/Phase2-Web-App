@@ -1,0 +1,311 @@
+/* Phase 2 identity is shared by all navigation. Timecard and export content
+   retain their original inherited theme; never override the root theme here. */
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('../assets/fonts/SourceSans3-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('../assets/fonts/SourceSans3-Semibold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Saira Semi Condensed';
+  src: url('../assets/fonts/SairaSemiCondensed-SemiBold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+.app-shell--branded {
+  --brand-workspace-background: #112838;
+}
+
+.app-shell--branded-content,
+.app-shell__sidebar,
+.app-shell__topbar,
+.app-shell__statusbar,
+body:has(.app-shell--branded) > .confirm-dialog,
+body:has(.app-shell--branded) > #app-toast-root {
+  --font-sans: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-body: var(--font-sans);
+  --font-heading: 'Saira Semi Condensed', 'Source Sans 3', sans-serif;
+  --brand-blue: #00437f;
+  --brand-orange: #b65326;
+  --brand-clay: #e9a47d;
+  --bg: #112838;
+  --bg-elevated: #102532;
+  --bg-panel: #1b303f;
+  --bg-soft: #213a4a;
+  --bg-softest: #294555;
+  --bg-accent: #1b3c53;
+  --surface: #1b303f;
+  --surface-raised: #213a4a;
+  --surface-glass: #102532;
+  --field: #112838;
+  --field-hover: #1b3c53;
+  --border: #354f62;
+  --border-soft: #2b4354;
+  --border-strong: #8bc4e8;
+  --control-border: #71889a;
+  --text: #edf4f8;
+  --text-muted: #b2c3ce;
+  --text-soft: #a3b8c6;
+  --accent: #8bc4e8;
+  --accent-strong: #8bc4e8;
+  --accent-ink: #ffffff;
+  --accent-warm: var(--brand-clay);
+  --success: #95d6b6;
+  --warning: #edc47f;
+  --danger: #f0a3a8;
+  --success-surface: #173a30;
+  --success-border: #47755f;
+  --warning-surface: #3b3323;
+  --warning-border: #7b653e;
+  --danger-surface: #402c36;
+  --danger-border: #85505e;
+
+  /* Rebind aliases locally: inherited custom properties resolve at their owner. */
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-soft: var(--bg-soft);
+  --color-bg-softest: var(--bg-softest);
+  --color-bg-accent: var(--bg-accent);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-glass: var(--surface-glass);
+  --color-field: var(--field);
+  --color-field-hover: var(--field-hover);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-soft: var(--text-soft);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-warm: var(--accent-warm);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --panel-background: var(--surface);
+  --control-background: var(--field);
+  --button-primary: var(--brand-blue);
+  --button-primary-hover: #003462;
+  --focus-ring: 0 0 0 1px var(--border-strong);
+  --control-focus-shadow: var(--focus-ring);
+  --letter-spacing-eyebrow: 0.08em;
+  --font-size-pane-title: 1.375rem;
+  font-family: var(--font-body);
+  color: var(--text);
+  letter-spacing: normal;
+}
+
+.app-shell.app-shell--branded :is(.app-shell__brand-title, .app-shell__topbar-heading),
+.app-shell.app-shell--branded-content :is(h1, h2),
+body:has(.app-shell--branded) > .confirm-dialog h2 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* Fine material grain belongs only to navigation surfaces. */
+.app-shell.app-shell--branded .app-shell__sidebar {
+  background-image: url('../assets/images/sidebar-matte-metal.webp');
+  background-size: 256px 256px;
+  background-repeat: repeat;
+}
+
+.app-shell.app-shell--branded .app-shell__topbar {
+  background: var(--surface);
+  background-image: url('../assets/images/topbar-matte-metal.webp');
+  background-size: 256px 256px;
+  background-repeat: repeat;
+}
+
+.app-shell.app-shell--branded .app-shell__brand {
+  gap: 0.85rem;
+  padding-bottom: 1.25rem;
+}
+
+.app-shell__brand-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  height: 58px;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.app-shell__brand-mark img {
+  display: block;
+  object-fit: contain;
+}
+
+.app-shell.app-shell--branded .app-shell__brand-title {
+  font-size: 1.6rem;
+  line-height: 1.15;
+}
+
+.app-shell.app-shell--branded .app-shell__brand-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.65rem;
+}
+
+.app-shell.app-shell--branded .app-shell__section-label {
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+}
+
+.app-shell.app-shell--branded .app-shell__nav-link {
+  border-left-width: 3px;
+  font-size: 1rem;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.app-shell.app-shell--branded .app-shell__nav-link--active {
+  border-left-color: var(--brand-clay);
+  background: var(--bg-accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.app-shell.app-shell--branded .app-shell__topbar-heading {
+  font-size: 1.125rem;
+}
+
+.app-shell.app-shell--branded .app-shell__topbar-eyebrow {
+  color: var(--text-soft);
+  font-size: 0.625rem;
+}
+
+.app-shell.app-shell--branded .app-shell__topbar-chip--role {
+  background: var(--bg);
+  border-color: var(--border);
+  font-size: 0.75rem;
+}
+
+.app-shell.app-shell--branded .app-shell__statusbar {
+  color: var(--text-soft);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+}
+
+.app-shell.app-shell--branded-content :is(.app-text-input, .app-textarea, .app-search-input, .app-select, .app-readonly-field),
+body:has(.app-shell--branded) > .confirm-dialog :is(.app-text-input, .app-select) {
+  border-color: var(--control-border);
+}
+
+.app-shell.app-shell--branded-content :is(.app-text-input, .app-textarea, .app-search-input, .app-select):focus-visible {
+  border-color: var(--accent);
+}
+
+.app-shell.app-shell--branded-content :is(.app-pane-header__eyebrow, .app-section-header__eyebrow) {
+  color: var(--brand-clay);
+  font-weight: 600;
+}
+
+.app-shell.app-shell--branded-content .app-pane-header__title {
+  line-height: 1.2;
+}
+
+/* Main page headers share the Jobs artwork; section and editor headings stay plain. */
+.app-shell.app-shell--branded-content .app-pane-header.app-page-header {
+  flex-wrap: wrap;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 7rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  border-radius: 4px 4px 0 0;
+  background: var(--bg);
+}
+
+.app-shell.app-shell--branded-content .app-page-header > .app-pane-header__copy {
+  flex: 1;
+  min-width: min(100%, 10rem);
+}
+
+.app-shell.app-shell--branded-content .app-pane-header.app-page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(45%, 32rem);
+  z-index: -1;
+  background: url('../assets/images/workspace-blueprint.webp') right 55% / cover no-repeat;
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+.app-shell.app-shell--branded-content .app-pane-header.app-page-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--brand-orange);
+  width: 2.5rem;
+  pointer-events: none;
+}
+
+.app-shell.app-shell--branded-content .jobs-browser__row {
+  --app-list-button-active-background: var(--bg-accent);
+}
+
+.app-shell.app-shell--branded-content :is(.app-link-card, .module-launcher-card):hover {
+  border-color: var(--control-border);
+}
+
+.app-shell.app-shell--branded :is(.app-shell__sidebar, .app-shell__sidebar *, .app-shell__topbar, .app-shell__topbar *, .app-shell__statusbar, .app-shell__content),
+.app-shell.app-shell--branded-content * {
+  scrollbar-color: #526d80 var(--brand-workspace-background);
+}
+
+.app-shell.app-shell--branded :is(.app-shell__sidebar, .app-shell__sidebar *, .app-shell__topbar, .app-shell__topbar *, .app-shell__statusbar, .app-shell__content)::-webkit-scrollbar-thumb,
+.app-shell.app-shell--branded-content *::-webkit-scrollbar-thumb {
+  background: #526d80;
+}
+
+body:has(.app-shell--branded) > #app-toast-root .p-toast-message-success {
+  background: var(--success-surface);
+  border-color: var(--success-border);
+}
+
+body:has(.app-shell--branded) > #app-toast-root .p-toast-message-warn {
+  background: var(--warning-surface);
+  border-color: var(--warning-border);
+}
+
+body:has(.app-shell--branded) > #app-toast-root .p-toast-message-error {
+  background: var(--danger-surface);
+  border-color: var(--danger-border);
+}
+
+@media (max-width: 560px) {
+  .app-shell.app-shell--branded-content .app-pane-header.app-page-header {
+    min-height: 6rem;
+    padding: 1rem;
+  }
+}
+
+@media (max-height: 600px) {
+  .app-shell.app-shell--branded .app-shell__sidebar {
+    overflow-y: auto;
+  }
+
+  .app-shell.app-shell--branded .app-shell__sidebar-main {
+    flex: 1 0 auto;
+    overflow: visible;
+  }
+}

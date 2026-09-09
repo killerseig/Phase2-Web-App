@@ -30,7 +30,8 @@ const listButtonClasses = computed(() => [
   gap: var(--app-list-button-gap, 0.7rem);
   width: 100%;
   padding: var(--app-list-button-padding, 0.9rem);
-  border: 1px solid var(--app-list-button-border, var(--border));
+  border: 1px solid var(--app-list-button-border, transparent);
+  border-bottom-color: var(--app-list-button-border, var(--border-soft));
   border-radius: var(--app-list-button-radius, var(--radius-sm));
   background: var(--app-list-button-background, transparent);
   color: var(--app-list-button-color, var(--text));
@@ -48,6 +49,10 @@ const listButtonClasses = computed(() => [
   transform: none;
 }
 
+.app-list-button :deep(strong) {
+  font-weight: var(--font-weight-heading);
+}
+
 .app-list-button--active,
 .app-list-button--active:hover {
   border-color: var(--app-list-button-active-border, var(--border-strong));
@@ -61,6 +66,7 @@ const listButtonClasses = computed(() => [
 }
 
 .app-list-button--dashed {
+  --app-list-button-border: var(--border);
   gap: var(--app-list-button-dashed-gap, 0.45rem);
   border-style: dashed;
 }

@@ -129,7 +129,7 @@ function getSelectValue(value: string) {
 }
 
 .shop-catalog-create-panel__toggle-row span {
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
 }
 
 .shop-catalog-create-panel__toggle-row {

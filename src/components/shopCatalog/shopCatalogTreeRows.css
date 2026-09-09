@@ -22,16 +22,28 @@
     color 0.18s ease;
 }
 
-.catalog-tree-node:hover,
-.catalog-tree-node--active {
-  border-color: rgba(88, 186, 233, 0.18);
-  background: rgba(30, 73, 97, 0.2);
+.catalog-tree-node:hover {
+  border-color: var(--border);
+  background: var(--field-hover);
 }
 
-.catalog-tree-node--drop-target {
-  border-color: rgba(88, 186, 233, 0.34);
-  background: rgba(45, 106, 140, 0.28);
-  box-shadow: inset 0 0 0 1px rgba(88, 186, 233, 0.14);
+.catalog-tree-node--active,
+.catalog-tree-node--active:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-accent);
+}
+
+.catalog-tree-node:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.catalog-tree-node--drop-target,
+.catalog-tree-node--drop-target:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-accent);
+  outline: 1px dashed var(--accent);
+  outline-offset: -3px;
 }
 
 .catalog-tree-node--dragging {
@@ -137,7 +149,7 @@
 }
 
 .catalog-tree-node--root .catalog-tree-node__label {
-  font-weight: 700;
+  font-weight: var(--font-weight-heading);
 }
 
 .catalog-tree-node__meta {
@@ -152,16 +164,16 @@
   width: 100%;
   height: 1.9rem;
   padding: 0 0.45rem;
-  border: 1px solid rgba(88, 186, 233, 0.24);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: rgba(21, 36, 48, 0.96);
+  background: var(--field);
   color: var(--text);
   outline: none;
 }
 
 .catalog-tree-node__rename:focus {
-  border-color: rgba(88, 186, 233, 0.42);
-  box-shadow: 0 0 0 1px rgba(88, 186, 233, 0.18);
+  border-color: var(--border-strong);
+  box-shadow: var(--control-focus-shadow);
 }
 
 .catalog-tree-node__state {
@@ -169,11 +181,11 @@
   align-items: center;
   min-height: 1.55rem;
   padding: 0 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  letter-spacing: var(--letter-spacing-eyebrow);
   text-transform: uppercase;
 }
 

@@ -110,7 +110,7 @@ function removeRecipient(email: string) {
 .recipient-editor {
   --app-section-header-title-color: var(--text);
   --app-section-header-title-font-size: var(--font-size-section-title);
-  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-font-weight: var(--font-weight-heading);
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
   --app-section-header-description-font-size: 0.86rem;
@@ -157,15 +157,15 @@ function removeRecipient(email: string) {
 
 .recipient-editor__empty {
   display: grid;
-  place-content: center;
-  min-height: 5rem;
+  place-content: center start;
+  min-height: 2.5rem;
   max-width: 100%;
   min-width: 0;
-  padding: 0.9rem 1rem;
-  border: 1px dashed var(--border);
+  padding: 0.5rem 0;
+  border: 0;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  text-align: center;
+  text-align: left;
 }
 
 .recipient-editor__list {

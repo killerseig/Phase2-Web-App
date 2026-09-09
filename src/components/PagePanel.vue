@@ -11,7 +11,7 @@ defineProps<{
 <template>
   <section class="page-panel">
     <AppPaneHeader
-      class="page-panel__header"
+      class="app-page-header page-panel__header"
       :eyebrow="eyebrow"
       :title="title"
       title-tag="h2"

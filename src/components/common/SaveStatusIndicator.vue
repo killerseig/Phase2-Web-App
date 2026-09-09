@@ -44,3 +44,13 @@ const tone = computed(() => (
     </slot>
   </AppStatusMessage>
 </template>
+
+<style scoped>
+.save-status-indicator {
+  padding: 0.35rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--font-size-sm);
+}
+</style>

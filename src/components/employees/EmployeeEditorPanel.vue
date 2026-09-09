@@ -335,7 +335,7 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 }
 
 .employees-toggle-row span {
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
 }
 
 .employees-detail__status-group,
@@ -360,16 +360,17 @@ function handleDetailBooleanInput(field: EmployeeBooleanField, value: boolean) {
 .employees-settings-panel {
   --app-section-header-title-color: var(--text);
   --app-section-header-title-font-size: var(--font-size-section-title);
-  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-font-weight: var(--font-weight-heading);
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
   display: grid;
   gap: var(--form-gap);
   min-height: 0;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--field);
+  padding: 1rem 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  border-top: 1px solid var(--border-soft);
 }
 
 .employees-settings-panel__header-meta,

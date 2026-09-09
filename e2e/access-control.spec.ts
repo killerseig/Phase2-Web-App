@@ -603,6 +603,7 @@ test.describe('route access control', () => {
   })
 
   test('payroll can manage employees and open timecard export without other admin routes', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 })
     await gotoPhase2App(page, '/employees', createPayrollAdminFixture())
 
     await expect(page).toHaveURL(/\/employees$/)
@@ -637,6 +638,7 @@ test.describe('route access control', () => {
       }))
       .toBe('Payroll Lead')
 
+    await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
     await page.getByRole('link', { name: 'Timecard Export' }).click()
 
     await expect(page).toHaveURL(/\/exports\/timecards$/)

@@ -23,7 +23,7 @@ defineProps<{
 <style scoped>
 .shop-order-workspace-section {
   --app-section-header-title-font-size: 0.7rem;
-  --app-section-header-title-letter-spacing: 0.14em;
+  --app-section-header-title-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-actions-gap: 0.35rem;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

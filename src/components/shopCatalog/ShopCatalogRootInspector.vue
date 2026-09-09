@@ -54,6 +54,7 @@ defineProps<{
 
 .shop-catalog-root-inspector__body {
   display: grid;
+  align-content: start;
   gap: 1rem;
   min-height: 0;
 }
@@ -61,10 +62,12 @@ defineProps<{
 .shop-catalog-root-inspector__card {
   display: grid;
   gap: 0.4rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--field);
+  padding: 0 0 1rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.shop-catalog-root-inspector__card strong {
+  font-weight: var(--font-weight-heading);
 }
 
 .shop-catalog-root-inspector__card span {

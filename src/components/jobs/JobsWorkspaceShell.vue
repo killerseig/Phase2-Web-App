@@ -18,7 +18,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <AppShell>
+  <AppShell class="jobs-workspace">
     <template v-if="canUseJobSetupEditor" #topbar-actions>
       <AppButton
         class="jobs-edit-mode-button"
@@ -54,35 +54,78 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
+/* Directory geometry stays local; brand styling lives in the shared shell. */
+.jobs-workspace {
+  --letter-spacing-eyebrow: 0.09em;
+  --app-pane-border: 0;
+  --app-pane-radius: 0;
+  --app-pane-gap: var(--space-5);
+  --app-pane-padding: var(--space-4);
+  --app-pane-header-title-font-size: 1.5rem;
+  --app-pane-header-title-margin: 0.45rem 0 0;
+  --app-pane-header-eyebrow-font-size: 0.6875rem;
+  font-family: var(--font-sans);
+}
+
+.jobs-workspace :deep(.app-shell__content) {
+  padding: var(--space-6);
+}
+
+.jobs-workspace :deep(.app-pane-header) {
+  position: relative;
+  align-items: center;
+  min-height: 5.5rem;
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.jobs-workspace :deep(.app-pane-header::after) {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 2rem;
+  height: 2px;
+  background: var(--accent);
+}
+
+.jobs-workspace :deep(.app-pane-header__eyebrow) {
+  font-weight: var(--font-weight-heading);
+}
+
+.jobs-workspace :deep(.app-pane-header__title) {
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
 .jobs-edit-mode-button {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 2.55rem;
-  padding: 0 0.95rem;
-  border: 1px solid rgba(168, 190, 209, 0.11);
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel-background);
+  background: transparent;
   color: var(--text-muted);
   box-shadow: none;
-  font-size: 0.84rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-heading);
+  letter-spacing: normal;
   transition:
-    border-color 0.2s ease,
-    color 0.2s ease,
-    background 0.2s ease,
-    transform 0.2s ease;
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
 }
 
 .jobs-edit-mode-button :deep(.pi) {
   color: var(--accent);
-  font-size: 0.84rem;
+  font-size: var(--font-size-sm);
 }
 
 .jobs-edit-mode-button:hover:not(:disabled) {
   color: var(--text);
-  border-color: rgba(145, 220, 255, 0.38);
+  border-color: var(--text-soft);
   background: var(--field-hover);
   box-shadow: none;
   transform: none;
@@ -90,8 +133,51 @@ const emit = defineEmits<{
 
 .jobs-edit-mode-button--active {
   color: var(--text);
-  border-color: rgba(145, 220, 255, 0.38);
-  background: var(--bg-accent);
+  border-color: var(--border);
+  background: var(--field);
   box-shadow: none;
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .jobs-workspace {
+    --app-pane-header-title-margin: var(--space-1) 0 0;
+  }
+
+  .jobs-workspace :deep(.jobs-browser) {
+    --app-pane-header-title-font-size: 1.5rem;
+  }
+
+  .jobs-workspace :deep(.app-pane-header) {
+    min-height: 0;
+    padding-bottom: var(--space-2);
+  }
+
+  /* Keep a complete list row and a usable editor on shorter tablet screens. */
+  .jobs-workspace :deep(.app-split-workspace--equal) {
+    grid-template-rows: minmax(27rem, 1fr) minmax(24rem, 1fr);
+    min-height: 52rem;
+  }
+
+  .jobs-workspace :deep(.app-split-workspace--equal .jobs-browser) {
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .jobs-workspace :deep(.app-pane-header) {
+    align-items: flex-start;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .jobs-workspace {
+    --app-pane-padding: 0;
+  }
+
+  .jobs-workspace :deep(.app-shell__topbar),
+  .jobs-workspace :deep(.app-shell__content) {
+    padding-inline: var(--space-4);
+  }
 }
 </style>

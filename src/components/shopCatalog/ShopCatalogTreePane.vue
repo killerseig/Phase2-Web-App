@@ -200,8 +200,9 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
 }
 
 .catalog-tree-pane__list--drop-target {
-  background: rgba(45, 106, 140, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(88, 186, 233, 0.18);
+  background: var(--bg-accent);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
 }
 
 .catalog-tree {

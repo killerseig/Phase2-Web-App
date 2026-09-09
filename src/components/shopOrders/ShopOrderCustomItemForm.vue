@@ -88,7 +88,7 @@ const isSubmitDisabled = computed(() => props.submitDisabled ?? props.disabled)
   --app-pane-header-eyebrow-font-size: var(--font-size-eyebrow);
   --app-pane-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-pane-header-title-margin: 0.12rem 0 0;
-  --app-pane-header-title-font-size: 0.95rem;
+  --app-pane-header-title-font-size: var(--font-size-section-title);
   display: grid;
   align-content: start;
   gap: var(--field-gap);
@@ -97,23 +97,10 @@ const isSubmitDisabled = computed(() => props.submitDisabled ?? props.disabled)
   background: transparent;
 }
 
-.shop-order-custom-item-form__header :deep(.app-pane-header__title) {
-  letter-spacing: -0.01em;
-}
-
 .shop-order-custom-item-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--form-gap);
-}
-
-.shop-order-custom-item-form__field {
-  --app-field-gap: 0.28rem;
-  --app-field-color: var(--text-muted);
-  --app-field-label-color: var(--text-soft);
-  --app-field-label-font-size: 0.74rem;
-  --app-field-label-letter-spacing: 0.08em;
-  --app-field-label-text-transform: uppercase;
 }
 
 .shop-order-custom-item-form__field .app-text-input {

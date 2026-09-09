@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import constructionImage from '@/assets/images/construction-placeholder.webp'
+import loginArtwork from '@/assets/images/login-blueprint.webp'
 import AuthCard from '@/components/auth/AuthCard.vue'
 import AuthFirebaseConfigWarning from '@/components/auth/AuthFirebaseConfigWarning.vue'
 import AuthStatusMessage from '@/components/auth/AuthStatusMessage.vue'
@@ -88,7 +90,22 @@ async function handleLogin() {
 </script>
 
 <template>
-  <AuthCard eyebrow="Phase 2" title="Phase 2 Web Application">
+  <AuthCard class="login-page" eyebrow="Phase 2" title="Phase 2 Web Application">
+    <template #media>
+      <img
+        :src="constructionImage"
+        alt=""
+        width="1536"
+        height="1024"
+        fetchpriority="high"
+        decoding="async"
+      />
+    </template>
+
+    <template #backdrop>
+      <img :src="loginArtwork" alt="" width="1024" height="1536" decoding="async" />
+    </template>
+
     <AuthStatusMessage v-if="initializing"> Checking your current session... </AuthStatusMessage>
 
     <form v-else @submit.prevent="handleLogin">
@@ -125,3 +142,10 @@ async function handleLogin() {
     <AuthFirebaseConfigWarning v-if="!hasConfiguredFirebase" />
   </AuthCard>
 </template>
+
+<style scoped>
+.login-page {
+  --button-primary: #0047ab;
+  --button-primary-hover: #0859bd;
+}
+</style>

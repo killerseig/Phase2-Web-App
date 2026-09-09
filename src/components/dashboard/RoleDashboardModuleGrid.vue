@@ -44,10 +44,11 @@ defineProps<{
 }
 
 .role-dashboard-module-card__eyebrow {
-  color: var(--accent-strong);
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  letter-spacing: var(--letter-spacing-eyebrow);
   text-transform: uppercase;
+  font-weight: 500;
 }
 
 .role-dashboard-module-card p,

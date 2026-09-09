@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './dailyLogRepeater.css'
 import AppCard from '@/components/common/AppCard.vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
@@ -41,7 +42,7 @@ function updateCountField(index: number, value: string) {
     />
 
     <div class="daily-log-manpower-card__table-wrapper">
-      <table class="daily-log-manpower-card__table">
+      <table class="daily-log-manpower-card__table daily-log-repeater">
         <thead>
           <tr>
             <th v-for="column in columns" :key="column.key">{{ column.label }}</th>
@@ -63,18 +64,20 @@ function updateCountField(index: number, value: string) {
             v-for="(line, index) in lines"
             :key="`manpower-${index}`"
           >
-            <td>
+            <td :data-label="columns[0]?.label">
               <AppTextInput
                 :model-value="line.trade"
+                :aria-label="columns[0]?.label"
                 type="text"
                 :disabled="disabled"
                 :placeholder="columns[0]?.placeholder || ''"
                 @update:model-value="updateTextField(index, 'trade', $event)"
               />
             </td>
-            <td class="daily-log-manpower-card__count">
+            <td class="daily-log-manpower-card__count" :data-label="columns[1]?.label">
               <AppTextInput
                 :model-value="line.count"
+                :aria-label="columns[1]?.label"
                 type="number"
                 min="1"
                 step="1"
@@ -84,9 +87,10 @@ function updateCountField(index: number, value: string) {
                 @update:model-value="updateCountField(index, $event)"
               />
             </td>
-            <td>
+            <td :data-label="columns[2]?.label">
               <AppTextInput
                 :model-value="line.areas"
+                :aria-label="columns[2]?.label"
                 type="text"
                 :disabled="disabled"
                 :placeholder="columns[2]?.placeholder || ''"
@@ -118,37 +122,13 @@ function updateCountField(index: number, value: string) {
   --app-section-header-eyebrow-letter-spacing: var(--letter-spacing-eyebrow);
   --app-section-header-title-color: var(--text);
   --app-section-header-title-font-size: var(--font-size-section-title);
-  --app-section-header-title-font-weight: 700;
+  --app-section-header-title-font-weight: var(--font-weight-heading);
   --app-section-header-title-letter-spacing: normal;
   --app-section-header-title-text-transform: none;
 }
 
 .daily-log-manpower-card__table-wrapper {
   overflow: auto;
-}
-
-.daily-log-manpower-card__table {
-  --app-text-input-min-height: 2.55rem;
-  --app-text-input-padding-x: 0.85rem;
-  --app-text-input-border: var(--border);
-  --app-text-input-radius: var(--control-radius);
-  --app-text-input-background: var(--control-background);
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.daily-log-manpower-card__table th,
-.daily-log-manpower-card__table td {
-  padding: 0.45rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  text-align: left;
-}
-
-.daily-log-manpower-card__table th {
-  color: var(--text-soft);
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .daily-log-manpower-card__count {
@@ -164,6 +144,16 @@ function updateCountField(index: number, value: string) {
   .daily-log-manpower-card__header {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .daily-log-manpower-card__table tbody tr {
+    grid-template-columns: minmax(0, 1fr) 5.5rem;
+  }
+
+  .daily-log-manpower-card__count {
+    width: auto;
   }
 }
 </style>
