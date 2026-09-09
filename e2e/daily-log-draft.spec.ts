@@ -29,6 +29,9 @@ test.describe('daily log draft regressions', () => {
 
   test('email photo links open an isolated single-log gallery on mobile', async ({ page }) => {
     const fixture = createDailyLogsFixture()
+    const fullSizePhoto = `data:image/svg+xml,${encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200"><rect width="1600" height="1200" fill="#71889a"/></svg>',
+    )}`
     fixture.publicDailyLogGalleries = {
       'gallery-e2e': {
         jobName: 'Phase 2 Company Acoustical remodel',
@@ -40,7 +43,7 @@ test.describe('daily log draft regressions', () => {
         attachments: [
           {
             name: 'lobby-progress.jpg',
-            url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+            url: fullSizePhoto,
             thumbnailUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
             type: 'photo',
             description: 'Lobby ceiling progress',
@@ -99,6 +102,7 @@ test.describe('daily log draft regressions', () => {
     await expect(viewer).toBeVisible()
     const viewerImage = viewer.getByRole('img', { name: 'lobby-progress.jpg' })
     await expect(viewerImage).toBeVisible()
+    await expect(viewerImage).toHaveAttribute('src', fullSizePhoto)
     await expect(viewerImage).toHaveCSS('object-fit', 'contain')
     await expect(viewer.getByText('Lobby ceiling progress')).toBeVisible()
     await expect(viewer.getByText('Photos: 1 of 1')).toBeVisible()

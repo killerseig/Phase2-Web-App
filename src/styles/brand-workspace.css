@@ -1,4 +1,4 @@
-/* Phase 2 identity is shared by all navigation. Timecard and export content
+/* Phase 2 identity is shared by navigation and public brand surfaces. Timecard and export content
    retain their original inherited theme; never override the root theme here. */
 @font-face {
   font-family: 'Source Sans 3';
@@ -28,6 +28,7 @@
   --brand-workspace-background: #112838;
 }
 
+.brand-surface,
 .app-shell--branded-content,
 .app-shell__sidebar,
 .app-shell__topbar,
@@ -110,6 +111,7 @@ body:has(.app-shell--branded) > #app-toast-root {
   letter-spacing: normal;
 }
 
+.brand-surface :is(h1, h2),
 .app-shell.app-shell--branded :is(.app-shell__brand-title, .app-shell__topbar-heading),
 .app-shell.app-shell--branded-content :is(h1, h2),
 body:has(.app-shell--branded) > .confirm-dialog h2 {
@@ -220,6 +222,7 @@ body:has(.app-shell--branded) > .confirm-dialog :is(.app-text-input, .app-select
 }
 
 /* Main page headers share the Jobs artwork; section and editor headings stay plain. */
+.brand-page-header,
 .app-shell.app-shell--branded-content .app-pane-header.app-page-header {
   flex-wrap: wrap;
   position: relative;
@@ -237,6 +240,7 @@ body:has(.app-shell--branded) > .confirm-dialog :is(.app-text-input, .app-select
   min-width: min(100%, 10rem);
 }
 
+.brand-page-header::before,
 .app-shell.app-shell--branded-content .app-pane-header.app-page-header::before {
   content: '';
   position: absolute;
@@ -248,6 +252,7 @@ body:has(.app-shell--branded) > .confirm-dialog :is(.app-text-input, .app-select
   pointer-events: none;
 }
 
+.brand-page-header::after,
 .app-shell.app-shell--branded-content .app-pane-header.app-page-header::after {
   content: '';
   position: absolute;
@@ -293,6 +298,7 @@ body:has(.app-shell--branded) > #app-toast-root .p-toast-message-error {
 }
 
 @media (max-width: 560px) {
+  .brand-page-header,
   .app-shell.app-shell--branded-content .app-pane-header.app-page-header {
     min-height: 6rem;
     padding: 1rem;

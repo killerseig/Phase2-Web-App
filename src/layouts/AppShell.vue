@@ -26,6 +26,15 @@ const usesBrandContentTheme = computed(() => ![
 const workspaceNavigationItems = computed(() => getAppShellWorkspaceNavigationItems())
 const adminNavigationItems = computed(() => getAppShellAdminNavigationItems(auth.rawRole))
 const roleLabel = computed(() => getAppShellRoleLabel(auth.rawRole))
+const jobDashboardRoute = computed(() => {
+  const jobId = route.params.jobId
+  if (
+    typeof jobId !== 'string' || !jobId ||
+    !['timecards', 'daily-logs', 'shop-orders'].includes(String(route.name))
+  ) return null
+
+  return { name: 'job-dashboard', params: { jobId } }
+})
 
 function openMobileNav() {
   mobileNavOpen.value = true
@@ -74,7 +83,19 @@ watch(() => route.fullPath, () => {
       </div>
 
       <div class="app-shell__sidebar-main">
-        <div class="app-shell__section-label">Navigation</div>
+        <div class="app-shell__navigation-heading">
+          <div class="app-shell__section-label">Navigation</div>
+          <RouterLink
+            v-if="jobDashboardRoute"
+            :to="jobDashboardRoute"
+            class="app-shell__back-to-job app-shell__back-to-job--sidebar"
+            aria-label="Back to Job"
+            title="Back to Job"
+            @click="closeMobileNav"
+          >
+            <i class="pi pi-arrow-left app-shell__control-icon" aria-hidden="true"></i>
+          </RouterLink>
+        </div>
         <nav class="app-shell__nav">
           <RouterLink
             v-for="item in workspaceNavigationItems"
@@ -132,6 +153,18 @@ watch(() => route.fullPath, () => {
             <i :class="['pi', mobileNavOpen ? 'pi-times' : 'pi-bars', 'app-shell__control-icon']" aria-hidden="true"></i>
             <span class="sr-only">Menu</span>
           </Button>
+          <div class="app-shell__back-to-job-slot">
+            <RouterLink
+              v-if="jobDashboardRoute"
+              :to="jobDashboardRoute"
+              class="app-shell__back-to-job app-shell__back-to-job--topbar"
+              aria-label="Back to Job"
+              title="Back to Job"
+              @click="closeMobileNav"
+            >
+              <i class="pi pi-arrow-left app-shell__control-icon" aria-hidden="true"></i>
+            </RouterLink>
+          </div>
           <div class="app-shell__topbar-title">
             <span class="app-shell__topbar-eyebrow">Phase 2 Console</span>
             <strong class="app-shell__topbar-heading">Field Operations</strong>
@@ -194,7 +227,8 @@ watch(() => route.fullPath, () => {
 }
 
 .app-shell__sidebar-close,
-.app-shell__menu-button {
+.app-shell__menu-button,
+.app-shell__back-to-job {
   display: none;
   align-items: center;
   justify-content: center;
@@ -221,14 +255,16 @@ watch(() => route.fullPath, () => {
 }
 
 .app-shell__sidebar-close:hover,
-.app-shell__menu-button:hover {
+.app-shell__menu-button:hover,
+.app-shell__back-to-job:hover {
   border-color: rgba(186, 198, 211, 0.14);
   background: var(--field);
   color: rgba(238, 244, 250, 0.96);
 }
 
 .app-shell__sidebar-close:focus-visible,
-.app-shell__menu-button:focus-visible {
+.app-shell__menu-button:focus-visible,
+.app-shell__back-to-job:focus-visible {
   outline: none;
   border-color: var(--border-strong);
   box-shadow: var(--focus-ring);
@@ -271,6 +307,28 @@ watch(() => route.fullPath, () => {
   text-transform: uppercase;
   letter-spacing: var(--letter-spacing-eyebrow);
   padding: 0.2rem 0.28rem 0;
+}
+
+.app-shell__navigation-heading {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.app-shell__back-to-job-slot {
+  display: none;
+  flex: 0 0 2.5rem;
+  height: 2.5rem;
+}
+
+.app-shell__back-to-job--sidebar {
+  display: inline-flex;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
 }
 
 .app-shell__nav {
@@ -518,8 +576,14 @@ watch(() => route.fullPath, () => {
     place-items: center;
   }
 
-  .app-shell__menu-button {
+  .app-shell__menu-button,
+  .app-shell__back-to-job-slot,
+  .app-shell__back-to-job--topbar {
     display: inline-flex;
+  }
+
+  .app-shell__back-to-job--sidebar {
+    display: none;
   }
 
   .app-shell__nav {
