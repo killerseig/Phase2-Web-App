@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
 import { useCurrentActor } from '@/composables/useCurrentActor'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useRouteJobContext } from '@/composables/useRouteJobContext'
@@ -151,12 +150,6 @@ const {
   setActionError,
   setActionInfo,
 })
-
-onBeforeRouteLeave(async () => {
-  clearOrderMetaSaveTimer()
-  return saveOrderMetaImmediately()
-})
-
 const {
   clearOrderItemNoteDrafts,
   handleOrderItemNoteBlur,

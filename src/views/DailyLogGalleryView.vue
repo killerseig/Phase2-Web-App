@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import brandLogo from '@/assets/images/phase2-logo.png'
-import '@/styles/brand-workspace.css'
 import {
   fetchLegacyPublicDailyLogGallery,
   fetchPublicDailyLogGallery,
@@ -169,16 +167,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="daily-log-gallery brand-surface" data-testid="public-daily-log-gallery">
+  <div class="daily-log-gallery" data-testid="public-daily-log-gallery">
     <header class="daily-log-gallery__masthead">
-      <div class="daily-log-gallery__masthead-inner">
-        <div class="daily-log-gallery__brand-mark" aria-hidden="true">
-          <img :src="brandLogo" alt="" width="26" height="42" />
-        </div>
-        <div class="daily-log-gallery__brand-copy">
-          <strong>Phase 2</strong>
-          <span>Daily Log Photo Gallery</span>
-        </div>
+      <div class="daily-log-gallery__brand-mark" aria-hidden="true">P2</div>
+      <div>
+        <strong>Phase 2</strong>
+        <span>Daily Log Photo Gallery</span>
       </div>
     </header>
 
@@ -196,7 +190,7 @@ onBeforeUnmount(() => {
       </div>
 
       <article v-else-if="gallery" class="daily-log-gallery__document">
-        <header class="daily-log-gallery__header brand-page-header">
+        <header class="daily-log-gallery__header">
           <span class="daily-log-gallery__eyebrow">Submitted Daily Log</span>
           <h1>{{ jobLabel }}</h1>
           <dl class="daily-log-gallery__details">
@@ -341,7 +335,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .daily-log-gallery {
-  --gallery-content-width: min(100% - clamp(1.5rem, 4vw, 3rem), 76rem);
   height: 100%;
   min-height: 100dvh;
   overflow-x: hidden;
@@ -350,56 +343,44 @@ onBeforeUnmount(() => {
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   color: var(--text);
-  background: var(--bg);
-  scrollbar-color: #526d80 var(--bg);
+  background: var(--panel-background);
 }
 
-.daily-log-gallery__masthead-inner,
+.daily-log-gallery__masthead,
 .daily-log-gallery__main,
 .daily-log-gallery__footer {
-  width: var(--gallery-content-width);
+  width: min(100% - 2rem, 76rem);
   margin-inline: auto;
 }
 
 .daily-log-gallery__masthead {
-  border-bottom: 1px solid var(--border);
-  background: var(--surface) url('../assets/images/topbar-matte-metal.webp') repeat;
-  background-size: 256px 256px;
-}
-
-.daily-log-gallery__masthead-inner {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
-  min-height: 5.5rem;
-  padding-block: 0.75rem;
+  gap: 0.8rem;
+  min-height: 4.5rem;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .daily-log-gallery__brand-mark {
   display: grid;
   place-items: center;
-  flex: 0 0 48px;
-  height: 58px;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: #fff;
+  color: var(--text);
+  background: var(--field);
+  font-weight: var(--font-weight-heading);
 }
 
-.daily-log-gallery__brand-mark img {
-  display: block;
-  object-fit: contain;
-}
-
-.daily-log-gallery__brand-copy {
+.daily-log-gallery__masthead > div:last-child {
   display: grid;
-  gap: 0.25rem;
-  min-width: 0;
+  gap: 0.05rem;
 }
 
 .daily-log-gallery__masthead strong {
-  font-family: var(--font-heading);
-  font-size: 1.6rem;
-  font-weight: 600;
-  line-height: 1.15;
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-heading);
 }
 
 .daily-log-gallery__masthead span {
@@ -441,18 +422,16 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
-.daily-log-gallery__state h1 {
-  color: var(--text);
-}
-
 .daily-log-gallery__header {
   padding: clamp(1rem, 3vw, 2rem);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--panel-background);
 }
 
 .daily-log-gallery__eyebrow {
-  color: var(--brand-clay);
+  color: var(--text-muted);
   font-size: var(--font-size-eyebrow);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: var(--letter-spacing-eyebrow);
   text-transform: uppercase;
 }
@@ -462,12 +441,11 @@ onBeforeUnmount(() => {
   font-size: clamp(var(--font-size-xl), 3vw, 2rem);
   font-weight: var(--font-weight-heading);
   line-height: 1.25;
-  overflow-wrap: anywhere;
 }
 
 .daily-log-gallery__details {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 2fr)) repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-4);
   margin: 0;
 }
@@ -506,30 +484,26 @@ onBeforeUnmount(() => {
 }
 
 .daily-log-gallery__section-nav a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.75rem;
   padding: 0.55rem 0.8rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
   background: var(--field);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
 }
 
 .daily-log-gallery__section-nav a:hover,
 .daily-log-gallery__lightbox button:hover {
-  border-color: var(--accent);
   background: var(--field-hover);
 }
 
 .daily-log-gallery__section-nav a:focus-visible,
 .daily-log-gallery__photo-button:focus-visible,
 .daily-log-gallery__lightbox button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .daily-log-gallery__section-heading {
@@ -587,10 +561,6 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-
-.daily-log-gallery__photo-button:hover {
-  background: var(--field-hover);
 }
 
 .daily-log-gallery__photo figcaption {
@@ -675,10 +645,8 @@ onBeforeUnmount(() => {
 
 .daily-log-gallery__lightbox-stage img {
   display: block;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -717,6 +685,12 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 700px) {
+  .daily-log-gallery__masthead,
+  .daily-log-gallery__main,
+  .daily-log-gallery__footer {
+    width: min(100% - 1rem, 76rem);
+  }
+
   .daily-log-gallery__details {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -724,6 +698,29 @@ onBeforeUnmount(() => {
   .daily-log-gallery__section-heading {
     display: grid;
     gap: 0.25rem;
+  }
+
+  .daily-log-gallery__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-log-gallery__photo-button {
+    aspect-ratio: auto;
+    min-height: 12rem;
+    max-height: 70dvh;
+  }
+
+  .daily-log-gallery__photo-button img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 68dvh;
+  }
+}
+
+@media (max-width: 420px) {
+  .daily-log-gallery__details {
+    grid-template-columns: 1fr;
   }
 }
 </style>

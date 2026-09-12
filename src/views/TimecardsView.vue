@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
 import JobTimecardCanvasPanel from '@/components/timecards/JobTimecardCanvasPanel.vue'
 import JobTimecardCreateTray from '@/components/timecards/JobTimecardCreateTray.vue'
 import JobTimecardToolbar from '@/components/timecards/JobTimecardToolbar.vue'
@@ -154,6 +153,7 @@ const {
   recentWeeks,
   selectedWeek,
   selectedWeekStartDate,
+  weeksForSelectedDate,
 } = useJobTimecardWorkspaceState({
   cardSearchTerm,
   cards,
@@ -189,17 +189,6 @@ const {
   selectedWeek,
   selectedWeekStartDate,
 })
-
-onBeforeRouteLeave(async () => {
-  try {
-    await flushPendingSaves()
-    return !saveError.value
-  } catch {
-    // Keep the worksheet and its existing save error visible if saving fails.
-    return false
-  }
-})
-
 const {
   handleWorkbookChanged,
   isCardReadOnly,
