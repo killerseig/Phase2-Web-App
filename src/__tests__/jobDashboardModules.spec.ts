@@ -10,17 +10,17 @@ describe('jobDashboardModules', () => {
     expect(getJobDashboardModules()).toEqual([
       {
         label: 'Timecards',
-        detail: 'Weekly card workflow stays the first production priority.',
+        detail: 'Enter crew hours and submit weekly timecards.',
         to: 'timecards',
       },
       {
         label: 'Daily Logs',
-        detail: 'Structured daily reporting with shared recipients.',
+        detail: 'Record daily work, site updates, and photos.',
         to: 'daily-logs',
       },
       {
         label: 'Shop Orders',
-        detail: 'Explorer-style ordering workspace with custom items.',
+        detail: 'Order materials from the catalog or add a custom item.',
         to: 'shop-orders',
       },
     ])

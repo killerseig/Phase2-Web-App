@@ -128,12 +128,14 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
 
     <AppEmptyState
       v-if="props.loading"
+      panel
       class="shop-orders-pane__empty"
       message="Loading catalog..."
     />
 
     <AppEmptyState
       v-else-if="showEmptyState"
+      panel
       class="shop-orders-pane__empty"
       message="No catalog entries match this view."
     />
@@ -222,7 +224,7 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
   width: 100%;
   min-height: 2.25rem;
   padding: 0.5rem 0.7rem;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
@@ -231,23 +233,18 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
 }
 
 .shop-orders-context-menu__item:hover:not(:disabled) {
-  background: rgba(99, 199, 230, 0.14);
+  background: var(--field-hover);
+}
+
+.shop-orders-context-menu__item:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .shop-orders-context-menu__item:disabled {
-  opacity: 0.45;
+  color: var(--text-soft);
+  opacity: 0.55;
   cursor: default;
-}
-
-.shop-orders-pane__empty {
-  display: grid;
-  place-content: center;
-  min-height: 8.5rem;
-  padding: 0.85rem;
-  border: 1px dashed rgba(140, 162, 186, 0.1);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  text-align: center;
 }
 
 @media (max-width: 1180px) {

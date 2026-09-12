@@ -23,6 +23,10 @@ export const COLLECTIONS = {
 // Email Configuration
 export const EMAIL = {
   SENDER_DISPLAY_NAME: 'Phase 2',
+  DAILY_LOG_PHOTO_PREVIEW_LIMIT: 2,
+  // Keep the complete Graph request below 900 KB, leaving headroom toward a 1 MB
+  // message target for mail transport overhead. This is an app budget, not a tenant limit.
+  DAILY_LOG_MAX_PAYLOAD_BYTES: 900_000,
   SUBJECTS: {
     WELCOME: 'Create Your Phase 2 Account Password',
     PASSWORD_RESET: 'Reset Your Phase 2 Password',

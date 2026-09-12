@@ -62,7 +62,7 @@ describe('ShopOrderSelectedOrderPanel', () => {
     expect(wrapper.text()).toContain('Order #202606110001')
     expect(wrapper.text()).toContain('Draft / Due 2026-06-18')
     expect(wrapper.text()).toContain('Draft')
-    expect(wrapper.text()).toContain('1 items')
+    expect(wrapper.text()).toContain('1 item')
     expect(wrapper.text()).toContain('1 total qty')
     expect(wrapper.text()).toContain('CJ Blanchard')
     expect(wrapper.text()).toContain('Created Jun')

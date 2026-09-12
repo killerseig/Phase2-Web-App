@@ -44,6 +44,7 @@ const emit = defineEmits<{
     </div>
     <AppEmptyState
       v-if="props.jobsLoading"
+      panel
       class="users-browser__empty"
       message="Loading jobs..."
     />
@@ -62,6 +63,7 @@ const emit = defineEmits<{
     </div>
     <AppEmptyState
       v-else
+      panel
       class="users-browser__empty"
       :message="props.emptyMessage"
     />

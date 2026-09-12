@@ -1,0 +1,46 @@
+.app-history-list {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.app-history-row {
+  --app-list-button-padding: var(--space-3);
+  --app-list-button-gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  min-width: 0;
+}
+
+.app-history-row__main {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-history-row__main strong {
+  font-size: var(--font-size-md);
+}
+
+.app-history-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--font-size-help);
+}
+
+.app-history-row__badge {
+  --app-badge-white-space: nowrap;
+  justify-self: start;
+}
+
+@media (max-width: 560px) {
+  .app-history-row {
+    grid-template-columns: 1fr;
+  }
+}

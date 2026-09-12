@@ -150,7 +150,7 @@ test.describe('admin page coverage', () => {
 
     await expect(page.getByTestId('reference-list-page')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Job Types' })).toBeVisible()
-    await expect(page.getByText('List management scaffold')).toBeVisible()
+    await expect(page.getByText('List editing is not available yet.')).toBeVisible()
   })
 
   test('shop catalog page filters tree nodes on the real view', async ({ page }) => {

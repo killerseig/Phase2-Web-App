@@ -6,7 +6,7 @@
   padding: 0 1.05rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-softest);
+  background: var(--button-secondary-background, var(--bg-softest));
   color: var(--text);
   font-weight: 500;
   letter-spacing: normal;
@@ -24,20 +24,20 @@
 }
 
 .app-button--success {
-  border-color: #3e5740;
-  background: #202b21;
+  border-color: var(--success-border);
+  background: var(--success-surface);
   color: var(--success);
 }
 
 .app-button--danger {
-  border-color: #72493f;
+  border-color: var(--danger-border);
   background: transparent;
   color: var(--danger);
 }
 
 .app-button:hover:not(:disabled) {
-  border-color: #555555;
-  background: #404040;
+  border-color: var(--button-hover-border, #555555);
+  background: var(--button-secondary-hover, #404040);
 }
 
 .app-button--primary:hover:not(:disabled) {
@@ -47,12 +47,12 @@
 
 .app-button--success:hover:not(:disabled) {
   border-color: var(--success);
-  background: #293b2b;
+  background: var(--button-success-hover, #293b2b);
 }
 
 .app-button--danger:hover:not(:disabled) {
   border-color: var(--danger);
-  background: #3b2925;
+  background: var(--danger-surface);
 }
 
 .app-button:focus-visible {

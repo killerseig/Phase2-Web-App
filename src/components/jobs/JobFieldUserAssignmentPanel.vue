@@ -43,6 +43,7 @@ const emit = defineEmits<{
 
     <AppEmptyState
       v-if="loading"
+      panel
       class="jobs-foremen-panel__empty"
       message="Loading assignable users..."
     />
@@ -66,6 +67,7 @@ const emit = defineEmits<{
       </label>
       <AppEmptyState
         v-if="users.length === 0"
+        panel
         class="jobs-foremen-panel__empty jobs-foremen-panel__empty--compact"
         message="No assignable users match your search."
       />
@@ -133,26 +135,14 @@ const emit = defineEmits<{
   word-break: break-word;
 }
 
-.jobs-foreman-toggle__meta,
-.jobs-foremen-panel__empty {
+.jobs-foreman-toggle__meta {
   color: var(--text-muted);
 }
 
-.jobs-foremen-panel__empty {
-  display: grid;
-  place-content: center;
-  min-height: 12rem;
-  padding: 1.5rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  text-align: center;
-}
-
 .jobs-foremen-panel__empty--compact {
-  min-height: 3.4rem;
+  --app-empty-state-min-height: 4rem;
   max-width: 100%;
   min-width: 0;
-  padding: 0.9rem 1rem;
 }
 
 @media (max-width: 760px) {

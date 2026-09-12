@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AppDateInput from '@/components/common/AppDateInput.vue'
+import AppButton from '@/components/common/AppButton.vue'
+import AppField from '@/components/common/AppField.vue'
 import AppReadonlyField from '@/components/common/AppReadonlyField.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 
@@ -28,8 +30,7 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
 
 <template>
   <div class="shop-order-meta-form">
-    <label class="shop-order-meta-form__field shop-order-meta-form__field--delivery">
-      <span>Delivery Date</span>
+    <AppField class="shop-order-meta-form__field shop-order-meta-form__field--delivery" label="Delivery Date">
       <AppDateInput
         v-if="canEdit"
         :model-value="deliveryDate"
@@ -45,11 +46,11 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
       >
         {{ readonlyDeliveryDate || 'No delivery date' }}
       </AppReadonlyField>
-    </label>
+    </AppField>
 
     <div class="shop-order-meta-form__field shop-order-meta-form__field--shortcut">
       <span>Shortcut</span>
-      <button
+      <AppButton
         v-if="canEdit"
         type="button"
         class="shop-order-meta-form__shortcut-button"
@@ -58,7 +59,7 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
         @click="emit('applyThursdayDelivery')"
       >
         Thursday Delivery
-      </button>
+      </AppButton>
       <AppReadonlyField
         v-else
         class="shop-order-meta-form__readonly"
@@ -68,8 +69,7 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
       </AppReadonlyField>
     </div>
 
-    <label class="shop-order-meta-form__field shop-order-meta-form__field--comments">
-      <span>Comments</span>
+    <AppField class="shop-order-meta-form__field shop-order-meta-form__field--comments" label="Comments">
       <AppTextInput
         v-if="canEdit"
         :model-value="comments"
@@ -87,16 +87,16 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
       >
         {{ readonlyComments || 'No comments' }}
       </AppReadonlyField>
-    </label>
+    </AppField>
   </div>
 </template>
 
 <style scoped>
 .shop-order-meta-form {
   display: grid;
-  grid-template-columns: minmax(9rem, 10.5rem) minmax(9rem, 10.5rem) minmax(12rem, 1fr);
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 10.5rem) minmax(0, 1fr);
   gap: var(--field-gap);
-  align-items: center;
+  align-items: start;
 }
 
 .shop-order-meta-form__field {
@@ -110,9 +110,10 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
   --app-readonly-field-padding-x: 0.8rem;
   --app-readonly-field-border: var(--shop-line-soft);
   --app-readonly-field-radius: var(--shop-radius-md);
-  --app-readonly-field-background: rgba(255, 255, 255, 0.02);
+  --app-readonly-field-background: var(--control-background);
   --app-readonly-field-color: var(--text);
   display: grid;
+  min-width: 0;
   gap: var(--field-gap);
   color: var(--text-muted);
 }
@@ -128,57 +129,30 @@ function isThursdayDeliveryValue(value: string | null | undefined) {
 }
 
 .shop-order-meta-form__field--comments {
-  --app-text-input-min-height: 2rem;
-  --app-readonly-field-min-height: 2rem;
-  --app-readonly-field-multiline-min-height: 2rem;
+  --app-readonly-field-multiline-min-height: var(--control-height-form);
   --app-readonly-field-multiline-padding-y: 0.35rem;
 }
 
-.shop-order-meta-form__field--comments :deep(.app-text-input) {
-  min-height: 2rem;
-}
-
 .shop-order-meta-form__shortcut-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
   width: 100%;
   min-height: var(--shop-control-height);
   padding: 0 0.8rem;
-  border: 1px solid var(--shop-line);
-  border-radius: var(--shop-radius-md);
-  background: var(--shop-field);
-  color: var(--text);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 0.95rem;
-  line-height: 1;
-  box-shadow: none;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    color 0.18s ease;
 }
 
-.shop-order-meta-form__shortcut-button:hover:not(:disabled) {
-  border-color: rgba(145, 220, 255, 0.28);
-  background: var(--shop-surface-soft);
-  transform: none;
+@container shop-order-workspace (max-width: 40rem) {
+  .shop-order-meta-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shop-order-meta-form__field--comments {
+    grid-column: 1 / -1;
+  }
 }
 
-.shop-order-meta-form__shortcut-button:disabled {
-  opacity: 0.65;
-}
-
-@media (max-width: 980px) {
+@container shop-order-workspace (max-width: 24rem) {
   .shop-order-meta-form {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 820px) {
-  .shop-order-meta-form {
-    gap: var(--list-gap);
-  }
-}
 </style>

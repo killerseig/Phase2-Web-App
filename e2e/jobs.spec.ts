@@ -239,7 +239,7 @@ test.describe('jobs page regressions', () => {
       await section.getByPlaceholder('name@example.com').fill(recipient.email)
       await section.getByRole('button', { name: 'Add' }).click()
       await expect(section.getByText(recipient.email)).toBeVisible()
-      await expect(section).toContainText('1 recipients')
+      await expect(section).toContainText('1 recipient')
     }
 
     await expect

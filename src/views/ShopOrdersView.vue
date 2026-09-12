@@ -5,6 +5,8 @@ import { useCurrentActor } from '@/composables/useCurrentActor'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useRouteJobContext } from '@/composables/useRouteJobContext'
 import { useToastMessages } from '@/composables/useToastMessages'
+import AppButton from '@/components/common/AppButton.vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import ShopOrderCatalogBrowser from '@/components/shopOrders/ShopOrderCatalogBrowser.vue'
 import ShopOrderConfirmDialogs from '@/components/shopOrders/ShopOrderConfirmDialogs.vue'
 import ShopOrderCustomItemForm from '@/components/shopOrders/ShopOrderCustomItemForm.vue'
@@ -265,8 +267,11 @@ useShopOrderSubscriptionLifecycle({
 </script>
 
 <template>
-  <ShopOrderPageShell test-id="shop-orders-page">
-    <template #catalog>
+  <ShopOrderPageShell
+    test-id="shop-orders-page"
+    :confirmation-open="deleteDraftConfirmOpen || removeItemConfirmOpen || submitConfirmOpen"
+  >
+    <template #catalog="{ compact, drawerVisible, openOrder }">
       <ShopOrderCatalogBrowser
         :categories="categories"
         :catalog-items="catalogItems"
@@ -274,6 +279,31 @@ useShopOrderSubscriptionLifecycle({
         :disabled="orderInputDisabled"
         :add-catalog-item="addCatalogItemToOrder"
       >
+        <template #actions>
+          <div class="shop-order-page-actions">
+            <AppButton
+              v-if="compact"
+              variant="primary"
+              data-testid="shoporder-view-order"
+              aria-controls="shop-order-drawer"
+              aria-haspopup="dialog"
+              :aria-expanded="drawerVisible"
+              @click="openOrder"
+            >
+              <i class="pi pi-shopping-cart" aria-hidden="true"></i>
+              View Order
+              <span class="shop-order-page-actions__count">{{ orderItemCount }}</span>
+            </AppButton>
+            <AppLoadingButton
+              label="New Order"
+              loading-label="Creating..."
+              data-testid="shoporder-new-order"
+              :loading="createOrderLoading"
+              :disabled="!jobId || !job"
+              @click="handleCreateOrder"
+            />
+          </div>
+        </template>
         <ShopOrderCustomItemForm
           v-model:description="customItemForm.description"
           v-model:quantity="customItemForm.quantity"
@@ -289,7 +319,6 @@ useShopOrderSubscriptionLifecycle({
       <ShopOrderWorkspacePane
         v-model:delivery-date="orderMetaForm.deliveryDate"
         v-model:comments="orderMetaForm.comments"
-        :can-create-order="Boolean(jobId && job)"
         :can-edit-selected-order="canEditSelectedOrder"
         :create-order-loading="createOrderLoading"
         :draft-orders-count="draftOrders.length"
@@ -308,7 +337,6 @@ useShopOrderSubscriptionLifecycle({
         :submitted-orders-count="submittedOrders.length"
         :total-quantity="orderTotalQuantity"
         @apply-thursday-delivery="applyThursdayDelivery"
-        @create-order="handleCreateOrder"
         @delete-selected-order="handleDeleteSelectedOrder"
         @remove-item="requestRemoveOrderItem"
         @save-note="handleOrderItemNoteBlur"
@@ -331,3 +359,27 @@ useShopOrderSubscriptionLifecycle({
     />
   </ShopOrderPageShell>
 </template>
+
+<style scoped>
+.shop-order-page-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.shop-order-page-actions :deep(.app-button) {
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  padding: 0 0.625rem;
+  white-space: nowrap;
+}
+
+.shop-order-page-actions__count {
+  min-width: 1.5rem;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--bg-accent);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+</style>

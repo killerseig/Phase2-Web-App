@@ -35,9 +35,9 @@ onBeforeUnmount(() => {
   <AppShell>
     <div class="role-dashboard-page" data-testid="role-dashboard-page">
       <PagePanel
-        eyebrow="Role Dashboard"
+        eyebrow="Dashboard"
         :title="`Welcome, ${displayName}`"
-        :description="`Signed in as ${roleLabel}. Start with the tools available to your role, or open Jobs to drill into a shared job dashboard.`"
+        description="Open a job or choose a tool below."
       >
         <RoleDashboardModuleGrid :modules="modules" />
         <RoleDashboardJobShortcuts

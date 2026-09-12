@@ -56,32 +56,22 @@ function handleStatusFilterUpdate(value: string) {
 <template>
   <AppPane class="users-browser">
     <AppPaneHeader class="app-page-header users-browser__header" eyebrow="Admin" title="Users">
+      <template #description>
+        {{ pendingInviteCount }} pending {{ pendingInviteCount === 1 ? 'invite' : 'invites' }}
+      </template>
       <template #actions>
-        <div class="users-browser__header-actions">
-          <div class="users-browser__header-topline">
-            <div
-              :class="[
-                'users-browser__invite-summary',
-                { 'users-browser__invite-summary--empty': pendingInviteCount === 0 },
-              ]"
-            >
-              <span class="users-browser__invite-label">Pending Invites</span>
-              <strong class="users-browser__invite-count">{{ pendingInviteCount }}</strong>
-            </div>
-          </div>
-          <div class="users-browser__header-buttons">
-            <AppButton variant="primary" @click="emit('createUser')">
-              New User
-            </AppButton>
-            <AppLoadingButton
-              label="Send Invites"
-              loading-label="Sending..."
-              :loading="inviteLoading"
-              type="button"
-              :disabled="pendingInviteCount === 0"
-              @click="emit('sendInvites')"
-            />
-          </div>
+        <div class="users-browser__header-buttons">
+          <AppButton variant="primary" @click="emit('createUser')">
+            New User
+          </AppButton>
+          <AppLoadingButton
+            label="Send Invites"
+            loading-label="Sending..."
+            :loading="inviteLoading"
+            type="button"
+            :disabled="pendingInviteCount === 0"
+            @click="emit('sendInvites')"
+          />
         </div>
       </template>
     </AppPaneHeader>
@@ -110,7 +100,7 @@ function handleStatusFilterUpdate(value: string) {
       </label>
 
       <div class="users-browser__list">
-        <AppEmptyState v-if="usersLoading" class="users-browser__empty" message="Loading users..." />
+        <AppEmptyState panel v-if="usersLoading" class="users-browser__empty" message="Loading users..." />
 
         <AppListButton
           v-for="user in users"
@@ -141,6 +131,7 @@ function handleStatusFilterUpdate(value: string) {
 
         <AppEmptyState
           v-if="!usersLoading && users.length === 0"
+          panel
           class="users-browser__empty"
           message="No users match your search."
         />
@@ -150,61 +141,10 @@ function handleStatusFilterUpdate(value: string) {
 </template>
 
 <style scoped>
-.users-browser__header-actions {
-  display: grid;
-  justify-items: end;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.users-browser__header-topline {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-}
-
 .users-browser__header-buttons {
   display: flex;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  gap: var(--field-gap);
-  width: 100%;
-}
-
-.users-browser__header-buttons .app-button {
-  min-width: 0;
-  flex: 1 1 0;
-  white-space: nowrap;
-}
-
-.users-browser__invite-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--field-gap);
-  min-height: 1.9rem;
-  padding: 0 0.7rem;
-  border: 1px solid rgba(88, 186, 233, 0.18);
-  border-radius: var(--radius-sm);
-  background: rgba(38, 74, 96, 0.18);
-  color: var(--text-muted);
-}
-
-.users-browser__invite-summary--empty {
-  border-color: var(--border);
-  background: var(--field);
-}
-
-.users-browser__invite-label {
-  font-size: var(--font-size-badge);
-  letter-spacing: var(--letter-spacing-eyebrow);
-  text-transform: uppercase;
-}
-
-.users-browser__invite-count {
-  color: var(--text);
-  font-size: 0.9rem;
-  font-weight: var(--font-weight-heading);
-  line-height: 1;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .users-browser__body {
@@ -278,77 +218,6 @@ function handleStatusFilterUpdate(value: string) {
     min-height: 0;
     overflow: visible;
     padding-right: 0;
-  }
-
-  .users-browser__header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 0.75rem;
-  }
-
-  .users-browser__header-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    width: auto;
-    gap: var(--field-gap);
-  }
-
-  .users-browser__header-topline {
-    display: contents;
-  }
-
-  .users-browser__invite-summary {
-    width: auto;
-    justify-content: flex-start;
-    white-space: nowrap;
-  }
-
-  .users-browser__header-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    width: auto;
-    gap: var(--field-gap);
-  }
-
-  .users-browser__header-buttons .app-button {
-    width: auto;
-    flex: 0 0 auto;
-  }
-}
-
-@media (max-width: 560px) {
-  .users-browser__header {
-    grid-template-columns: 1fr;
-  }
-
-  .users-browser__header-actions {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .users-browser__header-topline {
-    display: flex;
-    width: 100%;
-  }
-
-  .users-browser__invite-summary {
-    width: auto;
-    max-width: 100%;
-    justify-content: flex-start;
-  }
-
-  .users-browser__header-buttons {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  .users-browser__header-buttons .app-button {
-    width: 100%;
   }
 }
 </style>

@@ -63,8 +63,7 @@ describe('UserDirectoryPanel', () => {
     const wrapper = mountDirectory()
 
     expect(wrapper.text()).toContain('Users')
-    expect(wrapper.text()).toContain('Pending Invites')
-    expect(wrapper.text()).toContain('2')
+    expect(wrapper.text()).toContain('2 pending invites')
     expect(wrapper.text()).toContain('Dan Larsen')
     expect(wrapper.text()).toContain('dan@example.com')
     expect(wrapper.text()).toContain('Admin')

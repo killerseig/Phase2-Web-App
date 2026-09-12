@@ -82,7 +82,7 @@ function handleStatusFilterUpdate(value: string) {
           </div>
         </AppListButton>
 
-        <AppEmptyState v-if="employeesLoading" class="employees-browser__empty" message="Loading employees..." />
+        <AppEmptyState panel v-if="employeesLoading" class="employees-browser__empty" message="Loading employees..." />
 
         <AppListButton
           v-for="employee in employees"
@@ -108,6 +108,7 @@ function handleStatusFilterUpdate(value: string) {
 
         <AppEmptyState
           v-if="!employeesLoading && employees.length === 0"
+          panel
           class="employees-browser__empty"
           message="No employees match your search."
         />

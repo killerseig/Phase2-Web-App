@@ -48,6 +48,7 @@ const emit = defineEmits<{
 
     <AppEmptyState
       v-else
+      panel
       class="daily-log-selected-card__empty"
       message="No daily log is selected for this date."
     />
@@ -80,16 +81,6 @@ const emit = defineEmits<{
 
 .daily-log-selected-card__summary span {
   color: var(--text-muted);
-}
-
-.daily-log-selected-card__empty {
-  display: grid;
-  place-content: center;
-  min-height: 8rem;
-  padding: 1rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  text-align: center;
 }
 
 @media (max-width: 920px) {

@@ -16,7 +16,6 @@ defineProps<{
       :to="module.targetRoute"
       :data-testid="`role-dashboard-module-${module.key}`"
     >
-      <span class="role-dashboard-module-card__eyebrow">{{ module.label }}</span>
       <strong>{{ module.label }}</strong>
       <p>{{ module.detail }}</p>
     </AppLinkCard>
@@ -31,24 +30,27 @@ defineProps<{
 .role-dashboard-module-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.9rem;
+  gap: var(--space-4);
 }
 
 .role-dashboard-module-card {
+  align-content: start;
   --app-link-card-gap: 0.35rem;
-  --app-link-card-border: 1px solid rgba(168, 190, 209, 0.16);
+  --app-link-card-border: 1px solid var(--border);
   --app-link-card-background: var(--panel-background);
   --app-link-card-shadow: none;
   --app-link-card-hover-background: var(--field-hover);
   --app-link-card-hover-shadow: none;
 }
 
-.role-dashboard-module-card__eyebrow {
-  color: var(--text-muted);
-  font-size: var(--font-size-eyebrow);
-  letter-spacing: var(--letter-spacing-eyebrow);
-  text-transform: uppercase;
-  font-weight: 500;
+.role-dashboard-module-card strong {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-pane-title);
+  line-height: 1.2;
+}
+
+.role-dashboard-module-card p {
+  margin: 0;
 }
 
 .role-dashboard-module-card p,

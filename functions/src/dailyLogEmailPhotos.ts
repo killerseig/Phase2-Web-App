@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { EMAIL } from './constants'
 import { storageBucket } from './runtime'
 
 export type DailyLogPhotoSectionKey = 'photo' | 'ptp' | 'qc'
@@ -34,10 +35,11 @@ interface DailyLogEmailPhotoDependencies {
   createBoundedJpeg: (source: Buffer, maxBytes: number) => Promise<Buffer | null>
 }
 
-export const DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT = 6
+export const DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT = EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT
 export const DAILY_LOG_EMAIL_INLINE_IMAGE_TARGET_BYTES = 96 * 1024
 export const DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_BYTES = 128 * 1024
-export const DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES = 2 * 1024 * 1024
+export const DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES =
+  DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT * 3 * DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_BYTES
 
 const DAILY_LOG_GALLERY_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 const DAILY_LOG_STORED_THUMBNAIL_MAX_BYTES = 300 * 1024

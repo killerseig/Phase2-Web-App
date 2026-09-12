@@ -9,7 +9,6 @@ import {
 } from '@/features/shopCatalog/catalogDisplayHelpers'
 import {
   useShopCatalogContextMenu,
-  type ShopCatalogContextMenuTarget as ContextMenuTarget,
 } from '@/features/shopCatalog/useShopCatalogContextMenu'
 import {
   buildShopOrderCatalogTreeNodes,
@@ -477,16 +476,19 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 
 <template>
   <AppPane class="shop-orders-tree-pane">
-  <AppPaneHeader
+    <AppPaneHeader
       class="app-page-header shop-orders-pane__header shop-orders-tree-pane__header"
       eyebrow="Catalog Browser"
       title="Shop Orders"
     >
-      <template #actions>
-        <div class="shop-orders-tree-pane__summary">
+      <template #description>
+        <span class="shop-orders-tree-pane__summary">
           <span>{{ activeCategoryCount }} folders</span>
           <span>{{ activeItemCount }} items</span>
-        </div>
+        </span>
+      </template>
+      <template v-if="$slots.actions" #actions>
+        <slot name="actions" />
       </template>
     </AppPaneHeader>
 
@@ -563,7 +565,18 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 }
 
 .shop-orders-tree-pane__header {
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+:global(.app-shell.app-shell--branded-content) .shop-orders-tree-pane__header :deep(.app-pane-header__copy) {
+  min-width: 0;
+}
+
+.shop-orders-tree-pane__header :deep(.app-pane-header__actions) {
+  width: auto;
+  justify-content: flex-end;
 }
 
 .shop-orders-pane__header :deep(.app-pane-header__copy),
@@ -620,9 +633,5 @@ useWindowEventListener('keydown', handleGlobalKeydown)
     --app-pane-gap: 0.75rem;
   }
 
-  .shop-orders-pane__header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }
 </style>

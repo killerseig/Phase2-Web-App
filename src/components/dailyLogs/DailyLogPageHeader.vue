@@ -2,6 +2,7 @@
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 
 const props = defineProps<{
   canCreateDailyLog: boolean
@@ -59,7 +60,7 @@ const emit = defineEmits<{
   <div class="daily-logs-toolbar">
     <AppBadge class="daily-logs-badge" tone="accent">{{ props.selectedLogLabel }}</AppBadge>
     <AppBadge class="daily-logs-badge" tone="accent">
-      {{ props.visibleLogCount }} logs for {{ props.selectedDate }}
+      {{ props.visibleLogCount }} {{ props.visibleLogCount === 1 ? 'log' : 'logs' }} for {{ props.selectedDate }}
     </AppBadge>
     <AppBadge v-if="props.savingDraft" class="daily-logs-badge" tone="accent">
       Saving draft...
@@ -69,12 +70,9 @@ const emit = defineEmits<{
     </AppBadge>
   </div>
 
-  <div
-    v-if="props.selectedDateIsFuture"
-    class="daily-logs-message daily-logs-message--info"
-  >
+  <AppStatusMessage v-if="props.selectedDateIsFuture">
     Future daily logs are view only. Choose today or an earlier date to create a draft.
-  </div>
+  </AppStatusMessage>
 </template>
 
 <style scoped>
@@ -101,16 +99,6 @@ const emit = defineEmits<{
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
-}
-
-.daily-logs-message {
-  padding: 0.95rem 1rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.daily-logs-message--info {
-  color: var(--text-soft);
 }
 
 @media (max-width: 920px) {

@@ -12,13 +12,12 @@ defineProps<{
   <PagePanel
     eyebrow="Job"
     :title="job ? `${job.code || 'No Job #'} - ${job.name}` : 'Job not found'"
-    description="Foremen land on the job dashboard first, then choose a module."
+    description="Choose a task for this job."
   >
     <div class="job-dashboard-header">
       <div class="job-dashboard-header__meta">
         <span v-if="job">Type: {{ formatJobTypeLabel(job.type) }}</span>
         <span v-if="job?.gc">GC: {{ job.gc }}</span>
-        <span>Mode: module launcher</span>
       </div>
     </div>
   </PagePanel>

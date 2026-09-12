@@ -182,6 +182,7 @@ describe('submitted field email callable handlers', () => {
         to: ['global-daily@phase2co.com', 'job-daily@phase2co.com'],
         subject: 'Daily Log Report | Vince Hintz | #5229 Lucky 3 Ranch | 6/17/2026',
         html: '<p>daily log</p>',
+        dailyLogPhotoFallbackHtml: '<p>daily log</p>',
       }),
     )
     expect(deps.buildDailyLogEmail).toHaveBeenCalledWith(
@@ -205,6 +206,15 @@ describe('submitted field email callable handlers', () => {
       jobDetails: job,
       log: expect.objectContaining({ id: 'daily-log-1' }),
     })
+    expect(deps.buildDailyLogEmail).toHaveBeenCalledWith(
+      job,
+      '2026-06-17',
+      expect.objectContaining({ id: 'daily-log-1' }),
+      {
+        dailyLogUrl: 'https://phase2-website.web.app/daily-log-gallery/gallery-share-id',
+        inlinePhotoPreviews: [],
+      },
+    )
     expect(deps.prepareDailyLogInlinePhotos).toHaveBeenCalledWith(
       'daily-log-1',
       expect.objectContaining({ id: 'daily-log-1' }),

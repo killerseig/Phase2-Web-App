@@ -64,7 +64,6 @@ function mountPane(overrides = {}) {
 
   return mount(ShopOrderWorkspacePane, {
     props: {
-      canCreateOrder: true,
       canEditSelectedOrder: true,
       comments: selectedOrder.comments,
       createOrderLoading: false,
@@ -97,7 +96,7 @@ describe('ShopOrderWorkspacePane', () => {
     expect(wrapper.text()).toContain('736 - Shop')
     expect(wrapper.text()).toContain('Order #202607140001')
     expect(wrapper.text()).toContain('Draft / Due 2026-07-16')
-    expect(wrapper.text()).toContain('1 items')
+    expect(wrapper.text()).toContain('1 item')
     expect(wrapper.text()).toContain('2 total qty')
     expect(wrapper.get('[data-testid="shoporder-submit-total"]').text()).toContain('$25.00')
     expect(wrapper.text()).toContain('Added Items')
@@ -110,11 +109,9 @@ describe('ShopOrderWorkspacePane', () => {
   it('emits top-level order action events', async () => {
     const wrapper = mountPane()
 
-    await wrapper.get('[data-testid="shoporder-new-order"]').trigger('click')
     await wrapper.get('[data-testid="shoporder-submit"]').trigger('click')
     await wrapper.get('.shop-orders-draft-delete-button').trigger('click')
 
-    expect(wrapper.emitted('create-order')).toHaveLength(1)
     expect(wrapper.emitted('submit-order')).toHaveLength(1)
     expect(wrapper.emitted('delete-selected-order')).toHaveLength(1)
   })

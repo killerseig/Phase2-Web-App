@@ -153,18 +153,6 @@ watch(() => route.fullPath, () => {
             <i :class="['pi', mobileNavOpen ? 'pi-times' : 'pi-bars', 'app-shell__control-icon']" aria-hidden="true"></i>
             <span class="sr-only">Menu</span>
           </Button>
-          <div class="app-shell__back-to-job-slot">
-            <RouterLink
-              v-if="jobDashboardRoute"
-              :to="jobDashboardRoute"
-              class="app-shell__back-to-job app-shell__back-to-job--topbar"
-              aria-label="Back to Job"
-              title="Back to Job"
-              @click="closeMobileNav"
-            >
-              <i class="pi pi-arrow-left app-shell__control-icon" aria-hidden="true"></i>
-            </RouterLink>
-          </div>
           <div class="app-shell__topbar-title">
             <span class="app-shell__topbar-eyebrow">Phase 2 Console</span>
             <strong class="app-shell__topbar-heading">Field Operations</strong>
@@ -315,12 +303,6 @@ watch(() => route.fullPath, () => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-}
-
-.app-shell__back-to-job-slot {
-  display: none;
-  flex: 0 0 2.5rem;
-  height: 2.5rem;
 }
 
 .app-shell__back-to-job--sidebar {
@@ -576,14 +558,8 @@ watch(() => route.fullPath, () => {
     place-items: center;
   }
 
-  .app-shell__menu-button,
-  .app-shell__back-to-job-slot,
-  .app-shell__back-to-job--topbar {
+  .app-shell__menu-button {
     display: inline-flex;
-  }
-
-  .app-shell__back-to-job--sidebar {
-    display: none;
   }
 
   .app-shell__nav {

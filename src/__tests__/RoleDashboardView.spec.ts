@@ -120,7 +120,7 @@ describe('RoleDashboardView', () => {
     expect(wrapper.get('[data-testid="role-dashboard-page"]').text()).toContain(
       'Welcome, Chris Larsen',
     )
-    expect(wrapper.text()).toContain('Signed in as Admin')
+    expect(wrapper.text()).toContain('Open a job or choose a tool below.')
     expect(wrapper.get('[data-testid="role-dashboard-module-users"]').attributes('href')).toBe(
       '/users',
     )

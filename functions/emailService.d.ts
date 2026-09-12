@@ -77,6 +77,8 @@ export interface SendEmailOptions {
     to: string | string[];
     subject: string;
     html: string;
+    /** Enables the daily log size budget and supplies gallery links when previews are too large. */
+    dailyLogPhotoFallbackHtml?: string;
     attachments?: Array<{
         name: string;
         contentType?: string;

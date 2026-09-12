@@ -4,6 +4,12 @@
   box-shadow: none;
 }
 
+/* Toast bodies have their own theme color and do not inherit the message color. */
+.p-toast .p-toast-message .p-toast-summary,
+.p-toast .p-toast-message .p-toast-detail {
+  color: var(--text);
+}
+
 .p-toast .p-toast-message.p-toast-message-success {
   background: #202b21;
   border-color: #3e5740;

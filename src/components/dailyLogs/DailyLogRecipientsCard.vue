@@ -66,7 +66,7 @@ const emit = defineEmits<{
 
 .daily-log-recipients-card__groups {
   display: grid;
-  gap: 0.9rem;
+  gap: var(--space-4);
 }
 
 @media (max-width: 920px) {

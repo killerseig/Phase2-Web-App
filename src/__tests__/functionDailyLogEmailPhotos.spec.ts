@@ -32,7 +32,7 @@ describe('Daily Log inline email photos', () => {
     mocks.file.mockReset()
   })
 
-  it('binds paths to the current log and selects at most six entries per section', () => {
+  it('binds paths to the current log and selects at most two entries per section', () => {
     const candidates = selectDailyLogEmailPhotoCandidates('daily-log-1', {
       payload: {
         attachments: [
@@ -48,10 +48,10 @@ describe('Daily Log inline email photos', () => {
       },
     })
 
-    expect(candidates).toHaveLength(18)
-    expect(candidates.filter((entry) => entry.section === 'photo')).toHaveLength(6)
-    expect(candidates.filter((entry) => entry.section === 'ptp')).toHaveLength(6)
-    expect(candidates.filter((entry) => entry.section === 'qc')).toHaveLength(6)
+    expect(candidates).toHaveLength(6)
+    expect(candidates.filter((entry) => entry.section === 'photo')).toHaveLength(2)
+    expect(candidates.filter((entry) => entry.section === 'ptp')).toHaveLength(2)
+    expect(candidates.filter((entry) => entry.section === 'qc')).toHaveLength(2)
     expect(candidates).not.toContainEqual(
       expect.objectContaining({ originalPath: expect.stringContaining('another-log') }),
     )
@@ -116,7 +116,7 @@ describe('Daily Log inline email photos', () => {
       (sum, entry) => sum + Buffer.from(entry.contentBytes, 'base64').length,
       0,
     )
-    expect(result.attachments).toHaveLength(16)
+    expect(result.attachments).toHaveLength(6)
     expect(totalBytes).toBeLessThanOrEqual(DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES)
   })
 })

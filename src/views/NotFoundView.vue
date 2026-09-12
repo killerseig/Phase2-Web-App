@@ -7,7 +7,7 @@ import AppButtonLink from '@/components/common/AppButtonLink.vue'
   <AuthCard
     eyebrow="404"
     title="Page not found"
-    copy="The workspace route you opened does not exist in the current scaffold."
+    copy="This page could not be found."
   >
     <AppButtonLink to="/jobs" variant="primary">Back to Jobs</AppButtonLink>
   </AuthCard>

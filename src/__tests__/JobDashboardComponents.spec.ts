@@ -108,7 +108,7 @@ describe('Job Dashboard components', () => {
     expect(wrapper.text()).toContain('5229 - Lucky 3 Ranch')
     expect(wrapper.text()).toContain('Type: General')
     expect(wrapper.text()).toContain('GC: Lucky GC')
-    expect(wrapper.text()).toContain('Mode: module launcher')
+    expect(wrapper.text()).toContain('Choose a task for this job.')
   })
 
   it('shows a safe empty state when the job is missing', () => {
@@ -119,6 +119,6 @@ describe('Job Dashboard components', () => {
     })
 
     expect(wrapper.text()).toContain('Job not found')
-    expect(wrapper.text()).toContain('Mode: module launcher')
+    expect(wrapper.text()).toContain('Choose a task for this job.')
   })
 })

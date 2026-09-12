@@ -251,7 +251,7 @@ function forwardDetailRecipientRemove(moduleKey: GlobalNotificationModuleKey, em
       </AppPaneHeader>
 
       <div class="jobs-detail__body">
-        <AppEmptyState
+        <AppEmptyState panel
           class="jobs-browser__empty"
           message="This role can view this job, but cannot edit its setup."
         />
@@ -260,7 +260,7 @@ function forwardDetailRecipientRemove(moduleKey: GlobalNotificationModuleKey, em
 
     <template v-else>
       <div class="jobs-detail__body">
-        <AppEmptyState
+        <AppEmptyState panel
           class="jobs-browser__empty"
           message="Select a job to edit, or create a new one."
         />
@@ -296,17 +296,6 @@ function forwardDetailRecipientRemove(moduleKey: GlobalNotificationModuleKey, em
   display: grid;
   gap: var(--space-6);
   align-content: start;
-}
-
-.jobs-browser__empty {
-  color: var(--text-muted);
-  display: grid;
-  place-content: center;
-  min-height: 12rem;
-  padding: 1.5rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  text-align: center;
 }
 
 .jobs-detail__actions {

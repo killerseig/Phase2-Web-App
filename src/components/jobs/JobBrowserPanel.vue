@@ -92,7 +92,7 @@ function handleStatusFilterUpdate(value: string) {
       </div>
 
       <div class="jobs-browser__list">
-        <AppEmptyState v-if="loading" class="jobs-browser__empty" message="Loading jobs..." />
+        <AppEmptyState panel v-if="loading" class="jobs-browser__empty" message="Loading jobs..." />
 
         <AppListButton
           v-if="showAllJobsEntry"
@@ -127,9 +127,10 @@ function handleStatusFilterUpdate(value: string) {
 
         <AppEmptyState
           v-if="!loading && visibleJobs.length === 0"
+          panel
           data-testid="jobs-empty"
           class="jobs-browser__empty"
-          message="No jobs match this view."
+          message="No jobs match your search."
         />
       </div>
     </div>
@@ -137,14 +138,10 @@ function handleStatusFilterUpdate(value: string) {
 </template>
 
 <style scoped>
-.jobs-browser {
-  --app-pane-header-title-font-size: 2rem;
-}
-
 .jobs-browser__body {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: var(--space-5);
+  gap: var(--space-4);
   min-height: 0;
 }
 
@@ -243,19 +240,4 @@ function handleStatusFilterUpdate(value: string) {
   font-variant-numeric: tabular-nums;
 }
 
-.jobs-browser__empty {
-  display: grid;
-  place-content: center;
-  min-height: 12rem;
-  padding: 1.5rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  text-align: center;
-}
-
-@media (max-width: 560px) {
-  .jobs-browser {
-    --app-pane-header-title-font-size: 1.75rem;
-  }
-}
 </style>

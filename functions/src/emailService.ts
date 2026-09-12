@@ -249,7 +249,7 @@ interface DailyLogEmailAttachment {
   section: DailyLogPhotoSectionKey
 }
 
-const DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT = 6
+const DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT = EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT
 
 function safeWebUrl(value: unknown): string {
   const normalized = typeof value === 'string' ? value.trim() : ''
@@ -2133,6 +2133,8 @@ export interface SendEmailOptions {
   to: string | string[]
   subject: string
   html: string
+  /** Enables the daily log size budget and supplies gallery links when previews are too large. */
+  dailyLogPhotoFallbackHtml?: string
   attachments?: Array<{
     name: string
     contentType?: string
@@ -2172,9 +2174,6 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
   }
 
   try {
-    // Get access token
-    const token = await getGraphAuthToken()
-
     const senderEmail = outlookSenderEmail.value()
     const senderRecipient = buildGraphSenderRecipient(senderEmail)
 
@@ -2210,6 +2209,27 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
       saveToSentItems: true,
     }
 
+    if (options.dailyLogPhotoFallbackHtml !== undefined) {
+      const payloadBytes = () => Buffer.byteLength(JSON.stringify(payload), 'utf8')
+      if (payloadBytes() > EMAIL.DAILY_LOG_MAX_PAYLOAD_BYTES) {
+        payload.message.body.content = options.dailyLogPhotoFallbackHtml
+        // Rebuild the photo section with gallery links so no missing CID images remain.
+        // Other attachment types must never be silently discarded.
+        const remainingAttachments = payload.message.attachments?.filter((att) => !att.isInline)
+        if (remainingAttachments?.length) payload.message.attachments = remainingAttachments
+        else delete payload.message.attachments
+        console.log('[sendEmail] Using gallery links to fit the daily log email size budget.')
+      }
+      if (payloadBytes() > EMAIL.DAILY_LOG_MAX_PAYLOAD_BYTES) {
+        throw new EmailDeliveryError(
+          'This daily log email is too large to send, even with photos linked. Please contact an administrator.',
+          { retryable: false },
+        )
+      }
+    }
+
+    // Validate message size before requesting a token or sending anything to Graph.
+    const token = await getGraphAuthToken()
     const graphEndpoint = `https://graph.microsoft.com/v1.0/users/${senderEmail}/sendMail`
 
     console.log('[sendEmail] Using endpoint:', graphEndpoint)
@@ -2265,6 +2285,7 @@ export async function sendDailyLogEmailNotification(
     to: recipients,
     subject: buildDailyLogEmailSubject(jobDetails, logDate, dailyLog || {}),
     html,
+    dailyLogPhotoFallbackHtml: html,
   })
 }
 

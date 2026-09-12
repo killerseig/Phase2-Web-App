@@ -30,7 +30,7 @@ defineProps<{
 .module-launcher-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.9rem;
+  gap: var(--space-4);
 }
 
 @media (max-width: 1100px) {

@@ -30,7 +30,7 @@ const TARGET_ROLE_DASHBOARD_MODULES: readonly DashboardModuleDefinition[] = [
   {
     key: 'users',
     label: 'Users',
-    detail: 'Create users, manage access, and assign field-facing roles.',
+    detail: 'Manage user accounts, roles, and job access.',
     targetRoute: '/users',
     canUse: (capabilities) => capabilities.manageUsers,
   },
@@ -51,7 +51,7 @@ const TARGET_ROLE_DASHBOARD_MODULES: readonly DashboardModuleDefinition[] = [
   {
     key: 'jobs-lookup',
     label: 'Jobs Lookup',
-    detail: 'Find jobs and drill into the shared job dashboard when allowed.',
+    detail: 'Find a job and open its timecards, daily logs, and shop orders.',
     targetRoute: '/jobs',
     canUse: (capabilities) => capabilities.viewAllJobs,
   },
@@ -72,7 +72,7 @@ const TARGET_ROLE_DASHBOARD_MODULES: readonly DashboardModuleDefinition[] = [
   {
     key: 'submitted-timecards',
     label: 'Submitted Timecards',
-    detail: 'Review submitted assigned-job timecards for billing context.',
+    detail: 'Review submitted timecards for your assigned jobs.',
     targetRoute: '/jobs',
     canUse: (capabilities) => capabilities.viewSubmittedAssignedTimecards,
   },

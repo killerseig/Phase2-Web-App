@@ -45,7 +45,7 @@ defineProps<{
   gap: 0.2rem;
   min-width: 13rem;
   padding: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--panel-background);
   box-shadow: none;
@@ -55,23 +55,29 @@ defineProps<{
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 2.2rem;
-  padding: 0 0.7rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.7rem;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   text-align: left;
+  cursor: pointer;
 }
 
 .shop-catalog-context-menu__item:hover:not(:disabled) {
-  border-color: rgba(88, 186, 233, 0.18);
-  background: rgba(34, 79, 104, 0.22);
+  background: var(--field-hover);
+}
+
+.shop-catalog-context-menu__item:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .shop-catalog-context-menu__item:disabled {
   color: var(--text-soft);
   opacity: 0.55;
+  cursor: default;
 }
 
 .shop-catalog-context-menu__item--danger {
@@ -79,7 +85,6 @@ defineProps<{
 }
 
 .shop-catalog-context-menu__item--danger:hover:not(:disabled) {
-  border-color: rgba(255, 125, 107, 0.18);
-  background: rgba(108, 48, 44, 0.2);
+  background: var(--danger-surface);
 }
 </style>

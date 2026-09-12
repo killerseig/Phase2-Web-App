@@ -13,7 +13,6 @@ import type {
 } from '@/types/domain'
 
 defineProps<{
-  canCreateOrder: boolean
   canEditSelectedOrder: boolean
   comments: string
   createOrderLoading: boolean
@@ -39,7 +38,6 @@ const emit = defineEmits<{
   'update:delivery-date': [value: string]
   'update:comments': [value: string]
   'apply-thursday-delivery': []
-  'create-order': []
   'delete-selected-order': []
   'remove-item': [orderItemId: string]
   'save-note': [orderItemId: string]
@@ -53,20 +51,15 @@ const emit = defineEmits<{
 <template>
   <AppPane class="shop-orders-workspace-pane">
     <ShopOrderWorkspaceHeader
-      :can-create-order="canCreateOrder"
       :can-submit-order="canEditSelectedOrder"
       :create-order-loading="createOrderLoading"
       :item-action-loading="itemActionLoading"
       :job="job"
       :order-estimated-total="orderEstimatedTotal"
-      @create-order="emit('create-order')"
       @submit-order="emit('submit-order')"
     />
 
-    <div
-      class="shop-orders-workspace-pane__body"
-      :class="{ 'shop-orders-workspace-pane__body--has-selected-order': selectedOrder }"
-    >
+    <div class="shop-orders-workspace-pane__body">
       <ShopOrderSelectedOrderPanel
         v-if="selectedOrder"
         :delivery-date="deliveryDate"
@@ -88,7 +81,7 @@ const emit = defineEmits<{
       >
         <template #actions>
           <div class="shop-orders-history-summary">
-            <span>{{ itemCount }} items</span>
+            <span>{{ itemCount }} {{ itemCount === 1 ? 'item' : 'items' }}</span>
             <span>{{ totalQuantity }} total qty</span>
           </div>
         </template>
@@ -144,6 +137,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .shop-orders-workspace-pane {
+  container: shop-order-workspace / inline-size;
   --app-pane-grid-template-rows: auto minmax(0, 1fr);
   --app-pane-gap: 0.65rem;
   --app-pane-padding: 0.75rem;
@@ -168,18 +162,9 @@ const emit = defineEmits<{
   padding-right: 0;
 }
 
-.shop-orders-workspace-pane__body--has-selected-order {
-  overflow-y: auto;
-}
-
-.shop-orders-workspace-pane__items-section {
-  flex: 2 1 14rem;
-  min-height: 10rem;
-}
-
-.shop-orders-workspace-pane__history-section {
-  flex: 0.9 1 9.5rem;
-  min-height: 7rem;
+.shop-orders-workspace-pane__body > * {
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 .shop-orders-history-summary {
@@ -187,9 +172,7 @@ const emit = defineEmits<{
   flex-wrap: wrap;
   gap: 0.32rem 0.55rem;
   color: var(--text-soft);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--font-size-help);
 }
 
 .shop-orders-workspace-section__header-meta {
@@ -207,26 +190,20 @@ const emit = defineEmits<{
   font-size: var(--font-size-help);
 }
 
-@media (max-width: 820px) {
+@media (max-width: 1180px) {
   .shop-orders-workspace-pane {
     --app-pane-height: auto;
     --app-pane-grid-template-rows: auto auto;
     --app-pane-overflow: visible;
   }
 
-  .shop-orders-workspace-pane__body,
-  .shop-orders-workspace-pane__body--has-selected-order {
+  .shop-orders-workspace-pane__body {
     overflow: visible;
   }
+}
 
-  .shop-orders-workspace-pane__items-section,
-  .shop-orders-workspace-pane__history-section {
-    flex: 0 0 auto;
-    min-height: 0;
-  }
-
+@media (max-width: 820px) {
   .shop-orders-history-summary {
-    font-size: 0.64rem;
     gap: 0.24rem 0.42rem;
   }
 

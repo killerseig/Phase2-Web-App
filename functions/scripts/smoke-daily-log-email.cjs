@@ -76,7 +76,7 @@ const nestedDailyLogRecord = {
 
 const normalizedPayload = normalizeDailyLogEmailPayload(nestedDailyLogRecord)
 const inlinePhotoPreviews = [
-  ...Array.from({ length: 6 }, (_, index) => ({
+  ...Array.from({ length: 2 }, (_, index) => ({
     section: 'photo',
     position: index + 1,
     contentId: `daily-log-photo-${index + 1}@phase2.local`,
@@ -179,8 +179,8 @@ assert.equal(
 )
 assert.equal(
   (html.match(/<img /g) || []).length,
-  8,
-  'email should cap Photos at six while independently previewing PTP and QC photos',
+  4,
+  'email should cap Photos at two while independently previewing PTP and QC photos',
 )
 assert.equal(
   html.includes('https://example.com/level-1-photo.jpg'),
@@ -190,7 +190,7 @@ assert.equal(
 assert.equal(
   html.includes('View All 1 PTP Photos'),
   false,
-  'sections at or below six photos should not include an overflow button',
+  'sections at or below two photos should not include an overflow button',
 )
 assert.equal(
   html.includes('What areas were inspected?:'),

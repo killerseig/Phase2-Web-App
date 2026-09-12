@@ -1,4 +1,4 @@
-import { expect, test } from './helpers/test.js'
+import { expect, test, type Page } from './helpers/test.js'
 import {
   createAdminWorkspaceFixture,
   createDailyLogsFixture,
@@ -9,10 +9,15 @@ import {
 } from './helpers/phase2AppFixture.js'
 
 const viewports = [
-  { label: 'desktop', width: 1600, backContainer: '.app-shell__navigation-heading' },
-  { label: 'compact laptop', width: 1280, backContainer: '.app-shell__topbar-leading' },
-  { label: 'phone', width: 390, backContainer: '.app-shell__topbar-leading' },
+  { label: 'desktop', width: 1600 },
+  { label: 'compact laptop', width: 1280 },
+  { label: 'phone', width: 390 },
 ] as const
+
+async function openNavigationIfNeeded(page: Page) {
+  const menu = page.getByRole('button', { name: 'Open navigation', exact: true })
+  if (await menu.isVisible()) await menu.click()
+}
 
 test.describe('job dashboard navigation', () => {
   for (const viewport of viewports) {
@@ -25,13 +30,15 @@ test.describe('job dashboard navigation', () => {
       for (const module of ['timecards', 'daily-logs', 'shop-orders']) {
         await page.getByTestId(`job-dashboard-module-${module}`).click()
         await expect(page).toHaveURL(new RegExp(`/jobs/job-e2e/${module}$`))
+        await openNavigationIfNeeded(page)
 
         const backLink = page.getByRole('link', { name: 'Back to Job' })
         await expect(backLink).toHaveCount(1)
         await expect(backLink).toBeInViewport()
         await expect(backLink).toHaveAttribute('href', '/jobs/job-e2e')
         await expect(backLink).toHaveAttribute('title', 'Back to Job')
-        await expect(page.locator(viewport.backContainer).getByRole('link', { name: 'Back to Job' })).toBeVisible()
+        await expect(page.locator('.app-shell__navigation-heading').getByRole('link', { name: 'Back to Job' })).toBeVisible()
+        await expect(page.locator('.app-shell__topbar').getByRole('link', { name: 'Back to Job' })).toHaveCount(0)
 
         await backLink.click()
         await expect(page).toHaveURL(/\/jobs\/job-e2e$/)
@@ -47,6 +54,7 @@ test.describe('job dashboard navigation', () => {
     fixture.auth.profile.assignedJobIds = ['job-from-link']
     await page.setViewportSize({ width: 390, height: 844 })
     await gotoPhase2App(page, '/jobs/job-from-link/daily-logs', fixture)
+    await openNavigationIfNeeded(page)
 
     const backLink = page.getByRole('link', { name: 'Back to Job' })
     await expect(backLink).toHaveAttribute('href', '/jobs/job-from-link')

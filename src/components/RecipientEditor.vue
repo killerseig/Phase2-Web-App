@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
@@ -34,7 +35,7 @@ const emit = defineEmits<{
 }>()
 
 const recipientCountLabel = computed(() => (
-  `${props.recipients.length} recipients`
+  `${props.recipients.length} ${props.recipients.length === 1 ? 'recipient' : 'recipients'}`
 ))
 
 function addRecipient() {
@@ -65,6 +66,7 @@ function removeRecipient(email: string) {
       <AppTextInput
         class="recipient-editor__input"
         :model-value="modelValue"
+        :aria-label="`${title} email address`"
         type="email"
         autocomplete="email"
         :disabled="disabled"
@@ -89,7 +91,7 @@ function removeRecipient(email: string) {
     <div v-else class="recipient-editor__list">
       <article v-for="email in recipients" :key="email" class="recipient-editor__row">
         <span>{{ email }}</span>
-        <span v-if="rowBadge" class="recipient-editor__badge">{{ rowBadge }}</span>
+        <AppBadge v-if="rowBadge" class="recipient-editor__badge">{{ rowBadge }}</AppBadge>
         <AppIconButton
           v-else-if="!readOnly"
           class="recipient-editor__remove"
@@ -99,7 +101,7 @@ function removeRecipient(email: string) {
           :title="removeLabel"
           @click="removeRecipient(email)"
         >
-          X
+          <i class="pi pi-times" aria-hidden="true"></i>
         </AppIconButton>
       </article>
     </div>
@@ -116,23 +118,22 @@ function removeRecipient(email: string) {
   --app-section-header-description-font-size: 0.86rem;
   --app-section-header-description-line-height: 1.25;
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-width: 0;
 }
 
 .recipient-editor__count {
   flex: 0 0 auto;
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--font-size-help);
   white-space: nowrap;
 }
 
 .recipient-editor__input-row {
   display: flex;
   align-items: stretch;
-  gap: 0.6rem;
-  width: min(100%, 28rem);
-  max-width: 28rem;
+  gap: var(--space-2);
+  width: 100%;
   min-width: 0;
 }
 
@@ -140,16 +141,16 @@ function removeRecipient(email: string) {
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
-  --app-text-input-min-height: 2.25rem;
-  --app-text-input-padding-x: 0.8rem;
+  --app-text-input-min-height: var(--control-height-form);
+  --app-text-input-padding-x: var(--control-padding-x);
   --app-text-input-radius: var(--radius-sm);
-  font-size: 0.92rem;
+  font-size: var(--font-size-md);
 }
 
 .recipient-editor__add {
   flex: 0 0 auto;
   min-width: 4.25rem;
-  min-height: 2.25rem;
+  min-height: var(--control-height-form);
   padding: 0 0.95rem;
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -171,20 +172,18 @@ function removeRecipient(email: string) {
 .recipient-editor__list {
   display: grid;
   gap: var(--list-gap);
-  width: min(100%, 42rem);
+  width: 100%;
   max-width: 100%;
   min-width: 0;
 }
 
 .recipient-editor__row {
   display: grid;
-  gap: 0.6rem;
+  gap: var(--space-2);
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--field);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-soft);
   color: var(--text-muted);
 }
 
@@ -193,17 +192,7 @@ function removeRecipient(email: string) {
   overflow-wrap: anywhere;
 }
 
-.recipient-editor__badge {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-}
-
 @media (max-width: 760px) {
-  .recipient-editor__input-row {
-    flex-direction: column;
-    max-width: none;
-  }
-
   .recipient-editor__header {
     --app-section-header-flex-direction: column;
     --app-section-header-align-items: flex-start;

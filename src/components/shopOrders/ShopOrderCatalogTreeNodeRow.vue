@@ -24,7 +24,6 @@ const emit = defineEmits<{
   updateQuantity: [value: string]
 }>()
 
-const isCategory = computed(() => props.node.kind === 'category')
 const isItem = computed(() => props.node.kind === 'item')
 const hasChildren = computed(() => {
   if (props.node.kind === 'item') return false
@@ -62,7 +61,7 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
     @keydown.enter.prevent="emit('select')"
     @contextmenu="emit('contextMenu', $event)"
   >
-    <span class="shop-orders-tree-node__indent" :style="{ width: `${props.node.depth}rem` }"></span>
+    <span class="shop-orders-tree-node__indent" :style="{ '--node-depth': props.node.depth }"></span>
     <button
       v-if="hasChildren"
       type="button"
@@ -70,6 +69,8 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
       :class="{ 'shop-orders-tree-node__twist--open': props.expanded }"
       :data-testid="toggleTestId"
       :data-state="props.expanded ? 'expanded' : 'collapsed'"
+      :aria-label="`${props.expanded ? 'Collapse' : 'Expand'} ${props.node.label}`"
+      :aria-expanded="props.expanded"
       @click.stop="emit('toggle')"
       @keydown.enter.prevent.stop="emit('toggle')"
       @keydown.space.prevent.stop="emit('toggle')"
@@ -169,15 +170,15 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 
 .shop-orders-tree-node__indent {
   flex: 0 0 auto;
-  width: 0;
+  width: calc(var(--node-depth, 0) * 1rem);
 }
 
 .shop-orders-tree-node__twist {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 2rem;
+  height: 2rem;
   flex: 0 0 auto;
   padding: 0;
   border: none;
@@ -187,6 +188,7 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 }
 
 .shop-orders-tree-node__twist--placeholder {
+  height: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -255,9 +257,9 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 .shop-orders-tree-node__label {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
   font-size: 0.92rem;
 }
 
@@ -284,7 +286,7 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 }
 
 .shop-orders-tree-node--item {
-  min-height: 2.8rem;
+  min-height: calc(var(--shop-number-control-height, 2rem) + 2px);
 }
 
 .shop-orders-tree-node__actions {
@@ -306,8 +308,8 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 }
 
 .shop-orders-tree-node__add {
-  min-width: 2.05rem;
-  min-height: var(--shop-control-height);
+  min-width: 2.25rem;
+  min-height: var(--shop-number-control-height, 2rem);
   padding: 0;
   font-size: 1.1rem;
   line-height: 1;
@@ -316,16 +318,66 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
 @media (max-width: 1180px) {
   .shop-orders-tree-node {
     height: auto;
-    padding-top: 0.35rem;
-    padding-bottom: 0.35rem;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .shop-orders-tree-node__meta {
+    flex: 0 0 auto;
+    font-size: var(--font-size-help);
   }
 
-  .shop-orders-tree-node__label {
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.25;
+  .shop-orders-tree-node__indent {
+    width: calc(min(var(--node-depth, 0), 3) * 0.5rem);
+  }
+
+  .shop-orders-tree-node--item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: var(--space-2);
+    row-gap: 0;
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .shop-orders-tree-node--item .shop-orders-tree-node__indent,
+  .shop-orders-tree-node--item .shop-orders-tree-node__twist--placeholder {
+    display: none;
+  }
+
+  .shop-orders-tree-node--item .shop-orders-tree-node__label {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+  }
+
+  .shop-orders-tree-node--item .shop-orders-node-icon {
+    grid-row: 1 / 3;
+  }
+
+  .shop-orders-tree-node__price {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    font-size: var(--font-size-label);
+  }
+
+  .shop-orders-tree-node__actions {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}
+
+@media (pointer: coarse) {
+  .shop-orders-tree-node__twist {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .shop-orders-tree-node__twist--placeholder {
+    width: 1rem;
+    height: 0;
   }
 }
 </style>

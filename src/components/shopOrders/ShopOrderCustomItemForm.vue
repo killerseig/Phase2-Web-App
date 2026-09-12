@@ -122,7 +122,7 @@ const isSubmitDisabled = computed(() => props.submitDisabled ?? props.disabled)
   gap: 0.6rem;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 560px) {
   .shop-order-custom-item-form__grid {
     grid-template-columns: 1fr;
   }

@@ -1095,6 +1095,12 @@ export async function handleSendDailyLogEmail(
           log,
         ),
         html: emailHtml,
+        dailyLogPhotoFallbackHtml: deps.buildDailyLogEmail(
+          job || { id: '', name: 'Unknown Job', number: '' },
+          logDate,
+          log,
+          { dailyLogUrl, inlinePhotoPreviews: [] },
+        ),
         ...(inlinePhotos.attachments.length ? { attachments: inlinePhotos.attachments } : {}),
       })
     } catch (emailError: any) {

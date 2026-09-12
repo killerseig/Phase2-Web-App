@@ -176,7 +176,7 @@ describe('function email inbox labels', () => {
     expect(html).not.toContain('<script>alert("bad")</script>')
   })
 
-  it('renders up to six true thumbnails in each matching daily log section', () => {
+  it('renders up to two true thumbnails per section and links to all remaining photos', () => {
     const attachments = [
       ...Array.from({ length: 8 }, (_, index) => ({
         name: `photo-${index + 1}.jpg`,
@@ -229,17 +229,17 @@ describe('function email inbox labels', () => {
       { dailyLogUrl, inlinePhotoPreviews },
     )
 
-    expect(html.match(/<img /g)).toHaveLength(14)
+    expect(html.match(/<img /g)).toHaveLength(6)
     expect(html).toContain('North wall progress')
     expect(html).toContain('View All 8 Photos')
     expect(html).toContain('View All 7 PTP Photos')
     expect(html).not.toContain('View All 2 QC Photos')
     expect(html).toContain(`${dailyLogUrl}#gallery-photo-1`)
     expect(html).toContain(`${dailyLogUrl}#gallery-ptp`)
-    expect(html).toContain('src="cid:daily-log-photo-6@phase2.local"')
-    expect(html).not.toContain('cid:daily-log-photo-7@phase2.local')
-    expect(html).toContain('src="cid:daily-log-ptp-6@phase2.local"')
-    expect(html).not.toContain('cid:daily-log-ptp-7@phase2.local')
+    expect(html).toContain('src="cid:daily-log-photo-2@phase2.local"')
+    expect(html).not.toContain('cid:daily-log-photo-3@phase2.local')
+    expect(html).toContain('src="cid:daily-log-ptp-2@phase2.local"')
+    expect(html).not.toContain('cid:daily-log-ptp-3@phase2.local')
     expect(html).toContain('src="cid:daily-log-qc-2@phase2.local"')
     expect(html).not.toContain('/thumbnails/')
     expect(html).not.toContain('/originals/')

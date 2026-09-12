@@ -14,6 +14,8 @@ export declare const COLLECTIONS: {
 };
 export declare const EMAIL: {
     readonly SENDER_DISPLAY_NAME: "Phase 2";
+    readonly DAILY_LOG_PHOTO_PREVIEW_LIMIT: 2;
+    readonly DAILY_LOG_MAX_PAYLOAD_BYTES: 900000;
     readonly SUBJECTS: {
         readonly WELCOME: "Create Your Phase 2 Account Password";
         readonly PASSWORD_RESET: "Reset Your Phase 2 Password";

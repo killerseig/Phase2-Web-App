@@ -74,9 +74,7 @@ describe('DailyLogHistoryList', () => {
     expect(wrapper.text()).toContain('Draft #3')
     expect(wrapper.text()).toContain('Unknown foreman')
     expect(wrapper.text()).toContain('Jun 11, 2026')
-    expect(wrapper.get('[data-testid="dailylog-history-submitted-log"]').classes()).toContain(
-      'daily-log-history-row--active',
-    )
+    expect(wrapper.get('[data-testid="dailylog-history-submitted-log"]').attributes('aria-pressed')).toBe('true')
   })
 
   it('emits date navigation and selected-log events', async () => {

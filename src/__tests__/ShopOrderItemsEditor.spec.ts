@@ -67,7 +67,7 @@ describe('ShopOrderItemsEditor', () => {
 
     expect(wrapper.text()).toContain('Description')
     expect(wrapper.text()).toContain('Price')
-    expect(wrapper.text()).toContain('Qty')
+    expect(wrapper.text()).toContain('Quantity')
     expect(wrapper.text()).toContain('Total')
     expect(wrapper.text()).toContain('Note')
     expect(wrapper.text()).toContain('AHA Book')
@@ -75,7 +75,7 @@ describe('ShopOrderItemsEditor', () => {
     expect(wrapper.get('[data-testid="shoporder-order-item-line-total-catalog-item-1"]').text()).toBe('$25.00')
 
     const quantity = wrapper.get<HTMLInputElement>('[data-testid="shoporder-order-item-qty-catalog-item-1"]')
-    const note = wrapper.get<HTMLInputElement>('[data-testid="shoporder-order-item-note-catalog-item-1"]')
+    const note = wrapper.get<HTMLTextAreaElement>('[data-testid="shoporder-order-item-note-catalog-item-1"]')
 
     expect(quantity.element.value).toBe('2')
     expect(note.element.value).toBe('Draft note')

@@ -21,23 +21,8 @@ const PagePanelStub = {
   `,
 }
 
-const ModulePlaceholderStub = {
-  name: 'ModulePlaceholder',
-  props: ['description', 'eyebrow', 'highlights', 'title'],
-  template: `
-    <article data-testid="module-placeholder">
-      <p data-testid="placeholder-eyebrow">{{ eyebrow }}</p>
-      <h2 data-testid="placeholder-title">{{ title }}</h2>
-      <p data-testid="placeholder-description">{{ description }}</p>
-      <ul>
-        <li v-for="highlight in highlights" :key="highlight">{{ highlight }}</li>
-      </ul>
-    </article>
-  `,
-}
-
 describe('ReferenceListPageShell', () => {
-  it('renders the reference-list scaffold through shared page primitives', () => {
+  it('renders the shared page layout and list availability', () => {
     const wrapper = mount(ReferenceListPageShell, {
       props: {
         title: 'Job Types',
@@ -45,7 +30,6 @@ describe('ReferenceListPageShell', () => {
       global: {
         stubs: {
           AppShell: AppShellStub,
-          ModulePlaceholder: ModulePlaceholderStub,
           PagePanel: PagePanelStub,
         },
       },
@@ -56,10 +40,8 @@ describe('ReferenceListPageShell', () => {
     expect(wrapper.get('[data-testid="panel-eyebrow"]').text()).toBe('Admin')
     expect(wrapper.get('[data-testid="panel-title"]').text()).toBe('Job Types')
     expect(wrapper.get('[data-testid="panel-description"]').text()).toContain(
-      'fixed lists are managed by admins',
+      'Shared choices used in jobs, employee records, and forms.',
     )
-    expect(wrapper.get('[data-testid="placeholder-eyebrow"]').text()).toBe('Reference Lists')
-    expect(wrapper.get('[data-testid="placeholder-title"]').text()).toBe('List management scaffold')
-    expect(wrapper.text()).toContain('Job types, GCs, and occupations')
+    expect(wrapper.text()).toContain('List editing is not available yet.')
   })
 })

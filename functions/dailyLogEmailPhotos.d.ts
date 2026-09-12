@@ -25,7 +25,7 @@ interface DailyLogEmailPhotoDependencies {
     downloadObject: (path: string, maxBytes: number) => Promise<Buffer>;
     createBoundedJpeg: (source: Buffer, maxBytes: number) => Promise<Buffer | null>;
 }
-export declare const DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT = 6;
+export declare const DAILY_LOG_EMAIL_PHOTO_PREVIEW_LIMIT: 2;
 export declare const DAILY_LOG_EMAIL_INLINE_IMAGE_TARGET_BYTES: number;
 export declare const DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_BYTES: number;
 export declare const DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES: number;

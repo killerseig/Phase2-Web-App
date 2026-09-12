@@ -15,7 +15,6 @@ defineProps<{
     class="module-launcher-card"
     :data-testid="testId"
   >
-    <span class="module-launcher-card__eyebrow">{{ label }}</span>
     <strong>{{ label }}</strong>
     <p>{{ detail }}</p>
   </AppLinkCard>
@@ -23,23 +22,23 @@ defineProps<{
 
 <style scoped>
 .module-launcher-card {
+  align-content: start;
   --app-link-card-gap: 0.35rem;
-  --app-link-card-border: 1px solid rgba(168, 190, 209, 0.16);
+  --app-link-card-border: 1px solid var(--border);
   --app-link-card-background: var(--panel-background);
   --app-link-card-shadow: none;
   --app-link-card-hover-background: var(--field-hover);
   --app-link-card-hover-shadow: none;
 }
 
-.module-launcher-card__eyebrow {
-  color: var(--text-muted);
-  font-size: var(--font-size-eyebrow);
-  letter-spacing: var(--letter-spacing-eyebrow);
-  text-transform: uppercase;
-  font-weight: 500;
+.module-launcher-card strong {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-pane-title);
+  line-height: 1.2;
 }
 
 .module-launcher-card p {
+  margin: 0;
   color: var(--text-muted);
 }
 </style>

@@ -5,6 +5,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppDateInput from '@/components/common/AppDateInput.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppField from '@/components/common/AppField.vue'
+import AppListButton from '@/components/common/AppListButton.vue'
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import { getDailyLogLabel, getDailyLogStatusLabel, getDailyLogTimestampLabel } from '@/features/dailyLogs/format'
 import type { DailyLogRecord } from '@/types/domain'
@@ -52,38 +53,44 @@ const emit = defineEmits<{
 
     <AppEmptyState
       v-if="loading"
+      panel
       class="daily-log-history-empty"
       message="Loading daily logs..."
     />
 
     <AppEmptyState
       v-else-if="logs.length === 0"
+      panel
       class="daily-log-history-empty"
       message="No daily logs exist for this date yet."
     />
 
-    <div v-else class="daily-log-history-list">
-      <button
+    <div v-else class="app-history-list daily-log-history-list">
+      <AppListButton
         v-for="log in logs"
         :key="log.id"
-        type="button"
-        class="daily-log-history-row"
-        :class="{ 'daily-log-history-row--active': selectedLogId === log.id }"
+        class="app-history-row daily-log-history-row"
+        :active="selectedLogId === log.id"
+        :aria-pressed="selectedLogId === log.id"
         :data-testid="`dailylog-history-${log.id}`"
         @click="emit('select', log.id)"
       >
-        <div class="daily-log-history-row__main">
+        <div class="app-history-row__main">
           <strong>{{ getDailyLogLabel(log) }}</strong>
-          <span>{{ log.foremanName || 'Unknown foreman' }}</span>
-          <span>{{ getDailyLogTimestampLabel(log) }}</span>
+          <div class="app-history-row__meta">
+            <span>{{ log.foremanName || 'Unknown foreman' }}</span>
+            <span>{{ getDailyLogTimestampLabel(log) }}</span>
+          </div>
         </div>
-        <AppBadge class="daily-log-history-badge" tone="accent">
+        <AppBadge class="app-history-row__badge" tone="accent">
           {{ getDailyLogStatusLabel(log) }}
         </AppBadge>
-      </button>
+      </AppListButton>
     </div>
   </AppCard>
 </template>
+
+<style src="../common/history-list.css"></style>
 
 <style scoped>
 .daily-log-history-card {
@@ -105,79 +112,12 @@ const emit = defineEmits<{
 }
 
 .daily-log-history-field .app-text-input {
-  --app-text-input-min-height: 2.55rem;
-  --app-text-input-padding-x: 0.85rem;
-}
-
-.daily-log-history-empty {
-  display: grid;
-  place-content: center;
-  min-height: 8rem;
-  padding: 1rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  text-align: center;
+  --app-text-input-min-height: var(--control-height-form);
+  --app-text-input-padding-x: var(--control-padding-x);
 }
 
 .daily-log-history-list {
-  display: grid;
-  gap: var(--list-gap);
   max-height: 22rem;
-  overflow: auto;
-  padding-right: 0.2rem;
-  align-content: start;
-}
-
-.daily-log-history-row {
-  display: grid;
-  gap: var(--field-gap);
-  width: 100%;
-  padding: 0.8rem;
-  border: 1px solid transparent;
-  border-bottom-color: var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    transform 0.18s ease;
-}
-
-.daily-log-history-row:hover {
-  border-color: var(--border);
-  background: var(--field-hover);
-}
-
-.daily-log-history-row--active,
-.daily-log-history-row--active:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-accent);
-}
-
-.daily-log-history-row:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
-}
-
-.daily-log-history-row__main {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.daily-log-history-row__main strong {
-  font-weight: var(--font-weight-heading);
-}
-
-.daily-log-history-row__main span {
-  color: var(--text-muted);
-}
-
-.daily-log-history-badge {
-  --app-badge-width: max-content;
 }
 
 @media (max-width: 920px) {

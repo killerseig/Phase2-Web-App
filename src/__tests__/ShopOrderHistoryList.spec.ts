@@ -71,13 +71,13 @@ describe('ShopOrderHistoryList', () => {
 
     expect(wrapper.text()).toContain('Draft / Due 2026-06-18')
     expect(wrapper.text()).toContain('Order #202606110001')
-    expect(wrapper.text()).toContain('1 items')
+    expect(wrapper.text()).toContain('1 item')
     expect(wrapper.text()).toContain('2026-06-18')
     expect(wrapper.text()).toContain('Submitted / Jun')
     expect(wrapper.text()).toContain('Order #20260612154500')
     expect(wrapper.text()).toContain('2 items')
     expect(wrapper.text()).toContain('No delivery date')
-    expect(wrapper.get('.shop-orders-history-row--active').text()).toContain('Submitted')
+    expect(wrapper.get('.shop-orders-history-row[aria-pressed="true"]').text()).toContain('Submitted')
   })
 
   it('emits selected order ids from history rows', async () => {

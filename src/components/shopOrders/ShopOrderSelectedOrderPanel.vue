@@ -42,7 +42,7 @@ const emit = defineEmits<{
             {{ getShopOrderStatusLabel(order) }}
           </AppBadge>
           <AppBadge class="shop-order-selected-panel__badge" tone="accent">
-            {{ itemCount }} items
+            {{ itemCount }} {{ itemCount === 1 ? 'item' : 'items' }}
           </AppBadge>
           <AppBadge class="shop-order-selected-panel__badge" tone="accent">
             {{ totalQuantity }} total qty
@@ -80,7 +80,7 @@ const emit = defineEmits<{
   --app-entity-header-title-line-height: 1.2;
   --app-entity-header-actions-gap: 0.35rem;
   display: grid;
-  gap: 0.28rem;
+  gap: var(--space-2);
   min-width: 0;
   min-height: 0;
   padding: 0.05rem 0 0.32rem;
@@ -90,14 +90,13 @@ const emit = defineEmits<{
 .shop-order-selected-panel__status {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: var(--space-2);
   justify-content: flex-end;
   min-width: 0;
 }
 
 .shop-order-selected-panel__badge {
   --app-badge-flex: 0 0 auto;
-  --app-badge-min-height: 1.55rem;
   --app-badge-padding: 0 0.5rem;
   --app-badge-white-space: nowrap;
   --app-badge-accent-border-color: var(--border);
@@ -117,9 +116,8 @@ const emit = defineEmits<{
 }
 
 .shop-order-selected-panel__meta span {
-  font-size: 0.74rem;
-  line-height: 1.18;
-  letter-spacing: 0.02em;
+  font-size: var(--font-size-help);
+  line-height: var(--line-height-normal);
 }
 
 @media (max-width: 820px) {
@@ -135,11 +133,5 @@ const emit = defineEmits<{
   .shop-order-selected-panel__status {
     justify-content: flex-start;
   }
-
-  .shop-order-selected-panel__badge {
-    --app-badge-min-height: 1.42rem;
-    --app-badge-padding: 0 0.42rem;
-  }
 }
-
 </style>

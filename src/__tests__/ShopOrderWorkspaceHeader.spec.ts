@@ -20,7 +20,6 @@ function makeJob(overrides: Partial<JobRecord> = {}): JobRecord {
 function mountHeader(overrides: Partial<InstanceType<typeof ShopOrderWorkspaceHeader>['$props']> = {}) {
   return mount(ShopOrderWorkspaceHeader, {
     props: {
-      canCreateOrder: true,
       canSubmitOrder: true,
       createOrderLoading: false,
       itemActionLoading: false,
@@ -40,10 +39,8 @@ describe('ShopOrderWorkspaceHeader', () => {
     expect(wrapper.get('[data-testid="shoporder-submit-total"]').text()).toContain('Estimated Total')
     expect(wrapper.get('[data-testid="shoporder-submit-total"]').text()).toContain('$37.50')
 
-    await wrapper.get('[data-testid="shoporder-new-order"]').trigger('click')
     await wrapper.get('[data-testid="shoporder-submit"]').trigger('click')
 
-    expect(wrapper.emitted('createOrder')).toHaveLength(1)
     expect(wrapper.emitted('submitOrder')).toHaveLength(1)
   })
 
@@ -71,16 +68,12 @@ describe('ShopOrderWorkspaceHeader', () => {
       createOrderLoading: true,
     })
 
-    expect(loading.get('[data-testid="shoporder-new-order"]').text()).toBe('Creating...')
-    expect(loading.get<HTMLButtonElement>('[data-testid="shoporder-new-order"]').element.disabled).toBe(true)
     expect(loading.get<HTMLButtonElement>('[data-testid="shoporder-submit"]').element.disabled).toBe(true)
 
     const blocked = mountHeader({
-      canCreateOrder: false,
       itemActionLoading: true,
     })
 
-    expect(blocked.get<HTMLButtonElement>('[data-testid="shoporder-new-order"]').element.disabled).toBe(true)
     expect(blocked.get<HTMLButtonElement>('[data-testid="shoporder-submit"]').element.disabled).toBe(true)
   })
 

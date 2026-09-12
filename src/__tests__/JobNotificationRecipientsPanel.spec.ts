@@ -43,7 +43,7 @@ describe('JobNotificationRecipientsPanel', () => {
     expect(wrapper.text()).toContain('Email Recipients')
     expect(wrapper.text()).toContain('Added on top of All Jobs defaults for this job only')
     expect(wrapper.text()).toContain('Daily Logs')
-    expect(wrapper.text()).toContain('1 recipients')
+    expect(wrapper.text()).toContain('1 recipient')
     expect(wrapper.text()).toContain('daily@example.com')
     expect(wrapper.text()).toContain('Timecards')
     expect(wrapper.text()).toContain('No recipients yet.')

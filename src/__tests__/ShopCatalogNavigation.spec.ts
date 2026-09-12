@@ -39,7 +39,7 @@ describe('ShopCatalogMobileNav', () => {
     expect(tabs).toHaveLength(2)
     expect(tabs[0]!.text()).toBe('Catalog')
     expect(tabs[0]!.attributes('aria-selected')).toBe('true')
-    expect(tabs[0]!.classes()).toContain('shop-catalog-mobile-nav__toggle--active')
+    expect(tabs[0]!.classes()).toContain('app-mobile-panel-tabs__button--active')
     expect(tabs[1]!.text()).toBe('Inspector')
     expect(tabs[1]!.attributes('aria-selected')).toBe('false')
 

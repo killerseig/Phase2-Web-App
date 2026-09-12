@@ -136,6 +136,6 @@ describe('JobBrowserPanel', () => {
       showAllJobsEntry: false,
     })
 
-    expect(emptyWrapper.get('[data-testid="jobs-empty"]').text()).toContain('No jobs match this view.')
+    expect(emptyWrapper.get('[data-testid="jobs-empty"]').text()).toContain('No jobs match your search.')
   })
 })

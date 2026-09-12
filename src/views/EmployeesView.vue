@@ -20,7 +20,7 @@ import {
 import { useEmployeeFormState } from '@/features/employees/useEmployeeFormState'
 import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
 
-const mobilePanelTabs = buildDirectoryEditorMobilePanelTabs()
+const mobilePanelTabs = buildDirectoryEditorMobilePanelTabs('Employees')
 
 const searchTerm = ref('')
 const statusFilter = ref<DirectoryStatusFilter>('active')

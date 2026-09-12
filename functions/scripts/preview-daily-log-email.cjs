@@ -10,6 +10,7 @@ process.env.FIREBASE_CONFIG =
   })
 
 const { buildDailyLogEmail } = require('../emailService.js')
+const { EMAIL } = require('../constants.js')
 
 const defaultOutputPath = path.resolve(__dirname, '..', 'tmp', 'daily-log-email-preview.html')
 
@@ -28,7 +29,7 @@ function main() {
   const inlinePhotoPreviews = ['photo', 'ptp', 'qc'].flatMap((section) =>
     attachments
       .filter((attachment) => attachment.type === section)
-      .slice(0, 6)
+      .slice(0, EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT)
       .map((attachment, index) => ({
         section,
         position: index + 1,

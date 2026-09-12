@@ -107,6 +107,7 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
       >
         <AppEmptyState
           v-if="catalogLoading"
+          panel
           class="catalog-pane__empty"
           message="Loading catalog..."
         />
@@ -166,6 +167,7 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
 
           <AppEmptyState
             v-if="treeNodes.length === 0"
+            panel
             class="catalog-pane__empty"
             message="No folders or items match your search."
           />
@@ -209,15 +211,6 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
   display: grid;
   gap: 0.08rem;
   min-width: 100%;
-}
-
-.catalog-pane__empty {
-  color: var(--text-muted);
-  font-size: 0.88rem;
-  padding: 1rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  text-align: center;
 }
 
 @media (max-width: 1180px) {
