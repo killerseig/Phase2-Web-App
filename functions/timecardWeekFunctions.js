@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.submitTimecardWeekRecord = exports.reopenTimecardWeekRecord = exports.deleteTimecardWeekRecord = exports.deleteTimecardCardRecord = exports.updateTimecardCardRecord = exports.createTimecardCardRecord = exports.ensureTimecardWeekRecord = exports.listTimecardCardsForCurrentUser = exports.listTimecardWeeksForCurrentUser = void 0;
 exports.findTimecardRequiredFieldIssues = findTimecardRequiredFieldIssues;
 exports.buildTimecardRequiredFieldsMessage = buildTimecardRequiredFieldsMessage;
+exports.sendSubmittedWeekEmail = sendSubmittedWeekEmail;
 exports.handleReopenTimecardWeekRecord = handleReopenTimecardWeekRecord;
 exports.handleSubmitTimecardWeekRecord = handleSubmitTimecardWeekRecord;
 const firestore_1 = require("firebase-admin/firestore");
@@ -147,7 +148,7 @@ async function getAuthorizedUser(uid) {
     if (!(0, roleAccess_1.currentFunctionUserHasAnyRole)(user, ['admin', 'payroll', 'foreman', 'shop-foreman', 'project-manager'])) {
         throw new https_1.HttpsError('permission-denied', 'Your account does not have access to timecards.');
     }
-    return user;
+    return { ...user, email: typeof data.email === 'string' ? data.email : undefined };
 }
 function isFieldTimecardOwnerRole(user) {
     return user.role === 'foreman' || user.role === 'shop-foreman';
@@ -482,7 +483,7 @@ async function copyPreviousWeekCardsIntoDraft(input) {
     await batch.commit();
     return previousCardsSnap.size;
 }
-async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName) {
+async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName, submittedByEmail) {
     if (!(0, emailService_1.isEmailEnabled)()) {
         return {
             success: true,
@@ -491,7 +492,8 @@ async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName) {
         };
     }
     const settings = await (0, firestoreService_1.getEmailSettings)();
-    const recipients = normalizeRecipients(settings.globalNotificationRecipients.timecards);
+    const emailRouting = (0, emailService_1.buildSubmissionEmailRouting)(normalizeRecipients(settings.globalNotificationRecipients.timecards), submittedByEmail);
+    const recipients = emailRouting.to;
     if (!recipients.length) {
         return {
             success: true,
@@ -556,7 +558,7 @@ async function sendSubmittedWeekEmail(weekId, week, jobId, submittedByName) {
         contentBytes: pdfBuffer.toString('base64'),
     });
     await (0, emailService_1.sendEmail)({
-        to: recipients,
+        ...emailRouting,
         subject: (0, emailService_1.buildTimecardEmailSubject)({
             jobName,
             jobNumber,
@@ -876,7 +878,7 @@ async function handleSubmitTimecardWeekRecord(request, deps = defaultSubmitTimec
             submittedByUserId,
             submittedByName,
             status: 'submitted',
-        }, jobId, submittedByName);
+        }, jobId, submittedByName, user.email);
         await weekRef.update(deps.buildSubmittedEmailStatusUpdate({
             emailSent: emailResult.emailSent,
             emailMessage: emailResult.emailMessage,

@@ -179,7 +179,8 @@ describe('submitted field email callable handlers', () => {
 
     expect(deps.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: ['global-daily@phase2co.com', 'job-daily@phase2co.com'],
+        to: ['global-daily@phase2co.com', 'job-daily@phase2co.com', 'foreman@phase2co.com'],
+        replyTo: 'foreman@phase2co.com',
         subject: 'Daily Log Report | Vince Hintz | #5229 Lucky 3 Ranch | 6/17/2026',
         html: '<p>daily log</p>',
         dailyLogPhotoFallbackHtml: '<p>daily log</p>',
@@ -328,6 +329,7 @@ describe('submitted field email callable handlers', () => {
 
   it('records and rejects when a daily log has no recipients', async () => {
     const deps = makeDailyLogDeps({
+      getUserProfile: vi.fn(async () => ({ ...assignedForeman, email: '' })),
       getEmailSettings: vi.fn(async () => emailSettings()),
       getJobNotificationRecipients: vi.fn(async () => []),
     })
@@ -407,7 +409,8 @@ describe('submitted field email callable handlers', () => {
 
     expect(deps.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: ['requested-shop@phase2co.com', 'global-shop@phase2co.com', 'job-shop@phase2co.com'],
+        to: ['requested-shop@phase2co.com', 'global-shop@phase2co.com', 'job-shop@phase2co.com', 'admin@phase2co.com'],
+        replyTo: 'admin@phase2co.com',
         subject: 'Shop Order | CJ Blanchard | #5229 Lucky 3 Ranch | Order #20260617000000',
         html: '<p>shop order</p>',
         attachments: [

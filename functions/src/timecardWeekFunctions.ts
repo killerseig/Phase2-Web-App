@@ -8,7 +8,7 @@ import {
   type Transaction,
 } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
-import { buildTimecardEmailSubject, buildTimecardsEmail, isEmailEnabled, sendEmail } from './emailService'
+import { buildSubmissionEmailRouting, buildTimecardEmailSubject, buildTimecardsEmail, isEmailEnabled, sendEmail } from './emailService'
 import {
   buildSubmittedEmailOperationId,
   buildSubmittedEmailStatusUpdate,
@@ -202,7 +202,7 @@ function buildWeekDates(weekStartDate: string) {
   })
 }
 
-async function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser> {
+async function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser & { email?: string }> {
   const userSnap = await db.collection('users').doc(uid).get()
   if (!userSnap.exists) {
     throw new HttpsError('failed-precondition', 'Your user profile was not found.')
@@ -219,7 +219,7 @@ async function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser> {
     throw new HttpsError('permission-denied', 'Your account does not have access to timecards.')
   }
 
-  return user
+  return { ...user, email: typeof data.email === 'string' ? data.email : undefined }
 }
 
 function isFieldTimecardOwnerRole(user: CurrentFunctionUser) {
@@ -632,11 +632,12 @@ async function copyPreviousWeekCardsIntoDraft(input: {
   return previousCardsSnap.size
 }
 
-async function sendSubmittedWeekEmail(
+export async function sendSubmittedWeekEmail(
   weekId: string,
   week: any,
   jobId: string,
   submittedByName: string | null,
+  submittedByEmail?: string,
 ): Promise<SubmitTimecardWeekResponse> {
   if (!isEmailEnabled()) {
     return {
@@ -647,7 +648,11 @@ async function sendSubmittedWeekEmail(
   }
 
   const settings = await getEmailSettings()
-  const recipients = normalizeRecipients(settings.globalNotificationRecipients.timecards)
+  const emailRouting = buildSubmissionEmailRouting(
+    normalizeRecipients(settings.globalNotificationRecipients.timecards),
+    submittedByEmail,
+  )
+  const recipients = emailRouting.to
 
   if (!recipients.length) {
     return {
@@ -720,7 +725,7 @@ async function sendSubmittedWeekEmail(
   })
 
   await sendEmail({
-    to: recipients,
+    ...emailRouting,
     subject: buildTimecardEmailSubject({
       jobName,
       jobNumber,
@@ -1115,7 +1120,7 @@ export async function handleSubmitTimecardWeekRecord(
       submittedByUserId,
       submittedByName,
       status: 'submitted',
-    }, jobId, submittedByName)
+    }, jobId, submittedByName, user.email)
 
     await weekRef.update(deps.buildSubmittedEmailStatusUpdate({
       emailSent: emailResult.emailSent,

@@ -12,6 +12,7 @@ import {
 } from './firestoreService'
 import {
   sendEmail,
+  buildSubmissionEmailRouting,
   buildDailyLogEmail,
   buildDailyLogEmailSubject,
   buildDailyLogAutoSubmitEmail,
@@ -1047,11 +1048,12 @@ export async function handleSendDailyLogEmail(
     }
 
     const settings = await deps.getEmailSettings()
-    const recipients = normalizeRecipients(
+    const emailRouting = buildSubmissionEmailRouting(normalizeRecipients(
       settings.globalNotificationRecipients.dailyLogs,
       await deps.getJobNotificationRecipients(jobId, 'dailyLogs'),
       log?.additionalRecipients,
-    )
+    ), user?.email)
+    const recipients = emailRouting.to
 
     if (!recipients.length) {
       await deps.recordSubmittedEmailStatus(
@@ -1088,7 +1090,7 @@ export async function handleSendDailyLogEmail(
       )
 
       await deps.sendEmail({
-        to: recipients,
+        ...emailRouting,
         subject: buildDailyLogEmailSubject(
           job || { id: '', name: 'Unknown Job', number: '' },
           logDate,
@@ -2294,11 +2296,12 @@ export async function handleSendShopOrderEmail(
       ? request.data.recipients
       : []
     const settings = await deps.getEmailSettings()
-    const recipients = normalizeRecipients(
+    const emailRouting = buildSubmissionEmailRouting(normalizeRecipients(
       requestedRecipients,
       settings.globalNotificationRecipients.shopOrders,
       await deps.getJobNotificationRecipients(jobId, 'shopOrders'),
-    )
+    ), user?.email)
+    const recipients = emailRouting.to
     if (!recipients.length) {
       await deps.recordSubmittedEmailStatus(
         statusRefs,
@@ -2356,7 +2359,7 @@ export async function handleSendShopOrderEmail(
       const pdfBuffer = await deps.buildShopOrderPdfBuffer(order, costCodesByCatalogItemId)
 
       await deps.sendEmail({
-        to: recipients,
+        ...emailRouting,
         subject: buildShopOrderEmailSubject(order, job),
         html: emailHtml,
         attachments: [

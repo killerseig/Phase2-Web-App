@@ -75,6 +75,7 @@ export declare function buildSecretExpirationEmail(): string;
  */
 export interface SendEmailOptions {
     to: string | string[];
+    replyTo?: string;
     subject: string;
     html: string;
     /** Enables the daily log size budget and supplies gallery links when previews are too large. */
@@ -87,6 +88,11 @@ export interface SendEmailOptions {
         isInline?: boolean;
     }>;
 }
+/** Use only a server-loaded sender profile, never a client-supplied address. */
+export declare function buildSubmissionEmailRouting(recipients: string[], senderEmail: unknown): {
+    replyTo?: string | undefined;
+    to: string[];
+};
 export declare function buildEmailSendLogSummary(options: SendEmailOptions): {
     recipientCount: number;
     attachmentCount: number;

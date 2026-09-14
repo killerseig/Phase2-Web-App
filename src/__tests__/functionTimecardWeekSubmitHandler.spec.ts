@@ -22,6 +22,7 @@ beforeAll(async () => {
 
 const ownerForeman = {
   uid: 'foreman-1',
+  email: 'foreman@phase2co.com',
   role: 'foreman',
   active: true,
   displayName: 'Vince Hintz',
@@ -126,6 +127,7 @@ describe('timecard week submit handler', () => {
       }),
       'job-1',
       'Vince Hintz',
+      'foreman@phase2co.com',
     )
     expect(deps.buildSubmittedEmailStatusUpdate).toHaveBeenCalledWith(
       {

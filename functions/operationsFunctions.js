@@ -808,7 +808,8 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
             throw new https_2.HttpsError('permission-denied', 'Field users can only email their own daily logs');
         }
         const settings = await deps.getEmailSettings();
-        const recipients = normalizeRecipients(settings.globalNotificationRecipients.dailyLogs, await deps.getJobNotificationRecipients(jobId, 'dailyLogs'), log?.additionalRecipients);
+        const emailRouting = (0, emailService_1.buildSubmissionEmailRouting)(normalizeRecipients(settings.globalNotificationRecipients.dailyLogs, await deps.getJobNotificationRecipients(jobId, 'dailyLogs'), log?.additionalRecipients), user?.email);
+        const recipients = emailRouting.to;
         if (!recipients.length) {
             await deps.recordSubmittedEmailStatus(statusRefs, {
                 emailSent: false,
@@ -833,7 +834,7 @@ async function handleSendDailyLogEmail(request, deps = defaultSendDailyLogEmailD
                 inlinePhotoPreviews: inlinePhotos.previews,
             });
             await deps.sendEmail({
-                to: recipients,
+                ...emailRouting,
                 subject: (0, emailService_1.buildDailyLogEmailSubject)(job || { id: '', name: 'Unknown Job', number: '' }, logDate, log),
                 html: emailHtml,
                 dailyLogPhotoFallbackHtml: deps.buildDailyLogEmail(job || { id: '', name: 'Unknown Job', number: '' }, logDate, log, { dailyLogUrl, inlinePhotoPreviews: [] }),
@@ -1667,7 +1668,8 @@ async function handleSendShopOrderEmail(request, deps = defaultSendShopOrderEmai
             ? request.data.recipients
             : [];
         const settings = await deps.getEmailSettings();
-        const recipients = normalizeRecipients(requestedRecipients, settings.globalNotificationRecipients.shopOrders, await deps.getJobNotificationRecipients(jobId, 'shopOrders'));
+        const emailRouting = (0, emailService_1.buildSubmissionEmailRouting)(normalizeRecipients(requestedRecipients, settings.globalNotificationRecipients.shopOrders, await deps.getJobNotificationRecipients(jobId, 'shopOrders')), user?.email);
+        const recipients = emailRouting.to;
         if (!recipients.length) {
             await deps.recordSubmittedEmailStatus(statusRefs, {
                 emailSent: false,
@@ -1713,7 +1715,7 @@ async function handleSendShopOrderEmail(request, deps = defaultSendShopOrderEmai
             const emailHtml = deps.buildShopOrderEmail(order, costCodesByCatalogItemId);
             const pdfBuffer = await deps.buildShopOrderPdfBuffer(order, costCodesByCatalogItemId);
             await deps.sendEmail({
-                to: recipients,
+                ...emailRouting,
                 subject: (0, emailService_1.buildShopOrderEmailSubject)(order, job),
                 html: emailHtml,
                 attachments: [

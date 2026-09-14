@@ -23,6 +23,7 @@ exports.buildShopOrderEmail = buildShopOrderEmail;
 exports.buildShopOrderPdfFilename = buildShopOrderPdfFilename;
 exports.buildShopOrderPdfBuffer = buildShopOrderPdfBuffer;
 exports.buildSecretExpirationEmail = buildSecretExpirationEmail;
+exports.buildSubmissionEmailRouting = buildSubmissionEmailRouting;
 exports.buildEmailSendLogSummary = buildEmailSendLogSummary;
 exports.sendEmail = sendEmail;
 exports.sendDailyLogEmailNotification = sendDailyLogEmailNotification;
@@ -1766,6 +1767,14 @@ function buildSecretExpirationEmail() {
     </div>
   `;
 }
+/** Use only a server-loaded sender profile, never a client-supplied address. */
+function buildSubmissionEmailRouting(recipients, senderEmail) {
+    const address = typeof senderEmail === 'string' ? senderEmail.trim().toLowerCase() : '';
+    const replyTo = isValidEmailFormat(address) ? address : undefined;
+    const to = Array.from(new Map([...recipients, ...(replyTo ? [replyTo] : [])]
+        .map(email => [email.trim().toLowerCase(), email.trim()])).values());
+    return { to, ...(replyTo ? { replyTo } : {}) };
+}
 function buildEmailSendLogSummary(options) {
     return {
         recipientCount: Array.isArray(options.to) ? options.to.length : options.to ? 1 : 0,
@@ -1786,6 +1795,9 @@ async function sendEmail(options) {
     if (invalidRecipientCount > 0) {
         throw new emailDeliveryErrors_1.EmailDeliveryError(`${invalidRecipientCount} invalid email ${invalidRecipientCount === 1 ? 'address was' : 'addresses were'} provided.`, { retryable: false });
     }
+    if (options.replyTo !== undefined && !isValidEmailFormat(options.replyTo.trim())) {
+        throw new emailDeliveryErrors_1.EmailDeliveryError('Invalid reply-to email address.', { retryable: false });
+    }
     try {
         const senderEmail = functionConfig_1.outlookSenderEmail.value();
         const senderRecipient = buildGraphSenderRecipient(senderEmail);
@@ -1795,6 +1807,7 @@ async function sendEmail(options) {
             message: {
                 subject: options.subject,
                 from: senderRecipient,
+                ...(options.replyTo ? { replyTo: [{ emailAddress: { address: options.replyTo.trim() } }] } : {}),
                 body: {
                     contentType: 'HTML',
                     content: options.html,

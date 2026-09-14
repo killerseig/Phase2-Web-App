@@ -22,7 +22,9 @@ interface CallableRequestLike {
 }
 export declare function findTimecardRequiredFieldIssues(value: unknown): TimecardRequiredFieldIssue[];
 export declare function buildTimecardRequiredFieldsMessage(issues: TimecardRequiredFieldIssue[]): string;
-declare function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser>;
+declare function getAuthorizedUser(uid: string): Promise<CurrentFunctionUser & {
+    email?: string;
+}>;
 declare function getWeekDoc(weekId: string): Promise<{
     weekRef: DocumentReference<FirebaseFirestore.DocumentData, FirebaseFirestore.DocumentData>;
     weekSnap: DocumentSnapshot<FirebaseFirestore.DocumentData, FirebaseFirestore.DocumentData>;
@@ -36,7 +38,7 @@ export declare const listTimecardWeeksForCurrentUser: import("firebase-functions
 export declare const listTimecardCardsForCurrentUser: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     cards: any[];
 }>, unknown>;
-declare function sendSubmittedWeekEmail(weekId: string, week: any, jobId: string, submittedByName: string | null): Promise<SubmitTimecardWeekResponse>;
+export declare function sendSubmittedWeekEmail(weekId: string, week: any, jobId: string, submittedByName: string | null, submittedByEmail?: string): Promise<SubmitTimecardWeekResponse>;
 export declare const ensureTimecardWeekRecord: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     id: string;
 }>, unknown>;

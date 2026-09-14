@@ -2131,6 +2131,7 @@ export function buildSecretExpirationEmail(): string {
  */
 export interface SendEmailOptions {
   to: string | string[]
+  replyTo?: string
   subject: string
   html: string
   /** Enables the daily log size budget and supplies gallery links when previews are too large. */
@@ -2142,6 +2143,17 @@ export interface SendEmailOptions {
     contentId?: string
     isInline?: boolean
   }>
+}
+
+/** Use only a server-loaded sender profile, never a client-supplied address. */
+export function buildSubmissionEmailRouting(recipients: string[], senderEmail: unknown) {
+  const address = typeof senderEmail === 'string' ? senderEmail.trim().toLowerCase() : ''
+  const replyTo = isValidEmailFormat(address) ? address : undefined
+  const to = Array.from(new Map(
+    [...recipients, ...(replyTo ? [replyTo] : [])]
+      .map(email => [email.trim().toLowerCase(), email.trim()]),
+  ).values())
+  return { to, ...(replyTo ? { replyTo } : {}) }
 }
 
 export function buildEmailSendLogSummary(options: SendEmailOptions) {
@@ -2173,6 +2185,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
     )
   }
 
+  if (options.replyTo !== undefined && !isValidEmailFormat(options.replyTo.trim())) {
+    throw new EmailDeliveryError('Invalid reply-to email address.', { retryable: false })
+  }
+
   try {
     const senderEmail = outlookSenderEmail.value()
     const senderRecipient = buildGraphSenderRecipient(senderEmail)
@@ -2184,6 +2200,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
       message: {
         subject: options.subject,
         from: senderRecipient,
+        ...(options.replyTo ? { replyTo: [{ emailAddress: { address: options.replyTo.trim() } }] } : {}),
         body: {
           contentType: 'HTML',
           content: options.html,
