@@ -1,5 +1,7 @@
 import { type DocumentData } from 'firebase-admin/firestore';
 import { sendEmail } from './emailService';
+export declare function hashSetupToken(token: string): string;
+export declare function setupCredentialIsValid(data: DocumentData, token: string, now?: Date): boolean;
 declare function createSetupTokenRecord(): {
     setupToken: string;
     setupTokenExpiry: Date;

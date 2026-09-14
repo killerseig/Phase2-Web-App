@@ -6,12 +6,50 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function user() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function log(logId) {
+      return firestore.get(/databases/(default)/documents/dailyLogs/$(logId)).data;
+    }
+
+    function role() {
+      return user().role;
+    }
+
+    function admin() {
+      return role() in ['admin', 'Admin'];
+    }
+
+    function fieldUser() {
+      return role() in ['foreman', 'Foreman', 'shop-foreman', 'shop_foreman', 'shop foreman', 'shopForeman', 'Shop Foreman', 'project-manager', 'project_manager', 'project manager', 'projectManager', 'Project Manager'];
+    }
+
+    function assigned(jobId) {
+      let job = firestore.get(/databases/(default)/documents/jobs/$(jobId)).data;
+      return jobId in user().get('assignedJobIds', []) ||
+        request.auth.uid in job.get('assignedForemanIds', []) ||
+        (role() in ['shop-foreman', 'shop_foreman', 'shop foreman', 'shopForeman', 'Shop Foreman'] &&
+          (job.get('code', '') in ['736', 736] || job.get('number', '') in ['736', 736] || job.get('name', '') in ['Shop', 'shop']));
+    }
+
+    function canReadLog(logId) {
+      return signedIn() && user().get('active', true) == true &&
+        (admin() || (fieldUser() && assigned(log(logId).jobId)));
+    }
+
+    function canEditLog(logId) {
+      return canReadLog(logId) && (admin() || log(logId).status == 'draft');
+    }
+
     function requestHasDailyLogAttachmentMetadata(logId) {
       return request.resource.metadata != null &&
              'jobId' in request.resource.metadata &&
              'dailyLogId' in request.resource.metadata &&
              'uploadedBy' in request.resource.metadata &&
              request.resource.metadata.dailyLogId == logId &&
+             request.resource.metadata.jobId == log(logId).jobId &&
              request.resource.metadata.uploadedBy == request.auth.uid;
     }
 
@@ -19,7 +57,7 @@ service firebase.storage {
       return request.resource != null &&
              resource == null &&
              request.resource.size < 10 * 1024 * 1024 &&
-             request.resource.contentType.matches('image/.*') &&
+             request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'] &&
              request.resource.metadata.variant == 'gallery-photo' &&
              requestHasDailyLogAttachmentMetadata(logId);
     }
@@ -34,21 +72,17 @@ service firebase.storage {
     }
 
     match /daily-logs/{logId}/thumbnails/{fileName} {
-      // Download tokens are intentionally used for the public gallery. Authenticated app reads
-      // remain available here for field workflows and cleanup.
-      allow read: if signedIn();
-      allow create: if signedIn() && isSupportedDailyLogThumbnailUpload(logId);
-      allow delete: if signedIn();
+      // Public galleries use explicit download tokens; SDK access requires job authorization.
+      allow read: if canReadLog(logId);
+      allow create: if canEditLog(logId) && isSupportedDailyLogThumbnailUpload(logId);
+      allow delete: if canEditLog(logId);
       allow update: if false;
     }
 
     match /daily-logs/{logId}/{fileName} {
-      // Firestore and callable functions authorize access to the parent daily log.
-      // Keeping object rules self-contained avoids a separate cross-product IAM
-      // dependency that can reject valid field users before an upload begins.
-      allow read: if signedIn();
-      allow create: if signedIn() && isSupportedDailyLogAttachmentUpload(logId);
-      allow delete: if signedIn();
+      allow read: if canReadLog(logId);
+      allow create: if canEditLog(logId) && isSupportedDailyLogAttachmentUpload(logId);
+      allow delete: if canEditLog(logId);
       allow update: if false;
     }
 

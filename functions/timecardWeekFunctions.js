@@ -106,7 +106,7 @@ function buildTimecardRequiredFieldsMessage(issues) {
         return '';
     const additionalIssueCount = issues.length - 1;
     const additionalIssueMessage = additionalIssueCount > 0
-        ? ` ${additionalIssueCount} other line${additionalIssueCount === 1 ? '' : 's'} also need attention.`
+        ? ` ${additionalIssueCount} other ${additionalIssueCount === 1 ? 'line also needs' : 'lines also need'} attention.`
         : '';
     return `${firstIssue.employeeName}, line ${firstIssue.lineNumber} is missing ${formatMissingFieldList(firstIssue.missingFields)}.${additionalIssueMessage} Complete Job #, Area, and Acct for every line with hours before submitting.`;
 }
@@ -860,8 +860,8 @@ async function handleSubmitTimecardWeekRecord(request, deps = defaultSubmitTimec
             emailMessage: claimMessage,
         };
     }
-    const submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid);
-    const submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName);
+    const submittedByUserId = request.auth.uid;
+    const submittedByName = user.displayName;
     await weekRef.update({
         status: 'submitted',
         submittedAt: firestore_1.FieldValue.serverTimestamp(),

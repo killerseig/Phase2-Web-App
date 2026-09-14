@@ -1097,8 +1097,8 @@ export async function handleSubmitTimecardWeekRecord(
     }
   }
 
-  const submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid)
-  const submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName)
+  const submittedByUserId = request.auth.uid
+  const submittedByName = user.displayName
 
   await weekRef.update({
     status: 'submitted',

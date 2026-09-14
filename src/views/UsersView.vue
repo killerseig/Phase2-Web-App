@@ -203,6 +203,8 @@ useUserAdminViewSync({
 
 <template>
   <DirectoryEditorWorkspaceShell
+    title="Users"
+    description="Manage accounts, access, and job assignments."
     class="users-workspace"
     data-testid="users-page"
     :active-panel="activeMobilePanel"

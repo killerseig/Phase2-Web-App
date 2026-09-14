@@ -214,6 +214,6 @@ exports.getPublicDailyLogGallery = (0, https_1.onCall)(async (request) => {
     const shareId = text(request.data?.shareId);
     if (shareId)
         return loadPublicDailyLogGallery(shareId);
-    return loadLegacyPublicDailyLogGallery(text(request.data?.jobId), text(request.data?.dailyLogId));
+    throw new https_1.HttpsError('failed-precondition', 'This older photo link is no longer available. Ask the sender for a new gallery link.');
 });
 //# sourceMappingURL=dailyLogGalleryFunctions.js.map

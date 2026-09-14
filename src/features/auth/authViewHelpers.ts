@@ -57,7 +57,7 @@ export function getForgotPasswordValidationMessage(email: string) {
 
 export function getSetPasswordValidationMessage(password: string, confirmPassword: string) {
   if (!password.trim()) return 'Password is required.'
-  if (password.length < 6) return 'Password must be at least 6 characters.'
+  if (password.length < 12 || password.length > 128) return 'Password must be between 12 and 128 characters.'
   if (password !== confirmPassword) return 'Passwords do not match.'
   return ''
 }

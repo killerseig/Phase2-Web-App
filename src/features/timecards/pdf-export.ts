@@ -1,7 +1,7 @@
 import type { TimecardCardRecord, TimecardWeekRecord } from '@/types/domain'
 
 const TIMECARD_PDF_EXPORT_STORAGE_KEY = 'phase2-timecard-pdf-exports'
-const TIMECARD_PDF_EXPORT_MAX_AGE_MS = 1000 * 60 * 60 * 12
+const TIMECARD_PDF_EXPORT_MAX_AGE_MS = 1000 * 60 * 5
 
 export interface TimecardPdfExportCard extends TimecardCardRecord {
   exportWeekId: string
@@ -42,7 +42,9 @@ function getPdfExportStorage() {
   if (typeof window === 'undefined') return null
 
   try {
-    if (window.localStorage) return window.localStorage
+    // Remove exports left by older versions; current payloads are tab-scoped.
+    window.localStorage?.removeItem(TIMECARD_PDF_EXPORT_STORAGE_KEY)
+    if (window.sessionStorage) return window.sessionStorage
   } catch {
     return null
   }
@@ -161,4 +163,19 @@ export function loadTimecardPdfExportPayload(exportId?: string) {
   )[0]
 
   return latestPayload ?? null
+}
+
+export function clearTimecardPdfExports() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(TIMECARD_PDF_EXPORT_STORAGE_KEY)
+    window.sessionStorage.removeItem(TIMECARD_PDF_EXPORT_STORAGE_KEY)
+  } catch { /* Storage can be disabled by browser policy. */ }
+}
+
+export function transferTimecardPdfExport(exportId: string, target: Window) {
+  const payload = loadTimecardPdfExportPayload(exportId)
+  if (!payload) throw new Error('The PDF export has expired. Create it again.')
+  target.sessionStorage.setItem(TIMECARD_PDF_EXPORT_STORAGE_KEY, JSON.stringify({ [exportId]: payload }))
+  clearTimecardPdfExports()
 }

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import TimecardConfirmDialog from '@/components/timecards/TimecardConfirmDialog.vue'
 import TimecardExportCanvasPanel from '@/components/timecards/TimecardExportCanvasPanel.vue'
 import TimecardExportCreateTray from '@/components/timecards/TimecardExportCreateTray.vue'
-import TimecardPageShell from '@/components/timecards/TimecardPageShell.vue'
+import TimecardExportPageShell from '@/components/timecards/TimecardExportPageShell.vue'
 import TimecardPageMessages from '@/components/timecards/TimecardPageMessages.vue'
 import TimecardExportToolbar from '@/components/timecards/TimecardExportToolbar.vue'
 import TimecardSummaryPanel from '@/components/timecards/TimecardSummaryPanel.vue'
@@ -64,14 +64,8 @@ const jobsStore = useJobsStore()
 const router = useRouter()
 const canReopenSubmittedWeeks = computed(() => auth.rawRole === 'admin')
 
-const {
-  pageError,
-  pageInfo,
-  resetMessages,
-  setPageError,
-  setPageErrorMessage,
-  setPageInfo,
-} = usePageMessages()
+const { pageError, pageInfo, resetMessages, setPageError, setPageErrorMessage, setPageInfo } =
+  usePageMessages()
 const {
   employees,
   employeesLoading,
@@ -98,15 +92,11 @@ const {
   timecardExportConfirmTitle,
 } = useTimecardExportConfirmDialog(actionLoading)
 
-const {
-  activeWeekFilterBounds,
-  filteredWeeks,
-  filters,
-  updateToolbarFilter,
-} = useTimecardExportFilters({
-  currentWeekEndDate,
-  weeks,
-})
+const { activeWeekFilterBounds, filteredWeeks, filters, updateToolbarFilter } =
+  useTimecardExportFilters({
+    currentWeekEndDate,
+    weeks,
+  })
 
 const {
   closeCreateTray,
@@ -197,16 +187,16 @@ const {
   defaultBurden: DEFAULT_TIMECARD_BURDEN,
   filteredWeeks,
   getJobs: () => jobsStore.jobs,
-  getPendingStateMaps: () => collectTimecardPendingStateMaps(scheduledSaveIds, savingIds, queuedSaveIds),
+  getPendingStateMaps: () =>
+    collectTimecardPendingStateMaps(scheduledSaveIds, savingIds, queuedSaveIds),
   onError: (error, week) => {
-    setPageError(error, `Failed to load timecards for ${formatTimecardExportWeekRowSubtitle(week)}.`)
+    setPageError(
+      error,
+      `Failed to load timecards for ${formatTimecardExportWeekRowSubtitle(week)}.`,
+    )
   },
 })
-const {
-  activeCreateWeekCards,
-  filteredCards,
-  orderedCards,
-} = useTimecardExportVisibleCards({
+const { activeCreateWeekCards, filteredCards, orderedCards } = useTimecardExportVisibleCards({
   cards,
   cardsByWeekId,
   collator,
@@ -294,10 +284,7 @@ useTimecardExportFilteredWeekSync({
   syncCardsForFilteredWeeks,
 })
 
-const {
-  handleAddCustomCard,
-  handleAddEmployee,
-} = useTimecardExportCreateActions({
+const { handleAddCustomCard, handleAddEmployee } = useTimecardExportCreateActions({
   actionLoading,
   canEditWeek,
   closeCreateTray,
@@ -347,21 +334,19 @@ const {
   timecardExportConfirmAction,
 })
 
-const {
-  handleCsvExport,
-  handlePdfExport,
-} = useTimecardExportDownloadActions({
+const { handleCsvExport, handlePdfExport } = useTimecardExportDownloadActions({
   buildCsvExportFilename,
   buildPdfExportSubtitle,
   flushPendingSaves,
   orderedCards,
   resetPageAndSaveMessages,
-  resolvePrintHref: (exportId) => router.resolve({
-    name: 'timecard-export-print',
-    query: {
-      exportId,
-    },
-  }).href,
+  resolvePrintHref: (exportId) =>
+    router.resolve({
+      name: 'timecard-export-print',
+      query: {
+        exportId,
+      },
+    }).href,
   setPageError,
   setPageErrorMessage,
   setPageInfo,
@@ -389,7 +374,7 @@ useTimecardExportLifecycle({
 </script>
 
 <template>
-  <TimecardPageShell test-id="timecard-export-page">
+  <TimecardExportPageShell test-id="timecard-export-page">
     <template #workspace>
       <TimecardExportToolbar
         :tabs="mobileToolbarTabs"
@@ -501,5 +486,5 @@ useTimecardExportLifecycle({
       @update-open="handleTimecardExportConfirmOpenUpdate"
       @confirm="confirmTimecardExportAction"
     />
-  </TimecardPageShell>
+  </TimecardExportPageShell>
 </template>

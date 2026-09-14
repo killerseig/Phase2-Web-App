@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto'
+import { createHash, randomBytes } from 'crypto'
 import { FieldValue, type DocumentData } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore'
@@ -21,6 +21,19 @@ import {
 import { auth, db } from './runtime'
 import { verifyAdminRole } from './firestoreService'
 import { targetFunctionRoleCanBeAssignedJobs } from './targetRoleCapabilities'
+import { consumePasswordResetAllowance } from './passwordResetRateLimit'
+
+const SETUP_CREDENTIALS = 'userSetupCredentials'
+
+export function hashSetupToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+export function setupCredentialIsValid(data: DocumentData, token: string, now = new Date()) {
+  const expiry = parseTokenExpiry(data.setupTokenExpiry).getTime()
+  return /^[a-f0-9]{64}$/.test(token) && data.setupTokenHash === hashSetupToken(token)
+    && Number.isFinite(expiry) && expiry > now.getTime() && !data.consumedAt
+}
 
 function parseTokenExpiry(value: any): Date {
   if (value?.toDate && typeof value.toDate === 'function') {
@@ -51,8 +64,9 @@ function createSetupTokenRecord() {
 }
 
 const USER_INVITE_STATE_FIELDS = [
-  'setupToken',
+  'setupTokenHash',
   'setupTokenExpiry',
+  'consumedAt',
   'inviteStatus',
   'inviteSentAt',
   'inviteSentByUid',
@@ -138,15 +152,28 @@ function buildUserInviteRestoreUpdate(
 const firestoreUserInviteStateStore: UserInviteStateStore = {
   async transact(uid, transition) {
     const userRef = db.collection(COLLECTIONS.USERS).doc(uid)
+    const credentialRef = db.collection(SETUP_CREDENTIALS).doc(uid)
     return db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(userRef)
+      const credentials = await transaction.get(credentialRef)
       if (!snapshot.exists) {
         throw new HttpsError('not-found', 'User not found.')
       }
 
-      const next = transition(snapshot.data() || {})
+      const { setupToken: _legacyToken, setupTokenExpiry: _legacyExpiry, ...profile } = snapshot.data() || {}
+      const next = transition({ ...profile, ...credentials.data() })
       if (next.update) {
-        transaction.update(userRef, next.update)
+        const privateUpdate: DocumentData = {}
+        const publicUpdate: DocumentData = {}
+        for (const [key, value] of Object.entries(next.update)) {
+          if (key === 'setupTokenHash' || key === 'setupTokenExpiry' || key === 'consumedAt') {
+            privateUpdate[key] = value
+          } else {
+            publicUpdate[key] = value
+          }
+        }
+        transaction.update(userRef, { ...publicUpdate, setupToken: FieldValue.delete(), setupTokenExpiry: FieldValue.delete() })
+        if (Object.keys(privateUpdate).length) transaction.set(credentialRef, privateUpdate, { merge: true })
       }
       return next.result
     })
@@ -233,7 +260,9 @@ export async function sendUserInvite(
 
     return {
       update: {
-        ...tokenRecord,
+        setupTokenHash: hashSetupToken(tokenRecord.setupToken),
+        setupTokenExpiry: tokenRecord.setupTokenExpiry,
+        consumedAt: dependencies.deleteField(),
         inviteDeliveryId: deliveryId,
         inviteDeliveryLeaseExpiresAt: deliveryLeaseExpiresAt,
       },
@@ -255,7 +284,7 @@ export async function sendUserInvite(
       await dependencies.stateStore.transact(options.uid, (current) => {
         if (
           current.inviteDeliveryId !== deliveryId ||
-          current.setupToken !== tokenRecord.setupToken
+          current.setupTokenHash !== hashSetupToken(tokenRecord.setupToken)
         ) {
           return { result: false }
         }
@@ -278,7 +307,7 @@ export async function sendUserInvite(
   }
 
   const finalized = await dependencies.stateStore.transact(options.uid, (current) => {
-    if (current.inviteDeliveryId !== deliveryId || current.setupToken !== tokenRecord.setupToken) {
+    if (current.inviteDeliveryId !== deliveryId || current.setupTokenHash !== hashSetupToken(tokenRecord.setupToken)) {
       return { result: false }
     }
 
@@ -834,17 +863,14 @@ export const verifySetupToken = onCall(async (request) => {
     }
 
     const userData = userDoc.data()
-    if (!userData?.setupToken || userData.setupToken !== setupToken) {
+    const credentials = await db.collection(SETUP_CREDENTIALS).doc(uid).get()
+    if (userData?.active === false || !setupCredentialIsValid(credentials.data() || {}, setupToken)) {
       throw new HttpsError('permission-denied', 'Invalid token')
-    }
-
-    if (new Date() > parseTokenExpiry(userData.setupTokenExpiry)) {
-      throw new HttpsError('deadline-exceeded', 'Token expired')
     }
 
     return {
       success: true,
-      email: userData.email,
+      email: userData?.email,
       message: 'Token verified',
     }
   } catch (error: any) {
@@ -866,6 +892,13 @@ export const requestPasswordResetEmail = onCall(
 
     const successMessage =
       'If an account exists for that email, a password reset email has been sent.'
+
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new HttpsError('invalid-argument', 'Enter a valid email address.')
+    }
+    if (!await consumePasswordResetAllowance(email, request.rawRequest.ip || 'unknown')) {
+      return { success: true, message: successMessage }
+    }
 
     try {
       const userRecord = await auth.getUserByEmail(email).catch((error: any) => {
@@ -916,23 +949,23 @@ export const setUserPassword = onCall(async (request) => {
       'Missing required parameters: uid, password, and setupToken',
     )
   }
-  if (password.length < 6) {
-    throw new HttpsError('invalid-argument', 'Password must be at least 6 characters')
+  if (password.length < 12 || password.length > 128) {
+    throw new HttpsError('invalid-argument', 'Password must be between 12 and 128 characters')
   }
 
   try {
-    const userDoc = await db.collection(COLLECTIONS.USERS).doc(uid).get()
-    if (!userDoc.exists) {
-      throw new HttpsError('not-found', 'User not found')
-    }
-
-    const userData = userDoc.data()
-    if (userData?.setupToken !== setupToken) {
-      throw new HttpsError('permission-denied', 'Invalid setup token')
-    }
-    if (new Date() > parseTokenExpiry(userData?.setupTokenExpiry)) {
-      throw new HttpsError('deadline-exceeded', 'Setup token has expired')
-    }
+    const credentialRef = db.collection(SETUP_CREDENTIALS).doc(uid)
+    // Claim before changing Auth: concurrent/replayed requests cannot reuse the token.
+    // If Auth fails, an administrator must issue a fresh invitation.
+    await db.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(db.collection(COLLECTIONS.USERS).doc(uid))
+      const credentials = await transaction.get(credentialRef)
+      if (!userDoc.exists || userDoc.data()?.active === false
+        || !setupCredentialIsValid(credentials.data() || {}, setupToken)) {
+        throw new HttpsError('permission-denied', 'This setup link is invalid or expired. Request a new invitation.')
+      }
+      transaction.update(credentialRef, { consumedAt: FieldValue.serverTimestamp(), setupTokenHash: FieldValue.delete() })
+    })
 
     await auth.updateUser(uid, { password })
     await db.collection(COLLECTIONS.USERS).doc(uid).update({

@@ -27,6 +27,7 @@ import {
 import { hasConfiguredFirebase } from '@/services/firebaseConfig'
 import { useJobsStore } from '@/stores/jobs'
 import { getE2EAuthState, isE2EActive } from '@/testing/e2eRuntime'
+import { clearTimecardPdfExports } from '@/features/timecards/pdf-export'
 import type { EffectiveRoleKey, RawRoleKey, UserProfile } from '@/types/domain'
 import { normalizeError } from '@/utils/normalizeError'
 
@@ -219,6 +220,9 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       unsubscribeAuth = subscribeAuthSession(async (nextUser) => {
+        if (!nextUser || (currentUser.value && currentUser.value.uid !== nextUser.uid)) {
+          clearTimecardPdfExports()
+        }
         currentUser.value = nextUser
 
         if (!nextUser) {
@@ -259,6 +263,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function signOut() {
+    clearTimecardPdfExports()
     clearProfileListener()
 
     if (hasConfiguredFirebase && !isE2EActive()) {

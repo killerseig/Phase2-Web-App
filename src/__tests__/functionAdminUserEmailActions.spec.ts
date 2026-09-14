@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let handleResendUserInviteByAdmin: typeof import('../../functions/src/userFunctions').handleResendUserInviteByAdmin
@@ -299,7 +300,7 @@ function makeInviteStateHarness(
 describe('individual invite state lifecycle', () => {
   it('restores the prior token and invite metadata when delivery fails', async () => {
     const originalState = {
-      setupToken: 'previous-token',
+      setupTokenHash: 'previous-token',
       setupTokenExpiry: 'previous-expiry',
       inviteStatus: 'sent',
       inviteSentAt: 'previous-sent-at',
@@ -330,7 +331,7 @@ describe('individual invite state lifecycle', () => {
 
   it('does not let an older failed resend roll back a newer invite token', async () => {
     const newerState = {
-      setupToken: 'newer-token',
+      setupTokenHash: 'newer-token',
       setupTokenExpiry: 'newer-expiry',
       inviteStatus: 'sent',
       inviteSentAt: 'newer-sent-at',
@@ -346,7 +347,7 @@ describe('individual invite state lifecycle', () => {
     })
     const harness = makeInviteStateHarness(
       {
-        setupToken: 'previous-token',
+        setupTokenHash: 'previous-token',
         inviteStatus: 'sent',
       },
       deliverEmail,
@@ -370,7 +371,7 @@ describe('individual invite state lifecycle', () => {
 
   it('keeps completed accounts accepted after a successful resend', async () => {
     const harness = makeInviteStateHarness({
-      setupToken: null,
+      setupTokenHash: null,
       setupTokenExpiry: null,
       inviteStatus: 'accepted',
       inviteSentAt: 'previous-sent-at',
@@ -389,7 +390,7 @@ describe('individual invite state lifecycle', () => {
     )
 
     expect(harness.getState()).toMatchObject({
-      setupToken: 'new-setup-token',
+      setupTokenHash: createHash('sha256').update('new-setup-token').digest('hex'),
       inviteStatus: 'accepted',
       inviteSentAt: 'server-timestamp',
       inviteSentByUid: 'admin-current',
@@ -408,7 +409,7 @@ describe('individual invite state lifecycle', () => {
     })
     const harness = makeInviteStateHarness(
       {
-        setupToken: 'previous-token',
+        setupTokenHash: 'previous-token',
         inviteStatus: 'sent',
       },
       deliverEmail,
@@ -449,7 +450,7 @@ describe('individual invite state lifecycle', () => {
 
   it('reports failure instead of success when a completed delivery loses ownership', async () => {
     const newerState = {
-      setupToken: 'newer-token',
+      setupTokenHash: 'newer-token',
       setupTokenExpiry: 'newer-expiry',
       inviteStatus: 'sent',
       inviteSentAt: 'newer-sent-at',
@@ -463,7 +464,7 @@ describe('individual invite state lifecycle', () => {
     })
     const harness = makeInviteStateHarness(
       {
-        setupToken: 'previous-token',
+        setupTokenHash: 'previous-token',
         inviteStatus: 'sent',
       },
       deliverEmail,

@@ -2,7 +2,7 @@
 import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import TimecardPrintRouteContent from '@/components/timecards/TimecardPrintRouteContent.vue'
-import { loadTimecardPdfExportPayload } from '@/features/timecards/pdf-export'
+import { clearTimecardPdfExports, loadTimecardPdfExportPayload } from '@/features/timecards/pdf-export'
 import { useTimecardPrintRoute } from '@/features/timecards/useTimecardPrintRoute'
 
 const route = useRoute()
@@ -20,6 +20,7 @@ const {
 
 onMounted(async () => {
   await loadPrintPayload()
+  clearTimecardPdfExports()
 })
 </script>
 

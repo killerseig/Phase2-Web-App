@@ -14,7 +14,9 @@ describe('ShopCatalogTreeFilters', () => {
       },
     })
 
-    expect(wrapper.get<HTMLInputElement>('[data-testid="shop-catalog-search"]').element.value).toBe('adhesive')
+    expect(wrapper.get<HTMLInputElement>('[data-testid="shop-catalog-search"]').element.value).toBe(
+      'adhesive',
+    )
     expect(wrapper.get<HTMLInputElement>('input[type="checkbox"]').element.checked).toBe(false)
     expect(wrapper.text()).toContain('Show Archived')
 
@@ -54,8 +56,7 @@ describe('ShopCatalogTreeHeader', () => {
   it('renders the catalog admin heading through the shared pane header', () => {
     const wrapper = mount(ShopCatalogTreeHeader)
 
-    expect(wrapper.text()).toContain('Admin')
-    expect(wrapper.get('h1').text()).toBe('Shop Catalog')
+    expect(wrapper.get('h2').text()).toBe('Catalog folders & items')
     expect(wrapper.get('.shop-catalog-tree-header').classes()).toContain('app-pane-header')
   })
 })

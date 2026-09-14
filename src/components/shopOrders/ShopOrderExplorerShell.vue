@@ -250,7 +250,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1440px) {
   .shop-orders-explorer {
-    grid-template-columns: minmax(320px, 0.88fr) minmax(480px, 1.12fr);
+    grid-template-columns: minmax(240px, 0.7fr) minmax(590px, 1.3fr);
   }
 }
 

@@ -272,8 +272,8 @@ export const createShopOrderRecordCallable = onCall(async (request) => {
     deliveryDate: textOrNull(request.data?.deliveryDate),
     status: 'draft',
     comments: '',
-    foremanUserId: textOrNull(request.data?.foremanUserId ?? request.auth.uid),
-    foremanName: textOrNull(request.data?.foremanName ?? user.displayName),
+    foremanUserId: request.auth.uid,
+    foremanName: user.displayName,
     createdByUserId: request.auth.uid,
     updatedByUserId: request.auth.uid,
     submittedByUserId: null,
@@ -329,8 +329,8 @@ export const updateShopOrderRecordCallable = onCall(async (request) => {
 
     if (status === 'submitted') {
       payload.submittedAt = FieldValue.serverTimestamp()
-      payload.submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid)
-      payload.submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName)
+      payload.submittedByUserId = request.auth.uid
+      payload.submittedByName = user.displayName
     }
   }
 

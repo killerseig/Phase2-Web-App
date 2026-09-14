@@ -1,12 +1,15 @@
 <script setup lang="ts">
 type ShopCatalogPanel = 'catalog' | 'inspector'
 
-withDefaults(defineProps<{
-  activePanel: ShopCatalogPanel
-  testId?: string
-}>(), {
-  testId: undefined,
-})
+withDefaults(
+  defineProps<{
+    activePanel: ShopCatalogPanel
+    testId?: string
+  }>(),
+  {
+    testId: undefined,
+  },
+)
 </script>
 
 <template>
@@ -35,7 +38,7 @@ withDefaults(defineProps<{
 <style scoped>
 .catalog-explorer {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr);
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 32%, 440px);
   gap: 1rem;
   height: 100%;
   min-height: 0;
@@ -46,12 +49,6 @@ withDefaults(defineProps<{
   display: grid;
   min-width: 0;
   min-height: 0;
-}
-
-@media (max-width: 1440px) {
-  .catalog-explorer {
-    grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
-  }
 }
 
 @media (max-width: 1180px) {

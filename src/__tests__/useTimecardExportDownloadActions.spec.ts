@@ -16,6 +16,7 @@ vi.mock('@/features/timecards/csv-export', () => ({
 
 vi.mock('@/features/timecards/pdf-export', () => ({
   saveTimecardPdfExportPayload: vi.fn(),
+  transferTimecardPdfExport: vi.fn(),
 }))
 
 const buildTimecardCsvExportMock = vi.mocked(buildTimecardCsvExport)

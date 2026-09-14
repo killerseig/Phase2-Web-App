@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import '@/styles/brand-workspace.css'
 defineProps<{
   copy?: string
   eyebrow: string
@@ -8,7 +9,7 @@ defineProps<{
 
 <template>
   <div
-    class="auth-page"
+    class="auth-page public-page"
     :class="{
       'auth-page--with-media': $slots.media,
       'auth-page--with-backdrop': $slots.backdrop,
@@ -37,6 +38,7 @@ defineProps<{
   place-items: center;
   min-height: 100vh;
   padding: 1.5rem;
+  background: var(--bg);
 }
 
 .auth-page__content {
@@ -68,13 +70,13 @@ defineProps<{
   width: min(100%, 460px);
   padding: 2rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: 6px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 .auth-card__eyebrow {
-  color: var(--accent-strong);
+  color: var(--brand-clay);
   font-size: var(--font-size-eyebrow);
   letter-spacing: var(--letter-spacing-eyebrow);
   text-transform: uppercase;
@@ -93,7 +95,7 @@ defineProps<{
   min-height: 0;
   padding: 0;
   overflow-y: auto;
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-body);
 }
 
 .auth-page__media {

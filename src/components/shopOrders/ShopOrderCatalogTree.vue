@@ -19,37 +19,40 @@ interface ContextMenuState {
   y: number
 }
 
-const props = withDefaults(defineProps<{
-  activeFolderId?: string | null
-  contextMenu?: ContextMenuState
-  contextMenuActions?: readonly ContextMenuAction[]
-  disabled?: boolean
-  expandedCategoryIds?: readonly string[]
-  listCollapsed?: boolean
-  loading?: boolean
-  nodes: readonly ShopOrderCatalogTreeNode[]
-  pendingItemIds?: readonly string[]
-  quantities?: Readonly<Record<string, string>>
-  rootExpanded?: boolean
-  rootHasChildren?: boolean
-  rootNode: ShopOrderCatalogRootNode
-  searchActive?: boolean
-  selectedCatalogItemId?: string | null
-}>(), {
-  activeFolderId: null,
-  contextMenu: () => ({ visible: false, x: 0, y: 0 }),
-  contextMenuActions: () => [],
-  disabled: false,
-  expandedCategoryIds: () => [],
-  listCollapsed: false,
-  loading: false,
-  pendingItemIds: () => [],
-  quantities: () => ({}),
-  rootExpanded: false,
-  rootHasChildren: false,
-  searchActive: false,
-  selectedCatalogItemId: null,
-})
+const props = withDefaults(
+  defineProps<{
+    activeFolderId?: string | null
+    contextMenu?: ContextMenuState
+    contextMenuActions?: readonly ContextMenuAction[]
+    disabled?: boolean
+    expandedCategoryIds?: readonly string[]
+    listCollapsed?: boolean
+    loading?: boolean
+    nodes: readonly ShopOrderCatalogTreeNode[]
+    pendingItemIds?: readonly string[]
+    quantities?: Readonly<Record<string, string>>
+    rootExpanded?: boolean
+    rootHasChildren?: boolean
+    rootNode: ShopOrderCatalogRootNode
+    searchActive?: boolean
+    selectedCatalogItemId?: string | null
+  }>(),
+  {
+    activeFolderId: null,
+    contextMenu: () => ({ visible: false, x: 0, y: 0 }),
+    contextMenuActions: () => [],
+    disabled: false,
+    expandedCategoryIds: () => [],
+    listCollapsed: false,
+    loading: false,
+    pendingItemIds: () => [],
+    quantities: () => ({}),
+    rootExpanded: false,
+    rootHasChildren: false,
+    searchActive: false,
+    selectedCatalogItemId: null,
+  },
+)
 
 const emit = defineEmits<{
   contextAction: [key: string]
@@ -64,10 +67,9 @@ const emit = defineEmits<{
 }>()
 
 const rootActive = computed(() => props.activeFolderId === null && !props.selectedCatalogItemId)
-const showEmptyState = computed(() =>
-  !props.loading
-  && props.nodes.length === 0
-  && (!props.rootHasChildren || props.searchActive)
+const showEmptyState = computed(
+  () =>
+    !props.loading && props.nodes.length === 0 && (!props.rootHasChildren || props.searchActive),
 )
 
 function isNodeActive(node: ShopOrderCatalogTreeNode) {
@@ -89,7 +91,7 @@ function getNodeExpanded(node: ShopOrderCatalogTreeNode) {
 }
 
 function getNodeQuantity(node: ShopOrderCatalogTreeNode) {
-  return node.kind === 'item' ? props.quantities[node.id] ?? '1' : '1'
+  return node.kind === 'item' ? (props.quantities[node.id] ?? '1') : '1'
 }
 
 function handleNodeToggle(node: ShopOrderCatalogTreeNode) {
@@ -189,7 +191,7 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
   align-content: start;
   gap: 0;
   min-width: 0;
-  min-height: 0;
+  min-height: 12rem;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 0.15rem;
@@ -197,6 +199,7 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
 
 .shop-orders-tree-pane__list--collapsed {
   flex: 0 0 auto;
+  min-height: 0;
   overflow: visible;
 }
 

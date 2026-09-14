@@ -151,6 +151,8 @@ useEmployeeAdminViewSync({
 
 <template>
   <DirectoryEditorWorkspaceShell
+    title="Employees"
+    description="Manage employee details and keep your crew directory up to date."
     class="employees-workspace"
     data-testid="employees-page"
     :active-panel="activeMobilePanel"

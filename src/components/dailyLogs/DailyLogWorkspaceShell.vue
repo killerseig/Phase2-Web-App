@@ -1,33 +1,35 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  testId?: string
-}>(), {
-  testId: undefined,
-})
+import AppPageLayout from '@/components/common/AppPageLayout.vue'
+withDefaults(
+  defineProps<{
+    testId?: string
+  }>(),
+  {
+    testId: undefined,
+  },
+)
 </script>
 
 <template>
-  <div class="daily-log-workspace" :data-testid="testId">
-    <slot name="header" />
+  <AppPageLayout class="daily-log-workspace" :data-testid="testId">
+    <template #header><slot name="header" /></template>
 
     <div class="daily-log-workspace__layout">
       <slot name="main" />
       <slot name="sidebar" />
     </div>
-  </div>
+  </AppPageLayout>
 </template>
 
 <style scoped>
 .daily-log-workspace {
-  display: grid;
-  gap: 1rem;
   min-height: 0;
 }
 
 .daily-log-workspace__layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.85fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  gap: var(--page-gap);
   min-height: 0;
 }
 

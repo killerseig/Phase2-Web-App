@@ -25,7 +25,7 @@ async function confirmRemoveOrderItem(page: Page) {
 }
 
 test.describe('shop order workspace regressions', () => {
-  test('side navigation collapses on compact laptop screens', async ({ page }) => {
+  test('side navigation stays open on desktop and collapses on tablets', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 800 })
     await gotoPhase2App(page, '/jobs/job-e2e/shop-orders', createShopOrdersFixture())
 
@@ -35,6 +35,10 @@ test.describe('shop order workspace regressions', () => {
     await expect(menuButton).toBeHidden()
 
     await page.setViewportSize({ width: 1366, height: 768 })
+    await expect(menuButton).toBeHidden()
+    await expect(navigation).toBeInViewport()
+
+    await page.setViewportSize({ width: 1024, height: 768 })
     await expect(menuButton).toBeVisible()
     await expect(navigation).not.toBeInViewport()
 

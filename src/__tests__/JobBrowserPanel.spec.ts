@@ -54,7 +54,7 @@ describe('JobBrowserPanel', () => {
       ],
     })
 
-    expect(wrapper.text()).toContain('Admin')
+    expect(wrapper.text()).toContain('Job directory')
     expect(wrapper.get('[data-testid="jobs-new-button"]').text()).toBe('New Job')
     expect(wrapper.text()).toContain('2 active')
     expect(wrapper.text()).toContain('1 archived')
@@ -98,7 +98,7 @@ describe('JobBrowserPanel', () => {
       showAllJobsEntry: false,
     })
 
-    expect(wrapper.text()).toContain('Field Workspace')
+    expect(wrapper.text()).toContain('Job directory')
     expect(wrapper.find('[data-testid="jobs-new-button"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="jobs-status-filter"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('9 archived')
@@ -136,6 +136,8 @@ describe('JobBrowserPanel', () => {
       showAllJobsEntry: false,
     })
 
-    expect(emptyWrapper.get('[data-testid="jobs-empty"]').text()).toContain('No jobs match your search.')
+    expect(emptyWrapper.get('[data-testid="jobs-empty"]').text()).toContain(
+      'No jobs match your search.',
+    )
   })
 })

@@ -416,47 +416,33 @@ test.describe('admin page coverage', () => {
     await expect(page.getByText('Downloaded CSV with 1 detail row from 1 timecard.')).toBeVisible()
   })
 
-  test('timecard export pdf opens the real print route payload', async ({ page }) => {
-    await page.addInitScript(() => {
-      const fakeWindow = {
-        document: {
-          title: '',
-          body: {
-            innerHTML: '',
-          },
-        },
-        location: {
-          href: '',
-        },
-        close() {
-          return undefined
-        },
-      }
+  test('timecard export pdf opens the real print route payload', async ({ page, context }) => {
+    const fixture = createAdminWorkspaceFixture()
+    await context.addInitScript((state) => {
+      Object.assign(window, { __PHASE2_E2E__: state })
+      window.print = () => undefined
+    }, fixture)
 
-      ;(window as Window & { __PHASE2_LAST_PRINT_WINDOW__?: typeof fakeWindow | null }).__PHASE2_LAST_PRINT_WINDOW__ = null
-      window.open = () => {
-        ;(window as Window & { __PHASE2_LAST_PRINT_WINDOW__?: typeof fakeWindow }).__PHASE2_LAST_PRINT_WINDOW__ = fakeWindow
-        return fakeWindow as unknown as Window
-      }
-    })
-
-    await gotoPhase2App(page, '/exports/timecards', createAdminWorkspaceFixture())
+    await gotoPhase2App(page, '/exports/timecards', fixture)
 
     await page.getByTestId('timecard-export-week-search').fill('1A')
     await expect(page.getByTestId('timecard-export-week-week-admin-2')).toHaveCount(0)
     await expect.poll(async () => page.locator('.timecards-canvas__item').count()).toBe(1)
 
+    const popupPromise = page.waitForEvent('popup')
     await page.getByRole('button', { name: 'Export PDF' }).click()
+    const popup = await popupPromise
 
     await expect(page.getByText('Opened 1 timecard for PDF export.')).toBeVisible()
-    await expect
-      .poll(async () => page.evaluate(() => {
-        const host = window as Window & {
-          __PHASE2_LAST_PRINT_WINDOW__?: { location?: { href?: string } } | null
-        }
-        return host.__PHASE2_LAST_PRINT_WINDOW__?.location?.href ?? ''
-      }))
-      .toContain('/exports/timecards/print?exportId=')
+    await expect(popup).toHaveURL(/\/exports\/timecards\/print\?exportId=/)
+    await expect(popup.getByTestId('timecard-export-print-document')).toBeVisible()
+    for (const exportPage of [page, popup]) {
+      expect(await exportPage.evaluate(() => ({
+        local: localStorage.getItem('phase2-timecard-pdf-exports'),
+        session: sessionStorage.getItem('phase2-timecard-pdf-exports'),
+      }))).toEqual({ local: null, session: null })
+    }
+    await popup.close()
   })
 
   test('timecard export can toggle a card between locked and editable modes', async ({ page }) => {
@@ -514,7 +500,7 @@ test.describe('admin page coverage', () => {
     }
 
     await page.addInitScript(({ nextExportId, nextPayload }) => {
-      window.localStorage.setItem(
+      window.sessionStorage.setItem(
         'phase2-timecard-pdf-exports',
         JSON.stringify({ [nextExportId]: nextPayload }),
       )

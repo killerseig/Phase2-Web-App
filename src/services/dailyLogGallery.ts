@@ -80,24 +80,5 @@ export async function fetchLegacyPublicDailyLogGallery(
     throw new Error('This photo gallery link is incomplete.')
   }
 
-  if (isE2EActive()) {
-    const gallery = getE2EPublicDailyLogGallery(`legacy:${normalizedJobId}:${normalizedDailyLogId}`)
-    if (!gallery) throw new Error('This photo gallery is unavailable.')
-    return normalizeGallery(gallery)
-  }
-
-  try {
-    const { functions } = requireFirebaseServices()
-    const callable = httpsCallable<
-      { jobId: string; dailyLogId: string },
-      PublicDailyLogGalleryRecord
-    >(functions, 'getPublicDailyLogGallery')
-    const result = await callable({
-      jobId: normalizedJobId,
-      dailyLogId: normalizedDailyLogId,
-    })
-    return normalizeGallery(result.data)
-  } catch (error) {
-    throw new Error(normalizeError(error, 'This photo gallery is unavailable.'))
-  }
+  throw new Error('This older photo link is no longer available. Ask the sender for a new gallery link.')
 }

@@ -69,11 +69,14 @@ describe('ShopCatalogTreePane', () => {
       treeNodes: [],
     })
 
-    expect(wrapper.text()).toContain('Admin')
-    expect(wrapper.text()).toContain('Shop Catalog')
-    expect(wrapper.get<HTMLInputElement>('[data-testid="shop-catalog-search"]').element.value).toBe('adhesive')
+    expect(wrapper.text()).toContain('Catalog folders & items')
+    expect(wrapper.get<HTMLInputElement>('[data-testid="shop-catalog-search"]').element.value).toBe(
+      'adhesive',
+    )
     expect(wrapper.get<HTMLInputElement>('input[type="checkbox"]').element.checked).toBe(false)
-    expect(wrapper.get('.catalog-tree-pane__list').classes()).toContain('catalog-tree-pane__list--drop-target')
+    expect(wrapper.get('.catalog-tree-pane__list').classes()).toContain(
+      'catalog-tree-pane__list--drop-target',
+    )
     expect(wrapper.text()).toContain('Loading catalog...')
     expect(wrapper.findComponent(ShopCatalogTreeRootRow).exists()).toBe(false)
     expect(setListRef).toHaveBeenCalled()

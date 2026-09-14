@@ -203,7 +203,8 @@ test.describe('daily log draft regressions', () => {
     await expect(page.getByText('History', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Save Draft', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Sign Out', { exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'View legacy-progress.jpg' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'View legacy-progress.jpg' })).toHaveCount(0)
+    await expect(page.getByText('This older photo link is no longer available. Ask the sender for a new gallery link.')).toBeVisible()
   })
 
   test('opening today does not create a daily log draft until the foreman asks for one', async ({

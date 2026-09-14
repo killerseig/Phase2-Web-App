@@ -138,7 +138,11 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
             :active="selectedInspectorKey === node.key || createKey === node.key"
             :dragging="dragSourceKey === node.key"
             :drop-target="dragOverKey === node.key"
-            :draggable="!node.draft && !isCreatingNode(node.key, createKey) && !isRenamingNode(node.key, renameKey)"
+            :draggable="
+              !node.draft &&
+              !isCreatingNode(node.key, createKey) &&
+              !isRenamingNode(node.key, renameKey)
+            "
             :expanded="isCategoryExpanded(node.id, expandedCategoryIds)"
             :creating="isCreatingNode(node.key, createKey)"
             :renaming="isRenamingNode(node.key, renameKey)"
@@ -186,6 +190,7 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
 
 .catalog-tree-pane__body {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.7rem;
   min-height: 0;
   align-content: start;
@@ -209,7 +214,10 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
 
 .catalog-tree {
   display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: 0.08rem;
+  width: max-content;
   min-width: 100%;
 }
 
@@ -227,11 +235,6 @@ function isCategoryExpanded(categoryId: string, expandedCategoryIds: string[]) {
     overflow-x: auto;
     overflow-y: visible;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .catalog-tree {
-    width: 100%;
-    min-width: 100%;
   }
 }
 </style>

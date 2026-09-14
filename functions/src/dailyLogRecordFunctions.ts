@@ -447,8 +447,8 @@ export const createDailyLogRecordCallable = onCall(async (request) => {
     logDate,
     sequenceNumber,
     status: 'draft',
-    foremanUserId: textOrNull(request.data?.foremanUserId ?? request.auth.uid),
-    foremanName: textOrNull(request.data?.foremanName ?? user.displayName),
+    foremanUserId: request.auth.uid,
+    foremanName: user.displayName,
     createdByUserId: request.auth.uid,
     updatedByUserId: request.auth.uid,
     submittedByUserId: null,
@@ -526,8 +526,8 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
 
     if (status === 'submitted') {
       payload.submittedAt = FieldValue.serverTimestamp()
-      payload.submittedByUserId = textOrNull(request.data?.actor?.userId ?? request.auth.uid)
-      payload.submittedByName = textOrNull(request.data?.actor?.displayName ?? user.displayName)
+      payload.submittedByUserId = request.auth.uid
+      payload.submittedByName = user.displayName
     }
   }
 

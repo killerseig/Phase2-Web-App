@@ -15,6 +15,7 @@ import {
 } from '@/features/employees/employeeViewHelpers'
 import type { EmployeeRecord } from '@/types/domain'
 import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
+import '@/components/common/directory-browser.css'
 
 defineProps<{
   employees: readonly EmployeeRecord[]
@@ -38,12 +39,10 @@ function handleStatusFilterUpdate(value: string) {
 </script>
 
 <template>
-  <AppPane class="employees-browser">
-    <AppPaneHeader class="app-page-header" eyebrow="Admin" title="Employees">
+  <AppPane class="employees-browser directory-browser">
+    <AppPaneHeader title="Employee directory" title-tag="h2">
       <template #actions>
-        <AppButton variant="primary" @click="emit('createEmployee')">
-          New Employee
-        </AppButton>
+        <AppButton variant="primary" @click="emit('createEmployee')"> New Employee </AppButton>
       </template>
     </AppPaneHeader>
 
@@ -71,18 +70,12 @@ function handleStatusFilterUpdate(value: string) {
       </label>
 
       <div class="employees-browser__list">
-        <AppListButton
-          class="employees-browser__row"
-          :active="isCreateMode"
-          @click="emit('createEmployee')"
-        >
-          <div class="employees-browser__row-main">
-            <strong>Create Employee</strong>
-            <span>Add a record to the global employee directory.</span>
-          </div>
-        </AppListButton>
-
-        <AppEmptyState panel v-if="employeesLoading" class="employees-browser__empty" message="Loading employees..." />
+        <AppEmptyState
+          panel
+          v-if="employeesLoading"
+          class="employees-browser__empty"
+          message="Loading employees..."
+        />
 
         <AppListButton
           v-for="employee in employees"
@@ -95,8 +88,12 @@ function handleStatusFilterUpdate(value: string) {
         >
           <div class="employees-browser__row-main">
             <strong>{{ getEmployeeDisplayName(employee) }}</strong>
-            <span>{{ getEmployeeOccupation(employee) }}</span>
-            <span class="employees-browser__secondary">Employee #{{ getEmployeeCode(employee) }}</span>
+            <div class="employees-browser__details">
+              <span class="employees-browser__secondary"
+                >Employee #{{ getEmployeeCode(employee) }}</span
+              >
+              <span>{{ getEmployeeOccupation(employee) }}</span>
+            </div>
           </div>
           <div class="employees-browser__row-meta">
             <AppBadge tone="accent">{{ getEmployeeTypeLabel(employee) }}</AppBadge>

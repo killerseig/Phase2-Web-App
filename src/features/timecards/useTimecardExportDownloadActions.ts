@@ -1,6 +1,6 @@
 import { buildTimecardCsvExport, downloadTimecardCsvExport } from '@/features/timecards/csv-export'
 import type { TimecardExportArchiveCardRecord } from '@/features/timecards/exportViewHelpers'
-import { saveTimecardPdfExportPayload } from '@/features/timecards/pdf-export'
+import { saveTimecardPdfExportPayload, transferTimecardPdfExport } from '@/features/timecards/pdf-export'
 import type { ReadonlyRef } from '@/types/reactivity'
 
 interface UseTimecardExportDownloadActionsOptions {
@@ -64,6 +64,7 @@ export function useTimecardExportDownloadActions({
         })),
       })
 
+      transferTimecardPdfExport(exportId, printWindow)
       printWindow.location.href = resolvePrintHref(exportId)
       setPageInfo(`Opened ${orderedCards.value.length} timecard${orderedCards.value.length === 1 ? '' : 's'} for PDF export.`)
     } catch (error) {

@@ -30,8 +30,9 @@ const emit = defineEmits<{
 <template>
   <AppPaneHeader
     class="app-page-header daily-logs-header"
-    eyebrow="Daily Logs"
-    :title="props.title"
+    eyebrow="Field Workspace"
+    title="Daily Logs"
+    :description="props.title"
     title-tag="h1"
   >
     <template #actions>
@@ -60,7 +61,8 @@ const emit = defineEmits<{
   <div class="daily-logs-toolbar">
     <AppBadge class="daily-logs-badge" tone="accent">{{ props.selectedLogLabel }}</AppBadge>
     <AppBadge class="daily-logs-badge" tone="accent">
-      {{ props.visibleLogCount }} {{ props.visibleLogCount === 1 ? 'log' : 'logs' }} for {{ props.selectedDate }}
+      {{ props.visibleLogCount }} {{ props.visibleLogCount === 1 ? 'log' : 'logs' }} for
+      {{ props.selectedDate }}
     </AppBadge>
     <AppBadge v-if="props.savingDraft" class="daily-logs-badge" tone="accent">
       Saving draft...

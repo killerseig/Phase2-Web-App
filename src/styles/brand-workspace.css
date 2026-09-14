@@ -29,6 +29,7 @@
 }
 
 .app-shell--branded-content,
+.public-page,
 .app-shell__sidebar,
 .app-shell__topbar,
 .app-shell__statusbar,
@@ -112,6 +113,7 @@ body:has(.app-shell--branded) > #app-toast-root {
 
 .app-shell.app-shell--branded :is(.app-shell__brand-title, .app-shell__topbar-heading),
 .app-shell.app-shell--branded-content :is(h1, h2),
+.public-page :is(h1, h2),
 body:has(.app-shell--branded) > .confirm-dialog h2 {
   font-family: var(--font-heading);
   font-weight: 600;
@@ -201,12 +203,14 @@ body:has(.app-shell--branded) > .confirm-dialog h2 {
   letter-spacing: 0.06em;
 }
 
-.app-shell.app-shell--branded-content :is(.app-text-input, .app-textarea, .app-search-input, .app-select, .app-readonly-field),
+.app-shell.app-shell--branded-content
+  :is(.app-text-input, .app-textarea, .app-search-input, .app-select, .app-readonly-field),
 body:has(.app-shell--branded) > .confirm-dialog :is(.app-text-input, .app-select) {
   border-color: var(--control-border);
 }
 
-.app-shell.app-shell--branded-content :is(.app-text-input, .app-textarea, .app-search-input, .app-select):focus-visible {
+.app-shell.app-shell--branded-content
+  :is(.app-text-input, .app-textarea, .app-search-input, .app-select):focus-visible {
   border-color: var(--accent);
 }
 
@@ -219,36 +223,46 @@ body:has(.app-shell--branded) > .confirm-dialog :is(.app-text-input, .app-select
   line-height: 1.2;
 }
 
-/* Main page headers share the Jobs artwork; section and editor headings stay plain. */
-.app-shell.app-shell--branded-content .app-pane-header.app-page-header {
+/* Full-width workspace headers; list and editor headings stay inside their panels. */
+.app-shell.app-shell--branded-content .app-pane-header.app-page-header,
+.public-page .app-pane-header.app-page-header {
   flex-wrap: wrap;
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  align-items: center;
+  gap: 1rem;
   min-height: 7rem;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  border-radius: 4px 4px 0 0;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--bg);
+  box-shadow: none;
+  --app-pane-header-title-font-size: 1.75rem;
+  --app-pane-header-title-margin: 0.25rem 0 0;
+  --app-pane-header-description-font-size: 1rem;
 }
 
-.app-shell.app-shell--branded-content .app-page-header > .app-pane-header__copy {
+.app-shell.app-shell--branded-content .app-page-header > .app-pane-header__copy,
+.public-page .app-page-header > .app-pane-header__copy {
   flex: 1;
   min-width: min(100%, 10rem);
 }
 
-.app-shell.app-shell--branded-content .app-pane-header.app-page-header::before {
+.app-shell.app-shell--branded-content .app-pane-header.app-page-header::before,
+.public-page .app-pane-header.app-page-header::before {
   content: '';
   position: absolute;
   inset: 0 0 0 auto;
-  width: min(45%, 32rem);
+  width: min(35%, 28rem);
   z-index: -1;
   background: url('../assets/images/workspace-blueprint.webp') right 55% / cover no-repeat;
-  opacity: 0.42;
+  opacity: 0.2;
   pointer-events: none;
 }
 
-.app-shell.app-shell--branded-content .app-pane-header.app-page-header::after {
+.app-shell.app-shell--branded-content .app-pane-header.app-page-header::after,
+.public-page .app-pane-header.app-page-header::after {
   content: '';
   position: absolute;
   bottom: 0;
@@ -267,12 +281,28 @@ body:has(.app-shell--branded) > .confirm-dialog :is(.app-text-input, .app-select
   border-color: var(--control-border);
 }
 
-.app-shell.app-shell--branded :is(.app-shell__sidebar, .app-shell__sidebar *, .app-shell__topbar, .app-shell__topbar *, .app-shell__statusbar, .app-shell__content),
+.app-shell.app-shell--branded
+  :is(
+    .app-shell__sidebar,
+    .app-shell__sidebar *,
+    .app-shell__topbar,
+    .app-shell__topbar *,
+    .app-shell__statusbar,
+    .app-shell__content
+  ),
 .app-shell.app-shell--branded-content * {
   scrollbar-color: #526d80 var(--brand-workspace-background);
 }
 
-.app-shell.app-shell--branded :is(.app-shell__sidebar, .app-shell__sidebar *, .app-shell__topbar, .app-shell__topbar *, .app-shell__statusbar, .app-shell__content)::-webkit-scrollbar-thumb,
+.app-shell.app-shell--branded
+  :is(
+    .app-shell__sidebar,
+    .app-shell__sidebar *,
+    .app-shell__topbar,
+    .app-shell__topbar *,
+    .app-shell__statusbar,
+    .app-shell__content
+  )::-webkit-scrollbar-thumb,
 .app-shell.app-shell--branded-content *::-webkit-scrollbar-thumb {
   background: #526d80;
 }
@@ -293,9 +323,12 @@ body:has(.app-shell--branded) > #app-toast-root .p-toast-message-error {
 }
 
 @media (max-width: 560px) {
-  .app-shell.app-shell--branded-content .app-pane-header.app-page-header {
+  .app-shell.app-shell--branded-content .app-pane-header.app-page-header,
+  .public-page .app-pane-header.app-page-header {
     min-height: 6rem;
     padding: 1rem;
+    align-items: flex-start;
+    --app-pane-header-title-font-size: 1.5rem;
   }
 }
 

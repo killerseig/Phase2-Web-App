@@ -18,7 +18,9 @@ function makeEmployee(overrides: Partial<EmployeeRecord> = {}): EmployeeRecord {
   }
 }
 
-function mountDirectory(overrides: Partial<InstanceType<typeof EmployeeDirectoryPanel>['$props']> = {}) {
+function mountDirectory(
+  overrides: Partial<InstanceType<typeof EmployeeDirectoryPanel>['$props']> = {},
+) {
   return mount(EmployeeDirectoryPanel, {
     props: {
       employees: [
@@ -53,9 +55,8 @@ describe('EmployeeDirectoryPanel', () => {
   it('renders employee rows, status/type badges, fallbacks, filters, and active selection', () => {
     const wrapper = mountDirectory()
 
-    expect(wrapper.text()).toContain('Employees')
+    expect(wrapper.text()).toContain('Employee directory')
     expect(wrapper.text()).toContain('New Employee')
-    expect(wrapper.text()).toContain('Create Employee')
     expect(wrapper.text()).toContain('Chris Larsen')
     expect(wrapper.text()).toContain('Foreman')
     expect(wrapper.text()).toContain('Employee #5133')
@@ -66,26 +67,31 @@ describe('EmployeeDirectoryPanel', () => {
     expect(wrapper.text()).toContain('Employee #No Number')
     expect(wrapper.text()).toContain('Contractor')
     expect(wrapper.text()).toContain('Inactive')
-    expect(wrapper.get('[data-testid="employee-row-employee-1"]').classes()).toContain('app-list-button--active')
-    expect(wrapper.get<HTMLInputElement>('[data-testid="employees-search"]').element.value).toBe('chris')
-    expect(wrapper.get<HTMLSelectElement>('[data-testid="employees-status-filter"]').element.value).toBe('active')
+    expect(wrapper.get('[data-testid="employee-row-employee-1"]').classes()).toContain(
+      'app-list-button--active',
+    )
+    expect(wrapper.get<HTMLInputElement>('[data-testid="employees-search"]').element.value).toBe(
+      'chris',
+    )
+    expect(
+      wrapper.get<HTMLSelectElement>('[data-testid="employees-status-filter"]').element.value,
+    ).toBe('active')
   })
 
-  it('marks create mode active and emits create, search, status, and row-selection events', async () => {
+  it('clears row selection in create mode and emits create, search, status, and row-selection events', async () => {
     const wrapper = mountDirectory({
       isCreateMode: true,
       selectedEmployeeId: null,
     })
 
-    expect(wrapper.findAll('.app-list-button--active')[0]!.text()).toContain('Create Employee')
+    expect(wrapper.findAll('.app-list-button--active')).toHaveLength(0)
 
     await wrapper.get('button.app-button--primary').trigger('click')
-    await wrapper.findAll('button.app-list-button')[0]!.trigger('click')
     await wrapper.get('[data-testid="employees-search"]').setValue('cj')
     await wrapper.get('[data-testid="employees-status-filter"]').setValue('both')
     await wrapper.get('[data-testid="employee-row-employee-2"]').trigger('click')
 
-    expect(wrapper.emitted('createEmployee')).toHaveLength(2)
+    expect(wrapper.emitted('createEmployee')).toHaveLength(1)
     expect(wrapper.emitted('update:searchTerm')).toEqual([['cj']])
     expect(wrapper.emitted('update:statusFilter')).toEqual([['both']])
     expect(wrapper.emitted('selectEmployee')).toEqual([['employee-2']])

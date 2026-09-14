@@ -52,7 +52,7 @@ function handleStatusFilterUpdate(value: string) {
 
 <template>
   <AppPane class="jobs-browser">
-    <AppPaneHeader class="app-page-header" :eyebrow="canManageJobs ? 'Admin' : 'Field Workspace'" title="Jobs">
+    <AppPaneHeader title="Job directory" title-tag="h2">
       <template v-if="canCreateJobs && editMode" #actions>
         <AppButton variant="primary" data-testid="jobs-new-button" @click="emit('createJob')">
           New Job
@@ -183,6 +183,7 @@ function handleStatusFilterUpdate(value: string) {
 
 .jobs-browser__list {
   display: grid;
+  grid-auto-rows: max-content;
   gap: var(--space-1);
   align-content: start;
   min-height: 0;
@@ -191,7 +192,7 @@ function handleStatusFilterUpdate(value: string) {
 }
 
 .jobs-browser__row {
-  --app-list-button-padding: var(--space-4);
+  --app-list-button-padding: 0.5rem 0.65rem;
   --app-list-button-active-background: #252d35;
   --app-list-button-active-border: transparent;
   position: relative;
@@ -204,7 +205,7 @@ function handleStatusFilterUpdate(value: string) {
 }
 
 .jobs-browser__row.app-list-button--active::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: var(--space-3) auto var(--space-3) 0;
   width: 3px;
@@ -239,5 +240,4 @@ function handleStatusFilterUpdate(value: string) {
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
 }
-
 </style>

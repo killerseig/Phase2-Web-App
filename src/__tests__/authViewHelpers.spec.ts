@@ -101,12 +101,12 @@ describe('auth view helpers', () => {
   it('validates password setup fields in the same order as the route form', () => {
     expect(getSetPasswordValidationMessage('', '')).toBe('Password is required.')
     expect(getSetPasswordValidationMessage('short', 'short')).toBe(
-      'Password must be at least 6 characters.',
+      'Password must be between 12 and 128 characters.',
     )
-    expect(getSetPasswordValidationMessage('password1', 'password2')).toBe(
+    expect(getSetPasswordValidationMessage('test-password1', 'test-password2')).toBe(
       'Passwords do not match.',
     )
-    expect(getSetPasswordValidationMessage('password1', 'password1')).toBe('')
+    expect(getSetPasswordValidationMessage('test-password1', 'test-password1')).toBe('')
   })
 
   it('reads setup-link params from scalar or repeated query values', () => {

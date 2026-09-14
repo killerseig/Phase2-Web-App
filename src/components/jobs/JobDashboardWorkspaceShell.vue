@@ -1,21 +1,24 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  testId?: string
-}>(), {
-  testId: undefined,
-})
+import AppPageLayout from '@/components/common/AppPageLayout.vue'
+withDefaults(
+  defineProps<{
+    testId?: string
+  }>(),
+  {
+    testId: undefined,
+  },
+)
 </script>
 
 <template>
-  <div class="job-dashboard-workspace" :data-testid="testId">
-    <slot name="header" />
+  <AppPageLayout class="job-dashboard-workspace" :data-testid="testId">
+    <template #header><slot name="header" /></template>
     <slot name="modules" />
-  </div>
+  </AppPageLayout>
 </template>
 
 <style scoped>
 .job-dashboard-workspace {
-  display: grid;
-  gap: 1rem;
+  min-width: 0;
 }
 </style>

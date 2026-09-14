@@ -232,6 +232,7 @@ function normalizeState(state: Phase2E2EState): Phase2E2EState {
 }
 
 function getState() {
+  if (import.meta.env.PROD) return null
   if (cachedState !== undefined) return cachedState
 
   if (typeof window === 'undefined' || !window.__PHASE2_E2E__) {

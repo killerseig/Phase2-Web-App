@@ -141,11 +141,11 @@ describe('PagePanel', () => {
       },
     })
 
-    expect(wrapper.find('section.page-panel').exists()).toBe(true)
+    expect(wrapper.find('.page-panel.app-page-layout').exists()).toBe(true)
     expect(wrapper.getComponent({ name: 'AppPaneHeader' }).props()).toMatchObject({
       eyebrow: 'Admin',
       title: 'Jobs',
-      titleTag: 'h2',
+      titleTag: 'h1',
       description: 'Manage job records.',
     })
     expect(wrapper.get('[data-testid="panel-body"]').text()).toBe('Panel body')

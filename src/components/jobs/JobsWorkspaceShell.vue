@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppButton from '@/components/common/AppButton.vue'
+import AppPageLayout from '@/components/common/AppPageLayout.vue'
 import AppSplitWorkspace from '@/components/common/AppSplitWorkspace.vue'
 import AppShell from '@/layouts/AppShell.vue'
 
@@ -19,35 +20,38 @@ const emit = defineEmits<{
 
 <template>
   <AppShell class="jobs-workspace">
-    <template v-if="canUseJobSetupEditor" #topbar-actions>
-      <AppButton
-        class="jobs-edit-mode-button"
-        :class="{ 'jobs-edit-mode-button--active': editMode }"
-        variant="ghost"
-        data-testid="jobs-edit-mode"
-        :aria-pressed="editMode"
-        @click="emit('toggleEditMode')"
-      >
-        <i
-          :class="editMode ? 'pi pi-check' : 'pi pi-pencil'"
-          aria-hidden="true"
-        ></i>
-        <span>{{ editMode ? 'Done Editing' : 'Edit Mode' }}</span>
-      </AppButton>
-    </template>
-
-    <AppSplitWorkspace
-      v-bind="$attrs"
-      :mode="canUseJobSetupEditor && editMode ? 'equal' : 'single'"
+    <AppPageLayout
+      title="Jobs"
+      description="Find a job to open its timecards, daily logs, and shop orders."
+      fill
     >
-      <template #primary>
-        <slot name="primary" />
+      <template v-if="canUseJobSetupEditor" #actions>
+        <AppButton
+          class="jobs-edit-mode-button"
+          :class="{ 'jobs-edit-mode-button--active': editMode }"
+          variant="ghost"
+          data-testid="jobs-edit-mode"
+          :aria-pressed="editMode"
+          @click="emit('toggleEditMode')"
+        >
+          <i :class="editMode ? 'pi pi-check' : 'pi pi-pencil'" aria-hidden="true"></i>
+          <span>{{ editMode ? 'Done Editing' : 'Edit Mode' }}</span>
+        </AppButton>
       </template>
 
-      <template #secondary>
-        <slot name="secondary" />
-      </template>
-    </AppSplitWorkspace>
+      <AppSplitWorkspace
+        v-bind="$attrs"
+        :mode="canUseJobSetupEditor && editMode ? 'equal' : 'single'"
+      >
+        <template #primary>
+          <slot name="primary" />
+        </template>
+
+        <template #secondary>
+          <slot name="secondary" />
+        </template>
+      </AppSplitWorkspace>
+    </AppPageLayout>
 
     <slot />
   </AppShell>

@@ -155,7 +155,8 @@ describe('role workflow contract', () => {
     expect(rules).toContain('isAdmin() || isPayroll()')
     expect(rules).toContain('function foremanCanWorkWeek(weekData)')
     expect(rules).toContain('return canUseTimecards() && hasJobWriteAccess(weekData.jobId);')
-    expect(rules).toContain('request.resource.data.status == resource.data.status')
+    expect(rules).toContain('allow write: if false;')
+    expect(rules).not.toContain('.changedKeys()')
     expect(rules).toContain('match /dailyLogs/{logId}')
     expect(rules).toContain('match /shopOrders/{orderId}')
     expect(rules).toContain('match /timecardWeeks/{weekId}')
@@ -172,12 +173,12 @@ describe('role workflow contract', () => {
     expect(source.split(shopOrderFieldRoleList).length - 1).toBe(2)
   })
 
-  it('keeps daily log attachment uploads independent from cross-product rule lookups', () => {
+  it('requires job authorization as well as file validation for attachments', () => {
     const rules = readFileSync(resolve(process.cwd(), 'storage.rules'), 'utf8')
 
     expect(rules).toContain('function isSupportedDailyLogAttachmentUpload(logId)')
     expect(rules).toContain('request.resource.size < 10 * 1024 * 1024')
-    expect(rules).toContain("request.resource.contentType.matches('image/.*')")
+    expect(rules).toContain("request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']")
     expect(rules).toContain("request.resource.metadata.variant == 'gallery-photo'")
     expect(rules).toContain('function isSupportedDailyLogThumbnailUpload(logId)')
     expect(rules).toContain('request.resource.size <= 300 * 1024')
@@ -185,14 +186,14 @@ describe('role workflow contract', () => {
     expect(rules).toContain("request.resource.metadata.variant == 'email-thumbnail'")
     expect(rules).toContain('request.resource.metadata.dailyLogId == logId')
     expect(rules).toContain('request.resource.metadata.uploadedBy == request.auth.uid')
-    expect(rules).toContain('allow read: if signedIn();')
+    expect(rules).toContain('allow read: if canReadLog(logId);')
     expect(rules).toContain(
-      'allow create: if signedIn() && isSupportedDailyLogAttachmentUpload(logId);',
+      'allow create: if canEditLog(logId) && isSupportedDailyLogAttachmentUpload(logId);',
     )
-    expect(rules).toContain('allow delete: if signedIn();')
+    expect(rules).toContain('allow delete: if canEditLog(logId);')
     expect(rules).toContain('allow update: if false;')
-    expect(rules).not.toContain('firestore.get(')
-    expect(rules).not.toContain('firestore.exists(')
+    expect(rules).toContain('firestore.get(')
+    expect(rules).toContain('request.resource.metadata.jobId == log(logId).jobId')
     expect(rules).toContain('match /daily-logs/{logId}/thumbnails/{fileName}')
     expect(rules).toContain('match /daily-logs/{logId}/{fileName}')
   })

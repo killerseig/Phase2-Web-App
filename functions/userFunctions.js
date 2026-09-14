@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setUserPassword = exports.requestPasswordResetEmail = exports.verifySetupToken = exports.sendPendingUserInvites = exports.createUserByAdmin = exports.deleteUser = exports.handleUserAccessRevocationCleanup = exports.listAssignableFieldUsers = exports.removeEmailFromAllRecipientLists = exports.sendUserPasswordResetByAdmin = exports.resendUserInviteByAdmin = void 0;
+exports.hashSetupToken = hashSetupToken;
+exports.setupCredentialIsValid = setupCredentialIsValid;
 exports.sendUserInvite = sendUserInvite;
 exports.handleResendUserInviteByAdmin = handleResendUserInviteByAdmin;
 exports.handleSendUserPasswordResetByAdmin = handleSendUserPasswordResetByAdmin;
@@ -16,6 +18,16 @@ const roleAccess_1 = require("./roleAccess");
 const runtime_1 = require("./runtime");
 const firestoreService_1 = require("./firestoreService");
 const targetRoleCapabilities_1 = require("./targetRoleCapabilities");
+const passwordResetRateLimit_1 = require("./passwordResetRateLimit");
+const SETUP_CREDENTIALS = 'userSetupCredentials';
+function hashSetupToken(token) {
+    return (0, crypto_1.createHash)('sha256').update(token).digest('hex');
+}
+function setupCredentialIsValid(data, token, now = new Date()) {
+    const expiry = parseTokenExpiry(data.setupTokenExpiry).getTime();
+    return /^[a-f0-9]{64}$/.test(token) && data.setupTokenHash === hashSetupToken(token)
+        && Number.isFinite(expiry) && expiry > now.getTime() && !data.consumedAt;
+}
 function parseTokenExpiry(value) {
     if (value?.toDate && typeof value.toDate === 'function') {
         return value.toDate();
@@ -41,8 +53,9 @@ function createSetupTokenRecord() {
     };
 }
 const USER_INVITE_STATE_FIELDS = [
-    'setupToken',
+    'setupTokenHash',
     'setupTokenExpiry',
+    'consumedAt',
     'inviteStatus',
     'inviteSentAt',
     'inviteSentByUid',
@@ -82,14 +95,29 @@ function buildUserInviteRestoreUpdate(previousState, deleteField) {
 const firestoreUserInviteStateStore = {
     async transact(uid, transition) {
         const userRef = runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(uid);
+        const credentialRef = runtime_1.db.collection(SETUP_CREDENTIALS).doc(uid);
         return runtime_1.db.runTransaction(async (transaction) => {
             const snapshot = await transaction.get(userRef);
+            const credentials = await transaction.get(credentialRef);
             if (!snapshot.exists) {
                 throw new https_1.HttpsError('not-found', 'User not found.');
             }
-            const next = transition(snapshot.data() || {});
+            const { setupToken: _legacyToken, setupTokenExpiry: _legacyExpiry, ...profile } = snapshot.data() || {};
+            const next = transition({ ...profile, ...credentials.data() });
             if (next.update) {
-                transaction.update(userRef, next.update);
+                const privateUpdate = {};
+                const publicUpdate = {};
+                for (const [key, value] of Object.entries(next.update)) {
+                    if (key === 'setupTokenHash' || key === 'setupTokenExpiry' || key === 'consumedAt') {
+                        privateUpdate[key] = value;
+                    }
+                    else {
+                        publicUpdate[key] = value;
+                    }
+                }
+                transaction.update(userRef, { ...publicUpdate, setupToken: firestore_1.FieldValue.delete(), setupTokenExpiry: firestore_1.FieldValue.delete() });
+                if (Object.keys(privateUpdate).length)
+                    transaction.set(credentialRef, privateUpdate, { merge: true });
             }
             return next.result;
         });
@@ -153,7 +181,9 @@ async function sendUserInvite(options, dependencies = sendUserInviteDependencies
         }
         return {
             update: {
-                ...tokenRecord,
+                setupTokenHash: hashSetupToken(tokenRecord.setupToken),
+                setupTokenExpiry: tokenRecord.setupTokenExpiry,
+                consumedAt: dependencies.deleteField(),
                 inviteDeliveryId: deliveryId,
                 inviteDeliveryLeaseExpiresAt: deliveryLeaseExpiresAt,
             },
@@ -171,7 +201,7 @@ async function sendUserInvite(options, dependencies = sendUserInviteDependencies
         try {
             await dependencies.stateStore.transact(options.uid, (current) => {
                 if (current.inviteDeliveryId !== deliveryId ||
-                    current.setupToken !== tokenRecord.setupToken) {
+                    current.setupTokenHash !== hashSetupToken(tokenRecord.setupToken)) {
                     return { result: false };
                 }
                 return {
@@ -189,7 +219,7 @@ async function sendUserInvite(options, dependencies = sendUserInviteDependencies
         throw deliveryError;
     }
     const finalized = await dependencies.stateStore.transact(options.uid, (current) => {
-        if (current.inviteDeliveryId !== deliveryId || current.setupToken !== tokenRecord.setupToken) {
+        if (current.inviteDeliveryId !== deliveryId || current.setupTokenHash !== hashSetupToken(tokenRecord.setupToken)) {
             return { result: false };
         }
         const preserveAcceptedStatus = previousState.inviteStatus.value === 'accepted' || current.inviteStatus === 'accepted';
@@ -622,15 +652,13 @@ exports.verifySetupToken = (0, https_1.onCall)(async (request) => {
             throw new https_1.HttpsError('not-found', 'User not found');
         }
         const userData = userDoc.data();
-        if (!userData?.setupToken || userData.setupToken !== setupToken) {
+        const credentials = await runtime_1.db.collection(SETUP_CREDENTIALS).doc(uid).get();
+        if (userData?.active === false || !setupCredentialIsValid(credentials.data() || {}, setupToken)) {
             throw new https_1.HttpsError('permission-denied', 'Invalid token');
-        }
-        if (new Date() > parseTokenExpiry(userData.setupTokenExpiry)) {
-            throw new https_1.HttpsError('deadline-exceeded', 'Token expired');
         }
         return {
             success: true,
-            email: userData.email,
+            email: userData?.email,
             message: 'Token verified',
         };
     }
@@ -649,6 +677,12 @@ exports.requestPasswordResetEmail = (0, https_1.onCall)({ secrets: (0, functionC
         throw new https_1.HttpsError('invalid-argument', 'Enter your email address first.');
     }
     const successMessage = 'If an account exists for that email, a password reset email has been sent.';
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new https_1.HttpsError('invalid-argument', 'Enter a valid email address.');
+    }
+    if (!await (0, passwordResetRateLimit_1.consumePasswordResetAllowance)(email, request.rawRequest.ip || 'unknown')) {
+        return { success: true, message: successMessage };
+    }
     try {
         const userRecord = await runtime_1.auth.getUserByEmail(email).catch((error) => {
             if (error?.code === 'auth/user-not-found') {
@@ -690,21 +724,22 @@ exports.setUserPassword = (0, https_1.onCall)(async (request) => {
     if (!uid || !password || !setupToken) {
         throw new https_1.HttpsError('invalid-argument', 'Missing required parameters: uid, password, and setupToken');
     }
-    if (password.length < 6) {
-        throw new https_1.HttpsError('invalid-argument', 'Password must be at least 6 characters');
+    if (password.length < 12 || password.length > 128) {
+        throw new https_1.HttpsError('invalid-argument', 'Password must be between 12 and 128 characters');
     }
     try {
-        const userDoc = await runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(uid).get();
-        if (!userDoc.exists) {
-            throw new https_1.HttpsError('not-found', 'User not found');
-        }
-        const userData = userDoc.data();
-        if (userData?.setupToken !== setupToken) {
-            throw new https_1.HttpsError('permission-denied', 'Invalid setup token');
-        }
-        if (new Date() > parseTokenExpiry(userData?.setupTokenExpiry)) {
-            throw new https_1.HttpsError('deadline-exceeded', 'Setup token has expired');
-        }
+        const credentialRef = runtime_1.db.collection(SETUP_CREDENTIALS).doc(uid);
+        // Claim before changing Auth: concurrent/replayed requests cannot reuse the token.
+        // If Auth fails, an administrator must issue a fresh invitation.
+        await runtime_1.db.runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(uid));
+            const credentials = await transaction.get(credentialRef);
+            if (!userDoc.exists || userDoc.data()?.active === false
+                || !setupCredentialIsValid(credentials.data() || {}, setupToken)) {
+                throw new https_1.HttpsError('permission-denied', 'This setup link is invalid or expired. Request a new invitation.');
+            }
+            transaction.update(credentialRef, { consumedAt: firestore_1.FieldValue.serverTimestamp(), setupTokenHash: firestore_1.FieldValue.delete() });
+        });
         await runtime_1.auth.updateUser(uid, { password });
         await runtime_1.db.collection(constants_1.COLLECTIONS.USERS).doc(uid).update({
             setupToken: null,

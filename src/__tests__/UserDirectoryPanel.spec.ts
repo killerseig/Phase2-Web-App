@@ -17,7 +17,9 @@ function makeUser(overrides: Partial<UserProfile> = {}): UserProfile {
   }
 }
 
-function mountDirectory(overrides: Partial<InstanceType<typeof UserDirectoryPanel>['$props']> = {}) {
+function mountDirectory(
+  overrides: Partial<InstanceType<typeof UserDirectoryPanel>['$props']> = {},
+) {
   return mount(UserDirectoryPanel, {
     props: {
       users: [
@@ -62,7 +64,7 @@ describe('UserDirectoryPanel', () => {
   it('renders user rows, role/status/invite badges, active selection, and invite controls', () => {
     const wrapper = mountDirectory()
 
-    expect(wrapper.text()).toContain('Users')
+    expect(wrapper.text()).toContain('User directory')
     expect(wrapper.text()).toContain('2 pending invites')
     expect(wrapper.text()).toContain('Dan Larsen')
     expect(wrapper.text()).toContain('dan@example.com')
@@ -75,9 +77,13 @@ describe('UserDirectoryPanel', () => {
     expect(wrapper.text()).toContain('No Access')
     expect(wrapper.text()).toContain('Invited')
     expect(wrapper.text()).toContain('Inactive')
-    expect(wrapper.get('[data-testid="users-row-pm-user"]').classes()).toContain('app-list-button--active')
+    expect(wrapper.get('[data-testid="users-row-pm-user"]').classes()).toContain(
+      'app-list-button--active',
+    )
     expect(wrapper.get<HTMLInputElement>('[data-testid="users-search"]').element.value).toBe('dan')
-    expect(wrapper.get<HTMLSelectElement>('[data-testid="users-status-filter"]').element.value).toBe('active')
+    expect(
+      wrapper.get<HTMLSelectElement>('[data-testid="users-status-filter"]').element.value,
+    ).toBe('active')
   })
 
   it('emits create, invite, search, status, and row-selection events', async () => {
@@ -109,7 +115,9 @@ describe('UserDirectoryPanel', () => {
       usersLoading: false,
     })
 
-    expect(noInvitesWrapper.get('button:not(.app-button--primary)').attributes('disabled')).toBeDefined()
+    expect(
+      noInvitesWrapper.get('button:not(.app-button--primary)').attributes('disabled'),
+    ).toBeDefined()
     expect(noInvitesWrapper.text()).toContain('0')
     expect(loadingWrapper.text()).toContain('Loading users...')
     expect(loadingWrapper.find('[data-testid="users-row-admin-user"]').exists()).toBe(false)

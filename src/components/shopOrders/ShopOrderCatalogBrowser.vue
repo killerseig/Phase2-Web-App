@@ -7,9 +7,7 @@ import {
   getShopCategoryDisplayName as getCategoryDisplayName,
   normalizeShopCatalogSearch as normalizeSearch,
 } from '@/features/shopCatalog/catalogDisplayHelpers'
-import {
-  useShopCatalogContextMenu,
-} from '@/features/shopCatalog/useShopCatalogContextMenu'
+import { useShopCatalogContextMenu } from '@/features/shopCatalog/useShopCatalogContextMenu'
 import {
   buildShopOrderCatalogTreeNodes,
   type ShopOrderCatalogRootNode,
@@ -28,16 +26,19 @@ interface ContextMenuAction {
   run: () => void | Promise<void>
 }
 
-const props = withDefaults(defineProps<{
-  addCatalogItem: (item: ShopCatalogItemRecord, quantity: number) => Promise<boolean> | boolean
-  catalogItems: readonly ShopCatalogItemRecord[]
-  categories: readonly ShopCategoryRecord[]
-  disabled?: boolean
-  loading?: boolean
-}>(), {
-  disabled: false,
-  loading: false,
-})
+const props = withDefaults(
+  defineProps<{
+    addCatalogItem: (item: ShopCatalogItemRecord, quantity: number) => Promise<boolean> | boolean
+    catalogItems: readonly ShopCatalogItemRecord[]
+    categories: readonly ShopCategoryRecord[]
+    disabled?: boolean
+    loading?: boolean
+  }>(),
+  {
+    disabled: false,
+    loading: false,
+  },
+)
 
 const treeSearch = ref('')
 const activeFolderId = ref<string | null>(null)
@@ -56,7 +57,9 @@ const {
 
 let treeInitialized = false
 
-const categoriesById = computed(() => new Map(props.categories.map((category) => [category.id, category])))
+const categoriesById = computed(
+  () => new Map(props.categories.map((category) => [category.id, category])),
+)
 const catalogItemsById = computed(() => new Map(props.catalogItems.map((item) => [item.id, item])))
 
 const childCategoriesByParent = computed(() => {
@@ -93,7 +96,9 @@ const childItemsByParent = computed(() => {
   return map
 })
 
-const activeCategoryCount = computed(() => props.categories.filter((category) => category.active).length)
+const activeCategoryCount = computed(
+  () => props.categories.filter((category) => category.active).length,
+)
 const activeItemCount = computed(() => props.catalogItems.filter((item) => item.active).length)
 const normalizedTreeSearch = computed(() => normalizeSearch(treeSearch.value))
 const isTreeSearchActive = computed(() => normalizedTreeSearch.value.length > 0)
@@ -102,10 +107,7 @@ const rootBucketEffectivelyExpanded = computed(() =>
 )
 const rootBucketHasChildren = computed(() => hasVisibleChildren(null))
 const rootBucketSummary = computed(() =>
-  formatFolderItemSummary(
-    getVisibleChildCategoryCount(null),
-    getVisibleChildItemCount(null),
-  ),
+  formatFolderItemSummary(getVisibleChildCategoryCount(null), getVisibleChildItemCount(null)),
 )
 const rootTreeNode = computed<ShopOrderCatalogRootNode>(() => ({
   key: 'root' as const,
@@ -142,11 +144,12 @@ const contextMenuActions = computed<ContextMenuAction[]>(() => {
   const visibleCategoryIds = getVisibleCategoryIds()
   const hasVisibleCategories = visibleCategoryIds.length > 0
   const allVisibleCategoriesExpanded =
-    rootBucketEffectivelyExpanded.value
-    && (!hasVisibleCategories || visibleCategoryIds.every((categoryId) => isCategoryEffectivelyExpanded(categoryId)))
+    rootBucketEffectivelyExpanded.value &&
+    (!hasVisibleCategories ||
+      visibleCategoryIds.every((categoryId) => isCategoryEffectivelyExpanded(categoryId)))
   const anyFoldersExpanded =
-    rootBucketEffectivelyExpanded.value
-    || visibleCategoryIds.some((categoryId) => isCategoryEffectivelyExpanded(categoryId))
+    rootBucketEffectivelyExpanded.value ||
+    visibleCategoryIds.some((categoryId) => isCategoryEffectivelyExpanded(categoryId))
 
   if (target.kind === 'root') {
     return [
@@ -208,13 +211,13 @@ const contextMenuActions = computed<ContextMenuAction[]>(() => {
         closeContextMenu()
       },
     },
-      {
-        key: 'add-item',
-        label: 'Add to Order',
-        disabled: props.disabled || isCatalogItemAddPending(target.id),
-        run: async () => {
-          closeContextMenu()
-          await handleTreeItemAdd(target.id)
+    {
+      key: 'add-item',
+      label: 'Add to Order',
+      disabled: props.disabled || isCatalogItemAddPending(target.id),
+      run: async () => {
+        closeContextMenu()
+        await handleTreeItemAdd(target.id)
       },
     },
     {
@@ -259,7 +262,8 @@ function getCategoryPath(categoryId: string | null) {
 }
 
 function getVisibleChildCategoryCount(categoryId: string | null) {
-  return (childCategoriesByParent.value.get(categoryId) ?? []).filter((category) => category.active).length
+  return (childCategoriesByParent.value.get(categoryId) ?? []).filter((category) => category.active)
+    .length
 }
 
 function getVisibleChildItemCount(categoryId: string | null) {
@@ -267,7 +271,9 @@ function getVisibleChildItemCount(categoryId: string | null) {
 }
 
 function hasVisibleChildren(categoryId: string | null) {
-  const visibleCategories = (childCategoriesByParent.value.get(categoryId) ?? []).some((category) => category.active)
+  const visibleCategories = (childCategoriesByParent.value.get(categoryId) ?? []).some(
+    (category) => category.active,
+  )
   if (visibleCategories) return true
 
   return (childItemsByParent.value.get(categoryId) ?? []).some((item) => item.active)
@@ -304,7 +310,9 @@ function ensureExpandedToCategory(categoryId: string | null) {
 function toggleCategoryExpanded(categoryId: string) {
   if (isTreeSearchActive.value) {
     if (isCategoryCollapsedDuringSearch(categoryId)) {
-      collapsedCategoryIdsDuringSearch.value = collapsedCategoryIdsDuringSearch.value.filter((id) => id !== categoryId)
+      collapsedCategoryIdsDuringSearch.value = collapsedCategoryIdsDuringSearch.value.filter(
+        (id) => id !== categoryId,
+      )
       return
     }
 
@@ -375,7 +383,9 @@ async function handleTreeItemAdd(itemId: string) {
   if (!item) return
 
   const quantity = readQuantity(catalogItemQuantities[item.id] ?? '1')
-  const saved = await runWithPendingCatalogItemAdd(itemId, () => props.addCatalogItem(item, quantity))
+  const saved = await runWithPendingCatalogItemAdd(itemId, () =>
+    props.addCatalogItem(item, quantity),
+  )
   if (saved) {
     catalogItemQuantities[item.id] = '1'
     inspectCatalogItem(item)
@@ -477,9 +487,9 @@ useWindowEventListener('keydown', handleGlobalKeydown)
 <template>
   <AppPane class="shop-orders-tree-pane">
     <AppPaneHeader
-      class="app-page-header shop-orders-pane__header shop-orders-tree-pane__header"
-      eyebrow="Catalog Browser"
-      title="Shop Orders"
+      class="shop-orders-pane__header shop-orders-tree-pane__header"
+      title="Catalog"
+      title-tag="h2"
     >
       <template #description>
         <span class="shop-orders-tree-pane__summary">
@@ -555,7 +565,8 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   gap: 0.6rem;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .shop-orders-pane__header {
@@ -570,7 +581,9 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   gap: var(--space-2);
 }
 
-:global(.app-shell.app-shell--branded-content) .shop-orders-tree-pane__header :deep(.app-pane-header__copy) {
+:global(.app-shell.app-shell--branded-content)
+  .shop-orders-tree-pane__header
+  :deep(.app-pane-header__copy) {
   min-width: 0;
 }
 
@@ -632,6 +645,5 @@ useWindowEventListener('keydown', handleGlobalKeydown)
   .shop-orders-tree-pane {
     --app-pane-gap: 0.75rem;
   }
-
 }
 </style>

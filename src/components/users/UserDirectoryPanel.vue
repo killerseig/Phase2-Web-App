@@ -11,6 +11,7 @@ import AppSelect from '@/components/common/AppSelect.vue'
 import { getRoleBadgeLabel } from '@/features/users/userViewHelpers'
 import type { UserProfile } from '@/types/domain'
 import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
+import '@/components/common/directory-browser.css'
 
 defineProps<{
   users: readonly UserProfile[]
@@ -54,16 +55,14 @@ function handleStatusFilterUpdate(value: string) {
 </script>
 
 <template>
-  <AppPane class="users-browser">
-    <AppPaneHeader class="app-page-header users-browser__header" eyebrow="Admin" title="Users">
+  <AppPane class="users-browser directory-browser">
+    <AppPaneHeader class="users-browser__header" title="User directory" title-tag="h2">
       <template #description>
         {{ pendingInviteCount }} pending {{ pendingInviteCount === 1 ? 'invite' : 'invites' }}
       </template>
       <template #actions>
         <div class="users-browser__header-buttons">
-          <AppButton variant="primary" @click="emit('createUser')">
-            New User
-          </AppButton>
+          <AppButton variant="primary" @click="emit('createUser')"> New User </AppButton>
           <AppLoadingButton
             label="Send Invites"
             loading-label="Sending..."
@@ -100,7 +99,12 @@ function handleStatusFilterUpdate(value: string) {
       </label>
 
       <div class="users-browser__list">
-        <AppEmptyState panel v-if="usersLoading" class="users-browser__empty" message="Loading users..." />
+        <AppEmptyState
+          panel
+          v-if="usersLoading"
+          class="users-browser__empty"
+          message="Loading users..."
+        />
 
         <AppListButton
           v-for="user in users"
@@ -117,13 +121,13 @@ function handleStatusFilterUpdate(value: string) {
           </div>
           <div class="users-browser__row-meta">
             <AppBadge tone="accent">{{ getRoleBadgeLabel(user.role) }}</AppBadge>
-            <AppBadge
-              v-if="getInviteStatusLabel(user)"
-              :tone="getInviteStatusTone(user)"
-            >
+            <AppBadge v-if="getInviteStatusLabel(user)" :tone="getInviteStatusTone(user)">
               {{ getInviteStatusLabel(user) }}
             </AppBadge>
-            <AppBadge class="users-browser__account-status" :tone="user.active ? 'success' : 'danger'">
+            <AppBadge
+              class="users-browser__account-status"
+              :tone="user.active ? 'success' : 'danger'"
+            >
               {{ user.active ? 'Active' : 'Inactive' }}
             </AppBadge>
           </div>
@@ -141,6 +145,15 @@ function handleStatusFilterUpdate(value: string) {
 </template>
 
 <style scoped>
+.users-browser__header {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.users-browser__header :deep(.app-pane-header__actions) {
+  justify-content: flex-start;
+}
+
 .users-browser__header-buttons {
   display: flex;
   flex-wrap: wrap;

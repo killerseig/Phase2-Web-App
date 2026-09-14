@@ -41,6 +41,7 @@ import {
   buildPublicDailyLogGalleryPayload,
   isTrustedStorageObjectUrl,
   loadLegacyPublicDailyLogGallery,
+  getPublicDailyLogGallery,
 } from '../../functions/src/dailyLogGalleryFunctions'
 
 function storageUrl(path: string) {
@@ -48,6 +49,11 @@ function storageUrl(path: string) {
 }
 
 describe('public daily log gallery payload', () => {
+  it('rejects public requests containing only legacy document identifiers', async () => {
+    await expect(getPublicDailyLogGallery.run({ data: { jobId: 'job-1', dailyLogId: 'daily-log-1' } } as never))
+      .rejects.toMatchObject({ code: 'failed-precondition' })
+    expect(mocks.directGet).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     mocks.directGet.mockReset()
     mocks.nestedGet.mockReset()

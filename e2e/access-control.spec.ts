@@ -638,7 +638,7 @@ test.describe('route access control', () => {
       }))
       .toBe('Payroll Lead')
 
-    await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Open navigation', exact: true })).toBeHidden()
     await page.getByRole('link', { name: 'Timecard Export' }).click()
 
     await expect(page).toHaveURL(/\/exports\/timecards$/)

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import AppPageLayout from '@/components/common/AppPageLayout.vue'
+import '@/styles/brand-workspace.css'
 import {
   fetchLegacyPublicDailyLogGallery,
   fetchPublicDailyLogGallery,
@@ -167,7 +169,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="daily-log-gallery" data-testid="public-daily-log-gallery">
+  <div class="daily-log-gallery public-page" data-testid="public-daily-log-gallery">
     <header class="daily-log-gallery__masthead">
       <div class="daily-log-gallery__brand-mark" aria-hidden="true">P2</div>
       <div>
@@ -189,10 +191,14 @@ onBeforeUnmount(() => {
         <p>{{ errorMessage }}</p>
       </div>
 
-      <article v-else-if="gallery" class="daily-log-gallery__document">
-        <header class="daily-log-gallery__header">
-          <span class="daily-log-gallery__eyebrow">Submitted Daily Log</span>
-          <h1>{{ jobLabel }}</h1>
+      <AppPageLayout
+        v-else-if="gallery"
+        class="daily-log-gallery__document"
+        :title="jobLabel"
+        eyebrow="Submitted Daily Log"
+        description="Daily Log Photos"
+      >
+        <div class="daily-log-gallery__header">
           <dl class="daily-log-gallery__details">
             <div>
               <dt>Log Date</dt>
@@ -211,7 +217,7 @@ onBeforeUnmount(() => {
               <dd>{{ gallery.attachments.length }}</dd>
             </div>
           </dl>
-        </header>
+        </div>
 
         <nav
           v-if="gallerySections.length > 1"
@@ -274,7 +280,7 @@ onBeforeUnmount(() => {
           <h2 id="gallery-empty-title" class="sr-only">Photos</h2>
           <p class="daily-log-gallery__empty">No photos are attached to this daily log.</p>
         </section>
-      </article>
+      </AppPageLayout>
     </main>
 
     <footer class="daily-log-gallery__footer">
@@ -394,7 +400,6 @@ onBeforeUnmount(() => {
   padding-block: clamp(1rem, 3vw, 2rem);
 }
 
-.daily-log-gallery__document,
 .daily-log-gallery__state {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -423,24 +428,10 @@ onBeforeUnmount(() => {
 }
 
 .daily-log-gallery__header {
-  padding: clamp(1rem, 3vw, 2rem);
-  border-bottom: 1px solid var(--border-soft);
+  padding: var(--page-panel-padding);
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--panel-background);
-}
-
-.daily-log-gallery__eyebrow {
-  color: var(--text-muted);
-  font-size: var(--font-size-eyebrow);
-  font-weight: 500;
-  letter-spacing: var(--letter-spacing-eyebrow);
-  text-transform: uppercase;
-}
-
-.daily-log-gallery__header h1 {
-  margin: 0.45rem 0 1.4rem;
-  font-size: clamp(var(--font-size-xl), 3vw, 2rem);
-  font-weight: var(--font-weight-heading);
-  line-height: 1.25;
 }
 
 .daily-log-gallery__details {
@@ -468,7 +459,10 @@ onBeforeUnmount(() => {
 }
 
 .daily-log-gallery__photos {
-  padding: clamp(1rem, 3vw, 2rem);
+  padding: var(--page-panel-padding);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-background);
   scroll-margin-top: 1rem;
 }
 
