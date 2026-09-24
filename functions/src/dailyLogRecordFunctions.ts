@@ -468,71 +468,95 @@ export const updateDailyLogRecordCallable = onCall(async (request) => {
   }
 
   const dailyLogId = text(request.data?.dailyLogId)
-  if (!dailyLogId) throw new HttpsError('invalid-argument', 'dailyLogId is required')
-
-  const { logRef, log, jobId } = await getDailyLogDoc(dailyLogId)
+  if (!dailyLogId || dailyLogId.includes('/')) {
+    throw new HttpsError('invalid-argument', 'A valid dailyLogId is required')
+  }
+  const submissionRequestId = text(request.data?.submissionRequestId)
+  if (submissionRequestId.length > 128) {
+    throw new HttpsError('invalid-argument', 'Invalid submission request ID')
+  }
   const user = await getAuthorizedUser(request.auth.uid)
-  const jobDetails = await getJobDetails(jobId)
-  const writeAction: FieldWorkflowWriteAction =
-    'status' in request.data && toStatus(request.data?.status) === 'submitted'
-      ? 'submit'
-      : 'edit-draft'
-  assertCanWriteExistingDailyLog(user, jobId, jobDetails, writeAction, log)
-
-  if (toStatus(log.status) === 'submitted' && user.role !== 'admin') {
-    throw new HttpsError(
-      'failed-precondition',
-      'Submitted daily logs cannot be changed by field users.',
-    )
-  }
-
-  const payload: Record<string, unknown> = {
-    updatedAt: FieldValue.serverTimestamp(),
-    updatedByUserId: request.auth.uid,
-  }
-
-  if ('payload' in request.data && request.data?.payload) {
-    payload.payload = sanitizePayload(request.data.payload, dailyLogId)
-  }
-
-  if ('payloadFields' in request.data && request.data?.payloadFields) {
+  const logRef = db.collection('dailyLogs').doc(dailyLogId)
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(logRef)
+    if (!snapshot.exists) throw new HttpsError('not-found', 'Daily log not found.')
+    const log = snapshot.data() || {}
+    const jobId = text(log.jobId)
+    if (!jobId)
+      throw new HttpsError('failed-precondition', 'Daily log is missing its job assignment.')
+    // A response can be lost after committing. Acknowledge this user's exact
+    // request again without changing the submitted content or timestamp.
     if (
-      typeof request.data.payloadFields !== 'object' ||
-      Array.isArray(request.data.payloadFields)
-    ) {
-      throw new HttpsError('invalid-argument', 'payloadFields must be an object.')
+      request.data?.status === 'submitted' &&
+      log.status === 'submitted' &&
+      submissionRequestId &&
+      log.submissionRequestId === submissionRequestId &&
+      log.submittedByUserId === user.uid
+    )
+      return { success: true }
+    const jobDetails = await getJobDetails(jobId)
+    const writeAction: FieldWorkflowWriteAction =
+      'status' in request.data && toStatus(request.data?.status) === 'submitted'
+        ? 'submit'
+        : 'edit-draft'
+    assertCanWriteExistingDailyLog(user, jobId, jobDetails, writeAction, log)
+
+    if (toStatus(log.status) === 'submitted' && user.role !== 'admin') {
+      throw new HttpsError(
+        'failed-precondition',
+        'Submitted daily logs cannot be changed by field users.',
+      )
     }
 
-    for (const [fieldKey, fieldValue] of Object.entries(request.data.payloadFields)) {
-      if (!dailyLogTextFieldKeys.has(fieldKey as DailyLogTextFieldKey)) {
-        throw new HttpsError('invalid-argument', `Unsupported daily log field: ${fieldKey}`)
+    const payload: Record<string, unknown> = {
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedByUserId: user.uid,
+    }
+
+    if ('payload' in request.data && request.data?.payload) {
+      payload.payload = sanitizePayload(request.data.payload, dailyLogId)
+    }
+
+    if ('payloadFields' in request.data && request.data?.payloadFields) {
+      if (
+        typeof request.data.payloadFields !== 'object' ||
+        Array.isArray(request.data.payloadFields)
+      ) {
+        throw new HttpsError('invalid-argument', 'payloadFields must be an object.')
       }
 
-      payload[`payload.${fieldKey}`] = text(fieldValue)
+      for (const [fieldKey, fieldValue] of Object.entries(request.data.payloadFields)) {
+        if (!dailyLogTextFieldKeys.has(fieldKey as DailyLogTextFieldKey)) {
+          throw new HttpsError('invalid-argument', `Unsupported daily log field: ${fieldKey}`)
+        }
 
-      if (fieldKey === 'qcAreasInspected') {
-        payload['payload.qcInspection'] = text(fieldValue)
+        payload[`payload.${fieldKey}`] = text(fieldValue)
+
+        if (fieldKey === 'qcAreasInspected') {
+          payload['payload.qcInspection'] = text(fieldValue)
+        }
       }
     }
-  }
 
-  if ('additionalRecipients' in request.data) {
-    payload.additionalRecipients = normalizeRecipientList(request.data?.additionalRecipients)
-  }
-
-  if ('status' in request.data && request.data?.status) {
-    const status = toStatus(request.data.status)
-    payload.status = status
-
-    if (status === 'submitted') {
-      payload.submittedAt = FieldValue.serverTimestamp()
-      payload.submittedByUserId = request.auth.uid
-      payload.submittedByName = user.displayName
+    if ('additionalRecipients' in request.data) {
+      payload.additionalRecipients = normalizeRecipientList(request.data?.additionalRecipients)
     }
-  }
 
-  await logRef.update(payload)
-  return { success: true }
+    if ('status' in request.data && request.data?.status) {
+      const status = toStatus(request.data.status)
+      payload.status = status
+
+      if (status === 'submitted') {
+        payload.submittedAt = FieldValue.serverTimestamp()
+        payload.submittedByUserId = user.uid
+        payload.submittedByName = user.displayName
+        payload.submissionRequestId = submissionRequestId || null
+      }
+    }
+
+    transaction.update(logRef, payload)
+    return { success: true }
+  })
 })
 
 export const deleteDailyLogRecordCallable = onCall(async (request) => {

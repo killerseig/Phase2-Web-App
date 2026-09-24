@@ -1,4 +1,5 @@
 export { sendDailyLogEmail, sendShopOrderEmail } from './operationsFunctions'
+export { sdsWorkspace, generateSdsBook, downloadSdsFile } from './sdsFunctions'
 
 export {
   createUserByAdmin,
@@ -55,3 +56,7 @@ export {
   sendFieldUserAssignmentNotification,
   sendNewJobNotification,
 } from './jobNotificationFunctions'
+export { websiteBuilder, getPublishedWebsite, websiteImage } from './websiteFunctions'
+export { dashboardWorkspace } from './dashboardFunctions'
+
+export { submitWebsiteForm, deliverWebsiteFormEmail, websiteFormAdmin } from './websiteFormFunctions'

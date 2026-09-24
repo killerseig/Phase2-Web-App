@@ -126,6 +126,7 @@ export function useDailyLogActions({
   }
 
   async function handleSubmit() {
+    if (submittingLog.value) return
     if (!selectedLog.value || !canEditSelectedLog.value) {
       setActionError('Only an editable daily log draft can be submitted.')
       return
@@ -161,6 +162,10 @@ export function useDailyLogActions({
 
       try {
         const emailMessage = await sendDailyLogEmail(submittedJobId, submittedLogId)
+        if (emailMessage.toLowerCase().includes('in progress')) {
+          setActionInfo('Daily log submitted. Email delivery is still in progress.')
+          return
+        }
         if (emailMessage.toLowerCase().includes('skipped')) {
           setActionInfo('Daily log submitted.')
           return

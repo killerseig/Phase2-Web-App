@@ -6,7 +6,7 @@ import {
 } from '@/features/navigation/appShellNavigation'
 
 describe('app shell navigation policy', () => {
-  it('keeps the workspace navigation stable for every role', () => {
+  it('keeps unannounced dashboards out of workspace navigation for every role', () => {
     expect(getAppShellWorkspaceNavigationItems()).toEqual([
       { label: 'Jobs', to: '/jobs' },
     ])
@@ -14,6 +14,7 @@ describe('app shell navigation policy', () => {
 
   it('shows the current admin navigation only when the role can use each route capability', () => {
     expect(getAppShellAdminNavigationItems('admin')).toEqual([
+      { capability: 'manage-website', label: 'Website Builder', to: '/admin/website' },
       { capability: 'manage-users', label: 'Users', to: '/users' },
       { capability: 'manage-employees', label: 'Employees', to: '/employees' },
       { capability: 'use-timecard-export', label: 'Timecard Export', to: '/exports/timecards' },

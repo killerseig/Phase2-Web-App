@@ -31,6 +31,36 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/admin/website',
+      name: 'website-builder',
+      component: () => import('@/views/WebsiteBuilderView.vue'),
+      meta: { title: 'Website Builder', requiredCapability: 'manage-website' },
+    },
+    {
+      path: '/website/:slug?',
+      name: 'public-website',
+      component: () => import('@/views/PublicWebsiteView.vue'),
+      meta: { title: 'Phase 2', requiresAuth: false },
+    },
+    {
+      path: '/dashboards/personal',
+      name: 'personal-workspace',
+      component: () => import('@/views/PersonalWorkspaceView.vue'),
+      meta: { title: 'Personal Dashboard' },
+    },
+    {
+      path: '/dashboards/role',
+      name: 'role-workspace',
+      component: () => import('@/views/RoleWorkspaceView.vue'),
+      meta: { title: 'Role Dashboard' },
+    },
+    {
+      path: '/safety/sds',
+      name: 'sds-library',
+      component: () => import('@/views/SdsLibraryView.vue'),
+      meta: { title: 'SDS Library' },
+    },
+    {
       path: '/',
       redirect: '/login',
     },
@@ -198,7 +228,7 @@ router.beforeEach(async (to) => {
   if (legacyGalleryRedirect) return legacyGalleryRedirect
 
   // Public gallery links must not wait for or depend on an authenticated app session.
-  if (to.name === 'daily-log-gallery' || to.name === 'daily-log-gallery-legacy') return true
+  if (to.name === 'daily-log-gallery' || to.name === 'daily-log-gallery-legacy' || to.name === 'public-website') return true
 
   const auth = useAuthStore()
   const jobs = useJobsStore()

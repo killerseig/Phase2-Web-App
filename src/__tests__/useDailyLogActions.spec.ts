@@ -351,6 +351,31 @@ describe('useDailyLogActions', () => {
     expect(updateDailyLogRecordMock).toHaveBeenCalledTimes(2)
   })
 
+  it('ignores a second submit while the first submission is in progress', async () => {
+    let finish!: () => void
+    updateDailyLogRecordMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const { actions } = mountActions()
+    const first = actions.handleSubmit()
+    await actions.handleSubmit()
+    expect(updateDailyLogRecordMock).toHaveBeenCalledTimes(1)
+    finish()
+    await first
+    expect(sendDailyLogEmailMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not claim an email has been delivered while delivery is in progress', async () => {
+    sendDailyLogEmailMock.mockResolvedValue('Email send already in progress.')
+    const { actions, actionInfos } = mountActions()
+    await actions.handleSubmit()
+    expect(actionInfos).toContain('Daily log submitted. Email delivery is still in progress.')
+    expect(actionInfos).not.toContain('Daily log submitted and emailed.')
+  })
+
   it('opens delete confirmation only for deletable selected drafts', () => {
     const editable = mountActions()
 

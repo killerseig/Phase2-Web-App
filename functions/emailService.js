@@ -1791,7 +1791,8 @@ async function sendEmail(options) {
     if (recipients.length === 0) {
         throw new emailDeliveryErrors_1.EmailDeliveryError('No recipients provided', { retryable: false });
     }
-    const invalidRecipientCount = recipients.filter((email) => !isValidEmailFormat(email.trim())).length;
+    const cc = (options.cc || []).filter(address => !recipients.some(to => to.trim().toLowerCase() === address.trim().toLowerCase()));
+    const invalidRecipientCount = [...recipients, ...cc].filter((email) => !isValidEmailFormat(email.trim())).length;
     if (invalidRecipientCount > 0) {
         throw new emailDeliveryErrors_1.EmailDeliveryError(`${invalidRecipientCount} invalid email ${invalidRecipientCount === 1 ? 'address was' : 'addresses were'} provided.`, { retryable: false });
     }
@@ -1812,6 +1813,7 @@ async function sendEmail(options) {
                     contentType: 'HTML',
                     content: options.html,
                 },
+                ...(cc.length ? { ccRecipients: cc.map(address => ({ emailAddress: { address: address.trim() } })) } : {}),
                 toRecipients: recipients.map((email) => ({
                     emailAddress: {
                         address: email.trim(),

@@ -7,6 +7,12 @@ import {
 } from '@/auth/targetRouteCapabilities'
 
 describe('target route capabilities', () => {
+  it('limits website management to Admin', () => {
+    expect(isTargetRouteCapability('manage-website')).toBe(true)
+    for (const role of ['admin', 'payroll', 'shop-foreman', 'foreman', 'project-manager', 'none'] as const) {
+      expect(targetRoleCanUseRouteCapability(role, 'manage-website')).toBe(role === 'admin')
+    }
+  })
   it('recognizes only known target route capability metadata values', () => {
     expect(isTargetRouteCapability('manage-users')).toBe(true)
     expect(isTargetRouteCapability('manage-employees')).toBe(true)

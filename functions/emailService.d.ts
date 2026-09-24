@@ -74,6 +74,7 @@ export declare function buildSecretExpirationEmail(): string;
  * Send email via Microsoft Graph API
  */
 export interface SendEmailOptions {
+    cc?: string[];
     to: string | string[];
     replyTo?: string;
     subject: string;

@@ -1,29 +1,5 @@
 /* Phase 2 identity is shared by all navigation. Timecard and export content
    retain their original inherited theme; never override the root theme here. */
-@font-face {
-  font-family: 'Source Sans 3';
-  src: url('../assets/fonts/SourceSans3-Regular.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Source Sans 3';
-  src: url('../assets/fonts/SourceSans3-Semibold.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Saira Semi Condensed';
-  src: url('../assets/fonts/SairaSemiCondensed-SemiBold.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-}
-
 .app-shell--branded {
   --brand-workspace-background: #112838;
 }

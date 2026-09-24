@@ -1,8 +1,8 @@
 # Phase 2 next update: design documents
 
-Draft for discussion · September 14, 2026
+Design and implementation record · September 14, 2026
 
-The next phase includes **all requests collected from the stakeholder emails and planning conversation**. General and job-specific SDS access is the first feature priority. These documents organize the work; they do not authorize implementation, establish a delivery date, or remove later work from scope.
+The next phase includes **all requests collected from the stakeholder emails and planning conversation**. General and job-specific SDS access is the first feature priority. The user subsequently authorized first-phase implementation. These documents do not establish delivery dates or remove later work from scope; see the implementation record for what is built versus still proposed.
 
 ## Reading order
 
@@ -13,6 +13,11 @@ The next phase includes **all requests collected from the stakeholder emails and
 | [People and workspace design](03-workspace-design.md) | Roles, dashboards, reports, documents, public website, and safety tools |
 | [Technical design direction](04-technical-design.md) | Existing application context and proposed integration boundaries |
 | [Delivery and decisions](05-delivery-and-decisions.md) | Build sequence, unresolved questions, verification, and review checklist |
+| [First-phase implementation](06-first-phase-implementation.md) | Delivered code, defaults, verification, limits, and deployment steps |
+| [Website Builder milestone](07-website-builder.md) | Admin editor, private drafts, publication, public pages, and launch boundaries |
+| [Widget layouts](08-widget-layouts.md) | Drag-and-drop, responsive widths, personal ownership and Admin-managed shared layouts |
+| [Website Builder editing guide](09-website-builder-guide.md) | Owner workflows for editing, previewing, reusing widgets and publishing |
+| [Website Builder quality audit](10-website-builder-quality-audit.md) | Reliability fixes, verification evidence and remaining acceptance gates before polish |
 
 ## How to read this set
 
@@ -30,7 +35,7 @@ One employee workspace with three dashboard types: Personal, Role, and Job. **In
 
 For SDS, Admin adds information/PDFs and manages the master explorer; its hierarchy becomes the table of contents for PDF/printed books. Anyone with access to a job can check/uncheck its sheets and export/print its book, including otherwise read-only job users. Unchecked sheets remain in the master library; jobs inherit its organization. These actions live on new SDS surfaces and do not change existing job-edit permissions. Vendor integration is optional later work; embedded preview details and offline app access still need decisions.
 
-Role dashboards provide consistent shared resources and tools tailored to each role. Admin, Foreman, and Project Manager views can differ while respecting the viewer's existing access. Personal dashboards focus on the individual's information. Role resource/layout publishing ownership is distinct from the confirmed Admin ownership of the SDS master.
+Role dashboards provide consistent shared resources and tools tailored to each role. Admin, Foreman, and Project Manager views can differ while respecting the viewer's existing access. Personal dashboards focus on the individual's information. Admin ownership of shared role layouts is confirmed; users edit their own personal layouts.
 
 The explorer is a reusable dashboard module, with SDS as its first collection configuration. Basic dashboards with fixed default placements are sufficient initially; master/job explorer modules and expanded views share the same records and actions. The general SDS library is a content page, not a fourth dashboard type. User-added modules and layout customization follow in the broader dashboard work. See [module and initial dashboard design](03-workspace-design.md#document-explorer-module-and-initial-dashboards).
 
@@ -38,7 +43,7 @@ Use the existing [brand and typography guide](../Phase2-Design-Guide.html) as vi
 
 ## Current boundaries
 
-Documentation only: no application changes, deployments, vendor logins, emails, or external integrations are part of this task. A subsequent public mSDS Source reference review is recorded in the SDS design; the subscribed interface, API/integration capabilities, and current regulatory requirements remain unverified. The documents make no compliance certification claims.
+The first phase has now been implemented locally; production deployment is separate. All existing Jobs pages/dashboards and their data remain unchanged. No vendor logins, emails, or production data edits were performed. A public mSDS Source reference review is recorded in the SDS design; subscribed integration capabilities remain unverified and are not required for Admin uploads.
 
 The estimate email mentions $6,000 and continuing support. The user has clarified that all submitted requests belong to this phase. The missing estimate attachment and support terms remain open planning inputs; neither the price nor the older email's timing has been used to cut scope.
 

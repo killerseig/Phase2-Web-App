@@ -3,6 +3,14 @@ import { fileURLToPath } from 'node:url'
 
 // Loading the Functions dependencies can exceed Firebase's 10-second default
 // on Windows and in OneDrive workspaces.
+const configuredTimeout = Number(process.env.FUNCTIONS_DISCOVERY_TIMEOUT)
+const discoveryTimeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+  ? configuredTimeout
+  : 120
+console.log(`Firebase Functions discovery timeout: ${discoveryTimeout} seconds.`)
+if (discoveryTimeout < 120) {
+  console.warn('The current FUNCTIONS_DISCOVERY_TIMEOUT overrides the 120-second project default.')
+}
 const result = spawnSync(
   process.execPath,
   [
@@ -14,7 +22,7 @@ const result = spawnSync(
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: {
       ...process.env,
-      FUNCTIONS_DISCOVERY_TIMEOUT: process.env.FUNCTIONS_DISCOVERY_TIMEOUT || '120',
+      FUNCTIONS_DISCOVERY_TIMEOUT: String(discoveryTimeout),
     },
     stdio: 'inherit',
   },

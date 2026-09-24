@@ -2130,6 +2130,7 @@ export function buildSecretExpirationEmail(): string {
  * Send email via Microsoft Graph API
  */
 export interface SendEmailOptions {
+  cc?: string[]
   to: string | string[]
   replyTo?: string
   subject: string
@@ -2175,7 +2176,8 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
     throw new EmailDeliveryError('No recipients provided', { retryable: false })
   }
 
-  const invalidRecipientCount = recipients.filter(
+  const cc = (options.cc || []).filter(address => !recipients.some(to => to.trim().toLowerCase() === address.trim().toLowerCase()))
+  const invalidRecipientCount = [...recipients,...cc].filter(
     (email) => !isValidEmailFormat(email.trim()),
   ).length
   if (invalidRecipientCount > 0) {
@@ -2205,6 +2207,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
           contentType: 'HTML',
           content: options.html,
         },
+        ...(cc.length ? { ccRecipients: cc.map(address => ({ emailAddress: { address: address.trim() } })) } : {}),
         toRecipients: recipients.map((email) => ({
           emailAddress: {
             address: email.trim(),

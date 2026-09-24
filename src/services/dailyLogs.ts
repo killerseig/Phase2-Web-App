@@ -40,6 +40,10 @@ import {
 } from '@/testing/e2eRuntime'
 import { toAppMillis } from '@/utils/dateTime'
 import { normalizeError } from '@/utils/normalizeError'
+import { dailyLogRequestError, retryDailyLogSubmission } from './dailyLogRequests'
+
+const pendingLogWrites = new Map<string, Promise<void>>()
+const submissionRequests = new Map<string, { signature: string; id: string }>()
 
 export interface CreateDailyLogInput {
   jobId: string
@@ -477,7 +481,32 @@ export async function updateDailyLogRecord(
     return
   }
 
-  try {
+  // Snapshot before waiting so a subsequent form edit cannot change this save.
+  const request = {
+    dailyLogId,
+    ...(input.payload ? { payload: serializePayloadForCallable(input.payload) } : {}),
+    ...(input.payloadFields ? { payloadFields: { ...input.payloadFields } } : {}),
+    ...(input.status ? { status: input.status } : {}),
+    ...('additionalRecipients' in input
+      ? { additionalRecipients: normalizeRecipientList(input.additionalRecipients) }
+      : {}),
+    ...(actor ? { actor: { ...actor } } : {}),
+    submissionRequestId: undefined as string | undefined,
+  }
+  if (input.status === 'submitted') {
+    const signature = JSON.stringify(request)
+    let pending = submissionRequests.get(dailyLogId)
+    if (pending?.signature !== signature) {
+      pending = { signature, id: crypto.randomUUID() }
+      submissionRequests.set(dailyLogId, pending)
+    }
+    request.submissionRequestId = pending.id
+  }
+
+  const previous = pendingLogWrites.get(dailyLogId)
+  const write = (async () => {
+    // A blur-save already in flight must finish before submitting this log.
+    await previous?.catch(() => undefined)
     const { functions } = requireFirebaseServices()
     const callable = httpsCallable<
       {
@@ -487,22 +516,27 @@ export async function updateDailyLogRecord(
         status?: DailyLogStatus
         additionalRecipients?: string[]
         actor?: DailyLogActor
+        submissionRequestId?: string
       },
       { success: boolean }
     >(functions, 'updateDailyLogRecordCallable')
 
-    await callable({
-      dailyLogId,
-      ...(input.payload ? { payload: serializePayloadForCallable(input.payload) } : {}),
-      ...(input.payloadFields ? { payloadFields: input.payloadFields } : {}),
-      ...(input.status ? { status: input.status } : {}),
-      ...('additionalRecipients' in input
-        ? { additionalRecipients: normalizeRecipientList(input.additionalRecipients) }
-        : {}),
-      ...(actor ? { actor } : {}),
-    })
+    if (request.submissionRequestId) {
+      await retryDailyLogSubmission(() => callable(request))
+      if (submissionRequests.get(dailyLogId)?.id === request.submissionRequestId) {
+        submissionRequests.delete(dailyLogId)
+      }
+    } else {
+      await callable(request)
+    }
+  })()
+  pendingLogWrites.set(dailyLogId, write)
+  try {
+    await write
   } catch (error) {
-    throw new Error(normalizeError(error, 'Failed to update daily log.'))
+    throw dailyLogRequestError(error, normalizeError(error, 'Failed to update daily log.'))
+  } finally {
+    if (pendingLogWrites.get(dailyLogId) === write) pendingLogWrites.delete(dailyLogId)
   }
 }
 
@@ -516,12 +550,12 @@ export async function sendDailyLogEmail(jobId: string, dailyLogId: string): Prom
     const callable = httpsCallable<
       { jobId: string; dailyLogId: string },
       { success: boolean; message?: string }
-    >(functions, 'sendDailyLogEmail')
+    >(functions, 'sendDailyLogEmail', { timeout: 135000 })
 
     const result = await callable({ jobId, dailyLogId })
     return String(result.data?.message || '').trim() || 'Email sent successfully'
   } catch (error) {
-    throw new Error(normalizeError(error, 'Failed to send the daily log email.'))
+    throw dailyLogRequestError(error, normalizeError(error, 'Failed to send the daily log email.'))
   }
 }
 

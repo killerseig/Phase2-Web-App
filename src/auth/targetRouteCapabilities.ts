@@ -1,6 +1,7 @@
 import { getTargetRoleCapabilities, type TargetRoleCapabilities, type TargetRoleKey } from '@/auth/targetRoleCapabilities'
 
 export type TargetRouteCapability =
+  | 'manage-website'
   | 'manage-users'
   | 'manage-employees'
   | 'manage-reference-lists'
@@ -23,6 +24,7 @@ type TargetRouteCapabilityKey = keyof Pick<
 >
 
 const TARGET_ROUTE_CAPABILITY_MAP: Readonly<Record<TargetRouteCapability, TargetRouteCapabilityKey>> = {
+  'manage-website': 'manageUsers',
   'manage-employees': 'manageEmployees',
   'manage-reference-lists': 'manageReferenceLists',
   'manage-shop-catalog': 'manageShopCatalog',
@@ -33,6 +35,7 @@ const TARGET_ROUTE_CAPABILITY_MAP: Readonly<Record<TargetRouteCapability, Target
 export function isTargetRouteCapability(value: unknown): value is TargetRouteCapability {
   return (
     value === 'manage-users'
+    || value === 'manage-website'
     || value === 'manage-employees'
     || value === 'manage-reference-lists'
     || value === 'manage-shop-catalog'

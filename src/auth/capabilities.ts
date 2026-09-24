@@ -16,6 +16,7 @@ import type { EffectiveRoleKey, RawRoleKey } from '@/types/domain'
 
 export type RouteNameLike = string | symbol | null | undefined
 export type AppRouteCapability =
+  | 'manage-website'
   | 'manage-users'
   | 'manage-employees'
   | 'manage-reference-lists'
@@ -25,6 +26,7 @@ export type AppRouteCapability =
 export function isAppRouteCapability(value: unknown): value is AppRouteCapability {
   return (
     value === 'manage-users'
+    || value === 'manage-website'
     || value === 'manage-employees'
     || value === 'manage-reference-lists'
     || value === 'manage-shop-catalog'

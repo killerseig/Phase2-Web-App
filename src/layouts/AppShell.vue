@@ -11,6 +11,8 @@ import { useAuthStore } from '@/stores/auth'
 import brandLogo from '@/assets/images/phase2-logo.png'
 import '@/styles/brand-workspace.css'
 
+defineProps<{ contained?: boolean; compact?: boolean }>()
+
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
@@ -64,6 +66,8 @@ watch(
     :class="{
       'app-shell--mobile-nav-open': mobileNavOpen,
       'app-shell--branded-content': usesBrandContentTheme,
+      'app-shell--contained': contained,
+      'app-shell--compact': compact,
     }"
   >
     <button
@@ -150,7 +154,7 @@ watch(
     </aside>
 
     <div class="app-shell__body">
-      <header class="app-shell__topbar">
+      <header v-if="!compact" class="app-shell__topbar">
         <div class="app-shell__topbar-leading">
           <Button
             class="app-shell__menu-button"
@@ -182,10 +186,10 @@ watch(
       </header>
 
       <main class="app-shell__content">
-        <slot />
+        <slot :open-navigation="openMobileNav" :mobile-nav-open="mobileNavOpen" />
       </main>
 
-      <footer class="app-shell__statusbar">
+      <footer v-if="!compact" class="app-shell__statusbar">
         <span>Ready</span>
       </footer>
     </div>
@@ -505,6 +509,23 @@ watch(
   padding: 1.15rem;
   overflow: auto;
   background: var(--brand-workspace-background);
+}
+
+.app-shell--contained {
+  height: 100dvh;
+}
+.app-shell--contained .app-shell__content {
+  display: flex;
+  overflow: hidden;
+  padding: 0.65rem;
+}
+
+.app-shell--compact .app-shell__body {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.app-shell--compact .app-shell__content {
+  padding: 0.25rem;
 }
 
 .app-shell__statusbar {

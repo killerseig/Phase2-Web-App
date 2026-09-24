@@ -59,6 +59,10 @@ npm run dev
 npm run build
 ```
 
+This checks the frontend types, compiles Firebase Functions, and builds the production
+website. Backend compilation errors now fail this command before deployment. Use
+`npm run build-only` when you only need the frontend bundle.
+
 ### Deploy to Firebase
 
 ```sh
@@ -71,6 +75,16 @@ and Functions. The deployment script allows 120 seconds for Functions discovery
 to avoid the `Cannot determine backend specification. Timeout after 10000`
 error when dependencies load slowly. You can override this with the
 `FUNCTIONS_DISCOVERY_TIMEOUT` environment variable (seconds).
+
+The wrapper prints the active discovery timeout before starting Firebase. Both
+`npm run deploy` and `npm --prefix functions run deploy` use it. Running
+`firebase deploy` directly bypasses the wrapper. If an error still says
+`Timeout after 10000`, explicitly set the timeout in the same PowerShell window:
+
+```powershell
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = '120'
+npm.cmd run deploy
+```
 
 On Windows PowerShell, use `npm.cmd run deploy`. If Node.js is installed but
 the terminal cannot find npm, update the current terminal's PATH first:

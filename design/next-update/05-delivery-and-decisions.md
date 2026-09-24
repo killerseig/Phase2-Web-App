@@ -55,7 +55,7 @@ Next discussions: access matrix and site visits; dashboard/group ownership and d
 
 ## Validation plan
 
-No tests are being added or run as part of this documentation task. During implementation, use scenario tests that prove user outcomes rather than only reproducing component internals.
+First-phase implementation and its executed checks are recorded in [the implementation record](06-first-phase-implementation.md). The scenarios below remain the broader phase validation plan.
 
 | Area | Evidence before release |
 | --- | --- |

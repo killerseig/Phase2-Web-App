@@ -13,9 +13,11 @@ export interface AppShellNavigationItem {
 
 const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { label: 'Jobs', to: '/jobs' },
+  // Dashboard routes remain available by direct URL during testing, ahead of announcement.
 ]
 
 const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
+  { capability: 'manage-website', label: 'Website Builder', to: '/admin/website' },
   { capability: 'manage-users', label: 'Users', to: '/users' },
   { capability: 'manage-employees', label: 'Employees', to: '/employees' },
   { capability: 'use-timecard-export', label: 'Timecard Export', to: '/exports/timecards' },
