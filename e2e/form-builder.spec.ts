@@ -1,3 +1,4 @@
+import { fillCommitteeAudit } from './helpers/formFixture.js'
 import { expect, test } from './helpers/test.js'
 import {
   createJobsFixture,
@@ -25,7 +26,7 @@ test('opening the library creates nothing; repeated saves and reload retain loca
   await expect(page.getByLabel('Recipients', { exact: true })).toHaveValue(
     'dan@example.com, safety@example.com',
   )
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(6)
+  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(41)
 })
 
 test('keyboard and drag ordering share the definition used by full-page preview', async ({
@@ -33,20 +34,20 @@ test('keyboard and drag ordering share the definition used by full-page preview'
 }) => {
   await gotoPhase2App(page, '/admin/forms', createJobsFixture())
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
-  await page.getByRole('button', { name: 'Move Job / location down', exact: true }).click()
-  await expect(page.getByLabel('Field label', { exact: true }).first()).toHaveValue('Audit date')
+  await page.getByRole('button', { name: 'Move Date of inspection down', exact: true }).click()
+  await expect(page.getByLabel('Field label', { exact: true }).first()).toHaveValue('Job name')
   await page
-    .getByRole('button', { name: 'Drag Audit date', exact: true })
+    .getByRole('button', { name: 'Drag Job name', exact: true })
     .dragTo(page.getByRole('article', { name: 'Field 3', exact: true }), {
       targetPosition: { x: 10, y: 10 },
     })
-  await expect(page.getByLabel('Field label', { exact: true }).nth(2)).toHaveValue('Audit date')
+  await expect(page.getByLabel('Field label', { exact: true }).nth(2)).toHaveValue('Job name')
   await page.getByRole('button', { name: 'Full-page preview', exact: true }).click()
   await page.getByRole('button', { name: 'Check required fields', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Job / location is required.')
-  await expect(page.getByRole('alert')).toContainText('Audit date is required.')
-  await page.getByLabel('Job / location', { exact: false }).fill('Synthetic job')
-  await page.getByLabel('Audit date', { exact: false }).fill('2026-10-01')
+  await expect(page.getByRole('alert')).toContainText('Date of inspection is required.')
+
+  await fillCommitteeAudit(page)
+
   await page.getByRole('button', { name: 'Check required fields', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
@@ -84,9 +85,7 @@ test('quota failure preserves unsaved editor work and a retry succeeds', async (
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Quota exceeded')
-  await expect(page.getByLabel('Form title', { exact: true })).toHaveValue(
-    'Committee audit — starter',
-  )
+  await expect(page.getByLabel('Form title', { exact: true })).toHaveValue('Committee Site Audit')
   await page.evaluate(() => sessionStorage.setItem('allow-form-save', 'yes'))
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('Saved on this device.')
@@ -109,7 +108,7 @@ test('conflicting local revision is rejected and reload recovers the saved libra
   await expect(page.getByRole('alert')).toContainText('Another tab changed')
   await page.reload()
   await expect(
-    page.getByRole('button', { name: 'Committee audit — starter', exact: true }),
+    page.getByRole('button', { name: 'Committee Site Audit', exact: true }),
   ).toBeVisible()
 })
 

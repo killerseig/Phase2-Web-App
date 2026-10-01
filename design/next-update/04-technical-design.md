@@ -127,3 +127,9 @@ Do not select a vendor or promise a current API based solely on pasted email rec
 - Log operational IDs and outcomes without document contents, credentials, or unnecessary personal data.
 
 The first SDS release includes basic Personal and Role pages/tabs and separate master/job-context SDS views with the reusable explorer module. Existing Jobs dashboards/pages receive no changes. Job-dashboard integration and Jobs-page retirement are deferred; a custom role builder, user-configurable dashboards, and AI search are also not prerequisites.
+
+## Local Form Builder records and protocol
+
+New callable handlers are formTemplates, formWorkspace and formEmail, plus the separate delivery creation handler deliverFormEmail. They are source-only and must not be included in a deployment without a separate release review. Collections: formTemplates with immutable versions subcollection, formRecords for owner drafts/current state, formSubmissions for immutable snapshots, formAssets for private photo ownership, and formDeliveries for delivery/attempt status. Client writes are callable-only; unchanged default-deny rules provide no direct access to these records.
+
+Create IDs derive from owner plus a stable request UUID. Save checks the expected revision and retains request/fingerprint for lost-response retries. Submit atomically writes the snapshot and delivery intent; a repeated identical submission ID returns the existing result, another ID is rejected. Template issue increments the version and never overwrites earlier definitions. Upload checks a draft revision before and after normalization/storage and cleans a new object if its transaction fails. Existing daily-log/shop-order/timecard state machines remain independent. See workspace design for source provenance, local startup, validation evidence and remaining control gaps.

@@ -1,21 +1,17 @@
-export type FormFieldKind = 'text' | 'textarea' | 'date' | 'number' | 'choice' | 'photo'
-export interface FormField {
-  id: string
-  kind: FormFieldKind
-  label: string
-  required: boolean
-  options: string[]
-}
-export interface FormDefinition {
-  title: string
-  description: string
-  fields: FormField[]
-  recipients: string[]
-}
-export interface FormVersion extends FormDefinition {
-  version: number
-  createdAt: string
-}
+import { validateFormDefinition } from '../../../functions/src/formModel'
+import auditDefinition from '../../../functions/src/committeeAudit.json'
+import type {
+  FormFieldKind,
+  FormField,
+  FormDefinition,
+  FormVersion,
+} from '../../../functions/src/formModel'
+export type {
+  FormFieldKind,
+  FormField,
+  FormDefinition,
+  FormVersion,
+} from '../../../functions/src/formModel'
 export interface FormTemplate extends FormDefinition {
   id: string
   archived: boolean
@@ -50,19 +46,12 @@ export function newTemplate(title = 'Untitled form'): FormTemplate {
   }
 }
 export function committeeAudit(): FormTemplate {
-  const template = newTemplate('Committee audit — starter')
-  template.description = 'Review these starter prompts with Dan before issuing this form.'
-  template.fields = [
-    newField('text', 'Job / location'),
-    newField('date', 'Audit date'),
-    newField('text', 'Committee attendees'),
-    newField('textarea', 'Observations'),
-    newField('textarea', 'Follow-up actions'),
-    newField('photo', 'Supporting photos'),
-  ]
-  template.fields[0]!.required = true
-  template.fields[1]!.required = true
-  return template
+  return {
+    ...clone(auditDefinition as FormDefinition),
+    id: crypto.randomUUID(),
+    archived: false,
+    versions: [],
+  }
 }
 export function definitionErrors(definition: FormDefinition): string[] {
   const errors: string[] = []
@@ -89,6 +78,11 @@ export function definitionErrors(definition: FormDefinition): string[] {
     definition.recipients.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
   )
     errors.push('Use up to 20 valid recipient email addresses.')
+  try {
+    validateFormDefinition(definition)
+  } catch (caught) {
+    if (!errors.length) errors.push((caught as Error).message)
+  }
   return [...new Set(errors)]
 }
 export function keepVersion(template: FormTemplate): FormTemplate {
@@ -112,8 +106,10 @@ export function duplicateTemplate(template: FormTemplate): FormTemplate {
   next.title += ' (copy)'
   next.archived = false
   next.versions = []
+  const ids = new Map(next.fields.map((field) => [field.id, crypto.randomUUID()]))
   next.fields.forEach((field) => {
-    field.id = crypto.randomUUID()
+    field.id = ids.get(field.id)!
+    if (field.requiredWhen) field.requiredWhen.fieldId = ids.get(field.requiredWhen.fieldId)!
   })
   return next
 }

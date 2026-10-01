@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
+import { formApi, isFormServerEnabled, type ServerFormTemplate } from '@/services/forms'
 import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
@@ -22,6 +24,93 @@ import {
 } from '@/features/forms/model'
 import { readLibrary, saveLibrary } from '@/features/forms/localLibrary'
 const auth = useAuthStore()
+const serverEnabled = isFormServerEnabled(),
+  serverTemplates = ref<ServerFormTemplate[]>([]),
+  serverBusy = ref(false)
+async function loadServer() {
+  if (!serverEnabled || !uid.value) return
+  const owner = uid.value
+  try {
+    const result = await formApi<{ templates: ServerFormTemplate[] }>('formTemplates', {
+      action: 'list',
+    })
+    if (uid.value === owner) serverTemplates.value = result.templates
+  } catch (caught) {
+    error.value = (caught as Error).message
+  }
+}
+async function saveServer(): Promise<ServerFormTemplate | undefined> {
+  if (!draft.value) return
+  const owner = uid.value
+  serverBusy.value = true
+  try {
+    const existing = serverTemplates.value.find((item) => item.id === draft.value!.id)
+    const result = await formApi<ServerFormTemplate>('formTemplates', {
+      action: 'save',
+      id: draft.value.id,
+      revision: existing?.revision || 0,
+      definition: draft.value,
+    })
+    if (uid.value !== owner) return
+    await loadServer()
+    message.value = 'Draft saved to the local server.'
+    error.value = ''
+    return result
+  } catch (caught) {
+    error.value = (caught as Error).message
+  } finally {
+    serverBusy.value = false
+  }
+}
+async function issueServer() {
+  if (serverBusy.value) return
+  const saved = await saveServer()
+  if (!saved) return
+  serverBusy.value = true
+  try {
+    await formApi('formTemplates', { action: 'issue', id: saved.id, revision: saved.revision })
+    await loadServer()
+    message.value = 'Immutable local server version issued.'
+    error.value = ''
+  } catch (caught) {
+    error.value = (caught as Error).message
+  } finally {
+    serverBusy.value = false
+  }
+}
+async function removeServer(template: ServerFormTemplate) {
+  const owner = uid.value
+  if (
+    !(await confirmation.value?.ask({
+      title: 'Remove or archive server template?',
+      message: 'Issued or used templates are archived and their records remain available.',
+      confirmLabel: 'Remove or archive',
+    })) ||
+    uid.value !== owner
+  )
+    return
+  serverBusy.value = true
+  try {
+    await formApi('formTemplates', {
+      action: 'remove',
+      id: template.id,
+      revision: template.revision,
+    })
+    await loadServer()
+  } catch (caught) {
+    error.value = (caught as Error).message
+  } finally {
+    serverBusy.value = false
+  }
+}
+async function selectServer(template: ServerFormTemplate) {
+  await select({
+    ...clone(template.draft),
+    id: template.id,
+    archived: template.archived,
+    versions: [],
+  })
+}
 const library = ref(emptyLibrary()),
   draft = ref<FormTemplate>(),
   message = ref(''),
@@ -60,6 +149,14 @@ watch(
       blocked.value = true
       error.value = (caught as Error).message
     }
+  },
+  { immediate: true },
+)
+watch(
+  uid,
+  () => {
+    serverTemplates.value = []
+    void loadServer()
   },
   { immediate: true },
 )
@@ -215,9 +312,31 @@ const errors = computed(() => (draft.value ? definitionErrors(draft.value) : [])
               {{ template.versions.length ? 'Archive' : 'Delete' }}
             </button>
           </article>
+          <section v-if="serverEnabled" aria-label="Server form library">
+            <h2>Local server forms</h2>
+            <button :disabled="serverBusy" @click="loadServer">Refresh server library</button>
+            <article v-for="template in serverTemplates" :key="template.id">
+              <button @click="selectServer(template)">{{ template.draft.title }}</button
+              ><span
+                >{{ template.archived ? 'Archived' : 'Active' }} · issued version
+                {{ template.latestVersion }}</span
+              ><RouterLink v-if="template.latestVersion" :to="'/forms/' + template.id"
+                >Open authenticated form</RouterLink
+              ><button :disabled="serverBusy || template.archived" @click="removeServer(template)">
+                Remove or archive server form
+              </button>
+            </article>
+          </section>
         </aside>
         <section v-if="draft" aria-label="Form editor">
           <BuilderSelectionContext kind="Form" :scope="draft.title" />
+          <div v-if="serverEnabled" class="toolbar">
+            <button :disabled="serverBusy || draft.archived" @click="saveServer">
+              Save to local server</button
+            ><button :disabled="serverBusy || draft.archived" @click="issueServer">
+              Issue local server version
+            </button>
+          </div>
           <div class="toolbar">
             <button :disabled="blocked || draft.archived" @click="save()">Save local draft</button
             ><button :disabled="blocked || draft.archived" @click="save(true)">

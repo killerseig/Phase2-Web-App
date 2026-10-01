@@ -150,9 +150,47 @@ The first bounded local slice is a development-only authenticated/admin library 
 
 Verified first-slice checkpoint: 91/91 Chromium browser scenarios passed (11 Form Builder CRUD/failure/validation/desktop/phone checks plus 80 protected workflow/login checks), 8/8 focused model/navigation unit tests passed, final typecheck passed, and the production build passed with Form Builder excluded by the development guard. Desktop editor and phone full-page preview screenshots were visually reviewed. The first fixture-server run had a source-alias error; follow-up checks exposed native drag-transfer handling and a formatted inline Vue expression that prevented development compilation. Both were corrected, and the final complete 91-test run passed. Final ESLint reports zero errors and zero warnings. No Forms backend, photo uploads, emails, respondent submissions or production Form Builder release is claimed. User edits on this device require explicit Save local draft; refreshing an unsaved editor does not create a durable submission. The route temporarily reuses the existing admin-only manage-website gate during local development; the next backend slice must define and verify its own template/respondent permissions.
 
-Next backend slice: admin-only template APIs with conflict/version checks; immutable issued versions; authenticated respondent drafts; required-field and photo validation; bounded Storage attachments; idempotent submissions that durably retain template version, answers and photo references before any email attempt. Delivery state is a separate record and must never erase/fail an already durable submission. Used templates are archived, never deleted. No new production rules or functions are deployed as part of this local slice.
+The backend direction below is now implemented locally and verified in the next checkpoint: admin-only template APIs with conflict/version checks; immutable issued versions; authenticated respondent drafts; required-field and photo validation; bounded Storage attachments; idempotent submissions that durably retain template version, answers and photo references before any email attempt. Delivery state is a separate record and must never erase/fail an already durable submission. Used templates are archived, never deleted. No new production rules or functions are deployed as part of this local slice.
 
 Acceptance checks require meaningful Playwright coverage for CRUD, saved/reloaded edits, drag/keyboard ordering, preview validation, interrupted and failed save, repeated actions, archived/versioned preservation and denied non-admin access, plus affected navigation/access-control regressions. Production records, recipients and email are excluded from testing.
+
+### Authenticated audit lifecycle: local checkpoint
+
+Dan's original attachment `Phase2_Committee_Audit_for_website.html` was recovered and parsed without executing its scripts. Source SHA-256: `bf4be4a69fdae6e49c192cef3a404c1d58158200b08cce2a7ab42d9cfdbe09b6`. The structured source is `functions/src/committeeAudit.json`: 41 fields in Job, Quick checks, ten rated safety sections, and Inspector. It retains source options, hints and recipient `dan2@phase2co.com`. No invented audit sections remain. Needs attention or Unsatisfactory requires notes on the server; personnel is a nonnegative integer. Synthetic tests substitute test recipients and never send email.
+
+The development profile now has real authenticated full-page respondent records, explicit durable draft creation/save/resume, stable create/save/submit request identifiers, revision conflicts, immutable issued template versions and submitted snapshots. Opening a page creates nothing. Templates already issued or used are archived; old records retain their pinned definition. A lost submission response locks editing and offers confirmation retry using the same identifier. Shared FormDefinitionFields renders the preview and response; later inline presentation can reuse it.
+
+Admin alone edits/issues/removes templates. Active Admin, PM, Foreman and Shop Foreman may create records; only their owner edits or submits them, while Admin may read for review. These are deliberately bounded initial role policies, not new global capabilities. Server functions reread the profile and enforce ownership. Existing Firestore/Storage rules stay unchanged: direct client access to the new private collections and photo prefix is denied. No payroll access or mature workflow changes are included.
+
+Photos pass through the authenticated callable, must belong to the same record/owner/field, and are normalized to WebP with metadata removed. Limits: JPEG/PNG/WebP, 2 MB input, 16 megapixels, five per field, twenty attached per record, forty lifetime uploads. Private view calls require record access; no public URLs are issued. The initial email output reports retained photo counts; photo email attachments are a remaining delivery decision. Photos themselves remain in the durable authenticated record.
+
+Submission snapshots are stored before delivery. A separate delivery record tracks queued/sending/sent/failed/disabled/uncertain/not-configured states and attempt claims. Known failed or disabled delivery can be retried without modifying the submission. Concurrent retries claim once; sent messages are not resent. Ambiguous provider failure or interrupted sending requires operator review rather than automatic duplicate delivery. All emulator email is disabled, including retries.
+
+Run `npm run dev:forms` in the normal checkout for the isolated demo profile at `http://127.0.0.1:5195/admin/forms`. Demo accounts: `admin@forms.local` and `foreman@forms.local`; synthetic password `Local-Forms-Only-123!`. This uses Auth/Firestore/Storage emulators and a loopback-only authenticated callable adapter for just the new Forms handlers, avoiding existing production triggers and Graph bindings. Firebase initialization rejects an emulator flag paired with a production project. The ordinary user devserver is preserved and does not enable durable Forms calls.
+
+Local emulator state is excluded from Git in `.forms-local-data/`. The launcher imports the latest complete snapshot and preserves earlier snapshots. Windows/OneDrive can reject the CLI's export rename; the wrapper recovers a complete export by copying and explicitly confirms the saved snapshot. An unconfirmed export is reported as a failure. Shutdown during a power loss may lose progress since the last emulator snapshot; this local profile is not a production availability promise.
+
+Verification: 150/150 Chromium scenarios passed (19 Forms scenarios plus 131 protected workflow/login regressions); 8/8 focused model/navigation unit tests passed; typecheck and backend compilation passed; the real backend emulator verifier passed 26 rejection checks. An actual emulator browser run also verified old submitted answers and private photos after restart, then passed real login, issuing a template, save/reload/resume, private photo upload/view, immutable submission, disabled email and containment at 1440/390 px. Production build passed with local Form Builder routes/chunks excluded; affected ESLint passed with zero errors and warnings. No Forms deployment, production records, real email, rule changes or power settings changes are authorized or performed.
+
+### Basic control completeness checklist
+
+Reviewed official [Bootstrap Forms overview](https://getbootstrap.com/docs/5.3/forms/overview/), [Vue form input bindings](https://vuejs.org/guide/essentials/forms.html), and [PrimeVue 4 InputText accessibility](https://v4.primevue.org/inputtext/). PrimeVue 4 documentation is the primary component checklist, as confirmed by the owner after the review; Bootstrap is a completeness reference only. The app already uses PrimeVue plus custom Vue controls/CSS; no UI framework installation or migration is planned.
+
+| Control or behavior | Current audit checkpoint | Next bounded slice |
+| --- | --- | --- |
+| Text / textarea | Implemented, bounded strings, conditional required notes | Preserve |
+| Number / date | Implemented, real-date and integer/minimum validation | Configurable number constraints |
+| Single select | Implemented with configured valid options | Radio presentation |
+| Email / phone / time | Missing dedicated palette controls | Add native input types and matching server validation |
+| Checkbox / multiselect | Missing respondent controls | Add typed boolean and option arrays with required validation |
+| Photo upload | Implemented privately, bounded and record-scoped | Remove/detach interaction, email attachment policy |
+| Arbitrary file upload | Deferred | Requires file-type scanning/retention policy; photo support is not general-file support |
+| Switch / range | Deferred presentation variants | Use only where a meaningful boolean or numeric constraint is defined |
+| Labels / hints / required state | Visible labels/hints/stars implemented | Connect help and validation with ARIA, focus first invalid field |
+| Read-only / disabled | Submitted/pending confirmation and busy states lock controls | Improve readable submitted presentation |
+| Keyboard / phone behavior | Native controls, keyboard ordering, 390 px checked | Explicit palette roundtrip and mobile input tests |
+
+Password collection, arbitrary executable logic, signatures, approvals, formulas and a dashboard builder are outside this slice. Finish this audit lifecycle checkpoint before expanding the palette. Production deployment remains a separate review and authorization.
 
 The earlier interpretations below are retained as planning history; the owner has now selected option 2:
 

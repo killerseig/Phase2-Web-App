@@ -24,8 +24,8 @@ describe('local Form Builder foundation', () => {
     const issued = keepVersion(original)
     issued.fields[0]!.label = 'Later title'
     issued.recipients.push('dan@example.com')
-    expect(issued.versions[0]!.fields[0]!.label).toBe('Job / location')
-    expect(issued.versions[0]!.recipients).toEqual([])
+    expect(issued.versions[0]!.fields[0]!.label).toBe('Date of inspection')
+    expect(issued.versions[0]!.recipients).toEqual(['dan2@phase2co.com'])
     expect(original.versions).toEqual([])
     const library = emptyLibrary()
     library.templates.push(issued)
@@ -42,6 +42,11 @@ describe('local Form Builder foundation', () => {
     expect(
       duplicate.fields.every((field) => !original.fields.some((source) => source.id === field.id)),
     ).toBe(true)
+    const note = duplicate.fields.find((field) => field.requiredWhen)!
+    expect(duplicate.fields.find((field) => field.id === note.requiredWhen!.fieldId)?.kind).toBe(
+      'choice',
+    )
+    expect(definitionErrors(duplicate)).toEqual([])
     const ids = duplicate.fields.map((field) => field.id)
     moveField(duplicate, ids[0]!, 2)
     expect(duplicate.fields.map((field) => field.id)).toEqual([

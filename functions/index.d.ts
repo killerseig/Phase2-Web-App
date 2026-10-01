@@ -11,4 +11,6 @@ export { sendFieldUserAssignmentNotification, sendNewJobNotification, } from './
 export { websiteBuilder, getPublishedWebsite, websiteImage } from './websiteFunctions';
 export { dashboardWorkspace } from './dashboardFunctions';
 export { submitWebsiteForm, deliverWebsiteFormEmail, websiteFormAdmin } from './websiteFormFunctions';
+export { formTemplates, formWorkspace } from './formFunctions';
+export { formEmail, deliverFormEmail } from './formDelivery';
 //# sourceMappingURL=index.d.ts.map

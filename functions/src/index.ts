@@ -60,3 +60,7 @@ export { websiteBuilder, getPublishedWebsite, websiteImage } from './websiteFunc
 export { dashboardWorkspace } from './dashboardFunctions'
 
 export { submitWebsiteForm, deliverWebsiteFormEmail, websiteFormAdmin } from './websiteFormFunctions'
+
+// Local Form Builder milestone: no production deployment is authorized.
+export { formTemplates, formWorkspace } from './formFunctions'
+export { formEmail, deliverFormEmail } from './formDelivery'

@@ -41,3 +41,9 @@ __screenshots__/
 test-results/
 playwright-report/
 .security-work/
+
+# Demo-only Form Builder emulator state (never production content)
+.forms-local-data/
+
+# Firebase CLI local export staging (demo fixtures only)
+firebase-export-*/

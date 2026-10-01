@@ -1,0 +1,504 @@
+{
+  "title": "Committee Site Audit",
+  "description": "Phase 2 Company committee site audit",
+  "recipients": [
+    "dan2@phase2co.com"
+  ],
+  "fields": [
+    {
+      "id": "date",
+      "label": "Date of inspection",
+      "kind": "date",
+      "required": true,
+      "options": [],
+      "section": "Job"
+    },
+    {
+      "id": "jobName",
+      "label": "Job name",
+      "kind": "text",
+      "required": true,
+      "options": [],
+      "section": "Job"
+    },
+    {
+      "id": "jobNum",
+      "label": "Job #",
+      "kind": "text",
+      "required": true,
+      "options": [],
+      "section": "Job"
+    },
+    {
+      "id": "pm",
+      "label": "PM",
+      "kind": "text",
+      "required": false,
+      "options": [],
+      "section": "Job"
+    },
+    {
+      "id": "foreman",
+      "label": "Site foreman",
+      "kind": "text",
+      "required": true,
+      "options": [],
+      "section": "Job"
+    },
+    {
+      "id": "personnel",
+      "label": "# of personnel",
+      "kind": "number",
+      "required": false,
+      "options": [],
+      "section": "Job",
+      "minimum": 0,
+      "integer": true
+    },
+    {
+      "id": "cordColor",
+      "label": "Current cord color",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Green",
+        "Purple",
+        "Red",
+        "Yellow"
+      ],
+      "section": "Quick checks"
+    },
+    {
+      "id": "cordCheck",
+      "label": "Cord check complete",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "section": "Quick checks"
+    },
+    {
+      "id": "tagged",
+      "label": "Scaffolds, scissors, booms tagged",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Yes",
+        "No",
+        "N/A"
+      ],
+      "section": "Quick checks"
+    },
+    {
+      "id": "medkit",
+      "label": "Sealed medical kit and trauma kit",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "section": "Quick checks"
+    },
+    {
+      "id": "rating_impression",
+      "label": "First impression rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "First impression",
+      "hint": "What did the site look like walking in?"
+    },
+    {
+      "id": "notes_impression",
+      "label": "First impression notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "First impression",
+      "hint": "What did the site look like walking in?",
+      "requiredWhen": {
+        "fieldId": "rating_impression",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_impression",
+      "label": "First impression photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "First impression",
+      "hint": "What did the site look like walking in?"
+    },
+    {
+      "id": "rating_office",
+      "label": "Site office rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "Site office",
+      "hint": "Secure, posters and notices, first aid kit, trauma bag, eyewash, cord test kit, fire extinguisher signed, spill kit."
+    },
+    {
+      "id": "notes_office",
+      "label": "Site office notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "Site office",
+      "hint": "Secure, posters and notices, first aid kit, trauma bag, eyewash, cord test kit, fire extinguisher signed, spill kit.",
+      "requiredWhen": {
+        "fieldId": "rating_office",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_office",
+      "label": "Site office photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "Site office",
+      "hint": "Secure, posters and notices, first aid kit, trauma bag, eyewash, cord test kit, fire extinguisher signed, spill kit."
+    },
+    {
+      "id": "rating_housekeeping",
+      "label": "Housekeeping rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "Housekeeping",
+      "hint": "Material stacked and orderly, cleanup, waste disposal, fuel and solvent storage, toilets, parking lot, site signage and restricted access zones current."
+    },
+    {
+      "id": "notes_housekeeping",
+      "label": "Housekeeping notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "Housekeeping",
+      "hint": "Material stacked and orderly, cleanup, waste disposal, fuel and solvent storage, toilets, parking lot, site signage and restricted access zones current.",
+      "requiredWhen": {
+        "fieldId": "rating_housekeeping",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_housekeeping",
+      "label": "Housekeeping photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "Housekeeping",
+      "hint": "Material stacked and orderly, cleanup, waste disposal, fuel and solvent storage, toilets, parking lot, site signage and restricted access zones current."
+    },
+    {
+      "id": "rating_ppe",
+      "label": "PPE rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "PPE",
+      "hint": "Hard hats and Type II helmets with chin straps, eye and ear protection, gloves, boots, face shields, respirators, sleeves, extras stored properly."
+    },
+    {
+      "id": "notes_ppe",
+      "label": "PPE notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "PPE",
+      "hint": "Hard hats and Type II helmets with chin straps, eye and ear protection, gloves, boots, face shields, respirators, sleeves, extras stored properly.",
+      "requiredWhen": {
+        "fieldId": "rating_ppe",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_ppe",
+      "label": "PPE photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "PPE",
+      "hint": "Hard hats and Type II helmets with chin straps, eye and ear protection, gloves, boots, face shields, respirators, sleeves, extras stored properly."
+    },
+    {
+      "id": "rating_ladders",
+      "label": "Ladders rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "Ladders",
+      "hint": "Clean, used as designed, appropriate size, 4-to-1 rule, extends 3 ft past the landing, tied off securely."
+    },
+    {
+      "id": "notes_ladders",
+      "label": "Ladders notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "Ladders",
+      "hint": "Clean, used as designed, appropriate size, 4-to-1 rule, extends 3 ft past the landing, tied off securely.",
+      "requiredWhen": {
+        "fieldId": "rating_ladders",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_ladders",
+      "label": "Ladders photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "Ladders",
+      "hint": "Clean, used as designed, appropriate size, 4-to-1 rule, extends 3 ft past the landing, tied off securely."
+    },
+    {
+      "id": "rating_electrical",
+      "label": "Electrical rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "Electrical",
+      "hint": "Cord check done, no light-gauge or damaged cords, no illegal plug ends, cords hung, GFCIs as needed, colors in order: green, purple, red, yellow."
+    },
+    {
+      "id": "notes_electrical",
+      "label": "Electrical notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "Electrical",
+      "hint": "Cord check done, no light-gauge or damaged cords, no illegal plug ends, cords hung, GFCIs as needed, colors in order: green, purple, red, yellow.",
+      "requiredWhen": {
+        "fieldId": "rating_electrical",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_electrical",
+      "label": "Electrical photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "Electrical",
+      "hint": "Cord check done, no light-gauge or damaged cords, no illegal plug ends, cords hung, GFCIs as needed, colors in order: green, purple, red, yellow."
+    },
+    {
+      "id": "rating_stilts",
+      "label": "Stilts and walk-ups rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "Stilts and walk-ups",
+      "hint": "Maintained, good rubber foot pads, no deformities, all parts tight, employee wearing a helmet."
+    },
+    {
+      "id": "notes_stilts",
+      "label": "Stilts and walk-ups notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "Stilts and walk-ups",
+      "hint": "Maintained, good rubber foot pads, no deformities, all parts tight, employee wearing a helmet.",
+      "requiredWhen": {
+        "fieldId": "rating_stilts",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_stilts",
+      "label": "Stilts and walk-ups photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "Stilts and walk-ups",
+      "hint": "Maintained, good rubber foot pads, no deformities, all parts tight, employee wearing a helmet."
+    },
+    {
+      "id": "rating_scaffolds",
+      "label": "Scaffolds and lifts rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "Scaffolds and lifts",
+      "hint": "Signed off by the safety assistant and the user daily, or tagged out. Assembled to Phase 2 guidelines. Wheels locked."
+    },
+    {
+      "id": "notes_scaffolds",
+      "label": "Scaffolds and lifts notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "Scaffolds and lifts",
+      "hint": "Signed off by the safety assistant and the user daily, or tagged out. Assembled to Phase 2 guidelines. Wheels locked.",
+      "requiredWhen": {
+        "fieldId": "rating_scaffolds",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_scaffolds",
+      "label": "Scaffolds and lifts photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "Scaffolds and lifts",
+      "hint": "Signed off by the safety assistant and the user daily, or tagged out. Assembled to Phase 2 guidelines. Wheels locked."
+    },
+    {
+      "id": "rating_fall",
+      "label": "Fall protection rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "Fall protection",
+      "hint": "Properly hung and stored. Employees trained and comfortable with the equipment on site. Floor and wall openings covered or barricaded."
+    },
+    {
+      "id": "notes_fall",
+      "label": "Fall protection notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "Fall protection",
+      "hint": "Properly hung and stored. Employees trained and comfortable with the equipment on site. Floor and wall openings covered or barricaded.",
+      "requiredWhen": {
+        "fieldId": "rating_fall",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_fall",
+      "label": "Fall protection photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "Fall protection",
+      "hint": "Properly hung and stored. Employees trained and comfortable with the equipment on site. Floor and wall openings covered or barricaded."
+    },
+    {
+      "id": "rating_attitude",
+      "label": "General attitude rating",
+      "kind": "choice",
+      "required": true,
+      "options": [
+        "Satisfactory",
+        "Needs attention",
+        "Unsatisfactory",
+        "N/A"
+      ],
+      "section": "General attitude",
+      "hint": "Would you want to work on this site today?"
+    },
+    {
+      "id": "notes_attitude",
+      "label": "General attitude notes",
+      "kind": "textarea",
+      "required": false,
+      "options": [],
+      "section": "General attitude",
+      "hint": "Would you want to work on this site today?",
+      "requiredWhen": {
+        "fieldId": "rating_attitude",
+        "values": [
+          "Needs attention",
+          "Unsatisfactory"
+        ]
+      }
+    },
+    {
+      "id": "photo_attitude",
+      "label": "General attitude photos",
+      "kind": "photo",
+      "required": false,
+      "options": [],
+      "section": "General attitude",
+      "hint": "Would you want to work on this site today?"
+    },
+    {
+      "id": "inspector",
+      "label": "Inspector name",
+      "kind": "text",
+      "required": true,
+      "options": [],
+      "section": "Inspector"
+    }
+  ]
+}
