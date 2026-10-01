@@ -3,6 +3,7 @@ const { customDefinition, customMarkup, resolvedCustom, visibleCustomSections } 
   import.meta.url,
 )('../functions/websiteCustom.js')
 import { readFileSync } from 'node:fs'
+const { compareWebsites } = createRequire(import.meta.url)('../functions/websiteChanges.js')
 import { expect, test, type Page } from './helpers/test.js'
 
 import {
@@ -133,7 +134,20 @@ async function mockWebsite(
       result = { version }
     }
     if (data.action === 'listRevisions')
-      result = { revisions: revisions.map(({ draft: _draft, ...meta }) => meta) }
+      result = {
+        revisions: revisions.map(({ draft: _draft, ...meta }) => meta),
+        activity: revisions.map(({ id, version, savedAt }) => ({
+          id,
+          version,
+          savedAt,
+          action: 'save',
+          savedBy: 'Test admin',
+        })),
+      }
+    if (data.action === 'getRevision')
+      result = { draft: revisions.find((entry) => entry.id === data.revisionId)!.draft }
+    if (data.action === 'comparePublished')
+      result = { ...compareWebsites(published, data.site), publishedAt: published ? 1 : null }
     if (data.action === 'restoreRevision') {
       draft = structuredClone(revisions.find((entry) => entry.id === data.revisionId)!.draft)
       version++
@@ -222,7 +236,7 @@ async function mockWebsite(
 
 async function openTool(page: Page, name: 'Pages' | 'Widgets' | 'Layers' | 'Publishing') {
   const mobilePanels = page.getByRole('navigation', { name: 'Builder panels' })
-  const outlineButton = mobilePanels.getByRole('button', { name: 'Pages & sections' })
+  const outlineButton = mobilePanels.getByRole('button', { name: 'Pages & widgets' })
   if (
     (await mobilePanels.isVisible()) &&
     (await outlineButton.getAttribute('aria-pressed')) !== 'true'
@@ -233,6 +247,50 @@ async function openTool(page: Page, name: 'Pages' | 'Widgets' | 'Layers' | 'Publ
     .getByRole('button', { name, exact: true })
   if ((await tool.getAttribute('aria-pressed')) !== 'true') await tool.click()
 }
+
+test('publishing comparison and change history review edits without altering the live site', async ({
+  page,
+}) => {
+  const api = await mockWebsite(page, true)
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await selectCanvasWidget(page, 'Welcome to Phase 2')
+  await openInspectorFor(page, 'Heading')
+  const heading = page
+    .getByRole('complementary', { name: 'Content editor' })
+    .getByLabel('Heading', { exact: true })
+  await heading.fill('First saved heading')
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Draft saved')
+  await heading.fill('Current heading')
+  await openTool(page, 'Publishing')
+  await page.getByText('Compare with live site', { exact: true }).click()
+  await page.getByRole('button', { name: 'Compare current draft', exact: true }).click()
+  const liveComparison = page.locator('.publish-comparison')
+  await liveComparison
+    .getByText('changed Pages / Home / Widgets / Current heading / Title', { exact: true })
+    .click()
+  await expect(liveComparison).toContainText('Welcome to Phase 2')
+  await expect(liveComparison).toContainText('Current heading')
+  await page.getByText('Change history', { exact: true }).click()
+  await page.getByRole('button', { name: 'Compare draft version 1', exact: true }).click()
+  const savedComparison = page
+    .locator('article')
+    .filter({ has: page.getByRole('button', { name: 'Compare draft version 1', exact: true }) })
+  await savedComparison
+    .getByText('changed Pages / Home / Widgets / Current heading / Title', { exact: true })
+    .click()
+  await expect(savedComparison).toContainText('First saved heading')
+  await expect(savedComparison).toContainText('Current draft (including unsaved edits)')
+  await page.getByText('Recent activity', { exact: true }).click()
+  await expect(page.locator('.activity')).toContainText('Test admin')
+  await page.screenshot({ path: '.security-work/website-change-history.png', fullPage: true })
+  expect(api.published()!.pages[0]!.sections[0]!.title).toBe('Welcome to Phase 2')
+  expect(api.actions).not.toContain('publish')
+  expect(api.actions).not.toContain('restoreRevision')
+  await heading.fill('Changed after comparison')
+  await expect(liveComparison).toContainText('Compare again to refresh')
+  await expect(liveComparison.locator('.change-list')).toHaveCount(0)
+})
 
 async function openInspectorFor(page: Page, label: string) {
   const tabs = page.getByRole('tablist', { name: 'Widget settings' })
@@ -338,8 +396,8 @@ test('full text toolbar preserves typography, heading formatting, undo and publi
   await expect(bar.getByLabel('Font family', { exact: true })).toHaveValue('Georgia')
   await expect(bar.getByLabel('Font size', { exact: true })).toHaveValue('24')
   await bar.getByRole('button', { name: 'Done', exact: true }).click()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.locator('h1 u')).toHaveText('Welcome to Phase 2')
@@ -426,6 +484,200 @@ test('full text toolbar keeps code literal and preserves line breaks and divider
   await expect(canvas.locator('.widget-text script')).toHaveCount(0)
 })
 
+test('brand presets, font previews and responsive text styles survive publication', async ({
+  page,
+}) => {
+  const api = await mockWebsite(page)
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await page.getByRole('button', { name: 'Site settings', exact: true }).click()
+  await expect(page.getByLabel('Selection scope', { exact: true })).toContainText('Entire website')
+  await page.getByText('Brand presets', { exact: true }).click()
+  await page.getByRole('button', { name: 'Apply Phase 2 brand', exact: true }).click()
+  await page.getByRole('button', { name: 'Preview body font choices', exact: true }).click()
+  await page.screenshot({ path: '.security-work/design-font-previews.png' })
+  await page.getByRole('button', { name: 'Work Sans', exact: true }).click()
+  await expect(page.getByLabel('Body font', { exact: true })).toHaveValue('Work Sans')
+  await page.getByText('Reusable text styles', { exact: true }).click()
+  await page.getByLabel('Text style size', { exact: true }).fill('52')
+  await page.getByLabel('Text style size', { exact: true }).press('Tab')
+  await page.getByLabel('Typography screen size').selectOption('mobile')
+  await page.getByLabel('Text style size', { exact: true }).fill('28')
+  await page.getByLabel('Text style size', { exact: true }).press('Tab')
+  await page.getByLabel('Preset name', { exact: true }).fill('Company blue')
+  await page.getByRole('button', { name: 'Save brand preset', exact: true }).click()
+  await page.getByLabel('Typography screen size').selectOption('desktop')
+  await page.getByLabel('Text style size', { exact: true }).fill('44')
+  await page.getByLabel('Text style size', { exact: true }).press('Tab')
+  await page.getByRole('button', { name: 'Apply Company blue', exact: true }).click()
+  await expect(page.getByLabel('Text style size', { exact: true })).toHaveValue('52')
+  const heading = page.locator('.preview-frame h1.widget-title')
+  await expect
+    .poll(() => heading.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)))
+    .toBeCloseTo(52, 2)
+  await page.getByRole('button', { name: 'Mobile', exact: true }).click()
+  await expect(heading).toHaveCSS('font-size', '28px')
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect.poll(() => api.draft().theme?.presets?.length).toBe(1)
+  await page.reload()
+  await expect
+    .poll(() =>
+      page
+        .locator('.preview-frame h1.widget-title')
+        .evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
+    )
+    .toBeCloseTo(52, 2)
+  await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
+  await expect(page.getByRole('status')).toContainText('Website published')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/website')
+  await expect(page.locator('h1.widget-title')).toHaveCSS('font-size', '28px')
+})
+
+test('image gradients and entrance animations preserve edits and respect reduced motion', async ({
+  page,
+}) => {
+  const content = structuredClone(initial)
+  Object.assign(content.pages[0]!.sections[0]!, { imageId: 'photo', alt: 'Job photo' })
+  const api = await mockWebsite(page, false, false, content)
+  await page.addInitScript(() => {
+    const target = window as Window & { motionCalls?: number }
+    target.motionCalls = 0
+    const animate = Element.prototype.animate
+    Element.prototype.animate = function (...args) {
+      target.motionCalls!++
+      return animate.apply(this, args)
+    }
+  })
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  const canvas = page.locator('.preview-frame')
+  await canvas.getByRole('button', { name: 'Edit image: Job photo' }).dblclick()
+  const editor = page.getByRole('region', { name: 'Image editor', exact: true })
+  await editor.getByText('Image overlay and gradient', { exact: true }).click()
+  await editor.getByLabel('Overlay style', { exact: true }).selectOption('linear')
+  await editor.getByRole('slider', { name: 'Overlay opacity', exact: true }).fill('65')
+  await editor.getByRole('slider', { name: 'Gradient direction', exact: true }).fill('180')
+  await expect(canvas.locator('.media-overlay')).toHaveCSS('opacity', '0.65')
+  await expect(canvas.locator('.media-overlay')).toHaveCSS('background-image', /linear-gradient/)
+  await editor.getByRole('button', { name: 'Done', exact: true }).click()
+  await selectCanvasWidget(page, 'Welcome to Phase 2')
+  const inspector = page.getByRole('complementary', { name: 'Content editor' })
+  await inspector.getByRole('tab', { name: 'Appearance', exact: true }).click()
+  await inspector.getByText('Animation and fading', { exact: true }).click()
+  await inspector.getByLabel('Entrance animation', { exact: true }).selectOption('rise')
+  await inspector.getByLabel('Animation duration (ms)', { exact: true }).fill('1200')
+  await inspector.getByLabel('Animation duration (ms)', { exact: true }).press('Tab')
+  await inspector.getByRole('button', { name: 'Preview animation', exact: true }).click()
+  await page.screenshot({ path: '.security-work/design-motion-controls.png' })
+  expect(await page.evaluate(() => (window as Window & { motionCalls?: number }).motionCalls)).toBe(
+    1,
+  )
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect
+    .poll(() => api.draft().pages[0]!.sections[0]!.appearance?.motion?.effect)
+    .toBe('rise')
+  await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
+  await expect(page.getByRole('status')).toContainText('Website published')
+  await page.goto('/website')
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { motionCalls?: number }).motionCalls))
+    .toBe(1)
+  await expect(page.locator('.media-overlay')).toHaveCSS('opacity', '0.65')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Welcome to Phase 2' })).toBeVisible()
+  expect(await page.evaluate(() => (window as Window & { motionCalls?: number }).motionCalls)).toBe(
+    0,
+  )
+})
+
+test('hero titles support heading styles and lists with self-hosted fonts through publication', async ({
+  page,
+}) => {
+  const content = structuredClone(initial)
+  content.theme = { bodyFont: 'Inter', headingFont: 'Lora' }
+  const api = await mockWebsite(page, true, false, content)
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await page.getByRole('button', { name: 'Content', exact: true }).click()
+  const canvas = page.locator('.preview-frame')
+  const toolbar = page.getByRole('group', { name: 'Text formatting' })
+  await canvas.getByRole('heading', { name: 'Welcome to Phase 2' }).click()
+  const editor = page.getByRole('textbox', { name: 'Edit heading on page' })
+  await toolbar.getByLabel('Text style', { exact: true }).selectOption('h2')
+  await expect(editor.locator('h2')).toHaveText('Welcome to Phase 2')
+  await expect(editor.locator('h2')).toHaveCSS('font-family', 'Lora, Georgia, serif')
+  await editor.press(await shortcut(page, 'a'))
+  await toolbar.getByRole('button', { name: 'More formatting', exact: true }).click()
+  await toolbar.getByLabel('Font family', { exact: true }).selectOption('Montserrat')
+  await expect(editor.locator('span')).toHaveCSS('font-family', 'Montserrat')
+  expect(
+    await page.evaluate(async () => (await document.fonts.load('600 24px Montserrat')).length),
+  ).toBeGreaterThan(0)
+  await toolbar.getByRole('button', { name: 'Bulleted list', exact: true }).click()
+  await expect(editor.locator('ul li')).toHaveText('Welcome to Phase 2')
+  await editor.press('End')
+  await editor.press('Enter')
+  await editor.pressSequentially('Built together')
+  await expect(editor.locator('ul li')).toHaveCount(2)
+  await toolbar.getByRole('button', { name: 'Numbered list', exact: true }).click()
+  await expect(editor.locator('ol li')).toHaveCount(2)
+  await toolbar.getByRole('button', { name: 'Done', exact: true }).click()
+  await expect(canvas.locator('.widget-title ol li')).toHaveCount(2)
+  await expect(canvas.locator('h1 ol, h2 ol')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(canvas.getByRole('heading', { name: 'Welcome to Phase 2' })).toBeVisible()
+  await page.getByRole('button', { name: 'Redo', exact: true }).click()
+  await expect(canvas.locator('.widget-title ol li')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect
+    .poll(() => api.draft().pages[0]!.sections[0]!.titleRichText?.content?.[0]?.type)
+    .toBe('orderedList')
+  await page.reload()
+  await expect(canvas.locator('.widget-title ol li')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
+  await expect(page.getByRole('status')).toContainText('Website published')
+  await page.goto('/website')
+  await expect(page.locator('.widget-title ol li')).toHaveCount(2)
+  await expect(page.locator('.widget-title ol li span').first()).toHaveCSS(
+    'font-family',
+    'Montserrat',
+  )
+})
+
+test('image darkening previews live and survives save, reload and publication', async ({
+  page,
+}) => {
+  const content = structuredClone(initial)
+  Object.assign(content.pages[0]!.sections[0]!, { imageId: 'photo', alt: 'Job photo' })
+  const api = await mockWebsite(page, false, false, content)
+  await page.setViewportSize({ width: 1440, height: 950 })
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  const canvas = page.locator('.preview-frame')
+  await canvas.getByRole('button', { name: 'Edit image: Job photo' }).dblclick()
+  const panel = page.getByRole('region', { name: 'Image editor', exact: true })
+  await panel.getByRole('slider', { name: 'Darken image', exact: true }).fill('45')
+  await expect(canvas.locator('.website-media img')).toHaveCSS('filter', 'brightness(0.55)')
+  await expect(panel.locator('.focal-preview img')).toHaveCSS('filter', 'brightness(0.55)')
+  await panel.getByRole('button', { name: 'Done', exact: true }).click()
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(canvas.locator('.website-media img')).toHaveCSS('filter', 'none')
+  await page.getByRole('button', { name: 'Redo', exact: true }).click()
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect.poll(() => api.draft().pages[0]!.sections[0]!.imageSettings?.darken).toBe(45)
+  await page.reload()
+  await expect(canvas.locator('.website-media img')).toHaveCSS('filter', 'brightness(0.55)')
+  await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
+  await expect(page.getByRole('status')).toContainText('Website published')
+  await page.goto('/website')
+  await expect(page.locator('.website-media img')).toHaveCSS('filter', 'brightness(0.55)')
+})
+
 test('inline text edits stay synchronized, undo as a session, and only save the draft', async ({
   page,
 }) => {
@@ -441,7 +693,7 @@ test('inline text edits stay synchronized, undo as a session, and only save the 
   await heading.press(await shortcut(page, 'a'))
   await heading.pressSequentially('Built together')
   await expect(inspector.getByLabel('Heading', { exact: true })).toHaveValue('Built together')
-  await heading.press('Enter')
+  await heading.press('Escape')
   await expect(page.getByRole('group', { name: 'Text formatting' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(
@@ -467,7 +719,7 @@ test('inline text edits stay synchronized, undo as a session, and only save the 
   await expect(canvas.getByRole('heading', { name: 'Built together' })).toBeVisible()
 })
 
-test('phone sizing edits preserve inherited dimensions through reset, reload and desktop changes', async ({
+test('phone sizing overrides reset to automatic flow without changing desktop dimensions', async ({
   page,
 }) => {
   const content = structuredClone(initial)
@@ -491,6 +743,11 @@ test('phone sizing edits preserve inherited dimensions through reset, reload and
   const inspector = page.getByRole('complementary', { name: 'Content editor' })
   const height = inspector.getByLabel('Minimum height (px)', { exact: true })
   const grow = inspector.getByLabel('Grow proportion', { exact: true })
+  const growSource = inspector
+    .locator('label')
+    .filter({ has: page.getByRole('spinbutton', { name: 'Grow proportion', exact: true }) })
+    .locator('.setting-source')
+  await expect(growSource).toHaveText('Automatic')
   await grow.fill('3')
   await grow.press('Tab')
   await height.fill('90')
@@ -501,15 +758,15 @@ test('phone sizing edits preserve inherited dimensions through reset, reload and
     .toEqual({ grow: 3, minHeight: 90 })
   await height.fill('')
   await height.press('Tab')
-  await expect(height).toHaveValue('180')
+  await expect(height).toHaveValue('')
   await inspector.getByLabel('Item alignment', { exact: true }).selectOption('end')
   await inspector.getByLabel('Item alignment', { exact: true }).selectOption('')
-  await expect(inspector.getByLabel('Item alignment', { exact: true })).toHaveValue('center')
+  await expect(inspector.getByLabel('Item alignment', { exact: true })).toHaveValue('auto')
   await page.getByRole('button', { name: 'Desktop', exact: true }).click()
   await height.fill('220')
   await height.press('Tab')
   await page.getByRole('button', { name: 'Mobile', exact: true }).click()
-  await expect(height).toHaveValue('220')
+  await expect(height).toHaveValue('')
   await expect(grow).toHaveValue('3')
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect
@@ -519,8 +776,20 @@ test('phone sizing edits preserve inherited dimensions through reset, reload and
   await selectCanvasWidget(page, 'Child')
   await page.getByRole('button', { name: 'Mobile', exact: true }).click()
   await openInspectorFor(page, 'Minimum height (px)')
-  await expect(height).toHaveValue('220')
+  await expect(height).toHaveValue('')
   await expect(grow).toHaveValue('3')
+  await expect(growSource).toHaveText('Override')
+  await inspector.getByRole('button', { name: 'Use automatic sizing', exact: true }).click()
+  await expect(grow).toHaveValue('0')
+  await expect(growSource).toHaveText('Automatic')
+  await expect(height).toHaveValue('')
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect
+    .poll(() => api.draft().pages[0]!.sections[1]!.devices?.mobile?.sizing)
+    .toBeUndefined()
+  await page.getByRole('button', { name: 'Desktop', exact: true }).click()
+  await expect(grow).toHaveValue('2')
+  await expect(height).toHaveValue('220')
 })
 
 test('simplified settings preserve desktop inheritance and reset individual phone styles', async ({
@@ -550,6 +819,11 @@ test('simplified settings preserve desktop inheritance and reset individual phon
   await page.getByRole('button', { name: 'Mobile', exact: true }).click()
   await expect(inspector.getByText('Phone · Overrides', { exact: true })).toBeVisible()
   const padding = inspector.getByLabel('Padding (px)', { exact: true })
+  const source = inspector
+    .locator('label')
+    .filter({ has: page.getByRole('spinbutton', { name: 'Padding (px)', exact: true }) })
+    .locator('.setting-source')
+  await expect(source).toHaveText('Automatic')
   await expect(padding).toHaveValue('24')
   await expect(
     inspector.getByRole('button', { name: 'Reset padding (px)', exact: true }),
@@ -560,12 +834,22 @@ test('simplified settings preserve desktop inheritance and reset individual phon
   await expect
     .poll(() => api.draft().pages[0]!.sections[0]!.devices?.mobile?.appearance)
     .toEqual({ padding: 8 })
+  await expect(source).toHaveText('Override')
   await inspector.getByRole('button', { name: 'Reset padding (px)', exact: true }).click()
   await expect(padding).toHaveValue('24')
+  await expect(source).toHaveText('Automatic')
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(padding).toHaveValue('8')
+  await expect(source).toHaveText('Override')
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
   await expect(padding).toHaveValue('24')
+  await page.getByRole('button', { name: 'Tablet', exact: true }).click()
+  await padding.fill('0')
+  await padding.press('Tab')
+  await expect(source).toHaveText('Override')
+  await page.getByRole('button', { name: 'Mobile', exact: true }).click()
+  await expect(padding).toHaveValue('24')
+  await expect(source).toHaveText('Automatic')
   await inspector.getByLabel('Background color', { exact: true }).fill('#abcdef')
   await page.getByRole('button', { name: 'Desktop', exact: true }).click()
   await inspector.getByLabel('Corner radius (px)', { exact: true }).fill('30')
@@ -653,13 +937,95 @@ test('floating widget actions support transforms, locks, history and safe remova
   await expect(page.locator('.preview-frame [data-widget-id]')).toHaveCount(2)
   await toolbar.getByRole('button', { name: 'Send to back', exact: true }).click()
   await toolbar.getByRole('button', { name: 'Bring to front', exact: true }).click()
-  page.once('dialog', (dialog) => dialog.dismiss())
   await toolbar.getByRole('button', { name: 'Delete widget', exact: true }).click()
+  await page.locator('.builder-confirm[open]').getByRole('button').first().click()
   await expect(page.locator('.preview-frame [data-widget-id]')).toHaveCount(2)
-  page.once('dialog', (dialog) => dialog.accept())
   await toolbar.getByRole('button', { name: 'Delete widget', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.locator('.preview-frame [data-widget-id]')).toHaveCount(1)
   await expect(toolbar).toHaveCount(0)
+})
+
+test('website autosave saves idle edits as a draft without publishing', async ({ page }) => {
+  const api = await mockWebsite(page)
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await page.locator('.preview-frame [data-text-field="title"]').click()
+  const heading = page
+    .getByRole('region', { name: 'Selected element editor' })
+    .getByLabel('Heading', { exact: true })
+  await heading.fill('Automatically saved headline')
+  await expect
+    .poll(() => api.draft().pages[0]!.sections[0]!.title, { timeout: 10000 })
+    .toBe('Automatically saved headline')
+  await expect(page.locator('.builder-title')).toContainText('Draft saved')
+  expect(api.actions).not.toContain('publish')
+  expect(api.published()).toBeNull()
+  await page.reload()
+  await expect(page.locator('.preview-frame [data-text-field="title"]')).toContainText(
+    'Automatically saved headline',
+  )
+  await expect(page.getByLabel('Browser recovery', { exact: true })).toHaveCount(0)
+})
+
+test('offline website edits recover after reload and sync without publication', async ({
+  page,
+  context,
+}) => {
+  const api = await mockWebsite(page)
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await page.locator('.preview-frame [data-text-field="title"]').click()
+  const heading = page
+    .getByRole('region', { name: 'Selected element editor' })
+    .getByLabel('Heading', { exact: true })
+  await context.setOffline(true)
+  await heading.fill('Work kept through a lost connection')
+  await expect(page.locator('.builder-title')).toContainText('Saved in browser')
+  expect(api.draft().pages[0]!.sections[0]!.title).not.toBe('Work kept through a lost connection')
+  // Keep navigator offline during the refreshed editor's load; local assets/API mocks
+  // remain reachable so this exercises draft recovery rather than browser cache policy.
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }),
+  )
+  await context.setOffline(false)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Recover edits', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Recover edits', exact: true }).click()
+  await expect(page.locator('.preview-frame [data-text-field="title"]')).toContainText(
+    'Work kept through a lost connection',
+  )
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true })
+    window.dispatchEvent(new Event('online'))
+  })
+  await expect
+    .poll(() => api.draft().pages[0]!.sections[0]!.title, { timeout: 10000 })
+    .toBe('Work kept through a lost connection')
+  expect(api.actions).not.toContain('publish')
+  await expect(page.locator('.builder-title')).toContainText('Draft saved')
+})
+
+test('autosave conflicts preserve edits and keep the browser recovery available', async ({
+  page,
+}) => {
+  const api = await mockWebsite(page)
+  api.failSave()
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await page.locator('.preview-frame [data-text-field="title"]').click()
+  const heading = page
+    .getByRole('region', { name: 'Selected element editor' })
+    .getByLabel('Heading', { exact: true })
+  await heading.fill('Keep this conflicting work')
+  await heading.press('Tab')
+  await expect(page.getByText('Another saved version exists.', { exact: false })).toBeVisible({
+    timeout: 10000,
+  })
+  await expect(heading).toHaveValue('Keep this conflicting work')
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download recovery copy' }).click()
+  expect((await download).suggestedFilename()).toContain('website-recovery-')
+  expect(api.draft().pages[0]!.sections[0]!.title).not.toBe('Keep this conflicting work')
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Recover edits', exact: true })).toBeVisible()
 })
 
 test('contextual inspector edits only the selected element and breadcrumbs return to its parent', async ({
@@ -680,6 +1046,8 @@ test('contextual inspector edits only the selected element and breadcrumbs retur
   const heading = canvas.locator('[data-text-field="title"]')
   const inspector = page.getByRole('region', { name: 'Selected element editor', exact: true })
   await heading.click()
+  await expect(page.getByLabel('Selection scope', { exact: true })).toContainText('Heading')
+  await expect(page.getByLabel('Selection scope', { exact: true })).toContainText('Home')
   await expect(inspector.getByLabel('Heading', { exact: true })).toHaveValue(hero.title)
   await expect(inspector.getByLabel('Button link', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('navigation', { name: 'Selection path' })).toContainText('Heading')
@@ -699,6 +1067,7 @@ test('contextual inspector edits only the selected element and breadcrumbs retur
   await page.getByRole('button', { name: 'Done', exact: true }).click()
   await page.getByRole('button', { name: 'Select parent A clearer headline', exact: true }).click()
   await expect(inspector).toHaveCount(0)
+  await expect(page.getByLabel('Selection scope', { exact: true })).toContainText('Widget')
   await expect(page.getByRole('tab', { name: 'Appearance', exact: true })).toBeVisible()
   await canvas.locator('.website-media .media-crop').click()
   await expect(inspector.getByLabel('Image description', { exact: true })).toHaveValue('Job photo')
@@ -853,9 +1222,23 @@ test('element inspector and nested layers keep responsive placement, resets and 
   await expect(photo).toHaveAttribute('style', /width:/)
   await page.getByRole('button', { name: 'Mobile', exact: true }).click()
   await imageLayer.click()
+  await expect(fields.getByLabel('Element Width', { exact: true })).toHaveAttribute(
+    'aria-description',
+    'Follows desktop',
+  )
   await fields.getByLabel('Keep proportions').uncheck()
+  await expect(
+    fields
+      .locator('label')
+      .filter({ has: page.getByRole('checkbox', { name: 'Keep proportions' }) })
+      .locator('.setting-source'),
+  ).toHaveText('Override')
   await fields.getByLabel('Element Width', { exact: true }).fill('200')
   await fields.getByLabel('Element Width', { exact: true }).press('Tab')
+  await expect(fields.getByLabel('Element Width', { exact: true })).toHaveAttribute(
+    'aria-description',
+    'Override for this screen size',
+  )
   const mobileRect = (await photo.boundingBox())!
   const mobileScale =
     mobileRect.width / (await photo.evaluate((element) => (element as HTMLElement).offsetWidth))
@@ -899,8 +1282,8 @@ test('element inspector and nested layers keep responsive placement, resets and 
     .toEqual({ width: 200, rotation: 98, lockAspect: false })
   expect(api.draft().pages[0]!.sections[0]!.textBoxes?.image?.rotation).toBeUndefined()
   await page.reload()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website/home')
   await page.setViewportSize({ width: 390, height: 844 })
@@ -968,12 +1351,43 @@ test('images and buttons have direct handles, alignment guides and precise saved
   const textRect = (await title.boundingBox())!
   const buttonRect = (await button.boundingBox())!
   const start = { x: buttonRect.x + buttonRect.width / 2, y: buttonRect.y + buttonRect.height / 2 }
+  await button.evaluate((element) =>
+    element.addEventListener(
+      'pointerdown',
+      (event) => {
+        element.setAttribute('data-test-pointer', String((event as PointerEvent).pointerId))
+      },
+      { once: true },
+    ),
+  )
   await page.mouse.move(start.x, start.y)
   await page.mouse.down()
   await page.mouse.move(start.x + textRect.x - buttonRect.x + 3, start.y - 16, { steps: 5 })
+  // A slow pointer adjustment must keep the element on its visible guide.
+  await button.evaluate(
+    (element, point) => {
+      const event = new PointerEvent('pointermove', {
+        pointerId: Number(element.getAttribute('data-test-pointer')),
+        isPrimary: true,
+        clientX: point.x,
+        clientY: point.y,
+        bubbles: true,
+      })
+      Object.defineProperty(event, 'timeStamp', { value: performance.now() + 1000 })
+      window.dispatchEvent(event)
+    },
+    { x: start.x + textRect.x - buttonRect.x + 3.25, y: start.y - 16 },
+  )
+  await expect
+    .poll(async () => Math.abs((await button.boundingBox())!.x - textRect.x))
+    .toBeLessThan(0.75)
+  const alignedBeforeRelease = (await button.boundingBox())!.x
   await expect(page.locator('.alignment-guide').first()).toBeVisible()
   await page.mouse.up()
   await expect(page.locator('.alignment-guide')).toHaveCount(0)
+  await expect
+    .poll(async () => Math.abs((await button.boundingBox())!.x - alignedBeforeRelease))
+    .toBeLessThan(0.75)
   await expect(banner).toHaveAttribute('style', parentStyle!)
   await button.dblclick()
   await expect(page.getByRole('textbox', { name: 'Edit button label on page' })).toBeFocused()
@@ -984,8 +1398,8 @@ test('images and buttons have direct handles, alignment guides and precise saved
   expect(api.draft().pages[0]!.sections[0]!.layout).toEqual(hero.layout)
   await page.reload()
   await expect(photo).toHaveAttribute('style', /rotate\(98deg\)/)
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website/home')
   await expect(page.locator('.website-media')).toHaveAttribute('style', /rotate\(98deg\)/)
@@ -1077,8 +1491,8 @@ test('text has its own resize circles and rotation handle without moving its ban
   await expect.poll(() => api.draft().pages[0]!.sections[0]!.textBoxes?.title?.rotation).toBe(15)
   expect(api.draft().pages[0]!.sections[0]!.layout).toEqual(hero.layout)
   expect(api.draft().pages[0]!.sections[0]!.text).toBe(hero.text)
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website/home')
   const published = page.getByRole('heading', { name: 'Build your next chapter today' })
@@ -1116,6 +1530,10 @@ test('floating widget actions fit phones and yield to inline text editing', asyn
     0,
   )
   await textToolbar.getByRole('button', { name: 'Done', exact: true }).click()
+  // Finishing text editing preserves the element selection and its direct handles.
+  await expect(page.getByRole('button', { name: 'Rotate text', exact: true })).toBeVisible()
+  await selectCanvasWidget(page, 'Welcome to Phase 2')
+  await panels.getByRole('button', { name: 'Preview', exact: true }).click()
   await expect(toolbar).toBeVisible()
   await toolbar.getByRole('button', { name: 'Widget settings', exact: true }).click()
   await expect(page.getByRole('complementary', { name: 'Content editor' })).toBeVisible()
@@ -1154,6 +1572,8 @@ test('canvas image editing replaces, crops and describes a photo without moving 
   await editor.getByRole('button', { name: 'Choose image from library' }).click()
   const library = page.getByRole('dialog', { name: 'Website image library' })
   await library.getByRole('button', { name: 'Load more images' }).click()
+  await page.evaluate(() => document.fonts.ready)
+  await library.screenshot({ path: '.security-work/gui-image-library.png' })
   await library.getByRole('button', { name: 'Use Company logo.webp' }).click()
   await editor.getByLabel('Image description', { exact: true }).fill('Crew completing the project')
   await editor.getByRole('button', { name: 'Done', exact: true }).click()
@@ -1408,6 +1828,7 @@ test('inspector tabs preserve edits, support keyboard navigation and work on pho
     appearance: { rotation: 12 },
   })
   expect(api.actions).not.toContain('publish')
+  await page.evaluate(() => document.fonts.ready)
   await page.screenshot({ path: '.security-work/inspector-tabs-desktop.png' })
   await page.setViewportSize({ width: 390, height: 844 })
   await page
@@ -1525,6 +1946,7 @@ test('canvas zoom works across devices and fit follows the available workspace w
     )
   }
   await controls.getByRole('button', { name: 'Desktop', exact: true }).click()
+  await fit.click()
   const fitted = await width()
   await controls.getByRole('button', { name: 'Focus canvas', exact: true }).click()
   await expect.poll(width).toBeGreaterThan(fitted + 300)
@@ -1540,7 +1962,8 @@ test('canvas zoom works across devices and fit follows the available workspace w
     .click()
   await expect.poll(width).toBeLessThan(390)
   await expect(page.locator('.builder-header .subtle')).toContainText('Draft saved')
-  expect(api.actions).toEqual(['load', 'save'])
+  expect(api.actions[0]).toBe('load')
+  expect(api.actions.filter((action) => action !== 'load')).toEqual(['save'])
 })
 
 test('publishing checks open the correct widget and shared layout so blockers can be fixed', async ({
@@ -1740,7 +2163,7 @@ test('owners edit content in one inspector, preserve shared designs and see accu
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Another admin changed')
   await expect(inspector.getByLabel('Card headline', { exact: true })).toHaveValue('Another edit')
-  await expect(page.locator('.builder-header .subtle')).toContainText('Unsaved changes')
+  await expect(page.locator('.builder-header .subtle')).toContainText('Save conflict')
 })
 
 test('refined workspace guides an empty page into adding its first widget on mobile', async ({
@@ -1798,11 +2221,11 @@ test('admin edits, previews, saves and deliberately publishes pages; draft chang
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
   expect(api.published()).toBeNull()
-  page.once('dialog', (dialog) => dialog.dismiss())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open]').getByRole('button').first().click()
   expect(api.actions).not.toContain('publish')
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await openInspectorFor(page, 'Heading')
   await inspector.getByLabel('Heading', { exact: true }).fill('Unpublished change')
@@ -1832,8 +2255,8 @@ test('admin edits, previews, saves and deliberately publishes pages; draft chang
   expect((await page.locator('.preview-frame').boundingBox())!.width).toBeLessThanOrEqual(390)
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await openTool(page, 'Publishing')
   await page.getByRole('button', { name: 'Restore previous to draft', exact: true }).click()
@@ -1874,7 +2297,7 @@ test('templates, copies and local history edit the draft without changing public
     .getByRole('button', { name: 'Projects (copy) /projects-copy', exact: true })
     .click()
   await selectCanvasWidget(page, 'Our projects')
-  await page.getByRole('button', { name: 'Duplicate section', exact: true }).click()
+  await page.getByRole('button', { name: 'Duplicate widget', exact: true }).click()
   await openInspectorFor(page, 'Heading')
   await inspector.getByLabel('Heading', { exact: true }).first().fill('Copy only')
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
@@ -1972,8 +2395,8 @@ test('grid widgets keep authored coordinates through move, resize, zoom, undo an
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeEnabled()
   expect(api.draft().pages[0]!.sections[0]!.layout!.x).toBe(0)
   expect(api.published()).toBeNull()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.getByRole('button', { name: 'Fit', exact: true }).click()
   await page.screenshot({ path: '.security-work/website-network-grid.png' })
@@ -1981,12 +2404,13 @@ test('grid widgets keep authored coordinates through move, resize, zoom, undo an
   await expect(page.getByRole('heading', { name: 'Grid note', exact: true })).toBeVisible()
   await expect(page.locator('.grid-resize')).toHaveCount(0)
   await expect(page.locator('.show-grid')).toHaveCount(0)
+  const publishedWidget = page.locator('.grid-widget').nth(1)
+  await expect(publishedWidget).toHaveCSS('left', '225px')
   await page.setViewportSize({ width: 390, height: 844 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true)
-  const publishedWidget = page.locator('.grid-widget').nth(1)
-  await expect(publishedWidget).toHaveCSS('left', '225px')
+  await expect(page.locator('.flow-surface')).toBeVisible()
 })
 
 test('cancelled drags leave the draft intact and widget buttons work on phones', async ({
@@ -2008,11 +2432,11 @@ test('cancelled drags leave the draft intact and widget buttons work on phones',
   await expect(page.locator('.widget-frame')).toHaveCount(1)
   await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled()
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await source.click()
   await expect(page.getByLabel('Heading', { exact: true })).toHaveValue('Text')
   await page.getByLabel('Heading', { exact: true }).fill('Phone widget')
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await openTool(page, 'Pages')
   await page.getByRole('button', { name: 'Move section 2 up', exact: true }).click()
   await page
@@ -2079,8 +2503,8 @@ test('multi-selection moves as a group, supports clipboard and layers, and undoe
   expect(new Set(sections.map((entry) => entry.id)).size).toBe(5)
   const selected = page.locator('.grid-selected').first()
   await selected.focus()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.keyboard.press('Delete')
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.locator('.grid-widget')).toHaveCount(3)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(page.locator('.grid-widget')).toHaveCount(5)
@@ -2159,10 +2583,10 @@ test('group arrangement persists, supports keyboard history and protects text ed
   await expect(page.locator('.grid-widget')).toHaveCount(4)
   expect(await widgetX()).toEqual([1, 9.5, 19])
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await openTool(page, 'Pages')
   await outline.getByRole('button', { name: 'A Text', exact: true }).click()
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await openTool(page, 'Pages')
   await outline.getByRole('button', { name: 'B Text', exact: true }).click({ modifiers: ['Shift'] })
   await expect(inspector.getByRole('region', { name: 'Arrange widgets' })).toBeVisible()
@@ -2234,11 +2658,11 @@ test('containers, appearance and rotation survive copying, undo and publication'
   await expect(page.locator('.container-children')).toHaveCount(1)
   await openTool(page, 'Pages')
   await outline.getByRole('button', { name: 'Feature group Container', exact: true }).click()
-  await openInspectorFor(page, 'Hide section')
-  await inspector.getByLabel('Hide section', { exact: true }).check()
+  await openInspectorFor(page, 'Hide widget')
+  await inspector.getByLabel('Hide widget', { exact: true }).check()
   await expect(page.locator('.contained-widget')).toHaveCount(0)
-  await openInspectorFor(page, 'Hide section')
-  await inspector.getByLabel('Hide section', { exact: true }).uncheck()
+  await openInspectorFor(page, 'Hide widget')
+  await inspector.getByLabel('Hide widget', { exact: true }).uncheck()
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
   const saved = api.draft().pages[0]!.sections
@@ -2251,8 +2675,8 @@ test('containers, appearance and rotation survive copying, undo and publication'
     fontFamily: 'serif',
     headingSize: 36,
   })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.locator('.section-container')).toHaveCSS('background-color', 'rgb(35, 69, 103)')
@@ -2309,8 +2733,8 @@ test('standalone photos rotate, move and render without a text block', async ({ 
     padding: 0,
     imageFit: 'contain',
   })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.getByRole('img', { name: 'Our project', exact: true })).toHaveCSS(
@@ -2475,8 +2899,8 @@ test('admins reuse library images for the logo and sections and publish shared f
   expect(api.draft().pages[0]?.sections[0]?.imageId).toBe('photo')
   expect(api.actions).not.toContain('uploadImage')
   expect(api.published()).toBeNull()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.getByRole('img', { name: 'Phase 2 logo', exact: true })).toBeVisible()
@@ -2514,7 +2938,7 @@ test('builder fills the workspace and scrolls long content inside each pane', as
   await page.setViewportSize({ width: 1440, height: 900 })
   await gotoPhase2App(page, '/admin/website', createJobsFixture())
   await expect(page.getByRole('heading', { name: 'Section 1', exact: true })).toBeVisible()
-  const preview = page.locator('.preview-scroll')
+  const preview = page.locator('.preview-viewport')
   const main = page.locator('.app-shell__content')
   const assertContained = async () => {
     expect(await main.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1)
@@ -2575,7 +2999,7 @@ test('builder fills the workspace and scrolls long content inside each pane', as
     el.scrollTop = el.scrollHeight
   })
   expect((await preview.locator('footer').boundingBox())!.y).toBeLessThan(844)
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await page.getByRole('button', { name: 'Page settings', exact: true }).click()
   await expect(page.getByLabel('Page title', { exact: true })).toBeVisible()
   await assertContained()
@@ -2605,9 +3029,9 @@ test('save conflicts preserve edits and warn before leaving; editor fits a phone
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Another admin changed')
   await expect(page.getByLabel('Website name', { exact: true })).toHaveValue('Keep these edits')
-  page.once('dialog', (dialog) => dialog.dismiss())
   await openTool(page, 'Publishing')
   await page.getByRole('button', { name: 'Reload draft', exact: true }).click()
+  await page.locator('.builder-confirm[open]').getByRole('button').first().click()
   await expect(page.getByLabel('Website name', { exact: true })).toHaveValue('Keep these edits')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -2651,8 +3075,8 @@ test('page CSS templates preview safely, validate, save and publish with respons
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
   expect(api.draft().pages[0]!.css).toBe(css)
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await page.setViewportSize({ width: 390, height: 844 })
@@ -2754,7 +3178,7 @@ test('flow containers size to content and device overrides preserve desktop styl
   await outline.getByRole('button', { name: 'Row group Container', exact: true }).click()
   await openInspectorFor(page, 'Ungroup container')
   await page.getByRole('button', { name: 'Reset mobile overrides', exact: true }).click()
-  await expect(page.locator('.container-children')).toHaveCSS('flex-direction', 'row')
+  await expect(page.locator('.container-children')).toHaveCSS('flex-direction', 'column')
 })
 
 function layerFixture(): WebsiteSite {
@@ -2898,8 +3322,8 @@ test('layers list matches hierarchy, reorders by dragging and keyboard, and save
     'inner-b',
   ])
   await page.screenshot({ path: '.security-work/website-layers-desktop.png' })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   const front = page
@@ -2934,7 +3358,7 @@ test('layer drag cancellation and cross-container drops leave the draft intact; 
   await page.mouse.move(1, 1)
   await page.mouse.up()
   expect(await order()).toEqual(before)
-  const preview = page.locator('.preview-scroll')
+  const preview = page.locator('.preview-viewport')
   await preview.evaluate((el) => {
     el.scrollTop = 0
   })
@@ -2963,7 +3387,7 @@ test('layers can be selected and revealed on phones without closing the list on 
   await mockWebsite(page, false, false, layerFixture())
   await page.setViewportSize({ width: 390, height: 844 })
   await gotoPhase2App(page, '/admin/website', createJobsFixture())
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await page.getByRole('button', { name: 'Layers', exact: true }).click()
   const panel = page.getByRole('region', { name: 'Page layers', exact: true })
   await panel.getByRole('button', { name: 'Select layer Far note', exact: true }).click()
@@ -2977,7 +3401,7 @@ test('layers can be selected and revealed on phones without closing the list on 
   )
 })
 
-test('saved sections preview privately, copy between pages, rename, undo removal and persist independently', async ({
+test('saved widgets preview privately, copy between pages, rename, undo removal and persist independently', async ({
   page,
 }) => {
   const api = await mockWebsite(page, false, false, layerFixture())
@@ -2990,10 +3414,10 @@ test('saved sections preview privately, copy between pages, rename, undo removal
   await openTool(page, 'Widgets')
   await outline
     .locator('summary')
-    .filter({ hasText: /^Saved sections/ })
+    .filter({ hasText: /^Saved widgets/ })
     .click()
   await openTool(page, 'Widgets')
-  await outline.getByLabel('Saved section name', { exact: true }).fill('Project intro')
+  await outline.getByLabel('Saved widget name', { exact: true }).fill('Project intro')
   await openTool(page, 'Widgets')
   await outline.getByRole('button', { name: 'Save selection to library', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Added Project intro')
@@ -3003,16 +3427,16 @@ test('saved sections preview privately, copy between pages, rename, undo removal
   await inspector.getByLabel('Heading', { exact: true }).fill('Changed original')
   await openTool(page, 'Widgets')
   await outline
-    .getByRole('button', { name: 'Preview saved section Project intro', exact: true })
+    .getByRole('button', { name: 'Preview saved widget Project intro', exact: true })
     .click()
-  const dialog = page.getByRole('dialog', { name: 'Saved section preview', exact: true })
+  const dialog = page.getByRole('dialog', { name: 'Saved widget preview', exact: true })
   await expect(dialog.getByRole('heading', { name: 'Inner A', exact: true })).toBeVisible()
   await expect(dialog.locator('.grid-resize,.drag-widget,.edit-section')).toHaveCount(0)
   await page.screenshot({ path: '.security-work/saved-section-desktop.png' })
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
   await expect(
-    outline.getByRole('button', { name: 'Preview saved section Project intro', exact: true }),
+    outline.getByRole('button', { name: 'Preview saved widget Project intro', exact: true }),
   ).toBeFocused()
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
@@ -3028,7 +3452,7 @@ test('saved sections preview privately, copy between pages, rename, undo removal
   await inspector.getByLabel('Page title', { exact: true }).fill('Projects')
   await openTool(page, 'Widgets')
   await outline
-    .getByRole('button', { name: 'Preview saved section Project intro', exact: true })
+    .getByRole('button', { name: 'Preview saved widget Project intro', exact: true })
     .click()
   await dialog.getByRole('button', { name: 'Insert on current page', exact: true }).click()
   await expect(dialog).toBeHidden()
@@ -3051,21 +3475,21 @@ test('saved sections preview privately, copy between pages, rename, undo removal
   )
   await openTool(page, 'Widgets')
   await outline
-    .getByLabel('Rename saved section Project intro', { exact: true })
+    .getByLabel('Rename saved widget Project intro', { exact: true })
     .fill('Project layout')
   await openTool(page, 'Widgets')
-  await outline.getByLabel('Rename saved section Project intro', { exact: true }).press('Tab')
+  await outline.getByLabel('Rename saved widget Project intro', { exact: true }).press('Tab')
   await openTool(page, 'Widgets')
   await outline
-    .getByRole('button', { name: 'Remove saved section Project layout', exact: true })
+    .getByRole('button', { name: 'Remove saved widget Project layout', exact: true })
     .click()
   await expect(
-    outline.getByRole('button', { name: 'Insert saved section Project layout', exact: true }),
+    outline.getByRole('button', { name: 'Insert saved widget Project layout', exact: true }),
   ).toHaveCount(0)
   await expect(page.locator('.grid-surface .contained-widget')).toHaveCount(2)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(
-    outline.getByRole('button', { name: 'Insert saved section Project layout', exact: true }),
+    outline.getByRole('button', { name: 'Insert saved widget Project layout', exact: true }),
   ).toBeVisible()
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
@@ -3073,17 +3497,17 @@ test('saved sections preview privately, copy between pages, rename, undo removal
   await page.getByRole('button', { name: 'Reload draft', exact: true }).click()
   await openTool(page, 'Widgets')
   await expect(
-    outline.getByLabel('Rename saved section Project layout', { exact: true }),
+    outline.getByLabel('Rename saved widget Project layout', { exact: true }),
   ).toHaveValue('Project layout')
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   expect(api.published()!.savedSections).toBeUndefined()
   await page.goto('/website/page-1')
   await expect(page.getByRole('heading', { name: 'Copy heading', exact: true })).toBeVisible()
 })
 
-test('saved section previews load private images and enforce page capacity', async ({ page }) => {
+test('saved widget previews load private images and enforce page capacity', async ({ page }) => {
   const fixture = structuredClone(initial)
   const image = {
     ...fixture.pages[0]!.sections[0]!,
@@ -3099,16 +3523,16 @@ test('saved section previews load private images and enforce page capacity', asy
   const api = await mockWebsite(page, false, false, fixture)
   await page.setViewportSize({ width: 390, height: 844 })
   await gotoPhase2App(page, '/admin/website', createJobsFixture())
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await openTool(page, 'Widgets')
   await page
     .locator('summary')
-    .filter({ hasText: /^Saved sections/ })
+    .filter({ hasText: /^Saved widgets/ })
     .click()
   await page
-    .getByRole('button', { name: 'Preview saved section Private photo', exact: true })
+    .getByRole('button', { name: 'Preview saved widget Private photo', exact: true })
     .click()
-  const dialog = page.getByRole('dialog', { name: 'Saved section preview', exact: true })
+  const dialog = page.getByRole('dialog', { name: 'Saved widget preview', exact: true })
   await expect(
     dialog.getByRole('img', { name: 'Reusable project image', exact: true }),
   ).toBeVisible()
@@ -3125,13 +3549,13 @@ test('saved section previews load private images and enforce page capacity', asy
   }))
   await page.unroute('**/websiteBuilder')
   await mockWebsite(page, false, false, fixture)
-  page.once('dialog', (dialog) => dialog.accept())
   await openTool(page, 'Publishing')
   await page.getByRole('button', { name: 'Reload draft', exact: true }).click()
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await openTool(page, 'Widgets')
   await expect(
-    page.getByRole('button', { name: 'Insert saved section Private photo', exact: true }),
+    page.getByRole('button', { name: 'Insert saved widget Private photo', exact: true }),
   ).toBeDisabled()
 })
 
@@ -3210,8 +3634,8 @@ test('resizing a navbar shifts later rows live and saves one reversible layout c
   expect(api.draft().pages[0]!.sections.map((section) => section.layout!.x)).toEqual([0, 0, 12, 0])
   await page.reload()
   await expect.poll(() => left.evaluate((el) => (el as HTMLElement).style.top)).toBe('288px')
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect
@@ -3275,6 +3699,9 @@ test('shared navigation supports spacing controls and drag height with undo, can
   await page.getByRole('button', { name: 'Create shared layout', exact: true }).click()
   await selectCanvasWidget(page, 'Navigation')
   const inspector = page.getByRole('complementary', { name: 'Content editor' })
+  await expect(inspector.getByLabel('Selection scope', { exact: true })).toContainText(
+    'Shared layout',
+  )
   const nav = page.locator('.preview-frame .section-navigation')
   const frame = nav.locator('..')
   await expect(nav.getByText('Add text', { exact: true })).toHaveCount(0)
@@ -3313,10 +3740,14 @@ test('shared navigation supports spacing controls and drag height with undo, can
     steps: 8,
   })
   await page.mouse.up()
+  // Pointer coordinates round differently in scaled Firefox/WebKit canvases.
   await expect
-    .poll(() => frame.evaluate((el) => parseFloat((el as HTMLElement).style.height)))
-    .toBe(64)
-  await expect.poll(() => nav.evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(54)
+    .poll(() => frame.evaluate((el) => Math.abs(parseFloat((el as HTMLElement).style.height) - 64)))
+    .toBeLessThanOrEqual(1)
+  const draggedHeight = await frame.evaluate((el) => parseFloat((el as HTMLElement).style.height))
+  await expect
+    .poll(() => nav.evaluate((el) => (el as HTMLElement).offsetHeight))
+    .toBe(draggedHeight - 10)
   await expect
     .poll(() => nav.locator('.brand-logo').evaluate((el) => (el as HTMLElement).offsetHeight))
     .toBeLessThan(48)
@@ -3327,7 +3758,7 @@ test('shared navigation supports spacing controls and drag height with undo, can
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
   await expect
     .poll(() => frame.evaluate((el) => parseFloat((el as HTMLElement).style.height)))
-    .toBe(64)
+    .toBe(draggedHeight)
   const next = (await handle.boundingBox())!
   await page.mouse.move(next.x + next.width / 2, next.y + next.height / 2)
   await page.mouse.down()
@@ -3336,14 +3767,14 @@ test('shared navigation supports spacing controls and drag height with undo, can
   await page.mouse.up()
   await expect
     .poll(() => frame.evaluate((el) => parseFloat((el as HTMLElement).style.height)))
-    .toBe(64)
+    .toBe(draggedHeight)
   await page
     .getByRole('group', { name: 'Widget actions' })
     .getByRole('button', { name: 'Resize widget', exact: true })
     .press('ArrowDown')
   await expect
     .poll(() => frame.evaluate((el) => parseFloat((el as HTMLElement).style.height)))
-    .toBe(65)
+    .toBe(draggedHeight + 1)
   await page.getByRole('button', { name: 'Mobile', exact: true }).click()
   await inspector.getByLabel('Height (px)', { exact: true }).fill('96')
   await inspector.getByLabel('Height (px)', { exact: true }).press('Tab')
@@ -3353,10 +3784,10 @@ test('shared navigation supports spacing controls and drag height with undo, can
   await page.getByRole('button', { name: 'Desktop', exact: true }).click()
   await expect
     .poll(() => frame.evaluate((el) => parseFloat((el as HTMLElement).style.height)))
-    .toBe(65)
+    .toBe(draggedHeight + 1)
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
-  expect(api.draft().sharedLayout!.sections[0]!.sizing?.height).toBe(65)
+  expect(api.draft().sharedLayout!.sections[0]!.sizing?.height).toBe(draggedHeight + 1)
   expect(api.draft().sharedLayout!.sections[0]!.devices?.mobile?.sizing).toEqual({ height: 96 })
   expect(api.draft().sharedLayout!.sections[0]!.appearance).toMatchObject({
     padding: 8,
@@ -3369,17 +3800,17 @@ test('shared navigation supports spacing controls and drag height with undo, can
   await page.getByRole('button', { name: 'Site layout', exact: true }).click()
   await expect
     .poll(() => frame.evaluate((el) => parseFloat((el as HTMLElement).style.height)))
-    .toBe(65)
+    .toBe(draggedHeight + 1)
   await page.screenshot({ path: '.security-work/navbar-spacing.png' })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect
     .poll(() =>
       page.locator('.section-navigation').evaluate((el) => (el as HTMLElement).offsetHeight),
     )
-    .toBe(55)
+    .toBe(draggedHeight - 9)
   await expect(page.locator('.section-navigation')).toHaveCSS('margin-left', '12px')
 })
 
@@ -3486,8 +3917,8 @@ test('buttons and individual cards edit inline, keep their own destinations and 
   await expect(itemUrl).toBeInViewport({ ratio: 1 })
   await page.screenshot({ path: '.security-work/individual-card-editor-phone.png' })
   await page.setViewportSize({ width: 1600, height: 1000 })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.getByRole('link', { name: 'Talk to us', exact: true })).toHaveAttribute(
@@ -3561,7 +3992,7 @@ test('navbar links edit inline including page, login and dropdown labels without
   const editor = page.getByRole('textbox', { name: 'Edit menu label on page' })
   const toolbar = page.getByRole('group', { name: 'Text formatting' })
   const inspector = page.getByRole('complementary', { name: 'Content editor' })
-  await menu.getByText('Home', { exact: true }).click()
+  await menu.getByText('Home', { exact: true }).dblclick()
   await expect(editor).toBeFocused()
   await editor.press(await shortcut(page, 'a'))
   await editor.press('Backspace')
@@ -3570,7 +4001,7 @@ test('navbar links edit inline including page, login and dropdown labels without
   await toolbar.getByRole('button', { name: 'Bold', exact: true }).click()
   await toolbar.getByRole('button', { name: 'Done', exact: true }).click()
   await expect(menu.locator('strong')).toHaveText('Welcome')
-  await menu.getByText('Employee Login', { exact: true }).click()
+  await menu.getByText('Employee Login', { exact: true }).dblclick()
   await expect(editor).toBeFocused()
   await editor.press(await shortcut(page, 'a'))
   await editor.press('Backspace')
@@ -3614,8 +4045,8 @@ test('navbar links edit inline including page, login and dropdown labels without
   await page.reload()
   await expect(menu.getByText('Welcome', { exact: true })).toBeVisible()
   await expect(menu.getByText('Team login', { exact: true })).toBeVisible()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.getByRole('link', { name: 'Welcome', exact: true })).toHaveAttribute(
@@ -3673,7 +4104,7 @@ test('navigation and footer share inline text, image and menu editing with other
   await inspector.getByLabel('Menu label', { exact: true }).fill('Contact office')
   await expect(inspector.getByLabel('Menu label', { exact: true })).toHaveCSS(
     'background-color',
-    'rgb(17, 40, 56)',
+    'rgb(16, 35, 49)',
   )
   await nav.getByRole('button', { name: 'Edit image: Company logo', exact: true }).dblclick()
   const image = page.getByRole('region', { name: 'Image editor', exact: true })
@@ -3707,8 +4138,8 @@ test('navigation and footer share inline text, image and menu editing with other
   await page.screenshot({ path: '.security-work/navigation-editor-desktop.png' })
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.locator('header .website-brand strong')).toHaveText('Phase 2 Construction')
@@ -3718,6 +4149,7 @@ test('navigation and footer share inline text, image and menu editing with other
     page.locator('header').getByRole('link', { name: 'Contact office' }),
   ).toHaveAttribute('href', 'mailto:office@example.com')
   await page.setViewportSize({ width: 390, height: 844 })
+  await page.locator('header').getByRole('button', { name: 'Open navigation menu' }).click()
   await expect(page.locator('header').getByRole('link', { name: 'Contact office' })).toBeVisible()
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -3757,18 +4189,18 @@ test('blank pages use movable optional navigation and footer widgets with dropdo
   await page.getByRole('button', { name: 'Add Footer widget', exact: true }).click()
   await openInspectorFor(page, 'Text')
   await inspector.getByLabel('Text', { exact: true }).fill('Our company footer')
-  await openInspectorFor(page, 'Hide section')
-  await inspector.getByLabel('Hide section', { exact: true }).check()
+  await openInspectorFor(page, 'Hide widget')
+  await inspector.getByLabel('Hide widget', { exact: true }).check()
   await expect(preview.locator('footer')).toHaveCount(0)
-  await openInspectorFor(page, 'Hide section')
-  await inspector.getByLabel('Hide section', { exact: true }).uncheck()
+  await openInspectorFor(page, 'Hide widget')
+  await inspector.getByLabel('Hide widget', { exact: true }).uncheck()
   await expect(preview.locator('footer')).toHaveCount(1)
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
   expect(api.draft().pages[0]!.chrome).toBe('widgets')
   expect(api.draft().pages[0]!.sections[0]!.layout!.y).toBe(2)
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.locator('header')).toHaveCount(1)
@@ -3793,7 +4225,7 @@ test('formatted content, image effects and locks persist while revision restore 
   await inspector.getByLabel('Formatted text', { exact: true }).check()
   const text = inspector.getByLabel('Text', { exact: true })
   await text.fill('Important')
-  await text.press(await shortcut(page, 'a'))
+  await text.selectText()
   await inspector.getByRole('button', { name: 'Bold', exact: true }).click()
   await expect(text).toHaveValue('**Important**')
   await text.fill(
@@ -3809,6 +4241,7 @@ test('formatted content, image effects and locks persist while revision restore 
   await inspector.getByText('Image crop and effects', { exact: true }).click()
   await openInspectorFor(page, 'Image caption')
   await inspector.getByLabel('Image caption', { exact: true }).fill('Completed work')
+  await inspector.getByText('Image overlay and gradient', { exact: true }).click()
   for (const [label, value] of [
     ['Horizontal focal point', '25'],
     ['Vertical focal point', '75'],
@@ -3851,13 +4284,13 @@ test('formatted content, image effects and locks persist while revision restore 
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
   await openTool(page, 'Publishing')
-  await page.getByText('Saved draft history', { exact: true }).click()
+  await page.getByText('Change history', { exact: true }).click()
   await page.getByRole('button', { name: 'Restore draft version 1', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Saved version restored')
   expect(api.draft().pages[0]!.sections[0]!.title).toBe('Welcome to Phase 2')
   expect(api.published()!.pages[0]!.sections[0]!.textFormat).toBeUndefined()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.locator('strong')).toHaveText('Important')
@@ -3883,8 +4316,8 @@ test('legacy header and footer become editable widgets and deleting them stays d
   await expect(page.locator('.preview-scroll header')).toHaveCount(1)
   await expect(page.locator('.preview-scroll footer')).toHaveCount(1)
   await selectCanvasWidget(page, 'Navigation')
-  page.once('dialog', (dialog) => dialog.accept())
-  await page.getByRole('button', { name: 'Remove section', exact: true }).click()
+  await page.getByRole('button', { name: 'Remove widget', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.locator('.preview-scroll header')).toHaveCount(0)
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
@@ -3951,8 +4384,8 @@ test('custom visual designs update linked placements and preserve local settings
   await expect(preview.getByRole('heading', { name: 'First placement', exact: true })).toHaveCount(
     1,
   )
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   expect(api.published()!.customWidgets).toBeUndefined()
   await page.goto('/website')
@@ -4011,15 +4444,18 @@ test('HTML CSS widgets preview privately, expose settings and publish in a sandb
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Draft saved')
   expect(api.published()).toBeNull()
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
-  await expect(page.frameLocator('iframe').getByRole('heading')).toHaveText(
+  await expect(page.frameLocator('iframe[title="Announcement"]').getByRole('heading')).toHaveText(
     '<img src=x onerror=bad()>',
   )
-  await expect(page.frameLocator('iframe').locator('script')).toHaveCount(0)
-  await expect(page.frameLocator('iframe').locator('h2')).toHaveCSS('color', 'rgb(18, 52, 86)')
+  await expect(page.frameLocator('iframe[title="Announcement"]').locator('script')).toHaveCount(0)
+  await expect(page.frameLocator('iframe[title="Announcement"]').locator('h2')).toHaveCSS(
+    'color',
+    'rgb(18, 52, 86)',
+  )
   expect(await page.evaluate(() => 'injected' in window)).toBe(false)
 })
 
@@ -4075,8 +4511,8 @@ test('admins configure private public-form routing and visitors submit without a
     cc: ['manager@example.test'],
     subject: 'New project inquiry',
   })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   expect(api.published()!.forms![0]!.delivery).toBeUndefined()
   await page.goto('/website')
@@ -4144,11 +4580,11 @@ test('admins can review stored inquiries and retry failed notifications', async 
   await inbox.locator('summary').click()
   await expect(inbox.getByText('<script>bad()</script>', { exact: true })).toBeVisible()
   await expect(inbox.locator('script')).toHaveCount(0)
-  page.once('dialog', (dialog) => dialog.dismiss())
   await inbox.getByRole('button', { name: 'Retry notification email', exact: true }).click()
+  await page.locator('.builder-confirm[open]').getByRole('button').first().click()
   expect(actions).toEqual(['list'])
-  page.once('dialog', (dialog) => dialog.accept())
   await inbox.getByRole('button', { name: 'Retry notification email', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(inbox.locator('summary')).toContainText('Email sent')
   expect(actions).toEqual(['list', 'retry'])
   await inbox.getByRole('button', { name: 'Close submissions', exact: true }).click()
@@ -4203,8 +4639,8 @@ test('interactive widgets can be added, edited, published and used on mobile', a
   expect(api.draft().pages[0]!.sections.find((s) => s.type === 'tabs')!.items[0]!.title).toBe(
     'tabs item 2',
   )
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Example video', exact: true })).toBeVisible()
@@ -4246,6 +4682,8 @@ test('component library filters, edits and publishes basic, company and data wid
   const inspector = page.getByRole('complementary', { name: 'Content editor' })
   const library = page.locator('.widget-library')
   await openTool(page, 'Widgets')
+  await page.evaluate(() => document.fonts.ready)
+  await page.screenshot({ path: '.security-work/gui-widget-library.png' })
   await page.getByLabel('Widget category', { exact: true }).selectOption('Data')
   await expect(library.getByRole('button', { name: 'Add Chart widget', exact: true })).toBeVisible()
   await expect(library.getByRole('button', { name: 'Add Button widget', exact: true })).toHaveCount(
@@ -4340,8 +4778,8 @@ test('component library filters, edits and publishes basic, company and data wid
   expect(
     api.draft().pages[0]!.sections.find((s) => s.type === 'chart')!.blockOptions?.chartType,
   ).toBe('donut')
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(
@@ -4349,6 +4787,7 @@ test('component library filters, edits and publishes basic, company and data wid
   ).toHaveAttribute('href', '/website')
   await expect(page.getByText('Project Manager', { exact: true })).toBeVisible()
   await expect(page.getByText('A reliable project team.', { exact: true })).toBeVisible()
+  await page.locator('.section-logos').scrollIntoViewIfNeeded()
   await expect(
     page.getByRole('img', { name: 'Company certification logo', exact: true }),
   ).toBeVisible()
@@ -4432,8 +4871,8 @@ test('compact cards and graphs edit as individual components and keep data acces
   expect(metric.value).toBe(0)
   expect(metric.layout).toMatchObject({ w: 6, h: 5 })
   expect(metric.appearance).toMatchObject({ padding: 12, headingSize: 18 })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Compact metric', exact: true })).toBeVisible()
@@ -4497,8 +4936,10 @@ test('editor modes preserve one draft and prevent layout edits outside Design', 
   await expect(page.getByRole('button', { name: 'Rotate Owner update', exact: true })).toBeVisible()
   await openInspectorFor(page, 'Widget w')
   await inspector.getByLabel('Widget w', { exact: true }).fill('18')
-  await openInspectorFor(page, 'Widget w')
+  await page.setViewportSize({ width: 1400, height: 950 })
+  await expect(inspector.getByLabel('Widget w', { exact: true })).toHaveValue('18')
   await inspector.getByLabel('Widget w', { exact: true }).press('Tab')
+  await expect(inspector.getByLabel('Widget w', { exact: true })).toHaveValue('18')
   await modes.getByRole('button', { name: 'Code', exact: true }).click()
   await expect(page.locator('.grid-resize, .grid-rotate, .drag-widget')).toHaveCount(0)
   await openInspectorFor(page, 'CSS class')
@@ -4547,7 +4988,7 @@ test('editor modes and site settings remain usable on a phone without changing t
     page.getByRole('button', { name: 'Enable shared design', exact: true }),
   ).toBeVisible()
   await modes.getByRole('button', { name: 'Code', exact: true }).click()
-  await page.getByRole('button', { name: 'Pages & sections', exact: true }).click()
+  await page.getByRole('button', { name: 'Pages & widgets', exact: true }).click()
   await page.getByRole('button', { name: 'Page settings', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Page CSS', exact: true })).toBeVisible()
   await modes.getByRole('button', { name: 'Content', exact: true }).click()
@@ -4571,7 +5012,8 @@ test('shared site layout wraps pages and HTML preserves editable widgets', async
     'aria-pressed',
     'true',
   )
-  await expect(page.locator('.preview-frame .section-page-content')).toBeVisible()
+  // Shared layout editing keeps the actual page in its content slot.
+  await expect(page.locator('.preview-frame .section-hero')).toBeVisible()
   await modes.getByRole('button', { name: 'Code', exact: true }).click()
   const html = page.getByRole('textbox', { name: 'Site layout HTML', exact: true })
   const source = await html.inputValue()
@@ -4604,8 +5046,8 @@ test('shared site layout wraps pages and HTML preserves editable widgets', async
   await expect(page.locator('.preview-frame .section-navigation')).toHaveCount(0)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(page.locator('.preview-frame .section-navigation')).toHaveCount(1)
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await expect(page.getByRole('heading', { name: 'Content inside layout', exact: true })).toHaveCSS(
@@ -4718,4 +5160,168 @@ test('script runtime keeps public forms working and blocks preview submissions',
     message: 'A sandboxed inquiry',
   })
   expect(JSON.stringify(requests)).not.toContain('private-routing')
+})
+
+test('builder panel widths support pointer and keyboard resizing, cancellation and local persistence', async ({
+  page,
+}) => {
+  const api = await mockWebsite(page)
+  await page.setViewportSize({ width: 1440, height: 950 })
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  const left = page.getByRole('separator', { name: 'Resize structure panel' })
+  const right = page.getByRole('separator', { name: 'Resize editor panel' })
+  await expect(left).toHaveAttribute('aria-valuenow', '248')
+  const box = (await left.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + 180)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + 180, { steps: 8 })
+  await page.mouse.up()
+  await expect(left).toHaveAttribute('aria-valuenow', '308')
+  await right.focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(right).toHaveAttribute('aria-valuenow', '310')
+  const moved = (await left.boundingBox())!
+  await page.mouse.move(moved.x + 3, moved.y + 180)
+  await page.mouse.down()
+  await page.mouse.move(moved.x + 53, moved.y + 180, { steps: 4 })
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect(left).toHaveAttribute('aria-valuenow', '308')
+  await page.reload()
+  await expect(left).toHaveAttribute('aria-valuenow', '308')
+  await expect(right).toHaveAttribute('aria-valuenow', '310')
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await expect
+    .poll(() => page.locator('.preview-pane').evaluate((el) => el.clientWidth))
+    .toBeGreaterThanOrEqual(158)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.setViewportSize({ width: 1440, height: 950 })
+  await expect(left).toHaveAttribute('aria-valuenow', '308')
+  await left.focus()
+  await page.keyboard.press('Enter')
+  await expect(left).toHaveAttribute('aria-valuenow', '248')
+  await right.dblclick()
+  await expect(right).toHaveAttribute('aria-valuenow', '300')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(left).toBeHidden()
+  await expect(right).toBeHidden()
+  expect(api.actions).not.toContain('save')
+  expect(api.actions).not.toContain('publish')
+})
+
+test('builder confirmations trap focus, cancel safely and preserve nested widget edits', async ({
+  page,
+}) => {
+  const api = await mockWebsite(page)
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Draft saved')
+  const publish = page.getByRole('button', { name: 'Publish', exact: true })
+  await publish.click()
+  const confirmation = page.getByRole('dialog', { name: 'Publish website?', exact: true })
+  await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(
+    confirmation.getByRole('button', { name: 'Publish website', exact: true }),
+  ).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(confirmation).toBeHidden()
+  await expect(publish).toBeFocused()
+  expect(api.actions).not.toContain('publish')
+  await publish.click()
+  await confirmation.getByRole('button', { name: 'Publish website', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Website published')
+  await openTool(page, 'Publishing')
+  await page.getByRole('button', { name: 'Take website offline', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: 'Take website offline?', exact: true })
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click()
+  expect(api.published()).not.toBeNull()
+  await page.getByRole('button', { name: 'Take website offline', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: 'Take website offline?', exact: true })
+    .getByRole('button', { name: 'Take offline', exact: true })
+    .click()
+  await expect.poll(() => api.published()).toBeNull()
+  await page
+    .getByRole('group', { name: 'Editor mode', exact: true })
+    .getByRole('button', { name: 'Code', exact: true })
+    .click()
+  await openTool(page, 'Widgets')
+  await page.getByRole('button', { name: 'Create HTML/CSS widget', exact: true }).click()
+  const editor = page.getByRole('dialog', { name: 'Custom widget editor', exact: true })
+  await editor.getByLabel('Custom widget name', { exact: true }).fill('Keep my widget')
+  await editor.getByRole('button', { name: 'Cancel widget edits', exact: true }).click()
+  const discard = page.getByRole('dialog', { name: 'Discard widget edits?', exact: true })
+  await expect(discard.getByRole('button', { name: 'Keep editing', exact: true })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(discard).toBeHidden()
+  await expect(editor.getByLabel('Custom widget name', { exact: true })).toHaveValue(
+    'Keep my widget',
+  )
+  await expect(
+    editor.getByRole('button', { name: 'Cancel widget edits', exact: true }),
+  ).toBeFocused()
+  await editor.getByRole('button', { name: 'Cancel widget edits', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await discard.screenshot({ path: '.security-work/builder-confirm-mobile.png' })
+  expect(await discard.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  await discard.getByRole('button', { name: 'Discard edits', exact: true }).click()
+  await expect(editor).toBeHidden()
+})
+
+test('editing guide supports keyboard and phone use without changing the draft or intercepting text', async ({
+  page,
+}) => {
+  const api = await mockWebsite(page)
+  await page.setViewportSize({ width: 1440, height: 950 })
+  await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  const help = page.getByRole('button', { name: 'Editing guide', exact: true })
+  const guide = page.getByRole('dialog', { name: 'Editing guide', exact: true })
+  await expect(page.getByLabel('Page title', { exact: true })).toBeVisible()
+  const status = await page.locator('.builder-header .subtle').innerText()
+  await help.click()
+  await expect(guide.getByRole('button', { name: 'Close guide', exact: true })).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(guide.getByRole('button', { name: 'Done', exact: true })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(guide.getByRole('button', { name: 'Close guide', exact: true })).toBeFocused()
+  await expect(guide.getByRole('heading', { name: 'Widget shortcuts', exact: true })).toBeVisible()
+  const modifier = await page.evaluate(() =>
+    /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd' : 'Ctrl',
+  )
+  await expect(guide.locator('kbd').filter({ hasText: modifier + ' + D' })).toHaveCount(1)
+  await guide.screenshot({ path: '.security-work/builder-guide-desktop.png' })
+  await page.keyboard.press('Escape')
+  await expect(guide).toBeHidden()
+  await expect(help).toBeFocused()
+  await page.keyboard.press('?')
+  await expect(guide).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(help).toBeFocused()
+  await expect(page.locator('.builder-header .subtle')).toHaveText(status)
+  expect(api.actions).not.toContain('save')
+  expect(api.actions).not.toContain('publish')
+  await page.getByRole('button', { name: 'Site settings', exact: true }).click()
+  const field = page.getByLabel('Website name', { exact: true })
+  await field.fill('Question')
+  await field.press('End')
+  await field.press('?')
+  await expect(field).toHaveValue('Question?')
+  await expect(guide).toBeHidden()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await help.click()
+  await expect(guide).toBeVisible()
+  expect(await guide.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  const body = guide.locator('.help-body')
+  await body.evaluate((el) => {
+    el.scrollTop = el.scrollHeight
+  })
+  await expect(guide.getByRole('button', { name: 'Done', exact: true })).toBeInViewport()
+  await guide.screenshot({ path: '.security-work/builder-guide-mobile.png' })
+  await guide.getByRole('button', { name: 'Done', exact: true }).click()
+  await expect(help).toBeFocused()
+  await expect(field).toHaveValue('Question?')
 })

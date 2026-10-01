@@ -59,6 +59,7 @@ watch(
             objectPosition: `${settings.focusX ?? 50}% ${settings.focusY ?? 50}%`,
             transform: `scale(${settings.zoom ?? 1})`,
             transformOrigin: `${settings.focusX ?? 50}% ${settings.focusY ?? 50}%`,
+            filter: settings.darken ? `brightness(${1 - settings.darken / 100})` : undefined,
           }
         : {}
     "

@@ -15,6 +15,7 @@ import {
 export function useWebsiteGrid(options: {
   surface: () => HTMLElement | undefined
   scroller: Ref<HTMLElement | undefined>
+  viewport?: Ref<HTMLElement | undefined>
   disabled: () => boolean
   settings: () => GridSettings
   commit: (
@@ -53,6 +54,7 @@ export function useWebsiteGrid(options: {
         capture?: HTMLElement
         consumeClick: boolean
         stepped: boolean
+        bypassAlignment: boolean
         group: GeometryMap
         additive: boolean
         id: string
@@ -71,12 +73,29 @@ export function useWebsiteGrid(options: {
     const scale = rect.width / surface.offsetWidth || 1
     return { x: (x - rect.left) / (45 * scale), y: (y - rect.top) / (32 * scale) }
   }
+  function visibleBounds() {
+    const workspace = options.scroller.value?.getBoundingClientRect()
+    if (!workspace) return undefined
+    const viewport = options.viewport?.value?.getBoundingClientRect() || workspace
+    return {
+      left: Math.max(workspace.left, viewport.left),
+      right: Math.min(workspace.right, viewport.right),
+      top: Math.max(workspace.top, viewport.top),
+      bottom: Math.min(workspace.bottom, viewport.bottom),
+    }
+  }
   function overCanvas() {
     if (!interaction) return false
-    const bounds = options.scroller.value?.getBoundingClientRect()
+    const bounds = visibleBounds()
     const { x, y } = interaction.last
     return Boolean(
-      bounds && x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom,
+      bounds &&
+        bounds.right > bounds.left &&
+        bounds.bottom > bounds.top &&
+        x >= bounds.left &&
+        x <= bounds.right &&
+        y >= bounds.top &&
+        y <= bounds.bottom,
     )
   }
   function update() {
@@ -150,7 +169,11 @@ export function useWebsiteGrid(options: {
                 interaction.rotation,
               )
     guides.value = []
-    if (interaction.action === 'move' && Object.keys(interaction.group).length <= 1) {
+    if (
+      interaction.action === 'move' &&
+      !interaction.bypassAlignment &&
+      Object.keys(interaction.group).length <= 1
+    ) {
       const surface = options.surface()
       const bounds = surface?.getBoundingClientRect()
       if (surface && bounds) {
@@ -177,9 +200,17 @@ export function useWebsiteGrid(options: {
             height: layout.h * 32 * scale,
           },
           targets,
-          false,
         )
-        // The existing page grid remains authoritative for whole-widget movement.
+        // Apply the same alignment to the live draft and the committed position.
+        const x = Math.max(0, Math.min(1000 - layout.w, layout.x + aligned.x / (45 * scale)))
+        const y = Math.max(0, Math.min(10000 - layout.h, layout.y + aligned.y / (32 * scale)))
+        aligned.guides = aligned.guides.filter((guide) =>
+          guide.axis === 'x'
+            ? Math.abs((x - layout.x) * 45 * scale - aligned.x) < 0.01
+            : Math.abs((y - layout.y) * 32 * scale - aligned.y) < 0.01,
+        )
+        layout.x = x
+        layout.y = y
         guides.value = aligned.guides
       }
     }
@@ -213,12 +244,16 @@ export function useWebsiteGrid(options: {
       cancel()
       return
     }
-    const scroller = options.scroller.value
-    if (scroller && overCanvas() && interaction.action !== 'pan') {
-      const r = scroller.getBoundingClientRect(),
+    // Dragging scrolls the page inside its device screen; the hand tool still
+    // pans the outer workspace. Keep edge scrolling consistent at every zoom.
+    const scroller = options.viewport?.value || options.scroller.value
+    const r = visibleBounds()
+    if (scroller && r && overCanvas() && interaction.action !== 'pan') {
+      const scale = scroller.getBoundingClientRect().width / scroller.offsetWidth || 1,
+        step = 10 / scale,
         p = interaction.last
-      scroller.scrollLeft += p.x < r.left + 30 ? -10 : p.x > r.right - 30 ? 10 : 0
-      scroller.scrollTop += p.y < r.top + 30 ? -10 : p.y > r.bottom - 30 ? 10 : 0
+      scroller.scrollLeft += p.x < r.left + 30 ? -step : p.x > r.right - 30 ? step : 0
+      scroller.scrollTop += p.y < r.top + 30 ? -step : p.y > r.bottom - 30 ? step : 0
       update()
     }
     frame = requestAnimationFrame(tick)
@@ -227,6 +262,7 @@ export function useWebsiteGrid(options: {
     if (!interaction || event.pointerId !== interaction.pointer) return
     interaction.last = { x: event.clientX, y: event.clientY }
     interaction.stepped = event.shiftKey
+    interaction.bypassAlignment = event.altKey
     if (interaction.action === 'rotate') {
       const rect = interaction.element?.getBoundingClientRect()
       if (rect) {
@@ -362,6 +398,7 @@ export function useWebsiteGrid(options: {
       capture,
       consumeClick,
       stepped: event.shiftKey,
+      bypassAlignment: event.altKey,
       group: Object.fromEntries(
         Object.entries(options.group?.() || {}).map(([key, value]) => [key, { ...value }]),
       ),

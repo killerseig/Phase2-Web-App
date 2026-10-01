@@ -18,5 +18,11 @@ export interface InlineEditing {
 export const inlineEditingKey: InjectionKey<InlineEditing> = Symbol('website-inline-editing')
 export const navigationEditingKey: InjectionKey<(sectionId: string, linkId: string) => void> =
   Symbol('website-navigation-editing')
+export const navigationPreviewKey: InjectionKey<{
+  pageId: (url: string) => string | undefined
+  navigate: (id: string) => void
+  openAppLogin: () => void
+  edit: (target: InlineTarget) => void
+}> = Symbol('website-navigation-preview')
 export const itemEditingKey: InjectionKey<(target: InlineTarget) => void> =
   Symbol('website-item-editing')

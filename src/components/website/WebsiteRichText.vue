@@ -65,6 +65,7 @@ export default defineComponent({
   props: {
     value: { type: Object as PropType<RichTextNode>, required: true },
     heading: Boolean,
+    titleBlocks: Boolean,
     preview: Boolean,
     fallback: { type: String, default: '' },
   },
@@ -72,9 +73,9 @@ export default defineComponent({
     return () => {
       let content: VNodeChild[]
       try {
-        content = (validateRichText(props.value, props.heading).content || []).map((node) =>
-          render(node, props.heading),
-        )
+        content = (
+          validateRichText(props.value, props.titleBlocks ? 'title' : props.heading).content || []
+        ).map((node) => render(node, props.heading))
       } catch {
         content = [props.fallback]
       }
@@ -136,6 +137,7 @@ export default defineComponent({
 .website-rich-text :deep(h5),
 .website-rich-text :deep(h6) {
   margin: 0.7rem 0;
+  font-family: var(--widget-font, var(--site-heading-font, inherit));
 }
 .rich-heading {
   display: block;

@@ -150,6 +150,8 @@ try {
       'getImage',
       'listImages',
       'listRevisions',
+      'getRevision',
+      'comparePublished',
       'restoreRevision',
     ])
       await reject(() => call(actor, action))
@@ -448,6 +450,16 @@ try {
   assert.equal((await fetch(imageUrl(image.id))).status, 404)
   assert.equal((await fetch(imageUrl(logo.id))).status, 404)
   await call(admin, 'save', { version: 0, site })
+  const firstComparison = await call(admin, 'comparePublished', { version: 1, site })
+  assert.equal(firstComparison.publishedAt, null)
+  assert.ok(firstComparison.total > 0)
+  assert.equal((await call(admin, 'load')).version, 1)
+  await reject(() => call(admin, 'comparePublished', { version: 0, site }), /aborted/)
+  await reject(() => call(admin, 'getRevision', { revisionId: '../state' }), /invalid-argument/)
+  await reject(
+    () => call(admin, 'getRevision', { revisionId: 'revision-9999' }),
+    /failed-precondition/,
+  )
   assert.deepEqual((await call(admin, 'load')).draft.savedSections, site.savedSections)
   assert.equal((await call(admin, 'load')).draft.pages[0].sections[0].span, 6)
   assert.deepEqual((await call(admin, 'load')).draft.pages[0].sections[0].layout, geometry)
@@ -488,6 +500,25 @@ try {
   await reject(() => call(admin, 'publish', { version: 2 }), /invalid-argument/)
   await call(admin, 'save', { version: 2, site })
   await call(admin, 'publish', { version: 3 })
+  assert.equal((await call(admin, 'comparePublished', { version: 4, site })).total, 0)
+  const comparisonDraft = structuredClone(site)
+  comparisonDraft.pages[0].sections[1].title = 'Hidden change'
+  comparisonDraft.savedSections[0].name = 'Private library change'
+  assert.equal(
+    (await call(admin, 'comparePublished', { version: 4, site: comparisonDraft })).total,
+    0,
+  )
+  comparisonDraft.pages[0].sections[0].title = 'New public heading'
+  const comparisonReport = await call(admin, 'comparePublished', {
+    version: 4,
+    site: comparisonDraft,
+  })
+  assert.equal(comparisonReport.total, 1)
+  assert.equal(comparisonReport.changes[0].after, 'New public heading')
+  assert.equal(
+    (await call(admin, 'load')).draft.pages[0].sections[0].title,
+    site.pages[0].sections[0].title,
+  )
   let publicResult = (await publicSite()).site
   assert.equal(publicResult.savedSections, undefined)
   assert.equal(JSON.stringify(publicResult).includes('Library-only content'), false)
@@ -662,6 +693,16 @@ try {
   const revisionList = (await call(admin, 'listRevisions')).revisions
   assert.ok(revisionList.length > 1)
   assert.ok(revisionList.every((entry) => !('draft' in entry)))
+  assert.equal(
+    (await call(admin, 'getRevision', { revisionId: revisionList[0].id })).draft.name,
+    revisionList[0].name,
+  )
+  assert.ok(revisionList.every((entry) => entry.savedBy === admin.uid))
+  const activity = (await call(admin, 'listRevisions')).activity
+  assert.ok(activity.some((entry) => entry.action === 'publish'))
+  assert.ok(activity.some((entry) => entry.action === 'unpublish'))
+  assert.ok(activity.some((entry) => entry.action === 'restore'))
+  assert.ok(activity.every((entry) => !('draft' in entry) && entry.savedBy === admin.uid))
   await reject(
     () => call(admin, 'restoreRevision', { version: 9, revisionId: '../state' }),
     /invalid-argument/,
@@ -679,7 +720,7 @@ try {
   assert.equal(restored.draft.name, earliest.name)
   assert.equal((await publicSite()).site, null)
   let revisionVersion = restored.version
-  for (let i = 0; i < 11; i++) {
+  for (let i = 0; i < 55; i++) {
     site.name = 'Revision ' + i
     const saved = await call(admin, 'save', { version: revisionVersion, site })
     revisionVersion = saved.version
@@ -688,6 +729,8 @@ try {
   assert.equal(history.length, 10)
   assert.equal(history[0].version, revisionVersion)
   assert.equal((await db.collection('websitePrivate/state/revisions').get()).size, 10)
+  assert.equal((await db.collection('websitePrivate/state/activity').get()).size, 50)
+  assert.equal((await call(admin, 'listRevisions')).activity.length, 50)
   await reject(
     () => call(admin, 'restoreRevision', { version: revisionVersion, revisionId: earliest.id }),
     /not-found/,

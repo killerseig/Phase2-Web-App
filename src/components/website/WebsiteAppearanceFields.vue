@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import BuilderSettingSource from '@/components/builder/BuilderSettingSource.vue'
 import { appearanceNumbers } from '@/features/website/appearance'
 import type { WidgetAppearance } from '@/features/website/types'
 import { computed } from 'vue'
+import { fontOptions } from '../../../functions/src/websiteFonts'
+import WebsiteFontPicker from './WebsiteFontPicker.vue'
+import WebsiteMotionControls from './WebsiteMotionControls.vue'
 const props = defineProps<{
   value?: WidgetAppearance
   layoutLocked?: boolean
@@ -9,11 +13,12 @@ const props = defineProps<{
   kind?: string
   hasImage?: boolean
   inherited?: boolean
+  automatic?: boolean
   overrides?: WidgetAppearance
 }>()
 const authored = computed(() => (props.inherited ? props.overrides : props.value))
 const emit = defineEmits<{ update: [value: WidgetAppearance | undefined] }>()
-function update(key: keyof WidgetAppearance, value: string | number | undefined) {
+function update(key: keyof WidgetAppearance, value: WidgetAppearance[keyof WidgetAppearance]) {
   const next = { ...authored.value }
   if (value === undefined || value === '') delete next[key]
   else Object.assign(next, { [key]: value })
@@ -32,11 +37,7 @@ const choices = [
   {
     key: 'fontFamily',
     label: 'Font family',
-    values: [
-      ['sans', 'Sans serif'],
-      ['serif', 'Serif'],
-      ['mono', 'Monospace'],
-    ],
+    values: fontOptions.map((font) => [font.value, font.label]),
   },
   {
     key: 'textAlign',
@@ -106,6 +107,12 @@ const groups = computed(() => {
 const resetHint = computed(() =>
   props.inherited ? 'Use the desktop value' : 'Use the default value',
 )
+function automaticField(key: keyof WidgetAppearance) {
+  return (
+    props.automatic &&
+    (key.startsWith('padding') || key.startsWith('margin') || key === 'headingSize')
+  )
+}
 </script>
 <template>
   <component
@@ -115,6 +122,7 @@ const resetHint = computed(() =>
     open
   >
     <summary v-if="!standalone">Appearance and rotation</summary>
+    <WebsiteMotionControls :value="value?.motion" @update="update('motion', $event)" />
     <details v-for="group in groups" :key="group.label" class="style-group" :open="group.open">
       <summary>{{ group.label }}</summary>
       <div class="appearance-grid">
@@ -122,7 +130,10 @@ const resetHint = computed(() =>
           v-for="{ label, key } in colors.filter((field) => group.keys.includes(field.key))"
           :key="key"
         >
-          {{ label }}
+          <span
+            >{{ label
+            }}<BuilderSettingSource v-if="inherited" :overridden="authored?.[key] !== undefined"
+          /></span>
           <span class="color-control">
             <input
               type="color"
@@ -144,9 +155,15 @@ const resetHint = computed(() =>
         <label
           v-for="choice in choices.filter((field) => group.keys.includes(field.key))"
           :key="choice.key"
-          >{{ choice.label }}
+          ><span
+            >{{ choice.label
+            }}<BuilderSettingSource
+              v-if="inherited"
+              :overridden="authored?.[choice.key] !== undefined"
+          /></span>
           <span class="color-control">
             <select
+              v-if="choice.key !== 'fontFamily'"
               :aria-label="choice.label"
               :value="value?.[choice.key] || ''"
               @change="update(choice.key, ($event.target as HTMLSelectElement).value)"
@@ -156,6 +173,13 @@ const resetHint = computed(() =>
                 {{ label }}
               </option>
             </select>
+            <WebsiteFontPicker
+              v-else
+              label="Font family"
+              :value="value?.fontFamily"
+              :inherit-label="inherited ? 'Use desktop' : 'Default'"
+              @update="update('fontFamily', $event)"
+            />
             <button
               type="button"
               :aria-label="`Reset ${choice.label.toLowerCase()}`"
@@ -170,7 +194,13 @@ const resetHint = computed(() =>
         <label
           v-for="field in appearanceNumbers.filter((field) => group.keys.includes(field.key))"
           :key="field.key"
-          >{{ field.label }}
+          ><span
+            >{{ field.label
+            }}<BuilderSettingSource
+              v-if="inherited"
+              :automatic="automaticField(field.key)"
+              :overridden="authored?.[field.key] !== undefined"
+          /></span>
           <span class="color-control">
             <input
               :aria-label="field.label"
@@ -186,7 +216,11 @@ const resetHint = computed(() =>
             <button
               type="button"
               :aria-label="`Reset ${field.label.toLowerCase()}`"
-              :title="resetHint"
+              :title="
+                inherited && automaticField(field.key)
+                  ? 'Use the automatic value for this screen size'
+                  : resetHint
+              "
               :disabled="
                 authored?.[field.key] === undefined || (layoutLocked && field.key === 'rotation')
               "
@@ -199,7 +233,11 @@ const resetHint = computed(() =>
       </div>
     </details>
     <small>{{
-      inherited ? 'Reset a setting to follow desktop again.' : 'Reset a setting to use its default.'
+      inherited
+        ? automatic
+          ? 'Desktop spacing and heading sizes adapt to this screen unless overridden. Reset a setting to restore its automatic or inherited value.'
+          : 'Reset a setting to follow desktop again.'
+        : 'Reset a setting to use its default.'
     }}</small>
     <button
       type="button"

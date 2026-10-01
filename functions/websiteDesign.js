@@ -17,6 +17,9 @@ exports.pageCssTemplate = `/* Page styles override matching appearance controls.
   border-radius: 8px;
 }
 /* .custom-feature { background-color: #eaf0f5; padding: 24px; } */
+/* .custom-feature { animation: fade-in 600ms ease-out; }
+   Other entrance effects: fade-up, slide-in, zoom-in.
+   Hover fades: transition: opacity 200ms ease-out; */
 @media (max-width: 767px) {
   .widget-title { font-size: 28px; }
   .page-header { gap: 12px; }
@@ -48,6 +51,14 @@ function compilePageCss(source, scopeId) {
     if (input.includes('/*') || input.includes('*/'))
         throw new Error('Close the CSS comment with */.');
     const scope = `[data-page-scope="${scopeId}"]`;
+    const motionNames = new Set();
+    let hasTransition = false;
+    const effectFrames = {
+        'fade-in': 'from{opacity:0}to{opacity:1}',
+        'fade-up': 'from{opacity:0;translate:0 24px}to{opacity:1;translate:0 0}',
+        'slide-in': 'from{opacity:0;translate:-24px 0}to{opacity:1;translate:0 0}',
+        'zoom-in': 'from{opacity:0;scale:0.96}to{opacity:1;scale:1}',
+    };
     let rules = 0;
     function error(message, position) {
         throw new Error(`Line ${input.slice(0, position).split('\n').length}: ${message}`);
@@ -78,6 +89,28 @@ function compilePageCss(source, scopeId) {
             if (!match)
                 error('Expected property: value;.', position);
             const property = match[1], value = match[2].replace(/\s*!important\s*$/, '');
+            if (property === 'animation') {
+                if (value === 'none')
+                    return 'animation:none!important;';
+                const motion = /^(fade-in|fade-up|slide-in|zoom-in)\s+(\d+(?:\.\d+)?)(ms|s)(?:\s+(linear|ease|ease-in|ease-out|ease-in-out))?(?:\s+(\d+(?:\.\d+)?)(ms|s))?$/.exec(value);
+                if (!motion ||
+                    Number(motion[2]) * (motion[3] === 's' ? 1000 : 1) < 100 ||
+                    Number(motion[2]) * (motion[3] === 's' ? 1000 : 1) > 3000 ||
+                    Number(motion[5] || 0) * (motion[6] === 's' ? 1000 : 1) > 3000)
+                    error('Use a named entrance animation with a duration of 100–3000 ms and a delay up to 3000 ms.', position);
+                motionNames.add(motion[1]);
+                return `animation:website-${scopeId}-${value} both!important;`;
+            }
+            if (property === 'transition') {
+                if (value !== 'none' &&
+                    !value.split(',').every((part) => {
+                        const transition = /^\s*(opacity|color|background-color|border-color|box-shadow)\s+(\d+(?:\.\d+)?)(ms|s)(?:\s+(linear|ease|ease-in|ease-out|ease-in-out))?\s*$/.exec(part);
+                        return (transition && Number(transition[2]) * (transition[3] === 's' ? 1000 : 1) <= 3000);
+                    }))
+                    error('Use an opacity or color/shadow transition lasting up to 3000 ms.', position);
+                hasTransition = true;
+                return `transition:${value}!important;`;
+            }
             if (!properties.has(property) && !/^--[a-z][a-z0-9-]{0,40}$/.test(property))
                 error(`Unsupported CSS property: ${property}.`, position);
             if (!value || value.length > 500 || !/^[a-zA-Z0-9\s#.,%()+*/'"_-]+$/.test(value))
@@ -156,6 +189,13 @@ function compilePageCss(source, scopeId) {
         }
         return output;
     }
-    return parse(0, input.length);
+    const compiled = parse(0, input.length);
+    const keyframes = [...motionNames]
+        .map((name) => `@keyframes website-${scopeId}-${name}{${effectFrames[name]}}`)
+        .join('');
+    const reduced = motionNames.size || hasTransition
+        ? `@media (prefers-reduced-motion: reduce){${scope},${scope} *{animation:none!important;transition:none!important;}}`
+        : '';
+    return compiled + keyframes + reduced;
 }
 //# sourceMappingURL=websiteDesign.js.map

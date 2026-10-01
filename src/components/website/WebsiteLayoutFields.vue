@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BuilderSettingSource from '@/components/builder/BuilderSettingSource.vue'
 import type { ContainerLayout, ItemSizing } from '@/features/website/types'
 const props = defineProps<{
   container?: ContainerLayout
@@ -8,6 +9,7 @@ const props = defineProps<{
   disabled?: boolean
   inherited?: boolean
   sizingOverrides?: ItemSizing
+  automatic?: boolean
 }>()
 const emit = defineEmits<{
   container: [value: ContainerLayout]
@@ -39,6 +41,10 @@ function gap(event: Event) {
 <template>
   <fieldset v-if="isContainer" :disabled="disabled">
     <legend>Container layout</legend>
+    <small v-if="automatic"
+      >Columns wrap on tablets and stack on phones automatically. Changes here apply to this screen
+      size.</small
+    >
     <label
       >Child layout<select
         aria-label="Child layout"
@@ -79,8 +85,17 @@ function gap(event: Event) {
           })
         "
       >
-        <option v-for="value in ['stretch', 'start', 'center', 'end']" :key="value">
-          {{ value }}
+        <option
+          v-for="(label, value) in {
+            stretch: 'Stretch',
+            start: 'Start',
+            center: 'Center',
+            end: 'End',
+          }"
+          :key="value"
+          :value="value"
+        >
+          {{ label }}
         </option>
       </select></label
     >
@@ -95,10 +110,17 @@ function gap(event: Event) {
         "
       >
         <option
-          v-for="value in ['start', 'center', 'end', 'space-between', 'space-around']"
+          v-for="(label, value) in {
+            start: 'Start',
+            center: 'Center',
+            end: 'End',
+            'space-between': 'Space between',
+            'space-around': 'Space around',
+          }"
           :key="value"
+          :value="value"
         >
-          {{ value }}
+          {{ label }}
         </option>
       </select></label
     >
@@ -107,57 +129,112 @@ function gap(event: Event) {
     <legend>Flexible sizing</legend>
     <template v-if="contained">
       <label
-        >Grow proportion<input
+        ><span
+          >Grow proportion<BuilderSettingSource
+            v-if="inherited"
+            :automatic="automatic"
+            :overridden="sizingOverrides?.grow !== undefined" /></span
+        ><input
           type="number"
           min="0"
           max="12"
           step="any"
+          :aria-label="'Grow proportion'"
           :value="sizing?.grow"
           placeholder="1"
           @change="number('grow', $event)"
       /></label>
       <label
-        >Starting size (%)<input
+        ><span
+          >Starting size (%)<BuilderSettingSource
+            v-if="inherited"
+            :automatic="automatic"
+            :overridden="sizingOverrides?.basis !== undefined" /></span
+        ><input
           type="number"
           min="0"
           max="100"
           step="any"
+          :aria-label="'Starting size (%)'"
           :value="sizing?.basis"
           placeholder="Automatic"
           @change="number('basis', $event)"
       /></label>
       <label
-        >Item alignment<select
+        ><span
+          >Item alignment<BuilderSettingSource
+            v-if="inherited"
+            :automatic="automatic"
+            :overridden="sizingOverrides?.align !== undefined" /></span
+        ><select
           aria-label="Item alignment"
           :value="sizing?.align || 'auto'"
           @change="setSizing('align', ($event.target as HTMLSelectElement).value)"
         >
-          <option v-if="inherited" value="">Use desktop</option>
-          <option v-for="value in ['auto', 'stretch', 'start', 'center', 'end']" :key="value">
-            {{ value }}
+          <option v-if="inherited" value="">{{ automatic ? 'Automatic' : 'Use desktop' }}</option>
+          <option
+            v-for="(label, value) in {
+              auto: 'Automatic',
+              stretch: 'Stretch',
+              start: 'Start',
+              center: 'Center',
+              end: 'End',
+            }"
+            :key="value"
+            :value="value"
+          >
+            {{ label }}
           </option>
         </select></label
       >
     </template>
-    <label
-      >Height (px)<input
-        type="number"
-        min="32"
-        max="2000"
-        :value="sizing?.height"
-        placeholder="Fit content"
-        @change="number('height', $event)"
-    /></label>
-    <small>Clear Height to fit the content automatically.</small>
-    <label
-      >Minimum height (px)<input
-        type="number"
-        min="0"
-        max="2000"
-        :value="sizing?.minHeight"
-        placeholder="Automatic"
-        @change="number('minHeight', $event)"
-    /></label>
+    <div class="builder-field-grid">
+      <label
+        ><span
+          >Height (px)<BuilderSettingSource
+            v-if="inherited"
+            :automatic="automatic"
+            :overridden="sizingOverrides?.height !== undefined" /></span
+        ><input
+          type="number"
+          min="32"
+          max="2000"
+          :aria-label="'Height (px)'"
+          :value="sizing?.height"
+          placeholder="Fit content"
+          @change="number('height', $event)"
+      /></label>
+      <label
+        ><span
+          >Minimum height (px)<BuilderSettingSource
+            v-if="inherited"
+            :automatic="automatic"
+            :overridden="sizingOverrides?.minHeight !== undefined" /></span
+        ><input
+          type="number"
+          min="0"
+          max="2000"
+          :aria-label="'Minimum height (px)'"
+          :value="sizing?.minHeight"
+          placeholder="Automatic"
+          @change="number('minHeight', $event)"
+      /></label>
+    </div>
+    <small>{{
+      inherited
+        ? automatic
+          ? 'Clear a value to use the automatic layout for this screen size.'
+          : 'Clear a value to follow desktop.'
+        : 'Clear Height to fit the content automatically.'
+    }}</small>
+    <button
+      v-if="inherited"
+      type="button"
+      :disabled="!sizingOverrides || !Object.keys(sizingOverrides).length"
+      @click="emit('sizing', undefined)"
+    >
+      {{ automatic ? 'Use automatic sizing' : 'Use desktop sizing' }}
+    </button>
   </fieldset>
 </template>
 <style scoped>

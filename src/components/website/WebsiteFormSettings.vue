@@ -117,6 +117,7 @@ const fieldTypes: WebsiteFormField['type'][] = [
     </p>
     <label
       >To recipients<textarea
+        data-form-recipients
         :value="form.delivery?.to.join(', ') || ''"
         @change="recipients('to', $event)"
       />

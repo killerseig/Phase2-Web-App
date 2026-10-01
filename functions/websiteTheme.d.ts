@@ -1,17 +1,27 @@
+import { type WebsiteFont } from './websiteFonts';
+import { type WebsiteTextStyles } from './websiteTypography';
+export interface BrandPreset {
+    name: string;
+    accent: string;
+    theme: Omit<WebsiteTheme, 'presets'>;
+}
 export interface WebsiteTheme {
+    enabled?: boolean;
     background?: string;
     surface?: string;
     text?: string;
     muted?: string;
     border?: string;
     buttonText?: string;
-    bodyFont?: 'sans' | 'serif' | 'mono';
-    headingFont?: 'sans' | 'serif' | 'display';
+    bodyFont?: WebsiteFont;
+    headingFont?: WebsiteFont;
     fontSize?: number;
     lineHeight?: number;
     radius?: number;
     spacing?: number;
     contentWidth?: number;
+    textStyles?: WebsiteTextStyles;
+    presets?: BrandPreset[];
 }
 export declare const themeColors: readonly ["background", "surface", "text", "muted", "border", "buttonText"];
 export declare const themeNumbers: {
@@ -46,8 +56,8 @@ export declare const themeNumbers: {
         readonly step: 10;
     };
 };
-export declare const defaultTheme: Required<WebsiteTheme>;
-export declare function validateTheme(value: unknown): WebsiteTheme;
+export declare const defaultTheme: Required<Omit<WebsiteTheme, 'textStyles' | 'presets' | 'enabled'>>;
+export declare function validateTheme(value: unknown, allowPresets?: boolean): WebsiteTheme;
 export declare function contrastRatio(first: string, second: string): number;
 export declare function themeWarnings(theme: WebsiteTheme, accent: string): string[];
 //# sourceMappingURL=websiteTheme.d.ts.map

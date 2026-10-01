@@ -280,6 +280,7 @@ onBeforeUnmount(() => {
         <div class="layer-order">
           <button
             :aria-label="`Raise ${section.title || sectionLabels[section.type]} layer`"
+            title="Raise one layer (Alt + Up from the layer row)"
             :disabled="disabled || !canMove(section.id, -1)"
             @click="move(section.id, -1)"
           >
@@ -287,6 +288,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             :aria-label="`Lower ${section.title || sectionLabels[section.type]} layer`"
+            title="Lower one layer (Alt + Down from the layer row)"
             :disabled="disabled || !canMove(section.id, 1)"
             @click="move(section.id, 1)"
           >

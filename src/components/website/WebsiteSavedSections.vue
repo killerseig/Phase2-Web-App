@@ -24,7 +24,7 @@ const dialog = ref<HTMLDialogElement>()
 let opener: HTMLElement | undefined
 function save() {
   if (props.disabled || !props.selectionCount || props.entries.length >= 20) return
-  emit('save', name.value.trim() || props.suggestedName || 'Saved section')
+  emit('save', name.value.trim() || props.suggestedName || 'Saved widget')
   name.value = ''
 }
 function rename(id: string, event: Event) {
@@ -59,12 +59,12 @@ onBeforeUnmount(() => dialog.value?.close())
 </script>
 <template>
   <details class="saved-sections">
-    <summary>Saved sections ({{ entries.length }})</summary>
+    <summary>Saved widgets ({{ entries.length }})</summary>
     <p>
       Select widgets or a container, then save a reusable copy. Save draft to keep library changes.
     </p>
     <label
-      >Saved section name<input
+      >Saved widget name<input
         v-model="name"
         maxlength="80"
         :placeholder="suggestedName || 'e.g. Project introduction'"
@@ -74,11 +74,11 @@ onBeforeUnmount(() => dialog.value?.close())
     <button :disabled="disabled || !selectionCount || entries.length >= 20" @click="save">
       Save selection to library
     </button>
-    <small v-if="entries.length >= 20">Library limit reached: 20 saved sections.</small>
-    <p v-if="!entries.length">Your saved sections will appear here.</p>
-    <article v-for="entry in entries" :key="entry.id" :aria-label="`Saved section ${entry.name}`">
+    <small v-if="entries.length >= 20">Library limit reached: 20 saved widgets.</small>
+    <p v-if="!entries.length">Your saved widgets will appear here.</p>
+    <article v-for="entry in entries" :key="entry.id" :aria-label="`Saved widget ${entry.name}`">
       <input
-        :aria-label="`Rename saved section ${entry.name}`"
+        :aria-label="`Rename saved widget ${entry.name}`"
         :value="entry.name"
         maxlength="80"
         required
@@ -89,21 +89,21 @@ onBeforeUnmount(() => dialog.value?.close())
       <div class="saved-actions">
         <button
           :disabled="disabled || entry.sections.length > remaining"
-          :aria-label="`Insert saved section ${entry.name}`"
+          :aria-label="`Insert saved widget ${entry.name}`"
           @click="emit('insert', entry.id)"
         >
           Insert
         </button>
         <button
           :disabled="disabled"
-          :aria-label="`Preview saved section ${entry.name}`"
+          :aria-label="`Preview saved widget ${entry.name}`"
           @click="show(entry.id, $event)"
         >
           Preview
         </button>
         <button
           :disabled="disabled"
-          :aria-label="`Remove saved section ${entry.name}`"
+          :aria-label="`Remove saved widget ${entry.name}`"
           @click="emit('remove', entry.id)"
         >
           Remove
@@ -120,7 +120,8 @@ onBeforeUnmount(() => dialog.value?.close())
     <Teleport to="body">
       <dialog
         ref="dialog"
-        aria-label="Saved section preview"
+        class="builder-controls builder-dialog"
+        aria-label="Saved widget preview"
         @cancel.prevent="close"
         @keydown.esc.prevent.stop="close"
       >

@@ -1,17 +1,27 @@
+import { websiteFonts, type WebsiteFont } from './websiteFonts'
+import { validateTextStyles, type WebsiteTextStyles } from './websiteTypography'
+export interface BrandPreset {
+  name: string
+  accent: string
+  theme: Omit<WebsiteTheme, 'presets'>
+}
 export interface WebsiteTheme {
+  enabled?: boolean
   background?: string
   surface?: string
   text?: string
   muted?: string
   border?: string
   buttonText?: string
-  bodyFont?: 'sans' | 'serif' | 'mono'
-  headingFont?: 'sans' | 'serif' | 'display'
+  bodyFont?: WebsiteFont
+  headingFont?: WebsiteFont
   fontSize?: number
   lineHeight?: number
   radius?: number
   spacing?: number
   contentWidth?: number
+  textStyles?: WebsiteTextStyles
+  presets?: BrandPreset[]
 }
 export const themeColors = [
   'background',
@@ -28,7 +38,7 @@ export const themeNumbers = {
   spacing: { label: 'Default flow spacing', min: 0, max: 80, step: 1 },
   contentWidth: { label: 'Flow content width', min: 720, max: 1600, step: 10 },
 } as const
-export const defaultTheme: Required<WebsiteTheme> = {
+export const defaultTheme: Required<Omit<WebsiteTheme, 'textStyles' | 'presets' | 'enabled'>> = {
   background: '#f4f6f8',
   surface: '#ffffff',
   text: '#172c40',
@@ -43,7 +53,7 @@ export const defaultTheme: Required<WebsiteTheme> = {
   spacing: 24,
   contentWidth: 1200,
 }
-export function validateTheme(value: unknown): WebsiteTheme {
+export function validateTheme(value: unknown, allowPresets = true): WebsiteTheme {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('Invalid website design settings.')
   const data = value as Record<string, unknown>,
@@ -51,7 +61,15 @@ export function validateTheme(value: unknown): WebsiteTheme {
   if (
     Object.keys(data).some(
       (key) =>
-        ![...themeColors, ...Object.keys(themeNumbers), 'bodyFont', 'headingFont'].includes(key),
+        ![
+          ...themeColors,
+          ...Object.keys(themeNumbers),
+          'bodyFont',
+          'headingFont',
+          'textStyles',
+          'enabled',
+          ...(allowPresets ? ['presets'] : []),
+        ].includes(key),
     )
   )
     throw new Error('Unknown website design setting.')
@@ -73,14 +91,41 @@ export function validateTheme(value: unknown): WebsiteTheme {
       result[key] = data[key]
     }
   for (const [key, choices] of Object.entries({
-    bodyFont: ['sans', 'serif', 'mono'],
-    headingFont: ['sans', 'serif', 'display'],
+    bodyFont: Object.keys(websiteFonts),
+    headingFont: Object.keys(websiteFonts),
   }))
     if (data[key] !== undefined) {
       if (!choices.includes(data[key] as string))
         throw new Error('Choose a supported website font.')
       result[key] = data[key]
     }
+  if (data.enabled !== undefined) {
+    if (typeof data.enabled !== 'boolean') throw new Error('Invalid shared design state.')
+    result.enabled = data.enabled
+  }
+  if (data.textStyles !== undefined) result.textStyles = validateTextStyles(data.textStyles)
+  if (data.presets !== undefined) {
+    if (!Array.isArray(data.presets) || data.presets.length > 12)
+      throw new Error('Keep up to 12 brand presets.')
+    result.presets = data.presets.map((preset) => {
+      if (
+        !preset ||
+        typeof preset !== 'object' ||
+        Array.isArray(preset) ||
+        typeof preset.name !== 'string' ||
+        !preset.name.trim() ||
+        preset.name.length > 64 ||
+        typeof preset.accent !== 'string' ||
+        !/^#[0-9a-f]{6}$/i.test(preset.accent)
+      )
+        throw new Error('Invalid brand preset.')
+      return {
+        name: preset.name.trim(),
+        accent: preset.accent,
+        theme: validateTheme(preset.theme, false),
+      }
+    })
+  }
   return result as WebsiteTheme
 }
 export function contrastRatio(first: string, second: string): number {

@@ -59,7 +59,8 @@ export interface WebsiteSection extends WebsiteItem {
         headingSize?: number;
         opacity?: number;
         rotation?: number;
-        fontFamily?: 'sans' | 'serif' | 'mono';
+        fontFamily?: import('./websiteFonts').WebsiteFont;
+        motion?: import('./websiteMotion').WebsiteMotion;
         textAlign?: 'left' | 'center' | 'right';
         imageFit?: 'cover' | 'contain';
     };

@@ -90,8 +90,11 @@ export function inlineValue(
   doc: JSONContent,
   title = false,
   keepMarkdown = false,
+  titleBlocks = false,
 ): { text: string; format?: 'markdown'; rich?: RichTextNode } {
-  const rich = validateRichText(doc, title)
+  const rich = validateRichText(doc, title && titleBlocks ? 'title' : title)
+  if (title && titleBlocks && (rich.content?.length !== 1 || rich.content[0]?.type !== 'paragraph'))
+    return { text: richTextPlain(rich), rich }
   function advanced(node: RichTextNode): boolean {
     return (
       !['doc', 'paragraph', 'heading', 'bulletList', 'orderedList', 'listItem', 'text'].includes(

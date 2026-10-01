@@ -71,8 +71,14 @@ test('homepage prototype exercises shared design, mobile flow, images and keyboa
   await expect(page.getByRole('status')).toContainText('Draft saved')
   expect(draft.theme?.spacing).toBe(20)
   expect(published.theme?.spacing).toBe(24)
-  page.once('dialog', (dialog) => dialog.accept())
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await page.evaluate(() => document.fonts.ready)
+  await page.locator('.preview-frame .section-hero img').evaluate(async (image) => {
+    await (image as HTMLImageElement).decode()
+  })
+  await page.screenshot({ path: '.security-work/builder-polished-desktop.png' })
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.locator('.builder-confirm[open] [data-confirm-action]').click()
   await expect(page.getByRole('status')).toContainText('Website published')
   await page.goto('/website')
   await page.setViewportSize({ width: 1440, height: 1050 })
@@ -109,6 +115,7 @@ test('homepage prototype exercises shared design, mobile flow, images and keyboa
     await (image as HTMLImageElement).decode()
   })
   await page.screenshot({ path: '.security-work/homepage-mobile.png', fullPage: true })
+  await page.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
   await expect(page.getByRole('link', { name: 'Employee Login', exact: true })).toHaveAttribute(
     'href',
     '/login',

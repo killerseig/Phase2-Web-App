@@ -100,6 +100,12 @@ npm.cmd run deploy
 npm run test:unit
 ```
 
+### Regression standard
+
+Every feature or fix must add or update meaningful Playwright coverage for the changed owner workflow. Include negative, interrupted/recovery and repeated flows when relevant, and rerun affected existing workflows before completion. Protect daily logs, shop orders, timecards and user management whenever shared code or a website release could affect them. Report exact passing/failing counts and checks not run; do not replace browser workflow coverage with implementation-mirroring unit tests.
+
+All browser writes, email requests and publication checks must use synthetic fixtures or local emulators. Never exercise production-backed write UI or use production records as test data. A production bundle must also be checked for boot/public fallback/login behavior with external requests blocked. The build excludes the fixture runtime, so fixture browser results verify the selected source, not production-service availability.
+
 ### Run End-to-End Tests with [Playwright](https://playwright.dev)
 
 ```sh

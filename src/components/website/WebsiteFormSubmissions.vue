@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import { ref, nextTick, onBeforeUnmount } from 'vue'
 import { websiteFormAdmin, websiteError } from '@/services/website'
 interface Submission {
@@ -10,6 +11,7 @@ interface Submission {
   attempts: number
   attemptStartedAt: number | null
 }
+const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const dialog = ref<HTMLDialogElement>(),
   entries = ref<Submission[]>([]),
   cursor = ref<string | null>(null),
@@ -33,8 +35,8 @@ async function load(more = false) {
     busy.value = false
   }
 }
-async function open() {
-  opener = document.activeElement as HTMLElement
+async function open(trigger?: MouseEvent) {
+  opener = (trigger?.currentTarget as HTMLElement) || (document.activeElement as HTMLElement)
   await nextTick()
   dialog.value?.showModal()
   void load()
@@ -43,12 +45,18 @@ function close() {
   dialog.value?.close()
   opener?.focus({ preventScroll: true })
 }
-async function retry(entry: Submission) {
+async function retry(entry: Submission, trigger?: MouseEvent) {
   if (
     busy.value ||
-    !window.confirm(
-      'Retry this email using its original recipients? If the earlier attempt reached the mail service but its confirmation was lost, recipients may receive a duplicate.',
-    )
+    !(await confirmation.value?.ask(
+      {
+        title: 'Retry notification email?',
+        message:
+          'This retries delivery to the original recipients. If the earlier attempt succeeded without confirmation, they may receive a duplicate.',
+        confirmLabel: 'Retry email',
+      },
+      trigger,
+    ))
   )
     return
   busy.value = true
@@ -72,10 +80,12 @@ function canRetry(entry: Submission) {
 onBeforeUnmount(() => dialog.value?.close())
 </script>
 <template>
+  <BuilderConfirmDialog ref="confirmation" />
   <button type="button" @click="open">View form submissions</button>
   <Teleport to="body"
     ><dialog
       ref="dialog"
+      class="builder-controls builder-dialog"
       aria-label="Website form submissions"
       @cancel.prevent="close"
       @keydown.esc.prevent.stop="close"
@@ -115,7 +125,7 @@ onBeforeUnmount(() => dialog.value?.close())
         <p v-else-if="entry.emailStatus === 'failed'">
           The email attempt failed. The inquiry is saved here.
         </p>
-        <button v-if="canRetry(entry)" :disabled="busy" @click="retry(entry)">
+        <button v-if="canRetry(entry)" :disabled="busy" @click="retry(entry, $event)">
           Retry notification email
         </button>
       </details>

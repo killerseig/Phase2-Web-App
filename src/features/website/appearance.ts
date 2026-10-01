@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'vue'
+import { websiteFonts } from '../../../functions/src/websiteFonts'
 import type { WidgetAppearance } from './types'
 import { GRID_COLUMN, GRID_ROW, type WidgetGeometry } from './grid'
 
@@ -43,21 +44,10 @@ export function appearanceStyle(value: WidgetAppearance = {}): CSSProperties {
     '--widget-margin-bottom': px(value.marginBottom ?? value.margin ?? 0),
     '--widget-margin-left': px(value.marginLeft ?? value.margin ?? 0),
     fontSize: px(value.fontSize),
-    fontFamily: value.fontFamily
-      ? {
-          sans: "'Source Sans 3', 'Segoe UI', sans-serif",
-          serif: 'Georgia, serif',
-          mono: 'Consolas, monospace',
-        }[value.fontFamily]
-      : undefined,
+    '--widget-body-size': px(value.fontSize),
+    fontFamily: value.fontFamily ? websiteFonts[value.fontFamily] : undefined,
     textAlign: value.textAlign,
-    '--widget-font': value.fontFamily
-      ? {
-          sans: "'Source Sans 3', 'Segoe UI', sans-serif",
-          serif: 'Georgia, serif',
-          mono: 'Consolas, monospace',
-        }[value.fontFamily]
-      : undefined,
+    '--widget-font': value.fontFamily ? websiteFonts[value.fontFamily] : undefined,
     '--heading-size': px(value.headingSize),
     '--image-fit': value.imageFit,
   }

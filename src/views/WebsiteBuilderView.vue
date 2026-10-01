@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import BuilderHelpDialog from '@/components/builder/BuilderHelpDialog.vue'
+import { commandKey, editorHelp } from '@/features/website/editorHelp'
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
+import BuilderPanelResize from '@/components/builder/BuilderPanelResize.vue'
+import { useBuilderPanels } from '@/features/builder/useBuilderPanels'
 import WebsitePageCode from '@/components/website/WebsitePageCode.vue'
 import WebsiteScriptFrame from '@/components/website/WebsiteScriptFrame.vue'
 import { parseWebsiteHtml, reconcileWebsiteHtml } from '../../functions/src/websiteLayout'
@@ -19,8 +24,10 @@ import {
 import {
   inlineEditingKey,
   navigationEditingKey,
+  navigationPreviewKey,
   itemEditingKey,
   type InlineTarget,
+  type InlineEditing,
 } from '@/features/website/inlineEditing'
 import { updateNavigationLabel } from '@/features/website/navigation'
 import { inlineItem } from '@/features/website/itemEditing'
@@ -28,7 +35,7 @@ import { imageEditingKey, type ImageTarget } from '@/features/website/imageEditi
 import WebsiteImageEditor from '@/components/website/WebsiteImageEditor.vue'
 import WebsiteWidgetToolbar from '@/components/website/WebsiteWidgetToolbar.vue'
 import WebsiteAlignmentGuides from '@/components/website/WebsiteAlignmentGuides.vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import AppShell from '@/layouts/AppShell.vue'
 import WebsiteCanvas from '@/components/website/WebsiteCanvas.vue'
 import WebsiteAppearanceFields from '@/components/website/WebsiteAppearanceFields.vue'
@@ -53,7 +60,7 @@ import WebsiteSavedSections from '@/components/website/WebsiteSavedSections.vue'
 import { captureSavedSection, insertSavedSection } from '@/features/website/savedSections'
 import { reorderLayer } from '@/features/website/layers'
 import { compilePageCss } from '../../functions/src/websiteDesign'
-import { responsiveSection, deviceWidth, isFlow } from '@/features/website/responsive'
+import { responsiveSection, deviceWidth, deviceHeight, isFlow } from '@/features/website/responsive'
 import type {
   WebsiteDevice,
   WidgetAppearance,
@@ -69,6 +76,7 @@ import {
 import { visualGeometry } from '@/features/website/appearance'
 import { normalizeRotation } from '@/features/website/transform'
 import { textBoxEditingKey, sameText, type ElementTarget } from '@/features/website/textBox'
+import BuilderSelectionContext from '@/components/builder/BuilderSelectionContext.vue'
 import WebsiteElementFields from '@/components/website/WebsiteElementFields.vue'
 import WebsiteElementContent from '@/components/website/WebsiteElementContent.vue'
 import {
@@ -80,6 +88,7 @@ import {
 import type { TextBoxValues } from '../../functions/src/websiteTextBox'
 import WebsiteNavigationFields from '@/components/website/WebsiteNavigationFields.vue'
 import WebsiteRevisionHistory from '@/components/website/WebsiteRevisionHistory.vue'
+import WebsitePublishComparison from '@/components/website/WebsitePublishComparison.vue'
 import { publishingChecks, type PublishingIssue } from '@/features/website/publishing'
 import WebsiteItemFields from '@/components/website/WebsiteItemFields.vue'
 import WebsiteBrandingFields from '@/components/website/WebsiteBrandingFields.vue'
@@ -114,6 +123,10 @@ import {
 } from '@/features/website/pageTools'
 import { useWebsiteHistory } from '@/features/website/useWebsiteHistory'
 import { useWebsiteGrid } from '@/features/website/useWebsiteGrid'
+import { starterFromDraft, backupBeforeStarter } from '@/features/website/starterImport'
+import { useWebsiteAutosave } from '@/features/website/useWebsiteAutosave'
+import { useWebsiteDraftSync } from '@/features/website/useWebsiteDraftSync'
+import { useAuthStore } from '@/stores/auth'
 import {
   defaultGrid,
   materializeGrid,
@@ -127,6 +140,7 @@ import {
 } from '@/features/website/grid'
 
 type EditorMode = 'content' | 'design' | 'code'
+const router = useRouter()
 const modes: { id: EditorMode; label: string; description: string }[] = [
   { id: 'content', label: 'Content', description: 'Update text, images, links and list entries.' },
   {
@@ -145,6 +159,19 @@ function preferredMode(): EditorMode {
   }
   return 'content'
 }
+const guide = ref<InstanceType<typeof BuilderHelpDialog>>()
+function helpKey(event: KeyboardEvent) {
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.key !== '?')
+    return
+  if (
+    event.target instanceof HTMLElement &&
+    event.target.closest('input, textarea, select, [contenteditable]')
+  )
+    return
+  event.preventDefault()
+  void guide.value?.open()
+}
+const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const editorMode = ref<EditorMode>(preferredMode())
 const designMode = computed(() => editorMode.value === 'design')
 const codeMode = computed(() => editorMode.value === 'code')
@@ -339,25 +366,49 @@ const filteredWidgets = computed(
       ),
     ) as typeof builtinLabels,
 )
+const widgetGroups = computed(() => {
+  const entries = [
+    ...Object.entries(filteredWidgets.value),
+    ...(matchesWidget('form', 'Form') ? [['form', 'Form']] : []),
+  ] as [SectionType, string][]
+  return widgetCategories
+    .map((category) => ({
+      category,
+      widgets: entries.filter(([type]) => widgetCategory(type) === category),
+    }))
+    .filter((group) => group.widgets.length)
+})
 const device = ref<WebsiteDevice>('desktop')
 const mobile = computed(() => device.value !== 'desktop')
 const activePane = ref<'outline' | 'preview' | 'inspector'>('inspector')
 const inspectorPane = ref<HTMLElement>()
 
-const page = computed(() =>
-  editingLayout.value
-    ? site.value?.sharedLayout
-    : site.value?.pages.find((page) => page.id === selectedPage.value),
-)
+const contentPage = computed(() => site.value?.pages.find((page) => page.id === selectedPage.value))
+const page = computed(() => (editingLayout.value ? site.value?.sharedLayout : contentPage.value))
+// Shared widgets stay on the canvas with the current page. Route every edit to
+// its owner rather than replacing the preview when the selection changes scope.
+function sectionOwner(id: string) {
+  if (contentPage.value?.sections.some((entry) => entry.id === id)) return contentPage.value
+  if (site.value?.sharedLayout?.sections.some((entry) => entry.id === id))
+    return site.value.sharedLayout
+}
+function chooseSectionScope(id: string) {
+  const owner = sectionOwner(id)
+  if (owner && (owner === site.value?.sharedLayout) !== editingLayout.value)
+    chooseScope(owner === site.value?.sharedLayout)
+}
 const section = computed(() =>
   page.value?.sections.find((section) => section.id === selectedSection.value),
 )
-const effectiveSection = computed(
-  () => section.value && responsiveSection(section.value, device.value),
-)
-const layerSections = computed(() =>
-  (page.value?.sections || []).map((section) => responsiveSection(section, device.value)),
-)
+const effectiveSection = computed(() => section.value && renderedSection(section.value))
+const layerSections = computed(() => (page.value?.sections || []).map(renderedSection))
+function renderedSection(entry: WebsiteSection) {
+  const owner = sectionOwner(entry.id) || page.value
+  return responsiveSection(entry, device.value, {
+    flow: owner === site.value?.sharedLayout || isFlow(owner?.layout, device.value),
+    parent: owner?.sections.find((parent) => parent.id === entry.parentId),
+  })
+}
 const geometryEditable = computed(
   () =>
     designMode.value &&
@@ -633,14 +684,22 @@ function cropSelectedElement() {
   const image = element?.querySelector('img')
   imageContain.value = !!image && getComputedStyle(image).objectFit === 'contain'
 }
+const elementOverrides = computed(() => {
+  const target = selectedText.value
+  if (!target || device.value === 'desktop') return undefined
+  return selectedElementItem.value?.textBoxes?.[target.field as ElementField]?.devices?.[
+    device.value
+  ]
+})
 const elementBox = computed(() => {
   const target = selectedText.value
   const item = target && inlineItem(page.value?.sections || [], target)
   return resolveElementBox(item?.textBoxes?.[target?.field as ElementField], device.value)
 })
 function selectElement(target: ElementTarget) {
-  if (locked.value || !designMode.value || layoutLocked(page.value?.sections || [], target.id))
-    return
+  if (locked.value || !designMode.value) return
+  chooseSectionScope(target.id)
+  if (layoutLocked(page.value?.sections || [], target.id)) return
   endInline()
   endImage()
   widgetDrag.cancel()
@@ -708,16 +767,23 @@ function setSelection(ids: string[]) {
 }
 const checks = computed(() => (site.value ? publishingChecks(site.value) : []))
 const publishBlocked = computed(() => checks.value.some((issue) => issue.level === 'error'))
-const dirty = computed(() => Boolean(site.value && JSON.stringify(site.value) !== saved.value))
+const draftSnapshot = computed(() => (site.value ? JSON.stringify(site.value) : ''))
+const dirty = computed(() => Boolean(site.value && draftSnapshot.value !== saved.value))
 const draftState = computed(() =>
   loading.value
     ? 'Loading draft…'
     : !site.value
       ? 'Draft unavailable'
-      : saving.value
+      : saving.value || autosave.saving.value
         ? 'Saving draft…'
         : dirty.value
-          ? 'Unsaved changes'
+          ? autosave.conflict.value
+            ? 'Save conflict · Online save paused'
+            : autosave.protectedLocally.value
+              ? autosave.online.value
+                ? 'Saved in browser · Waiting to sync'
+                : 'Saved in browser · Offline'
+              : 'Unsaved changes'
           : 'Draft saved',
 )
 watch(dirty, (changed) => {
@@ -741,7 +807,9 @@ const imageRatio = ref(1.5)
 const imageContain = ref(false)
 function imageItem(target: ImageTarget | undefined) {
   if (!target) return
-  const owner = page.value?.sections.find((entry) => entry.id === target.sectionId)
+  const owner = sectionOwner(target.sectionId)?.sections.find(
+    (entry) => entry.id === target.sectionId,
+  )
   return owner?.id === target.itemId
     ? owner
     : owner?.items.find((item) => item.id === target.itemId)
@@ -833,8 +901,8 @@ provide(textBoxEditingKey, {
       target.field === 'text' ||
       target.field === 'image' ||
       target.field === 'button') &&
-    !!inlineItem(page.value?.sections || [], target) &&
-    !layoutLocked(page.value?.sections || [], target.id),
+    !!inlineItem(sectionOwner(target.id)?.sections || [], target) &&
+    !layoutLocked(sectionOwner(target.id)?.sections || [], target.id),
   select: selectElement,
   save: (target, box) => {
     const item = inlineItem(page.value?.sections || [], target)
@@ -857,18 +925,22 @@ provide(textBoxEditingKey, {
     })
   },
 })
-watch([editorMode, page], () => {
-  selectedText.value = undefined
-})
-provide(inlineEditingKey, {
+watch(
+  [editorMode, page],
+  () => {
+    selectedText.value = undefined
+  },
+  { flush: 'sync' },
+)
+const inlineEditing: InlineEditing = {
   active: inlineTarget,
   enabled: (target) =>
     !locked.value &&
     !codeMode.value &&
     !runningCode.value &&
     (target.field === 'menu' || target.field === 'brand'
-      ? Boolean(page.value?.sections.some((entry) => entry.id === target.id))
-      : Boolean(inlineItem(page.value?.sections || [], target))),
+      ? Boolean(sectionOwner(target.id))
+      : Boolean(inlineItem(sectionOwner(target.id)?.sections || [], target))),
   design: () => designMode.value,
   select: (target, event) => {
     endInline()
@@ -877,6 +949,7 @@ provide(inlineEditingKey, {
     activePane.value = pane
   },
   begin: (target) => {
+    chooseSectionScope(target.id)
     if (
       inlineTarget.value?.id === target.id &&
       inlineTarget.value.field === target.field &&
@@ -950,14 +1023,40 @@ provide(inlineEditingKey, {
     }
   },
   end: endInline,
+}
+provide(inlineEditingKey, inlineEditing)
+provide(navigationPreviewKey, {
+  pageId: (url) => site.value?.pages.find((entry) => pageUrl(entry.slug) === url)?.id,
+  navigate: (id) => {
+    if (locked.value) return
+    endInline()
+    endImage()
+    choosePage(id)
+  },
+  openAppLogin: () => {
+    if (locked.value) return
+    endInline()
+    endImage()
+    void router.push('/login')
+  },
+  edit: (target) => {
+    if (locked.value || codeMode.value || runningCode.value) return
+    if (site.value?.sharedLayout?.sections.some((entry) => entry.id === target.id))
+      chooseScope(true)
+    void nextTick(() => {
+      if (inlineEditing.enabled(target)) inlineEditing.begin(target)
+    })
+  },
 })
-watch([selectedPage, editingLayout, editorMode, runningCode, locked], () => endInline())
+watch([selectedPage, editingLayout, editorMode, runningCode, locked], () => endInline(), {
+  flush: 'sync',
+})
 provide(itemEditingKey, (target) => {
   if (
     locked.value ||
     codeMode.value ||
     runningCode.value ||
-    !inlineItem(page.value?.sections || [], target)
+    !inlineItem(sectionOwner(target.id)?.sections || [], target)
   )
     return
   endInline()
@@ -995,12 +1094,14 @@ provide(navigationEditingKey, (sectionId, linkId) => {
 })
 const builderRoot = ref<HTMLElement>()
 const previewScroller = ref<HTMLElement>()
+const previewViewport = ref<HTMLElement>()
 const websiteCanvas = ref<InstanceType<typeof WebsiteCanvas>>()
 const zoom = ref(1)
 const autoFit = ref(true)
 const widgetDrag = useWebsiteGrid({
-  surface: () => websiteCanvas.value?.getSurface(),
+  surface: () => websiteCanvas.value?.getSurface(editingLayout.value),
   scroller: previewScroller,
+  viewport: previewViewport,
   disabled: () => locked.value || Boolean(inlineTarget.value),
   settings: () => page.value?.grid || defaultGrid(),
   commit: commitGeometry,
@@ -1010,7 +1111,7 @@ const widgetDrag = useWebsiteGrid({
       : undefined,
   rotation: (id) => {
     const entry = page.value?.sections.find((entry) => entry.id === id)
-    return entry ? responsiveSection(entry, device.value).appearance?.rotation || 0 : 0
+    return entry ? renderedSection(entry).appearance?.rotation || 0 : 0
   },
   group: groupGeometry,
   widgets: () =>
@@ -1025,7 +1126,7 @@ const { draft: gridDraft, hand, marquee } = widgetDrag
 const canvasWidth = computed(
   () =>
     gridExtent([
-      ...visibleSections(page.value?.sections || [])
+      ...visibleSections(contentPage.value?.sections || [])
         .filter((section) => !section.parentId && section.layout)
         .map((section) =>
           visualGeometry(
@@ -1041,6 +1142,14 @@ const canvasWidth = computed(
         : []),
     ]).width,
 )
+const previewWidth = computed(() => (mobile.value ? deviceWidth[device.value] : canvasWidth.value))
+const previewFrame = ref<HTMLElement>()
+const previewHeight = computed(() => deviceHeight[device.value])
+watch([selectedPage, device], async () => {
+  await nextTick()
+  previewViewport.value?.scrollTo(0, 0)
+  previewScroller.value?.scrollTo(0, 0)
+})
 watch(selectedPage, () => {
   settingsPanel.value = 'page'
 })
@@ -1072,9 +1181,21 @@ function updateFit() {
   if (!autoFit.value || !scroller?.clientWidth || gridDraft.value) return
   const style = getComputedStyle(scroller)
   const available =
-    scroller.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-  const width = mobile.value ? deviceWidth[device.value] : canvasWidth.value
-  zoom.value = Math.max(0.1, Math.min(1, available / width))
+    scroller.clientWidth -
+    parseFloat(style.paddingLeft) -
+    parseFloat(style.paddingRight)
+  const availableHeight =
+    scroller.clientHeight -
+    parseFloat(style.paddingTop) -
+    parseFloat(style.paddingBottom)
+  zoom.value = Math.max(
+    0.1,
+    Math.min(
+      1,
+      available / previewWidth.value,
+      availableHeight / previewHeight.value,
+    ),
+  )
 }
 let fitFrame: number | undefined
 function scheduleFit() {
@@ -1153,7 +1274,8 @@ function commitGeometry(
   })
 }
 function startWidgetMove(event: PointerEvent, id: string, action: WidgetAction = 'move') {
-  if (!designMode.value) return
+  if (!designMode.value || locked.value) return
+  chooseSectionScope(id)
   if (layoutLocked(page.value?.sections || [], id) || selectedLayoutLocked.value) return
   if (action !== 'rotate' && action !== 'height' && !geometryEditable.value) return
   if (!page.value || locked.value || event.button === 2 || (event.shiftKey && action !== 'rotate'))
@@ -1175,7 +1297,7 @@ function startWidgetMove(event: PointerEvent, id: string, action: WidgetAction =
         x: 0,
         y: 0,
         w: frame.offsetWidth / 45,
-        h: (responsiveSection(entry, device.value).sizing?.height ?? frame.offsetHeight) / 32,
+        h: (renderedSection(entry).sizing?.height ?? frame.offsetHeight) / 32,
         z: entry.layout?.z || 0,
       },
       'height',
@@ -1220,7 +1342,9 @@ function addWidget(type: SectionType) {
 function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'move') {
   if (!designMode.value) return
   if (event.target instanceof HTMLElement && event.target.closest('input,textarea,select')) return
-  if (locked.value || !page.value) return
+  if (locked.value) return
+  chooseSectionScope(id)
+  if (!page.value) return
   const entry = page.value.sections.find((section) => section.id === id)
   if (!entry?.layout || layoutLocked(page.value.sections, id) || selectedLayoutLocked.value) return
   if (action === 'rotate' || (event.target as HTMLElement).closest('.grid-rotate')) {
@@ -1237,7 +1361,7 @@ function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'm
         event.key === 'Home'
           ? 0
           : normalizeRotation(
-              (responsiveSection(entry, device.value).appearance?.rotation || 0) +
+              (renderedSection(entry).appearance?.rotation || 0) +
                 direction! * (event.shiftKey ? 15 : 1),
             ),
       )
@@ -1257,7 +1381,7 @@ function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'm
         {
           ...entry.layout,
           h:
-            ((responsiveSection(entry, device.value).sizing?.height ?? frame.offsetHeight) +
+            ((renderedSection(entry).sizing?.height ?? frame.offsetHeight) +
               delta * (event.shiftKey ? 10 : 1)) /
             32,
         },
@@ -1371,15 +1495,25 @@ function closeMenu(restore = false) {
   overlapTargets.value = []
   if (restore) menuOpener?.focus({ preventScroll: true })
 }
-async function openMenu(event: MouseEvent, id = '') {
+function chooseCanvasScope(ownerId: string | undefined) {
+  if (ownerId && ownerId !== page.value?.id) chooseScope(ownerId === site.value?.sharedLayout?.id)
+}
+function startCanvasMarquee(event: PointerEvent, ownerId: string) {
+  if (locked.value || !designMode.value) return
+  chooseCanvasScope(ownerId)
+  widgetDrag.startMarquee(event)
+}
+async function openMenu(event: MouseEvent, id = '', ownerId?: string) {
   if (!designMode.value) return
   if (locked.value) return
+  chooseCanvasScope(ownerId)
+  if (id) chooseSectionScope(id)
   event.preventDefault()
   overlapTargets.value = objectsAtPoint(event)
   widgetDrag.cancel()
   if (id && !selectedIds.value.includes(id)) setSelection([id])
   if (!id) setSelection([])
-  const surface = websiteCanvas.value?.getSurface()
+  const surface = websiteCanvas.value?.getSurface(editingLayout.value)
   const bounds = surface?.getBoundingClientRect()
   const scale = bounds && surface ? bounds.width / surface.offsetWidth : 1
   const point =
@@ -1395,7 +1529,7 @@ async function openMenu(event: MouseEvent, id = '') {
   await nextTick()
   menu.value = { x: event.clientX, y: event.clientY, point }
 }
-function widgetToolbarAction(action: string) {
+function widgetToolbarAction(action: string, trigger?: Event) {
   if (locked.value || !designMode.value || !section.value) return
   if (action === 'settings') {
     chooseSection(section.value.id)
@@ -1408,9 +1542,9 @@ function widgetToolbarAction(action: string) {
     history.change(() => {
       section.value!.locked = !section.value!.locked
     })
-  } else selectionAction(action)
+  } else selectionAction(action, trigger)
 }
-function selectionAction(action: string) {
+async function selectionAction(action: string, trigger?: Event) {
   if (!designMode.value) return
   if (locked.value || !page.value) return
   if (action.startsWith('select-object:')) {
@@ -1463,14 +1597,26 @@ function selectionAction(action: string) {
       for (const entry of page.value!.sections)
         if (layouts[entry.id]) entry.layout = layouts[entry.id]
     })
-  } else if (
-    action === 'delete' &&
-    selectedWidgets.value.length &&
-    window.confirm(
-      `Remove ${selectedTree.value.length} widget(s), including container contents, from this draft?`,
-    )
-  ) {
+  } else if (action === 'delete' && selectedWidgets.value.length) {
+    const target = page.value
     const ids = selectedTree.value.map((entry) => entry.id)
+    if (
+      !(await confirmation.value?.ask(
+        {
+          title: 'Remove widgets?',
+          message:
+            'Remove ' +
+            ids.length +
+            ' widget(s), including container contents, from this draft? You can undo this change.',
+          confirmLabel: 'Remove widgets',
+          destructive: true,
+        },
+        trigger,
+      )) ||
+      locked.value ||
+      page.value !== target
+    )
+      return
     history.change(() => {
       page.value!.sections = page.value!.sections.filter((entry) => !ids.includes(entry.id))
     })
@@ -1509,6 +1655,16 @@ function editorKey(event: KeyboardEvent) {
     closeMenu()
   }
 }
+// Keep an unfinished numeric edit through Fit/ResizeObserver rerenders until blur commits it.
+const geometryInput = ref<{ id: string; field: keyof WidgetGeometry; value: string }>()
+function geometryValue(field: keyof WidgetGeometry) {
+  const edit = geometryInput.value
+  return edit && edit.id === section.value?.id && edit.field === field
+    ? edit.value : section.value?.layout?.[field]
+}
+function holdGeometry(field: keyof WidgetGeometry, event: Event) {
+  if (section.value) geometryInput.value = { id: section.value.id, field, value: (event.target as HTMLInputElement).value }
+}
 function setGeometry(field: keyof WidgetGeometry, event: Event) {
   if (!section.value?.layout || locked.value || sectionFixed.value) return
   const input = event.target as HTMLInputElement
@@ -1532,19 +1688,221 @@ function setGeometry(field: keyof WidgetGeometry, event: Event) {
   }
   commitGeometry(section.value.id, next)
 }
-function canDiscard() {
-  return !dirty.value || window.confirm('Discard your unsaved website changes?')
+const auth = useAuthStore()
+const panels = useBuilderPanels({
+  scope: () =>
+    auth.currentUser?.uid
+      ? 'website:' +
+        (import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default') +
+        ':' +
+        auth.currentUser.uid
+      : '',
+  root: builderRoot,
+  leftOpen: leftPanelOpen,
+  rightOpen: rightPanelOpen,
+})
+const remoteChangePending = ref(false)
+const starterReview = ref(false)
+const starterConfirmation = ref(false)
+
+const autosave = useWebsiteAutosave({
+  scope: () =>
+    auth.currentUser?.uid
+      ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default'}:${auth.currentUser.uid}`
+      : '',
+  site,
+  saved,
+  version,
+  manualSave: () => starterReview.value,
+  blocked: () => locked.value || starterReview.value || starterConfirmation.value || !!cssError.value || !auth.currentUser || remoteChangePending.value,
+  save: (draft, baseVersion) =>
+    websiteCommand<{ version: number }>('save', { site: draft, version: baseVersion }),
+})
+const recoveryKey = ref('')
+const recovery = computed(
+  () =>
+    autosave.recoveries.value.find((entry) => entry.key === recoveryKey.value) ||
+    autosave.recoveries.value[0],
+)
+let loadedServer = false
+let loadedSnapshot = ''
+let loadedVersion = 0
+const draftSync = useWebsiteDraftSync({
+  scope: () =>
+    auth.currentUser?.uid
+      ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default'}:${auth.currentUser.uid}`
+      : '',
+  snapshot: draftSnapshot,
+  version,
+  ready: () => loadedServer && autosave.ready.value && !loading.value,
+  // Materialized editor defaults are not user edits. Once the server version
+  // changes, the older load baseline must not excuse an intentional Undo.
+  dirty: () =>
+    dirty.value && (version.value !== loadedVersion || draftSnapshot.value !== loadedSnapshot),
+  blocked: () =>
+    locked.value ||
+    starterReview.value ||
+    starterConfirmation.value ||
+    saving.value ||
+    autosave.saving.value ||
+    autosave.conflict.value ||
+    autosave.recoveries.value.length > 0 ||
+    widgetDrag.dragging.value ||
+    !!inlineTarget.value ||
+    !!imageTarget.value ||
+    !!selectedText.value ||
+    runningCode.value ||
+    !!document.activeElement?.closest(
+      'input, textarea, select, [contenteditable], dialog[open], [role="dialog"]',
+    ),
+  load: () => websiteCommand<WebsiteState>('load'),
+  apply: applySharedDraft,
+})
+watch(draftSync.newerVersion, (value) => (remoteChangePending.value = value !== null), {
+  flush: 'sync',
+})
+function applySharedDraft(result: WebsiteState) {
+  autosave.ready.value = false
+  history.reset(withWebsiteDefaults(result.draft))
+  loadedSnapshot = draftSnapshot.value
+  loadedVersion = result.version
+  version.value = result.version
+  saved.value = JSON.stringify(result.draft)
+  publishedAt.value = result.publishedAt
+  hasPrevious.value = result.hasPrevious
+  homePageId.value = result.draft.pages.find((entry) => entry.slug === 'home')?.id || ''
+  if (!contentPage.value) selectedPage.value = result.draft.pages[0]?.id || ''
+  if (editingLayout.value && !site.value?.sharedLayout) editingLayout.value = false
+  if (!section.value) setSelection([])
+  autosave.conflict.value = false
+  autosave.problem.value = ''
+  autosave.discover(saved.value)
+  autosave.begin()
+  message.value = 'Shared draft updated.'
 }
-async function load() {
-  if (!canDiscard()) return
+function downloadRecovery() {
+  const draft = site.value || recovery.value?.draft
+  if (!draft) return
+  autosave.persist()
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' }),
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `website-recovery-${new Date().toISOString().slice(0, 10)}.json`
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+async function importStarter(trigger?: Event) {
+  if (locked.value || !site.value || !auth.currentUser || starterConfirmation.value) return
+  const snapshot = JSON.stringify(site.value)
+  const uid = auth.currentUser.uid
+  starterConfirmation.value = true
+  try {
+    await autosave.settle()
+    if (!(await confirmation.value?.ask({
+      title: 'Review the nine-page starter?',
+      message: 'This replaces the pages in this editor with an editable placeholder starter. A browser backup and downloaded copy preserve your current draft. Automatic saving stays paused until you choose Save draft. The published website stays unchanged. Careers is hidden until you configure its recipients.',
+      confirmLabel: 'Back up and review starter',
+      destructive: true,
+    }, trigger))) return
+    if (locked.value || uid !== auth.currentUser?.uid || snapshot !== JSON.stringify(site.value)) {
+      message.value = 'The draft changed while confirming. Review it and try again.'
+      return
+    }
+    const scope = (import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default') + ':' + uid
+    const backup = backupBeforeStarter(localStorage, scope, site.value, version.value, saved.value)
+    const next = starterFromDraft(site.value)
+    endInline()
+    endImage()
+    widgetDrag.cancel()
+    closeMenu()
+    downloadRecovery()
+    autosave.stash()
+    // Backups share the recovery contract so the existing Recover edits UI can restore them.
+    localStorage.setItem('website-recovery:v1:' + encodeURIComponent(scope) + ':starter-' + crypto.randomUUID(), backup.value)
+    starterReview.value = true
+    autosave.discover(saved.value)
+    history.change(() => { site.value = next })
+    editingLayout.value = false
+    selectedPage.value = next.pages[0]?.id || ''
+    homePageId.value = selectedPage.value
+    setSelection([])
+    runningCode.value = false
+    error.value = ''
+    message.value = 'Starter review is local. Automatic saving is paused. Save draft only when you are ready to replace the private draft; publication remains a separate action.'
+    await nextTick()
+    fitView()
+  } catch {
+    error.value = 'The starter was not imported because a draft backup could not be saved. Your current draft is unchanged.'
+  } finally { starterConfirmation.value = false }
+}
+
+async function recoverDraft(trigger?: Event) {
+  const record = recovery.value
+  if (
+    !record ||
+    locked.value ||
+    (JSON.stringify(site.value) !== loadedSnapshot && !(await canDiscard(trigger)))
+  )
+    return
+  const serverVersion = version.value
+  starterReview.value = record.manualSave === true
+  autosave.stash()
+  autosave.ready.value = false
+  history.reset(withWebsiteDefaults(record.draft))
+  saved.value = record.saved
+  version.value = record.version
+  autosave.conflict.value = loadedServer && serverVersion !== record.version
+  autosave.problem.value = autosave.conflict.value
+    ? 'The online draft changed since this recovery copy. Automatic saving is paused. Download your recovery copy before reloading the latest draft to review it.'
+    : ''
+  selectedPage.value = site.value!.pages[0]?.id || ''
+  selectedSection.value = ''
+  homePageId.value = site.value!.pages.find((entry) => entry.slug === 'home')?.id || ''
+  autosave.begin(true)
+  autosave.persist()
+  if (autosave.protectedLocally.value) autosave.forget(record)
+  error.value = ''
+  message.value = 'Browser recovery restored. The published website has not changed.'
+}
+async function canDiscard(trigger?: Event) {
+  return (
+    !dirty.value ||
+    !!(await confirmation.value?.ask(
+      {
+        title: 'Discard unsaved changes?',
+        message: 'Your unsaved website changes will be replaced. Keep editing to save them first.',
+        confirmLabel: 'Discard changes',
+        cancelLabel: 'Keep editing',
+        destructive: true,
+      },
+      trigger,
+    ))
+  )
+}
+async function load(trigger?: Event) {
+  if (!(await canDiscard(trigger))) return
+  autosave.stash()
+  autosave.ready.value = false
   loading.value = true
   error.value = ''
   message.value = ''
+  let receivedDraft = false
   try {
+    await autosave.settle()
     const result = await websiteCommand<WebsiteState>('load')
     history.reset(withWebsiteDefaults(result.draft))
+    starterReview.value = false
+    loadedSnapshot = JSON.stringify(site.value)
+    loadedVersion = result.version
     version.value = result.version
     saved.value = JSON.stringify(result.draft)
+    receivedDraft = true
+    loadedServer = true
+    autosave.conflict.value = false
+    autosave.problem.value = ''
+    autosave.discover(saved.value)
     if (dirty.value)
       message.value =
         'This draft is ready for the grid editor. Review the layout and save it before publishing.'
@@ -1559,30 +1917,54 @@ async function load() {
     error.value = websiteError(reason)
   } finally {
     loading.value = false
+    if (site.value) autosave.begin(!receivedDraft)
   }
 }
 async function command(
   action: 'save' | 'publish' | 'restore' | 'unpublish' | 'restoreRevision',
   revisionId?: string,
+  trigger?: Event,
 ) {
   if (locked.value || !site.value) return
   if ((action === 'save' || action === 'publish') && cssError.value) {
     error.value = cssError.value
     return
   }
+  if (action === 'save' && !autosave.online.value) {
+    autosave.persist()
+    message.value = autosave.protectedLocally.value
+      ? 'Saved in this browser. Your draft will sync when the connection returns.'
+      : ''
+    return
+  }
   if (
     action === 'publish' &&
-    !window.confirm(
-      'Publish the saved website? All published pages and images will be visible to anyone with the website link.',
-    )
+    !(await confirmation.value?.ask(
+      {
+        title: 'Publish website?',
+        message: 'Your saved pages and images will be visible to anyone with the website link.',
+        confirmLabel: 'Publish website',
+      },
+      trigger,
+    ))
   )
     return
   if (
     action === 'unpublish' &&
-    !window.confirm('Take the website offline? Your saved draft will remain available.')
+    !(await confirmation.value?.ask(
+      {
+        title: 'Take website offline?',
+        message:
+          'Visitors will no longer see the published website. Your saved draft will remain available.',
+        confirmLabel: 'Take offline',
+        destructive: true,
+      },
+      trigger,
+    ))
   )
     return
-  if ((action === 'restore' || action === 'restoreRevision') && !canDiscard()) return
+  if ((action === 'restore' || action === 'restoreRevision') && !(await canDiscard(trigger))) return
+  if (locked.value || !site.value) return
   if (action === 'publish' && publishBlocked.value) {
     error.value = 'Resolve the publishing checks before publishing.'
     return
@@ -1593,6 +1975,8 @@ async function command(
   error.value = ''
   message.value = ''
   try {
+    await autosave.settle()
+    const snapshot = JSON.stringify(site.value)
     const result = await websiteCommand<{
       version: number
       draft?: WebsiteSite
@@ -1600,13 +1984,20 @@ async function command(
       hasPrevious?: boolean
     }>(action, {
       version: version.value,
-      ...(action === 'save' ? { site: site.value } : {}),
+      ...(action === 'save' ? { site: JSON.parse(snapshot) } : {}),
       ...(action === 'restoreRevision' ? { revisionId } : {}),
     })
     version.value = result.version
-    if (action === 'save') saved.value = JSON.stringify(site.value)
+    if (action === 'save') {
+      starterReview.value = false
+      saved.value = snapshot
+      autosave.problem.value = ''
+      autosave.conflict.value = false
+    }
     if (result.draft) {
       history.reset(withWebsiteDefaults(result.draft))
+      loadedSnapshot = draftSnapshot.value
+      loadedVersion = result.version
       saved.value = JSON.stringify(result.draft)
       homePageId.value = result.draft.pages.find((page) => page.slug === 'home')?.id || ''
       selectedPage.value = result.draft.pages[0]?.id || ''
@@ -1614,6 +2005,7 @@ async function command(
     }
     if (result.publishedAt !== undefined) publishedAt.value = result.publishedAt
     if (result.hasPrevious !== undefined) hasPrevious.value = result.hasPrevious
+    autosave.persist()
     message.value = {
       save: 'Draft saved. The published website has not changed.',
       publish: 'Website published.',
@@ -1623,6 +2015,7 @@ async function command(
     }[action]
   } catch (reason) {
     error.value = websiteError(reason)
+    if (action === 'save') autosave.reportFailure(reason)
   } finally {
     busy.value = false
     saving.value = false
@@ -1655,12 +2048,20 @@ async function reviewIssue(issue: PublishingIssue) {
     // Keep checks available alongside the setting being corrected.
     builderTool.value = 'publishing'
     await nextTick()
-    inspectorPane.value?.focus({ preventScroll: true })
+    if (issue.target === 'form-delivery') {
+      inspectorTab.value = 'content'
+      await nextTick()
+      const recipients =
+        inspectorPane.value?.querySelector<HTMLTextAreaElement>('[data-form-recipients]')
+      recipients?.focus({ preventScroll: true })
+      recipients?.scrollIntoView({ block: 'center', inline: 'nearest' })
+    } else inspectorPane.value?.focus({ preventScroll: true })
   }
 }
 function chooseSection(id: string, event?: MouseEvent) {
   rightPanelOpen.value = true
   if (!locked.value) {
+    if (id) chooseSectionScope(id)
     endInline()
     selectedText.value = undefined
     endImage()
@@ -1702,7 +2103,7 @@ function saveReusableSection(name: string) {
   history.change(() => {
     site.value!.savedSections = [...(site.value!.savedSections || []), entry]
   })
-  message.value = `Added ${entry.name} to the section library. Save draft to keep it.`
+  message.value = `Added ${entry.name} to the saved widget library. Save draft to keep it.`
 }
 function renameReusableSection(id: string, name: string) {
   if (locked.value || !name.trim() || name.trim().length > 80) return
@@ -1750,7 +2151,9 @@ async function revealLayer(id: string, preserveSelection = false) {
   activePane.value = 'preview'
   await nextTick()
   const element = Array.from(
-    websiteCanvas.value?.getSurface()?.querySelectorAll<HTMLElement>('[data-widget-id]') || [],
+    websiteCanvas.value
+      ?.getSurface(editingLayout.value)
+      ?.querySelectorAll<HTMLElement>('[data-widget-id]') || [],
   ).find((element) => element.dataset.widgetId === id)
   if (!element) {
     activePane.value = 'inspector'
@@ -1949,20 +2352,39 @@ function travelHistory(direction: 'undo' | 'redo') {
   message.value = ''
   error.value = ''
 }
-function removePage() {
-  if (editingLayout.value) return
+async function removePage(trigger?: Event) {
   if (
+    locked.value ||
+    editingLayout.value ||
     !site.value ||
     !page.value ||
-    page.value.slug === 'home' ||
-    !window.confirm(`Remove ${page.value.title} from the draft?`)
+    page.value.slug === 'home'
+  )
+    return
+  const target = page.value
+  if (
+    !(await confirmation.value?.ask(
+      {
+        title: 'Remove page?',
+        message:
+          'Remove "' +
+          target.title +
+          '" and its widgets from the draft? You can undo this change. The live website changes only when you publish.',
+        confirmLabel: 'Remove page',
+        destructive: true,
+      },
+      trigger,
+    )) ||
+    locked.value ||
+    page.value !== target
   )
     return
   history.change(() => {
-    site.value!.pages = site.value!.pages.filter((item) => item.id !== selectedPage.value)
+    site.value!.pages = site.value!.pages.filter((item) => item.id !== target.id)
   })
   choosePage(site.value.pages[0]?.id || '')
 }
+
 function move<T>(list: T[], index: number, direction: number) {
   const target = index + direction
   if (target < 0 || target >= list.length) return
@@ -1971,10 +2393,10 @@ function move<T>(list: T[], index: number, direction: number) {
     if (item) list.splice(target, 0, item)
   })
 }
-function removeSection() {
+function removeSection(trigger?: Event) {
   if (!section.value) return
   setSelection([section.value.id])
-  selectionAction('delete')
+  selectionAction('delete', trigger)
 }
 function updateSection(value: WebsiteItem) {
   const target = site.value?.pages
@@ -1983,7 +2405,8 @@ function updateSection(value: WebsiteItem) {
   if (target) Object.assign(target, value)
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value || uploading.value) {
+  autosave.persist()
+  if ((dirty.value && !autosave.protectedLocally.value) || uploading.value) {
     event.preventDefault()
     event.returnValue = ''
   }
@@ -1993,12 +2416,23 @@ onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
 })
 onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
-onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
+onBeforeRouteLeave(() => {
+  autosave.persist()
+  return !uploading.value && !busy.value && (autosave.protectedLocally.value || canDiscard())
+})
 </script>
 <template>
   <AppShell v-slot="{ openNavigation, mobileNavOpen }" contained compact>
-    <div class="website-builder">
-      <header class="builder-header">
+    <div class="website-builder" @keydown="helpKey">
+      <BuilderHelpDialog
+        ref="guide"
+        title="Editing guide"
+        introduction="Quick controls for building pages. Widget shortcuts apply in the workspace; text fields keep their normal editing keys."
+        :groups="editorHelp"
+      />
+      <BuilderConfirmDialog ref="confirmation" />
+      <p v-if="starterReview" role="status" class="builder-status">Starter review: automatic saving is paused. Save draft deliberately to replace the private draft, or Undo to restore your previous layout. Your backup is also available in browser recovery.</p>
+      <header class="builder-header builder-controls">
         <div class="builder-heading">
           <button
             class="builder-navigation"
@@ -2013,7 +2447,17 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
           </button>
           <div class="builder-title">
             <h1>Website Builder</h1>
-            <p class="subtle" aria-live="polite" aria-atomic="true">
+            <p
+              class="subtle"
+              aria-live="polite"
+              aria-atomic="true"
+              :title="
+                draftState +
+                (publishedAt
+                  ? ' · Published ' + new Date(publishedAt).toLocaleString()
+                  : ' · Not published')
+              "
+            >
               {{ draftState }} ·
               {{
                 publishedAt
@@ -2037,9 +2481,17 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
         </div>
         <div class="builder-actions">
           <button
+            type="button"
+            aria-label="Editing guide"
+            title="Editing guide (?)"
+            @click="guide?.open($event)"
+          >
+            <i class="pi pi-question-circle" aria-hidden="true" />
+          </button>
+          <button
             :disabled="locked || !canUndo"
             aria-label="Undo"
-            title="Undo local draft edit"
+            :title="`Undo draft edit (${commandKey} + Z)`"
             @click="travelHistory('undo')"
           >
             <i class="pi pi-undo" aria-hidden="true"></i>
@@ -2047,7 +2499,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
           <button
             :disabled="locked || !canRedo"
             aria-label="Redo"
-            title="Redo local draft edit"
+            :title="`Redo draft edit (${commandKey} + Shift + Z)`"
             @click="travelHistory('redo')"
           >
             <i class="pi pi-refresh" aria-hidden="true"></i>
@@ -2055,7 +2507,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
           <button
             :disabled="locked"
             aria-label="Site settings"
-            title="Site settings"
+            title="Edit shared website branding, fonts and colors"
             @click="openSiteSettings"
           >
             <i class="pi pi-cog" aria-hidden="true"></i
@@ -2066,14 +2518,15 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
             target="_blank"
             rel="noopener"
             aria-label="View website"
-            title="View website"
+            title="Open the published website in a new tab"
             class="view-website"
             ><i class="pi pi-external-link" aria-hidden="true"></i
             ><span class="desktop-label"> View website</span></a
           ><button
             aria-label="Save draft"
+            title="Save your edits to the draft without publishing"
             :disabled="locked || !site || !!cssError"
-            @click="command('save')"
+            @click="command('save', undefined, $event)"
           >
             {{ saving ? 'Saving…' : 'Save draft' }}</button
           ><button
@@ -2086,23 +2539,52 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   : 'Publish the saved draft'
             "
             :disabled="locked || !site || dirty || !version || !!cssError || publishBlocked"
-            @click="command('publish')"
+            @click="command('publish', undefined, $event)"
           >
             Publish
           </button>
         </div>
       </header>
 
+      <div v-if="draftSync.newerVersion.value !== null" class="recovery-notice" aria-live="polite">
+        <span>A newer shared draft is available. Your current edits are still here.</span>
+        <button :disabled="locked" @click="load">Load latest draft</button>
+      </div>
+      <div v-if="recovery" class="recovery-notice" aria-label="Browser recovery">
+        <span
+          >Unsaved work is available from {{ new Date(recovery.updatedAt).toLocaleString() }}.</span
+        >
+        <select
+          v-if="autosave.recoveries.value.length > 1"
+          v-model="recoveryKey"
+          aria-label="Recovery copy"
+        >
+          <option v-for="record in autosave.recoveries.value" :key="record.key" :value="record.key">
+            {{ new Date(record.updatedAt).toLocaleString() }}
+          </option>
+        </select>
+        <button :disabled="locked" @click="recoverDraft">Recover edits</button>
+        <button :disabled="locked" @click="autosave.forget(recovery)">Discard recovery</button>
+      </div>
+      <div
+        v-if="autosave.problem.value || autosave.storageProblem.value"
+        class="recovery-notice"
+        aria-live="polite"
+      >
+        <span>{{ autosave.storageProblem.value || autosave.problem.value }}</span>
+        <button @click="downloadRecovery">Download recovery copy</button>
+      </div>
+
       <p v-if="cssError" role="alert" class="notice error">{{ cssError }}</p>
       <p v-if="error" role="alert" class="notice error">{{ error }}</p>
       <p v-if="loading" role="status">Loading website draft…</p>
-      <nav v-if="site" class="pane-switcher" aria-label="Builder panels">
+      <nav v-if="site" class="pane-switcher builder-controls" aria-label="Builder panels">
         <button
           type="button"
           :aria-pressed="activePane === 'outline'"
           @click="activePane = 'outline'"
         >
-          Pages & sections
+          Pages & widgets
         </button>
         <button
           type="button"
@@ -2124,6 +2606,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
         ref="builderRoot"
         :disabled="locked"
         class="builder-grid"
+        :style="panels.style.value"
         :data-active-pane="activePane"
         :data-editor-mode="editorMode"
         :class="{ 'left-closed': !leftPanelOpen, 'right-closed': !rightPanelOpen }"
@@ -2131,7 +2614,11 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
         @click.capture="widgetDrag.guardClick"
         @keydown="editorKey"
       >
-        <aside class="outline" aria-label="Website structure">
+        <aside
+          id="website-structure"
+          class="outline builder-controls"
+          aria-label="Website structure"
+        >
           <nav class="builder-tools" aria-label="Workspace tools">
             <button
               v-for="tool in builderTools"
@@ -2218,6 +2705,11 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                 <button :disabled="site.pages.length >= 30" @click="addTemplatePage">
                   Create from template
                 </button>
+              </details>
+              <details class="template-tools">
+                <summary>Complete website starter</summary>
+                <p>Nine editable pages with placeholder copy and photo slots. Existing photos are reused; Careers starts hidden.</p>
+                <button :disabled="locked || starterConfirmation" @click="importStarter">Review nine-page starter</button>
               </details>
               <h2 class="on-page-heading">On this page</h2>
               <div v-if="page" data-widget-surface="outline" class="widget-outline">
@@ -2334,38 +2826,39 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   >
                     No matching widgets.
                   </p>
-                  <div class="widget-library-grid">
-                    <button
-                      v-for="(label, type) in filteredWidgets"
-                      :key="type"
-                      class="widget-library-item"
-                      :disabled="!page || page.sections.length >= 30"
-                      :aria-label="`Add ${label} widget`"
-                      :title="widgetInfo(type).description"
-                      @pointerdown="startNewWidget($event, type)"
-                      @dragstart.prevent
-                      @click="addWidget(type)"
-                    >
-                      <i :class="['pi', widgetInfo(type).icon]" aria-hidden="true"></i>
-                      <span
-                        >{{ label }}<small>{{ widgetInfo(type).description }}</small></span
+                  <section
+                    v-for="group in widgetGroups"
+                    :key="group.category"
+                    class="widget-category-group"
+                    :aria-label="group.category + ' widgets'"
+                  >
+                    <h3>
+                      {{ group.category }}<span>{{ group.widgets.length }}</span>
+                    </h3>
+                    <div class="widget-library-grid">
+                      <button
+                        v-for="[type, label] in group.widgets"
+                        :key="type"
+                        class="widget-library-item"
+                        :class="{ 'widget-library-item--form': type === 'form' }"
+                        :disabled="
+                          !page ||
+                          page.sections.length >= 30 ||
+                          (type === 'form' && (site.forms?.length || 0) >= 20)
+                        "
+                        :aria-label="'Add ' + label + ' widget'"
+                        :title="widgetInfo(type).description"
+                        @pointerdown="type !== 'form' && startNewWidget($event, type)"
+                        @dragstart.prevent
+                        @click="type === 'form' ? addWebsiteForm() : addWidget(type)"
                       >
-                    </button>
-                    <button
-                      v-if="matchesWidget('form', 'Form')"
-                      class="widget-library-item"
-                      :disabled="
-                        !page || page.sections.length >= 30 || (site.forms?.length || 0) >= 20
-                      "
-                      aria-label="Add Form widget"
-                      @click="addWebsiteForm()"
-                    >
-                      <i class="pi pi-envelope" aria-hidden="true"></i>
-                      <span
-                        >Form<small>{{ widgetInfo('form').description }}</small></span
-                      >
-                    </button>
-                  </div>
+                        <i :class="['pi', widgetInfo(type).icon]" aria-hidden="true" />
+                        <span
+                          >{{ label }}<small>{{ widgetInfo(type).description }}</small></span
+                        >
+                      </button>
+                    </div>
+                  </section>
                 </details>
                 <details class="template-tools">
                   <summary>Public forms</summary>
@@ -2427,7 +2920,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                 :entries="site.savedSections || []"
                 :selection-count="selectedTree.length"
                 :suggested-name="
-                  selectedWidgets.length === 1 ? section?.title || 'Saved section' : 'Widget group'
+                  selectedWidgets.length === 1 ? section?.title || 'Saved widget' : 'Widget group'
                 "
                 :remaining="30 - (page?.sections.length || 0)"
                 :disabled="locked || !page"
@@ -2461,22 +2954,43 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   </li>
                 </ul>
               </details>
+              <WebsitePublishComparison :site="site" :version="version" :disabled="locked" />
               <WebsiteRevisionHistory
+                :site="site"
                 :version="version"
                 :disabled="locked"
                 @restore="command('restoreRevision', $event)"
               />
               <p>Save your draft, then publish when it is ready.</p>
-              <button :disabled="!hasPrevious" @click="command('restore')">
+              <button :disabled="!hasPrevious" @click="command('restore', undefined, $event)">
                 Restore previous to draft</button
-              ><button v-if="publishedAt" @click="command('unpublish')">
+              ><button
+                v-if="publishedAt"
+                class="danger"
+                @click="command('unpublish', undefined, $event)"
+              >
                 Take website offline
               </button>
             </div>
           </div>
         </aside>
+        <BuilderPanelResize
+          v-if="leftPanelOpen"
+          class="left-resize"
+          label="Resize structure panel"
+          controls="website-structure"
+          :value="panels.widths.value.left"
+          :min="panels.minimum.left"
+          :max="panels.limits.value.left"
+          :disabled="locked"
+          @update:value="panels.set('left', $event)"
+          @start="panels.begin"
+          @cancel="panels.cancel"
+          @commit="panels.save"
+          @reset="panels.reset('left')"
+        />
         <div class="preview-pane">
-          <div class="preview-toolbar" role="group" aria-label="Canvas controls">
+          <div class="preview-toolbar builder-controls" role="group" aria-label="Canvas controls">
             <div class="canvas-tool-group panel-tools" role="group" aria-label="Canvas panels">
               <button
                 class="desktop-tool icon-tool"
@@ -2514,7 +3028,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                 class="zoom-value"
                 @click="setZoom(1)"
                 aria-label="Reset zoom"
-                title="Reset to 100%"
+                title="Show the preview at 100%. Device changes keep the same zoom."
               >
                 {{ Math.round(zoom * 100) }}%
               </button>
@@ -2543,7 +3057,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                 :key="option"
                 :aria-pressed="device === option"
                 :aria-label="option[0]!.toUpperCase() + option.slice(1)"
-                :title="`${option[0]!.toUpperCase() + option.slice(1)} preview`"
+                :title="`${option === 'mobile' ? 'Phone' : option[0]!.toUpperCase() + option.slice(1)} preview · ${option === 'desktop' ? canvasWidth : deviceWidth[option]} × ${deviceHeight[option]} CSS pixels · ${autoFit ? 'fits the workspace' : 'keeps manual zoom'}`"
                 @click="chooseDevice(option)"
               >
                 <i
@@ -2554,6 +3068,12 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   aria-hidden="true"
                 ></i>
               </button>
+              <span
+                class="preview-dimensions"
+                aria-label="Preview viewport size"
+                title="Representative screen size in CSS pixels before editor zoom. Scroll inside the preview to see the rest of the page."
+                >{{ previewWidth }} × {{ previewHeight }}</span
+              >
             </div>
             <button v-if="codeMode" class="code-preview-action" @click="toggleCodePreview">
               <i :class="['pi', runningCode ? 'pi-stop' : 'pi-play']" aria-hidden="true"></i>
@@ -2627,6 +3147,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
             :key="section.id"
             :id="section.id"
             :scroller="previewScroller"
+            :viewport="previewViewport"
             :disabled="locked"
             :fixed="sectionFixed"
             :own-lock="!!section.locked"
@@ -2652,6 +3173,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
             ref="previewScroller"
             class="preview-scroll"
             :class="{ 'pan-tool': hand }"
+            :style="{ '--preview-handle-space': '0px' }"
             tabindex="0"
             aria-label="Website grid workspace"
             @pointerdown.capture="widgetDrag.background"
@@ -2663,51 +3185,105 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
               <button class="primary" @click="openWidgetLibrary">Add your first widget</button>
             </div>
             <div
-              class="preview-frame"
-              :class="{ mobile }"
-              :style="{
-                width: `${mobile ? deviceWidth[device] : canvasWidth}px`,
-                zoom,
-              }"
+              class="preview-scale"
+              :style="{ width: `${previewWidth * zoom}px`, height: `${previewHeight * zoom}px` }"
             >
-              <WebsiteScriptFrame
-                v-if="runningCode && codePreviewSite"
-                :key="selectedPage"
-                :site="codePreviewSite"
-                :page-id="selectedPage"
-                preview
-              />
-              <WebsiteCanvas
-                v-else
-                ref="websiteCanvas"
-                :site="site"
-                :page-id="selectedPage"
-                :layout-editor="editingLayout"
-                @select-layout="
-                  (id) => {
-                    chooseScope(true)
-                    chooseSection(id)
-                  }
-                "
-                :selected-id="selectedSection"
-                :selected-ids="selectedIds"
-                :marquee="marquee"
-                preview
-                :device="device"
-                :grid-draft="gridDraft"
-                :locked="locked"
-                :design-tools="designMode"
-                @select="chooseSection"
-                @page="choosePage"
-                @drag-widget="startWidgetMove"
-                @geometry-key="geometryKey"
-                @marquee-start="widgetDrag.startMarquee"
-                @widget-menu="openMenu"
-              />
+              <div class="preview-clip">
+                <div
+                  ref="previewFrame"
+                  class="preview-frame"
+                  :class="{ mobile }"
+                  :style="{
+                    width: `${previewWidth}px`,
+                    height: `${previewHeight}px`,
+                    transform: `scale(${zoom})`,
+                    '--device-handle-space': `${designMode && !runningCode ? 40 : 0}px`,
+                  }"
+                >
+                  <div
+                    ref="previewViewport"
+                    class="preview-viewport"
+                    tabindex="0"
+                    :aria-label="`${device === 'mobile' ? 'Phone' : device === 'tablet' ? 'Tablet' : 'Desktop'} website preview`"
+                  >
+                    <WebsiteScriptFrame
+                      v-if="runningCode && codePreviewSite"
+                      :key="selectedPage"
+                      :site="codePreviewSite"
+                      :page-id="selectedPage"
+                      :viewport-height="previewHeight"
+                      preview
+                    />
+                    <WebsiteCanvas
+                      v-else
+                      ref="websiteCanvas"
+                      :site="site"
+                      :page-id="selectedPage"
+                      :layout-editor="editingLayout"
+                      @select-layout="chooseSection"
+                      :selected-id="selectedSection"
+                      :selected-ids="selectedIds"
+                      :marquee="marquee"
+                      preview
+                      :device="device"
+                      :grid-draft="gridDraft"
+                      :locked="locked"
+                      :design-tools="designMode"
+                      @select="chooseSection"
+                      @page="choosePage"
+                      @drag-widget="startWidgetMove"
+                      @geometry-key="geometryKey"
+                      @marquee-start="startCanvasMarquee"
+                      @widget-menu="openMenu"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <aside ref="inspectorPane" class="inspector" aria-label="Content editor" tabindex="-1">
+        <BuilderPanelResize
+          v-if="rightPanelOpen"
+          class="right-resize"
+          label="Resize editor panel"
+          controls="website-inspector"
+          :value="panels.widths.value.right"
+          :min="panels.minimum.right"
+          :max="panels.limits.value.right"
+          :disabled="locked"
+          reverse
+          @update:value="panels.set('right', $event)"
+          @start="panels.begin"
+          @cancel="panels.cancel"
+          @commit="panels.save"
+          @reset="panels.reset('right')"
+        />
+        <aside
+          id="website-inspector"
+          ref="inspectorPane"
+          class="inspector builder-controls"
+          aria-label="Content editor"
+          tabindex="-1"
+        >
+          <BuilderSelectionContext
+            :kind="
+              settingsPanel === 'site'
+                ? 'Site settings'
+                : selectedWidgets.length > 1
+                  ? selectedWidgets.length + ' widgets'
+                  : selectionDetail?.label ||
+                    (section ? 'Widget' : editingLayout ? 'Layout' : 'Page')
+            "
+            :scope="
+              settingsPanel === 'site'
+                ? 'Entire website'
+                : editingLayout
+                  ? 'Shared layout'
+                  : page?.title || 'Page'
+            "
+            :shared="settingsPanel === 'site' || editingLayout"
+            :title="editingLayout ? 'Changes apply to every page using this layout.' : undefined"
+          />
           <nav
             v-if="section && !codeMode"
             class="selection-path"
@@ -2772,8 +3348,10 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
             together. Fields below edit the primary widget.
           </p>
           <template v-if="settingsPanel === 'site'">
-            <h2>Site settings</h2>
-            <p class="subtle">These settings apply across the website.</p>
+            <div class="inspector-header settings-header">
+              <h2><i class="pi pi-cog" aria-hidden="true" /> Site settings</h2>
+              <p class="selection-name">Shared across your website</p>
+            </div>
             <label>Website name<input v-model="site.name" maxlength="100" /></label>
             <WebsitePageCode
               v-if="codeMode"
@@ -2790,6 +3368,12 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
               v-if="designMode"
               :theme="site.theme"
               :accent="site.accent"
+              @apply="
+                history.change(() => {
+                  site!.theme = $event.theme
+                  site!.accent = $event.accent
+                })
+              "
               @update="
                 history.change(() => {
                   if ($event) site!.theme = $event
@@ -2877,6 +3461,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
             />
             <WebsiteElementFields
               :value="elementBox"
+              :overrides="elementOverrides"
               :device="device"
               :disabled="locked || sectionFixed"
               :label="
@@ -2901,7 +3486,13 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   <h2>{{ sectionLabels[section.type] }}</h2>
                   <p v-if="section.title" class="selection-name">{{ section.title }}</p>
                 </div>
-                <button @click="chooseSection('')" aria-label="Close section editor">×</button>
+                <button
+                  @click="chooseSection('')"
+                  aria-label="Close widget editor"
+                  title="Return to page settings"
+                >
+                  ×
+                </button>
               </div>
               <p v-if="editingLayout" class="edit-scope">
                 Shared layout · Changes appear on every page using this layout.
@@ -2929,7 +3520,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                     ? 'Text and images are shared across desktop, tablet and phone.'
                     : device === 'desktop'
                       ? 'Tablet and phone follow these styles unless overridden.'
-                      : 'Style changes affect only this screen size. Reset a setting to follow desktop.'
+                      : 'Desktop values stay linked. Override values apply here only. Reset to follow desktop.'
                 }}</span>
               </p>
             </div>
@@ -3095,6 +3686,9 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   standalone
                   :value="effectiveSection?.appearance"
                   :kind="section.type"
+                  :automatic="
+                    device !== 'desktop' && (editingLayout || isFlow(page?.layout, device))
+                  "
                   :has-image="!!section.imageId || section.items.some((item) => !!item.imageId)"
                   :inherited="device !== 'desktop'"
                   :overrides="
@@ -3119,7 +3713,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   rotation</label
                 >
                 <label class="check"
-                  ><input v-model="section.hidden" type="checkbox" /> Hide section</label
+                  ><input v-model="section.hidden" type="checkbox" /> Hide widget</label
                 >
                 <label
                   >Container
@@ -3153,6 +3747,9 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   :container="effectiveSection?.container"
                   :sizing="effectiveSection?.sizing"
                   :inherited="device !== 'desktop'"
+                  :automatic="
+                    device !== 'desktop' && (editingLayout || isFlow(page?.layout, device))
+                  "
                   :sizing-overrides="
                     device === 'desktop' ? undefined : section.devices?.[device]?.sizing
                   "
@@ -3177,10 +3774,12 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                       <input
                         type="number"
                         step="any"
-                        :value="section.layout[field]"
+                        :value="geometryValue(field)"
                         :aria-label="`Widget ${field}`"
                         :disabled="sectionFixed"
+                        @input="holdGeometry(field, $event)"
                         @change="setGeometry(field, $event)"
+                        @blur="geometryInput = undefined"
                       />
                     </label>
                   </div>
@@ -3194,10 +3793,12 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                         <input
                           type="number"
                           :step="field === 'z' ? 1 : 'any'"
-                          :value="section.layout[field]"
+                          :value="geometryValue(field)"
                           :aria-label="`Widget ${field}`"
                           :disabled="sectionFixed"
-                          @change="setGeometry(field, $event)"
+                          @input="holdGeometry(field, $event)"
+                        @change="setGeometry(field, $event)"
+                        @blur="geometryInput = undefined"
                         />
                       </label>
                     </div>
@@ -3215,14 +3816,17 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                 :disabled="!page || page.sections.length >= 30"
                 @click="duplicateSection"
               >
-                Duplicate section
+                Duplicate widget
               </button>
 
-              <button class="danger remove-section" @click="removeSection">Remove section</button>
+              <button class="danger remove-section" @click="removeSection">Remove widget</button>
             </div>
           </template>
-          <template v-else-if="page"
-            ><h2>Page settings</h2>
+          <template v-else-if="page">
+            <div class="inspector-header settings-header">
+              <h2><i class="pi pi-file" aria-hidden="true" /> Page settings</h2>
+              <p class="selection-name">{{ page.title }}</p>
+            </div>
             <p v-if="page.chrome !== 'widgets'" class="notice">
               This legacy page needs room for its navigation and footer widgets. Keep at most 28
               other widgets, leave eight grid rows free at the bottom, then save and reload to
@@ -3232,10 +3836,11 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
               <fieldset>
                 <legend>Responsive page layout</legend>
                 <label v-for="target in ['desktop', 'tablet', 'mobile'] as const" :key="target"
-                  >{{ target }} layout
+                  >{{ target === 'mobile' ? 'Phone' : target === 'tablet' ? 'Tablet' : 'Desktop' }}
+                  layout
                   <select
                     :aria-label="target + ' layout'"
-                    :value="page.layout?.[target] || (target === 'desktop' ? 'grid' : 'scale')"
+                    :value="page.layout?.[target] || (target === 'desktop' ? 'grid' : 'flow')"
                     @change="
                       history.change(() => {
                         page!.layout = {
@@ -3248,21 +3853,28 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                     <option :value="target === 'desktop' ? 'grid' : 'scale'">
                       {{ target === 'desktop' ? 'Free grid' : 'Scale desktop grid' }}
                     </option>
-                    <option value="flow">Flow with content</option>
+                    <option value="flow">
+                      {{
+                        target === 'desktop' ? 'Flow with content' : 'Responsive flow (automatic)'
+                      }}
+                    </option>
                   </select>
                 </label>
                 <small
-                  >Flow stacks page widgets in outline order and grows with content. Containers
-                  arrange their children. Existing grid positions are retained.</small
+                  >Responsive flow wraps tablet columns and stacks phone content, adapting spacing
+                  and height automatically. Device overrides take priority. Scale desktop grid keeps
+                  the exact desktop arrangement.</small
                 >
-                <label v-for="field in ['gap', 'padding'] as const" :key="field"
-                  >Flow {{ field }} (px)<input
-                    type="number"
-                    min="0"
-                    max="160"
-                    :value="page.layout?.[field] ?? 16"
-                    @change="setPageSpacing(field, $event)"
-                /></label>
+                <div class="builder-field-grid">
+                  <label v-for="field in ['gap', 'padding'] as const" :key="field"
+                    >Flow {{ field }} (px)<input
+                      type="number"
+                      min="0"
+                      max="160"
+                      :value="page.layout?.[field] ?? 16"
+                      @change="setPageSpacing(field, $event)"
+                  /></label>
+                </div>
               </fieldset>
               <fieldset class="grid-settings">
                 <legend>Canvas grid</legend>
@@ -3273,34 +3885,36 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                   <label class="check"
                     ><input v-model="page.grid.snap" type="checkbox" /> Snap to grid</label
                   >
-                  <label
-                    >Horizontal spacing<select
-                      v-model.number="page.grid.spacingX"
-                      aria-label="Horizontal grid spacing"
-                    >
-                      <option
-                        v-for="spacing in [0.25, 0.5, 1, 2, 4]"
-                        :key="spacing"
-                        :value="spacing"
+                  <div class="builder-field-grid">
+                    <label
+                      >Horizontal spacing<select
+                        v-model.number="page.grid.spacingX"
+                        aria-label="Horizontal grid spacing"
                       >
-                        {{ spacing }}
-                      </option>
-                    </select></label
-                  >
-                  <label
-                    >Vertical spacing<select
-                      v-model.number="page.grid.spacingY"
-                      aria-label="Vertical grid spacing"
+                        <option
+                          v-for="spacing in [0.25, 0.5, 1, 2, 4]"
+                          :key="spacing"
+                          :value="spacing"
+                        >
+                          {{ spacing }}
+                        </option>
+                      </select></label
                     >
-                      <option
-                        v-for="spacing in [0.25, 0.5, 1, 2, 4]"
-                        :key="spacing"
-                        :value="spacing"
+                    <label
+                      >Vertical spacing<select
+                        v-model.number="page.grid.spacingY"
+                        aria-label="Vertical grid spacing"
                       >
-                        {{ spacing }}
-                      </option>
-                    </select></label
-                  >
+                        <option
+                          v-for="spacing in [0.25, 0.5, 1, 2, 4]"
+                          :key="spacing"
+                          :value="spacing"
+                        >
+                          {{ spacing }}
+                        </option>
+                      </select></label
+                    >
+                  </div>
                 </template>
               </fieldset>
             </template>
@@ -3354,7 +3968,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
             </button>
             <hr />
             <p class="subtle">
-              Select a section in the preview or outline to edit its content.
+              Select a widget in the preview or outline to edit its content.
             </p></template
           >
         </aside>
@@ -3383,6 +3997,21 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
   </AppShell>
 </template>
 <style scoped>
+.recovery-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.recovery-notice button,
+.recovery-notice select {
+  font-size: inherit;
+  padding: 0.25rem 0.45rem;
+}
 .selection-path {
   display: flex;
   align-items: center;
@@ -3635,7 +4264,10 @@ a {
 }
 .builder-grid {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr) 300px;
+  grid-template-columns: var(--builder-left-width, 248px) 6px minmax(0, 1fr) 6px var(
+      --builder-right-width,
+      300px
+    );
   grid-template-rows: minmax(0, 1fr);
   flex: 1 1 0;
   min-height: 0;
@@ -3799,14 +4431,34 @@ a {
   margin-top: 0;
 }
 @media (min-width: 901px) {
+  .outline {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .left-resize {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .preview-pane {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .right-resize {
+    grid-column: 4;
+    grid-row: 1;
+  }
+  .inspector {
+    grid-column: 5;
+    grid-row: 1;
+  }
   .builder-grid.left-closed {
-    grid-template-columns: 0 minmax(0, 1fr) 300px;
+    grid-template-columns: 0 0 minmax(0, 1fr) 6px var(--builder-right-width, 300px);
   }
   .builder-grid.right-closed {
-    grid-template-columns: 248px minmax(0, 1fr) 0;
+    grid-template-columns: var(--builder-left-width, 248px) 6px minmax(0, 1fr) 0 0;
   }
   .builder-grid.left-closed.right-closed {
-    grid-template-columns: 0 minmax(0, 1fr) 0;
+    grid-template-columns: 0 0 minmax(0, 1fr) 0 0;
   }
   .builder-grid.left-closed > .outline,
   .builder-grid.right-closed > .inspector {
@@ -3888,96 +4540,6 @@ select {
 }
 .check input {
   width: auto;
-}
-/* Inspector components share the same controls. Keep these rules out of the
-   website canvas so editing chrome cannot override an authored site's styles. */
-.inspector
-  :deep(
-    :where(
-      input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
-      textarea,
-      select
-    )
-  ) {
-  font: inherit;
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  color: var(--text);
-  background: var(--field);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0.45rem 0.55rem;
-}
-.inspector :deep(:where(button)) {
-  font: inherit;
-  color: var(--text);
-  background: var(--field);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0.4rem 0.6rem;
-  cursor: pointer;
-}
-.inspector :deep(button:hover:not(:disabled)) {
-  border-color: var(--accent);
-}
-.inspector :deep(button:disabled) {
-  opacity: 0.5;
-  cursor: default;
-}
-.inspector :deep(:is(input, textarea, select, button, summary):focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.inspector :deep(input:is([type='checkbox'], [type='radio'])) {
-  width: 1rem;
-  height: 1rem;
-  flex: 0 0 auto;
-  margin: 0;
-  accent-color: var(--accent);
-}
-.inspector :deep(input::file-selector-button) {
-  font: inherit;
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.3rem 0.5rem;
-  margin-right: 0.5rem;
-  cursor: pointer;
-}
-.inspector :deep(input[type='checkbox']) {
-  appearance: none;
-  display: inline-grid;
-  place-content: center;
-  border: 1px solid var(--control-border, var(--border));
-  border-radius: 3px;
-  background: var(--field);
-  vertical-align: middle;
-  cursor: pointer;
-}
-.inspector :deep(input[type='checkbox']::before) {
-  content: '';
-  width: 0.5rem;
-  height: 0.25rem;
-  border-left: 2px solid var(--field);
-  border-bottom: 2px solid var(--field);
-  transform: rotate(-45deg) scale(0);
-}
-.inspector :deep(input[type='checkbox']:checked) {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.inspector :deep(input[type='checkbox']:checked::before) {
-  transform: rotate(-45deg) scale(1);
-}
-@media (forced-colors: active) {
-  .inspector :deep(input[type='checkbox']) {
-    appearance: auto;
-  }
-  .inspector :deep(input[type='checkbox']::before) {
-    content: none;
-  }
 }
 .tool-panel > label {
   margin-top: 1rem;
@@ -4065,6 +4627,13 @@ select {
   min-width: 44px;
   font-variant-numeric: tabular-nums;
 }
+.preview-dimensions {
+  padding-inline: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .preview-toolbar button:focus-visible,
 .selection-toolbar button:focus-visible {
   outline: 2px solid var(--accent);
@@ -4111,10 +4680,36 @@ select {
   scrollbar-gutter: stable;
   padding: 0.75rem;
 }
-.preview-frame {
-  width: 100%;
+.preview-scale {
+  position: relative;
+  flex-shrink: 0;
   margin: auto;
   box-shadow: 0 6px 25px #0004;
+}
+.preview-clip {
+  position: absolute;
+  inset: calc(-1 * var(--preview-handle-space));
+  padding: var(--preview-handle-space);
+  overflow: clip;
+}
+.preview-frame {
+  transform-origin: top left;
+}
+.preview-viewport {
+  position: relative;
+  top: calc(-1 * var(--device-handle-space));
+  left: calc(-1 * var(--device-handle-space));
+  box-sizing: border-box;
+  width: calc(100% + 2 * var(--device-handle-space));
+  height: calc(100% + 2 * var(--device-handle-space));
+  padding: var(--device-handle-space);
+  overflow: auto;
+  overscroll-behavior: contain;
+  /* Keep the authored device width on systems with non-overlay scrollbars. */
+  scrollbar-width: none;
+}
+.preview-viewport::-webkit-scrollbar {
+  display: none;
 }
 .geometry-fields {
   display: grid;
@@ -4134,12 +4729,6 @@ select {
 .arrangement-actions button {
   padding: 0.4rem;
   font-size: 0.75rem;
-}
-.grid-settings {
-  display: grid;
-  gap: 0.5rem;
-  min-width: 0;
-  border: 1px solid var(--border);
 }
 .pan-tool {
   cursor: grab;
@@ -4336,3 +4925,5 @@ hr {
   }
 }
 </style>
+
+<style src="../styles/website-builder.css"></style>

@@ -1,5 +1,9 @@
 import { type WebsiteSite } from './websiteModel';
 export declare const websiteBuilder: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    publishedAt: any;
+    changes: import("./websiteChanges").WebsiteChange[];
+    total: number;
+} | {
     version: any;
     draft: WebsiteSite;
     savedAt: number;
@@ -24,18 +28,35 @@ export declare const websiteBuilder: import("firebase-functions/v2/https").Calla
     draft?: undefined;
     savedAt?: undefined;
 } | {
-    revisions: {
-        id: string;
-        version: any;
-        savedAt: any;
-        name: any;
-    }[];
+    draft: any;
+    activity?: undefined;
+    revisions?: undefined;
     images?: undefined;
     nextCursor?: undefined;
     id?: undefined;
     base64?: undefined;
     version?: undefined;
+    publishedAt?: undefined;
+    hasPrevious?: undefined;
+    savedAt?: undefined;
+} | {
+    activity: {
+        id: string;
+    }[];
+    revisions: {
+        id: string;
+        version: any;
+        savedAt: any;
+        name: any;
+        savedBy: any;
+        action: any;
+    }[];
     draft?: undefined;
+    images?: undefined;
+    nextCursor?: undefined;
+    id?: undefined;
+    base64?: undefined;
+    version?: undefined;
     publishedAt?: undefined;
     hasPrevious?: undefined;
     savedAt?: undefined;
@@ -47,22 +68,24 @@ export declare const websiteBuilder: import("firebase-functions/v2/https").Calla
         createdAt: any;
     }[];
     nextCursor: string | null;
+    draft?: undefined;
+    activity?: undefined;
     revisions?: undefined;
     id?: undefined;
     base64?: undefined;
     version?: undefined;
-    draft?: undefined;
     publishedAt?: undefined;
     hasPrevious?: undefined;
     savedAt?: undefined;
 } | {
     id: any;
     base64: string;
+    draft?: undefined;
+    activity?: undefined;
     revisions?: undefined;
     images?: undefined;
     nextCursor?: undefined;
     version?: undefined;
-    draft?: undefined;
     publishedAt?: undefined;
     hasPrevious?: undefined;
     savedAt?: undefined;
@@ -72,6 +95,7 @@ export declare const websiteBuilder: import("firebase-functions/v2/https").Calla
     publishedAt: any;
     hasPrevious: boolean;
     savedAt: any;
+    activity?: undefined;
     revisions?: undefined;
     images?: undefined;
     nextCursor?: undefined;

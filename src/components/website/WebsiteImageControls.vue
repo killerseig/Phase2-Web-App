@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ImageSettings } from '../../../functions/src/websiteContent'
+import WebsiteOverlayControls from './WebsiteOverlayControls.vue'
 const props = defineProps<{ value?: ImageSettings }>()
 const emit = defineEmits<{ update: [value: ImageSettings | undefined] }>()
 function change(key: keyof ImageSettings, event: Event) {
@@ -19,7 +20,7 @@ function change(key: keyof ImageSettings, event: Event) {
         { key: 'focusX', label: 'Horizontal focal point', max: 100, step: 1, fallback: 50, min: 0 },
         { key: 'focusY', label: 'Vertical focal point', max: 100, step: 1, fallback: 50, min: 0 },
         { key: 'zoom', label: 'Crop zoom', max: 3, step: 0.05, fallback: 1, min: 1 },
-        { key: 'overlayOpacity', label: 'Overlay opacity', max: 80, step: 1, fallback: 0, min: 0 },
+        { key: 'darken', label: 'Darken image', max: 100, step: 1, fallback: 0, min: 0 },
       ] as const"
       :key="field.key"
       >{{ field.label }}: {{ value?.[field.key] ?? field.fallback
@@ -32,12 +33,7 @@ function change(key: keyof ImageSettings, event: Event) {
         :value="value?.[field.key] ?? field.fallback"
         @input="change(field.key, $event)"
     /></label>
-    <label
-      >Overlay color<input
-        type="color"
-        :value="value?.overlay || '#000000'"
-        @input="change('overlay', $event)"
-    /></label>
+    <WebsiteOverlayControls :value="value" @update="emit('update', $event)" />
     <label
       >Image caption<input
         :value="value?.caption || ''"

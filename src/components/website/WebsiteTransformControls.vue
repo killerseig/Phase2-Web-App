@@ -31,7 +31,7 @@ const emit = defineEmits<{
           action: 'rotate',
           icon: 'pi-refresh',
           label: 'Rotate widget',
-          hint: 'Drag to rotate. Arrow keys rotate; Shift uses 15° steps. Home resets.',
+          hint: 'Drag to rotate; go slowly for precision. Alt bypasses snapping; Shift uses 15° steps. Arrow keys rotate; Home resets.',
         },
       ] as const"
       :key="tool.action"

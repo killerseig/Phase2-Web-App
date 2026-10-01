@@ -11,6 +11,21 @@ import { copySection } from './pageTools'
 import { homepagePrototype } from '../../../e2e/fixtures/homepagePrototype'
 import { publishingChecks } from './publishing'
 describe('website shared design', () => {
+  it('adapts inherited heading sizes in responsive flow and preserves device typography', () => {
+    const theme = {
+      textStyles: {
+        pageTitle: { size: 72, devices: { mobile: { size: 48 } } },
+        sectionHeading: { size: 64 },
+        body: { size: 18 },
+      },
+    }
+    expect(themeStyle(theme, 'mobile', true)['--type-title-size']).toBe('48px')
+    expect(themeStyle(theme, 'mobile', true)['--type-section-size']).toBe('40px')
+    expect(themeStyle(theme, 'tablet', true)['--type-title-size']).toBe('56px')
+    expect(themeStyle(theme, 'mobile', true)['--type-body-size']).toBe('18px')
+    expect(themeStyle(theme, 'tablet', false)['--type-title-size']).toBe('72px')
+    expect(themeStyle(theme, 'desktop', true)['--type-title-size']).toBe('72px')
+  })
   it('validates a bounded design contract without external fonts or CSS injection', () => {
     expect(validateTheme(defaultTheme)).toEqual(defaultTheme)
     for (const value of [

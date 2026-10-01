@@ -1,0 +1,42 @@
+export declare const websiteFonts: {
+    readonly sans: "'Source Sans 3', 'Segoe UI', sans-serif";
+    readonly serif: "Georgia, serif";
+    readonly mono: "Consolas, monospace";
+    readonly display: "'Saira Semi Condensed', 'Source Sans 3', sans-serif";
+    readonly Inter: "Inter, Arial, sans-serif";
+    readonly Montserrat: "Montserrat, Arial, sans-serif";
+    readonly Lora: "Lora, Georgia, serif";
+    readonly Roboto: "Roboto, Arial, sans-serif";
+    readonly 'Open Sans': "'Open Sans', Arial, sans-serif";
+    readonly Raleway: "Raleway, Arial, sans-serif";
+    readonly Nunito: "Nunito, Arial, sans-serif";
+    readonly Oswald: "Oswald, Arial, sans-serif";
+    readonly 'Playfair Display': "'Playfair Display', Georgia, serif";
+    readonly Merriweather: "Merriweather, Georgia, serif";
+    readonly 'Libre Baskerville': "'Libre Baskerville', Georgia, serif";
+    readonly 'DM Sans': "'DM Sans', Arial, sans-serif";
+    readonly 'Work Sans': "'Work Sans', Arial, sans-serif";
+    readonly 'Fira Code': "'Fira Code', Consolas, monospace";
+    readonly 'Dancing Script': "'Dancing Script', cursive";
+    readonly 'Source Sans 3': "'Source Sans 3', Arial, sans-serif";
+    readonly 'Saira Semi Condensed': "'Saira Semi Condensed', Arial, sans-serif";
+    readonly Arial: "Arial, sans-serif";
+    readonly Georgia: "Georgia, serif";
+    readonly 'Times New Roman': "'Times New Roman', serif";
+    readonly Verdana: "Verdana, sans-serif";
+    readonly 'Trebuchet MS': "'Trebuchet MS', sans-serif";
+    readonly Tahoma: "Tahoma, sans-serif";
+    readonly 'Palatino Linotype': "'Palatino Linotype', Palatino, serif";
+    readonly 'Courier New': "'Courier New', monospace";
+    readonly Consolas: "Consolas, monospace";
+    readonly 'sans-serif': "sans-serif";
+    readonly monospace: "monospace";
+};
+export type WebsiteFont = keyof typeof websiteFonts;
+export declare function fontCategory(value: string): "Monospace" | "Script" | "Serif" | "Condensed" | "Sans serif";
+export declare const textFonts: string[];
+export declare const fontOptions: {
+    value: string;
+    label: string;
+}[];
+//# sourceMappingURL=websiteFonts.d.ts.map

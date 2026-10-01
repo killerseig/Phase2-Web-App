@@ -1,0 +1,46 @@
+Phase 2 website generic placeholder images
+Mode: built-in imagegen tool; each asset generated separately.
+Generated: 2026-09-30
+Status: AI-generated illustrative photographs, not actual Phase 2 project documentation.
+Encoding: original full dimensions preserved; JPEG quality 90 using System.Drawing; no visual content alterations.
+
+File: src/assets/images/site/architecture.jpg
+Final prompt:
+Use case: photorealistic-natural
+Asset type: wide editorial hero photograph for a premium construction company website, generic placeholder architecture
+Primary request: a beautifully executed contemporary commercial building exterior at golden hour, architectural photography with physically credible detailing.
+Scene/backdrop: a quiet landscaped urban-edge setting with a modern two-story office building, broad glass facade, warm stone and dark metal panels, clean concrete approach, subtle planting.
+Style/medium: authentic professional architectural photography, natural textures and reflections, perspective-correct verticals, restrained color grading.
+Composition/framing: wide landscape 16:9 image, eye-level three-quarter view, strong clean horizontal architectural lines; building occupies middle and right with some clear sky and darker foreground suitable for overlaid website copy. Produce one photograph only.
+Lighting/mood: late afternoon golden sun grazing warm stone, cool charcoal shadows, welcoming interior light, calm and confident.
+Constraints: invented generic building only, no specific real landmark, no text, no logos, no signage, no watermark, no people, no composited graphics. Real photograph aesthetic rather than shiny CGI.
+
+File: src/assets/images/site/finished-interior.jpg
+Final prompt:
+Use case: photorealistic-natural
+Asset type: wide editorial interior photograph for a premium construction company website; generic illustrative placeholder
+Primary request: a beautifully finished commercial interior emphasizing the craft of walls, ceilings, wood trim, and glass partitions.
+Scene/backdrop: a contemporary office lobby and circulation space with warm oak slat ceiling, pale neutral walls, floor-to-ceiling glass meeting rooms, precisely detailed black metal frames, a simple built-in bench, and large daylight windows.
+Style/medium: realistic professional architectural photography, believable construction detailing and natural wood grain, correct perspective, restrained editorial grading, rich yet natural detail.
+Composition/framing: wide landscape 16:9 image, clean generous interior scene, slightly off-center perspective with long ceiling and wall lines pulling into the depth. Distinct materials clearly visible, no large furniture obstructing workmanship. Produce one photograph only.
+Lighting/mood: soft daylight and warm concealed lighting, balanced charcoal and oak tones, calm refined hospitality feel.
+Constraints: invented generic interior, no claim of actual company project, no people, no logos, no readable text or signage, no watermark. Avoid ostentatious luxury, clutter, excessive glare and CGI look.
+
+File: src/assets/images/site/planning.jpg
+Final prompt:
+Use case: photorealistic-natural
+Asset type: editorial construction planning photograph for a premium company website; generic illustrative placeholder
+Primary request: a refined close-up of an architectural planning table with rolled and unfolded plan drawings, carefully arranged material samples, a plain metal scale ruler, and one graphite pencil.
+Scene/backdrop: natural oak studio table near a daylight window, clean workspace. On the tabletop: architectural floor-plan lines without legible labels, a small warm wood finish sample, charcoal metal finish sample, light stone sample, and a white wall finish swatch.
+Style/medium: authentic tactile editorial still-life photography, not an illustration or render; believable fine paper texture, subtle material imperfections and crisp joinery samples.
+Composition/framing: landscape 3:2 image, oblique overhead view, drawings as the foundation of the scene, organized asymmetrical arrangement, shallow but sufficient depth of field to show materials. Produce one photograph only.
+Lighting/mood: soft directional morning light, gently warm highlights, quiet charcoal shadows, refined neutral palette; purposeful and thoughtful, real working studio aesthetic.
+Constraints: no people or hands, no logos, no brand marks, no readable writing/numbers/text, no signage, no watermark, no busy clutter, no mugs/laptops. Generic scene does not identify any actual company or project.
+
+Final encoded dimensions and sizes:
+src/assets/images/site/architecture.jpg: 1672 x 941 pixels; 379950 bytes.
+src/assets/images/site/finished-interior.jpg: 1672 x 941 pixels; 368611 bytes.
+src/assets/images/site/planning.jpg: 1536 x 1024 pixels; 288689 bytes.
+
+All final assets were visually inspected after encoding.
+Original generated PNGs were retained locally; final project assets use the relative paths above.

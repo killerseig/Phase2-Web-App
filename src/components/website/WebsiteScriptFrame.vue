@@ -3,9 +3,22 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { websiteCommand, submitWebsiteForm } from '@/services/website'
 import { customDefinition } from '../../../functions/src/websiteCustom'
 import type { WebsiteSite } from '@/features/website/types'
-const props = defineProps<{ site: WebsiteSite; pageId: string; preview?: boolean }>()
+const props = defineProps<{
+  site: WebsiteSite
+  pageId: string
+  preview?: boolean
+  viewportHeight?: number
+}>()
 const frame = ref<HTMLIFrameElement>()
 const height = ref(640)
+const frameHeight = computed(() =>
+  props.preview &&
+  typeof props.viewportHeight === 'number' &&
+  Number.isFinite(props.viewportHeight) &&
+  props.viewportHeight > 0
+    ? props.viewportHeight
+    : height.value,
+)
 const error = ref('')
 const revision = ref(0)
 const token = ref(crypto.randomUUID())
@@ -193,7 +206,7 @@ onBeforeUnmount(() => window.removeEventListener('message', receive))
       title="Website code preview"
       sandbox="allow-scripts allow-forms allow-top-navigation-by-user-activation"
       referrerpolicy="no-referrer"
-      :style="{ height: height + 'px' }"
+      :style="{ height: frameHeight + 'px' }"
     />
   </div>
 </template>

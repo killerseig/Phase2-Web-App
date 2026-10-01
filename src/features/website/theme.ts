@@ -1,14 +1,33 @@
 import { defaultTheme, type WebsiteTheme } from '../../../functions/src/websiteTheme'
-export const websiteFonts = {
-  sans: "'Source Sans 3', 'Segoe UI', sans-serif",
-  serif: 'Georgia, serif',
-  mono: 'Consolas, monospace',
-  display: "'Saira Semi Condensed', 'Source Sans 3', sans-serif",
-}
-export function themeStyle(theme?: WebsiteTheme) {
-  if (!theme) return {}
+import { websiteFonts } from '../../../functions/src/websiteFonts'
+export { websiteFonts } from '../../../functions/src/websiteFonts'
+export function themeStyle(
+  theme?: WebsiteTheme,
+  device: 'desktop' | 'tablet' | 'mobile' = 'desktop',
+  automatic = false,
+): Record<string, string | number> {
+  if (!theme || theme.enabled === false) return {}
   const value = { ...defaultTheme, ...theme }
+  const typography: Record<string, string | number> = {}
+  for (const [name, style] of Object.entries(theme.textStyles || {})) {
+    const text = { ...style, ...(device === 'desktop' ? {} : style.devices?.[device]) }
+    const prefix = name === 'pageTitle' ? 'title' : name === 'sectionHeading' ? 'section' : 'body'
+    if (text.font) typography[`--type-${prefix}-font`] = websiteFonts[text.font]
+    if (text.size !== undefined) {
+      const size =
+        automatic &&
+        device !== 'desktop' &&
+        prefix !== 'body' &&
+        style.devices?.[device]?.size === undefined
+          ? Math.min(text.size, device === 'mobile' ? 40 : 56)
+          : text.size
+      typography[`--type-${prefix}-size`] = size + 'px'
+    }
+    if (text.weight !== undefined) typography[`--type-${prefix}-weight`] = text.weight
+    if (text.lineHeight !== undefined) typography[`--type-${prefix}-leading`] = text.lineHeight
+  }
   return {
+    ...typography,
     '--site-background': value.background,
     '--site-surface': value.surface,
     '--site-text': value.text,

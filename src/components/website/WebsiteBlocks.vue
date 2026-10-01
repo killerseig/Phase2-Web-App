@@ -178,19 +178,19 @@ h3 {
 a {
   color: inherit;
 }
-.block-button,
+.blocks > .block-button,
 .badge {
   display: inline-block;
   padding: 0.65em 1.2em;
   border: 1px solid currentColor;
   border-radius: 0.35em;
 }
-.solid .block-button,
+.blocks.solid > .block-button,
 .solid .badge {
   background: var(--website-accent, #174878);
   color: white;
 }
-.outline .block-button,
+.blocks.outline > .block-button,
 .outline .badge {
   background: transparent;
   color: inherit;
@@ -293,12 +293,12 @@ progress {
   height: 1.2em;
   accent-color: var(--website-accent, #174878);
 }
-@container (max-width:600px) {
+@container (max-width:1023px) {
   .block-grid {
     grid-template-columns: repeat(min(2, var(--block-columns)), minmax(0, 1fr));
   }
 }
-@container (max-width:380px) {
+@container (max-width:767px) {
   .block-grid {
     grid-template-columns: 1fr;
   }

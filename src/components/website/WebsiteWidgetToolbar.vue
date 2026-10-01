@@ -2,9 +2,11 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { WidgetAction } from '@/features/website/grid'
 import WebsiteTransformControls from './WebsiteTransformControls.vue'
+import { commandKey } from '@/features/website/editorHelp'
 const props = defineProps<{
   id: string
   scroller?: HTMLElement
+  viewport?: HTMLElement
   disabled: boolean
   fixed: boolean
   ownLock: boolean
@@ -15,7 +17,7 @@ const props = defineProps<{
   canDelete: boolean
 }>()
 const emit = defineEmits<{
-  action: [action: string]
+  action: [action: string, event?: MouseEvent]
   drag: [event: PointerEvent, action: WidgetAction]
   geometryKey: [event: KeyboardEvent, action: WidgetAction]
 }>()
@@ -36,11 +38,12 @@ function update() {
     return
   }
   const bounds = scroller.getBoundingClientRect()
+  const viewport = props.viewport?.getBoundingClientRect() || bounds
   const rect = element.getBoundingClientRect()
-  const left = Math.max(8, bounds.left + 8)
-  const right = Math.min(window.innerWidth - 8, bounds.right - 8)
-  const top = Math.max(8, bounds.top + 8)
-  const bottom = Math.min(window.innerHeight - 8, bounds.bottom - 8)
+  const left = Math.max(8, bounds.left + 8, viewport.left + 8)
+  const right = Math.min(window.innerWidth - 8, bounds.right - 8, viewport.right - 8)
+  const top = Math.max(8, bounds.top + 8, viewport.top + 8)
+  const bottom = Math.min(window.innerHeight - 8, bounds.bottom - 8, viewport.bottom - 8)
   visible.value =
     bounds.width > 0 &&
     bounds.height > 0 &&
@@ -77,6 +80,7 @@ defineExpose({
 onMounted(() => {
   resize = new ResizeObserver(schedule)
   if (props.scroller) resize.observe(props.scroller)
+  if (props.viewport) resize.observe(props.viewport)
   if (toolbar.value) resize.observe(toolbar.value)
   mutations = new MutationObserver(schedule)
   if (props.scroller)
@@ -101,7 +105,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="toolbar"
-    class="widget-toolbar"
+    class="widget-toolbar builder-floating"
     role="group"
     aria-label="Widget actions"
     :style="{ ...position, visibility: visible ? 'visible' : 'hidden' }"
@@ -120,7 +124,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       aria-label="Duplicate selection"
-      title="Duplicate widget"
+      :title="`Duplicate selected widgets (${commandKey} + D)`"
       :disabled="disabled || !canCopy"
       @click="emit('action', 'duplicate')"
     >
@@ -129,7 +133,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       aria-label="Bring to front"
-      title="Bring to front"
+      title="Place above other widgets without moving its position"
       :disabled="disabled || fixed"
       @click="emit('action', 'front')"
     >
@@ -138,7 +142,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       aria-label="Send to back"
-      title="Send to back"
+      title="Place behind other widgets without moving its position"
       :disabled="disabled || fixed"
       @click="emit('action', 'back')"
     >
@@ -163,9 +167,9 @@ onBeforeUnmount(() => {
     <button
       type="button"
       aria-label="Delete widget"
-      title="Delete widget"
+      title="Remove selected widgets from the draft (Delete). Confirm before removing."
       :disabled="disabled || !canDelete"
-      @click="emit('action', 'delete')"
+      @click="emit('action', 'delete', $event)"
     >
       <i class="pi pi-trash" aria-hidden="true" />
     </button>
@@ -181,7 +185,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       aria-label="Deselect widgets"
-      title="Deselect"
+      title="Clear widget selection (Escape)"
       :disabled="disabled"
       @click="emit('action', 'deselect')"
     >

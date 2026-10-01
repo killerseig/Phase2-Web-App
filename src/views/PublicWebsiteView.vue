@@ -55,6 +55,10 @@ watch(page, (page) => {
   </main>
 </template>
 <style scoped>
+/* The internal app owns its scroll panels; public pages use document scrolling. */
+:global(body:has(.public-website)) {
+  overflow: auto;
+}
 .public-website {
   min-height: 100vh;
   background: #fff;

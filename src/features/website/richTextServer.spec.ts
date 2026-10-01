@@ -31,6 +31,49 @@ function document(link = '/website'): RichTextNode {
   }
 }
 describe('server rich-text contract', () => {
+  it('preserves title blocks, darkened images and named fonts through publication', () => {
+    const site = initialWebsite()
+    const section = newSection('hero')
+    section.titleRichText = {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 2 },
+          content: [
+            {
+              type: 'text',
+              text: 'Our services',
+              marks: [{ type: 'textStyle', attrs: { fontFamily: 'Montserrat' } }],
+            },
+          ],
+        },
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Construction' }] }],
+            },
+          ],
+        },
+      ],
+    }
+    section.imageSettings = { darken: 40, zoom: 1.5, overlayOpacity: 20 }
+    section.appearance = { fontFamily: 'Lora' }
+    site.theme = { bodyFont: 'Inter', headingFont: 'Montserrat' }
+    site.pages[0]!.sections = [section]
+    const published = publishedWebsite(validateWebsite(site))
+    expect(published.pages[0]!.sections[0]!.titleRichText).toEqual(section.titleRichText)
+    expect(published.pages[0]!.sections[0]!.imageSettings).toEqual(section.imageSettings)
+    expect(published.pages[0]!.sections[0]!.appearance?.fontFamily).toBe('Lora')
+    expect(published.theme).toEqual(site.theme)
+    section.linkRichText = section.titleRichText
+    expect(() => validateWebsite(site)).toThrow('single line')
+    delete section.linkRichText
+    section.imageSettings.darken = 101
+    expect(() => validateWebsite(site)).toThrow('darken')
+  })
   it('keeps independent text geometry through validation and publication', () => {
     const site = initialWebsite()
     const section = newSection('hero')

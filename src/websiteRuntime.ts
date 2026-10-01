@@ -35,6 +35,7 @@ window.addEventListener('message', async (event) => {
   const site = data.site as WebsiteSite
   const page = site.pages.find((page) => page.id === data.pageId)
   if (!page) return
+  document.documentElement.classList.toggle('website-runtime-preview', !!data.preview)
   const app = createApp({ render: () => h(WebsiteCanvas, { site, pageId: data.pageId }) })
   app.provide(websiteRuntimeKey, {
     preview: !!data.preview,

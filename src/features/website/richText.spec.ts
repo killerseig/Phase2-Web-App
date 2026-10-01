@@ -43,6 +43,32 @@ function rich(): RichTextNode {
   }
 }
 describe('website rich text', () => {
+  it('round trips hero headings and lists without converting title formatting to markdown', () => {
+    const doc: RichTextNode = {
+      type: 'doc',
+      content: [
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Services' }] },
+        {
+          type: 'orderedList',
+          attrs: { start: 3 },
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Build' }] }],
+            },
+          ],
+        },
+      ],
+    }
+    const value = inlineValue(doc, true, false, true)
+    expect(value.text).toBe('Services\nBuild')
+    expect(inlineDocument(value.text, value.format, value.rich)).toEqual(doc)
+    const view = mount(WebsiteRichText, { props: { value: value.rich!, titleBlocks: true } })
+    expect(view.find('h2').text()).toBe('Services')
+    expect(view.find('ol').attributes('start')).toBe('3')
+    expect(view.find('li').text()).toBe('Build')
+    expect(() => validateRichText(doc, true)).toThrow('single line')
+  })
   it('round trips styles and heading marks without putting JSON in plain content fields', () => {
     const value = inlineValue(rich())
     expect(value.text).toBe('<img onerror=alert(1)> Safe')

@@ -51,10 +51,6 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
         rect: AlignmentRect
         targets: AlignmentRect[]
         rotationAssist: ReturnType<typeof rotationAssist>
-        lastX: number
-        lastY: number
-        lastTime: number
-        fast: boolean
       }
     | undefined
   let swallowClick = false
@@ -120,10 +116,6 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
       rect,
       targets,
       rotationAssist: rotationAssist(read?.(target.value)?.rotation || 0, event.timeStamp),
-      lastX: event.clientX,
-      lastY: event.clientY,
-      lastTime: event.timeStamp,
-      fast: false,
     }
     window.addEventListener('pointermove', move, { passive: false })
     window.addEventListener('pointerup', finish)
@@ -143,13 +135,6 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
     if (!g.changed && Math.hypot(event.clientX - g.x, event.clientY - g.y) < 4) return
     event.preventDefault()
     g.changed = true
-    const distance = Math.hypot(event.clientX - g.lastX, event.clientY - g.lastY)
-    if (distance > 0.01) {
-      g.fast = (distance * 1000) / Math.max(8, event.timeStamp - g.lastTime) >= 100
-      g.lastX = event.clientX
-      g.lastY = event.clientY
-      g.lastTime = event.timeStamp
-    }
     const rawX = (event.clientX - g.x) / g.scale,
       rawY = (event.clientY - g.y) / g.scale
     const dx = Math.cos(g.parentAngle) * rawX + Math.sin(g.parentAngle) * rawY
@@ -165,7 +150,6 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
           height: g.rect.height,
         },
         event.altKey ? [] : g.targets,
-        g.fast,
       )
       guides.value = alignment.guides
       next.x = clamp(

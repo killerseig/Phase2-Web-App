@@ -79,14 +79,14 @@ function update(text: string, format?: 'markdown', rich?: RichTextNode) {
             rows="4"
             maxlength="10000"
             :readonly="!!item.textRichText"
-            @change="update(($event.target as HTMLTextAreaElement).value, item.textFormat)"
+            @input="update(($event.target as HTMLTextAreaElement).value, item.textFormat)"
           />
           <input
             v-else
             :value="item[textField()]"
             :maxlength="field === 'button' ? 80 : 160"
             :readonly="!!item[richField()]"
-            @change="update(($event.target as HTMLInputElement).value)"
+            @input="update(($event.target as HTMLInputElement).value)"
           />
         </label>
         <button type="button" @click="formatText">
@@ -100,7 +100,7 @@ function update(text: string, format?: 'markdown', rich?: RichTextNode) {
           maxlength="1000"
           placeholder="https:// or /website/contact"
           data-link-url
-          @change="emit('update', { linkUrl: ($event.target as HTMLInputElement).value })"
+          @input="emit('update', { linkUrl: ($event.target as HTMLInputElement).value })"
         />
       </label>
     </template>

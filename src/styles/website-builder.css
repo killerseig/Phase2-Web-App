@@ -1,0 +1,436 @@
+@import './builder-ui.css';
+
+/* Compact shell and consistent action hierarchy. */
+.website-builder .builder-header {
+  padding: 6px 6px 8px;
+  gap: 8px;
+}
+.website-builder .builder-header h1 {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+.website-builder .builder-header .subtle {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.website-builder .editor-modes {
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--editor-border);
+  border-radius: 8px;
+  background: var(--editor-field);
+}
+.website-builder .editor-modes button {
+  min-height: 28px;
+  padding: 4px 12px;
+  border-color: transparent;
+  background: transparent;
+}
+.website-builder .builder-actions {
+  gap: 5px;
+}
+.website-builder .builder-actions button[aria-label='Site settings'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.website-builder .builder-actions button[aria-label='Site settings'] .pi,
+.website-builder .settings-header h2 .pi {
+  flex-shrink: 0;
+  line-height: 1;
+}
+.website-builder .builder-actions .primary,
+.builder-dialog button.primary {
+  color: #fff;
+  background: #236795;
+  border-color: #4081ac;
+  font-weight: 600;
+}
+.website-builder .builder-actions .primary:hover:not(:disabled),
+.builder-dialog button.primary:hover:not(:disabled) {
+  background: #2c78aa;
+  border-color: #91c9ed;
+}
+.website-builder .builder-actions button[aria-label='Site settings'],
+.website-builder .builder-actions button[aria-label='Editing guide'],
+.website-builder .builder-actions button:is([aria-label='Undo'], [aria-label='Redo']) {
+  background: transparent;
+  border-color: transparent;
+}
+.website-builder .view-website {
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--editor-muted);
+  font-size: 13px;
+}
+.website-builder .view-website:hover {
+  background: var(--editor-hover);
+  color: var(--editor-text);
+}
+.website-builder .builder-grid {
+  border-radius: 10px;
+  border-color: #385265;
+}
+.website-builder .builder-tools {
+  padding: 5px;
+  gap: 3px;
+}
+.website-builder .builder-tools button {
+  background: transparent;
+  border-color: transparent;
+  font-size: 11px;
+  padding: 8px 3px;
+  gap: 5px;
+}
+.website-builder .builder-tools .pi {
+  font-size: 16px;
+}
+.website-builder .outline-content {
+  padding: 12px;
+}
+.website-builder .inspector {
+  padding: 12px;
+  gap: 12px;
+}
+.website-builder .inspector-header {
+  top: -12px;
+  padding: 8px 0;
+  margin-top: -8px;
+  border-bottom: 1px solid var(--editor-border);
+}
+.website-builder .settings-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  font-weight: 600;
+}
+.website-builder .settings-header h2 i {
+  color: var(--editor-accent);
+  font-size: 14px;
+}
+.website-builder .settings-header .selection-name {
+  margin: 4px 0 2px;
+}
+.website-builder .inspector-fields {
+  gap: 12px;
+}
+.website-builder .inspector :is(.style-group, .precision-settings) {
+  padding-block: 8px;
+}
+.website-builder .inspector .color-control > button {
+  padding: 4px;
+  min-width: 26px;
+  flex-basis: 26px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--editor-muted);
+}
+.website-builder .inspector .color-control > button:hover:not(:disabled) {
+  color: var(--editor-text);
+  background: var(--editor-hover);
+  border-color: var(--editor-border);
+}
+.website-builder .inspector .element-fields {
+  border: 0;
+  border-top: 1px solid var(--editor-border);
+  border-radius: 0;
+  padding: 10px 0 0;
+  margin: 0;
+}
+.website-builder .inspector .element-fields .aspect {
+  grid-column: 1 / -1;
+}
+.website-builder .inspector .element-fields .resets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.website-builder .inspector .element-fields .resets > button:last-child {
+  grid-column: 1 / -1;
+}
+.website-builder :is(.outline-content, .inspector) {
+  scrollbar-width: thin;
+  scrollbar-color: #516d80 transparent;
+}
+.website-builder .inspector-tabs {
+  padding: 3px;
+  border: 1px solid var(--editor-border);
+  border-radius: 7px;
+  background: var(--editor-field);
+}
+.website-builder .inspector-tabs button {
+  padding: 5px 3px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+}
+.website-builder .editor-modes button[aria-pressed='true'],
+.website-builder .builder-tools button[aria-pressed='true'],
+.website-builder .inspector-tabs button[aria-selected='true'] {
+  background: var(--editor-selected);
+  border-color: #6598b9;
+  color: #eff8ff;
+  font-weight: 600;
+}
+.website-builder .edit-scope {
+  font-size: 11px;
+  padding: 7px 9px;
+  border-radius: 0 4px 4px 0;
+}
+.website-builder .selection-path {
+  padding: 0 0 8px;
+}
+.website-builder .selection-path button {
+  min-height: 26px;
+  padding: 3px 6px;
+  font-size: 11px;
+  background: transparent;
+  border-color: transparent;
+}
+.website-builder .outline-row .select {
+  background: transparent;
+  border-color: transparent;
+}
+.website-builder .layers-list {
+  max-height: none;
+  overflow: visible;
+}
+.website-builder .layers-list button {
+  background: transparent;
+  border-color: transparent;
+  padding: 3px;
+}
+.website-builder .layers-list .layer-order button {
+  min-height: 24px;
+}
+.website-builder .layer-help {
+  font-size: 12px;
+}
+.website-builder .preview-pane {
+  background: #0e1d2a;
+}
+.website-builder .preview-scroll {
+  background-image: radial-gradient(#40576c60 0.6px, transparent 0.6px);
+  background-size: 12px 12px;
+}
+.website-builder .preview-frame {
+  box-shadow: 0 10px 32px #0004;
+}
+.website-builder .preview-toolbar {
+  padding: 5px 7px;
+  gap: 5px;
+}
+.website-builder .canvas-tool-group button {
+  min-height: 30px;
+  min-width: 30px;
+  padding: 4px;
+}
+.website-builder .canvas-tool-group button:not([aria-pressed='true']) {
+  background: transparent;
+  border-color: transparent;
+}
+.website-builder .canvas-tool-group + .canvas-tool-group {
+  padding-left: 6px;
+}
+.website-builder .builder-controls .danger {
+  color: #f4b6ba;
+}
+.website-builder .builder-controls .danger:hover:not(:disabled) {
+  background: #482e39;
+  border-color: #bc737b;
+}
+.website-builder .builder-controls .history-actions details {
+  margin: 6px 0;
+}
+.website-builder .builder-controls .history-actions article {
+  padding: 10px 0;
+}
+
+/* Catalog rows and grouped settings keep dense panels easy to scan. */
+.website-builder .widget-library {
+  margin-top: 0;
+}
+.website-builder .widget-library-filters {
+  top: -12px;
+  padding-top: 12px;
+}
+.website-builder .widget-category-group {
+  margin: 18px 0 0;
+}
+.website-builder .widget-category-group > h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font:
+    600 12px/1.4 'Source Sans 3',
+    sans-serif;
+  color: var(--editor-muted);
+  margin: 0 0 7px;
+}
+.website-builder .widget-category-group > h3 span {
+  font-size: 11px;
+  font-weight: 400;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--editor-field);
+  font-variant-numeric: tabular-nums;
+}
+.website-builder .widget-library-grid {
+  gap: 5px;
+}
+.website-builder .widget-library-item {
+  padding: 8px;
+  gap: 9px;
+  background: transparent;
+  border-color: transparent;
+  cursor: grab;
+}
+.website-builder .widget-library-item--form {
+  cursor: pointer;
+}
+.website-builder .widget-library-item > i {
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  font-size: 15px;
+  border-radius: 6px;
+  background: var(--editor-field);
+}
+.website-builder .widget-library-item small {
+  font-size: 11px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.website-builder .theme-fields {
+  padding: 0;
+  border: 0;
+  gap: 10px;
+}
+.website-builder .theme-fields > legend {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 4px;
+}
+.website-builder .settings-group-title {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--editor-border);
+  font:
+    600 12px/1.4 'Source Sans 3',
+    sans-serif;
+  color: var(--editor-muted);
+}
+.website-builder :is(.theme-color-grid, .theme-number-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.website-builder .theme-color-grid label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 1px solid var(--editor-border);
+  border-radius: 6px;
+}
+.website-builder .theme-color-grid input[type='color'] {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  padding: 2px;
+  cursor: pointer;
+}
+.website-builder .theme-number-grid label:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* Portaled editors use the same palette as the panels. */
+.builder-controls .image-grid button {
+  padding: 7px;
+  border-radius: 8px;
+}
+.builder-controls .library-thumb {
+  border-radius: 5px;
+  background: var(--editor-field);
+}
+dialog.image-library-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.image-library-dialog > :is(header, footer) {
+  flex: 0 0 auto;
+}
+.image-library-dialog > header {
+  align-items: flex-start;
+  gap: 12px;
+}
+.image-library-dialog > header button {
+  flex: 0 0 auto;
+  min-width: 32px;
+}
+.image-library-dialog .image-library-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+}
+.image-library-dialog .image-library-search {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 12px;
+  background: var(--editor-panel);
+}
+.image-library-dialog .image-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
+  margin-top: 0;
+  gap: 10px;
+}
+.image-library-dialog .image-library-search label {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .website-builder .builder-header {
+    padding: 4px 0 6px;
+    gap: 6px;
+  }
+  .website-builder .builder-controls button {
+    min-height: 36px;
+  }
+  .website-builder .builder-tools button {
+    min-height: 48px;
+  }
+  .website-builder .builder-actions {
+    gap: 4px;
+  }
+  .website-builder .builder-actions button {
+    padding-inline: 8px;
+  }
+  .website-builder .preview-toolbar {
+    padding: 4px;
+    gap: 3px;
+  }
+  .website-builder .canvas-tool-group + .canvas-tool-group {
+    padding-left: 3px;
+  }
+  .website-builder .editor-modes button {
+    padding-inline: 9px;
+  }
+}

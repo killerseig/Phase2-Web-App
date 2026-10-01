@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import WebsiteBlockFields from './WebsiteBlockFields.vue'
 import { blockCollections } from '../../../functions/src/websiteBlocks'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
@@ -25,6 +26,7 @@ import { nextGeometry } from '@/features/website/grid'
 import { canContain, descendants } from '@/features/website/containers'
 defineProps<{ site: WebsiteSite }>()
 const emit = defineEmits<{ save: [definition: CustomWidgetDefinition] }>()
+const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const dialog = ref<HTMLDialogElement>(),
   draft = ref<CustomWidgetDefinition>(),
   selected = ref(''),
@@ -89,12 +91,22 @@ async function open(value: CustomWidgetDefinition) {
   await nextTick()
   dialog.value?.showModal()
 }
-function close(discard = false) {
+async function close(discard = false, trigger?: Event) {
   if (uploading.value) return
   if (
     !discard &&
     JSON.stringify(draft.value) !== original &&
-    !window.confirm('Discard your custom widget edits?')
+    !(await confirmation.value?.ask(
+      {
+        title: 'Discard widget edits?',
+        message:
+          'Changes made in this widget editor will be discarded. Keep editing to save them first.',
+        confirmLabel: 'Discard edits',
+        cancelLabel: 'Keep editing',
+        destructive: true,
+      },
+      trigger,
+    ))
   )
     return
   dialog.value?.close()
@@ -169,9 +181,11 @@ defineExpose({ open })
 onBeforeUnmount(() => dialog.value?.close())
 </script>
 <template>
+  <BuilderConfirmDialog ref="confirmation" />
   <Teleport to="body">
     <dialog
       ref="dialog"
+      class="builder-controls builder-dialog"
       aria-label="Custom widget editor"
       @cancel.prevent="close()"
       @keydown.esc.prevent.stop="close()"
@@ -180,8 +194,10 @@ onBeforeUnmount(() => dialog.value?.close())
       <template v-if="draft">
         <header>
           <h2>{{ draft.kind === 'code' ? 'HTML/CSS widget' : 'Visual custom widget' }}</h2>
-          <button @click="close()">Cancel widget edits</button
-          ><button :disabled="!!issue || uploading" @click="save">Apply widget changes</button>
+          <button @click="close(false, $event)">Cancel widget edits</button
+          ><button class="primary" :disabled="!!issue || uploading" @click="save">
+            Apply widget changes
+          </button>
         </header>
         <p>Changes update linked placements in this draft. Save draft and publish when ready.</p>
         <div class="custom-editor-columns">
@@ -381,7 +397,11 @@ onBeforeUnmount(() => dialog.value?.close())
               <button @click="draft.fields.splice(index, 1)">Remove editable setting</button>
             </fieldset>
           </section>
-          <section class="custom-preview" aria-label="Custom widget live preview">
+          <section
+            class="custom-preview"
+            data-builder-preview
+            aria-label="Custom widget live preview"
+          >
             <h3>Live preview</h3>
             <p v-if="issue" role="alert">{{ issue }}</p>
             <WebsiteCustomWidget v-else :section="previewSection" :site="site" preview />

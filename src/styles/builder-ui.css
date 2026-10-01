@@ -1,0 +1,334 @@
+/* Shared opt-in controls for visual builders. Apply builder-controls to editor
+   panels and dialogs, never to the authored canvas. Embedded previews must use
+   data-builder-preview. Website-specific layout belongs in website-builder.css. */
+.builder-controls,
+.builder-floating {
+  --editor-panel: #172b3a;
+  --editor-field: #102331;
+  --editor-hover: #223e50;
+  --editor-border: #385265;
+  --editor-text: #edf4f8;
+  --editor-muted: #afc1ce;
+  --editor-accent: #91c9ed;
+  --editor-selected: #204661;
+  --editor-radius: 6px;
+  color-scheme: dark;
+}
+.builder-controls,
+.builder-floating {
+  --field: var(--editor-field);
+  --bg-panel: var(--editor-panel);
+  --border: var(--editor-border);
+  --text: var(--editor-text);
+  --text-muted: var(--editor-muted);
+  --muted: var(--editor-muted);
+  --accent: var(--editor-accent);
+}
+.builder-controls {
+  color: var(--editor-text);
+  font:
+    400 13px/1.5 'Source Sans 3',
+    'Segoe UI',
+    sans-serif;
+}
+.builder-controls :is(button, input, textarea, select):not(:where([data-builder-preview] *)) {
+  box-sizing: border-box;
+  color: var(--editor-text);
+  background: var(--editor-field);
+  border: 1px solid var(--editor-border);
+  border-radius: var(--editor-radius);
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.4;
+}
+.builder-controls button:not(:where([data-builder-preview] *)) {
+  min-height: 32px;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+.builder-controls
+  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']), select):not(
+    :where([data-builder-preview] *)
+  ) {
+  min-height: 34px;
+  padding: 6px 9px;
+  min-width: 0;
+}
+.builder-controls textarea:not(:where([data-builder-preview] *)) {
+  padding: 8px 9px;
+  resize: vertical;
+  line-height: 1.55;
+}
+.builder-controls input::placeholder,
+.builder-controls textarea::placeholder {
+  color: #8fa8b9;
+  opacity: 1;
+}
+.builder-controls select:not(:where([data-builder-preview] *)) {
+  color-scheme: dark;
+}
+.builder-controls :is(label, small):not(:where([data-builder-preview] *)) {
+  font-size: 12px;
+}
+.builder-controls small:not(:where([data-builder-preview] *)) {
+  line-height: 1.5;
+  color: var(--editor-muted);
+}
+.builder-controls p:not(:where([data-builder-preview] *)) {
+  line-height: 1.5;
+}
+.builder-controls button:not(:where([data-builder-preview] *)):hover:not(:disabled) {
+  background: var(--editor-hover);
+  border-color: #6c92ab;
+}
+.builder-controls
+  button:is([aria-pressed='true'], [aria-selected='true'], .active):not(
+    :where([data-builder-preview] *)
+  ) {
+  color: #e9f6ff;
+  background: var(--editor-selected);
+  border-color: var(--editor-accent);
+}
+.builder-controls
+  :is(button, input, textarea, select):disabled:not(:where([data-builder-preview] *)) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.builder-controls
+  :is(button, input, textarea, select, summary, a):focus-visible:not(
+    :where([data-builder-preview] *)
+  ),
+.builder-floating :is(button, input, select):focus-visible {
+  outline: 2px solid var(--editor-accent);
+  outline-offset: 2px;
+}
+.builder-controls :is(input, textarea, select)[aria-invalid='true'] {
+  border-color: var(--danger, #f0a3a8);
+}
+.builder-controls
+  input:is([type='checkbox'], [type='radio']):not(:where([data-builder-preview] *)) {
+  appearance: auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--editor-accent);
+  vertical-align: middle;
+}
+.builder-controls
+  label:has(> input:is([type='checkbox'], [type='radio'])):not(:where([data-builder-preview] *)) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.builder-controls input[type='range']:not(:where([data-builder-preview] *)) {
+  accent-color: var(--editor-accent);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.builder-controls input[type='checkbox']:not(:where([data-builder-preview] *)) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  background: var(--editor-field);
+  border: 1px solid #7894a7;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.builder-controls input[type='checkbox']:not(:where([data-builder-preview] *))::before {
+  content: '';
+  width: 7px;
+  height: 4px;
+  border-left: 2px solid var(--editor-field);
+  border-bottom: 2px solid var(--editor-field);
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+}
+.builder-controls input[type='checkbox']:checked:not(:where([data-builder-preview] *)) {
+  background: var(--editor-accent);
+  border-color: var(--editor-accent);
+}
+.builder-controls input[type='checkbox']:checked:not(:where([data-builder-preview] *))::before {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+.builder-controls input[type='color']:not(:where([data-builder-preview] *)) {
+  height: 32px;
+  padding: 3px;
+}
+.builder-controls input::file-selector-button {
+  font: inherit;
+  padding: 4px 8px;
+  margin-right: 8px;
+  border: 1px solid var(--editor-border);
+  border-radius: 4px;
+  background: var(--editor-hover);
+  color: var(--editor-text);
+  cursor: pointer;
+}
+.builder-controls summary:not(:where([data-builder-preview] *)) {
+  list-style: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 7px 0;
+  margin: 0;
+}
+.builder-controls summary:not(:where([data-builder-preview] *))::-webkit-details-marker {
+  display: none;
+}
+.builder-controls summary:not(:where([data-builder-preview] *))::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid var(--editor-muted);
+  border-bottom: 1.5px solid var(--editor-muted);
+  transform: rotate(-45deg);
+  margin: 0 10px 2px 2px;
+}
+.builder-controls details[open] > summary:not(:where([data-builder-preview] *))::before {
+  transform: rotate(45deg);
+}
+.builder-controls details[open] > summary:not(:where([data-builder-preview] *)) {
+  margin-bottom: 8px;
+}
+.builder-controls :is(.css-editor, .site-code, .custom-source) textarea {
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+.builder-controls .font-gallery button {
+  font-size: 18px;
+}
+.builder-controls .font-gallery {
+  min-width: 0;
+  border-radius: 8px;
+}
+
+/* A consistent settings rhythm without browser-default group boxes. */
+.builder-controls fieldset:not(:where([data-builder-preview] *)) {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--editor-border);
+  border-radius: 0;
+}
+.builder-controls legend:not(:where([data-builder-preview] *)) {
+  padding: 0 8px 0 0;
+  color: var(--editor-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.builder-controls .builder-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+.builder-controls .builder-field-grid > label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+}
+.builder-controls .builder-field-grid :is(input, select) {
+  width: 100%;
+  min-width: 0;
+}
+.builder-controls .builder-field-grid > .builder-field-wide {
+  grid-column: 1 / -1;
+}
+.builder-controls hr:not(:where([data-builder-preview] *)) {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--editor-border);
+  margin: 4px 0;
+}
+.builder-controls input[type='number']:not(:where([data-builder-preview] *)) {
+  font-variant-numeric: tabular-nums;
+}
+.builder-controls
+  input[type='color']:not(:where([data-builder-preview] *))::-webkit-color-swatch-wrapper {
+  padding: 1px;
+}
+.builder-controls input[type='color']:not(:where([data-builder-preview] *))::-webkit-color-swatch {
+  border: 0;
+  border-radius: 3px;
+}
+.builder-controls input[type='color']:not(:where([data-builder-preview] *))::-moz-color-swatch {
+  border: 0;
+  border-radius: 3px;
+}
+
+dialog.builder-dialog {
+  background: var(--editor-panel);
+  color: var(--editor-text);
+  border: 1px solid var(--editor-border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 24px 80px #0007;
+}
+dialog.builder-dialog::backdrop {
+  background: #07131dcc;
+}
+.builder-dialog > header {
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--editor-border);
+}
+.builder-dialog > header h2 {
+  font:
+    600 17px/1.4 'Source Sans 3',
+    'Segoe UI',
+    sans-serif;
+}
+.builder-dialog > header p {
+  margin: 4px 0 0;
+  color: var(--editor-muted);
+  font-size: 12px;
+}
+.builder-dialog > footer {
+  border-top: 1px solid var(--editor-border);
+  padding-top: 12px;
+}
+
+.builder-floating {
+  background: var(--editor-panel);
+  color: var(--editor-text);
+  border-color: var(--editor-border);
+  box-shadow: 0 6px 24px #0005;
+}
+.builder-floating button:hover:not(:disabled),
+.builder-floating button[aria-pressed='true'] {
+  background: var(--editor-selected);
+}
+
+@media (max-width: 900px) {
+  dialog.builder-dialog {
+    padding: 14px;
+    max-height: 90dvh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .builder-controls button {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .builder-controls input[type='checkbox']:not(:where([data-builder-preview] *)) {
+    appearance: auto;
+  }
+  .builder-controls input[type='checkbox']:not(:where([data-builder-preview] *))::before {
+    content: none;
+  }
+  .builder-controls button:is([aria-pressed='true'], [aria-selected='true']) {
+    outline: 2px solid Highlight;
+  }
+}

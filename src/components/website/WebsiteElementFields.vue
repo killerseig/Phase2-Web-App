@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import BuilderSettingSource from '@/components/builder/BuilderSettingSource.vue'
 import type { TextBoxValues } from '../../../functions/src/websiteTextBox'
 import type { WebsiteDevice } from '@/features/website/types'
 defineProps<{
   value: TextBoxValues
+  overrides?: TextBoxValues
   width?: number
   height?: number
   label: string
@@ -44,10 +46,22 @@ function change(event: Event, field: (typeof fields)[number]) {
     </p>
     <div class="dimensions">
       <label v-for="field in fields" :key="field.key">
-        {{ field.label }}{{ field.key === 'rotation' ? ' (°)' : ' (px)' }}
+        <span
+          >{{ field.label }}{{ field.key === 'rotation' ? ' (°)' : ' (px)'
+          }}<BuilderSettingSource
+            v-if="device !== 'desktop'"
+            :overridden="overrides?.[field.key] !== undefined"
+        /></span>
         <input
           type="number"
           :aria-label="`Element ${field.label}`"
+          :aria-description="
+            device === 'desktop'
+              ? undefined
+              : overrides?.[field.key] !== undefined
+                ? 'Override for this screen size'
+                : 'Follows desktop'
+          "
           step="0.01"
           :min="field.min"
           :max="field.max"
@@ -67,13 +81,21 @@ function change(event: Event, field: (typeof fields)[number]) {
       <label class="aspect"
         ><input
           type="checkbox"
+          aria-label="Keep proportions"
           :checked="value.lockAspect ?? image"
-          @change="emit('change', { lockAspect: ($event.target as HTMLInputElement).checked })"
-        />
-        Keep proportions</label
-      >
+          @change="emit('change', { lockAspect: ($event.target as HTMLInputElement).checked })" />
+        Keep proportions<BuilderSettingSource
+          v-if="device !== 'desktop'"
+          :overridden="overrides?.lockAspect !== undefined"
+      /></label>
     </div>
-    <div class="resets" aria-label="Reset element placement">
+    <div
+      class="resets"
+      aria-label="Reset element placement"
+      :title="
+        device === 'desktop' ? 'Restore default placement' : 'Remove overrides and follow desktop'
+      "
+    >
       <button type="button" @click="emit('reset', ['x', 'y'])">Reset position</button>
       <button type="button" @click="emit('reset', ['width', 'height'])">Reset size</button>
       <button type="button" @click="emit('reset', ['rotation'])">Reset angle</button>

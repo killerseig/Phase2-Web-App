@@ -6,6 +6,8 @@ exports.websiteAssetIds = websiteAssetIds;
 exports.publishedWebsite = publishedWebsite;
 exports.initialWebsite = initialWebsite;
 const node_vm_1 = require("node:vm");
+const websiteMotion_1 = require("./websiteMotion");
+const websiteFonts_1 = require("./websiteFonts");
 const websiteTextBox_1 = require("./websiteTextBox");
 const websiteRichText_1 = require("./websiteRichText");
 const websiteLayout_1 = require("./websiteLayout");
@@ -105,7 +107,7 @@ function item(value) {
     let textBoxes;
     try {
         if (data.titleRichText !== undefined)
-            titleRichText = (0, websiteRichText_1.validateRichText)(data.titleRichText, true);
+            titleRichText = (0, websiteRichText_1.validateRichText)(data.titleRichText, 'title');
         if (data.textRichText !== undefined)
             textRichText = (0, websiteRichText_1.validateRichText)(data.textRichText);
         if (data.linkRichText !== undefined)
@@ -148,6 +150,8 @@ function item(value) {
 }
 function imageSettings(value) {
     const data = object(value);
+    if (data.overlayMode !== undefined && !['solid', 'linear'].includes(String(data.overlayMode)))
+        invalid('Choose a supported image overlay.');
     if (data.overlay !== undefined &&
         (typeof data.overlay !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(data.overlay)))
         invalid('Choose a hex overlay color.');
@@ -156,6 +160,9 @@ function imageSettings(value) {
         ...optionalNumber(data, 'focusY', 0, 100),
         ...optionalNumber(data, 'zoom', 1, 3),
         ...optionalNumber(data, 'overlayOpacity', 0, 80),
+        ...optionalNumber(data, 'overlayAngle', 0, 360),
+        ...(data.overlayMode === undefined ? {} : { overlayMode: data.overlayMode }),
+        ...optionalNumber(data, 'darken', 0, 100),
         ...(data.overlay === undefined ? {} : { overlay: data.overlay }),
         ...(data.caption === undefined ? {} : { caption: text(data.caption, 300, 'Image caption') }),
     };
@@ -261,6 +268,14 @@ function pageGrid(value) {
 function appearance(value) {
     const data = object(value);
     const result = {};
+    if (data.motion !== undefined) {
+        try {
+            result.motion = (0, websiteMotion_1.validateMotion)(data.motion);
+        }
+        catch (error) {
+            invalid(error instanceof Error ? error.message : 'Invalid animation.');
+        }
+    }
     for (const key of ['background', 'color', 'borderColor']) {
         if (data[key] === undefined)
             continue;
@@ -294,7 +309,7 @@ function appearance(value) {
         result[key] = number;
     }
     for (const [key, allowed] of [
-        ['fontFamily', ['sans', 'serif', 'mono']],
+        ['fontFamily', Object.keys(websiteFonts_1.websiteFonts)],
         ['textAlign', ['left', 'center', 'right']],
         ['imageFit', ['cover', 'contain']],
     ]) {
@@ -803,6 +818,10 @@ function publishedWebsite(site) {
             }),
         })),
     };
+    if (result.theme?.presets) {
+        const { presets: _presets, ...theme } = result.theme;
+        result.theme = theme;
+    }
     for (const page of result.pages) {
         if (page.html)
             page.html = page.html.replace(/<website-widget\s+id="([a-zA-Z0-9_-]+)"\s*><\/website-widget\s*>/g, (source, id) => (page.sections.some((section) => section.id === id) ? source : ''));

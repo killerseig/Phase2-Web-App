@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Editor, EditorContent, Extension } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
+import WebsiteFontPicker from './WebsiteFontPicker.vue'
 import { TextStyleKit } from '@tiptap/extension-text-style'
 import TextAlign from '@tiptap/extension-text-align'
 import Subscript from '@tiptap/extension-subscript'
@@ -10,7 +11,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSPro
 import { inlineDocument, inlineValue } from '@/features/website/inlineText'
 import { safeWebsiteLink } from '../../../functions/src/websiteContent'
 import {
-  textFonts,
   textSizes,
   lineHeights,
   richTextPlain,
@@ -22,6 +22,7 @@ const props = defineProps<{
   format?: 'markdown'
   rich?: RichTextNode
   heading: boolean
+  titleBlocks?: boolean
   allowLinks?: boolean
   maxLength?: number
   label?: string
@@ -44,6 +45,7 @@ const url = ref('')
 const error = ref('')
 const toolbarStyle = ref({ left: '8px', top: '8px', maxHeight: '440px' })
 const revision = ref(0)
+const singleLine = props.heading && !props.titleBlocks
 let lastValue = { text: props.text, format: props.format }
 let lastRich = JSON.stringify(props.rich)
 let finished = false
@@ -57,18 +59,18 @@ const editor = new Editor({
   content: inlineDocument(props.text, props.heading ? undefined : props.format, props.rich),
   extensions: [
     StarterKit.configure({
-      blockquote: props.heading ? false : {},
-      codeBlock: props.heading ? false : {},
-      horizontalRule: props.heading ? false : {},
+      blockquote: singleLine ? false : {},
+      codeBlock: singleLine ? false : {},
+      horizontalRule: singleLine ? false : {},
       trailingNode: false,
-      hardBreak: props.heading ? false : {},
+      hardBreak: singleLine ? false : {},
       dropcursor: false,
       gapcursor: false,
-      heading: props.heading ? false : { levels: [1, 2, 3, 4, 5, 6] },
-      bulletList: props.heading ? false : {},
-      orderedList: props.heading ? false : {},
-      listItem: props.heading ? false : {},
-      listKeymap: props.heading ? false : {},
+      heading: singleLine ? false : { levels: [1, 2, 3, 4, 5, 6] },
+      bulletList: singleLine ? false : {},
+      orderedList: singleLine ? false : {},
+      listItem: singleLine ? false : {},
+      listKeymap: singleLine ? false : {},
       link:
         props.allowLinks === false
           ? false
@@ -114,15 +116,12 @@ const editor = new Editor({
     attributes: {
       role: 'textbox',
       'aria-label': props.label || (props.heading ? 'Edit heading on page' : 'Edit text on page'),
-      'aria-multiline': String(!props.heading),
+      'aria-multiline': String(!singleLine),
       spellcheck: 'true',
     },
     handleKeyDown: (_view, event) => {
       if (event.isComposing) return false
-      if (
-        event.key === 'Escape' ||
-        (props.heading && event.key === 'Enter' && !event.isComposing)
-      ) {
+      if (event.key === 'Escape' || (singleLine && event.key === 'Enter' && !event.isComposing)) {
         event.preventDefault()
         done(true)
         return true
@@ -140,14 +139,19 @@ const editor = new Editor({
       if (text === undefined) return false
       event.preventDefault()
       editor.commands.insertContent(
-        inlineDocument(props.heading ? text.replace(/\s*\n\s*/g, ' ') : text).content!,
+        inlineDocument(singleLine ? text.replace(/\s*\n\s*/g, ' ') : text).content!,
       )
       return true
     },
     handleDrop: () => true,
   },
   onUpdate: () => {
-    const value = inlineValue(editor.getJSON(), props.heading, props.format === 'markdown')
+    const value = inlineValue(
+      editor.getJSON(),
+      props.heading,
+      props.format === 'markdown',
+      props.titleBlocks,
+    )
     lastValue = { text: value.text, format: value.format }
     lastRich = JSON.stringify(value.rich)
     emit('update', value.text, value.format, value.rich)
@@ -166,6 +170,7 @@ editor.registerPlugin(
           transaction.doc.toJSON(),
           props.heading,
           props.format === 'markdown',
+          props.titleBlocks,
         )
         if (props.maxLength && value.text.length > props.maxLength)
           throw new Error(`Keep this label within ${props.maxLength} characters.`)
@@ -204,8 +209,7 @@ function mark(name: string) {
   if (name === 'superscript') chain.unsetSubscript()
   chain.toggleMark(name).run()
 }
-function font(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
+function font(value: string) {
   const chain = editor.chain().focus()
   if (value) chain.setFontFamily(value).run()
   else chain.unsetFontFamily().run()
@@ -393,7 +397,16 @@ onBeforeUnmount(() => {
     ref="root"
     class="inline-text-editor"
     :style="textStyle"
-    :class="{ 'editor-pending': pending, 'heading-editor': heading, 'plain-editor': !rich && format !== 'markdown' }"
+    :class="{
+      'editor-pending': pending,
+      'heading-editor': heading,
+      'plain-editor': !rich && format !== 'markdown',
+      'block-heading-editor':
+        heading &&
+        titleBlocks &&
+        rich &&
+        (rich.content?.length !== 1 || rich.content[0]?.type !== 'paragraph'),
+    }"
     @pointerdown.stop
     @click.stop
     @dblclick.stop
@@ -405,7 +418,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       ref="toolbar"
-      class="inline-text-toolbar"
+      class="inline-text-toolbar builder-floating"
       :class="{ expanded: moreOpen }"
       :style="toolbarStyle"
       role="group"
@@ -420,10 +433,10 @@ onBeforeUnmount(() => {
           aria-label="Text style"
           class="inline-style-picker"
           :value="block"
-          :disabled="heading"
+          :disabled="singleLine"
           @change="setBlock"
         >
-          <option value="p">{{ heading ? 'Heading' : 'Paragraph' }}</option>
+          <option value="p">{{ singleLine ? 'Label' : 'Paragraph' }}</option>
           <option v-for="level in 6" :key="level" :value="'h' + level">Heading {{ level }}</option>
         </select>
         <button
@@ -464,7 +477,7 @@ onBeforeUnmount(() => {
           type="button"
           aria-label="Bulleted list"
           title="Bulleted list"
-          :disabled="heading"
+          :disabled="singleLine"
           :aria-pressed="editor.isActive('bulletList')"
           @pointerdown.prevent
           @click="editor.chain().focus().toggleBulletList().run()"
@@ -475,7 +488,7 @@ onBeforeUnmount(() => {
           type="button"
           aria-label="Numbered list"
           title="Numbered list"
-          :disabled="heading"
+          :disabled="singleLine"
           :aria-pressed="editor.isActive('orderedList')"
           @pointerdown.prevent
           @click="editor.chain().focus().toggleOrderedList().run()"
@@ -513,14 +526,13 @@ onBeforeUnmount(() => {
       </div>
       <div v-show="moreOpen" class="inline-more-options">
         <div class="inline-text-actions" aria-label="Font and text style">
-          <select
-            aria-label="Font family"
+          <WebsiteFontPicker
+            label="Font family"
             :value="editor.getAttributes('textStyle').fontFamily || ''"
-            @change="font"
-          >
-            <option value="">Page font</option>
-            <option v-for="family in textFonts" :key="family" :value="family">{{ family }}</option>
-          </select>
+            inherit-label="Page font"
+            inline
+            @update="font"
+          />
           <label class="inline-size"
             >Size
             <input
@@ -670,7 +682,7 @@ onBeforeUnmount(() => {
             type="button"
             aria-label="Block quote"
             title="Block quote"
-            :disabled="heading"
+            :disabled="singleLine"
             :aria-pressed="editor.isActive('blockquote')"
             @pointerdown.prevent
             @click="editor.chain().focus().toggleBlockquote().run()"
@@ -681,7 +693,7 @@ onBeforeUnmount(() => {
             type="button"
             aria-label="Code block"
             title="Code block"
-            :disabled="heading"
+            :disabled="singleLine"
             :aria-pressed="editor.isActive('codeBlock')"
             @pointerdown.prevent
             @click="editor.chain().focus().toggleCodeBlock().run()"
@@ -692,7 +704,7 @@ onBeforeUnmount(() => {
             type="button"
             aria-label="Horizontal rule"
             title="Horizontal rule"
-            :disabled="heading"
+            :disabled="singleLine"
             @pointerdown.prevent
             @click="editor.chain().focus().setHorizontalRule().run()"
           >
@@ -724,13 +736,17 @@ onBeforeUnmount(() => {
   touch-action: auto;
   cursor: text;
 }
-.editor-pending { position: absolute; visibility: hidden; pointer-events: none; }
+.editor-pending {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
 .inline-text-editor :deep(.tiptap) {
-  font-variant-ligatures: inherit;
   outline: none;
   min-height: 1em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  font-variant-ligatures: inherit;
 }
 .inline-text-editor :deep(p) {
   margin: 0 0 0.8rem;
@@ -739,10 +755,19 @@ onBeforeUnmount(() => {
 .inline-text-editor :deep(p:last-child) {
   margin-bottom: 0.8rem;
 }
-.inline-text-editor.plain-editor:not(.heading-editor) :deep(.tiptap > p) { font: inherit; line-height: inherit; margin: 0; }
+.inline-text-editor.plain-editor:not(.heading-editor) :deep(.tiptap > p) {
+  font: inherit;
+  line-height: inherit;
+  margin: 0;
+}
+.inline-text-editor :deep(h1),
 .inline-text-editor :deep(h2),
-.inline-text-editor :deep(h3) {
+.inline-text-editor :deep(h3),
+.inline-text-editor :deep(h4),
+.inline-text-editor :deep(h5),
+.inline-text-editor :deep(h6) {
   margin: 0.7rem 0;
+  font-family: var(--widget-font, var(--site-heading-font, inherit));
 }
 .inline-text-editor :deep(a) {
   color: var(--website-accent);
@@ -752,6 +777,9 @@ onBeforeUnmount(() => {
   font: inherit;
   line-height: inherit;
   margin: 0;
+}
+.inline-text-editor.block-heading-editor :deep(.tiptap > p) {
+  margin: 0 0 0.8rem;
 }
 .inline-text-toolbar {
   position: fixed;

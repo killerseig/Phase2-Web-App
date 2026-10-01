@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { compilePageCss, pageCssTemplate } from '../../../functions/src/websiteDesign'
-import { deviceForWidth, responsiveSection, sizingStyle, isFlow } from './responsive'
+import {
+  containerStyle,
+  deviceForWidth,
+  responsiveSection,
+  sizingStyle,
+  isFlow,
+} from './responsive'
 import { newSection } from './types'
 import { copyPage } from './pageTools'
 
@@ -62,12 +68,88 @@ describe('device layouts', () => {
       'tablet',
       'desktop',
     ])
-    expect(isFlow(undefined, 'mobile')).toBe(false)
+    expect(isFlow(undefined, 'mobile')).toBe(true)
+    expect(isFlow(undefined, 'tablet')).toBe(true)
+    expect(isFlow(undefined, 'desktop')).toBe(false)
+    expect(isFlow({ mobile: 'scale' }, 'mobile')).toBe(false)
     expect(sizingStyle({ grow: 2, basis: 30, minHeight: 200 })).toMatchObject({
       flexGrow: 2,
       flexBasis: '30%',
       minHeight: '200px',
     })
+  })
+  it('reflows inherited rows, spacing and content heights without rewriting authored data', () => {
+    const parent = newSection('container')
+    parent.container = { direction: 'row', gap: 40, wrap: false, align: 'center' }
+    const card = newSection('card')
+    card.parentId = parent.id
+    card.appearance = { padding: 64, paddingLeft: 80, headingSize: 72, color: '#123456' }
+    card.sizing = { height: 300, minHeight: 250, basis: 33, grow: 2, align: 'center' }
+    const before = structuredClone({ parent, card })
+    const phone = responsiveSection(card, 'mobile', { flow: true, parent })
+    expect(phone.appearance).toMatchObject({
+      padding: 24,
+      paddingLeft: 24,
+      headingSize: 40,
+      color: '#123456',
+    })
+    expect(phone.sizing).toEqual({ grow: 0 })
+    expect(responsiveSection(parent, 'mobile', { flow: true }).container).toMatchObject({
+      direction: 'column',
+      gap: 24,
+      align: 'stretch',
+    })
+    const tablet = responsiveSection(parent, 'tablet', { flow: true })
+    expect(tablet.container).toMatchObject({ direction: 'row', wrap: true, gap: 32 })
+    expect(containerStyle(tablet.container, true, 2)['--child-basis']).toBe(
+      'calc((100% - 32px) / 2)',
+    )
+    expect({ parent, card }).toEqual(before)
+    expect(responsiveSection(card, 'desktop', { flow: true, parent }).sizing).toEqual(card.sizing)
+    expect(responsiveSection(card, 'mobile', { flow: false, parent }).sizing).toEqual(card.sizing)
+    expect(responsiveSection(card, 'mobile', { flow: false, parent }).appearance).toEqual(
+      card.appearance,
+    )
+  })
+  it('keeps explicit device choices and lets a device shorthand replace desktop edges', () => {
+    const parent = newSection('container')
+    parent.container = { direction: 'row', gap: 20 }
+    parent.devices = { mobile: { container: { direction: 'row', gap: 4, wrap: false } } }
+    const card = newSection('card')
+    card.appearance = { padding: 64, paddingLeft: 80, paddingBottom: 60, headingSize: 72 }
+    card.sizing = { height: 300, minHeight: 250, basis: 33, grow: 2 }
+    card.devices = {
+      mobile: {
+        appearance: { padding: 12, paddingBottom: 0, headingSize: 52 },
+        sizing: { height: 220, minHeight: 0, basis: 60, grow: 3 },
+      },
+    }
+    const phone = responsiveSection(card, 'mobile', { flow: true, parent })
+    expect(phone.appearance).toMatchObject({
+      padding: 12,
+      paddingLeft: 12,
+      paddingBottom: 0,
+      headingSize: 52,
+    })
+    expect(phone.sizing).toEqual(card.devices.mobile?.sizing)
+    expect(responsiveSection(parent, 'mobile', { flow: true }).container).toEqual(
+      parent.devices.mobile?.container,
+    )
+    delete card.devices.mobile
+    expect(responsiveSection(card, 'mobile', { flow: true, parent }).sizing).toEqual({
+      basis: 33,
+      grow: 2,
+    })
+  })
+  it('keeps inherited media and navigation frames while content widgets grow to fit', () => {
+    for (const type of ['image', 'video', 'spacer', 'navigation', 'custom'] as const) {
+      const section = newSection(type)
+      section.sizing = { height: 96 }
+      expect(responsiveSection(section, 'mobile', { flow: true }).sizing?.height).toBe(96)
+    }
+    const form = newSection('form')
+    form.sizing = { height: 200, minHeight: 150 }
+    expect(responsiveSection(form, 'mobile', { flow: true }).sizing).toEqual({})
   })
   it('copies responsive settings without sharing mutable objects', () => {
     const section = newSection('text')

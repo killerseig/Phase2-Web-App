@@ -38,6 +38,7 @@ const scale = computed(() => Math.min(1, width.value / bounds.value.width))
   <div
     ref="viewport"
     class="saved-section-preview"
+    data-builder-preview
     :style="{ '--website-accent': accent }"
     @click.capture.prevent
   >

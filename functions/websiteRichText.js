@@ -7,17 +7,9 @@ exports.richTextLinks = richTextLinks;
 exports.mapRichTextLinks = mapRichTextLinks;
 exports.validateRichText = validateRichText;
 const websiteContent_1 = require("./websiteContent");
-exports.textFonts = [
-    'Arial',
-    'Georgia',
-    'Times New Roman',
-    'Verdana',
-    'Trebuchet MS',
-    'Courier New',
-    'sans-serif',
-    'serif',
-    'monospace',
-];
+const websiteFonts_1 = require("./websiteFonts");
+var websiteFonts_2 = require("./websiteFonts");
+Object.defineProperty(exports, "textFonts", { enumerable: true, get: function () { return websiteFonts_2.textFonts; } });
 exports.textSizes = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72, 96];
 exports.lineHeights = [1, 1.2, 1.5, 1.8, 2, 2.5, 3];
 const blocks = [
@@ -123,7 +115,7 @@ function validateRichText(value, heading = false) {
                 /* Rendering chooses safe attributes; no authored classes. */
             }
             else if (key === 'fontFamily') {
-                if (!exports.textFonts.includes(String(item)))
+                if (!websiteFonts_1.textFonts.includes(String(item)))
                     invalid('Choose a supported font.');
                 result[key] = String(item);
             }
@@ -229,7 +221,7 @@ function validateRichText(value, heading = false) {
         return result;
     }
     const doc = visit(value, '', 0);
-    if (heading &&
+    if (heading === true &&
         (doc.content?.length !== 1 ||
             doc.content[0]?.type !== 'paragraph' ||
             doc.content[0]?.content?.some((node) => node.type !== 'text')))

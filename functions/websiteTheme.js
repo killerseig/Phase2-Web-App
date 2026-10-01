@@ -4,6 +4,8 @@ exports.defaultTheme = exports.themeNumbers = exports.themeColors = void 0;
 exports.validateTheme = validateTheme;
 exports.contrastRatio = contrastRatio;
 exports.themeWarnings = themeWarnings;
+const websiteFonts_1 = require("./websiteFonts");
+const websiteTypography_1 = require("./websiteTypography");
 exports.themeColors = [
     'background',
     'surface',
@@ -34,11 +36,19 @@ exports.defaultTheme = {
     spacing: 24,
     contentWidth: 1200,
 };
-function validateTheme(value) {
+function validateTheme(value, allowPresets = true) {
     if (!value || typeof value !== 'object' || Array.isArray(value))
         throw new Error('Invalid website design settings.');
     const data = value, result = {};
-    if (Object.keys(data).some((key) => ![...exports.themeColors, ...Object.keys(exports.themeNumbers), 'bodyFont', 'headingFont'].includes(key)))
+    if (Object.keys(data).some((key) => ![
+        ...exports.themeColors,
+        ...Object.keys(exports.themeNumbers),
+        'bodyFont',
+        'headingFont',
+        'textStyles',
+        'enabled',
+        ...(allowPresets ? ['presets'] : []),
+    ].includes(key)))
         throw new Error('Unknown website design setting.');
     for (const key of exports.themeColors)
         if (data[key] !== undefined) {
@@ -56,14 +66,41 @@ function validateTheme(value) {
             result[key] = data[key];
         }
     for (const [key, choices] of Object.entries({
-        bodyFont: ['sans', 'serif', 'mono'],
-        headingFont: ['sans', 'serif', 'display'],
+        bodyFont: Object.keys(websiteFonts_1.websiteFonts),
+        headingFont: Object.keys(websiteFonts_1.websiteFonts),
     }))
         if (data[key] !== undefined) {
             if (!choices.includes(data[key]))
                 throw new Error('Choose a supported website font.');
             result[key] = data[key];
         }
+    if (data.enabled !== undefined) {
+        if (typeof data.enabled !== 'boolean')
+            throw new Error('Invalid shared design state.');
+        result.enabled = data.enabled;
+    }
+    if (data.textStyles !== undefined)
+        result.textStyles = (0, websiteTypography_1.validateTextStyles)(data.textStyles);
+    if (data.presets !== undefined) {
+        if (!Array.isArray(data.presets) || data.presets.length > 12)
+            throw new Error('Keep up to 12 brand presets.');
+        result.presets = data.presets.map((preset) => {
+            if (!preset ||
+                typeof preset !== 'object' ||
+                Array.isArray(preset) ||
+                typeof preset.name !== 'string' ||
+                !preset.name.trim() ||
+                preset.name.length > 64 ||
+                typeof preset.accent !== 'string' ||
+                !/^#[0-9a-f]{6}$/i.test(preset.accent))
+                throw new Error('Invalid brand preset.');
+            return {
+                name: preset.name.trim(),
+                accent: preset.accent,
+                theme: validateTheme(preset.theme, false),
+            };
+        });
+    }
     return result;
 }
 function contrastRatio(first, second) {

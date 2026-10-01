@@ -1,6 +1,6 @@
 # Website Builder: first milestone
 
-Local website refinement verified October 1, 2026. Production release remains held at the boundaries below; Form Builder has not started.
+Website milestone verified October 1, 2026 with a complete isolated release candidate and explicit owner starter import. Deployment is manual and production content activation remains separate. Form Builder has not started.
 
 ## October 1 working-checkout verification
 
@@ -12,7 +12,7 @@ Inline display text remains visible while the lazy editor attaches. A ready even
 
 Final normal-checkout revalidation (October 1): all 37 focused unit tests and all 12 combined website Chromium regressions passed after the last refinements. The browser suite covers Fit, device/mode/edit/resize changes, manual zoom, edge controls, inline geometry without blank frames, IME Escape and preview/public parity. Three visual-review scenarios capture all nine generated starter pages at 1440, 820 and 390 pixels (27 screenshots), checking images, overflow and balanced tablet card geometry. Eight additional inline toolbar/selection/paste/undo scenarios passed across their final runs. TypeScript and the production Vite bundle passed. Existing contenteditable fill interactions were corrected to keyboard selection/replacement; their rechecks passed. Vite logged ResizeObserver loop warnings during parity checks; assertions passed. This verifies the normal working tree, including preserved pre-existing uncommitted dependencies, rather than a clean deployment checkout.
 
-Git checkpoint scope is deliberately narrower than the full existing dirty Website Builder work: the attributed inline readiness/typography, Fit scheduling/device picker, edge controls, polish module and documentation are versioned. The current fixed-height preview and starter-site integration also rely on pre-existing uncommitted canvas/builder/schema files; preserve those files and review them before producing a clean deployment checkout. Do not bulk-stage them as part of this fix.
+The initial Git checkpoints were deliberately narrower than the full existing dirty Website Builder work: the attributed inline readiness/typography, Fit scheduling/device picker, edge controls, polish module and documentation are versioned. Those checkpoints relied on pre-existing pending canvas/builder/schema files. The later isolated release checkpoint below adopts the individually traced dependencies; unrelated pending files remain preserved.
 
 Vue choices follow [DOM-flush timing](https://vuejs.org/api/general.html#nexttick), [conditional rendering](https://vuejs.org/guide/essentials/conditional.html), and [async components](https://vuejs.org/guide/components/async.html): `v-show` keeps the display fallback mounted, `v-if` creates only the active rich editor, and lifecycle cleanup disconnects observers/listeners. A browser animation frame after DOM flush is used for fit measurement; this supplements Vue's DOM timing with container layout timing.
 
@@ -32,19 +32,21 @@ The starter is composed of ordinary editable widgets. The design uses a dark ink
 | Projects | Photography-led studies with captions and alternating feature composition |
 | Awards | Deliberately compact recognition page; no invented awards or credentials |
 
-These are concrete visual-review findings, not an objective A+ certification or final company design approval. Owners can replace widget text/photos without rebuilding this layout. Careers recipients remain unconfigured in the starter and require owner setup before publication. The generator currently enters the app through synthetic test/review adapters; it is not yet exposed as a production starter/import action. Deploying app code alone will not replace the existing published website or create this draft.
+These are concrete visual-review findings, not an objective A+ certification or final company design approval. Owners can replace widget text/photos without rebuilding this layout. Careers recipients remain unconfigured in the starter and require owner setup before publication. The normal builder now exposes Pages → Complete website starter → Review nine-page starter. The import reuses existing photo assets or leaves editable photo slots, keeps owner reusable libraries, and hides the unconfigured Careers form. Deployment alone never imports this starter or changes published content. Placeholder copy/photos are an intentional handoff and do not block the builder milestone.
 
-## Production release gate and smallest safe path
+## Production release path and content boundary
 
 The explicit website-only Firebase deployment authorization is recorded. Daily logs, shop orders, timecards and user management must retain their production behavior. All 75 fixture regressions for these workflows/role access/direct URLs passed; all five public/builder login regressions passed after keyboard-interaction correction. Daily-log, shop-order and timecard email smoke tests passed. Their feature views/services and backend handlers show no changes against the user's a169b8f baseline. Fixture tests do not establish deployed-source equivalence.
 
 The configured destination is project/site `phase2-website`. Read-only Hosting metadata identified live version `98e09c75d718273d`, release `1790763227254000` (September 30), which must remain available for rollback. No release was made by this checkpoint.
 
-A clean release must include reviewed WebsiteCanvas/WebsiteBuilder/responsive/typography/autosave dependencies, the editable starter module and its fonts/assets. Those remain intermixed with pre-existing unstaged work. In particular, `vite.config.ts` contains a shared Firestore SDK chunking change; the narrow checkpoint must not silently include it. Preserve the normal checkout, construct an explicit website-only release from reviewed source, retain the existing SDK build behavior unless separately justified, and rerun the protected workflows against that exact release bundle. Deploy Hosting and only individually necessary website function targets; omit rules, unrelated backend targets and security-sensitive settings.
+The dependency boundary has now been traced, reviewed per file and isolated from the normal checkout. Website renderer/editor, responsive viewport, typography/schema, local recovery/shared-draft sync, builder controls and starter dependencies are included with their tests, font licenses and generated Functions outputs. The shared Firestore chunking change in `vite.config.ts`, Hosting cache and unrelated pending documentation remain excluded. See the provenance appendix below. The normal checkout remains the source of truth; the release copy validates precisely the selected source.
+
+For the website code release, use a clean checkout of this completed checkpoint with the existing public Firebase web configuration, install both lockfiles, run `npm run build`, and use `node scripts/deploy.mjs --project phase2-website --only hosting,functions:websiteBuilder,functions:getPublishedWebsite,functions:websiteImage`. This is the scoped manual path, not a command already executed. Exclude Firestore/Storage rules, other Functions, DNS and credentials. Frontend and website validators must move together so richer formatting/fonts survive saves. Retain the recorded live Hosting version and capture pre-release website Function revision metadata before deployment. Do not deploy from the dirty normal checkout.
 
 Before activating the starter, read the existing production draft/published state, identify exactly what would be replaced and obtain the separate content-replacement approval. Keep existing user edits and image records until that scope is confirmed. The nine-page local review is not a production publication authorization. Form Builder remains queued behind this release gate.
 
-### Release-readiness decision — October 1
+### Earlier release hold — resolved by local integration
 
 **HOLD: no Firebase deployment performed.** The pushed checkpoints are `4cb56fd` and `2080f8e`; the passing tests above exercised the normal working tree, not a self-contained committed release.
 
@@ -53,6 +55,199 @@ The minimum missing release source includes untracked `src/features/website/phas
 A read-only production `getPublishedWebsite` call returned HTTP 200 with `published: false`. This establishes absence of a public snapshot, not absence of a private draft. The private draft was not inspected or changed. The local nine-page generator has no production builder import action. Add an explicit owner import/review workflow, retain existing private content until replacement scope is approved, and configure Careers recipients before publication. App deployment and starter content activation remain separate operations.
 
 A limited pattern scan of 1,148 committed text files found no matching credential patterns and printed no values. It did not scan history or validate provider credentials. The older GitHub secret-scanning alert #1 remains unverified because the available connector does not expose its status; this is uncertainty, not evidence of an active exposed credential. No credentials were retrieved or rotated.
+
+## Completed local release checkpoint — October 1
+
+The explicit starter action confirms replacement scope, verifies a uniquely keyed browser backup before mutation and downloads the current draft. Import updates the local editor/history only. Autosave stays paused until the owner deliberately chooses Save draft, including after recovery of an imported starter. Cancel, quota/readback failure and concurrent draft/account changes abort import. Repeated reviews retain independent backups. Current saved widgets, custom definitions, brand presets and other form definitions are preserved. Imported Careers stays hidden until its recipients are configured and an owner unhides it. Save replaces the private draft; Publish remains a separate confirmed action. No production draft was read through an authenticated editor or replaced by this task.
+
+Observed regression fixes during isolation: heading/list formatting keeps a stable editor host while carrying measured typography/margins, Fit rerenders retain unfinished numeric geometry input until blur commits it, public rotated artwork does not cause sideways document scrolling, and the mobile prototype check opens navigation before inspecting its link. The geometry edit/resize scenario passed three repeated runs.
+
+Validation: final affected Chromium suite **100/100 passed** (Website Builder, Fit/inline/public parity, five starter import scenarios, homepage prototype). Earlier broad clean-source run had **199 passing and two failing of 201**; those two failures were corrected and included in the final 100 passing suite. All 75 protected workflow/access tests and five login tests passed in the broad run. The earlier 199-case isolation run exposed four failures; all four were corrected and rechecked. Type checking, Functions compilation, production Vite build and **153 unit tests across 35 files** passed on the final candidate. Website emulator verification passed **347 rejection checks** plus draft/image privacy, validated publication, version conflicts, revision comparisons/restoration and unpublishing. ESLint had zero errors; existing test-style warnings and explicit autosave observation waits remain. Build-size and ResizeObserver loop warnings remain non-fatal. Production-bundle root fallback/login smoke passed with external requests blocked and no writes. The production build strips fixture runtime; fixture workflow results do not establish live service availability. Firefox/WebKit were not run for this milestone.
+
+The final nine-page visual captures at 1440/820/390 pixels use synthetic image/form services. Final Home/tablet and Careers/phone images were inspected against the earlier all-nine-page visual critique; screenshot assertions also check loaded images and overflow. No content was activated. Historical GitHub secret alert #1 status is inaccessible through the available connector. A limited candidate-source scan of 1,185 text files found no matching patterns and printed no secret values; history and credential validity were not checked.
+
+The user's ongoing Playwright regression standard is recorded in the project README and applies to future Form Builder work. Local review is served from the normal checkout at `http://localhost:5173` (IPv6 localhost, PID 25300 verified); `127.0.0.1:5173` is not that listener. The isolated synthetic release checks use a separate port and do not stop the user's server.
+
+<details>
+<summary>Individually selected release files and provenance</summary>
+
+Each row is included explicitly after import tracing and review. Existing pending website work is adopted as a dependency of the verified normal builder; it is not attributed solely to this task. New task work adds starter import/backup, observed regression fixes and project guidance. Generated files were rebuilt in the isolated candidate and compared byte for byte. The task's machine manifest records SHA-256 fingerprints for each selected file; staging rejects concurrent differences.
+
+| File | Dependency / provenance |
+| --- | --- |
+| `e2e/fixtures/homepagePrototype.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `e2e/phase2-proportions.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `e2e/phase2-site.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `e2e/website-builder.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `e2e/website-draft-sync.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `e2e/website-mobile-navigation.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `e2e/website-responsive-flow.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `e2e/website-starter-import.spec.ts` | Website/builder regression dependency; new in task-3 |
+| `functions/src/websiteChanges.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteContent.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteDesign.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteFonts.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteFunctions.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteModel.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteMotion.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteRichText.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteTheme.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `functions/src/websiteTypography.ts` | Website-only shared schema/validation or authenticated website callable dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `scripts/verify-website.mjs` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/DMSans-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/DMSans-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/DancingScript-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/DancingScript-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/FiraCode-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/FiraCode-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Inter-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Inter-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/LibreBaskerville-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/LibreBaskerville-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Lora-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Lora-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Merriweather-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Merriweather-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Montserrat-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Montserrat-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Nunito-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Nunito-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/OpenSans-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/OpenSans-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Oswald-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Oswald-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/PlayfairDisplay-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/PlayfairDisplay-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Raleway-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Raleway-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Roboto-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/Roboto-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/WorkSans-OFL.txt` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/fonts/WorkSans-Variable.ttf` | Self-hosted font and corresponding license referenced by website font CSS; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/builder/BuilderConfirmDialog.vue` | Shared builder controls currently consumed only by Website Builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/builder/BuilderHelpDialog.vue` | Shared builder controls currently consumed only by Website Builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/builder/BuilderPanelResize.vue` | Shared builder controls currently consumed only by Website Builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/builder/BuilderSelectionContext.vue` | Shared builder controls currently consumed only by Website Builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/builder/BuilderSettingSource.vue` | Shared builder controls currently consumed only by Website Builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteAppearanceFields.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteBlocks.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteCanvas.vue` | Responsive preview/public layout and fixed-height viewport dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteChangeList.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteCustomEditor.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteElementContent.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteElementFields.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteFontPicker.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteFormSettings.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteFormSubmissions.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteImage.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteImageControls.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteImageEditor.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteImageOverlay.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteImagePicker.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteInlineEditor.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteInlineText.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteLayersPanel.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteLayoutFields.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteMedia.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteMenuLabel.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteMotionControls.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteNavigation.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteNavigationDropdown.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteOverlayControls.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsitePublishComparison.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteRevisionHistory.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteRichText.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteSavedSectionPreview.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteSavedSections.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteScriptFrame.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteTextStyles.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteThemeFields.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteTransformControls.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteWidget.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/components/website/WebsiteWidgetToolbar.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/builder/useBuilderPanels.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/builder/useBuilderPanels.ts` | Shared builder controls currently consumed only by Website Builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/appearance.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/changes.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/designTools.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/editorHelp.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/inlineEditing.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/inlineText.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/motion.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/phase2Site.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/phase2Site.ts` | Existing pending nine-page ordinary-widget starter generator; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/publishing.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/responsive.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/responsive.ts` | Responsive preview/public layout and fixed-height viewport dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/richText.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/richTextServer.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/starterImport.spec.ts` | Website/builder regression dependency; new in task-3 |
+| `src/features/website/starterImport.ts` | New owner-confirmed local starter import and mandatory backup; new in task-3 |
+| `src/features/website/theme.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/theme.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/types.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/useTextBox.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/useWebsiteAutosave.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/useWebsiteAutosave.ts` | Existing pending recovery/shared-draft protection consumed by normal builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/useWebsiteDraftSync.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/useWebsiteDraftSync.ts` | Existing pending recovery/shared-draft protection consumed by normal builder; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/useWebsiteGrid.spec.ts` | Website/builder regression dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/features/website/useWebsiteGrid.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/styles/builder-ui.css` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/styles/fonts.css` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/styles/website-builder.css` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/views/PublicWebsiteView.vue` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/views/WebsiteBuilderView.vue` | Normal builder source including Fit fixes and new explicit starter review; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/websiteRuntime.ts` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `website-runtime.html` | Website renderer/editor, typography or runtime dependency; pre-existing pending website work adopted after review; attributed fixes already checkpointed |
+| `src/assets/images/site/architecture.jpg` | Illustrative generated image fixtures used by nine-page visual regressions; provenance accompanies assets; pre-existing pending website work adopted after review |
+| `src/assets/images/site/finished-interior.jpg` | Illustrative generated image fixtures used by nine-page visual regressions; provenance accompanies assets; pre-existing pending website work adopted after review |
+| `src/assets/images/site/planning.jpg` | Illustrative generated image fixtures used by nine-page visual regressions; provenance accompanies assets; pre-existing pending website work adopted after review |
+| `src/assets/images/site/asset-notes.txt` | Illustrative generated image fixtures used by nine-page visual regressions; provenance accompanies assets; pre-existing pending website work adopted after review |
+| `e2e/homepage-prototype.spec.ts` | Paired regression update required by modified homepage fixture; pre-existing pending website work adopted after review |
+| `README.md` | User-authorized regression standard in existing project guidance; new guidance in task-3 |
+| `functions/websiteChanges.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteChanges.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteChanges.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteChanges.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteContent.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteContent.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteContent.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteContent.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteDesign.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteDesign.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteDesign.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteDesign.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFonts.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFonts.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFonts.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFonts.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFunctions.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFunctions.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFunctions.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteFunctions.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteModel.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteModel.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteModel.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteModel.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteMotion.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteMotion.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteMotion.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteMotion.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteRichText.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteRichText.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteRichText.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteRichText.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTheme.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTheme.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTheme.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTheme.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTypography.js` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTypography.js.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTypography.d.ts` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+| `functions/websiteTypography.d.ts.map` | Generated with the isolated release tsc build; byte-identical to preserved normal-checkout output; generated artifact for individually reviewed website source |
+
+</details>
 
 ## Entry points
 

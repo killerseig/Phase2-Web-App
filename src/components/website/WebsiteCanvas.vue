@@ -2,11 +2,17 @@
 import WebsiteHtmlLayout from './WebsiteHtmlLayout.vue'
 import { defaultTheme } from '../../../functions/src/websiteTheme'
 import { themeStyle } from '@/features/website/theme'
-import { computed, onMounted, onBeforeUnmount, ref, useId } from 'vue'
+import { computed, inject, onMounted, onBeforeUnmount, provide, ref, useId } from 'vue'
+import { navigationPreviewKey } from '@/features/website/inlineEditing'
 import WebsiteImage from './WebsiteImage.vue'
 import WebsiteWidget from './WebsiteWidget.vue'
 import WebsitePageStyles from './WebsitePageStyles.vue'
-import { deviceForWidth, isFlow, responsiveSection } from '@/features/website/responsive'
+import {
+  deviceForWidth,
+  isFlow,
+  responsiveSection,
+  websiteDeviceKey,
+} from '@/features/website/responsive'
 import { visibleSections } from '@/features/website/containers'
 import { visualGeometry } from '@/features/website/appearance'
 import { pageUrl, type WebsiteSite, type WebsiteDevice } from '@/features/website/types'
@@ -36,29 +42,29 @@ const props = defineProps<{
   gridDraft?: GridDraft
   locked?: boolean
 }>()
+const navigation = inject(navigationPreviewKey, undefined)
 const emit = defineEmits<{
   select: [id: string, event?: MouseEvent]
   'select-layout': [id: string]
   page: [id: string]
   'drag-widget': [event: PointerEvent, id: string, action: WidgetAction]
   'geometry-key': [event: KeyboardEvent, id: string]
-  'marquee-start': [event: PointerEvent]
-  'widget-menu': [event: MouseEvent, id: string]
+  'marquee-start': [event: PointerEvent, ownerId: string]
+  'widget-menu': [event: MouseEvent, id: string, ownerId?: string]
 }>()
 const page = computed(() =>
-  props.layoutEditor || props.layoutShell
+  props.layoutShell
     ? props.site.sharedLayout
     : props.site.pages.find((page) => page.id === props.pageId),
 )
 const composed = computed(
   () =>
     !!props.site.sharedLayout &&
-    !!page.value?.useSiteLayout &&
+    (!!page.value?.useSiteLayout || props.layoutEditor) &&
     !props.standalone &&
-    !props.layoutEditor &&
     !props.layoutShell,
 )
-const nestedCanvas = ref<{ getSurface: () => HTMLElement | undefined }>()
+const nestedCanvas = ref<{ getSurface: (layoutEditor?: boolean) => HTMLElement | undefined }>()
 const rootIds = computed(() =>
   (page.value?.sections || []).filter((section) => !section.parentId).map((section) => section.id),
 )
@@ -79,13 +85,17 @@ onMounted(() => {
 })
 onBeforeUnmount(() => observer?.disconnect())
 defineExpose({
-  getSurface: (): HTMLElement | undefined => nestedCanvas.value?.getSurface() || surface.value,
+  getSurface: (layoutEditor = props.layoutEditor): HTMLElement | undefined =>
+    props.layoutShell && layoutEditor
+      ? surface.value
+      : nestedCanvas.value?.getSurface(layoutEditor) || surface.value,
 })
 const device = computed(() =>
   props.preview
     ? props.device || (props.mobile ? 'mobile' : 'desktop')
     : deviceForWidth(measuredWidth.value),
 )
+provide(websiteDeviceKey, device)
 const flow = computed(
   () => !!props.layoutShell || !!props.layoutEditor || isFlow(page.value?.layout, device.value),
 )
@@ -94,7 +104,10 @@ const gridMode = computed(
 )
 const sections = computed(() =>
   materializeGrid(page.value?.sections || []).map((section) =>
-    responsiveSection(section, device.value),
+    responsiveSection(section, device.value, {
+      flow: flow.value,
+      parent: page.value?.sections.find((parent) => parent.id === section.parentId),
+    }),
   ),
 )
 const visible = computed(() => visibleSections(sections.value))
@@ -150,7 +163,12 @@ function navigate(event: MouseEvent, id: string) {
   }
 }
 function previewLink(event: MouseEvent) {
-  if (props.preview) event.preventDefault()
+  if (!props.preview) return
+  event.preventDefault()
+  if ((event.currentTarget as HTMLAnchorElement).getAttribute('href') === '/login') {
+    event.stopPropagation()
+    navigation?.openAppLogin()
+  }
 }
 function backgroundPointer(event: PointerEvent) {
   if (
@@ -161,13 +179,13 @@ function backgroundPointer(event: PointerEvent) {
     !props.locked &&
     !(event.target as HTMLElement).closest('.grid-widget')
   )
-    emit('marquee-start', event)
+    emit('marquee-start', event, page.value?.id || props.pageId)
 }
 function contextMenu(event: MouseEvent, id = '') {
   if (!props.preview || props.designTools === false) return
   event.preventDefault()
   event.stopPropagation()
-  emit('widget-menu', event, id)
+  emit('widget-menu', event, id, page.value?.id)
 }
 </script>
 <template>
@@ -177,6 +195,7 @@ function contextMenu(event: MouseEvent, id = '') {
     :site="site"
     :page-id="pageId"
     layout-shell
+    :layout-editor="layoutEditor"
     :content-page-id="pageId"
     :preview="preview"
     :device="device"
@@ -191,10 +210,10 @@ function contextMenu(event: MouseEvent, id = '') {
     @page="(id) => emit('page', id)"
     @drag-widget="(event, id, action) => emit('drag-widget', event, id, action)"
     @geometry-key="(event, id) => emit('geometry-key', event, id)"
-    @marquee-start="(event) => emit('marquee-start', event)"
-    @widget-menu="(event, id) => emit('widget-menu', event, id)"
+    @marquee-start="(event, ownerId) => emit('marquee-start', event, ownerId)"
+    @widget-menu="(event, id, ownerId) => emit('widget-menu', event, id, ownerId)"
   />
-  <div v-else ref="viewport" class="website-viewport">
+  <div v-else ref="viewport" class="website-viewport" :class="{ 'public-viewport': !preview }">
     <WebsitePageStyles :css="site.css" :scope="cssScope" />
     <WebsitePageStyles :key="pageId" :css="page?.css" :scope="cssScope" />
     <div
@@ -202,8 +221,11 @@ function contextMenu(event: MouseEvent, id = '') {
       class="website-canvas"
       :data-page-scope="cssScope"
       :data-device="device"
-      :class="{ 'is-mobile': mobile, 'has-shared-design': !!site.theme }"
-      :style="{ '--website-accent': site.accent, ...themeStyle(site.theme) }"
+      :class="{
+        'is-mobile': mobile,
+        'has-shared-design': !!site.theme && site.theme.enabled !== false,
+      }"
+      :style="{ '--website-accent': site.accent, ...themeStyle(site.theme, device, flow) }"
     >
       <header v-if="page?.chrome !== 'widgets'" class="website-header page-header">
         <a
@@ -245,7 +267,7 @@ function contextMenu(event: MouseEvent, id = '') {
           @contextmenu="contextMenu($event)"
         >
           <p v-if="!page.sections.some((section) => !section.hidden)" class="canvas-empty">
-            Add a section to start building this page.
+            Add a widget to start building this page.
           </p>
           <WebsiteHtmlLayout :preview="preview" :html="page.html" :ids="rootIds" :slot-id="slotId">
             <template #widget="{ id }">
@@ -260,15 +282,15 @@ function contextMenu(event: MouseEvent, id = '') {
                 :design-tools="designTools"
                 :selected-id="selectedId"
                 :selected-ids="selectedIds"
-                :grid-draft="gridDraft"
-                :marquee="marquee"
+                :grid-draft="layoutEditor ? undefined : gridDraft"
+                :marquee="layoutEditor ? undefined : marquee"
                 :locked="locked"
                 @select="(id, event) => emit('select', id, event)"
                 @page="(id) => emit('page', id)"
                 @drag-widget="(event, id, action) => emit('drag-widget', event, id, action)"
                 @geometry-key="(event, id) => emit('geometry-key', event, id)"
-                @marquee-start="(event) => emit('marquee-start', event)"
-                @widget-menu="(event, id) => emit('widget-menu', event, id)"
+                @marquee-start="(event, ownerId) => emit('marquee-start', event, ownerId)"
+                @widget-menu="(event, id, ownerId) => emit('widget-menu', event, id, ownerId)"
               />
               <template v-else>
                 <WebsiteWidget
@@ -284,14 +306,16 @@ function contextMenu(event: MouseEvent, id = '') {
                   :preview="preview"
                   :selected-id="selectedId"
                   :selected-ids="selectedIds"
-                  :grid-draft="layoutShell ? undefined : gridDraft"
+                  :grid-draft="layoutShell && !layoutEditor ? undefined : gridDraft"
                   :locked="locked"
-                  :design-tools="designTools !== false && !layoutShell"
+                  :design-tools="designTools !== false && (!layoutShell || layoutEditor)"
                   @select="
                     (id, event) =>
-                      layoutShell ? emit('select-layout', id) : emit('select', id, event)
+                      layoutShell && !layoutEditor
+                        ? emit('select-layout', id)
+                        : emit('select', id, event)
                   "
-                  @widget-menu="(event, id) => emit('widget-menu', event, id)"
+                  @widget-menu="(event, id) => emit('widget-menu', event, id, page?.id)"
                   @drag-widget="(event, id, action) => emit('drag-widget', event, id, action)"
                   @geometry-key="(event, id) => emit('geometry-key', event, id)"
                 />
@@ -299,7 +323,7 @@ function contextMenu(event: MouseEvent, id = '') {
             </template>
           </WebsiteHtmlLayout>
           <div
-            v-if="preview && gridDraft?.type"
+            v-if="preview && (!layoutShell || layoutEditor) && gridDraft?.type"
             class="grid-drop-preview"
             :style="geometryStyle(gridDraft.layout)"
             aria-hidden="true"
@@ -307,7 +331,7 @@ function contextMenu(event: MouseEvent, id = '') {
             Drop widget
           </div>
           <div
-            v-if="preview && marquee"
+            v-if="preview && (!layoutShell || layoutEditor) && marquee"
             class="grid-marquee"
             :style="geometryStyle(marquee)"
             aria-hidden="true"
@@ -344,11 +368,16 @@ function contextMenu(event: MouseEvent, id = '') {
   flex-direction: column;
   box-sizing: border-box;
 }
+.public-viewport {
+  /* Rotated artwork may extend beyond its frame without creating sideways document scrolling. */
+  overflow-x: clip;
+}
 .website-canvas {
   --website-accent: #174878;
   color: #172c40;
   background: #fff;
   font-family: 'Source Sans 3', 'Segoe UI', sans-serif;
+  letter-spacing: normal;
   width: 100%;
   min-width: 0;
   container-type: inline-size;
@@ -632,10 +661,32 @@ footer span {
   line-height: 1.15;
 }
 .has-shared-design :deep(h1.widget-title) {
-  font-size: var(--heading-size, clamp(2.25rem, 5cqw, 4.5rem));
+  font-size: var(--heading-size, var(--type-title-size, clamp(2.25rem, 5cqw, 4.5rem)));
 }
 .has-shared-design :deep(h2.widget-title) {
-  font-size: var(--heading-size, clamp(1.35rem, 3cqw, 2rem));
+  font-size: var(--heading-size, var(--type-section-size, clamp(1.35rem, 3cqw, 2rem)));
+}
+.has-shared-design :deep(.widget-title[data-title-tag='h1']) {
+  font-family: var(--widget-font, var(--type-title-font, var(--site-heading-font)));
+  font-size: var(--heading-size, var(--type-title-size, clamp(2.25rem, 5cqw, 4.5rem)));
+  font-weight: var(--type-title-weight, 600);
+  line-height: var(--type-title-leading, 1.15);
+}
+.has-shared-design :deep(.widget-title[data-title-tag='h2']) {
+  font-family: var(--widget-font, var(--type-section-font, var(--site-heading-font)));
+  font-size: var(--heading-size, var(--type-section-size, clamp(1.35rem, 3cqw, 2rem)));
+  font-weight: var(--type-section-weight, 600);
+  line-height: var(--type-section-leading, 1.15);
+}
+.has-shared-design :deep(.widget-text),
+.has-shared-design :deep(.inline-body) {
+  font-family: var(--widget-font, var(--type-body-font, var(--site-body-font)));
+  font-size: var(--widget-body-size, var(--type-body-size, inherit));
+  font-weight: var(--type-body-weight, inherit);
+  line-height: var(--type-body-leading, var(--site-line-height));
+}
+.has-shared-design :deep(.widget-title .widget-text) {
+  font: inherit;
 }
 .has-shared-design :deep(.subtitle) {
   color: var(--site-muted);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import WebsiteImage from './WebsiteImage.vue'
+import WebsiteImageOverlay from './WebsiteImageOverlay.vue'
 import type { WebsiteItem } from '@/features/website/types'
 import { computed, inject, ref } from 'vue'
 import { useTextBox } from '@/features/website/useTextBox'
@@ -95,14 +96,7 @@ function click(event: MouseEvent) {
         :contain="contain"
         :settings="item.imageSettings"
       />
-      <div
-        v-if="item.imageSettings?.overlayOpacity"
-        class="media-overlay"
-        :style="{
-          background: item.imageSettings.overlay || '#000000',
-          opacity: item.imageSettings.overlayOpacity / 100,
-        }"
-      />
+      <WebsiteImageOverlay :settings="item.imageSettings" />
     </div>
     <figcaption v-if="item.imageSettings?.caption">{{ item.imageSettings.caption }}</figcaption>
     <WebsiteSelectionHandles

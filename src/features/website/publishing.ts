@@ -18,7 +18,7 @@ import type { WebsiteSite, WebsiteSection } from './types'
 export interface PublishingIssue {
   pageId: string
   sectionId?: string
-  target?: 'site' | 'site-code' | 'code' | 'widgets'
+  target?: 'site' | 'site-code' | 'code' | 'widgets' | 'form-delivery'
   message: string
   level: 'error' | 'warning'
 }
@@ -141,8 +141,9 @@ export function publishingChecks(site: WebsiteSite) {
             issues.push({
               pageId: page.id,
               level: 'error',
-              message: 'Set To recipients for ' + form.name + '.',
+              message: `${page.title}: add an email recipient for the “${form.name}” form.`,
               sectionId: section.id,
+              target: 'form-delivery',
             })
         }
       }

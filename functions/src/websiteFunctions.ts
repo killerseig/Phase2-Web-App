@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import { FieldPath } from 'firebase-admin/firestore'
 import { db, storageBucket } from './runtime'
 import { buildCurrentFunctionUser } from './roleAccess'
+import { compareWebsites } from './websiteChanges'
 import {
   initialWebsite,
   publishedWebsite,
@@ -15,6 +16,7 @@ import {
 const state = db.doc('websitePrivate/state')
 const published = db.doc('websitePublished/current')
 const revisions = state.collection('revisions')
+const activity = state.collection('activity')
 function checkVersion(actual: number, expected: unknown) {
   if (expected !== actual)
     throw new HttpsError(
@@ -33,14 +35,42 @@ async function requireWebsiteAdmin(uid?: string) {
 export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, async (request) => {
   const uid = await requireWebsiteAdmin(request.auth?.uid)
   const data = request.data || {}
+  if (data.action === 'comparePublished') {
+    const candidate = publishedWebsite(validateWebsite(data.site))
+    return db.runTransaction(async (transaction) => {
+      const [draftState, live] = await transaction.getAll(state, published)
+      checkVersion(draftState.data()?.version || 0, data.version)
+      return {
+        ...compareWebsites(live.data()?.site, candidate),
+        publishedAt: live.data()?.publishedAt || null,
+      }
+    })
+  }
+  if (data.action === 'getRevision') {
+    if (typeof data.revisionId !== 'string' || !/^revision-\d{1,12}$/.test(data.revisionId))
+      throw new HttpsError('invalid-argument', 'Choose a saved revision.')
+    const record = await revisions.doc(data.revisionId).get()
+    if (!record.exists)
+      throw new HttpsError(
+        'failed-precondition',
+        'That saved version has expired. Refresh the history.',
+      )
+    return { draft: record.data()!.draft }
+  }
   if (data.action === 'listRevisions') {
-    const records = await revisions.orderBy('version', 'desc').limit(10).get()
+    const [records, events] = await Promise.all([
+      revisions.orderBy('version', 'desc').limit(10).get(),
+      activity.orderBy('version', 'desc').limit(50).get(),
+    ])
     return {
+      activity: events.docs.map((record) => ({ id: record.id, ...record.data() })),
       revisions: records.docs.map((record) => ({
         id: record.id,
         version: record.data().version,
         savedAt: record.data().savedAt,
         name: record.data().draft?.name || 'Website draft',
+        savedBy: record.data().savedBy || '',
+        action: record.data().action || 'save',
       })),
     }
   }
@@ -153,6 +183,29 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
     checkVersion(snapshot.version || 0, data.version)
     const version = (snapshot.version || 0) + 1
     const now = Date.now()
+    const savedBy = String(request.auth?.token?.name || request.auth?.token?.email || uid).slice(
+      0,
+      160,
+    )
+    // All callers finish their reads before recording activity and writing state.
+    async function recordActivity(nextDraft?: WebsiteSite) {
+      const oldEvents = await transaction.get(activity.orderBy('version', 'desc').limit(51))
+      const changes = nextDraft ? compareWebsites(snapshot.draft, nextDraft) : undefined
+      transaction.set(activity.doc(`event-${version}`), {
+        version,
+        savedAt: now,
+        savedBy,
+        action: data.action,
+        ...(data.action === 'restoreRevision' ? { source: data.revisionId } : {}),
+        ...(changes
+          ? {
+              total: changes.total,
+              paths: changes.changes.slice(0, 20).map((change) => change.path.slice(0, 240)),
+            }
+          : {}),
+      })
+      for (const entry of oldEvents.docs.slice(49)) transaction.delete(entry.ref)
+    }
     if (data.action === 'restoreRevision') {
       if (typeof data.revisionId !== 'string' || !/^revision-\d{1,12}$/.test(data.revisionId))
         throw new HttpsError('invalid-argument', 'Choose a saved revision.')
@@ -160,9 +213,12 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
       if (!record.exists) throw new HttpsError('not-found', 'That revision is no longer available.')
       const restored = validateWebsite(record.data()!.draft)
       const old = await transaction.get(revisions.orderBy('version', 'desc').limit(12))
+      await recordActivity(restored)
       transaction.set(revisions.doc(`revision-${version}`), {
         version,
         savedAt: now,
+        savedBy,
+        action: data.action,
         draft: restored,
       })
       for (const entry of old.docs.slice(9)) transaction.delete(entry.ref)
@@ -185,7 +241,14 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
       )
         throw new HttpsError('invalid-argument', 'One of the images is missing. Upload it again.')
       const old = await transaction.get(revisions.orderBy('version', 'desc').limit(12))
-      transaction.set(revisions.doc(`revision-${version}`), { version, savedAt: now, draft })
+      await recordActivity(draft)
+      transaction.set(revisions.doc(`revision-${version}`), {
+        version,
+        savedAt: now,
+        draft,
+        savedBy,
+        action: data.action,
+      })
       for (const entry of old.docs.slice(9)) transaction.delete(entry.ref)
       transaction.set(state, { draft, version, savedAt: now, updatedBy: uid }, { merge: true })
       return { version, savedAt: now }
@@ -214,7 +277,25 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
         ],
         ...(snapshot.draft?.customWidgets ? { customWidgets: snapshot.draft.customWidgets } : {}),
         ...(snapshot.draft?.savedSections ? { savedSections: snapshot.draft.savedSections } : {}),
+        ...(snapshot.draft?.theme?.presets
+          ? {
+              theme: {
+                ...(snapshot.previous.theme || { enabled: false }),
+                presets: snapshot.draft.theme.presets,
+              },
+            }
+          : {}),
       })
+      const old = await transaction.get(revisions.orderBy('version', 'desc').limit(12))
+      await recordActivity(restored)
+      transaction.set(revisions.doc(`revision-${version}`), {
+        version,
+        savedAt: now,
+        draft: restored,
+        savedBy,
+        action: data.action,
+      })
+      for (const entry of old.docs.slice(9)) transaction.delete(entry.ref)
       transaction.set(
         state,
         { draft: restored, version, savedAt: now, updatedBy: uid },
@@ -224,6 +305,7 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
     }
     const current = (await transaction.get(published)).data()
     if (data.action === 'unpublish') {
+      await recordActivity()
       transaction.delete(published)
       transaction.delete(db.doc('websitePrivate/publicForms'))
       transaction.set(
@@ -245,6 +327,7 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
     if (!snapshot.draft)
       throw new HttpsError('failed-precondition', 'Save a draft before publishing.')
     const site = publishedWebsite(validateWebsite(snapshot.draft))
+    await recordActivity()
     transaction.set(published, { site, publishedAt: now, assetIds: websiteAssetIds(site) })
     transaction.set(db.doc('websitePrivate/publicForms'), {
       publishedAt: now,

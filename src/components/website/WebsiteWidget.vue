@@ -9,14 +9,15 @@ import WebsiteMedia from './WebsiteMedia.vue'
 import WebsiteButton from './WebsiteButton.vue'
 import WebsiteInlineText from './WebsiteInlineText.vue'
 import WebsiteNavigation from './WebsiteNavigation.vue'
-import { computed, provide } from 'vue'
+import { computed, provide, ref } from 'vue'
+import { useWebsiteMotion } from '@/features/website/motion'
 import { imageOwnerKey } from '@/features/website/imageEditing'
 import { textBoxValueKey, textBoxEditingKey } from '@/features/website/textBox'
 import { inject } from 'vue'
 import { layoutLocked } from '@/features/website/containers'
 import type { WebsiteSection, WebsiteSite } from '@/features/website/types'
 import { appearanceStyle, rotationStyle } from '@/features/website/appearance'
-import { containerStyle, sizingStyle } from '@/features/website/responsive'
+import { containerStyle, sizingStyle, websiteDeviceKey } from '@/features/website/responsive'
 import {
   geometryStyle,
   resizeDirections,
@@ -45,12 +46,30 @@ const emit = defineEmits<{
   'drag-widget': [event: PointerEvent, id: string, action: WidgetAction]
   'geometry-key': [event: KeyboardEvent, id: string]
 }>()
+const motionRoot = ref<HTMLElement>()
+useWebsiteMotion(
+  motionRoot,
+  () => props.section.appearance?.motion,
+  () => !!props.preview,
+)
 const heightOverride = computed(() =>
   props.gridDraft?.id === props.section.id && props.gridDraft.heightOnly
     ? props.gridDraft.layout.h * 32
     : props.section.sizing?.height,
 )
 const fixed = computed(() => layoutLocked(props.sections, props.section.id))
+const device = inject(websiteDeviceKey, undefined)
+const automaticColumns = computed(() =>
+  props.flow &&
+  device?.value === 'tablet' &&
+  !props.section.devices?.tablet?.container &&
+  props.section.container?.direction !== 'column'
+    ? Math.min(
+        2,
+        Math.max(1, props.sections.filter((child) => child.parentId === props.section.id).length),
+      )
+    : undefined,
+)
 const textEditing = inject(textBoxEditingKey, undefined)
 const selectingText = computed(() => textEditing?.selected.value?.id === props.section.id)
 provide(textBoxValueKey, (target) => {
@@ -203,6 +222,7 @@ function geometryKey(event: KeyboardEvent) {
       @click.stop
     />
     <section
+      ref="motionRoot"
       :style="{
         ...appearanceStyle(section.appearance),
         opacity:
@@ -220,7 +240,7 @@ function geometryKey(event: KeyboardEvent) {
       <div
         v-if="section.type === 'container'"
         class="container-children container-items"
-        :style="containerStyle(section.container, flow)"
+        :style="containerStyle(section.container, flow, automaticColumns)"
       >
         <WebsiteWidget
           v-for="child in sections.filter((entry) => entry.parentId === section.id)"
@@ -803,7 +823,12 @@ h2 {
   width: 100%;
   margin: 0;
 }
-@container (max-width: 580px) {
+@container (max-width: 1023px) {
+  .website-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 767px) {
   .widget-frame {
     grid-column: 1 / -1;
   }
@@ -852,6 +877,7 @@ h2 {
 .flow-widget .section-image :deep(img) {
   height: auto;
 }
+.widget-frame:has(> .section-navigation .mobile-menu-open),
 .widget-frame:has(> .section-navigation details[open]),
 .widget-frame:has(> .section-footer details[open]) {
   z-index: 10001 !important;
@@ -868,6 +894,20 @@ h2 {
 .grid-widget > .section-navigation,
 .fixed-height > .section-navigation {
   container-type: size;
+}
+/* Sized navigation keeps its chosen height while the phone menu opens below it. */
+.grid-widget > .section-navigation :deep(.mobile-navigation > .navigation-panel),
+.fixed-height > .section-navigation :deep(.mobile-navigation > .navigation-panel) {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  padding: 12px;
+  background: var(--navigation-menu-background, #fff);
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px #172c4026;
 }
 .grid-resize[data-height-resize] {
   bottom: 0;

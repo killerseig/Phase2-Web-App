@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { inlineEditingKey } from '@/features/website/inlineEditing'
 import type { NavigationEntry } from '@/features/website/navigation'
 import WebsiteMenuLabel from './WebsiteMenuLabel.vue'
-const props = defineProps<{ entry: NavigationEntry; sectionId: string; preview?: boolean }>()
+const props = defineProps<{
+  entry: NavigationEntry
+  sectionId: string
+  preview?: boolean
+  mobile?: boolean
+  expanded?: boolean
+}>()
+const emit = defineEmits<{ navigate: [] }>()
 const editing = inject(inlineEditingKey, undefined)
 const editable = computed(
   () =>
@@ -13,6 +20,13 @@ const open = ref(false)
 const root = ref<HTMLElement>()
 const toggle = ref<HTMLButtonElement>()
 const panelId = useId()
+function follow() {
+  open.value = false
+  emit('navigate')
+}
+watch([() => props.mobile, () => props.expanded], () => {
+  open.value = false
+})
 function outside(event: PointerEvent) {
   const target = event.target as HTMLElement
   if (!root.value?.contains(target) && !target.closest('.inline-text-toolbar')) open.value = false
@@ -27,7 +41,13 @@ onMounted(() => document.addEventListener('pointerdown', outside))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </script>
 <template>
-  <div ref="root" class="navigation-dropdown" @pointerdown.stop @keydown.esc="escape">
+  <div
+    ref="root"
+    class="navigation-dropdown"
+    :class="{ 'mobile-dropdown': mobile }"
+    @pointerdown.stop
+    @keydown.esc="escape"
+  >
     <div class="dropdown-heading">
       <WebsiteMenuLabel
         v-if="editable"
@@ -35,6 +55,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
         :section-id="sectionId"
         :preview="preview"
         summary
+        @navigate="follow"
       />
       <button
         ref="toggle"
@@ -50,13 +71,14 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
       </button>
     </div>
     <div v-show="open" :id="panelId" class="dropdown-links">
-      <a v-if="entry.url && !preview" :href="entry.url">{{ entry.label }}</a>
+      <a v-if="entry.url && !preview" :href="entry.url" @click="follow">{{ entry.label }}</a>
       <WebsiteMenuLabel
         v-for="child in entry.children"
         :key="child.key"
         :entry="child"
         :section-id="sectionId"
         :preview="preview"
+        @navigate="follow"
       />
     </div>
   </div>
@@ -114,6 +136,30 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
   border: 1px solid #172c4026;
   border-radius: 8px;
   box-shadow: 0 8px 24px #172c4026;
+}
+.mobile-dropdown .dropdown-heading {
+  justify-content: space-between;
+}
+.mobile-dropdown .dropdown-heading > :first-child {
+  flex: 1;
+}
+.mobile-dropdown .dropdown-toggle {
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: space-between;
+}
+.mobile-dropdown .dropdown-links {
+  position: static;
+  min-width: 0;
+  margin: 0 0 8px 12px;
+  padding: 0 0 0 8px;
+  gap: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0;
+  box-shadow: none;
 }
 a {
   color: inherit;

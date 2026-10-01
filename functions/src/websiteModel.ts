@@ -1,4 +1,6 @@
 import { Script } from 'node:vm'
+import { validateMotion } from './websiteMotion'
+import { websiteFonts } from './websiteFonts'
 import { validateTextBoxes, type TextBoxes } from './websiteTextBox'
 import {
   validateRichText,
@@ -116,7 +118,8 @@ export interface WebsiteSection extends WebsiteItem {
     headingSize?: number
     opacity?: number
     rotation?: number
-    fontFamily?: 'sans' | 'serif' | 'mono'
+    fontFamily?: import('./websiteFonts').WebsiteFont
+    motion?: import('./websiteMotion').WebsiteMotion
     textAlign?: 'left' | 'center' | 'right'
     imageFit?: 'cover' | 'contain'
   }
@@ -224,7 +227,7 @@ function item(value: unknown): WebsiteItem {
     linkRichText: RichTextNode | undefined
   let textBoxes: TextBoxes | undefined
   try {
-    if (data.titleRichText !== undefined) titleRichText = validateRichText(data.titleRichText, true)
+    if (data.titleRichText !== undefined) titleRichText = validateRichText(data.titleRichText, 'title')
     if (data.textRichText !== undefined) textRichText = validateRichText(data.textRichText)
     if (data.linkRichText !== undefined) linkRichText = validateRichText(data.linkRichText, true)
     if (data.textBoxes !== undefined) textBoxes = validateTextBoxes(data.textBoxes)
@@ -265,6 +268,7 @@ function item(value: unknown): WebsiteItem {
 }
 function imageSettings(value: unknown): ImageSettings {
   const data = object(value)
+  if (data.overlayMode !== undefined && !['solid', 'linear'].includes(String(data.overlayMode))) invalid('Choose a supported image overlay.')
   if (
     data.overlay !== undefined &&
     (typeof data.overlay !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(data.overlay))
@@ -275,6 +279,9 @@ function imageSettings(value: unknown): ImageSettings {
     ...optionalNumber(data, 'focusY', 0, 100),
     ...optionalNumber(data, 'zoom', 1, 3),
     ...optionalNumber(data, 'overlayOpacity', 0, 80),
+    ...optionalNumber(data, 'overlayAngle', 0, 360),
+    ...(data.overlayMode === undefined ? {} : { overlayMode: data.overlayMode as 'solid' | 'linear' }),
+    ...optionalNumber(data, 'darken', 0, 100),
     ...(data.overlay === undefined ? {} : { overlay: data.overlay as string }),
     ...(data.caption === undefined ? {} : { caption: text(data.caption, 300, 'Image caption') }),
   }
@@ -379,6 +386,7 @@ function pageGrid(value: unknown): NonNullable<WebsitePage['grid']> {
 function appearance(value: unknown): NonNullable<WebsiteSection['appearance']> {
   const data = object(value)
   const result: Record<string, unknown> = {}
+  if (data.motion !== undefined) { try { result.motion = validateMotion(data.motion) } catch (error) { invalid(error instanceof Error ? error.message : 'Invalid animation.') } }
   for (const key of ['background', 'color', 'borderColor']) {
     if (data[key] === undefined) continue
     if (typeof data[key] !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(data[key] as string))
@@ -410,7 +418,7 @@ function appearance(value: unknown): NonNullable<WebsiteSection['appearance']> {
     result[key] = number
   }
   for (const [key, allowed] of [
-    ['fontFamily', ['sans', 'serif', 'mono']],
+    ['fontFamily', Object.keys(websiteFonts)],
     ['textAlign', ['left', 'center', 'right']],
     ['imageFit', ['cover', 'contain']],
   ] as const) {
@@ -923,6 +931,10 @@ export function publishedWebsite(site: WebsiteSite): WebsiteSite {
           return { ...section, custom: { inline: resolved, values: {} } }
         }),
     })),
+  }
+  if (result.theme?.presets) {
+    const { presets: _presets, ...theme } = result.theme
+    result.theme = theme
   }
   for (const page of result.pages) {
     if (page.html)

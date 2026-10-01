@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref, watch, nextTick, type CSSProperties } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  inject,
+  onBeforeUnmount,
+  ref,
+  watch,
+  nextTick,
+  type CSSProperties,
+} from 'vue'
 import {
   inlineEditingKey,
   navigationEditingKey,
@@ -29,6 +38,17 @@ const editing = inject(inlineEditingKey, undefined)
 const editMenu = inject(navigationEditingKey, undefined)
 const editItem = inject(itemEditingKey, undefined)
 const shortLabel = computed(() => props.field === 'menu' || props.field === 'linkLabel')
+const titleBlocks = computed(() => props.field === 'title')
+const blockTitle = computed(
+  () =>
+    titleBlocks.value &&
+    !!props.rich &&
+    (props.rich.content?.length !== 1 ||
+      props.rich.content[0]?.type !== 'paragraph' ||
+      props.rich.content[0]?.content?.some((node) => node.type !== 'text')),
+)
+// Keep the host stable throughout editing: changing block structure must not remount Tiptap.
+const titleTag = computed(() => ((active.value && titleBlocks.value) || blockTitle.value ? 'div' : props.tag || 'h2'))
 const target = computed<InlineTarget>(() => ({
   id: props.id,
   field: props.field,
@@ -45,10 +65,10 @@ const active = computed(
 const root = ref<HTMLElement>()
 const editorReady = ref(false)
 const editorTypography = ref<CSSProperties>({})
+const editorHostTypography = ref<CSSProperties>({})
 watch(active, () => {
   editorReady.value = false
 })
-
 const box = useTextBox(root, target)
 const hint = computed(() =>
   box.enabled.value ? 'Drag to move text · Double-click to edit' : 'Click to edit text',
@@ -75,6 +95,10 @@ function begin() {
         ? { margin: style.margin }
         : {}),
     }
+  }
+  if (titleBlocks.value && root.value) {
+    const style = getComputedStyle(root.value)
+    editorHostTypography.value = { ...editorTypography.value, margin: style.margin, padding: style.padding }
   }
   editing?.begin(target.value)
 }
@@ -132,11 +156,19 @@ onBeforeUnmount(() => finish())
 <template>
   <component
     v-if="!enabled && field !== 'text'"
-    :is="tag || 'h2'"
+    :is="titleTag"
     class="widget-title"
+    :class="{ 'title-blocks': blockTitle }"
+    :data-title-tag="tag || 'h2'"
     :style="box.style.value"
     >{{ rich ? '' : text
-    }}<WebsiteRichText v-if="rich" :value="rich" heading :preview="preview" :fallback="text"
+    }}<WebsiteRichText
+      v-if="rich"
+      :value="rich"
+      :heading="!blockTitle"
+      :title-blocks="titleBlocks"
+      :preview="preview"
+      :fallback="text"
   /></component>
   <WebsiteText
     v-else-if="!enabled && (text || rich)"
@@ -148,17 +180,19 @@ onBeforeUnmount(() => finish())
   />
   <component
     v-else-if="enabled"
-    :is="field !== 'text' ? tag || 'h2' : 'div'"
+    :is="field !== 'text' ? titleTag : 'div'"
     ref="root"
     :class="[
       shortLabel ? 'inline-menu' : field !== 'text' ? 'widget-title' : 'inline-body',
       { 'inline-available': enabled, 'inline-active': active },
+      { 'title-blocks': blockTitle },
       {
         'text-box-design': box.enabled.value && !active,
         'text-box-selected': box.selected.value && !active,
       },
     ]"
-    :style="box.style.value"
+    :style="{ ...box.style.value, ...(active && titleBlocks ? editorHostTypography : {}) }"
+    :data-title-tag="tag || 'h2'"
     :aria-label="field === 'title' && !active ? text : undefined"
     :data-text-field="field"
     :data-alignable="enabled ? 'text' : undefined"
@@ -177,6 +211,7 @@ onBeforeUnmount(() => finish())
       :format="format"
       :rich="rich"
       :heading="field !== 'text'"
+      :title-blocks="titleBlocks"
       :allow-links="!shortLabel"
       :max-length="shortLabel ? 80 : undefined"
       :label="
@@ -193,16 +228,17 @@ onBeforeUnmount(() => finish())
       @ready="editorReady = true"
     />
     <span v-show="!active || !editorReady" class="inline-display">
-    <WebsiteRichText
-      v-if="rich"
-      :value="rich"
-      :heading="field !== 'text'"
-      :preview="preview"
-      :fallback="text"
-    />
-    <template v-else-if="field !== 'text'">{{ text || (enabled ? 'Add heading' : '') }}</template>
-    <WebsiteText v-else-if="text" :text="text" :format="format" :preview="preview" />
-    <span v-else class="inline-placeholder">Add text</span>
+      <WebsiteRichText
+        v-if="rich"
+        :value="rich"
+        :heading="field !== 'text' && !blockTitle"
+        :title-blocks="titleBlocks"
+        :preview="preview"
+        :fallback="text"
+      />
+      <template v-else-if="field !== 'text'">{{ text || (enabled ? 'Add heading' : '') }}</template>
+      <WebsiteText v-else-if="text" :text="text" :format="format" :preview="preview" />
+      <span v-else class="inline-placeholder">Add text</span>
     </span>
     <WebsiteSelectionHandles
       v-if="box.selected.value && !active"
@@ -216,7 +252,18 @@ onBeforeUnmount(() => finish())
   </component>
 </template>
 <style scoped>
-.inline-display { display: contents; }
+.inline-display {
+  display: contents;
+}
+.title-blocks {
+  font-family: var(--widget-font, var(--site-heading-font, inherit));
+  font-size: var(--heading-size, clamp(1.5rem, 3cqw, 2.5rem));
+  font-weight: 700;
+  line-height: 1.15;
+}
+.title-blocks[data-title-tag='h1'] {
+  font-size: var(--heading-size, clamp(2rem, 5cqw, 4rem));
+}
 .inline-available {
   cursor: text;
   touch-action: auto;

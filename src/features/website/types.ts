@@ -56,6 +56,7 @@ export type SectionType =
   | 'sparkline'
   | 'data-table'
 export interface WidgetAppearance {
+  motion?: import('../../../functions/src/websiteMotion').WebsiteMotion
   background?: string
   color?: string
   borderColor?: string
@@ -73,7 +74,7 @@ export interface WidgetAppearance {
   marginLeft?: number
   fontSize?: number
   headingSize?: number
-  fontFamily?: 'sans' | 'serif' | 'mono'
+  fontFamily?: import('../../../functions/src/websiteFonts').WebsiteFont
   textAlign?: 'left' | 'center' | 'right'
   imageFit?: 'cover' | 'contain'
   opacity?: number

@@ -121,6 +121,7 @@ function select(id: string) {
     <Teleport to="body"
       ><dialog
         ref="dialog"
+        class="builder-controls builder-dialog image-library-dialog"
         aria-label="Website image library"
         data-selection-inspector
         @cancel.prevent="closeLibrary"
@@ -133,36 +134,50 @@ function select(id: string) {
           </div>
           <button type="button" aria-label="Close image library" @click="closeLibrary">×</button>
         </header>
-        <label
-          >Search loaded images<input v-model="search" type="search" placeholder="File name"
-        /></label>
-        <p v-if="libraryError" role="alert">
-          {{ libraryError }}
-          <button type="button" :disabled="loading" @click="loadImages">Try again</button>
-        </p>
-        <div class="image-grid">
-          <button
-            v-for="asset in filtered"
-            :key="asset.id"
-            type="button"
-            :aria-label="`Use ${asset.name}`"
-            @click="select(asset.id)"
-          >
-            <div class="library-thumb">
-              <WebsiteImage :id="asset.id" :alt="asset.name" preview thumbnail />
-            </div>
-            <span>{{ asset.name }}</span
-            ><small>{{ Math.max(1, Math.round(asset.size / 1024)) }} KB</small>
-          </button>
+        <div class="image-library-body">
+          <div class="image-library-search">
+            <label
+              >Search loaded images<input v-model="search" type="search" placeholder="File name"
+            /></label>
+            <button
+              v-if="search"
+              type="button"
+              aria-label="Clear image search"
+              @click="search = ''"
+            >
+              Clear
+            </button>
+          </div>
+          <p v-if="libraryError" role="alert">
+            {{ libraryError }}
+            <button type="button" :disabled="loading" @click="loadImages">Try again</button>
+          </p>
+          <div class="image-grid">
+            <button
+              v-for="asset in filtered"
+              :key="asset.id"
+              type="button"
+              :aria-label="`Use ${asset.name}`"
+              :aria-pressed="asset.id === imageId"
+              @click="select(asset.id)"
+            >
+              <div class="library-thumb">
+                <WebsiteImage :id="asset.id" :alt="asset.name" preview thumbnail />
+              </div>
+              <span>{{ asset.name }}</span
+              ><small>{{ Math.max(1, Math.round(asset.size / 1024)) }} KB</small>
+              <small v-if="asset.id === imageId">Current image</small>
+            </button>
+          </div>
+          <p v-if="loading" role="status">Loading images…</p>
+          <p v-else-if="!filtered.length && !libraryError">
+            {{
+              images.length
+                ? 'No matching loaded images.'
+                : 'No images yet. Close the library to upload your first image.'
+            }}
+          </p>
         </div>
-        <p v-if="loading" role="status">Loading images…</p>
-        <p v-else-if="!filtered.length && !libraryError">
-          {{
-            images.length
-              ? 'No matching loaded images.'
-              : 'No images yet. Close the library to upload your first image.'
-          }}
-        </p>
         <footer>
           <span>{{ images.length }} images loaded</span
           ><button v-if="cursor" type="button" :disabled="loading" @click="loadImages">

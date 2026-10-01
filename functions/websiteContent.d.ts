@@ -6,6 +6,9 @@ export interface ImageSettings {
     caption?: string;
     overlay?: string;
     overlayOpacity?: number;
+    overlayMode?: 'solid' | 'linear';
+    overlayAngle?: number;
+    darken?: number;
 }
 export interface MenuLabel {
     label: string;

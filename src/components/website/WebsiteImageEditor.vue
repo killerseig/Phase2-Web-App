@@ -3,6 +3,8 @@ import type { WebsiteItem } from '@/features/website/types'
 import type { ImageSettings } from '../../../functions/src/websiteContent'
 import WebsiteImage from './WebsiteImage.vue'
 import WebsiteImagePicker from './WebsiteImagePicker.vue'
+import WebsiteImageOverlay from './WebsiteImageOverlay.vue'
+import WebsiteOverlayControls from './WebsiteOverlayControls.vue'
 const props = defineProps<{
   item: WebsiteItem
   ratio: number
@@ -38,7 +40,7 @@ function arrow(event: KeyboardEvent) {
     [key]: Math.max(0, Math.min(100, (props.item.imageSettings?.[key] ?? 50) + delta)),
   })
 }
-function range(key: 'focusX' | 'focusY' | 'zoom', event: Event) {
+function range(key: 'focusX' | 'focusY' | 'zoom' | 'darken', event: Event) {
   settings({ ...props.item.imageSettings, [key]: Number((event.target as HTMLInputElement).value) })
 }
 </script>
@@ -65,7 +67,21 @@ function range(key: 'focusX' | 'focusY' | 'zoom', event: Event) {
             :contain="contain"
             :settings="item.imageSettings"
           />
+          <WebsiteImageOverlay :settings="item.imageSettings" />
         </div>
+        <label>
+          Darken image: {{ item.imageSettings?.darken ?? 0 }}%
+          <input
+            type="range"
+            aria-label="Darken image"
+            min="0"
+            max="100"
+            step="1"
+            :value="item.imageSettings?.darken ?? 0"
+            @input="range('darken', $event)"
+          />
+        </label>
+        <WebsiteOverlayControls :value="item.imageSettings" @update="settings" />
         <details>
           <summary>Crop and focal point</summary>
           <p>
@@ -179,6 +195,7 @@ button:disabled {
   cursor: default;
 }
 .focal-preview {
+  position: relative;
   overflow: hidden;
   background: var(--field);
   border-radius: 4px;

@@ -1,4 +1,6 @@
 import { safeWebsiteLink } from './websiteContent'
+import { textFonts } from './websiteFonts'
+export { textFonts } from './websiteFonts'
 
 // A deliberately bounded document schema shared by the editor, server and renderer.
 // Authored HTML, event handlers and arbitrary CSS are never stored or rendered.
@@ -9,17 +11,6 @@ export interface RichTextNode {
   marks?: { type: string; attrs?: Record<string, string | number> }[]
   content?: RichTextNode[]
 }
-export const textFonts = [
-  'Arial',
-  'Georgia',
-  'Times New Roman',
-  'Verdana',
-  'Trebuchet MS',
-  'Courier New',
-  'sans-serif',
-  'serif',
-  'monospace',
-]
 export const textSizes = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72, 96]
 export const lineHeights = [1, 1.2, 1.5, 1.8, 2, 2.5, 3]
 const blocks = [
@@ -85,7 +76,7 @@ export function mapRichTextLinks(node: RichTextNode | undefined, map: (href: str
     if (mark.type === 'link' && mark.attrs) mark.attrs.href = map(String(mark.attrs.href))
   for (const child of node.content || []) mapRichTextLinks(child, map)
 }
-export function validateRichText(value: unknown, heading = false): RichTextNode {
+export function validateRichText(value: unknown, heading: boolean | 'title' = false): RichTextNode {
   if (JSON.stringify(value).length > 100000)
     invalid('This text has too much formatting. Simplify it before saving.')
   let count = 0
@@ -217,7 +208,7 @@ export function validateRichText(value: unknown, heading = false): RichTextNode 
   }
   const doc = visit(value, '', 0)
   if (
-    heading &&
+    heading === true &&
     (doc.content?.length !== 1 ||
       doc.content[0]?.type !== 'paragraph' ||
       doc.content[0]?.content?.some((node) => node.type !== 'text'))
