@@ -335,6 +335,58 @@ try {
   )
   assert.equal((await db.collection('formSubmissions').get()).size, 1)
   assert.deepEqual((await db.doc('formSubmissions/' + submitted.id).get()).data(), frozen)
+  const basics = {
+    title: 'Basics',
+    description: '',
+    recipients: [],
+    fields: ['email', 'phone', 'time'].map((kind) => ({
+      id: kind,
+      kind,
+      label: kind,
+      required: true,
+      options: [],
+    })),
+  }
+  await template('admin', 'save', { id: 'basics', revision: 0, definition: basics })
+  await template('admin', 'issue', { id: 'basics', revision: 1 })
+  let basicRecord = await record(signed.uid, 'create', {
+    templateId: 'basics',
+    version: 1,
+    requestId: randomUUID(),
+  })
+  const valid = { email: 'employee@example.com', phone: '+1 (555) 010-0200', time: '14:30' }
+  for (const [field, value] of [
+    ['email', 'bad'],
+    ['phone', 'call-me'],
+    ['time', '25:00'],
+  ])
+    await reject(
+      () =>
+        record(signed.uid, 'save', {
+          id: basicRecord.id,
+          revision: basicRecord.revision,
+          requestId: randomUUID(),
+          answers: { ...valid, [field]: value },
+        }),
+      'invalid-argument',
+    )
+  basicRecord = await record(signed.uid, 'save', {
+    id: basicRecord.id,
+    revision: basicRecord.revision,
+    requestId: randomUUID(),
+    answers: valid,
+  })
+  assert.deepEqual((await record(signed.uid, 'get', { id: basicRecord.id })).answers, valid)
+  assert.equal(
+    (
+      await record(signed.uid, 'submit', {
+        id: basicRecord.id,
+        revision: basicRecord.revision,
+        requestId: randomUUID(),
+      })
+    ).status,
+    'submitted',
+  )
   console.log(
     JSON.stringify({
       passed: true,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from '@/layouts/AppShell.vue'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
@@ -24,7 +24,8 @@ const enabled = isFormServerEnabled(),
   error = ref(''),
   message = ref(''),
   previews = ref<Record<string, string>>({}),
-  pendingSubmission = ref('')
+  pendingSubmission = ref(''),
+  invalidField = ref('')
 const confirm = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const uid = computed(() => auth.currentUser?.uid || ''),
   templateId = computed(() => String(route.params.templateId || ''))
@@ -35,6 +36,9 @@ let sequence = 0
 let saveRequest = { signature: '', id: '' }
 const pendingKey = () => 'form-submit-request:v1:' + uid.value + ':' + record.value?.id
 function received(next: FormRecord) {
+  invalidField.value = ''
+  error.value = ''
+  message.value = ''
   record.value = next
   answers.value = structuredClone(next.answers)
   dirty.value = false
@@ -44,6 +48,7 @@ function received(next: FormRecord) {
   if (next.status === 'submitted') localStorage.removeItem(pendingKey())
 }
 function updateAnswers(value: FormAnswers) {
+  invalidField.value = ''
   answers.value = value
   dirty.value = true
 }
@@ -59,6 +64,7 @@ async function load() {
   error.value = ''
   pendingSubmission.value = ''
   message.value = ''
+  invalidField.value = ''
   if (!enabled || !owner) return
   busy.value = true
   try {
@@ -112,7 +118,12 @@ async function start() {
   } catch (caught) {
     if (generation === sequence) error.value = (caught as Error).message
   } finally {
-    if (generation === sequence) busy.value = false
+    if (generation === sequence) {
+      busy.value = false
+      await nextTick()
+      if (generation === sequence && invalidField.value)
+        document.getElementById('answer-' + invalidField.value)?.focus()
+    }
   }
 }
 async function resume(id: string) {
@@ -126,7 +137,12 @@ async function resume(id: string) {
   } catch (caught) {
     if (generation === sequence) error.value = (caught as Error).message
   } finally {
-    if (generation === sequence) busy.value = false
+    if (generation === sequence) {
+      busy.value = false
+      await nextTick()
+      if (generation === sequence && invalidField.value)
+        document.getElementById('answer-' + invalidField.value)?.focus()
+    }
   }
 }
 async function save(): Promise<boolean> {
@@ -155,7 +171,16 @@ async function save(): Promise<boolean> {
     error.value = ''
     return true
   } catch (caught) {
-    if (uid.value === owner && generation === sequence) error.value = (caught as Error).message
+    if (uid.value === owner && generation === sequence) {
+      error.value = (caught as Error).message
+      invalidField.value =
+        current.definition.fields.find(
+          (field) =>
+            error.value.startsWith(field.label + ':') || error.value.startsWith(field.label + ' '),
+        )?.id || ''
+      await nextTick()
+      if (generation === sequence) document.getElementById('answer-' + invalidField.value)?.focus()
+    }
     return false
   }
 }
@@ -166,7 +191,12 @@ async function saveClick() {
   try {
     await save()
   } finally {
-    if (generation === sequence) busy.value = false
+    if (generation === sequence) {
+      busy.value = false
+      await nextTick()
+      if (generation === sequence && invalidField.value)
+        document.getElementById('answer-' + invalidField.value)?.focus()
+    }
   }
 }
 async function submit() {
@@ -193,6 +223,15 @@ async function submit() {
     if (uid.value !== owner || generation !== sequence) return
     const problem = caught as Error & { code?: string }
     error.value = problem.message
+    invalidField.value =
+      record.value?.definition.fields.find(
+        (field) =>
+          problem.message.startsWith(field.label + ' ') ||
+          problem.message.startsWith(field.label + ':'),
+      )?.id || ''
+    await nextTick()
+    if (generation === sequence && invalidField.value)
+      document.getElementById('answer-' + invalidField.value)?.focus()
     if (
       problem.code?.includes('invalid-argument') ||
       problem.code?.includes('permission-denied') ||
@@ -202,7 +241,12 @@ async function submit() {
       pendingSubmission.value = ''
     }
   } finally {
-    if (generation === sequence) busy.value = false
+    if (generation === sequence) {
+      busy.value = false
+      await nextTick()
+      if (generation === sequence && invalidField.value)
+        document.getElementById('answer-' + invalidField.value)?.focus()
+    }
   }
 }
 async function upload(fieldId: string, files: File[]) {
@@ -222,7 +266,12 @@ async function upload(fieldId: string, files: File[]) {
   } catch (caught) {
     if (generation === sequence) error.value = (caught as Error).message
   } finally {
-    if (generation === sequence) busy.value = false
+    if (generation === sequence) {
+      busy.value = false
+      await nextTick()
+      if (generation === sequence && invalidField.value)
+        document.getElementById('answer-' + invalidField.value)?.focus()
+    }
   }
 }
 async function viewPhoto(id: string) {
@@ -258,7 +307,12 @@ async function retryEmail() {
   } catch (caught) {
     if (generation === sequence) error.value = (caught as Error).message
   } finally {
-    if (generation === sequence) busy.value = false
+    if (generation === sequence) {
+      busy.value = false
+      await nextTick()
+      if (generation === sequence && invalidField.value)
+        document.getElementById('answer-' + invalidField.value)?.focus()
+    }
   }
 }
 </script>
@@ -274,7 +328,7 @@ async function retryEmail() {
       <p v-if="!enabled" role="alert">
         Start the local Form Builder emulator profile to use durable drafts and submissions.
       </p>
-      <p v-if="error" role="alert">{{ error }}</p>
+      <p v-if="error" id="form-validation-message" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
       <button
         :disabled="busy || !selectedTemplate?.latestVersion || selectedTemplate.archived"
@@ -298,6 +352,7 @@ async function retryEmail() {
         <FormDefinitionFields
           :definition="record.definition"
           :model-value="answers"
+          :invalid-field="invalidField"
           :readonly="record.status === 'submitted' || !!pendingSubmission"
           :disabled="busy"
           photos-enabled
@@ -335,11 +390,17 @@ async function retryEmail() {
 </template>
 <style scoped>
 .response {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
   max-width: 52rem;
   margin: auto;
   padding: 1rem;
 }
 button {
+  max-width: 100%;
+  white-space: normal;
   padding: 0.65rem;
   margin: 0.4rem 0.4rem 0.4rem 0;
   border: 1px solid var(--border);

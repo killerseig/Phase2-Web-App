@@ -22,7 +22,17 @@ export interface FormLibrary {
   revision: number
   templates: FormTemplate[]
 }
-export const fieldKinds: FormFieldKind[] = ['text', 'textarea', 'date', 'number', 'choice', 'photo']
+export const fieldKinds: FormFieldKind[] = [
+  'text',
+  'textarea',
+  'email',
+  'phone',
+  'time',
+  'date',
+  'number',
+  'choice',
+  'photo',
+]
 export const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 export const emptyLibrary = (): FormLibrary => ({ schema: 1, revision: 0, templates: [] })
 export function newField(kind: FormFieldKind, label = 'New field'): FormField {

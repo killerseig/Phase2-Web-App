@@ -24,6 +24,11 @@ test('adverse rating needs notes and server rejection preserves answers', async 
   await page.getByLabel('First impression rating', { exact: false }).selectOption('Unsatisfactory')
   await page.getByRole('button', { name: 'Submit form', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('First impression notes is required')
+  await expect(page.getByLabel('First impression notes', { exact: false })).toBeFocused()
+  await expect(page.getByLabel('First impression notes', { exact: false })).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
   await expect(page.getByLabel('Job name', { exact: false })).toHaveValue('Synthetic Job name')
   expect(server.submitted).toBe(0)
   await page
@@ -75,16 +80,14 @@ test('photo attachment is retained on the draft and can be read through its reco
   const server = await setupFormServer(page)
   await page.getByRole('button', { name: 'Start draft', exact: true }).click()
   await page.getByLabel('Job name', { exact: false }).fill('Photo draft')
-  await page
-    .getByLabel('First impression photos', { exact: false })
-    .setInputFiles({
-      name: 'synthetic.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-        'base64',
-      ),
-    })
+  await page.getByLabel('First impression photos', { exact: false }).setInputFiles({
+    name: 'synthetic.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  })
   await page.getByRole('button', { name: 'View First impression photos', exact: true }).click()
   await expect(
     page.getByRole('img', { name: 'First impression photos', exact: true }),

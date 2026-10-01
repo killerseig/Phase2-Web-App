@@ -181,12 +181,12 @@ Reviewed official [Bootstrap Forms overview](https://getbootstrap.com/docs/5.3/f
 | Text / textarea | Implemented, bounded strings, conditional required notes | Preserve |
 | Number / date | Implemented, real-date and integer/minimum validation | Configurable number constraints |
 | Single select | Implemented with configured valid options | Radio presentation |
-| Email / phone / time | Missing dedicated palette controls | Add native input types and matching server validation |
+| Email / phone / time | Implemented in the follow-up local slice with native types/mobile input modes and shared server validation | Preserve and broaden international phone policy only if needed |
 | Checkbox / multiselect | Missing respondent controls | Add typed boolean and option arrays with required validation |
 | Photo upload | Implemented privately, bounded and record-scoped | Remove/detach interaction, email attachment policy |
 | Arbitrary file upload | Deferred | Requires file-type scanning/retention policy; photo support is not general-file support |
 | Switch / range | Deferred presentation variants | Use only where a meaningful boolean or numeric constraint is defined |
-| Labels / hints / required state | Visible labels/hints/stars implemented | Connect help and validation with ARIA, focus first invalid field |
+| Labels / hints / required state | Visible labels, connected ARIA help/required/error state, first-invalid focus after controls unlock | Extend error presentation as remaining controls are added |
 | Read-only / disabled | Submitted/pending confirmation and busy states lock controls | Improve readable submitted presentation |
 | Keyboard / phone behavior | Native controls, keyboard ordering, 390 px checked | Explicit palette roundtrip and mobile input tests |
 
@@ -242,3 +242,11 @@ JHA assistance needs its own workflow: task definition → relevant source selec
 Treat OSHA reference search, enforcement/inspection data, and company incident analytics as separate sources and features. Verify their usefulness and availability before selecting APIs. The copied Copilot advice is not a verified technical specification or an approved safety procedure.
 
 Toolbox talks, hazard recognition, incident trends, and training tracking remain in scope. Define their records, audiences, and review responsibilities during detailed design. Sensitive incident/personnel information must not flow automatically into general dashboards or the public website.
+
+### Follow-up practical controls and responsive validation
+
+The next local slice adds email, phone and minute-precision time controls to the same editor, retained definitions and respondent renderer. Email requires an address shape; phone accepts common punctuation with 7-15 digits (no extensions yet); time is HH:mm in 24-hour storage with the browser's local input presentation. Blank optional values stay blank; required values and malformed supplied values are checked on the server. Save/resume/submit and editor/preview roundtrips have explicit browser coverage. Password fields are excluded. PrimeVue remains installed at 4.5.5 and the main app stays in its existing unstyled/custom-CSS mode.
+
+The phone screenshot review exposed apparent content clipping after resize, so the response now explicitly constrains its width and wraps long buttons/text. Verification measures the actual scroll pane, not only document width, and checks submitted-state resizing from desktop to phone. Error focus is delayed until the busy fieldset unlocks; server validation remains authoritative. Checkbox/radio/multiselect are the next bounded control slice; arbitrary files, switches/ranges, photo email attachments and inline presentation remain deferred. No Forms release is included.
+
+Follow-up verification: 22/22 Forms Chromium checks, 9/9 model/navigation unit checks, 29 backend emulator rejection checks, real emulator history/photo/browser smoke, production build/typecheck/backend compilation, and affected ESLint with zero errors/warnings passed. These follow the earlier 150-test protected workflow run; no mature workflow code changed in this follow-up. Desktop/phone screenshots were reviewed after the response width correction. Local Forms is excluded from the production build and remains undeployed.

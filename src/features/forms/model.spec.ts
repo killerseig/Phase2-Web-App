@@ -8,6 +8,7 @@ import {
   removeOrArchive,
   definitionErrors,
 } from './model'
+import { validateFormAnswers } from '../../../functions/src/formModel'
 import { readLibrary, saveLibrary } from './localLibrary'
 function storage() {
   const data = new Map<string, string>()
@@ -66,6 +67,32 @@ describe('local Form Builder foundation', () => {
     expect(template.versions).toEqual([])
     template.recipients = ['dan@example.com']
     expect(definitionErrors(template)).toEqual([])
+  })
+  it('validates dedicated email, phone and minute-precision time controls', () => {
+    const definition = {
+      title: 'Basics',
+      description: '',
+      recipients: [],
+      fields: ['email', 'phone', 'time'].map((kind) => ({
+        id: kind,
+        kind: kind as 'email' | 'phone' | 'time',
+        label: kind,
+        required: true,
+        options: [],
+      })),
+    }
+    expect(definitionErrors(definition)).toEqual([])
+    const answers = { email: 'employee@example.com', phone: '+1 (555) 010-0200', time: '14:30' }
+    expect(validateFormAnswers(definition, answers, true)).toEqual(answers)
+    for (const [id, value] of [
+      ['email', 'not-an-email'],
+      ['phone', 'call-me'],
+      ['time', '25:00'],
+    ])
+      expect(() => validateFormAnswers(definition, { ...answers, [id!]: value }, false)).toThrow()
+    expect(() => validateFormAnswers(definition, { ...answers, email: '' }, true)).toThrow(
+      'email is required',
+    )
   })
   it('opening creates nothing, separates users and preserves saved revisions after reload', () => {
     const cache = storage()

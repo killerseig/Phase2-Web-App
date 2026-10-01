@@ -8,6 +8,9 @@ exports.respondentDefinition = respondentDefinition;
 exports.formFieldKinds = [
     'text',
     'textarea',
+    'email',
+    'phone',
+    'time',
     'date',
     'number',
     'choice',
@@ -149,6 +152,15 @@ function validateFormAnswers(definition, value, final) {
                 !Number.isFinite(Date.parse(normalized)) ||
                 new Date(normalized).toISOString().slice(0, 10) !== normalized))
             throw new Error(field.label + ': enter a valid date.');
+        if (field.kind === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
+            throw new Error(field.label + ': enter a valid email address.');
+        if (field.kind === 'phone' &&
+            (!/^\+?[0-9() .-]{7,40}$/.test(normalized) ||
+                normalized.replace(/\D/g, '').length < 7 ||
+                normalized.replace(/\D/g, '').length > 15))
+            throw new Error(field.label + ': enter a phone number with 7-15 digits.');
+        if (field.kind === 'time' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(normalized))
+            throw new Error(field.label + ': enter a valid time in HH:mm format.');
         answers[field.id] = normalized;
     }
     if (Object.values(answers).filter(Array.isArray).flat().length > 20)

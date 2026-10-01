@@ -12,6 +12,7 @@ withDefaults(
     disabled?: boolean
     photosEnabled?: boolean
     photoPreviews?: Record<string, string>
+    invalidField?: string
   }>(),
   { readonly: false, disabled: false, photosEnabled: false },
 )
@@ -42,19 +43,41 @@ function photos(id: string, event: Event) {
       <label :for="'answer-' + field.id"
         >{{ field.label }}<span v-if="isFieldRequired(field, modelValue)"> *</span></label
       >
-      <p v-if="field.hint" class="hint">{{ field.hint }}</p>
-      <p v-if="field.requiredWhen" class="hint">
+      <p v-if="field.hint" :id="'help-' + field.id" class="hint">{{ field.hint }}</p>
+      <p v-if="field.requiredWhen" :id="'condition-' + field.id" class="hint">
         Notes required for {{ field.requiredWhen.values.join(' or ') }}.
       </p>
       <textarea
         v-if="field.kind === 'textarea'"
         :id="'answer-' + field.id"
+        :aria-required="isFieldRequired(field, modelValue)"
+        :aria-invalid="invalidField === field.id || undefined"
+        :aria-describedby="
+          [
+            field.hint && 'help-' + field.id,
+            field.requiredWhen && 'condition-' + field.id,
+            invalidField === field.id && 'form-validation-message',
+          ]
+            .filter(Boolean)
+            .join(' ') || undefined
+        "
         :value="value(modelValue, field.id)"
         @input="set(modelValue, field.id, $event)"
       />
       <select
         v-else-if="field.kind === 'choice'"
         :id="'answer-' + field.id"
+        :aria-required="isFieldRequired(field, modelValue)"
+        :aria-invalid="invalidField === field.id || undefined"
+        :aria-describedby="
+          [
+            field.hint && 'help-' + field.id,
+            field.requiredWhen && 'condition-' + field.id,
+            invalidField === field.id && 'form-validation-message',
+          ]
+            .filter(Boolean)
+            .join(' ') || undefined
+        "
         :value="value(modelValue, field.id)"
         @change="set(modelValue, field.id, $event)"
       >
@@ -65,6 +88,17 @@ function photos(id: string, event: Event) {
         <input
           v-if="photosEnabled && !readonly"
           :id="'answer-' + field.id"
+          :aria-required="isFieldRequired(field, modelValue)"
+          :aria-invalid="invalidField === field.id || undefined"
+          :aria-describedby="
+            [
+              field.hint && 'help-' + field.id,
+              field.requiredWhen && 'condition-' + field.id,
+              invalidField === field.id && 'form-validation-message',
+            ]
+              .filter(Boolean)
+              .join(' ') || undefined
+          "
           type="file"
           accept="image/jpeg,image/png,image/webp"
           multiple
@@ -78,8 +112,28 @@ function photos(id: string, event: Event) {
       <input
         v-else
         :id="'answer-' + field.id"
+        :aria-required="isFieldRequired(field, modelValue)"
+        :aria-invalid="invalidField === field.id || undefined"
+        :aria-describedby="
+          [
+            field.hint && 'help-' + field.id,
+            field.requiredWhen && 'condition-' + field.id,
+            invalidField === field.id && 'form-validation-message',
+          ]
+            .filter(Boolean)
+            .join(' ') || undefined
+        "
         :value="value(modelValue, field.id)"
-        :type="field.kind"
+        :type="field.kind === 'phone' ? 'tel' : field.kind"
+        :inputmode="
+          field.kind === 'phone'
+            ? 'tel'
+            : field.kind === 'email'
+              ? 'email'
+              : field.kind === 'number'
+                ? 'decimal'
+                : undefined
+        "
         :min="field.minimum"
         :step="field.integer ? 1 : 'any'"
         @input="set(modelValue, field.id, $event)"

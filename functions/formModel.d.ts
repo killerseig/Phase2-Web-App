@@ -1,4 +1,4 @@
-export type FormFieldKind = 'text' | 'textarea' | 'date' | 'number' | 'choice' | 'photo';
+export type FormFieldKind = 'text' | 'textarea' | 'email' | 'phone' | 'time' | 'date' | 'number' | 'choice' | 'photo';
 export interface FormField {
     id: string;
     kind: FormFieldKind;

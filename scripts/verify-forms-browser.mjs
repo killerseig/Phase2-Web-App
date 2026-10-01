@@ -115,6 +115,32 @@ try {
     assert.ok(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
     )
+    const pane = await page
+      .locator('.app-shell__content')
+      .evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
+    if (pane.scroll > pane.client + 1)
+      console.log(
+        JSON.stringify(
+          await page.evaluate(() =>
+            [
+              ...document.querySelectorAll(
+                '.response,.app-shell__content,.form-fields,.form-field,input,select,textarea,h2,p,button',
+              ),
+            ]
+              .map((el) => ({
+                tag: el.tagName,
+                class: el.className,
+                width: el.getBoundingClientRect().width,
+                left: el.getBoundingClientRect().left,
+                scroll: el.scrollWidth,
+                client: el.clientWidth,
+              }))
+              .filter((el) => el.width > 360 || el.scroll > el.client + 1)
+              .slice(0, 15),
+          ),
+        ),
+      )
+    assert.ok(pane.scroll <= pane.client + 1, 'The actual form scroll pane must stay contained.')
     if (process.env.FORMS_SMOKE_ARTIFACTS)
       await page.screenshot({
         path: process.env.FORMS_SMOKE_ARTIFACTS + '/form-record-' + width + '.png',
