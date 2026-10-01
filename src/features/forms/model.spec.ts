@@ -8,7 +8,13 @@ import {
   removeOrArchive,
   definitionErrors,
 } from './model'
-import { validateFormAnswers } from '../../../functions/src/formModel'
+import {
+  validateFormAnswers,
+  validateFormDefinition,
+  attachedPhotoCount,
+  formAnswerSummary,
+  type FormDefinition,
+} from '../../../functions/src/formModel'
 import { readLibrary, saveLibrary } from './localLibrary'
 function storage() {
   const data = new Map<string, string>()
@@ -20,6 +26,77 @@ function storage() {
   }
 }
 describe('local Form Builder foundation', () => {
+  const choices: FormDefinition = {
+    title: 'Choices',
+    description: '',
+    recipients: [],
+    fields: [
+      { id: 'check', kind: 'checkbox', label: 'Confirm', required: true, options: [] },
+      { id: 'optional', kind: 'checkbox', label: 'Optional', required: false, options: [] },
+      { id: 'radio', kind: 'radio', label: 'Radio', required: true, options: ['North', 'South'] },
+      {
+        id: 'multi',
+        kind: 'multiselect',
+        label: 'Areas',
+        required: true,
+        options: Array.from({ length: 25 }, (_, i) => 'Area ' + i),
+      },
+    ],
+  }
+  it('persists booleans and array defaults, rejecting typed coercions and required false/empty values', () => {
+    expect(validateFormAnswers(choices, {}, false)).toEqual({
+      check: false,
+      optional: false,
+      radio: '',
+      multi: [],
+    })
+    expect(() => validateFormAnswers(choices, {}, true)).toThrow('Confirm is required')
+    for (const value of ['false', 0, null, []])
+      expect(() => validateFormAnswers(choices, { check: value }, false)).toThrow()
+    for (const value of ['Area 0', ['Area 0', 'Area 0'], ['unknown'], [false], null])
+      expect(() => validateFormAnswers(choices, { multi: value }, false)).toThrow()
+    expect(() => validateFormAnswers(choices, { check: true, radio: '', multi: [] }, true)).toThrow(
+      'Radio is required',
+    )
+    expect(() =>
+      validateFormAnswers(choices, { check: true, radio: 'North', multi: [] }, true),
+    ).toThrow('Areas is required')
+    const answers = validateFormAnswers(
+      choices,
+      { check: true, optional: false, radio: 'South', multi: ['Area 2', 'Area 0'] },
+      true,
+    )
+    expect(answers).toEqual({
+      check: true,
+      optional: false,
+      radio: 'South',
+      multi: ['Area 0', 'Area 2'],
+    })
+    const many = validateFormAnswers(
+      choices,
+      { check: true, radio: 'North', multi: choices.fields[3]!.options },
+      true,
+    )
+    expect(attachedPhotoCount(choices, many)).toBe(0)
+    expect(formAnswerSummary(choices.fields[1]!, false)).toBe('No')
+    expect(formAnswerSummary(choices.fields[0]!, true)).toBe('Yes')
+    expect(formAnswerSummary(choices.fields[3]!, answers.multi)).toBe('Area 0, Area 2')
+  })
+  it('keeps choice configuration immutable across retained versions and rejects invalid options', () => {
+    expect(validateFormDefinition(choices)).toEqual(choices)
+    const versioned = keepVersion({ ...choices, id: 'choices', archived: false, versions: [] })
+    versioned.fields[2]!.options = ['Later', 'Other']
+    expect(versioned.versions[0]!.fields[2]!.options).toEqual(['North', 'South'])
+    expect(() =>
+      validateFormDefinition({
+        ...choices,
+        fields: [{ ...choices.fields[2]!, options: ['same', 'same'] }],
+      }),
+    ).toThrow()
+    expect(() =>
+      validateFormDefinition({ ...choices, fields: [{ ...choices.fields[3]!, options: ['one'] }] }),
+    ).toThrow()
+  })
   it('retains immutable versions and archives versioned templates instead of deleting', () => {
     const original = committeeAudit()
     const issued = keepVersion(original)

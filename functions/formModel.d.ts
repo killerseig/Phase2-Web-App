@@ -1,4 +1,4 @@
-export type FormFieldKind = 'text' | 'textarea' | 'email' | 'phone' | 'time' | 'date' | 'number' | 'choice' | 'photo';
+export type FormFieldKind = 'text' | 'textarea' | 'email' | 'phone' | 'time' | 'date' | 'number' | 'choice' | 'checkbox' | 'radio' | 'multiselect' | 'photo';
 export interface FormField {
     id: string;
     kind: FormFieldKind;
@@ -24,7 +24,7 @@ export interface FormVersion extends FormDefinition {
     version: number;
     createdAt: string;
 }
-export type FormAnswers = Record<string, string | number | string[]>;
+export type FormAnswers = Record<string, string | number | boolean | string[]>;
 export interface FormRecord {
     id: string;
     ownerUid: string;
@@ -40,9 +40,12 @@ export interface FormRecord {
     emailStatus?: string;
 }
 export declare const formFieldKinds: FormFieldKind[];
+export declare const optionFieldKinds: FormFieldKind[];
 export declare const formId: (value: unknown) => value is string;
 export declare function validateFormDefinition(value: unknown): FormDefinition;
 export declare function isFieldRequired(field: FormField, answers: FormAnswers): boolean;
 export declare function validateFormAnswers(definition: FormDefinition, value: unknown, final: boolean): FormAnswers;
+export declare function attachedPhotoCount(definition: FormDefinition, answers: FormAnswers): number;
+export declare function formAnswerSummary(field: FormField, value: FormAnswers[string] | undefined): string;
 export declare function respondentDefinition(definition: FormVersion): FormVersion;
 //# sourceMappingURL=formModel.d.ts.map

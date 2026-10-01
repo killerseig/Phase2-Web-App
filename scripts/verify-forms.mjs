@@ -19,7 +19,7 @@ const require = createRequire(new URL('../functions/package.json', import.meta.u
 adminApp({ projectId, storageBucket: projectId + '.appspot.com' })
 const db = getFirestore(),
   { formTemplates, formWorkspace } = require('../functions/formFunctions.js'),
-  { deliverFormSubmission, formEmail } = require('../functions/formDelivery.js')
+  { deliverFormSubmission, formEmail, buildFormEmailHtml } = require('../functions/formDelivery.js')
 const template = (uid, action, data = {}) =>
     formTemplates.run({ auth: uid ? { uid } : undefined, data: { action, ...data } }),
   record = (uid, action, data = {}) =>
@@ -387,10 +387,196 @@ try {
     ).status,
     'submitted',
   )
+  const choices = {
+    title: 'Common choice controls',
+    description: '',
+    recipients: [],
+    fields: [
+      { id: 'ack', kind: 'checkbox', label: 'Acknowledgement', required: true, options: [] },
+      {
+        id: 'optional',
+        kind: 'checkbox',
+        label: 'Optional follow-up',
+        required: false,
+        options: [],
+      },
+      {
+        id: 'schedule',
+        kind: 'radio',
+        label: 'Schedule',
+        required: true,
+        options: ['Daily', 'Weekly'],
+      },
+      {
+        id: 'areas',
+        kind: 'multiselect',
+        label: 'Work areas',
+        required: true,
+        options: [
+          'North',
+          'South',
+          '<West&Co>',
+          ...Array.from({ length: 21 }, (_, i) => 'Area ' + i),
+        ],
+      },
+      {
+        id: 'extras',
+        kind: 'multiselect',
+        label: 'Optional areas',
+        required: false,
+        options: ['Office', 'Shop'],
+      },
+      { id: 'photo', kind: 'photo', label: 'Choice photos', required: false, options: [] },
+    ],
+  }
+  await reject(
+    () => template(signed.uid, 'save', { id: 'choices', revision: 0, definition: choices }),
+    'permission-denied',
+  )
+  await template('admin', 'save', { id: 'choices', revision: 0, definition: choices })
+  await template('admin', 'issue', { id: 'choices', revision: 1 })
+  let choiceRecord = await record(signed.uid, 'create', {
+    templateId: 'choices',
+    version: 1,
+    requestId: randomUUID(),
+  })
+  assert.deepEqual(choiceRecord.answers, {
+    ack: false,
+    optional: false,
+    schedule: '',
+    areas: [],
+    extras: [],
+    photo: [],
+  })
+  for (const [field, value] of [
+    ['ack', 'true'],
+    ['ack', 0],
+    ['optional', null],
+    ['schedule', ['Daily']],
+    ['schedule', 'Monthly'],
+    ['areas', 'North'],
+    ['areas', ['North', 'North']],
+    ['areas', ['Unknown']],
+    ['areas', [false]],
+  ])
+    await reject(
+      () =>
+        record(signed.uid, 'save', {
+          id: choiceRecord.id,
+          revision: choiceRecord.revision,
+          requestId: randomUUID(),
+          answers: { ...choiceRecord.answers, [field]: value },
+        }),
+      'invalid-argument',
+    )
+  for (const answers of [{}, { ack: true }, { ack: true, schedule: 'Daily' }]) {
+    choiceRecord = await record(signed.uid, 'save', {
+      id: choiceRecord.id,
+      revision: choiceRecord.revision,
+      requestId: randomUUID(),
+      answers,
+    })
+    await reject(
+      () =>
+        record(signed.uid, 'submit', {
+          id: choiceRecord.id,
+          revision: choiceRecord.revision,
+          requestId: randomUUID(),
+        }),
+      'invalid-argument',
+    )
+  }
+  choiceRecord = await record(signed.uid, 'save', {
+    id: choiceRecord.id,
+    revision: choiceRecord.revision,
+    requestId: randomUUID(),
+    answers: {
+      ack: true,
+      optional: false,
+      schedule: 'Daily',
+      areas: choices.fields[3].options.slice(0, 21),
+    },
+  })
+  // Twenty-one multiselect choices must not consume the independent photo allowance.
+  choiceRecord = await record(signed.uid, 'upload', {
+    id: choiceRecord.id,
+    revision: choiceRecord.revision,
+    fieldId: 'photo',
+    contentType: 'image/png',
+    base64: bytes.toString('base64'),
+  })
+  choiceRecord = await record(signed.uid, 'save', {
+    id: choiceRecord.id,
+    revision: choiceRecord.revision,
+    requestId: randomUUID(),
+    answers: { ...choiceRecord.answers, areas: ['South', 'North', '<West&Co>'] },
+  })
+  assert.deepEqual(choiceRecord.answers.areas, ['North', 'South', '<West&Co>'])
+  assert.equal(choiceRecord.answers.optional, false)
+  assert.deepEqual(choiceRecord.answers.extras, [])
+  assert.deepEqual(
+    (await record(signed.uid, 'get', { id: choiceRecord.id })).answers,
+    choiceRecord.answers,
+  )
+  await reject(
+    () =>
+      record('other', 'save', {
+        id: choiceRecord.id,
+        revision: choiceRecord.revision,
+        requestId: randomUUID(),
+        answers: choiceRecord.answers,
+      }),
+    'permission-denied',
+  )
+  await template('admin', 'save', {
+    id: 'choices',
+    revision: 2,
+    definition: {
+      ...choices,
+      title: 'Later choice controls',
+      fields: choices.fields.map((field) =>
+        field.id === 'schedule'
+          ? { ...field, options: ['Monthly', 'Yearly'] }
+          : field.id === 'areas'
+            ? { ...field, options: ['East', 'West'] }
+            : field,
+      ),
+    },
+  })
+  await template('admin', 'issue', { id: 'choices', revision: 3 })
+  choiceRecord = await record(signed.uid, 'submit', {
+    id: choiceRecord.id,
+    revision: choiceRecord.revision,
+    requestId: randomUUID(),
+  })
+  assert.equal(choiceRecord.templateVersion, 1)
+  assert.equal(choiceRecord.definition.title, 'Common choice controls')
+  assert.deepEqual(choiceRecord.answers.areas, ['North', 'South', '<West&Co>'])
+  const choiceSnapshot = (await db.doc('formSubmissions/' + choiceRecord.id).get()).data(),
+    html = buildFormEmailHtml(choiceSnapshot)
+  assert.match(html, /<h3>Acknowledgement<\/h3><p>Yes<\/p>/)
+  assert.match(html, /<h3>Optional follow-up<\/h3><p>No<\/p>/)
+  assert.match(html, /North, South, &lt;West&amp;Co&gt;/)
+  assert.match(html, /<h3>Optional areas<\/h3><p>No selections<\/p>/)
+  assert.ok(!html.includes(choiceRecord.answers.photo[0]))
+  assert.ok(!html.includes('<img'))
+  assert.ok(!html.includes('href='))
+  await template('admin', 'remove', { id: 'choices', revision: 4 })
+  assert.deepEqual(
+    (await record(signed.uid, 'get', { id: choiceRecord.id })).answers,
+    choiceRecord.answers,
+  )
+  assert.deepEqual(
+    (await db.doc('formSubmissions/' + choiceRecord.id).get()).data(),
+    choiceSnapshot,
+  )
   console.log(
     JSON.stringify({
       passed: true,
       sourceFields: 41,
+      commonChoiceControls: true,
+      choiceSnapshotsAndEmailSummary: true,
+      multiSelectDoesNotConsumePhotos: true,
       rejectionChecks: negatives,
       draftResume: true,
       stableCreateSaveSubmit: true,

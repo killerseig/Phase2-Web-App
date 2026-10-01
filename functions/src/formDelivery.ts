@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
 import { db } from './runtime'
-import { formId, type FormRecord } from './formModel'
+import { formId, formAnswerSummary, type FormRecord } from './formModel'
 import { buildCurrentFunctionUser } from './roleAccess'
 import { getGraphEmailSecrets } from './functionConfig'
 import { classifyEmailDeliveryError } from './emailDeliveryErrors'
@@ -16,6 +16,23 @@ const escape = (value: unknown) =>
     /[&<>"']/g,
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!,
   )
+export function buildFormEmailHtml(record: FormRecord): string {
+  return (
+    '<h1>' +
+    escape(record.definition.title) +
+    '</h1>' +
+    record.definition.fields
+      .map(
+        (field) =>
+          '<h3>' +
+          escape(field.label) +
+          '</h3><p>' +
+          escape(formAnswerSummary(field, record.answers[field.id])) +
+          '</p>',
+      )
+      .join('')
+  )
+}
 const provider: FormEmailAdapter = {
   enabled: () =>
     !process.env.FIRESTORE_EMULATOR_HOST && !process.env.FUNCTIONS_EMULATOR && isEmailEnabled(),
@@ -23,25 +40,7 @@ const provider: FormEmailAdapter = {
     await sendEmail({
       to: recipients,
       subject: record.definition.title,
-      html:
-        '<h1>' +
-        escape(record.definition.title) +
-        '</h1>' +
-        record.definition.fields
-          .map(
-            (field) =>
-              '<h3>' +
-              escape(field.label) +
-              '</h3><p>' +
-              escape(
-                field.kind === 'photo'
-                  ? String((record.answers[field.id] as string[]).length) +
-                      ' private photos retained in the authenticated record.'
-                  : record.answers[field.id],
-              ) +
-              '</p>',
-          )
-          .join(''),
+      html: buildFormEmailHtml(record),
     })
   },
 }

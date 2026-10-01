@@ -147,12 +147,95 @@ try {
         fullPage: true,
       })
   }
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto('http://127.0.0.1:5195/admin/forms')
+  await page.getByRole('button', { name: 'New form', exact: true }).click()
+  await page.getByLabel('Form title', { exact: true }).fill('Common choice control smoke')
+  for (const [kind, label, required] of [
+    ['checkbox', 'Acknowledgement', true],
+    ['checkbox', 'Optional follow-up', false],
+    ['radio', 'Schedule', true],
+    ['multiselect', 'Work areas', true],
+  ]) {
+    await page.getByRole('button', { name: 'Add ' + kind, exact: true }).click()
+    const field = page.getByLabel('Form editor').locator('article').last()
+    await field.getByLabel('Field label', { exact: true }).fill(label)
+    if (required) await field.getByLabel('Required', { exact: true }).check()
+    if (kind !== 'checkbox') await field.getByLabel('Options', { exact: true }).fill('North\nSouth')
+  }
+  const choiceIssuedResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/formTemplates') &&
+      response.request().method() === 'POST' &&
+      response.request().postDataJSON()?.data.action === 'issue',
+  )
+  await page.getByRole('button', { name: 'Issue local server version', exact: true }).click()
+  const choiceIssued = (await (await choiceIssuedResponse).json()).result
+  await page.goto('http://127.0.0.1:5195/forms/' + choiceIssued.id)
+  await page.getByRole('button', { name: 'Start draft', exact: true }).click()
+  const ack = page.getByRole('checkbox', { name: /Acknowledgement/ }),
+    optional = page.getByRole('checkbox', { name: 'Optional follow-up', exact: true })
+  await ack.focus()
+  await ack.press('Space')
+  assert.equal(await ack.isChecked(), true)
+  assert.equal(await optional.isChecked(), false)
+  const north = page.getByRole('radio', { name: 'North', exact: true })
+  await north.focus()
+  await north.press('ArrowDown')
+  assert.equal(await page.getByRole('radio', { name: 'South', exact: true }).isChecked(), true)
+  const combo = page.getByRole('combobox', { name: /Work areas/ })
+  await combo.focus()
+  await combo.press('ArrowDown')
+  await combo.press('Home')
+  await combo.press('Enter')
+  assert.equal(
+    await page.getByRole('option', { name: 'North', exact: true }).getAttribute('aria-selected'),
+    'true',
+  )
+  await combo.press('ArrowDown')
+  await combo.press('Enter')
+  assert.equal(
+    await page.getByRole('option', { name: 'South', exact: true }).getAttribute('aria-selected'),
+    'true',
+  )
+  await combo.press('Escape')
+  await page.getByRole('button', { name: 'Save progress', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: 'Progress saved' }).waitFor()
+  await page.reload()
+  await page.getByRole('button', { name: /Resume draft/ }).click()
+  assert.equal(await ack.isChecked(), true)
+  assert.equal(await optional.isChecked(), false)
+  assert.equal(await page.getByRole('radio', { name: 'South', exact: true }).isChecked(), true)
+  await page.getByRole('button', { name: 'Submit form', exact: true }).click()
+  await page.getByText('Record status: submitted', { exact: false }).waitFor()
+  assert.equal(await ack.isDisabled(), true)
+  assert.equal(await combo.isDisabled(), true)
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 })
+    if (width === 390)
+      await page.waitForFunction(
+        () => document.querySelector('.app-shell__sidebar').getBoundingClientRect().right <= 0,
+      )
+    await page.locator('.app-shell__content').evaluate((el) => (el.scrollTop = 0))
+    assert.ok(
+      await page
+        .locator('.app-shell__content')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+    )
+    if (process.env.FORMS_SMOKE_ARTIFACTS)
+      await page.screenshot({
+        path: process.env.FORMS_SMOKE_ARTIFACTS + '/form-choices-' + width + '.png',
+        fullPage: true,
+      })
+  }
   assert.deepEqual(errors, [])
   assert.deepEqual(externalWrites, [])
   console.log(
     JSON.stringify({
       passed: true,
       realEmulatorAuth: true,
+      realCommonChoiceControls: true,
+      choiceKeyboardAndDraftRoundtrip: true,
       restartHistory: process.env.FORMS_EXPECT_HISTORY === 'true',
       adminIssue: true,
       draftResume: true,

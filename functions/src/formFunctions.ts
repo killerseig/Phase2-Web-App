@@ -5,6 +5,7 @@ import { db, storageBucket } from './runtime'
 import { buildCurrentFunctionUser } from './roleAccess'
 import {
   formId,
+  attachedPhotoCount,
   respondentDefinition,
   validateFormAnswers,
   validateFormDefinition,
@@ -284,7 +285,7 @@ export const formWorkspace = onCall(
           const list = current.answers[String(data.fieldId)] as string[]
           if (
             list.length >= 5 ||
-            Object.values(current.answers).filter(Array.isArray).flat().length >= 20 ||
+            attachedPhotoCount(current.definition, current.answers) >= 20 ||
             Number((current as FormRecord & { uploadedCount?: number }).uploadedCount || 0) >= 40
           )
             fail('failed-precondition', 'The photo limit has been reached.')

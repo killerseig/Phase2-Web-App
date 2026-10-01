@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deliverFormEmail = exports.formEmail = void 0;
+exports.buildFormEmailHtml = buildFormEmailHtml;
 exports.deliverFormSubmission = deliverFormSubmission;
 const node_crypto_1 = require("node:crypto");
 const https_1 = require("firebase-functions/v2/https");
@@ -12,25 +13,25 @@ const functionConfig_1 = require("./functionConfig");
 const emailDeliveryErrors_1 = require("./emailDeliveryErrors");
 const emailService_1 = require("./emailService");
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+function buildFormEmailHtml(record) {
+    return ('<h1>' +
+        escape(record.definition.title) +
+        '</h1>' +
+        record.definition.fields
+            .map((field) => '<h3>' +
+            escape(field.label) +
+            '</h3><p>' +
+            escape((0, formModel_1.formAnswerSummary)(field, record.answers[field.id])) +
+            '</p>')
+            .join(''));
+}
 const provider = {
     enabled: () => !process.env.FIRESTORE_EMULATOR_HOST && !process.env.FUNCTIONS_EMULATOR && (0, emailService_1.isEmailEnabled)(),
     send: async (record, recipients) => {
         await (0, emailService_1.sendEmail)({
             to: recipients,
             subject: record.definition.title,
-            html: '<h1>' +
-                escape(record.definition.title) +
-                '</h1>' +
-                record.definition.fields
-                    .map((field) => '<h3>' +
-                    escape(field.label) +
-                    '</h3><p>' +
-                    escape(field.kind === 'photo'
-                        ? String(record.answers[field.id].length) +
-                            ' private photos retained in the authenticated record.'
-                        : record.answers[field.id]) +
-                    '</p>')
-                    .join(''),
+            html: buildFormEmailHtml(record),
         });
     },
 };

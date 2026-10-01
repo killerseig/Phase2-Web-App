@@ -236,7 +236,7 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
                     fail('failed-precondition', 'Submitted photos cannot be changed.');
                 const list = current.answers[String(data.fieldId)];
                 if (list.length >= 5 ||
-                    Object.values(current.answers).filter(Array.isArray).flat().length >= 20 ||
+                    (0, formModel_1.attachedPhotoCount)(current.definition, current.answers) >= 20 ||
                     Number(current.uploadedCount || 0) >= 40)
                     fail('failed-precondition', 'The photo limit has been reached.');
                 tx.create(assets.doc(assetId), {

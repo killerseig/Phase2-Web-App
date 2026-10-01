@@ -3,6 +3,7 @@ export interface FormEmailAdapter {
     enabled: () => boolean;
     send: (record: FormRecord, recipients: string[]) => Promise<void>;
 }
+export declare function buildFormEmailHtml(record: FormRecord): string;
 export declare function deliverFormSubmission(id: string, retry?: boolean, adapter?: FormEmailAdapter): Promise<void>;
 export declare const formEmail: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     emailStatus: any;

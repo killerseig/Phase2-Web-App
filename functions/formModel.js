@@ -1,9 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.formId = exports.formFieldKinds = void 0;
+exports.formId = exports.optionFieldKinds = exports.formFieldKinds = void 0;
 exports.validateFormDefinition = validateFormDefinition;
 exports.isFieldRequired = isFieldRequired;
 exports.validateFormAnswers = validateFormAnswers;
+exports.attachedPhotoCount = attachedPhotoCount;
+exports.formAnswerSummary = formAnswerSummary;
 exports.respondentDefinition = respondentDefinition;
 exports.formFieldKinds = [
     'text',
@@ -14,8 +16,12 @@ exports.formFieldKinds = [
     'date',
     'number',
     'choice',
+    'checkbox',
+    'radio',
+    'multiselect',
     'photo',
 ];
+exports.optionFieldKinds = ['choice', 'radio', 'multiselect'];
 const formId = (value) => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(value);
 exports.formId = formId;
 const text = (value, max, required = false) => {
@@ -52,14 +58,14 @@ function validateFormDefinition(value) {
         const options = field.options.map((value) => text(value, 160, true));
         if (options.length > 30 ||
             new Set(options).size !== options.length ||
-            (kind === 'choice' && options.length < 2))
+            (exports.optionFieldKinds.includes(kind) && options.length < 2))
             throw new Error('Choice fields need 2–30 different options.');
         const result = {
             id: field.id,
             kind,
             label: text(field.label, 160, true),
             required: field.required,
-            options: kind === 'choice' ? options : [],
+            options: exports.optionFieldKinds.includes(kind) ? options : [],
         };
         if (field.section !== undefined)
             result.section = text(field.section, 160);
@@ -94,7 +100,8 @@ function validateFormDefinition(value) {
     for (const field of fields)
         if (field.requiredWhen) {
             const rating = fields.find((item) => item.id === field.requiredWhen.fieldId);
-            if (rating?.kind !== 'choice' ||
+            if (!rating ||
+                !['choice', 'radio'].includes(rating.kind) ||
                 field.requiredWhen.values.some((value) => !rating.options.includes(value)))
                 throw new Error('Required notes must refer to a choice field and its valid values.');
         }
@@ -116,6 +123,26 @@ function validateFormAnswers(definition, value, final) {
         throw new Error('Unknown answer field.');
     for (const field of definition.fields) {
         const value = input[field.id];
+        if (field.kind === 'checkbox') {
+            if (value !== undefined && typeof value !== 'boolean')
+                throw new Error(field.label + ': use a checked or unchecked value.');
+            answers[field.id] = value === undefined ? false : value;
+            continue;
+        }
+        if (field.kind === 'multiselect') {
+            if (value === undefined)
+                answers[field.id] = [];
+            else {
+                if (!Array.isArray(value) ||
+                    value.length > field.options.length ||
+                    value.some((item) => typeof item !== 'string' || !field.options.includes(item)) ||
+                    new Set(value).size !== value.length)
+                    throw new Error(field.label + ': choose different listed options.');
+                // Selection order is immaterial; store the definition's order for stable save retries and summaries.
+                answers[field.id] = field.options.filter((option) => value.includes(option));
+            }
+            continue;
+        }
         if (field.kind === 'photo') {
             if (value === undefined)
                 answers[field.id] = [];
@@ -145,7 +172,7 @@ function validateFormAnswers(definition, value, final) {
             continue;
         }
         const normalized = text(value, field.kind === 'textarea' ? 10000 : 1000);
-        if (field.kind === 'choice' && !field.options.includes(normalized))
+        if (['choice', 'radio'].includes(field.kind) && !field.options.includes(normalized))
             throw new Error(field.label + ': choose a listed option.');
         if (field.kind === 'date' &&
             (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) ||
@@ -163,7 +190,7 @@ function validateFormAnswers(definition, value, final) {
             throw new Error(field.label + ': enter a valid time in HH:mm format.');
         answers[field.id] = normalized;
     }
-    if (Object.values(answers).filter(Array.isArray).flat().length > 20)
+    if (attachedPhotoCount(definition, answers) > 20)
         throw new Error('Select up to 20 photos per record.');
     if (JSON.stringify(answers).length > 80000)
         throw new Error('This form exceeds the answer size limit.');
@@ -172,9 +199,24 @@ function validateFormAnswers(definition, value, final) {
             if (isFieldRequired(field, answers) &&
                 (Array.isArray(answers[field.id])
                     ? !answers[field.id].length
-                    : answers[field.id] === ''))
+                    : answers[field.id] === '' || (field.kind === 'checkbox' && answers[field.id] !== true)))
                 throw new Error(field.label + ' is required.');
     return answers;
+}
+function attachedPhotoCount(definition, answers) {
+    return definition.fields
+        .filter((field) => field.kind === 'photo')
+        .reduce((count, field) => count + (Array.isArray(answers[field.id]) ? answers[field.id].length : 0), 0);
+}
+function formAnswerSummary(field, value) {
+    if (field.kind === 'checkbox')
+        return value === true ? 'Yes' : 'No';
+    if (field.kind === 'photo')
+        return (String(Array.isArray(value) ? value.length : 0) +
+            ' private photos retained in the authenticated record.');
+    if (field.kind === 'multiselect')
+        return Array.isArray(value) && value.length ? value.join(', ') : 'No selections';
+    return value === '' || value === undefined ? 'Not provided' : String(value);
 }
 function respondentDefinition(definition) {
     return {

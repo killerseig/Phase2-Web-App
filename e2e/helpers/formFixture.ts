@@ -11,6 +11,7 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 export async function setupFormServer(
   page: Page,
   options: {
+    definition?: FormDefinition
     lostCreate?: boolean
     lostSave?: boolean
     lostSubmit?: boolean
@@ -19,7 +20,10 @@ export async function setupFormServer(
 ) {
   const fixture = createJobsFixture(),
     owner = fixture.auth.user.uid
-  const definition = validateFormDefinition({ ...audit, recipients: ['audit@example.com'] })
+  const definition = validateFormDefinition({
+    ...(options.definition || audit),
+    recipients: ['audit@example.com'],
+  })
   const versions = new Map<number, FormVersion>([
     [1, { ...definition, version: 1, createdAt: '2026-10-01T00:00:00Z' }],
   ])
@@ -33,6 +37,15 @@ export async function setupFormServer(
     archived: false,
     records: new Map<string, FormRecord>(),
     delivery: new Map<string, string>(),
+    issueNextVersion(next: FormDefinition) {
+      context.definition = validateFormDefinition(next)
+      context.latestVersion++
+      versions.set(context.latestVersion, {
+        ...clone(context.definition),
+        version: context.latestVersion,
+        createdAt: new Date().toISOString(),
+      })
+    },
     saveRequests: [] as string[],
     submitRequests: [] as string[],
     actions: [] as string[],

@@ -1,4 +1,4 @@
-import { validateFormDefinition } from '../../../functions/src/formModel'
+import { validateFormDefinition, optionFieldKinds } from '../../../functions/src/formModel'
 import auditDefinition from '../../../functions/src/committeeAudit.json'
 import type {
   FormFieldKind,
@@ -12,6 +12,7 @@ export type {
   FormDefinition,
   FormVersion,
 } from '../../../functions/src/formModel'
+export { optionFieldKinds } from '../../../functions/src/formModel'
 export interface FormTemplate extends FormDefinition {
   id: string
   archived: boolean
@@ -31,6 +32,9 @@ export const fieldKinds: FormFieldKind[] = [
   'date',
   'number',
   'choice',
+  'checkbox',
+  'radio',
+  'multiselect',
   'photo',
 ]
 export const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -41,7 +45,7 @@ export function newField(kind: FormFieldKind, label = 'New field'): FormField {
     kind,
     label,
     required: false,
-    options: kind === 'choice' ? ['Yes', 'No'] : [],
+    options: optionFieldKinds.includes(kind) ? ['Yes', 'No'] : [],
   }
 }
 export function newTemplate(title = 'Untitled form'): FormTemplate {
@@ -75,7 +79,7 @@ export function definitionErrors(definition: FormDefinition): string[] {
     if (!field.label.trim() || field.label.length > 160 || !fieldKinds.includes(field.kind))
       errors.push('Every field needs a valid type and label of 1–160 characters.')
     if (
-      field.kind === 'choice' &&
+      optionFieldKinds.includes(field.kind) &&
       (field.options.length < 2 ||
         field.options.length > 30 ||
         field.options.some((option) => !option.trim()) ||

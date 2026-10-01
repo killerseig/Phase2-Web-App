@@ -14,6 +14,7 @@ import {
   duplicateTemplate,
   emptyLibrary,
   fieldKinds,
+  optionFieldKinds,
   keepVersion,
   moveField,
   newField,
@@ -382,7 +383,7 @@ const errors = computed(() => (draft.value ? definitionErrors(draft.value) : [])
                   <option v-for="kind in fieldKinds" :key="kind">{{ kind }}</option>
                 </select></label
               ><label><input v-model="field.required" type="checkbox" /> Required</label
-              ><label v-if="field.kind === 'choice'"
+              ><label v-if="optionFieldKinds.includes(field.kind)"
                 >Options<textarea
                   :value="field.options.join('\n')"
                   @input="field.options = ($event.target as HTMLTextAreaElement).value.split('\n')"
