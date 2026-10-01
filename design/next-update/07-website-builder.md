@@ -44,6 +44,16 @@ A clean release must include reviewed WebsiteCanvas/WebsiteBuilder/responsive/ty
 
 Before activating the starter, read the existing production draft/published state, identify exactly what would be replaced and obtain the separate content-replacement approval. Keep existing user edits and image records until that scope is confirmed. The nine-page local review is not a production publication authorization. Form Builder remains queued behind this release gate.
 
+### Release-readiness decision — October 1
+
+**HOLD: no Firebase deployment performed.** The pushed checkpoints are `4cb56fd` and `2080f8e`; the passing tests above exercised the normal working tree, not a self-contained committed release.
+
+The minimum missing release source includes untracked `src/features/website/phase2Site.ts`, `useWebsiteAutosave.ts`, `useWebsiteDraftSync.ts`, `editorHelp.ts`, `src/components/builder/`, `src/styles/website-builder.css` and `functions/src/websiteTypography.ts`, plus their modified renderer/schema/backend consumers. These files must be reviewed and included explicitly before the exact release can be validated. The shared Firestore chunking change in `vite.config.ts` remains outside the website-only checkpoint. Existing work remains preserved and unstaged.
+
+A read-only production `getPublishedWebsite` call returned HTTP 200 with `published: false`. This establishes absence of a public snapshot, not absence of a private draft. The private draft was not inspected or changed. The local nine-page generator has no production builder import action. Add an explicit owner import/review workflow, retain existing private content until replacement scope is approved, and configure Careers recipients before publication. App deployment and starter content activation remain separate operations.
+
+A limited pattern scan of 1,148 committed text files found no matching credential patterns and printed no values. It did not scan history or validate provider credentials. The older GitHub secret-scanning alert #1 remains unverified because the available connector does not expose its status; this is uncertainty, not evidence of an active exposed credential. No credentials were retrieved or rotated.
+
 ## Entry points
 
 - `/admin/website`: Website Builder in the Admin sidebar. Active Admin accounts only, enforced by navigation, route capability, and every editing callable. Other roles are redirected to Jobs and cannot call the backend directly.
