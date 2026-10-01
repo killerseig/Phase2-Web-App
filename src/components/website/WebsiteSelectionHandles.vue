@@ -1,5 +1,35 @@
 <script setup lang="ts">
 import { resizeDirections, type ResizeDirection } from '@/features/website/grid'
+import { onMounted, onBeforeUnmount, ref } from 'vue'
+
+const rotateButton = ref<HTMLElement>()
+const insetTop = ref(false)
+const insetLeft = ref(false)
+let observer: ResizeObserver | undefined
+function positionControls() {
+  const target = rotateButton.value?.parentElement
+  const viewport = target?.closest('.preview-viewport') as HTMLElement | null
+  if (!target || !viewport) return
+  const bounds = target.getBoundingClientRect()
+  const edge = viewport.getBoundingClientRect()
+  const scale = edge.width / viewport.offsetWidth
+  const padding = parseFloat(getComputedStyle(viewport).paddingTop) * scale
+  insetTop.value = bounds.top - edge.top - padding < 40 * scale
+  insetLeft.value = bounds.left - edge.left - padding < 6 * scale
+}
+onMounted(() => {
+  observer = new ResizeObserver(positionControls)
+  const target = rotateButton.value?.parentElement
+  if (target) observer.observe(target)
+  const viewport = target?.closest('.preview-viewport')
+  if (viewport) observer.observe(viewport)
+  window.addEventListener('scroll', positionControls, true)
+  positionControls()
+})
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  window.removeEventListener('scroll', positionControls, true)
+})
 defineProps<{ label: string; rotation?: number; snapped?: boolean }>()
 const emit = defineEmits<{
   drag: [event: PointerEvent, action: ResizeDirection | 'rotate']
@@ -12,7 +42,7 @@ const emit = defineEmits<{
     :key="direction"
     type="button"
     class="text-resize"
-    :class="`text-resize-${direction}`"
+    :class="[`text-resize-${direction}`, { 'inset-top': insetTop, 'inset-left': insetLeft }]"
     :aria-label="`Resize ${label} from ${direction}`"
     title="Drag to resize. Shift toggles proportions on corner handles."
     @pointerdown.stop.prevent="emit('drag', $event, direction)"
@@ -23,6 +53,8 @@ const emit = defineEmits<{
   <button
     type="button"
     class="text-rotate"
+    ref="rotateButton"
+    :class="{ 'inset-top': insetTop }"
     :aria-label="`Rotate ${label}`"
     title="Drag to rotate. Move slowly for precision; Alt bypasses snapping."
     @pointerdown.stop.prevent="emit('drag', $event, 'rotate')"
@@ -32,7 +64,11 @@ const emit = defineEmits<{
   >
     <i class="pi pi-refresh" aria-hidden="true" />
   </button>
-  <span v-if="rotation !== undefined" class="rotation-reading" role="status"
+  <span
+    v-if="rotation !== undefined"
+    class="rotation-reading"
+    :class="{ 'inset-top': insetTop }"
+    role="status"
     >{{ Math.round(rotation * 100) / 100 }}°{{ snapped ? ' · snapped' : '' }}</span
   >
 </template>
@@ -110,6 +146,29 @@ const emit = defineEmits<{
   width: 1px;
   background: #168bd4;
   pointer-events: none;
+}
+.text-rotate.inset-top {
+  top: 8px;
+  bottom: auto;
+  left: auto;
+  right: 8px;
+}
+.text-rotate.inset-top::after {
+  display: none;
+}
+.text-resize-top-left.inset-top,
+.text-resize-top.inset-top,
+.text-resize-top-right.inset-top {
+  top: 0;
+}
+.text-resize-top-left.inset-left,
+.text-resize-left.inset-left,
+.text-resize-bottom-left.inset-left {
+  left: 0;
+}
+.rotation-reading.inset-top {
+  top: 8px;
+  bottom: auto;
 }
 .rotation-reading {
   position: absolute;

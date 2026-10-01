@@ -6,7 +6,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { Plugin } from '@tiptap/pm/state'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { inlineDocument, inlineValue } from '@/features/website/inlineText'
 import { safeWebsiteLink } from '../../../functions/src/websiteContent'
 import {
@@ -26,11 +26,14 @@ const props = defineProps<{
   maxLength?: number
   label?: string
   linkSettings?: boolean
+  pending?: boolean
+  textStyle?: CSSProperties
 }>()
 const emit = defineEmits<{
   update: [text: string, format?: 'markdown', rich?: RichTextNode]
   done: [focus?: boolean]
   'link-settings': []
+  ready: []
 }>()
 const root = ref<HTMLElement>()
 const toolbar = ref<HTMLElement>()
@@ -115,6 +118,7 @@ const editor = new Editor({
       spellcheck: 'true',
     },
     handleKeyDown: (_view, event) => {
+      if (event.isComposing) return false
       if (
         event.key === 'Escape' ||
         (props.heading && event.key === 'Enter' && !event.isComposing)
@@ -354,6 +358,9 @@ onMounted(async () => {
   // EditorContent attaches its DOM on the next tick.
   await nextTick()
   if (editor.isDestroyed) return
+  emit('ready')
+  await nextTick()
+  if (editor.isDestroyed) return
   // Set selection and focus together; a deferred focus can overwrite a selection
   // made immediately after opening another field.
   editor.commands.setTextSelection(editor.state.doc.content.size)
@@ -385,7 +392,8 @@ onBeforeUnmount(() => {
   <div
     ref="root"
     class="inline-text-editor"
-    :class="{ 'heading-editor': heading }"
+    :style="textStyle"
+    :class="{ 'editor-pending': pending, 'heading-editor': heading, 'plain-editor': !rich && format !== 'markdown' }"
     @pointerdown.stop
     @click.stop
     @dblclick.stop
@@ -716,7 +724,9 @@ onBeforeUnmount(() => {
   touch-action: auto;
   cursor: text;
 }
+.editor-pending { position: absolute; visibility: hidden; pointer-events: none; }
 .inline-text-editor :deep(.tiptap) {
+  font-variant-ligatures: inherit;
   outline: none;
   min-height: 1em;
   white-space: pre-wrap;
@@ -727,8 +737,9 @@ onBeforeUnmount(() => {
   min-height: 1em;
 }
 .inline-text-editor :deep(p:last-child) {
-  margin-bottom: 0;
+  margin-bottom: 0.8rem;
 }
+.inline-text-editor.plain-editor:not(.heading-editor) :deep(.tiptap > p) { font: inherit; line-height: inherit; margin: 0; }
 .inline-text-editor :deep(h2),
 .inline-text-editor :deep(h3) {
   margin: 0.7rem 0;
@@ -737,7 +748,7 @@ onBeforeUnmount(() => {
   color: var(--website-accent);
   text-decoration: underline;
 }
-.heading-editor :deep(p) {
+.inline-text-editor.heading-editor :deep(.tiptap > p) {
   font: inherit;
   line-height: inherit;
   margin: 0;

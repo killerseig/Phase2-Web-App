@@ -1062,6 +1062,11 @@ function setZoom(value: number) {
   autoFit.value = false
   zoom.value = Math.max(0.1, Math.min(3, value))
 }
+function chooseDevice(value: WebsiteDevice) {
+  if (value === device.value) return
+  // Fit follows device changes; manual zoom remains unchanged until Fit is chosen.
+  device.value = value
+}
 function updateFit() {
   const scroller = previewScroller.value
   if (!autoFit.value || !scroller?.clientWidth || gridDraft.value) return
@@ -1071,15 +1076,26 @@ function updateFit() {
   const width = mobile.value ? deviceWidth[device.value] : canvasWidth.value
   zoom.value = Math.max(0.1, Math.min(1, available / width))
 }
+let fitFrame: number | undefined
+function scheduleFit() {
+  if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
+  fitFrame = requestAnimationFrame(() => {
+    fitFrame = undefined
+    updateFit()
+  })
+}
 watch(previewScroller, (element, _previous, onCleanup) => {
   if (!element) return
-  const observer = new ResizeObserver(updateFit)
+  const observer = new ResizeObserver(scheduleFit)
   observer.observe(element)
-  onCleanup(() => observer.disconnect())
+  onCleanup(() => {
+    observer.disconnect()
+    if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
+  })
 })
-watch([device, canvasWidth, gridDraft, activePane, selectedPage], async () => {
+watch([device, canvasWidth, gridDraft, activePane, selectedPage, editorMode, runningCode], async () => {
   await nextTick()
-  updateFit()
+  scheduleFit()
 })
 function commitGeometry(
   id: string,
@@ -2508,7 +2524,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
               <button
                 @click="fitView"
                 :aria-pressed="autoFit"
-                title="Fit page to canvas and follow panel resizing"
+                title="Fit the selected device to the workspace and follow device or panel changes. Manual zoom turns Fit off."
               >
                 Fit
               </button>
@@ -2528,7 +2544,7 @@ onBeforeRouteLeave(() => !uploading.value && !busy.value && canDiscard())
                 :aria-pressed="device === option"
                 :aria-label="option[0]!.toUpperCase() + option.slice(1)"
                 :title="`${option[0]!.toUpperCase() + option.slice(1)} preview`"
-                @click="device = option"
+                @click="chooseDevice(option)"
               >
                 <i
                   :class="[

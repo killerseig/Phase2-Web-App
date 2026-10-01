@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref, watch, nextTick } from 'vue'
+import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref, watch, nextTick, type CSSProperties } from 'vue'
 import {
   inlineEditingKey,
   navigationEditingKey,
@@ -13,7 +13,8 @@ import WebsiteSelectionHandles from './WebsiteSelectionHandles.vue'
 import WebsiteAlignmentGuides from './WebsiteAlignmentGuides.vue'
 import type { RichTextNode } from '../../../functions/src/websiteRichText'
 
-const InlineEditor = defineAsyncComponent(() => import('./WebsiteInlineEditor.vue'))
+const loadInlineEditor = () => import('./WebsiteInlineEditor.vue')
+const InlineEditor = defineAsyncComponent(loadInlineEditor)
 const props = defineProps<{
   id: string
   field: InlineTarget['field']
@@ -42,12 +43,40 @@ const active = computed(
     editing.active.value.key === props.targetKey,
 )
 const root = ref<HTMLElement>()
+const editorReady = ref(false)
+const editorTypography = ref<CSSProperties>({})
+watch(active, () => {
+  editorReady.value = false
+})
+
 const box = useTextBox(root, target)
 const hint = computed(() =>
   box.enabled.value ? 'Drag to move text · Double-click to edit' : 'Click to edit text',
 )
 function begin() {
-  if (enabled.value) editing?.begin(target.value)
+  if (!enabled.value) return
+  const display =
+    props.field === 'text'
+      ? root.value?.querySelector('.widget-text, .website-rich-text')
+      : root.value
+  if (display) {
+    const style = getComputedStyle(display)
+    editorTypography.value = {
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      fontStyle: style.fontStyle,
+      lineHeight: style.lineHeight,
+      letterSpacing: style.letterSpacing,
+      wordSpacing: style.wordSpacing,
+      textAlign: style.textAlign as CSSProperties['textAlign'],
+      maxWidth: style.maxWidth,
+      ...(!props.rich && props.format !== 'markdown' && props.field === 'text'
+        ? { margin: style.margin }
+        : {}),
+    }
+  }
+  editing?.begin(target.value)
 }
 let selectedOnPointerDown = false
 function pointerDown(event: PointerEvent) {
@@ -96,7 +125,8 @@ function finish(focus = false) {
 }
 watch(enabled, (value) => {
   if (!value) finish()
-})
+  else void loadInlineEditor().catch(() => undefined)
+}, { immediate: true })
 onBeforeUnmount(() => finish())
 </script>
 <template>
@@ -141,6 +171,8 @@ onBeforeUnmount(() => finish())
   >
     <InlineEditor
       v-if="active"
+      :pending="!editorReady"
+      :text-style="editorTypography"
       :text="text"
       :format="format"
       :rich="rich"
@@ -158,9 +190,11 @@ onBeforeUnmount(() => finish())
       @link-settings="field === 'menu' ? editMenu?.(id, targetKey || '') : editItem?.(target)"
       @update="(text, format, rich) => editing?.update(target, text, format, rich)"
       @done="finish"
+      @ready="editorReady = true"
     />
+    <span v-show="!active || !editorReady" class="inline-display">
     <WebsiteRichText
-      v-else-if="rich"
+      v-if="rich"
       :value="rich"
       :heading="field !== 'text'"
       :preview="preview"
@@ -169,6 +203,7 @@ onBeforeUnmount(() => finish())
     <template v-else-if="field !== 'text'">{{ text || (enabled ? 'Add heading' : '') }}</template>
     <WebsiteText v-else-if="text" :text="text" :format="format" :preview="preview" />
     <span v-else class="inline-placeholder">Add text</span>
+    </span>
     <WebsiteSelectionHandles
       v-if="box.selected.value && !active"
       label="text"
@@ -181,6 +216,7 @@ onBeforeUnmount(() => finish())
   </component>
 </template>
 <style scoped>
+.inline-display { display: contents; }
 .inline-available {
   cursor: text;
   touch-action: auto;

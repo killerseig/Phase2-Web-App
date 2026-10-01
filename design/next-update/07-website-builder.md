@@ -1,12 +1,26 @@
 # Website Builder: first milestone
 
-Implemented locally; updated September 19, 2026. Not deployed or announced.
+Implemented locally; updated October 1, 2026. Not deployed or announced.
+
+## October 1 working-checkout verification
+
+The normal `Phase2-Web-App` checkout is the development source of truth. `npm run dev` serves these source edits; tests may use an isolated copy. The synthetic-data review at port 5188 also reads the normal checkout's source, with website services replaced by a local draft adapter and production publishing disabled. Port 5173 is normal development and can use the configured Firebase project; do not treat it as a production-isolated environment.
+
+Fit is on when entering the editor, follows Desktop/Tablet/Phone and Content/Design/Code changes, and recalculates after Vue DOM updates and pane resizing. Only an explicit manual zoom opts out. All three modes use Content's small central-pane gutters. Edge text controls move inward when required to stay reachable.
+
+Inline display text remains visible while the lazy editor attaches. A ready event switches display/editor visibility before focus, using `nextTick`; displayed typography is retained and heading paragraph rules override body-theme defaults. Heading/body glyph bounds and layout height were measured across repeated enter/exit cycles, with frame sampling for empty renders. Selection, formatting, literal paste, phone toolbars and undo regressions also passed.
+
+Current normal-checkout revalidation (October 1): TypeScript and 34 focused unit tests passed. Eight preview/Fit Chromium scenarios passed, plus eight inline toolbar/selection/paste/undo scenarios and one IME Escape scenario. One contenteditable fill test initially appended text; keyboard selection/replacement passed and now models the real editing interaction. All nine pages rendered with loaded images and no horizontal overflow at 1440 and 390 pixels; current screenshots were captured in task-3/visual. This verifies the working tree, including its preserved pre-existing uncommitted dependencies. Vite logged ResizeObserver loop warnings during parity tests; assertions passed. The production Vite bundle also passed; output was isolated in task-3/build without deployment.
+
+Git checkpoint scope is deliberately narrower than the full existing dirty Website Builder work: the attributed inline readiness/typography, Fit scheduling/device picker, edge controls, polish module and documentation are versioned. The current fixed-height preview and starter-site integration also rely on pre-existing uncommitted canvas/builder/schema files; preserve those files and review them before producing a clean deployment checkout. Do not bulk-stage them as part of this fix.
+
+Vue choices follow [DOM-flush timing](https://vuejs.org/api/general.html#nexttick), [conditional rendering](https://vuejs.org/guide/essentials/conditional.html), and [async components](https://vuejs.org/guide/components/async.html): `v-show` keeps the display fallback mounted, `v-if` creates only the active rich editor, and lifecycle cleanup disconnects observers/listeners. A browser animation frame after DOM flush is used for fit measurement; this supplements Vue's DOM timing with container layout timing.
 
 ## Entry points
 
 - `/admin/website`: Website Builder in the Admin sidebar. Active Admin accounts only, enforced by navigation, route capability, and every editing callable. Other roles are redirected to Jobs and cannot call the backend directly.
-- `/website`: published homepage. `/website/{slug}`: published pages, accessible without signing in. Employee Login links to the existing app.
-- Existing root/login behavior, Jobs pages, and hidden Personal/Role dashboard links remain unchanged. Moving the public site to a production domain or the root URL is a later launch decision.
+- `/` and `/website`: public homepage. `/website/{slug}`: public pages, accessible without signing in. Employee Login links to `/login`; authenticated workspace redirects accept only known backoffice routes.
+- Jobs pages and hidden Personal/Role dashboard links remain unchanged. Production launch and domain changes remain separate manual actions.
 
 ## Editor
 
