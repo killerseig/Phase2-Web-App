@@ -1,6 +1,8 @@
 # Website Builder: first milestone
 
-Website milestone verified October 1, 2026 with a complete isolated release candidate and explicit owner starter import. Deployment is manual and production content activation remains separate. Form Builder has not started.
+Website code milestone deployed and verified October 1, 2026 at 19:49 UTC from commit 2fa3e493db028d6a37f1555a1a77990efdcd7551. Hosting version 93ef3982169778a9, release 1790884180642000, is live at https://phase2-website.web.app. All three scoped website functions are ACTIVE: websitebuilder-00004-pej, getpublishedwebsite-00004-fuz, websiteimage-00004-bet. Private draft content/update time and the absent published snapshot/public form configuration are unchanged; all 45 unrelated function revisions are unchanged. Live index matches the tested bundle; public fallback/login, six protected entrypoint redirects and five workflow assets passed without page errors or production test writes. Authenticated mature workflows were tested earlier with synthetic fixtures, not live production submissions. Rollback Hosting version: 98e09c75d718273d; prior function revisions: websitebuilder-00003-rar, getpublishedwebsite-00003-gof, websiteimage-00003-dez.
+
+Initial deployment approval review rejected the earlier scope; fresh direct owner approval resolved it. Deployment was limited to Hosting and websiteBuilder/getPublishedWebsite/websiteImage. No security rules, DNS, credentials, unrelated functions or content were deployed. Owner Review nine-page starter → Save draft → Publish remains separate; company copy/photos are an intentional later handoff, and Careers remains hidden until configured. Local Form Builder development now starts in the existing report-builder design below.
 
 ## October 1 working-checkout verification
 
@@ -44,7 +46,7 @@ The dependency boundary has now been traced, reviewed per file and isolated from
 
 For the website code release, use a clean checkout of this completed checkpoint with the existing public Firebase web configuration, install both lockfiles, run `npm run build`, and use `node scripts/deploy.mjs --project phase2-website --only hosting,functions:websiteBuilder,functions:getPublishedWebsite,functions:websiteImage`. This is the scoped manual path, not a command already executed. Exclude Firestore/Storage rules, other Functions, DNS and credentials. Frontend and website validators must move together so richer formatting/fonts survive saves. Retain the recorded live Hosting version and capture pre-release website Function revision metadata before deployment. Do not deploy from the dirty normal checkout.
 
-Before activating the starter, read the existing production draft/published state, identify exactly what would be replaced and obtain the separate content-replacement approval. Keep existing user edits and image records until that scope is confirmed. The nine-page local review is not a production publication authorization. Form Builder remains queued behind this release gate.
+Before activating the starter, read the existing production draft/published state, identify exactly what would be replaced and obtain the separate content-replacement approval. Keep existing user edits and image records until that scope is confirmed. The nine-page local review is not a production publication authorization. This historical gate is resolved for code deployment; the verified release above preserves content. Form Builder local work now proceeds while owner content activation remains separate.
 
 ### Earlier release hold — resolved by local integration
 

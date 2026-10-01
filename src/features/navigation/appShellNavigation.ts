@@ -29,7 +29,8 @@ export function getAppShellWorkspaceNavigationItems(): AppShellNavigationItem[] 
 }
 
 export function getAppShellAdminNavigationItems(rawRole: RawRoleKey): AppShellNavigationItem[] {
-  return ADMIN_NAVIGATION_ITEMS.filter((item) => (
+  const items: readonly AppShellNavigationItem[] = import.meta.env.DEV ? [{ capability: 'manage-website', label: 'Form Builder', to: '/admin/forms' }, ...ADMIN_NAVIGATION_ITEMS] : ADMIN_NAVIGATION_ITEMS
+  return items.filter((item) => (
     !item.capability || canUseRouteCapability(rawRole, item.capability)
   ))
 }

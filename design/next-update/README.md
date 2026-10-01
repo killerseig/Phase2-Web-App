@@ -6,7 +6,7 @@ The next phase includes **all requests collected from the stakeholder emails and
 
 ## Start here: October 1 website checkpoint
 
-Read the working-checkout verification, visual review and production release gate in [Website Builder milestone](07-website-builder.md) first. Fit/inline editing and the nine-page editable starter have passed current local checks. Website-only Firebase deployment is authorized but held until the reviewed release includes its dependencies without the unstaged shared Firestore bundling change, and production content activation is scoped. Existing daily logs, shop orders, timecards and user management are protected acceptance gates. Form Builder is the next authorized local project after verified website release; it has not started.
+Read the working-checkout verification, visual review and production release gate in [Website Builder milestone](07-website-builder.md) first. Fit/inline editing and the nine-page editable starter have passed current local checks. Website code release 1790884180642000 (Hosting version 93ef3982169778a9) is deployed and verified. Existing private/public content and 45 unrelated function revisions are unchanged; owner content Review/Save/Publish is a separate action. Existing daily logs, shop orders, timecards and user management are protected acceptance gates. Form Builder local implementation has begun; read the Report builder section in [workspace design](03-workspace-design.md) for the bounded first slice and remaining backend work.
 
 ## Reading order
 

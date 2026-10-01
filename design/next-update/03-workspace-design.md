@@ -142,7 +142,19 @@ Site visit acceptance: an authorized PM/superintendent can complete the agreed s
 
 ## Report builder
 
-Two interpretations must be resolved before detailed implementation:
+### October 1 confirmed direction and local implementation
+
+The owner selected an admin-facing Form Builder: a separate admin tab with a form library, create/rename/duplicate/edit/remove actions, and archive instead of deleting templates already used or versioned. Select a form to edit it with drag/drop plus keyboard ordering, reusing Website Builder controls. Recipients are configurable. Full-page presentation comes first; later inline presentation must use the same definition and rendering component. Dan’s committee audit is the first example; starter prompts are provisional until his actual form is supplied. Existing daily logs, shop orders, timecards and user management remain independent and unchanged. Dashboard Builder follows later.
+
+The first bounded local slice is a development-only authenticated/admin library and field editor, browser-local explicit draft saves, retained immutable template versions, validated recipient/field configuration, full-page preview, and committee audit starter. Browser saves are scoped to the authenticated user, detect stale local revisions and surface quota/corrupt-data failures; merely opening the library creates nothing. This slice performs no Firebase writes or email sending and is not a production submission store.
+
+Verified first-slice checkpoint: 91/91 Chromium browser scenarios passed (11 Form Builder CRUD/failure/validation/desktop/phone checks plus 80 protected workflow/login checks), 8/8 focused model/navigation unit tests passed, final typecheck passed, and the production build passed with Form Builder excluded by the development guard. Desktop editor and phone full-page preview screenshots were visually reviewed. The first fixture-server run had a source-alias error; follow-up checks exposed native drag-transfer handling and a formatted inline Vue expression that prevented development compilation. Both were corrected, and the final complete 91-test run passed. Final ESLint reports zero errors and zero warnings. No Forms backend, photo uploads, emails, respondent submissions or production Form Builder release is claimed. User edits on this device require explicit Save local draft; refreshing an unsaved editor does not create a durable submission. The route temporarily reuses the existing admin-only manage-website gate during local development; the next backend slice must define and verify its own template/respondent permissions.
+
+Next backend slice: admin-only template APIs with conflict/version checks; immutable issued versions; authenticated respondent drafts; required-field and photo validation; bounded Storage attachments; idempotent submissions that durably retain template version, answers and photo references before any email attempt. Delivery state is a separate record and must never erase/fail an already durable submission. Used templates are archived, never deleted. No new production rules or functions are deployed as part of this local slice.
+
+Acceptance checks require meaningful Playwright coverage for CRUD, saved/reloaded edits, drag/keyboard ordering, preview validation, interrupted and failed save, repeated actions, archived/versioned preservation and denied non-admin access, plus affected navigation/access-control regressions. Production records, recipients and email are excluded from testing.
+
+The earlier interpretations below are retained as planning history; the owner has now selected option 2:
 
 1. Reusable developer-built templates for reports similar to daily logs.
 2. An admin-facing builder that creates and publishes templates without code.

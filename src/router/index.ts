@@ -30,6 +30,7 @@ function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    ...(import.meta.env.DEV ? [{ path: '/admin/forms', name: 'form-builder', component: () => import('@/views/FormBuilderView.vue'), meta: { title: 'Form Builder', requiredCapability: 'manage-website' } }] : []),
     {
       path: '/admin/website',
       name: 'website-builder',

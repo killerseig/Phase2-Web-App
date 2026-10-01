@@ -14,6 +14,7 @@ describe('app shell navigation policy', () => {
 
   it('shows the current admin navigation only when the role can use each route capability', () => {
     expect(getAppShellAdminNavigationItems('admin')).toEqual([
+      { capability: 'manage-website', label: 'Form Builder', to: '/admin/forms' },
       { capability: 'manage-website', label: 'Website Builder', to: '/admin/website' },
       { capability: 'manage-users', label: 'Users', to: '/users' },
       { capability: 'manage-employees', label: 'Employees', to: '/employees' },
