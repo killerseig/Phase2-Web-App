@@ -4,6 +4,10 @@ Design and implementation record · September 14, 2026
 
 The next phase includes **all requests collected from the stakeholder emails and planning conversation**. General and job-specific SDS access is the first feature priority. The user subsequently authorized first-phase implementation. These documents do not establish delivery dates or remove later work from scope; see the implementation record for what is built versus still proposed.
 
+## Start here: October 1 website checkpoint
+
+Read the working-checkout verification, visual review and production release gate in [Website Builder milestone](07-website-builder.md) first. Fit/inline editing and the nine-page editable starter have passed current local checks. Website-only Firebase deployment is authorized but held until the reviewed release includes its dependencies without the unstaged shared Firestore bundling change, and production content activation is scoped. Existing daily logs, shop orders, timecards and user management are protected acceptance gates. Form Builder is the next authorized local project after verified website release; it has not started.
+
 ## Reading order
 
 | Document | Purpose |

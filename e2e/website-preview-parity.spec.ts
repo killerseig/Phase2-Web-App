@@ -691,3 +691,35 @@ test('IME composition keeps Escape inside the active inline editor', async ({ pa
   await editor.press('Escape')
   await expect(editor).toHaveCount(0)
 })
+
+for (const width of [1440, 820, 390]) {
+  test(`editable starter-site visual review across all nine pages at ${width}px`, async ({ page }, testInfo) => {
+    const draft = fixture()
+    await mockWebsite(page, draft)
+    await page.setViewportSize({ width, height: 950 })
+    await gotoPhase2App(page, '/website', createJobsFixture())
+    for (const entry of draft.pages) {
+      await page.goto(entry.slug === 'home' ? '/' : `/website/${entry.slug}`)
+      await expect(page.locator('.public-website').getByRole('heading', { level: 1 })).toBeVisible()
+      await page.evaluate(() => document.fonts.ready)
+      for (const img of await page.locator('.public-website img').all()) {
+        await img.scrollIntoViewIfNeeded()
+        await expect.poll(() => img.evaluate((el: HTMLImageElement) =>
+          el.complete && el.naturalWidth > 0)).toBe(true)
+      }
+      await expect.poll(() => page.evaluate(() =>
+        document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+      if (width === 820) {
+        for (const group of await page.locator('.custom-card-trio').all()) {
+          const cards = await group.locator('.custom-detail-card').evaluateAll((elements) =>
+            elements.map((el) => ({ y: el.getBoundingClientRect().y, width: el.getBoundingClientRect().width })))
+          expect(cards).toHaveLength(3)
+          expect(Math.max(...cards.map((card) => card.y)) - Math.min(...cards.map((card) => card.y))).toBeLessThan(1)
+          expect(cards.every((card) => card.width > 200)).toBe(true)
+        }
+      }
+      await page.evaluate(() => window.scrollTo(0, 0))
+      await page.screenshot({ path: testInfo.outputPath(`${entry.slug}-${width}.png`), fullPage: true, animations: 'disabled' })
+    }
+  })
+}

@@ -1,6 +1,6 @@
 # Website Builder: first milestone
 
-Implemented locally; updated October 1, 2026. Not deployed or announced.
+Local website refinement verified October 1, 2026. Production release remains held at the boundaries below; Form Builder has not started.
 
 ## October 1 working-checkout verification
 
@@ -10,11 +10,39 @@ Fit is on when entering the editor, follows Desktop/Tablet/Phone and Content/Des
 
 Inline display text remains visible while the lazy editor attaches. A ready event switches display/editor visibility before focus, using `nextTick`; displayed typography is retained and heading paragraph rules override body-theme defaults. Heading/body glyph bounds and layout height were measured across repeated enter/exit cycles, with frame sampling for empty renders. Selection, formatting, literal paste, phone toolbars and undo regressions also passed.
 
-Current normal-checkout revalidation (October 1): TypeScript and 34 focused unit tests passed. Eight preview/Fit Chromium scenarios passed, plus eight inline toolbar/selection/paste/undo scenarios and one IME Escape scenario. One contenteditable fill test initially appended text; keyboard selection/replacement passed and now models the real editing interaction. All nine pages rendered with loaded images and no horizontal overflow at 1440 and 390 pixels; current screenshots were captured in task-3/visual. This verifies the working tree, including its preserved pre-existing uncommitted dependencies. Vite logged ResizeObserver loop warnings during parity tests; assertions passed. The production Vite bundle also passed; output was isolated in task-3/build without deployment.
+Final normal-checkout revalidation (October 1): all 37 focused unit tests and all 12 combined website Chromium regressions passed after the last refinements. The browser suite covers Fit, device/mode/edit/resize changes, manual zoom, edge controls, inline geometry without blank frames, IME Escape and preview/public parity. Three visual-review scenarios capture all nine generated starter pages at 1440, 820 and 390 pixels (27 screenshots), checking images, overflow and balanced tablet card geometry. Eight additional inline toolbar/selection/paste/undo scenarios passed across their final runs. TypeScript and the production Vite bundle passed. Existing contenteditable fill interactions were corrected to keyboard selection/replacement; their rechecks passed. Vite logged ResizeObserver loop warnings during parity checks; assertions passed. This verifies the normal working tree, including preserved pre-existing uncommitted dependencies, rather than a clean deployment checkout.
 
 Git checkpoint scope is deliberately narrower than the full existing dirty Website Builder work: the attributed inline readiness/typography, Fit scheduling/device picker, edge controls, polish module and documentation are versioned. The current fixed-height preview and starter-site integration also rely on pre-existing uncommitted canvas/builder/schema files; preserve those files and review them before producing a clean deployment checkout. Do not bulk-stage them as part of this fix.
 
 Vue choices follow [DOM-flush timing](https://vuejs.org/api/general.html#nexttick), [conditional rendering](https://vuejs.org/guide/essentials/conditional.html), and [async components](https://vuejs.org/guide/components/async.html): `v-show` keeps the display fallback mounted, `v-if` creates only the active rich editor, and lifecycle cleanup disconnects observers/listeners. A browser animation frame after DOM flush is used for fit measurement; this supplements Vue's DOM timing with container layout timing.
+
+## Visual review and owner workflow
+
+The starter is composed of ordinary editable widgets. The design uses a dark ink/white/warm-paper rhythm, condensed display headings with readable body text, consistent image crops, restrained blue accents and clear primary/link CTA hierarchy. The reviewed refinements balance three-card groups in one tablet row, prevent careers CTA arrows wrapping on tablet, add space between Safety copy and its login action, and shorten intro paragraph measure to 66 characters. Mobile photography retains enough height to read the subject; headings, cards and forms stack without shrinking the desktop layout.
+
+| Page | Reviewed composition |
+| --- | --- |
+| Home | Split hero, concise intro, balanced information cards, paired photo studies, alternating features and careers CTA |
+| Company | Team/operations/safety hierarchy, image feature and reserved editable biography/recognition cards |
+| Services | Numbered two-by-two service cards, construction photo feature and matching planning prompts |
+| Location | Address/phone placeholders in paired cards, directional image feature and careers CTA |
+| Safety | Public resources separated from employee information; a clearly spaced sign-in CTA |
+| Careers | Responsive copy/form composition; visible labels and consistent input/action spacing |
+| Insights | Editorial image/text feature followed by paired illustrated stories |
+| Projects | Photography-led studies with captions and alternating feature composition |
+| Awards | Deliberately compact recognition page; no invented awards or credentials |
+
+These are concrete visual-review findings, not an objective A+ certification or final company design approval. Owners can replace widget text/photos without rebuilding this layout. Careers recipients remain unconfigured in the starter and require owner setup before publication. The generator currently enters the app through synthetic test/review adapters; it is not yet exposed as a production starter/import action. Deploying app code alone will not replace the existing published website or create this draft.
+
+## Production release gate and smallest safe path
+
+The explicit website-only Firebase deployment authorization is recorded. Daily logs, shop orders, timecards and user management must retain their production behavior. All 75 fixture regressions for these workflows/role access/direct URLs passed; all five public/builder login regressions passed after keyboard-interaction correction. Daily-log, shop-order and timecard email smoke tests passed. Their feature views/services and backend handlers show no changes against the user's a169b8f baseline. Fixture tests do not establish deployed-source equivalence.
+
+The configured destination is project/site `phase2-website`. Read-only Hosting metadata identified live version `98e09c75d718273d`, release `1790763227254000` (September 30), which must remain available for rollback. No release was made by this checkpoint.
+
+A clean release must include reviewed WebsiteCanvas/WebsiteBuilder/responsive/typography/autosave dependencies, the editable starter module and its fonts/assets. Those remain intermixed with pre-existing unstaged work. In particular, `vite.config.ts` contains a shared Firestore SDK chunking change; the narrow checkpoint must not silently include it. Preserve the normal checkout, construct an explicit website-only release from reviewed source, retain the existing SDK build behavior unless separately justified, and rerun the protected workflows against that exact release bundle. Deploy Hosting and only individually necessary website function targets; omit rules, unrelated backend targets and security-sensitive settings.
+
+Before activating the starter, read the existing production draft/published state, identify exactly what would be replaced and obtain the separate content-replacement approval. Keep existing user edits and image records until that scope is confirmed. The nine-page local review is not a production publication authorization. Form Builder remains queued behind this release gate.
 
 ## Entry points
 
