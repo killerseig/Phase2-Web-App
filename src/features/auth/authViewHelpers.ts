@@ -28,7 +28,11 @@ export function getWorkspaceRedirectTarget(value: unknown) {
   try {
     const baseUrl = 'https://phase2.invalid'
     const parsed = new URL(target, baseUrl)
-    if (parsed.origin !== baseUrl || parsed.pathname === '/login') return '/jobs'
+    // Public website pages and auth screens never become employee landing pages.
+    // The router still applies each destination's role and job-access checks.
+    const workspacePath =
+      /^(?:\/jobs(?:\/[^/]+(?:\/(?:timecards|daily-logs|shop-orders))?)?|\/dashboard|\/dashboards\/(?:personal|role)|\/admin\/website|\/safety\/sds|\/exports\/timecards(?:\/print)?|\/(?:users|employees)|\/settings\/(?:shop-catalog|lists\/(?:job-types|gcs|occupations)))\/?$/
+    if (parsed.origin !== baseUrl || !workspacePath.test(parsed.pathname)) return '/jobs'
     return `${parsed.pathname}${parsed.search}${parsed.hash}`
   } catch {
     return '/jobs'
@@ -57,7 +61,8 @@ export function getForgotPasswordValidationMessage(email: string) {
 
 export function getSetPasswordValidationMessage(password: string, confirmPassword: string) {
   if (!password.trim()) return 'Password is required.'
-  if (password.length < 12 || password.length > 128) return 'Password must be between 12 and 128 characters.'
+  if (password.length < 12 || password.length > 128)
+    return 'Password must be between 12 and 128 characters.'
   if (password !== confirmPassword) return 'Passwords do not match.'
   return ''
 }

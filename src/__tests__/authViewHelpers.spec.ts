@@ -54,6 +54,37 @@ describe('auth view helpers', () => {
     expect(getWorkspaceRedirectTarget(undefined)).toBe('/jobs')
   })
 
+  it('rejects public and unknown return paths while retaining employee bookmarks', () => {
+    for (const target of [
+      '/',
+      '/website',
+      '/website/company',
+      '/forgot-password',
+      '/set-password',
+      '/unknown',
+      '/jobs/../website',
+      '/\\example.com',
+    ]) {
+      expect(getWorkspaceRedirectTarget(target)).toBe('/jobs')
+    }
+    for (const target of [
+      '/jobs/job-1',
+      '/jobs/job-1/timecards',
+      '/jobs/job-1/shop-orders',
+      '/dashboards/personal',
+      '/dashboards/role',
+      '/dashboard',
+      '/admin/website',
+      '/safety/sds',
+      '/exports/timecards/print',
+      '/users',
+      '/employees',
+      '/settings/lists/gcs',
+    ]) {
+      expect(getWorkspaceRedirectTarget(target)).toBe(target)
+    }
+  })
+
   it('redirects to the workspace only when the current auth state allows access', async () => {
     const replace = vi.fn<(target: string) => void>()
 

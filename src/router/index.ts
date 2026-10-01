@@ -38,6 +38,7 @@ const router = createRouter({
     },
     {
       path: '/website/:slug?',
+      alias: '/',
       name: 'public-website',
       component: () => import('@/views/PublicWebsiteView.vue'),
       meta: { title: 'Phase 2', requiresAuth: false },
@@ -59,10 +60,6 @@ const router = createRouter({
       name: 'sds-library',
       component: () => import('@/views/SdsLibraryView.vue'),
       meta: { title: 'SDS Library' },
-    },
-    {
-      path: '/',
-      redirect: '/login',
     },
     {
       path: '/login',
