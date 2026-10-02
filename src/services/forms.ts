@@ -18,9 +18,9 @@ export interface ServerFormTemplate {
 }
 export function isFormServerEnabled(): boolean {
   return (
-    import.meta.env.DEV &&
-    (import.meta.env.VITE_FORM_EMULATORS === 'true' ||
-      (isE2EActive() && window.__PHASE2_FORM_SERVER__ === true))
+    !import.meta.env.DEV ||
+    import.meta.env.VITE_FORM_EMULATORS === 'true' ||
+    (isE2EActive() && window.__PHASE2_FORM_SERVER__ === true)
   )
 }
 export async function formApi<T>(
@@ -28,9 +28,7 @@ export async function formApi<T>(
   data: Record<string, unknown>,
 ): Promise<T> {
   if (!isFormServerEnabled())
-    throw new Error(
-      'Start the local Form Builder emulator profile to use server drafts. Production calls are disabled.',
-    )
+    throw new Error('Start the local Form Builder emulator profile to use server drafts.')
   return (
     await httpsCallable<Record<string, unknown>, T>(requireFirebaseServices().functions, name)(data)
   ).data

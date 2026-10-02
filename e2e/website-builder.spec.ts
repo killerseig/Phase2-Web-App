@@ -1767,6 +1767,8 @@ test('inline toolbar stays usable on phones and public pages stay read only', as
   const canvas = page.locator('.preview-frame')
   await canvas.getByText('Our company introduction.', { exact: true }).click()
   const body = page.getByRole('textbox', { name: 'Edit text on page' })
+  // Wait for the editor's initial focus/selection before replacing its contents.
+  await expect(body).toBeFocused()
   await body.fill('Phone edit')
   const toolbar = page.getByRole('group', { name: 'Text formatting' })
   await expect(toolbar).toBeVisible()

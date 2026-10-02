@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { mkdirSync, writeFileSync } from 'node:fs'
-assert.equal(process.env.GCLOUD_PROJECT, 'demo-phase2-security')
+assert.match(process.env.GCLOUD_PROJECT || '', /^demo-[a-z0-9-]+$/, 'Only demo emulator projects are allowed')
 for (const name of [
   'FIRESTORE_EMULATOR_HOST',
   'FIREBASE_AUTH_EMULATOR_HOST',

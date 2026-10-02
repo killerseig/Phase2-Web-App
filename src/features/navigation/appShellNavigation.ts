@@ -17,6 +17,7 @@ const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
 ]
 
 const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
+  { capability: 'manage-website', label: 'Form Builder', to: '/admin/forms' },
   { capability: 'manage-website', label: 'Website Builder', to: '/admin/website' },
   { capability: 'manage-users', label: 'Users', to: '/users' },
   { capability: 'manage-employees', label: 'Employees', to: '/employees' },
@@ -29,10 +30,9 @@ export function getAppShellWorkspaceNavigationItems(): AppShellNavigationItem[] 
 }
 
 export function getAppShellAdminNavigationItems(rawRole: RawRoleKey): AppShellNavigationItem[] {
-  const items: readonly AppShellNavigationItem[] = import.meta.env.DEV ? [{ capability: 'manage-website', label: 'Form Builder', to: '/admin/forms' }, ...ADMIN_NAVIGATION_ITEMS] : ADMIN_NAVIGATION_ITEMS
-  return items.filter((item) => (
-    !item.capability || canUseRouteCapability(rawRole, item.capability)
-  ))
+  return ADMIN_NAVIGATION_ITEMS.filter(
+    (item) => !item.capability || canUseRouteCapability(rawRole, item.capability),
+  )
 }
 
 export function getAppShellRoleLabel(rawRole: RawRoleKey): string {

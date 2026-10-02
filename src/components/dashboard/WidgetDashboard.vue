@@ -15,9 +15,7 @@ import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDr
 import SdsExplorerModule from './SdsExplorerModule.vue'
 import RoleResourcesModule from './RoleResourcesModule.vue'
 import { formApi, isFormServerEnabled, type ServerFormTemplate } from '@/services/forms'
-const FormDashboardWidget = import.meta.env.DEV
-  ? defineAsyncComponent(() => import('./FormDashboardWidget.vue'))
-  : undefined
+const FormDashboardWidget = defineAsyncComponent(() => import('./FormDashboardWidget.vue'))
 const formWidgets = ref<{ prepareNavigation: () => Promise<boolean> }[]>([])
 const formTemplates = ref<ServerFormTemplate[]>([])
 const formError = ref('')

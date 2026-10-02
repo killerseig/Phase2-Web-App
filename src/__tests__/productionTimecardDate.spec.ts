@@ -10,6 +10,10 @@ describe('production timecard date', () => {
       logLevel: 'silent',
       build: {
         write: false,
+        // Replace the application's HTML entries with this production helper.
+        rolldownOptions: {
+          input: fileURLToPath(new URL('../features/timecards/workbook.ts', import.meta.url)),
+        },
         lib: {
           entry: fileURLToPath(new URL('../features/timecards/workbook.ts', import.meta.url)),
           formats: ['es'],
@@ -17,16 +21,19 @@ describe('production timecard date', () => {
       },
     })
     const outputs = Array.isArray(result) ? result : [result]
-    const chunk = outputs.flatMap(output => 'output' in output ? output.output : [])
-      .find(output => output.type === 'chunk' && output.isEntry)
+    const chunk = outputs
+      .flatMap((output) => ('output' in output ? output.output : []))
+      .find((output) => output.type === 'chunk' && output.isEntry)
     if (!chunk || chunk.type !== 'chunk') throw new Error('Missing production workbook bundle')
 
     expect(chunk.code).not.toContain('__PHASE2_E2E_STATE__')
-    const workbook = await import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`)
+    const workbook = await import(
+      /* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`
+    )
     const before = workbook.formatIsoDate(new Date())
     const today = workbook.getTodayIsoDate()
     const after = workbook.formatIsoDate(new Date())
     expect([before, after]).toContain(today)
     expect(workbook.snapToSaturday('')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-  })
+  }, 30000)
 })

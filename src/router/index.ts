@@ -30,28 +30,24 @@ function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    ...(import.meta.env.DEV
-      ? [
-          {
-            path: '/form-submissions/:id',
-            name: 'form-submission-view',
-            component: () => import('@/views/FormSubmissionView.vue'),
-            meta: { title: 'Completed Form', requiresAuth: false },
-          },
-          {
-            path: '/forms/:templateId',
-            name: 'form-response',
-            component: () => import('@/views/FormResponseView.vue'),
-            meta: { title: 'Complete Form' },
-          },
-          {
-            path: '/admin/forms',
-            name: 'form-builder',
-            component: () => import('@/views/FormBuilderView.vue'),
-            meta: { title: 'Form Builder', requiredCapability: 'manage-website' },
-          },
-        ]
-      : []),
+    {
+      path: '/form-submissions/:id',
+      name: 'form-submission-view',
+      component: () => import('@/views/FormSubmissionView.vue'),
+      meta: { title: 'Completed Form', requiresAuth: false },
+    },
+    {
+      path: '/forms/:templateId',
+      name: 'form-response',
+      component: () => import('@/views/FormResponseView.vue'),
+      meta: { title: 'Complete Form' },
+    },
+    {
+      path: '/admin/forms',
+      name: 'form-builder',
+      component: () => import('@/views/FormBuilderView.vue'),
+      meta: { title: 'Form Builder', requiredCapability: 'manage-website' },
+    },
     {
       path: '/admin/website',
       name: 'website-builder',

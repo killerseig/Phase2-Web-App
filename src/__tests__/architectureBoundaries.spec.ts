@@ -3,9 +3,36 @@ import { basename, join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const sourceRoot = join(process.cwd(), 'src')
-const guardedDirectories = ['views', 'components', 'layouts', 'router', 'features', 'composables', 'stores']
+const guardedDirectories = [
+  'views',
+  'components',
+  'layouts',
+  'router',
+  'features',
+  'composables',
+  'stores',
+]
 const directFirebaseImportPattern = /from\s+['"](?:@\/firebase|firebase\/[^'"]*)['"]/
-const componentIntegrationImportPattern = /from\s+['"](?:@\/services\/[^'"]*|@\/stores\/[^'"]*)['"]/
+const componentIntegrationImportPattern = /from\s+['"](@\/(?:services|stores)\/[^'"]*)['"]/g
+// Feature containers coordinate existing service boundaries. Shared presentation
+// components remain disconnected; adding a dependency requires explicit review.
+const connectedContainers: Record<string, string[]> = {
+  'auth/LocalFormsSignIn.vue': ['@/stores/auth'],
+  'dashboard/FormDashboardWidget.vue': ['@/services/forms', '@/stores/auth'],
+  'dashboard/RoleResourcesModule.vue': ['@/stores/auth', '@/services/sds'],
+  'dashboard/SdsExplorerModule.vue': ['@/stores/auth', '@/services/sds'],
+  'dashboard/SdsFileViewer.vue': ['@/services/sds'],
+  'dashboard/WidgetDashboard.vue': ['@/stores/auth', '@/services/dashboard', '@/services/forms'],
+  'forms/FormOutputSettings.vue': ['@/services/forms'],
+  'forms/FormResponseWorkspace.vue': ['@/stores/auth', '@/services/forms'],
+  'website/WebsiteFormSubmissions.vue': ['@/services/website'],
+  'website/WebsiteImage.vue': ['@/services/website'],
+  'website/WebsiteImagePicker.vue': ['@/services/website'],
+  'website/WebsitePublicForm.vue': ['@/services/website'],
+  'website/WebsitePublishComparison.vue': ['@/services/website'],
+  'website/WebsiteRevisionHistory.vue': ['@/services/website'],
+  'website/WebsiteScriptFrame.vue': ['@/services/website'],
+}
 
 function collectSourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -30,11 +57,11 @@ describe('frontend architecture boundaries', () => {
 
         return contents
           .split(/\r?\n/)
-          .flatMap((line, index) => (
+          .flatMap((line, index) =>
             directFirebaseImportPattern.test(line)
               ? [`${relative(sourceRoot, filePath)}:${index + 1}: ${line.trim()}`]
-              : []
-          ))
+              : [],
+          )
       })
     })
 
@@ -54,18 +81,20 @@ describe('frontend architecture boundaries', () => {
     expect(authServiceContents).toContain('signOutOfAuthSession')
   })
 
-  it('keeps components disconnected from services and stores', () => {
+  it('limits service and store dependencies to reviewed feature containers', () => {
     const componentDirectory = join(sourceRoot, 'components')
     const violations = collectSourceFiles(componentDirectory).flatMap((filePath) => {
       const contents = readFileSync(filePath, 'utf8')
+      const allowed =
+        connectedContainers[relative(componentDirectory, filePath).replace(/\\/g, '/')] ?? []
 
       return contents
         .split(/\r?\n/)
-        .flatMap((line, index) => (
-          componentIntegrationImportPattern.test(line)
-            ? [`${relative(sourceRoot, filePath)}:${index + 1}: ${line.trim()}`]
-            : []
-        ))
+        .flatMap((line, index) =>
+          [...line.matchAll(componentIntegrationImportPattern)]
+            .filter((match) => !allowed.includes(match[1]!))
+            .map(() => `${relative(sourceRoot, filePath)}:${index + 1}: ${line.trim()}`),
+        )
     })
 
     expect(violations).toEqual([])

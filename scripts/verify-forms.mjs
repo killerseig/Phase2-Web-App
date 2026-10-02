@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs'
 import { initializeApp, deleteApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator, signInAnonymously } from 'firebase/auth'
 import { getStorage, connectStorageEmulator, ref, getBytes } from 'firebase/storage'
-const projectId = 'demo-phase2-security'
+const projectId = process.env.GCLOUD_PROJECT || 'demo-phase2-security'
+assert.match(projectId, /^demo-[a-z0-9-]+$/, 'Only demo emulator projects are allowed')
 for (const key of [
   'FIRESTORE_EMULATOR_HOST',
   'FIREBASE_AUTH_EMULATOR_HOST',
@@ -45,7 +46,8 @@ connectAuthEmulator(auth, 'http://' + process.env.FIREBASE_AUTH_EMULATOR_HOST, {
 })
 const signed = (await signInAnonymously(auth)).user,
   storage = getStorage(app)
-connectStorageEmulator(storage, '127.0.0.1', 9199)
+const [formStorageHost, formStoragePort] = process.env.FIREBASE_STORAGE_EMULATOR_HOST.split(':')
+connectStorageEmulator(storage, formStorageHost, Number(formStoragePort))
 try {
   for (const [uid, role, active] of [
     ['admin', 'admin', true],

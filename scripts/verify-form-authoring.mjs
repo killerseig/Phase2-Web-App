@@ -8,7 +8,8 @@ for (const name of [
   'FIREBASE_STORAGE_EMULATOR_HOST',
 ])
   assert.match(process.env[name] || '', /^(127\.0\.0\.1|localhost):\d+$/)
-const projectId = 'demo-phase2-security'
+const projectId = process.env.GCLOUD_PROJECT || 'demo-phase2-security'
+assert.match(projectId, /^demo-[a-z0-9-]+$/, 'Only demo emulator projects are allowed')
 process.env.GCLOUD_PROJECT = projectId
 const require = createRequire(new URL('../functions/package.json', import.meta.url))
 require('firebase-admin/app').initializeApp({

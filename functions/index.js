@@ -63,7 +63,7 @@ var websiteFormFunctions_1 = require("./websiteFormFunctions");
 Object.defineProperty(exports, "submitWebsiteForm", { enumerable: true, get: function () { return websiteFormFunctions_1.submitWebsiteForm; } });
 Object.defineProperty(exports, "deliverWebsiteFormEmail", { enumerable: true, get: function () { return websiteFormFunctions_1.deliverWebsiteFormEmail; } });
 Object.defineProperty(exports, "websiteFormAdmin", { enumerable: true, get: function () { return websiteFormFunctions_1.websiteFormAdmin; } });
-// Local Form Builder milestone: no production deployment is authorized.
+// Authenticated Forms and scoped completed-submission viewer.
 var formFunctions_1 = require("./formFunctions");
 Object.defineProperty(exports, "formTemplates", { enumerable: true, get: function () { return formFunctions_1.formTemplates; } });
 Object.defineProperty(exports, "formWorkspace", { enumerable: true, get: function () { return formFunctions_1.formWorkspace; } });

@@ -90,3 +90,7 @@ The sample JHA and estimate attachment were not provided. Vendor account access,
 User approved full completed-form email with the Daily Logs photo/viewer pattern, then optional PDF and safe stable-field templates. Require login defaults ON. Admin may disable it before issue for single-entry forwarding with “Anyone with this link can view this submission and its photos”; links must be scoped, expiring and revocable. Recipient addresses never grant access. Old issued versions retain their setting. Custom omissions warn; unknown/deleted tokens error. CSV belongs to later bulk reporting. See current workspace checkpoint for actual state/evidence.
 
 Local checks and mocked Graph transport pass. A separately coordinated real inbox test and production release review remain outstanding. No Forms deployment or real email is authorized by this checkpoint.
+
+## Forms release authorization and access gate - 2 October 2026
+
+Atlas subsequently authorized pushing the completed work to GitHub and production after core feature checks. The workspace release-candidate section records completed tests and minimal Hosting/six-function scope. This supersedes the earlier local-only release boundary for ordinary deployment. Action-time approval is still required before enabling optional public submission sharing, changing rules/access or configuring credentials/persistent access. The candidate requires no rules/credential grant changes; scoped public sharing remains pending explicit approval. No live test emails, test records or owner website publication are included.

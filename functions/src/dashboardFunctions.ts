@@ -95,14 +95,13 @@ export const dashboardWorkspace = onCall(async (request) => {
       throw new HttpsError('permission-denied', 'Only admins can edit shared role layouts.')
     if (widgets?.some((widget) => widget.type === 'form')) {
       if (
-        !process.env.FIRESTORE_EMULATOR_HOST ||
         !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(user.role) ||
         (data.scope === 'role' &&
           !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role))
       )
         throw new HttpsError(
           'permission-denied',
-          'Forms are available only to authorized local emulator respondents.',
+          'Forms are available only to authorized respondents.',
         )
       for (const widget of widgets.filter((item) => item.type === 'form')) {
         const form = widget.form!

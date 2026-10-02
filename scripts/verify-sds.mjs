@@ -14,7 +14,8 @@ import {
 } from 'firebase/firestore'
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage'
 
-const projectId = 'demo-phase2-security'
+const projectId = process.env.GCLOUD_PROJECT || 'demo-phase2-security'
+assert.match(projectId, /^demo-[a-z0-9-]+$/, 'Only demo emulator projects are allowed')
 for (const key of [
   'FIRESTORE_EMULATOR_HOST',
   'FIREBASE_AUTH_EMULATOR_HOST',

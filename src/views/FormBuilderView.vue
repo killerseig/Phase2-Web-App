@@ -29,6 +29,7 @@ import {
 import { useFormAuthoring } from '@/features/forms/useFormAuthoring'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { readLibrary, saveLibrary } from '@/features/forms/localLibrary'
+const localPreview = import.meta.env.DEV
 const fieldGroups: { label: string; kinds: FormFieldKind[] }[] = [
   {
     label: 'Basic fields',
@@ -84,7 +85,7 @@ async function saveServer(): Promise<ServerFormTemplate | undefined> {
     if (uid.value !== owner) return
     await loadServer()
     if (JSON.stringify(draft.value) === submitted) authoring.saved()
-    message.value = 'Draft saved to the local server.'
+    message.value = localPreview ? 'Draft saved to the local server.' : 'Draft saved.'
     error.value = ''
     return result
   } catch (caught) {
@@ -101,7 +102,9 @@ async function issueServer() {
   try {
     await formApi('formTemplates', { action: 'issue', id: saved.id, revision: saved.revision })
     await loadServer()
-    message.value = 'Immutable local server version issued.'
+    message.value = localPreview
+      ? 'Immutable local server version issued.'
+      : 'Immutable form version issued.'
     error.value = ''
   } catch (caught) {
     error.value = (caught as Error).message
@@ -335,7 +338,7 @@ async function create(audit = false) {
     dirty.value &&
     !(await confirmation.value?.ask({
       title: 'Discard unsaved form edits?',
-      message: 'Create a new local form without saving these edits.',
+      message: 'Create a new form without saving these edits.',
       confirmLabel: 'Discard edits',
     }))
   )
@@ -502,7 +505,10 @@ watch(
         </button>
         <div>
           <h1>Form Builder</h1>
-          <small>{{ dirty ? 'Unsaved edits' : 'Draft saved' }} · Local preview</small>
+          <small
+            >{{ dirty ? 'Unsaved edits' : 'Draft saved' }} ·
+            {{ localPreview ? 'Local preview' : 'Forms' }}</small
+          >
         </div>
         <nav aria-label="Builder modes">
           <button
@@ -546,7 +552,7 @@ watch(
             <button
               :disabled="authoringLocked"
               @click="saveServer"
-              aria-label="Save to local server"
+              :aria-label="localPreview ? 'Save to local server' : 'Save to server'"
             >
               Save draft</button
             ><button
@@ -554,7 +560,7 @@ watch(
               :disabled="serverBusy || !draft || draft.archived"
               @click="issueServer"
             >
-              Issue local server version
+              {{ localPreview ? 'Issue local server version' : 'Issue version' }}
             </button>
           </div>
           <div class="toolbar">
@@ -577,7 +583,7 @@ watch(
           </div>
         </div>
       </header>
-      <details class="local-status">
+      <details v-if="localPreview" class="local-status">
         <summary>Development preview · no production submissions or email</summary>
         <p aria-live="polite">
           {{
@@ -937,7 +943,13 @@ watch(
                     v-model="recipientText"
                     placeholder="name@example.com, another@example.com"
                 /></label>
-                <p>Recipients are configuration only in this local preview; no email is sent.</p>
+                <p>
+                  {{
+                    localPreview
+                      ? 'Recipients are configuration only in this local preview; no email is sent.'
+                      : 'Submitted forms email these recipients. Recipient addresses do not grant access to private submissions.'
+                  }}
+                </p>
                 <p>
                   Drag a field onto the ordered canvas, or click Add to append. Select a field for
                   its inspector. Move buttons provide keyboard ordering.

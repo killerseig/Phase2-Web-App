@@ -11,6 +11,7 @@ import {
   type ServerFormTemplate,
 } from '@/services/forms'
 import type { FormAnswers, FormRecord } from '../../../functions/src/formModel'
+const localPreview = import.meta.env.DEV
 const props = withDefaults(
   defineProps<{
     templateId: string
@@ -141,7 +142,7 @@ async function discard() {
     !dirty.value ||
     (await confirm.value?.ask({
       title: 'Discard unsaved answers?',
-      message: 'Your last saved progress remains on the local server.',
+      message: 'Your last saved progress remains on the server.',
       confirmLabel: 'Discard answers',
     }))
   )
@@ -455,7 +456,7 @@ defineExpose({ prepareNavigation })
     >
       Return to dashboard
     </button>
-    <p>Local emulator workflow. Production records and email are not used.</p>
+    <p v-if="localPreview">Local emulator workflow. Production records and email are not used.</p>
     <p v-if="!enabled" role="alert">
       Start the local Form Builder emulator profile to use durable drafts and submissions.
     </p>

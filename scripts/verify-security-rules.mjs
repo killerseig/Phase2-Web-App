@@ -6,7 +6,8 @@ import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc,
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes, deleteObject } from 'firebase/storage'
 
 // Refuse to run against production even if the caller has application-default credentials.
-const projectId = 'demo-phase2-security'
+const projectId = process.env.GCLOUD_PROJECT || 'demo-phase2-security'
+assert.match(projectId, /^demo-[a-z0-9-]+$/, 'Only demo emulator projects are allowed')
 for (const key of ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST']) {
   assert.match(process.env[key] || '', /^(127\.0\.0\.1|localhost):\d+$/, `${key} must point to a local emulator`)
 }

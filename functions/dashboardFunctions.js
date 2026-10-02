@@ -85,11 +85,10 @@ exports.dashboardWorkspace = (0, https_1.onCall)(async (request) => {
         if (data.action === 'save' && !canEdit)
             throw new https_1.HttpsError('permission-denied', 'Only admins can edit shared role layouts.');
         if (widgets?.some((widget) => widget.type === 'form')) {
-            if (!process.env.FIRESTORE_EMULATOR_HOST ||
-                !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(user.role) ||
+            if (!['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(user.role) ||
                 (data.scope === 'role' &&
                     !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role)))
-                throw new https_1.HttpsError('permission-denied', 'Forms are available only to authorized local emulator respondents.');
+                throw new https_1.HttpsError('permission-denied', 'Forms are available only to authorized respondents.');
             for (const widget of widgets.filter((item) => item.type === 'form')) {
                 const form = widget.form;
                 const [template, issued] = await transaction.getAll(runtime_1.db.doc('formTemplates/' + form.templateId), runtime_1.db.doc('formTemplates/' + form.templateId + '/versions/v' + form.version));

@@ -59,10 +59,14 @@ export {
 export { websiteBuilder, getPublishedWebsite, websiteImage } from './websiteFunctions'
 export { dashboardWorkspace } from './dashboardFunctions'
 
-export { submitWebsiteForm, deliverWebsiteFormEmail, websiteFormAdmin } from './websiteFormFunctions'
+export {
+  submitWebsiteForm,
+  deliverWebsiteFormEmail,
+  websiteFormAdmin,
+} from './websiteFormFunctions'
 
-// Local Form Builder milestone: no production deployment is authorized.
+// Authenticated Forms and scoped completed-submission viewer.
 export { formTemplates, formWorkspace } from './formFunctions'
 export { formEmail, deliverFormEmail } from './formDelivery'
 
-export {formSubmissionViewer} from './formSubmissionViewer'
+export { formSubmissionViewer } from './formSubmissionViewer'
