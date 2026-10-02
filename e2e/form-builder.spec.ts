@@ -117,3 +117,61 @@ test('non-admin cannot open the Form Builder', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Form Builder', exact: true })).toHaveCount(0)
   await expect(page).not.toHaveURL(/admin\/forms/)
 })
+
+test('leaving unsaved template edits requires an explicit discard; cancel preserves fields and recipients', async ({
+  page,
+}) => {
+  await gotoPhase2App(page, '/admin/forms', createJobsFixture())
+  await page.getByRole('button', { name: 'New form', exact: true }).click()
+  await page.getByLabel('Form title', { exact: true }).fill('Unsaved navigation draft')
+  await page.getByLabel('Recipients', { exact: true }).fill('review@example.com')
+  await page.getByRole('button', { name: 'Add text', exact: true }).click()
+  await page.getByLabel('Field label', { exact: true }).fill('Keep this field')
+  await page.evaluate(async () => {
+    const { default: router } = await import('/src/router/index.ts')
+    void router.push('/dashboards/personal')
+  })
+  await expect(page.getByRole('dialog')).toContainText('Leave unsaved form edits?')
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp('admin/forms$'))
+  await expect(page.getByLabel('Field label', { exact: true })).toHaveValue('Keep this field')
+  await expect(page.getByLabel('Recipients', { exact: true })).toHaveValue('review@example.com')
+  expect(
+    await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }),
+  ).toBe(true)
+  await page.evaluate(async () => {
+    const { default: router } = await import('/src/router/index.ts')
+    void router.push('/dashboards/personal')
+  })
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Leave without saving', exact: true })
+    .click()
+  await expect(page).toHaveURL(new RegExp('dashboards/personal$'))
+})
+
+test('saved template leaves without an unsaved warning and browser reload warning is cleared', async ({
+  page,
+}) => {
+  await gotoPhase2App(page, '/admin/forms', createJobsFixture())
+  await page.getByRole('button', { name: 'New form', exact: true }).click()
+  await page.getByRole('button', { name: 'Add text', exact: true }).click()
+  await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
+  expect(
+    await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }),
+  ).toBe(false)
+  await page.evaluate(async () => {
+    const { default: router } = await import('/src/router/index.ts')
+    void router.push('/dashboards/personal')
+  })
+  await expect(page).toHaveURL(new RegExp('dashboards/personal$'))
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})

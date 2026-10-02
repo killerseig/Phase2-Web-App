@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, RouterLink } from 'vue-router'
 import { formApi, isFormServerEnabled, type ServerFormTemplate } from '@/services/forms'
 import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -281,6 +281,27 @@ function drop(event: DragEvent, index: number) {
   if (id) reorder(id, index)
 }
 const errors = computed(() => (draft.value ? definitionErrors(draft.value) : []))
+async function leaveEditor() {
+  if (serverBusy.value) return false
+  if (!dirty.value) return true
+  const owner = uid.value
+  const discard = await confirmation.value?.ask({
+    title: 'Leave unsaved form edits?',
+    message:
+      'Your last saved template remains in the library. Save this draft before leaving to keep these edits.',
+    confirmLabel: 'Leave without saving',
+  })
+  return !!discard && uid.value === owner && !serverBusy.value
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (dirty.value || serverBusy.value) {
+    event.preventDefault()
+    event.returnValue = ''
+  }
+}
+onBeforeRouteLeave(leaveEditor)
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
 <template>
   <AppShell>
