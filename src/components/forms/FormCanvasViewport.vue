@@ -47,7 +47,9 @@ onBeforeUnmount(() => {
         <button aria-label="Zoom out" @click="manual(zoom - 0.1)">−</button
         ><output aria-label="Zoom percentage">{{ Math.round(zoom * 100) }}%</output
         ><button aria-label="Zoom in" @click="manual(zoom + 0.1)">+</button
-        ><button :aria-pressed="fit" @click="fitting">Fit</button>
+        ><button :aria-pressed="fit" @click="fitting">
+          <i class="pi pi-arrows-alt" aria-hidden="true" />Fit
+        </button>
       </div>
       <slot name="devices" />
     </div>

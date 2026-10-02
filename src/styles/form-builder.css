@@ -1,0 +1,435 @@
+/* Forms-only visual layer. Reuse the existing opt-in builder controls unchanged;
+   every layout override below is rooted at .form-builder. */
+@import './builder-ui.css';
+
+.form-builder.builder-controls {
+  --surface: var(--editor-panel);
+  --surface-2: #1b3344;
+  --field-hover: var(--editor-hover);
+  --brand-sky: var(--editor-accent);
+  font-size: 13px;
+  color: var(--editor-text);
+}
+.form-builder .form-builder-header {
+  padding: 6px 6px 8px;
+  gap: 8px;
+}
+.form-builder .form-builder-header h1 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+.form-builder .form-builder-header small {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.form-builder .form-builder-header nav,
+.form-builder .sidebar-tabs,
+.form-builder .settings-tabs {
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--editor-border);
+  border-radius: 8px;
+  background: var(--editor-field);
+}
+.form-builder .form-builder-header nav button {
+  min-height: 28px;
+  padding: 4px 12px;
+  border-color: transparent;
+  background: transparent;
+}
+.form-builder .header-actions {
+  gap: 5px;
+}
+.form-builder .header-actions .history-action {
+  width: 32px;
+  padding: 5px;
+  border-color: transparent;
+  background: transparent;
+}
+.form-builder button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.form-builder button .pi {
+  line-height: 1;
+  flex-shrink: 0;
+}
+.form-builder .header-actions .primary {
+  color: #fff;
+  background: #236795;
+  border-color: #4081ac;
+  font-weight: 600;
+}
+.form-builder .header-actions .primary:hover:not(:disabled) {
+  background: #2c78aa;
+  border-color: #91c9ed;
+}
+.form-builder .builder-layout {
+  gap: 0 !important;
+  border: 1px solid var(--editor-border);
+  border-radius: 10px;
+  background: var(--editor-panel);
+  overflow: hidden;
+}
+.form-builder .builder-sidebar {
+  border: 0;
+  border-right: 1px solid var(--editor-border);
+  background: var(--editor-panel);
+  padding: 10px !important;
+}
+.form-builder .sidebar-tabs button,
+.form-builder .settings-tabs button {
+  background: transparent;
+  border-color: transparent;
+  font-size: 12px;
+}
+.form-builder .field-palette {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.form-builder .field-palette h2 {
+  font-size: 13px;
+  margin: 12px 0 8px;
+}
+.form-builder .field-palette h3 {
+  color: var(--editor-muted);
+  font-size: 11px;
+  font-weight: 600;
+  margin: 14px 0 6px;
+}
+.form-builder .palette-options {
+  gap: 6px;
+}
+.form-builder .palette-options button {
+  justify-content: flex-start;
+  padding: 7px 8px;
+  min-height: 36px;
+  font-size: 12px;
+}
+.form-builder .palette-options .pi {
+  color: var(--editor-accent);
+  font-size: 13px;
+}
+.form-builder .authoring-panels {
+  gap: 0;
+}
+.form-builder .inspector-panel {
+  padding: 12px !important;
+  border: 0;
+  border-left: 1px solid var(--editor-border);
+  background: var(--editor-panel);
+}
+.form-builder .inspector-panel > section {
+  display: grid;
+  gap: 12px;
+}
+.form-builder .inspector-panel label {
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.form-builder .inspector-panel p {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--editor-muted);
+  margin: 0;
+}
+.form-builder .inspector-panel .builder-selection-context {
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--editor-border);
+}
+.form-builder .viewport-toolbar {
+  background: var(--editor-panel);
+  padding: 6px 10px;
+  gap: 8px;
+}
+.form-builder .viewport-toolbar button {
+  padding: 5px 7px;
+  min-width: 30px;
+}
+.form-builder .viewport-toolbar output {
+  color: var(--editor-muted);
+  font: inherit;
+  width: 36px;
+  text-align: center;
+}
+.form-builder .viewport-toolbar .device-controls {
+  gap: 3px;
+}
+.form-builder .viewport-toolbar .device-controls button {
+  border-color: transparent;
+  background: transparent;
+}
+.form-builder .viewport-toolbar .device-controls .pi {
+  font-size: 15px;
+}
+.form-builder .canvas-viewport {
+  background: #0d1c28;
+}
+.form-builder .canvas-document {
+  --field: #102331;
+  border: 1px solid #385265;
+  background: #172b3a;
+}
+.form-builder .canvas-panel {
+  padding: 22px !important;
+  background: transparent;
+}
+.form-builder .canvas-title {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 10px;
+}
+.form-builder .canvas-description {
+  color: var(--editor-muted);
+  line-height: 1.55;
+}
+.form-builder .field-row {
+  padding: 8px;
+  margin: 0 0 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.form-builder .field-row:hover {
+  background: #1a3243;
+}
+.form-builder .field-row.selected {
+  border-color: #91c9ed;
+  box-shadow: 0 0 0 1px #91c9ed;
+  background: #1a3243;
+}
+.form-builder .field-row:focus-visible {
+  outline: 2px solid #91c9ed;
+  outline-offset: 2px;
+}
+.form-builder .field-kind {
+  opacity: 1;
+  color: var(--editor-muted);
+  font-size: 11px;
+}
+.form-builder .field-row > .toolbar {
+  opacity: 1;
+  gap: 4px;
+  margin-top: 6px;
+}
+.form-builder .field-row > .toolbar button {
+  font-size: 11px;
+  min-height: 26px;
+  padding: 4px 6px;
+}
+.form-builder .form-grip {
+  min-width: 26px;
+  min-height: 26px;
+  color: var(--editor-muted);
+}
+.form-builder .local-status {
+  color: var(--editor-muted);
+  font-size: 11px;
+  padding: 2px 8px 6px;
+}
+.form-builder .local-status summary {
+  padding: 0;
+}
+.form-builder .library-list article {
+  padding: 0;
+  margin: 0;
+}
+.form-builder .library-list h3 {
+  font-size: 12px;
+  margin: 8px 0;
+  color: var(--editor-muted);
+}
+.form-builder .library-list {
+  display: grid;
+  gap: 4px;
+}
+.form-builder .library-utilities {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+.form-builder .library-utilities h3 {
+  margin: 0;
+}
+.form-builder .library-actions {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0 6px;
+  border-top: 1px solid var(--editor-border);
+}
+.form-builder .library-actions button,
+.form-builder .library-actions a {
+  font-size: 12px;
+}
+.form-builder .library-creation {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+.form-builder .output-settings {
+  gap: 12px;
+}
+.form-builder .output-settings iframe {
+  box-sizing: border-box;
+  border-radius: 6px;
+}
+@media (max-width: 760px) {
+  .form-builder .form-builder-header nav {
+    order: initial;
+  }
+  .form-builder .form-builder-header button {
+    min-height: 36px;
+  }
+  .form-builder .header-actions {
+    max-width: none;
+    width: 100%;
+  }
+  .form-builder .builder-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--editor-border);
+    padding: 8px !important;
+  }
+  .form-builder .palette-options button {
+    min-height: 40px;
+  }
+  .form-builder .viewport-toolbar button {
+    min-height: 40px;
+  }
+  .form-builder .inspector-panel {
+    border-left: 0;
+    border-top: 1px solid var(--editor-border);
+  }
+  .form-builder .sidebar-tabs button,
+  .form-builder .settings-tabs button {
+    min-height: 40px;
+  }
+}
+.form-builder .form-library-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px !important;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.form-builder .form-library-row.selected {
+  background: #1b3344;
+  border-color: var(--editor-border);
+}
+.form-builder .form-library-row .library-target {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 8px;
+  background: transparent;
+  border-color: transparent;
+}
+.form-builder .library-target span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.form-builder .library-target .pi {
+  color: var(--editor-muted);
+  font-size: 13px;
+}
+.form-builder .library-meta {
+  grid-column: 1 / -1;
+  padding: 0 8px 2px 28px;
+  color: var(--editor-muted);
+  font-size: 11px;
+}
+.form-builder .library-action {
+  padding: 5px 7px;
+  min-width: 0;
+  font-size: 11px;
+}
+.form-builder .library-open {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  color: var(--editor-accent);
+  font-size: 12px;
+}
+.form-builder .library-refresh {
+  background: transparent;
+  border-color: transparent;
+  padding: 4px;
+  min-width: 28px;
+}
+.form-builder .library-list details {
+  margin: 0 0 8px;
+}
+.form-builder .canvas-field-preview input,
+.form-builder .canvas-field-preview textarea,
+.form-builder .canvas-field-preview select {
+  opacity: 1;
+}
+.form-builder .inspector-panel {
+  display: block;
+}
+.form-builder .settings-tabs {
+  min-height: 34px;
+  margin: 0 0 14px;
+}
+.form-builder .inspector-panel > section {
+  margin-top: 12px;
+}
+.form-builder .library-creation {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.form-builder .library-creation button {
+  font-size: 11px;
+  padding: 5px 6px;
+}
+.form-builder .canvas-document {
+  font-size: 16px;
+  line-height: 1.5;
+}
+.form-builder .canvas-field-preview .form-field > label {
+  font-size: 14px;
+}
+.form-builder .canvas-field-preview :is(input, textarea, select) {
+  font-size: 15px;
+}
+.form-builder
+  :is(.sidebar-tabs, .settings-tabs, .form-builder-header nav, .device-controls)
+  button[aria-pressed='true'] {
+  color: #e9f6ff;
+  background: var(--editor-selected);
+  border-color: #6598b9;
+}
+
+.form-builder .form-builder-header button {
+  font-size: 13px;
+}
+
+.form-builder .form-preview form > button {
+  color: var(--editor-text);
+  background: var(--editor-field);
+  border: 1px solid var(--editor-border);
+  border-radius: var(--editor-radius);
+  font: inherit;
+  min-height: 32px;
+  padding: 5px 9px;
+}
+.form-builder .form-preview form > button:hover {
+  background: var(--editor-hover);
+  border-color: #6c92ab;
+}
+.form-builder .form-preview form > button:focus-visible {
+  outline: 2px solid var(--editor-accent);
+  outline-offset: 2px;
+}

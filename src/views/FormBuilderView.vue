@@ -487,7 +487,7 @@ watch(
   <AppShell v-slot="{ openNavigation, mobileNavOpen }" contained compact>
     <section
       ref="builderRoot"
-      class="form-builder"
+      class="form-builder builder-controls"
       @click.capture="pointerDrag.guardClick"
       @keydown="editorKeys"
     >
@@ -498,20 +498,50 @@ watch(
           :aria-expanded="mobileNavOpen"
           @click="openNavigation"
         >
-          ☰
+          <i class="pi pi-bars" aria-hidden="true" />
         </button>
         <div>
           <h1>Form Builder</h1>
           <small>{{ dirty ? 'Unsaved edits' : 'Draft saved' }} · Local preview</small>
         </div>
         <nav aria-label="Builder modes">
-          <button :aria-pressed="!preview" @click="preview = false">Edit</button
-          ><button :aria-pressed="preview" @click="preview = true">Preview</button
-          ><button @click="settingsTab = 'output'">Output / review</button>
+          <button
+            :aria-pressed="!preview && settingsTab !== 'output'"
+            @click="((preview = false), (settingsTab = selection ? 'field' : 'form'))"
+          >
+            Edit</button
+          ><button
+            :aria-pressed="preview && settingsTab !== 'output'"
+            @click="((preview = true), (settingsTab = 'form'))"
+          >
+            Preview</button
+          ><button
+            aria-label="Output / issues"
+            title="Output and issues"
+            :aria-pressed="settingsTab === 'output'"
+            @click="settingsTab = 'output'"
+          >
+            Output / review
+          </button>
         </nav>
         <div class="header-actions">
-          <button :disabled="creationLocked" @click="create()">New form</button
-          ><button :disabled="creationLocked" @click="create(true)">Committee audit starter</button>
+          <button
+            class="history-action"
+            aria-label="Undo"
+            title="Undo draft edit"
+            :disabled="authoringLocked || !canUndo"
+            @click="authoring.undo"
+          >
+            <i class="pi pi-undo" aria-hidden="true" /></button
+          ><button
+            class="history-action"
+            aria-label="Redo"
+            title="Redo draft edit"
+            :disabled="authoringLocked || !canRedo"
+            @click="authoring.redo"
+          >
+            <i class="pi pi-refresh" aria-hidden="true" />
+          </button>
           <div v-if="serverEnabled" class="toolbar">
             <button
               :disabled="authoringLocked"
@@ -519,13 +549,15 @@ watch(
               aria-label="Save to local server"
             >
               Save draft</button
-            ><button :disabled="serverBusy || !draft || draft.archived" @click="issueServer">
+            ><button
+              class="primary"
+              :disabled="serverBusy || !draft || draft.archived"
+              @click="issueServer"
+            >
               Issue local server version
             </button>
           </div>
           <div class="toolbar">
-            <button :disabled="authoringLocked || !canUndo" @click="authoring.undo">Undo</button
-            ><button :disabled="authoringLocked || !canRedo" @click="authoring.redo">Redo</button>
             <button
               v-if="!serverEnabled"
               :disabled="blocked || !draft || draft.archived"
@@ -539,6 +571,7 @@ watch(
             >
               Keep local version</button
             ><button @click="preview = !preview">
+              <i :class="['pi', preview ? 'pi-pencil' : 'pi-eye']" aria-hidden="true" />
               {{ preview ? 'Edit fields' : 'Full-page preview' }}</button
             ><span>{{ dirty ? 'Unsaved edits' : 'Saved draft' }}</span>
           </div>
@@ -561,29 +594,72 @@ watch(
       <p v-if="message" role="status">{{ message }}</p>
       <div class="builder-layout">
         <aside class="builder-sidebar" aria-label="Form library">
+          <div class="library-creation">
+            <button :disabled="creationLocked" @click="create()">
+              <i class="pi pi-plus" aria-hidden="true" />New form</button
+            ><button :disabled="creationLocked" @click="create(true)">
+              <i class="pi pi-file-edit" aria-hidden="true" />Committee audit starter
+            </button>
+          </div>
           <nav class="sidebar-tabs" aria-label="Form palette">
             <button :aria-pressed="sidebarTab === 'library'" @click="sidebarTab = 'library'">
-              Library</button
+              <i class="pi pi-file" aria-hidden="true" /> Library</button
             ><button :aria-pressed="sidebarTab === 'fields'" @click="sidebarTab = 'fields'">
-              Fields
+              <i class="pi pi-th-large" aria-hidden="true" /> Fields
             </button>
           </nav>
           <div v-show="sidebarTab === 'library'" class="library-list">
             <p v-if="!serverEnabled && !library.templates.length">
               Create a form to begin. Opening this page creates nothing.
             </p>
-            <article v-for="template in serverEnabled ? [] : library.templates" :key="template.id">
-              <button @click="select(template)">{{ template.title }}</button
-              ><span v-if="template.archived">Archived</span
-              ><small>{{ template.versions.length }} retained versions</small
-              ><button :disabled="template.archived || blocked" @click="duplicate(template)">
-                Duplicate</button
-              ><button :disabled="template.archived || blocked" @click="remove(template)">
+            <article
+              class="form-library-row"
+              :class="{ selected: draft?.id === template.id }"
+              v-for="template in serverEnabled ? [] : library.templates"
+              :key="template.id"
+            >
+              <button
+                class="library-target"
+                :aria-label="template.title"
+                :aria-pressed="draft?.id === template.id"
+                @click="select(template).then(() => (sidebarTab = 'library'))"
+              >
+                <i class="pi pi-file" aria-hidden="true" /><span>{{ template.title }}</span></button
+              ><span v-if="template.archived" class="library-meta">Archived</span
+              ><small class="library-meta">{{ template.versions.length }} retained versions</small
+              ><button
+                class="library-action"
+                v-if="draft?.id === template.id"
+                :disabled="template.archived || blocked"
+                @click="duplicate(template)"
+              >
+                <i class="pi pi-copy" aria-hidden="true" /> Duplicate</button
+              ><button
+                class="library-action"
+                v-if="draft?.id === template.id"
+                :disabled="template.archived || blocked"
+                @click="remove(template)"
+              >
+                <i
+                  :class="['pi', template.versions.length ? 'pi-inbox' : 'pi-trash']"
+                  aria-hidden="true"
+                />
                 {{ template.versions.length ? 'Archive' : 'Delete' }}
               </button>
             </article>
             <section v-if="serverEnabled" aria-label="Server form library">
-              <h3>Server templates</h3>
+              <div class="library-utilities">
+                <h3>Forms</h3>
+                <button
+                  class="library-refresh"
+                  aria-label="Refresh server library"
+                  title="Refresh server library"
+                  :disabled="serverBusy"
+                  @click="loadServer"
+                >
+                  <i class="pi pi-refresh" aria-hidden="true" />
+                </button>
+              </div>
               <details v-if="library.templates.length">
                 <summary>Import an existing device draft</summary>
                 <p>
@@ -611,29 +687,53 @@ watch(
                   Import as new server draft
                 </button>
               </details>
-              <button :disabled="serverBusy" @click="loadServer">Refresh server library</button>
-              <article v-for="template in serverTemplates" :key="template.id">
-                <button :disabled="serverBusy" @click="selectServer(template)">
-                  {{ template.draft.title }}</button
-                ><span v-if="draft?.id === template.id"
-                  >{{ template.archived ? 'Archived' : 'Active' }} · issued version
-                  {{ template.latestVersion }}</span
+
+              <article
+                class="form-library-row"
+                :class="{ selected: draft?.id === template.id }"
+                v-for="template in serverTemplates"
+                :key="template.id"
+              >
+                <button
+                  class="library-target"
+                  :aria-label="template.draft.title"
+                  :aria-pressed="draft?.id === template.id"
+                  :disabled="serverBusy"
+                  @click="selectServer(template).then(() => (sidebarTab = 'library'))"
+                >
+                  <i class="pi pi-file" aria-hidden="true" />
+                  <span>{{ template.draft.title }}</span></button
+                ><span class="library-meta">{{
+                  template.archived
+                    ? 'Archived'
+                    : template.latestVersion
+                      ? 'Issued version ' + template.latestVersion
+                      : 'Draft'
+                }}</span
                 ><RouterLink
                   v-if="draft?.id === template.id && template.latestVersion"
                   :to="'/forms/' + template.id"
-                  >Open authenticated form</RouterLink
+                  class="library-open"
+                  aria-label="Open authenticated form"
+                  ><i class="pi pi-external-link" aria-hidden="true" />Open form</RouterLink
                 ><button
                   v-if="draft?.id === template.id"
                   :disabled="serverBusy || !serverAvailable || template.archived || dirty"
+                  class="library-action"
+                  aria-label="Duplicate server form"
                   @click="duplicateServer(template)"
                 >
-                  Duplicate server form</button
+                  <i class="pi pi-copy" aria-hidden="true" />Duplicate</button
                 ><button
                   v-if="draft?.id === template.id"
                   :disabled="serverBusy || !serverAvailable || template.archived"
+                  class="library-action"
+                  aria-label="Remove or archive server form"
                   @click="removeServer(template)"
                 >
-                  Remove or archive server form
+                  <i class="pi pi-inbox" aria-hidden="true" />{{
+                    template.latestVersion || template.used ? 'Archive' : 'Delete'
+                  }}
                 </button>
               </article>
             </section>
@@ -658,6 +758,26 @@ watch(
                   @click="add(kind)"
                   :aria-label="'Add ' + kind"
                 >
+                  <i
+                    :class="[
+                      'pi',
+                      {
+                        text: 'pi-align-left',
+                        textarea: 'pi-align-justify',
+                        email: 'pi-envelope',
+                        phone: 'pi-phone',
+                        time: 'pi-clock',
+                        date: 'pi-calendar',
+                        number: 'pi-hashtag',
+                        choice: 'pi-list',
+                        checkbox: 'pi-check-square',
+                        radio: 'pi-circle',
+                        multiselect: 'pi-check-circle',
+                        photo: 'pi-image',
+                      }[kind],
+                    ]"
+                    aria-hidden="true"
+                  />
                   {{
                     kind === 'choice'
                       ? 'Single select'
@@ -677,20 +797,33 @@ watch(
           <div class="authoring-panels">
             <FormCanvasViewport :device="previewDevice"
               ><template #devices>
-                <div class="toolbar" role="group" aria-label="Preview device">
+                <div class="toolbar device-controls" role="group" aria-label="Preview device">
                   <button
                     v-for="device in ['desktop', 'tablet', 'phone'] as const"
                     :key="device"
                     :aria-pressed="previewDevice === device"
+                    :aria-label="device[0]!.toUpperCase() + device.slice(1)"
+                    :title="device[0]!.toUpperCase() + device.slice(1)"
                     @click="previewDevice = device"
                   >
-                    {{ device[0]!.toUpperCase() + device.slice(1) }}
+                    <i
+                      :class="[
+                        'pi',
+                        device === 'desktop'
+                          ? 'pi-desktop'
+                          : device === 'tablet'
+                            ? 'pi-tablet'
+                            : 'pi-mobile',
+                      ]"
+                      aria-hidden="true"
+                    />
                   </button>
                 </div>
               </template>
               <div
                 v-if="preview"
                 class="form-preview-frame"
+                data-builder-preview
                 :style="{ maxWidth: previewWidth + 'px' }"
               >
                 <FormDefinitionPreview :definition="draft" />
@@ -743,7 +876,7 @@ watch(
                       :aria-label="'Drag ' + field.label"
                       @keydown.esc="pointerDrag.cancel"
                     >
-                      &#8942;&#8942;
+                      <i class="pi pi-ellipsis-v" aria-hidden="true" />
                     </button>
                     <small class="field-kind"
                       >{{
@@ -755,7 +888,7 @@ watch(
                       }}
                       · {{ index + 1 }}</small
                     >
-                    <div class="canvas-field-preview" inert aria-hidden="true">
+                    <div class="canvas-field-preview" data-builder-preview inert aria-hidden="true">
                       <FormDefinitionPreview
                         :definition="draft"
                         :canvas-field="field"
@@ -789,11 +922,11 @@ watch(
             <fieldset class="inspector-panel" :disabled="authoringLocked" @input="dirty = true">
               <nav class="settings-tabs" aria-label="Form settings tabs">
                 <button :aria-pressed="settingsTab === 'form'" @click="settingsTab = 'form'">
-                  Form</button
+                  <i class="pi pi-cog" aria-hidden="true" /> Form</button
                 ><button :aria-pressed="settingsTab === 'field'" @click="settingsTab = 'field'">
-                  Field</button
+                  <i class="pi pi-sliders-h" aria-hidden="true" /> Field</button
                 ><button :aria-pressed="settingsTab === 'output'" @click="settingsTab = 'output'">
-                  Output / issues
+                  <i class="pi pi-check-circle" aria-hidden="true" /> Output
                 </button>
               </nav>
               <section v-show="settingsTab === 'form'" aria-label="Form settings">
@@ -1559,3 +1692,5 @@ p[role='alert'] {
   }
 }
 </style>
+
+<style src="../styles/form-builder.css"></style>

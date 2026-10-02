@@ -98,6 +98,7 @@ test('cancelled discard keeps unsaved edits, versioned forms archive and copies 
     .getByRole('navigation', { name: 'Form palette' })
     .getByRole('button', { name: 'Library', exact: true })
     .click()
+  await page.getByRole('button', { name: 'Unsaved audit title', exact: true }).click()
   await page.getByRole('button', { name: 'Archive', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Archive form', exact: true }).click()
   await expect(page.getByLabel('Form library')).toContainText('Archived')

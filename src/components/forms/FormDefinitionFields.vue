@@ -357,6 +357,31 @@ select {
   background: var(--surface);
   color: var(--text);
 }
+input[type='file'] {
+  font: inherit;
+  color: var(--text);
+  min-width: 0;
+}
+input[type='file']::file-selector-button {
+  font: inherit;
+  color: #edf4f8;
+  background: #204661;
+  border: 1px solid #7894a7;
+  border-radius: 5px;
+  padding: 7px 10px;
+  margin-right: 10px;
+  opacity: 1;
+  cursor: pointer;
+}
+input[type='file']:disabled::file-selector-button {
+  color: #edf4f8;
+  -webkit-text-fill-color: #edf4f8;
+  cursor: default;
+}
+input[type='file']:focus-visible {
+  outline: 2px solid #91c9ed;
+  outline-offset: 2px;
+}
 textarea {
   min-height: 7rem;
 }

@@ -21,7 +21,7 @@ test('email, phone and time definitions roundtrip through the existing editor an
     ['phone', '+1 (555) 010-0200', 'tel'],
     ['time', '14:30', 'time'],
   ]) {
-    const input = page.getByLabel(id, { exact: false })
+    const input = page.getByLabel('Full-page form preview').getByLabel(id, { exact: false })
     await expect(input).toHaveAttribute('type', type!)
     await expect(input).toHaveAttribute('aria-required', 'true')
     await input.fill(value!)
