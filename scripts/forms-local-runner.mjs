@@ -36,7 +36,9 @@ for (const [uid, email, role] of [
     .set({ role, active: true, email, firstName: 'Local', lastName: role, assignedJobIds: [] })
 }
 const server = createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5195')
+  const origin = req.headers.origin || 'http://127.0.0.1:5173'
+  if (['http://127.0.0.1:5173', 'http://localhost:5173'].includes(origin))
+    res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Firebase-AppCheck')
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Content-Type', 'application/json')
@@ -115,7 +117,7 @@ const vite = spawn(
   },
 )
 console.log(
-  'Local Form Builder: http://127.0.0.1:5195/admin/forms; admin@forms.local or foreman@forms.local; fixture password Local-Forms-Only-123!. Demo emulators only; Graph email disabled.',
+  'Local Form Builder: http://127.0.0.1:5173/admin/forms; admin@forms.local or foreman@forms.local; use the local demo sign-in buttons at /login. Demo emulators only; Graph email disabled.',
 )
 const stop = () => {
   vite.kill()

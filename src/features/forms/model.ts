@@ -117,7 +117,7 @@ export function keepVersion(template: FormTemplate): FormTemplate {
 export function duplicateTemplate(template: FormTemplate): FormTemplate {
   const next = clone(template)
   next.id = crypto.randomUUID()
-  next.title += ' (copy)'
+  next.title = next.title.slice(0, 153) + ' (copy)'
   next.archived = false
   next.versions = []
   const ids = new Map(next.fields.map((field) => [field.id, crypto.randomUUID()]))

@@ -1,5 +1,10 @@
 import { type FormRecord, type FormVersion } from './formModel';
 export declare const formTemplates: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    id: string;
+    latestVersion?: undefined;
+    revision?: undefined;
+    archived?: undefined;
+} | {
     draft: import("./formModel").FormDefinition;
     revision: any;
     latestVersion: any;

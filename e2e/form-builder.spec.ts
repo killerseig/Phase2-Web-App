@@ -36,12 +36,24 @@ test('keyboard and drag ordering share the definition used by full-page preview'
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
   await page.getByRole('button', { name: 'Move Date of inspection down', exact: true }).click()
   await expect(page.getByLabel('Field label', { exact: true }).first()).toHaveValue('Job name')
-  await page
-    .getByRole('button', { name: 'Drag Job name', exact: true })
-    .dragTo(page.getByRole('article', { name: 'Field 3', exact: true }), {
-      targetPosition: { x: 10, y: 10 },
-    })
-  await expect(page.getByLabel('Field label', { exact: true }).nth(2)).toHaveValue('Job name')
+  await page.setViewportSize({ width: 1440, height: 1600 })
+  const handle = page.getByRole('button', { name: 'Drag Job name', exact: true })
+  const destination = page.getByRole('article', { name: 'Field 2', exact: true })
+  await handle.hover()
+  const to = (await destination.boundingBox())!,
+    from = (await handle.boundingBox())!
+  const hit = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.closest('button')?.getAttribute('aria-label'),
+    { x: from.x + 8, y: from.y + 8 },
+  )
+  expect(hit).toBe('Drag Job name')
+  await page.mouse.move(from.x + 8, from.y + 8)
+  await page.mouse.down()
+  expect(to.y + to.height - 10).toBeLessThan(1600)
+  await page.mouse.move(to.x + 20, to.y + to.height - 10, { steps: 12 })
+  await expect(page.locator('.form-drag-ghost')).toBeVisible()
+  await page.mouse.up()
+  await expect(page.getByLabel('Field label', { exact: true }).nth(1)).toHaveValue('Job name')
   await page.getByRole('button', { name: 'Full-page preview', exact: true }).click()
   await page.getByRole('button', { name: 'Check required fields', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Date of inspection is required.')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import constructionImage from '@/assets/images/construction-placeholder.webp'
 import loginArtwork from '@/assets/images/login-blueprint.webp'
 import AuthCard from '@/components/auth/AuthCard.vue'
@@ -22,6 +22,12 @@ import {
 import { hasConfiguredFirebase } from '@/services/firebaseConfig'
 import { useAuthStore } from '@/stores/auth'
 
+const LocalFormsSignIn =
+  import.meta.env.DEV &&
+  import.meta.env.VITE_FORM_EMULATORS === 'true' &&
+  import.meta.env.VITE_FIREBASE_PROJECT_ID === 'demo-phase2-security'
+    ? defineAsyncComponent(() => import('@/components/auth/LocalFormsSignIn.vue'))
+    : undefined
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
@@ -108,7 +114,8 @@ async function handleLogin() {
 
     <AuthStatusMessage v-if="initializing"> Checking your current session... </AuthStatusMessage>
 
-    <form v-else @submit.prevent="handleLogin">
+    <LocalFormsSignIn v-if="!initializing && LocalFormsSignIn" />
+    <form v-if="!initializing" @submit.prevent="handleLogin">
       <AppField class="auth-field" label="Email">
         <AppTextInput
           id="login-email"

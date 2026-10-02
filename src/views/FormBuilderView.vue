@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink } from 'vue-router'
 import { formApi, isFormServerEnabled, type ServerFormTemplate } from '@/services/forms'
 import AppShell from '@/layouts/AppShell.vue'
@@ -21,13 +21,31 @@ import {
   newTemplate,
   removeOrArchive,
   type FormFieldKind,
+  type FormField,
   type FormTemplate,
 } from '@/features/forms/model'
+import { useFormAuthoring } from '@/features/forms/useFormAuthoring'
+import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { readLibrary, saveLibrary } from '@/features/forms/localLibrary'
+const fieldGroups: { label: string; kinds: FormFieldKind[] }[] = [
+  {
+    label: 'Basic fields',
+    kinds: ['text', 'textarea', 'email', 'phone', 'time', 'date', 'number'],
+  },
+  { label: 'Choices', kinds: ['choice', 'checkbox', 'radio', 'multiselect'] },
+  { label: 'Photos', kinds: ['photo'] },
+]
+const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
+const previewWidth = computed(() =>
+  previewDevice.value === 'phone' ? 390 : previewDevice.value === 'tablet' ? 820 : 1080,
+)
 const auth = useAuthStore()
 const serverEnabled = isFormServerEnabled(),
   serverTemplates = ref<ServerFormTemplate[]>([]),
   serverBusy = ref(false)
+const serverAvailable = ref(false)
+const legacyImportId = ref(''),
+  legacyError = ref('')
 async function loadServer() {
   if (!serverEnabled || !uid.value) return
   const owner = uid.value
@@ -35,14 +53,21 @@ async function loadServer() {
     const result = await formApi<{ templates: ServerFormTemplate[] }>('formTemplates', {
       action: 'list',
     })
-    if (uid.value === owner) serverTemplates.value = result.templates
+    if (uid.value === owner) {
+      serverTemplates.value = result.templates
+      serverAvailable.value = true
+    }
   } catch (caught) {
-    error.value = (caught as Error).message
+    if (uid.value === owner) {
+      serverAvailable.value = false
+      error.value = (caught as Error).message
+    }
   }
 }
 async function saveServer(): Promise<ServerFormTemplate | undefined> {
-  if (!draft.value) return
-  const owner = uid.value
+  if (!draft.value || serverBusy.value || !serverAvailable.value) return
+  const owner = uid.value,
+    submitted = JSON.stringify(draft.value)
   serverBusy.value = true
   try {
     const existing = serverTemplates.value.find((item) => item.id === draft.value!.id)
@@ -54,6 +79,7 @@ async function saveServer(): Promise<ServerFormTemplate | undefined> {
     })
     if (uid.value !== owner) return
     await loadServer()
+    if (JSON.stringify(draft.value) === submitted) authoring.saved()
     message.value = 'Draft saved to the local server.'
     error.value = ''
     return result
@@ -98,6 +124,10 @@ async function removeServer(template: ServerFormTemplate) {
       revision: template.revision,
     })
     await loadServer()
+    if (uid.value === owner && draft.value?.id === template.id) {
+      draft.value = undefined
+      authoring.reset()
+    }
   } catch (caught) {
     error.value = (caught as Error).message
   } finally {
@@ -118,9 +148,104 @@ const library = ref(emptyLibrary()),
   error = ref(''),
   blocked = ref(false),
   preview = ref(false),
-  dirty = ref(false),
-  dragging = ref('')
+  dirty = ref(false)
 const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const authoring = useFormAuthoring(draft, dirty)
+const { selection, canUndo, canRedo } = authoring
+const selectedField = computed(() =>
+  draft.value?.fields.find((field) => field.id === selection.value),
+)
+const builderRoot = ref<HTMLElement>()
+const creationLocked = computed(
+  () => blocked.value || serverBusy.value || (serverEnabled && !serverAvailable.value),
+)
+const authoringLocked = computed(
+  () =>
+    blocked.value ||
+    serverBusy.value ||
+    !!draft.value?.archived ||
+    (serverEnabled && !serverAvailable.value),
+)
+type FieldDrag = { kind: 'new'; type: FormFieldKind } | { kind: 'move'; id: string }
+const pointerDrag = useWidgetDrag<FieldDrag>({
+  root: builderRoot,
+  disabled: () => authoringLocked.value || preview.value || !draft.value,
+  drop: dropField,
+})
+const {
+  dragging: pointerDragging,
+  target: pointerTarget,
+  point: pointerPoint,
+  label: pointerLabel,
+} = pointerDrag
+function startFieldDrag(event: PointerEvent, id: string, label: string) {
+  authoring.select(id)
+  pointerDrag.start(event, { kind: 'move', id }, label)
+}
+function dropField(payload: FieldDrag, target: WidgetDrop) {
+  if (!draft.value || authoringLocked.value) return
+  const at = target.beforeId
+    ? draft.value.fields.findIndex((field) => field.id === target.beforeId)
+    : draft.value.fields.length
+  if (at < 0) return
+  if (payload.kind === 'new') add(payload.type, at)
+  else {
+    const from = draft.value.fields.findIndex((field) => field.id === payload.id)
+    if (from < 0) return
+    reorder(payload.id, Math.max(0, at > from ? at - 1 : at))
+    selection.value = payload.id
+  }
+}
+function editorKeys(event: KeyboardEvent) {
+  if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]'))
+    return
+  if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
+    event.preventDefault()
+    if (authoringLocked.value) return
+    if (event.key.toLowerCase() === 'y' || event.shiftKey) authoring.redo()
+    else authoring.undo()
+  }
+}
+async function duplicateServer(template: ServerFormTemplate) {
+  if (serverBusy.value || !serverAvailable.value || template.archived) return
+  if (dirty.value) {
+    error.value = 'Save or discard current edits before duplicating.'
+    return
+  }
+  const owner = uid.value
+  const key = 'form-copy-request:v1:' + owner + ':' + template.id + ':' + template.revision
+  const targetId = localStorage.getItem(key) || crypto.randomUUID()
+  localStorage.setItem(key, targetId)
+  serverBusy.value = true
+  try {
+    const result = await formApi<ServerFormTemplate>('formTemplates', {
+      action: 'duplicate',
+      id: template.id,
+      revision: template.revision,
+      targetId,
+    })
+    if (uid.value !== owner) return
+    localStorage.removeItem(key)
+    await loadServer()
+    await selectServer(result)
+    message.value = 'Independent server copy created. Original versions and records are unchanged.'
+  } catch (caught) {
+    if (uid.value === owner) error.value = (caught as Error).message
+  } finally {
+    if (uid.value === owner) serverBusy.value = false
+  }
+}
+
+async function importDeviceDraft() {
+  if (!serverAvailable.value || serverBusy.value || dirty.value) return
+  const source = library.value.templates.find(
+    (item) => item.id === legacyImportId.value && !item.archived,
+  )
+  if (!source) return
+  draft.value = duplicateTemplate(source)
+  authoring.reset(true)
+  await saveServer()
+}
 const uid = computed(() => auth.currentUser?.uid || '')
 const recipientText = computed({
   get: () => draft.value?.recipients.join(', ') || '',
@@ -143,12 +268,18 @@ watch(
     error.value = ''
     dirty.value = false
     blocked.value = false
+    legacyError.value = ''
+    authoring.reset()
+    pointerDrag.cancel()
     if (!uid.value) return
     try {
       library.value = readLibrary(localStorage, uid.value)
     } catch (caught) {
-      blocked.value = true
-      error.value = (caught as Error).message
+      blocked.value = !serverEnabled
+      if (serverEnabled)
+        legacyError.value =
+          'Device cache could not be read; it is preserved. The server library remains separate.'
+      else error.value = (caught as Error).message
     }
   },
   { immediate: true },
@@ -157,6 +288,7 @@ watch(
   uid,
   () => {
     serverTemplates.value = []
+    serverAvailable.value = false
     void loadServer()
   },
   { immediate: true },
@@ -184,7 +316,9 @@ async function select(template: FormTemplate) {
   )
     return
   if (uid.value !== owner) return
+  pointerDrag.cancel()
   draft.value = clone(template)
+  authoring.reset()
   dirty.value = false
   preview.value = false
   message.value = ''
@@ -203,7 +337,9 @@ async function create(audit = false) {
   )
     return
   if (uid.value !== owner) return
+  pointerDrag.cancel()
   draft.value = audit ? committeeAudit() : newTemplate()
+  authoring.reset(true)
   dirty.value = true
   preview.value = false
 }
@@ -222,6 +358,7 @@ function save(version = false) {
   else next.templates[index] = saved
   if (persist(next)) {
     draft.value = clone(saved)
+    authoring.saved()
     dirty.value = false
   }
 }
@@ -251,34 +388,58 @@ function duplicate(template: FormTemplate) {
     return
   }
   draft.value = duplicateTemplate(template)
+  authoring.reset(true)
   dirty.value = true
   preview.value = false
 }
-function add(kind: FormFieldKind) {
-  if (!draft.value) return
-  draft.value.fields.push(newField(kind))
+function add(kind: FormFieldKind, at = draft.value?.fields.length || 0) {
+  if (!draft.value || authoringLocked.value || draft.value.fields.length >= 60) return
+  const field = newField(kind)
+  draft.value.fields.splice(at, 0, field)
+  selection.value = field.id
   dirty.value = true
+  void nextTick(() =>
+    builderRoot.value?.querySelector<HTMLElement>('[data-widget-id="' + field.id + '"]')?.focus(),
+  )
 }
 function reorder(id: string, index: number) {
-  if (!draft.value) return
+  if (!draft.value || authoringLocked.value) return
+  if (draft.value.fields.findIndex((field) => field.id === id) === index) return
   moveField(draft.value, id, index)
   dirty.value = true
-  dragging.value = ''
+}
+function changeFieldKind(field: FormField, kind: FormFieldKind) {
+  if (
+    draft.value?.fields.some((item) => item.requiredWhen?.fieldId === field.id) &&
+    !['choice', 'radio'].includes(kind)
+  ) {
+    error.value =
+      'This field is used by required-note conditions. Keep a single select or radio type.'
+    return
+  }
+  field.kind = kind
+  if (kind !== 'number') {
+    delete field.minimum
+    delete field.integer
+  }
+  if (!['text', 'textarea'].includes(kind)) delete field.requiredWhen
+  if (!optionFieldKinds.includes(kind)) field.options = []
+  else if (field.options.length < 2) field.options = ['Yes', 'No']
+}
+function changeCondition(field: FormField, id: string) {
+  const source = draft.value?.fields.find((item) => item.id === id)
+  if (!source) delete field.requiredWhen
+  else field.requiredWhen = { fieldId: source.id, values: [source.options[0]!] }
 }
 function removeField(index: number) {
-  draft.value?.fields.splice(index, 1)
+  if (!draft.value || authoringLocked.value) return
+  if (index < 0 || index >= draft.value.fields.length) return
+  const [removed] = draft.value.fields.splice(index, 1)
+  for (const field of draft.value.fields)
+    if (field.requiredWhen?.fieldId === removed?.id) delete field.requiredWhen
+  if (removed?.id === selection.value)
+    selection.value = draft.value.fields[index]?.id || draft.value.fields[index - 1]?.id || ''
   dirty.value = true
-}
-function beginDrag(event: DragEvent, id: string) {
-  dragging.value = id
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', id)
-  }
-}
-function drop(event: DragEvent, index: number) {
-  const id = dragging.value || event.dataTransfer?.getData('text/plain')
-  if (id) reorder(id, index)
 }
 const errors = computed(() => (draft.value ? definitionErrors(draft.value) : []))
 async function leaveEditor() {
@@ -305,133 +466,390 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
 <template>
   <AppShell>
-    <section class="form-builder">
+    <section
+      ref="builderRoot"
+      class="form-builder"
+      @click.capture="pointerDrag.guardClick"
+      @keydown="editorKeys"
+    >
       <header>
         <div>
           <h1>Form Builder</h1>
-          <p>
-            Development preview · local drafts on this device. No production submissions or email.
-          </p>
+          <p>Development preview. No production submissions or email.</p>
         </div>
-        <button :disabled="blocked" @click="create()">New form</button
-        ><button :disabled="blocked" @click="create(true)">Committee audit starter</button>
+        <button :disabled="creationLocked" @click="create()">New form</button
+        ><button :disabled="creationLocked" @click="create(true)">Committee audit starter</button>
       </header>
+      <p aria-live="polite">
+        {{
+          serverEnabled
+            ? serverAvailable
+              ? 'Source of truth: local emulator server. Device-only drafts are separate and are not listed here.'
+              : 'Emulator backend unavailable. Server edits are blocked; no fallback device records are mixed into this library.'
+            : 'Device-only draft mode. Start the Forms emulator profile for the shared server library; these drafts are not server records.'
+        }}
+      </p>
+      <p v-if="legacyError" role="alert">{{ legacyError }}</p>
       <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
       <div class="builder-layout">
-        <aside aria-label="Form library">
+        <aside class="builder-sidebar" aria-label="Form library">
           <h2>Form library</h2>
-          <p v-if="!library.templates.length">
-            Create a form to begin. Opening this page creates nothing.
-          </p>
-          <article v-for="template in library.templates" :key="template.id">
-            <button @click="select(template)">{{ template.title }}</button
-            ><span v-if="template.archived">Archived</span
-            ><small>{{ template.versions.length }} retained versions</small
-            ><button :disabled="template.archived || blocked" @click="duplicate(template)">
-              Duplicate</button
-            ><button :disabled="template.archived || blocked" @click="remove(template)">
-              {{ template.versions.length ? 'Archive' : 'Delete' }}
-            </button>
-          </article>
-          <section v-if="serverEnabled" aria-label="Server form library">
-            <h2>Local server forms</h2>
-            <button :disabled="serverBusy" @click="loadServer">Refresh server library</button>
-            <article v-for="template in serverTemplates" :key="template.id">
-              <button @click="selectServer(template)">{{ template.draft.title }}</button
-              ><span
-                >{{ template.archived ? 'Archived' : 'Active' }} · issued version
-                {{ template.latestVersion }}</span
-              ><RouterLink v-if="template.latestVersion" :to="'/forms/' + template.id"
-                >Open authenticated form</RouterLink
-              ><button :disabled="serverBusy || template.archived" @click="removeServer(template)">
-                Remove or archive server form
+          <div class="library-list">
+            <p v-if="!serverEnabled && !library.templates.length">
+              Create a form to begin. Opening this page creates nothing.
+            </p>
+            <article v-for="template in serverEnabled ? [] : library.templates" :key="template.id">
+              <button @click="select(template)">{{ template.title }}</button
+              ><span v-if="template.archived">Archived</span
+              ><small>{{ template.versions.length }} retained versions</small
+              ><button :disabled="template.archived || blocked" @click="duplicate(template)">
+                Duplicate</button
+              ><button :disabled="template.archived || blocked" @click="remove(template)">
+                {{ template.versions.length ? 'Archive' : 'Delete' }}
               </button>
             </article>
+            <section v-if="serverEnabled" aria-label="Server form library">
+              <h3>Server templates</h3>
+              <details v-if="library.templates.length">
+                <summary>Import an existing device draft</summary>
+                <p>
+                  Creates a new server draft. Device versions stay on this device and are not merged
+                  with server history.
+                </p>
+                <label
+                  >Device draft to import<select
+                    v-model="legacyImportId"
+                    aria-label="Device draft to import"
+                  >
+                    <option value="">Choose a device draft</option>
+                    <option
+                      v-for="item in library.templates.filter((item) => !item.archived)"
+                      :key="item.id"
+                      :value="item.id"
+                    >
+                      {{ item.title }}
+                    </option>
+                  </select></label
+                ><button
+                  :disabled="!legacyImportId || !serverAvailable || serverBusy || dirty"
+                  @click="importDeviceDraft"
+                >
+                  Import as new server draft
+                </button>
+              </details>
+              <button :disabled="serverBusy" @click="loadServer">Refresh server library</button>
+              <article v-for="template in serverTemplates" :key="template.id">
+                <button :disabled="serverBusy" @click="selectServer(template)">
+                  {{ template.draft.title }}</button
+                ><span v-if="draft?.id === template.id"
+                  >{{ template.archived ? 'Archived' : 'Active' }} · issued version
+                  {{ template.latestVersion }}</span
+                ><RouterLink
+                  v-if="draft?.id === template.id && template.latestVersion"
+                  :to="'/forms/' + template.id"
+                  >Open authenticated form</RouterLink
+                ><button
+                  v-if="draft?.id === template.id"
+                  :disabled="serverBusy || !serverAvailable || template.archived || dirty"
+                  @click="duplicateServer(template)"
+                >
+                  Duplicate server form</button
+                ><button
+                  v-if="draft?.id === template.id"
+                  :disabled="serverBusy || !serverAvailable || template.archived"
+                  @click="removeServer(template)"
+                >
+                  Remove or archive server form
+                </button>
+              </article>
+            </section>
+          </div>
+          <section v-if="draft && !preview" class="field-palette" aria-label="Field palette">
+            <h2>Fields</h2>
+            <section v-for="group in fieldGroups" :key="group.label">
+              <h3>{{ group.label }}</h3>
+              <div class="palette-options">
+                <button
+                  v-for="kind in group.kinds"
+                  :key="kind"
+                  class="form-grip"
+                  :disabled="authoringLocked || draft.fields.length >= 60"
+                  @pointerdown="pointerDrag.start($event, { kind: 'new', type: kind }, kind)"
+                  @dragstart.prevent
+                  @click="add(kind)"
+                  :aria-label="'Add ' + kind"
+                >
+                  {{
+                    kind === 'choice'
+                      ? 'Single select'
+                      : kind === 'textarea'
+                        ? 'Long text'
+                        : kind === 'multiselect'
+                          ? 'Multi select'
+                          : kind[0]!.toUpperCase() + kind.slice(1)
+                  }}
+                </button>
+              </div>
+            </section>
           </section>
         </aside>
         <section v-if="draft" aria-label="Form editor">
           <BuilderSelectionContext kind="Form" :scope="draft.title" />
           <div v-if="serverEnabled" class="toolbar">
-            <button :disabled="serverBusy || draft.archived" @click="saveServer">
-              Save to local server</button
+            <button :disabled="authoringLocked" @click="saveServer">Save to local server</button
             ><button :disabled="serverBusy || draft.archived" @click="issueServer">
               Issue local server version
             </button>
           </div>
           <div class="toolbar">
-            <button :disabled="blocked || draft.archived" @click="save()">Save local draft</button
-            ><button :disabled="blocked || draft.archived" @click="save(true)">
+            <button :disabled="authoringLocked || !canUndo" @click="authoring.undo">Undo</button
+            ><button :disabled="authoringLocked || !canRedo" @click="authoring.redo">Redo</button>
+            <button v-if="!serverEnabled" :disabled="blocked || draft.archived" @click="save()">
+              Save local draft</button
+            ><button
+              v-if="!serverEnabled"
+              :disabled="blocked || draft.archived"
+              @click="save(true)"
+            >
               Keep local version</button
             ><button @click="preview = !preview">
               {{ preview ? 'Edit fields' : 'Full-page preview' }}</button
             ><span>{{ dirty ? 'Unsaved edits' : 'Saved draft' }}</span>
           </div>
-          <FormDefinitionPreview v-if="preview" :definition="draft" />
-          <fieldset v-else :disabled="blocked || draft.archived" @input="dirty = true">
-            <label>Form title<input v-model="draft.title" maxlength="160" /></label
-            ><label>Description<textarea v-model="draft.description" /></label
-            ><label
-              >Recipients<input
-                v-model="recipientText"
-                placeholder="name@example.com, another@example.com"
-            /></label>
-            <p>Recipients are configuration only in this local preview; no email is sent.</p>
-            <div class="toolbar">
-              <button v-for="kind in fieldKinds" :key="kind" @click="add(kind)">
-                Add {{ kind }}
-              </button>
-            </div>
-            <article
-              v-for="(field, index) in draft.fields"
-              :key="field.id"
-              class="field-row"
-              :aria-label="'Field ' + (index + 1)"
-              @dragover.prevent
-              @drop.prevent="drop($event, index)"
+          <div class="toolbar" role="group" aria-label="Preview device">
+            <button
+              v-for="device in ['desktop', 'tablet', 'phone'] as const"
+              :key="device"
+              :aria-pressed="previewDevice === device"
+              @click="previewDevice = device"
             >
-              <button
-                draggable="true"
-                :aria-label="'Drag ' + field.label"
-                @dragstart="beginDrag($event, field.id)"
-                @dragend="dragging = ''"
-                @keydown.esc="dragging = ''"
-              >
-                &#8942;&#8942;</button
-              ><label>Field label<input v-model="field.label" maxlength="160" /></label
+              {{ device[0]!.toUpperCase() + device.slice(1) }}
+            </button>
+            <small>{{
+              preview
+                ? 'Preview fits the available workspace'
+                : 'Choose a device, then open Full-page preview'
+            }}</small>
+          </div>
+          <div v-if="preview" class="form-preview-frame" :style="{ maxWidth: previewWidth + 'px' }">
+            <FormDefinitionPreview :definition="draft" />
+          </div>
+          <div v-else class="authoring-panels">
+            <fieldset class="canvas-panel" :disabled="authoringLocked" @input="dirty = true">
+              <label>Form title<input v-model="draft.title" maxlength="160" /></label
+              ><label>Description<textarea v-model="draft.description" /></label
               ><label
-                >Type<select v-model="field.kind">
-                  <option v-for="kind in fieldKinds" :key="kind">{{ kind }}</option>
-                </select></label
-              ><label><input v-model="field.required" type="checkbox" /> Required</label
-              ><label v-if="optionFieldKinds.includes(field.kind)"
-                >Options<textarea
-                  :value="field.options.join('\n')"
-                  @input="field.options = ($event.target as HTMLTextAreaElement).value.split('\n')"
-                />
-              </label>
-              <div class="toolbar">
-                <button
-                  :disabled="index === 0"
-                  :aria-label="'Move ' + field.label + ' up'"
-                  @click="reorder(field.id, index - 1)"
+                >Recipients<input
+                  v-model="recipientText"
+                  placeholder="name@example.com, another@example.com"
+              /></label>
+              <p>Recipients are configuration only in this local preview; no email is sent.</p>
+              <p>
+                Drag a field onto the ordered canvas, or click Add to append. Select a field for its
+                inspector. Move buttons provide keyboard ordering.
+              </p>
+              <div
+                class="form-canvas"
+                data-widget-scroll
+                data-widget-surface="form"
+                aria-label="Form canvas"
+              >
+                <p v-if="!draft.fields.length" class="empty-canvas">
+                  Drop a field here or choose Add above.
+                </p>
+                <article
+                  v-for="(field, index) in draft.fields"
+                  :key="field.id"
+                  class="field-row"
+                  :data-widget-id="field.id"
+                  :class="{
+                    selected: selection === field.id,
+                    'drop-before':
+                      pointerTarget?.overId === field.id && pointerTarget.edge === 'before',
+                    'drop-after':
+                      pointerTarget?.overId === field.id && pointerTarget.edge === 'after',
+                  }"
+                  tabindex="0"
+                  @focusin="authoring.select(field.id)"
+                  @click="authoring.select(field.id)"
+                  @keydown.enter.self="authoring.select(field.id)"
+                  @keydown.space.self.prevent="authoring.select(field.id)"
+                  @keydown.delete.self.prevent="removeField(index)"
+                  :aria-label="'Field ' + (index + 1)"
                 >
-                  ↑</button
-                ><button
-                  :disabled="index === draft.fields.length - 1"
-                  :aria-label="'Move ' + field.label + ' down'"
-                  @click="reorder(field.id, index + 1)"
-                >
-                  ↓</button
-                ><button :aria-label="'Remove ' + field.label" @click="removeField(index)">
-                  Remove
-                </button>
+                  <button
+                    class="form-grip"
+                    @pointerdown="startFieldDrag($event, field.id, field.label)"
+                    @dragstart.prevent
+                    :aria-label="'Drag ' + field.label"
+                    @keydown.esc="pointerDrag.cancel"
+                  >
+                    &#8942;&#8942;</button
+                  ><label>Field label<input v-model="field.label" maxlength="160" /></label
+                  ><label
+                    >Type<select
+                      :value="field.kind"
+                      @change="
+                        changeFieldKind(
+                          field,
+                          ($event.target as HTMLSelectElement).value as FormFieldKind,
+                        )
+                      "
+                    >
+                      <option v-for="kind in fieldKinds" :key="kind">{{ kind }}</option>
+                    </select></label
+                  ><label><input v-model="field.required" type="checkbox" /> Required</label
+                  ><label v-if="optionFieldKinds.includes(field.kind)"
+                    >Options<textarea
+                      :value="field.options.join('\n')"
+                      @input="
+                        field.options = ($event.target as HTMLTextAreaElement).value.split('\n')
+                      "
+                    />
+                  </label>
+                  <div class="toolbar">
+                    <button
+                      :disabled="index === 0"
+                      :aria-label="'Move ' + field.label + ' up'"
+                      @click="reorder(field.id, index - 1)"
+                    >
+                      ↑</button
+                    ><button
+                      :disabled="index === draft.fields.length - 1"
+                      :aria-label="'Move ' + field.label + ' down'"
+                      @click="reorder(field.id, index + 1)"
+                    >
+                      ↓</button
+                    ><button :aria-label="'Remove ' + field.label" @click="removeField(index)">
+                      Remove
+                    </button>
+                  </div>
+                </article>
               </div>
-            </article>
-            <ul v-if="errors.length">
-              <li v-for="item in errors" :key="item">{{ item }}</li>
-            </ul>
-          </fieldset>
+              <ul v-if="errors.length">
+                <li v-for="item in errors" :key="item">{{ item }}</li>
+              </ul>
+            </fieldset>
+            <fieldset class="inspector-panel" :disabled="authoringLocked" @input="dirty = true">
+              <section v-if="selectedField" aria-label="Field inspector" class="field-inspector">
+                <BuilderSelectionContext kind="Field" :scope="selectedField.label" />
+                <label
+                  >Selected field label<input v-model="selectedField.label" maxlength="160"
+                /></label>
+                <label
+                  >Selected field type<select
+                    aria-label="Selected field type"
+                    :value="selectedField.kind"
+                    @change="
+                      changeFieldKind(
+                        selectedField,
+                        ($event.target as HTMLSelectElement).value as FormFieldKind,
+                      )
+                    "
+                  >
+                    <option v-for="kind in fieldKinds" :key="kind">{{ kind }}</option>
+                  </select></label
+                >
+                <label
+                  ><input v-model="selectedField.required" type="checkbox" />Selected field
+                  required</label
+                >
+                <label v-if="optionFieldKinds.includes(selectedField.kind)"
+                  >Selected field options<textarea
+                    :value="selectedField.options.join('\n')"
+                    @input="
+                      selectedField.options = ($event.target as HTMLTextAreaElement).value.split(
+                        '\n',
+                      )
+                    "
+                  />
+                </label>
+                <label
+                  >Selected field hint<input
+                    :value="selectedField.hint || ''"
+                    maxlength="500"
+                    @input="selectedField.hint = ($event.target as HTMLInputElement).value"
+                /></label>
+                <label
+                  >Selected field section<input
+                    :value="selectedField.section || ''"
+                    maxlength="160"
+                    @input="selectedField.section = ($event.target as HTMLInputElement).value"
+                /></label>
+                <template v-if="selectedField.kind === 'number'"
+                  ><label
+                    >Minimum number<input
+                      type="number"
+                      :value="selectedField.minimum"
+                      @input="
+                        ($event.target as HTMLInputElement).value === ''
+                          ? delete selectedField.minimum
+                          : (selectedField.minimum = Number(
+                              ($event.target as HTMLInputElement).value,
+                            ))
+                      " /></label
+                  ><label
+                    ><input v-model="selectedField.integer" type="checkbox" />Whole numbers
+                    only</label
+                  ></template
+                >
+                <template v-if="['text', 'textarea'].includes(selectedField.kind)">
+                  <label
+                    >Required note source<select
+                      aria-label="Required note source"
+                      :value="selectedField.requiredWhen?.fieldId || ''"
+                      @change="
+                        changeCondition(selectedField, ($event.target as HTMLSelectElement).value)
+                      "
+                    >
+                      <option value="">No condition</option>
+                      <option
+                        v-for="source in draft.fields.filter((field) =>
+                          ['choice', 'radio'].includes(field.kind),
+                        )"
+                        :key="source.id"
+                        :value="source.id"
+                      >
+                        {{ source.label }}
+                      </option>
+                    </select></label
+                  >
+                  <label v-if="selectedField.requiredWhen"
+                    >Required note values<select
+                      aria-label="Required note values"
+                      multiple
+                      :value="selectedField.requiredWhen.values"
+                      @change="
+                        selectedField.requiredWhen.values = Array.from(
+                          ($event.target as HTMLSelectElement).selectedOptions,
+                        ).map((option) => option.value)
+                      "
+                    >
+                      <option
+                        v-for="option in draft.fields.find(
+                          (field) => field.id === selectedField!.requiredWhen!.fieldId,
+                        )?.options || []"
+                        :key="option"
+                      >
+                        {{ option }}
+                      </option>
+                    </select></label
+                  >
+                </template>
+                <button
+                  :aria-label="'Delete selected ' + selectedField.label"
+                  @click="
+                    removeField(draft.fields.findIndex((field) => field.id === selectedField!.id))
+                  "
+                >
+                  Delete selected field
+                </button>
+              </section>
+
+              <p v-if="!selectedField">Select a field on the canvas to edit its properties.</p>
+            </fieldset>
+          </div>
         </section>
         <section v-else>
           <h2>Choose a form or create your first draft</h2>
@@ -441,11 +859,140 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           </p>
         </section>
       </div>
+      <Teleport to="body"
+        ><div
+          v-if="pointerDragging"
+          class="form-drag-ghost"
+          :style="{ left: pointerPoint.x + 12 + 'px', top: pointerPoint.y + 12 + 'px' }"
+          aria-hidden="true"
+        >
+          {{ pointerLabel }} · {{ pointerTarget ? 'Release to place' : 'Drag onto the canvas' }}
+        </div></Teleport
+      >
       <BuilderConfirmDialog ref="confirmation" />
     </section>
   </AppShell>
 </template>
 <style scoped>
+.authoring-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(13rem, 17rem);
+  gap: 0.75rem;
+  align-items: start;
+}
+.builder-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: calc(100dvh - 6rem);
+  overflow: auto;
+}
+.library-list {
+  max-height: 16rem;
+  overflow: auto;
+}
+.library-list article {
+  padding: 0.35rem 0;
+}
+.palette-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+.field-palette h3 {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.6rem 0 0.3rem;
+}
+.form-preview-frame {
+  width: 100%;
+  margin: 1rem auto;
+  min-width: 0;
+}
+.inspector-panel {
+  position: sticky;
+  top: 0.5rem;
+  max-height: 75dvh;
+  overflow: auto;
+}
+button[aria-pressed='true'] {
+  border-color: var(--brand-sky, #58bae9);
+  background: var(--surface-raised, var(--surface));
+}
+@media (max-width: 1250px) {
+  .authoring-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inspector-panel {
+    position: static;
+    max-height: none;
+  }
+}
+@media (max-width: 760px) {
+  .builder-sidebar {
+    display: contents;
+    position: static;
+    max-height: none;
+  }
+  .builder-sidebar > h2 {
+    display: none;
+  }
+  .library-list {
+    grid-row: 1;
+  }
+  .field-palette {
+    grid-row: 2;
+    position: sticky;
+    top: 0;
+  }
+  .library-list {
+    max-height: 10rem;
+  }
+  .palette-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.field-palette {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--surface);
+  padding-block: 0.5rem;
+}
+.form-canvas {
+  max-height: 65dvh;
+  overflow: auto;
+  min-height: 6rem;
+  padding: 0.5rem;
+  border: 1px dashed var(--border);
+}
+.form-grip {
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.field-row.selected {
+  outline: 2px solid var(--brand-sky, #58bae9);
+  outline-offset: -2px;
+}
+.drop-before {
+  box-shadow: 0 -3px var(--brand-sky, #58bae9);
+}
+.drop-after {
+  box-shadow: 0 3px var(--brand-sky, #58bae9);
+}
+.field-inspector {
+  padding: 0;
+  margin-top: 0;
+}
+.form-drag-ghost {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  background: var(--surface);
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+}
 .form-builder {
   padding: 1rem;
   max-width: 100rem;
@@ -468,7 +1015,7 @@ small {
 }
 .builder-layout {
   display: grid;
-  grid-template-columns: minmax(13rem, 19rem) minmax(0, 1fr);
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
   gap: 1rem;
   margin-top: 1rem;
 }

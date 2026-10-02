@@ -108,6 +108,44 @@ exports.formTemplates = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
     const id = validId(data.id), ref = templates.doc(id);
     return runtime_1.db.runTransaction(async (tx) => {
         const snapshot = await tx.get(ref), stored = snapshot.data();
+        if (data.action === 'duplicate') {
+            if (!snapshot.exists || stored?.archived)
+                fail('failed-precondition', 'Choose an active template to duplicate.');
+            const targetId = validId(data.targetId);
+            if (!requestId(targetId) || targetId === id)
+                fail('invalid-argument', 'Choose a new copy identity.');
+            const target = templates.doc(targetId), existing = await tx.get(target);
+            if (existing.exists) {
+                const copy = existing.data();
+                if (copy.duplicateOf !== id ||
+                    copy.duplicateRevision !== data.revision ||
+                    copy.createdBy !== profile.uid)
+                    fail('already-exists', 'This copy identity already exists.');
+                return { id: targetId, ...copy };
+            }
+            revision(stored.revision, data.revision);
+            const draft = validate(() => (0, formModel_1.validateFormDefinition)(stored.draft));
+            draft.title = draft.title.slice(0, 153) + ' (copy)';
+            const ids = new Map(draft.fields.map((field) => [field.id, (0, node_crypto_1.randomUUID)()]));
+            for (const field of draft.fields) {
+                field.id = ids.get(field.id);
+                if (field.requiredWhen)
+                    field.requiredWhen.fieldId = ids.get(field.requiredWhen.fieldId);
+            }
+            const copy = {
+                draft,
+                revision: 1,
+                latestVersion: 0,
+                archived: false,
+                used: false,
+                updatedAt: Date.now(),
+                createdBy: profile.uid,
+                duplicateOf: id,
+                duplicateRevision: data.revision,
+            };
+            tx.create(target, copy);
+            return { id: targetId, ...copy };
+        }
         revision(stored?.revision || 0, data.revision);
         if (data.action === 'save') {
             if (stored?.archived)

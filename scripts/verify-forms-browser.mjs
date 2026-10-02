@@ -24,20 +24,20 @@ try {
   const deadline = Date.now() + 45000
   while (true) {
     try {
-      if ((await fetch('http://127.0.0.1:5195/login')).ok) break
+      if ((await fetch('http://127.0.0.1:5173/login')).ok) break
     } catch {}
     if (Date.now() > deadline) throw new Error('Local Forms Vite did not become ready.')
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
-  await page.goto('http://127.0.0.1:5195/login', { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.goto('http://127.0.0.1:5173/login', { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.locator('#login-email').fill('admin@forms.local')
   await page.locator('#login-password').fill('Local-Forms-Only-123!')
   await page.getByRole('button', { name: 'Login', exact: true }).click()
   await page.waitForURL((url) => url.pathname !== '/login')
-  await page.goto('http://127.0.0.1:5195/admin/forms')
+  await page.goto('http://127.0.0.1:5173/admin/forms')
   if (process.env.FORMS_EXPECT_HISTORY === 'true') {
     assert.ok(process.env.FORMS_EXISTING_TEMPLATE, 'A submitted audit must survive restart.')
-    await page.goto('http://127.0.0.1:5195/forms/' + process.env.FORMS_EXISTING_TEMPLATE)
+    await page.goto('http://127.0.0.1:5173/forms/' + process.env.FORMS_EXISTING_TEMPLATE)
     await page
       .getByRole('button', {
         name: new RegExp('View submitted form.*' + process.env.FORMS_EXISTING_RECORD.slice(0, 8)),
@@ -49,7 +49,7 @@ try {
       await page.getByLabel('Job name', { exact: false }).inputValue(),
       'Synthetic Job name',
     )
-    await page.goto('http://127.0.0.1:5195/admin/forms')
+    await page.goto('http://127.0.0.1:5173/admin/forms')
   }
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
   const issuedResponse = page.waitForResponse(
@@ -64,7 +64,7 @@ try {
     .filter({ hasText: 'Immutable local server version issued.' })
     .waitFor()
   const issued = (await (await issuedResponse).json()).result
-  await page.goto('http://127.0.0.1:5195/forms/' + issued.id)
+  await page.goto('http://127.0.0.1:5173/forms/' + issued.id)
   await page.getByRole('button', { name: 'Start draft', exact: true }).click()
   await page.getByLabel('Job name', { exact: false }).fill('Actual emulator draft')
   await page.getByRole('button', { name: 'Save progress', exact: true }).click()
@@ -148,7 +148,7 @@ try {
       })
   }
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.goto('http://127.0.0.1:5195/admin/forms')
+  await page.goto('http://127.0.0.1:5173/admin/forms')
   await page.getByRole('button', { name: 'New form', exact: true }).click()
   await page.getByLabel('Form title', { exact: true }).fill('Common choice control smoke')
   for (const [kind, label, required] of [
@@ -171,7 +171,7 @@ try {
   )
   await page.getByRole('button', { name: 'Issue local server version', exact: true }).click()
   const choiceIssued = (await (await choiceIssuedResponse).json()).result
-  await page.goto('http://127.0.0.1:5195/forms/' + choiceIssued.id)
+  await page.goto('http://127.0.0.1:5173/forms/' + choiceIssued.id)
   await page.getByRole('button', { name: 'Start draft', exact: true }).click()
   const ack = page.getByRole('checkbox', { name: /Acknowledgement/ }),
     optional = page.getByRole('checkbox', { name: 'Optional follow-up', exact: true })
@@ -263,7 +263,7 @@ try {
       ],
     })
   }, choiceIssued.id)
-  await page.goto('http://127.0.0.1:5195/dashboards/personal')
+  await page.goto('http://127.0.0.1:5173/dashboards/personal')
   // The already-submitted choice record is reused; viewing an inline widget creates nothing.
   await page.getByText('Record status: submitted', { exact: false }).waitFor()
   assert.equal(await ack.isChecked(), true)
