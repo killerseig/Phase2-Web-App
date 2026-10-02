@@ -26,7 +26,7 @@ test('opening the library creates nothing; repeated saves and reload retain loca
   await expect(page.getByLabel('Recipients', { exact: true })).toHaveValue(
     'dan@example.com, safety@example.com',
   )
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(41)
+  await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(41)
 })
 
 test('keyboard and drag ordering share the definition used by full-page preview', async ({
@@ -35,7 +35,7 @@ test('keyboard and drag ordering share the definition used by full-page preview'
   await gotoPhase2App(page, '/admin/forms', createJobsFixture())
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
   await page.getByRole('button', { name: 'Move Date of inspection down', exact: true }).click()
-  await expect(page.getByLabel('Field label', { exact: true }).first()).toHaveValue('Job name')
+  await expect(page.locator('.form-canvas .form-field > label').first()).toContainText('Job name')
   await page.setViewportSize({ width: 1440, height: 1600 })
   const handle = page.getByRole('button', { name: 'Drag Job name', exact: true })
   const destination = page.getByRole('article', { name: 'Field 2', exact: true })
@@ -53,7 +53,7 @@ test('keyboard and drag ordering share the definition used by full-page preview'
   await page.mouse.move(to.x + 20, to.y + to.height - 10, { steps: 12 })
   await expect(page.locator('.form-drag-ghost')).toBeVisible()
   await page.mouse.up()
-  await expect(page.getByLabel('Field label', { exact: true }).nth(1)).toHaveValue('Job name')
+  await expect(page.locator('.form-canvas .form-field > label').nth(1)).toContainText('Job name')
   await page.getByRole('button', { name: 'Full-page preview', exact: true }).click()
   await page.getByRole('button', { name: 'Check required fields', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Date of inspection is required.')
@@ -138,7 +138,7 @@ test('leaving unsaved template edits requires an explicit discard; cancel preser
   await page.getByLabel('Form title', { exact: true }).fill('Unsaved navigation draft')
   await page.getByLabel('Recipients', { exact: true }).fill('review@example.com')
   await page.getByRole('button', { name: 'Add text', exact: true }).click()
-  await page.getByLabel('Field label', { exact: true }).fill('Keep this field')
+  await page.getByLabel('Selected field label', { exact: true }).fill('Keep this field')
   await page.evaluate(async () => {
     const { default: router } = await import('/src/router/index.ts')
     void router.push('/dashboards/personal')
@@ -146,7 +146,7 @@ test('leaving unsaved template edits requires an explicit discard; cancel preser
   await expect(page.getByRole('dialog')).toContainText('Leave unsaved form edits?')
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(page).toHaveURL(new RegExp('admin/forms$'))
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveValue('Keep this field')
+  await expect(page.locator('.form-canvas .form-field > label')).toContainText('Keep this field')
   await expect(page.getByLabel('Recipients', { exact: true })).toHaveValue('review@example.com')
   expect(
     await page.evaluate(() => {

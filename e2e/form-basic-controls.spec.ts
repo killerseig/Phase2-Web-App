@@ -9,9 +9,8 @@ test('email, phone and time definitions roundtrip through the existing editor an
   await page.getByRole('button', { name: 'New form', exact: true }).click()
   for (const kind of ['email', 'phone', 'time']) {
     await page.getByRole('button', { name: 'Add ' + kind, exact: true }).click()
-    const field = page.getByLabel('Form editor').locator('article').last()
-    await field.getByLabel('Field label', { exact: true }).fill(kind)
-    await field.getByLabel('Required', { exact: true }).check()
+    await page.getByLabel('Selected field label', { exact: true }).fill(kind)
+    await page.getByLabel('Selected field required', { exact: true }).check()
   }
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
   await page.reload()

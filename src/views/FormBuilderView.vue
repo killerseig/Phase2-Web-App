@@ -650,7 +650,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
                 inspector. Move buttons provide keyboard ordering.
               </p>
               <div
-                class="form-canvas"
+                class="form-canvas field-control-canvas"
                 data-widget-scroll
                 data-widget-surface="form"
                 aria-label="Form canvas"
@@ -676,6 +676,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
                   @keydown.enter.self="authoring.select(field.id)"
                   @keydown.space.self.prevent="authoring.select(field.id)"
                   @keydown.delete.self.prevent="removeField(index)"
+                  :aria-description="
+                    field.label + ', ' + field.kind + (field.required ? ', required' : '')
+                  "
                   :aria-label="'Field ' + (index + 1)"
                 >
                   <button
@@ -685,29 +688,25 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
                     :aria-label="'Drag ' + field.label"
                     @keydown.esc="pointerDrag.cancel"
                   >
-                    &#8942;&#8942;</button
-                  ><label>Field label<input v-model="field.label" maxlength="160" /></label
-                  ><label
-                    >Type<select
-                      :value="field.kind"
-                      @change="
-                        changeFieldKind(
-                          field,
-                          ($event.target as HTMLSelectElement).value as FormFieldKind,
-                        )
-                      "
-                    >
-                      <option v-for="kind in fieldKinds" :key="kind">{{ kind }}</option>
-                    </select></label
-                  ><label><input v-model="field.required" type="checkbox" /> Required</label
-                  ><label v-if="optionFieldKinds.includes(field.kind)"
-                    >Options<textarea
-                      :value="field.options.join('\n')"
-                      @input="
-                        field.options = ($event.target as HTMLTextAreaElement).value.split('\n')
-                      "
+                    &#8942;&#8942;
+                  </button>
+                  <small class="field-kind"
+                    >{{
+                      field.kind === 'choice'
+                        ? 'Single select'
+                        : field.kind === 'textarea'
+                          ? 'Long text'
+                          : field.kind
+                    }}
+                    · {{ index + 1 }}</small
+                  >
+                  <div class="canvas-field-preview" inert aria-hidden="true">
+                    <FormDefinitionPreview
+                      :definition="draft"
+                      :canvas-field="field"
+                      :previous-section="draft.fields[index - 1]?.section"
                     />
-                  </label>
+                  </div>
                   <div class="toolbar">
                     <button
                       :disabled="index === 0"
@@ -874,6 +873,38 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
   </AppShell>
 </template>
 <style scoped>
+@media (max-width: 760px) {
+  :global(.app-shell__content:has(.form-builder)) {
+    scroll-padding-top: 21rem;
+  }
+  .form-builder .form-canvas {
+    max-height: max(10rem, calc(100dvh - 28rem));
+    scroll-margin-top: 21rem;
+  }
+  .field-row {
+    scroll-margin-top: 21rem;
+  }
+}
+
+.canvas-field-preview {
+  grid-column: 1/-1;
+  min-width: 0;
+  pointer-events: none;
+}
+.field-kind {
+  text-transform: capitalize;
+}
+.field-row {
+  background: var(--surface);
+  border-radius: 0.45rem;
+  margin-bottom: 0.65rem;
+  padding: 0.65rem;
+}
+.field-row > .toolbar {
+  grid-column: 1/-1;
+  justify-content: flex-end;
+}
+
 .authoring-panels {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(13rem, 17rem);
@@ -1088,13 +1119,12 @@ button:disabled {
 }
 .field-row {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) 8rem;
+  grid-template-columns: 2rem minmax(0, 1fr);
   gap: 0.5rem;
   align-items: center;
 }
-.field-row > label:nth-last-of-type(1),
 .field-row > .toolbar {
-  grid-column: 2/-1;
+  grid-column: 1/-1;
 }
 fieldset {
   margin-top: 1rem;

@@ -26,7 +26,7 @@ test('palette inserts into empty/between canvas rows; inspector and structural u
     page.getByRole('button', { name: 'Add text', exact: true }),
     page.getByLabel('Form canvas'),
   )
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(1)
+  await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(1)
   await page.getByLabel('Selected field label', { exact: true }).fill('First')
   await page.getByRole('button', { name: 'Add number', exact: true }).click()
   await page.getByLabel('Selected field label', { exact: true }).fill('Last')
@@ -40,17 +40,19 @@ test('palette inserts into empty/between canvas rows; inspector and structural u
   await page.getByLabel('Selected field options', { exact: true }).fill('One\nTwo')
   expect(
     await page
-      .getByLabel('Field label', { exact: true })
-      .evaluateAll((elements) => elements.map((el) => (el as HTMLInputElement).value)),
+      .locator('.form-canvas .form-field > label')
+      .evaluateAll((elements) =>
+        elements.map((el) => (el.textContent || '').replace(/\s+\*$/, '').trim()),
+      ),
   ).toEqual(['First', 'Middle', 'Last'])
   await page.getByRole('button', { name: 'Delete selected Middle', exact: true }).click()
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(2)
+  await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(2)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(page.getByLabel('Selected field label', { exact: true })).toHaveValue('Middle')
   await expect(page.getByLabel('Selected field required', { exact: true })).toBeChecked()
   await expect(page.getByLabel('Selected field options', { exact: true })).toHaveValue('One\nTwo')
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(2)
+  await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(2)
 })
 
 test('keyboard add/order/undo stays accessible and saved schema retains existing properties', async ({
@@ -68,12 +70,12 @@ test('keyboard add/order/undo stays accessible and saved schema retains existing
   await page.getByRole('button', { name: 'Add text', exact: true }).click()
   await page.getByLabel('Selected field label', { exact: true }).fill('Job')
   await page.getByRole('button', { name: 'Move Job up', exact: true }).click()
-  await expect(page.getByLabel('Field label', { exact: true }).first()).toHaveValue('Job')
+  await expect(page.locator('.form-canvas .form-field > label').first()).toContainText('Job')
   await page.getByRole('article', { name: 'Field 1', exact: true }).focus()
   await page.keyboard.press('Control+z')
-  await expect(page.getByLabel('Field label', { exact: true }).first()).toHaveValue('Count')
+  await expect(page.locator('.form-canvas .form-field > label').first()).toContainText('Count')
   await page.keyboard.press('Control+Shift+z')
-  await expect(page.getByLabel('Field label', { exact: true }).first()).toHaveValue('Job')
+  await expect(page.locator('.form-canvas .form-field > label').first()).toContainText('Job')
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
   await page.reload()
   await page.getByRole('button', { name: 'Untitled form', exact: true }).click()
@@ -94,12 +96,12 @@ test('escape cancels palette insertion and releasing outside adds nothing', asyn
   await page.mouse.move(target.x + 10, target.y + 20, { steps: 8 })
   await page.keyboard.press('Escape')
   await page.mouse.up()
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(0)
+  await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(0)
   await page.mouse.move(source.x + 8, source.y + 8)
   await page.mouse.down()
   await page.mouse.move(3, 3, { steps: 8 })
   await page.mouse.up()
-  await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(0)
+  await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(0)
 })
 
 test.describe('touch authoring', () => {
@@ -130,7 +132,7 @@ test.describe('touch authoring', () => {
       touchPoints: [{ x: to.x + 20, y: Math.min(to.y + 20, 850) }],
     })
     await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-    await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(1)
+    await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(1)
     await expect(page.locator('.form-drag-ghost')).toHaveCount(0)
     expect(
       await page.getByLabel('Form canvas').evaluate((el) => getComputedStyle(el).touchAction),
@@ -155,7 +157,7 @@ test.describe('touch authoring', () => {
     }
     await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
     await expect.poll(() => canvas.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
-    await expect(page.getByLabel('Field label', { exact: true })).toHaveCount(7)
+    await expect(page.locator('.form-canvas .form-field > label')).toHaveCount(7)
     await expect(page.locator('.form-drag-ghost')).toHaveCount(0)
     await session.detach()
   })

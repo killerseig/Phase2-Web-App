@@ -4,11 +4,10 @@ import { choiceDefinition } from './helpers/choiceFormFixture.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 async function addRequiredControl(page: import('@playwright/test').Page, kind: string) {
   await page.getByRole('button', { name: 'Add ' + kind, exact: true }).click()
-  const field = page.getByLabel('Form editor').locator('article').last()
-  await field.getByLabel('Field label', { exact: true }).fill(kind)
-  await field.getByLabel('Required', { exact: true }).check()
+  await page.getByLabel('Selected field label', { exact: true }).fill(kind)
+  await page.getByLabel('Selected field required', { exact: true }).check()
   if (kind !== 'checkbox')
-    await field.getByLabel('Options', { exact: true }).fill('North\nSouth\nWest')
+    await page.getByLabel('Selected field options', { exact: true }).fill('North\nSouth\nWest')
 }
 async function chooseAreas(page: import('@playwright/test').Page) {
   const combo = page.getByRole('combobox', { name: /Work areas/ })

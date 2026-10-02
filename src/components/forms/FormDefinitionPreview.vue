@@ -1,14 +1,34 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import FormDefinitionFields from './FormDefinitionFields.vue'
 import { validateFormAnswers, type FormAnswers } from '../../../functions/src/formModel'
-import type { FormDefinition } from '@/features/forms/model'
-const props = defineProps<{ definition: FormDefinition }>(),
+import type { FormDefinition, FormField } from '@/features/forms/model'
+const props = defineProps<{
+    definition: FormDefinition
+    canvasField?: FormField
+    previousSection?: string
+  }>(),
   answers = ref<FormAnswers>({}),
   errors = ref<string[]>([]),
   invalidField = ref('')
+const canvasDefinition = computed(() =>
+  props.canvasField
+    ? {
+        ...props.definition,
+        fields: [
+          {
+            ...props.canvasField,
+            section:
+              props.previousSection === props.canvasField.section
+                ? undefined
+                : props.canvasField.section,
+          },
+        ],
+      }
+    : props.definition,
+)
 watch(
-  () => props.definition,
+  () => (props.canvasField ? undefined : props.definition),
   () => {
     answers.value = {}
     errors.value = []
@@ -34,7 +54,15 @@ async function validate() {
 }
 </script>
 <template>
-  <section class="form-preview" aria-label="Full-page form preview">
+  <div v-if="canvasField" class="canvas-control-preview">
+    <FormDefinitionFields
+      :definition="canvasDefinition"
+      :model-value="{}"
+      disabled
+      :photos-enabled="canvasField.kind === 'photo'"
+    />
+  </div>
+  <section v-else class="form-preview" aria-label="Full-page form preview">
     <h2>{{ definition.title }}</h2>
     <p>{{ definition.description }}</p>
     <form novalidate @submit.prevent="validate">
@@ -51,6 +79,19 @@ async function validate() {
   </section>
 </template>
 <style scoped>
+.canvas-control-preview :deep(.form-fields) {
+  margin: 0;
+}
+.canvas-control-preview :deep(.form-field) {
+  margin: 0.35rem 0;
+}
+.canvas-control-preview :deep(input:disabled),
+.canvas-control-preview :deep(textarea:disabled),
+.canvas-control-preview :deep(select:disabled) {
+  opacity: 1;
+  color: var(--text);
+}
+
 .form-preview {
   max-width: 48rem;
   margin: auto;
