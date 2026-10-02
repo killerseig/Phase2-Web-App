@@ -8,6 +8,10 @@ for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 950 })
       await gotoPhase2App(page, '/admin/forms', createJobsFixture())
       await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
+      await page
+        .getByRole('navigation', { name: 'Form settings tabs' })
+        .getByRole('button', { name: 'Form', exact: true })
+        .click()
       await expect(page.getByLabel('Form title', { exact: true })).toBeVisible()
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),

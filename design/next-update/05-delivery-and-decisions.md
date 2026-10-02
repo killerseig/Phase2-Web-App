@@ -85,6 +85,8 @@ Production-built browser checks are required for affected critical pages: develo
 
 The sample JHA and estimate attachment were not provided. Vendor account access, licensing/API behavior, production user data, actual SDS content, and current regulatory obligations were not investigated. Public mSDS Source material has since been reviewed as recorded in the SDS design. The user confirmed the master explorer, job checkbox selection, and PDF/printed books using the hierarchy as contents. Initial folder content, detailed output styling, and source retrieval remain discovery items, not reasons to omit the requested features.
 
-## Open Form Builder delivery decision — 2 October 2026
+## Resolved Form Builder delivery decision - 2 October 2026
 
-Recipient addresses currently route notifications only. Generated email includes answer text and private-photo counts, without attachments or authenticated record links. Recipient status does not confer record/photo access; owner/Admin access remains enforced. Before accepting the reviewer workflow, decide recipient authorization and authenticated-link versus attachment delivery. Do not infer sharing grants from email configuration. Local checks keep delivery disabled; a coordinated real inbox test is a later explicitly authorized step.
+User approved full completed-form email with the Daily Logs photo/viewer pattern, then optional PDF and safe stable-field templates. Require login defaults ON. Admin may disable it before issue for single-entry forwarding with “Anyone with this link can view this submission and its photos”; links must be scoped, expiring and revocable. Recipient addresses never grant access. Old issued versions retain their setting. Custom omissions warn; unknown/deleted tokens error. CSV belongs to later bulk reporting. See current workspace checkpoint for actual state/evidence.
+
+Local checks and mocked Graph transport pass. A separately coordinated real inbox test and production release review remain outstanding. No Forms deployment or real email is authorized by this checkpoint.

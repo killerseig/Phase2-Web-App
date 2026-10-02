@@ -30,7 +30,28 @@ function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    ...(import.meta.env.DEV ? [{ path: '/forms/:templateId', name: 'form-response', component: () => import('@/views/FormResponseView.vue'), meta: { title: 'Complete Form' } }, { path: '/admin/forms', name: 'form-builder', component: () => import('@/views/FormBuilderView.vue'), meta: { title: 'Form Builder', requiredCapability: 'manage-website' } }] : []),
+    ...(import.meta.env.DEV
+      ? [
+          {
+            path: '/form-submissions/:id',
+            name: 'form-submission-view',
+            component: () => import('@/views/FormSubmissionView.vue'),
+            meta: { title: 'Completed Form', requiresAuth: false },
+          },
+          {
+            path: '/forms/:templateId',
+            name: 'form-response',
+            component: () => import('@/views/FormResponseView.vue'),
+            meta: { title: 'Complete Form' },
+          },
+          {
+            path: '/admin/forms',
+            name: 'form-builder',
+            component: () => import('@/views/FormBuilderView.vue'),
+            meta: { title: 'Form Builder', requiredCapability: 'manage-website' },
+          },
+        ]
+      : []),
     {
       path: '/admin/website',
       name: 'website-builder',
@@ -226,7 +247,12 @@ router.beforeEach(async (to) => {
   if (legacyGalleryRedirect) return legacyGalleryRedirect
 
   // Public gallery links must not wait for or depend on an authenticated app session.
-  if (to.name === 'daily-log-gallery' || to.name === 'daily-log-gallery-legacy' || to.name === 'public-website') return true
+  if (
+    to.name === 'daily-log-gallery' ||
+    to.name === 'daily-log-gallery-legacy' ||
+    to.name === 'public-website'
+  )
+    return true
 
   const auth = useAuthStore()
   const jobs = useJobsStore()

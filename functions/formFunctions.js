@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.formWorkspace = exports.formTemplates = void 0;
+const formOutputTemplate_1 = require("./formOutputTemplate");
 const node_crypto_1 = require("node:crypto");
 const https_1 = require("firebase-functions/v2/https");
 const sharp_1 = __importDefault(require("sharp"));
@@ -132,6 +133,8 @@ exports.formTemplates = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
                 if (field.requiredWhen)
                     field.requiredWhen.fieldId = ids.get(field.requiredWhen.fieldId);
             }
+            if (draft.output?.template)
+                draft.output.template = draft.output.template.replace(/{{(.*?)}}/gs, (_match, key) => '{{' + (ids.get(key.trim()) || key.trim()) + '}}');
             const copy = {
                 draft,
                 revision: 1,
@@ -165,6 +168,9 @@ exports.formTemplates = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
         if (!snapshot.exists)
             fail('not-found', 'Form template not found.');
         if (data.action === 'issue') {
+            const outputErrors = (0, formOutputTemplate_1.formOutputIssues)(stored.draft).filter((issue) => issue.severity === 'error');
+            if (outputErrors.length)
+                fail('invalid-argument', outputErrors.map((issue) => issue.message).join(' '));
             if (stored.archived)
                 fail('failed-precondition', 'Archived forms cannot be issued.');
             const draft = validate(() => (0, formModel_1.validateFormDefinition)(stored.draft));

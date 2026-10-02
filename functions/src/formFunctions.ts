@@ -1,3 +1,4 @@
+import { formOutputIssues } from './formOutputTemplate'
 import { createHash, randomUUID } from 'node:crypto'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import sharp from 'sharp'
@@ -154,6 +155,11 @@ export const formTemplates = onCall({ memory: '512MiB', timeoutSeconds: 60 }, as
         field.id = ids.get(field.id)!
         if (field.requiredWhen) field.requiredWhen.fieldId = ids.get(field.requiredWhen.fieldId)!
       }
+      if (draft.output?.template)
+        draft.output.template = draft.output.template.replace(
+          /{{(.*?)}}/gs,
+          (_match, key: string) => '{{' + (ids.get(key.trim()) || key.trim()) + '}}',
+        )
       const copy = {
         draft,
         revision: 1,
@@ -185,6 +191,11 @@ export const formTemplates = onCall({ memory: '512MiB', timeoutSeconds: 60 }, as
     }
     if (!snapshot.exists) fail('not-found', 'Form template not found.')
     if (data.action === 'issue') {
+      const outputErrors = formOutputIssues(stored!.draft).filter(
+        (issue) => issue.severity === 'error',
+      )
+      if (outputErrors.length)
+        fail('invalid-argument', outputErrors.map((issue) => issue.message).join(' '))
       if (stored!.archived) fail('failed-precondition', 'Archived forms cannot be issued.')
       const draft = validate(() => validateFormDefinition(stored!.draft))
       const version = stored!.latestVersion + 1

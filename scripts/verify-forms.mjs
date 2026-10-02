@@ -554,10 +554,10 @@ try {
   assert.deepEqual(choiceRecord.answers.areas, ['North', 'South', '<West&Co>'])
   const choiceSnapshot = (await db.doc('formSubmissions/' + choiceRecord.id).get()).data(),
     html = buildFormEmailHtml(choiceSnapshot)
-  assert.match(html, /<h3>Acknowledgement<\/h3><p>Yes<\/p>/)
-  assert.match(html, /<h3>Optional follow-up<\/h3><p>No<\/p>/)
+  assert.match(html, /<h3>Acknowledgement<\/h3><p[^>]*>Yes<\/p>/)
+  assert.match(html, /<h3>Optional follow-up<\/h3><p[^>]*>No<\/p>/)
   assert.match(html, /North, South, &lt;West&amp;Co&gt;/)
-  assert.match(html, /<h3>Optional areas<\/h3><p>No selections<\/p>/)
+  assert.match(html, /<h3>Optional areas<\/h3><p[^>]*>No selections<\/p>/)
   assert.ok(!html.includes(choiceRecord.answers.photo[0]))
   assert.ok(!html.includes('<img'))
   assert.ok(!html.includes('href='))

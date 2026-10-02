@@ -105,7 +105,19 @@ function validateFormDefinition(value) {
                 field.requiredWhen.values.some((value) => !rating.options.includes(value)))
                 throw new Error('Required notes must refer to a choice field and its valid values.');
         }
+    let output;
+    if (data.output !== undefined) {
+        const value = object(data.output);
+        if (typeof value.requireLogin !== 'boolean' || typeof value.pdf !== 'boolean')
+            throw new Error('Invalid form output settings.');
+        output = {
+            requireLogin: value.requireLogin,
+            pdf: value.pdf,
+            template: text(value.template, 20000),
+        };
+    }
     return {
+        ...(output ? { output } : {}),
         title: text(data.title, 160, true),
         description: text(data.description, 5000),
         fields,

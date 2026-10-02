@@ -19,7 +19,14 @@ initializeApp({ projectId, storageBucket: projectId + '.appspot.com' })
 const { formTemplates, formWorkspace } = require('../functions/formFunctions.js'),
   { formEmail, deliverFormSubmission } = require('../functions/formDelivery.js')
 const { dashboardWorkspace } = require('../functions/dashboardFunctions.js')
-const handlers = { formTemplates, formWorkspace, formEmail, dashboardWorkspace },
+const { formSubmissionViewer } = require('../functions/formSubmissionViewer.js')
+const handlers = {
+    formTemplates,
+    formWorkspace,
+    formEmail,
+    dashboardWorkspace,
+    formSubmissionViewer,
+  },
   auth = getAuth(),
   db = getFirestore()
 for (const [uid, email, role] of [
@@ -61,14 +68,19 @@ const server = createServer(async (req, res) => {
   }
   try {
     const token = String(req.headers.authorization || '').replace(/^Bearer /, '')
-    const claims = await auth.verifyIdToken(token)
+    const claims = token ? await auth.verifyIdToken(token) : undefined
+    if (!claims && name !== 'formSubmissionViewer')
+      throw Object.assign(new Error('Sign in to the local emulator.'), { code: 'unauthenticated' })
     let body = ''
     for await (const chunk of req) {
       body += chunk
       if (body.length > 3000000) throw new Error('Request too large')
     }
     const data = JSON.parse(body).data
-    let result = await handler.run({ auth: { uid: claims.uid, token: claims }, data })
+    let result = await handler.run({
+      auth: claims ? { uid: claims.uid, token: claims } : undefined,
+      data,
+    })
     if (name === 'formWorkspace' && data.action === 'submit') {
       await deliverFormSubmission(result.id)
       result = await formWorkspace.run({

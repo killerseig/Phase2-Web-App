@@ -64,3 +64,5 @@ export { submitWebsiteForm, deliverWebsiteFormEmail, websiteFormAdmin } from './
 // Local Form Builder milestone: no production deployment is authorized.
 export { formTemplates, formWorkspace } from './formFunctions'
 export { formEmail, deliverFormEmail } from './formDelivery'
+
+export {formSubmissionViewer} from './formSubmissionViewer'

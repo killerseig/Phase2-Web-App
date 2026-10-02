@@ -127,6 +127,7 @@ test('server library is authoritative; persisted duplicate has a retry-safe new 
     await route.fulfill({ headers, json: { result } })
   })
   await gotoPhase2App(page, '/admin/forms', fixture)
+  await page.getByText('Development preview', { exact: false }).click()
   await expect(
     page.getByText('Source of truth: local emulator server.', { exact: false }),
   ).toBeVisible()
@@ -135,8 +136,16 @@ test('server library is authoritative; persisted duplicate has a retry-safe new 
     0,
   )
   await page.getByRole('button', { name: 'Persisted source', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Form palette' })
+    .getByRole('button', { name: 'Library', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Duplicate server form', exact: true }).click()
   await expect(page.getByRole('alert')).toBeVisible()
+  await page
+    .getByRole('navigation', { name: 'Form palette' })
+    .getByRole('button', { name: 'Library', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Duplicate server form', exact: true }).click()
   await expect(page.getByLabel('Form title', { exact: true })).toHaveValue(
     'Persisted source (copy)',
@@ -149,20 +158,28 @@ test('server library is authoritative; persisted duplicate has a retry-safe new 
   expect(copy.draft.fields[0]!.id).not.toBe(original.draft.fields[0]!.id)
   await page.getByLabel('Selected field label', { exact: true }).fill('Independent copy edit')
   await page.getByRole('button', { name: 'Save to local server', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('Draft saved to the local server')
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Draft saved to the local server' }),
+  ).toContainText('Draft saved to the local server')
   expect(templates.get(original.id)).toEqual(original)
   await page.reload()
   await page.getByRole('button', { name: 'Persisted source (copy)', exact: true }).click()
   await expect(page.getByLabel('Selected field label', { exact: true })).toHaveValue(
     'Independent copy edit',
   )
+  await page
+    .getByRole('navigation', { name: 'Form palette' })
+    .getByRole('button', { name: 'Library', exact: true })
+    .click()
   await page.getByText('Import an existing device draft', { exact: true }).click()
   await page.getByLabel('Device draft to import', { exact: true }).selectOption(legacy.id)
   await page.getByRole('button', { name: 'Import as new server draft', exact: true }).click()
   await expect(page.getByLabel('Form title', { exact: true })).toHaveValue(
     'Legacy device draft (copy)',
   )
-  await expect(page.getByRole('status')).toContainText('Draft saved to the local server')
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Draft saved to the local server' }),
+  ).toContainText('Draft saved to the local server')
   expect(
     await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key)!),
@@ -186,6 +203,7 @@ test('backend unavailability blocks edits without mixing legacy device drafts in
     }),
   )
   await gotoPhase2App(page, '/admin/forms', createJobsFixture())
+  await page.getByText('Development preview', { exact: false }).click()
   await expect(page.getByText('Emulator backend unavailable.', { exact: false })).toBeVisible()
   await expect(page.getByRole('button', { name: 'New form', exact: true })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Save local draft', exact: true })).toHaveCount(0)

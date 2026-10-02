@@ -10,6 +10,7 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
   const definition = (): FormDefinition | undefined =>
     draft.value
       ? clone({
+          output: draft.value.output || { requireLogin: true, pdf: false, template: '' },
           title: draft.value.title,
           description: draft.value.description,
           fields: draft.value.fields,

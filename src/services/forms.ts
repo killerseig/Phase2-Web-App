@@ -24,7 +24,7 @@ export function isFormServerEnabled(): boolean {
   )
 }
 export async function formApi<T>(
-  name: 'formTemplates' | 'formWorkspace' | 'formEmail',
+  name: 'formTemplates' | 'formWorkspace' | 'formEmail' | 'formSubmissionViewer',
   data: Record<string, unknown>,
 ): Promise<T> {
   if (!isFormServerEnabled())

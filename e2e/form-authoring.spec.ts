@@ -118,6 +118,11 @@ test.describe('touch authoring', () => {
     await page.waitForFunction(
       () => document.querySelector('.app-shell__sidebar').getBoundingClientRect().right <= 0,
     )
+    await page.waitForFunction(
+      () =>
+        document.querySelector('.canvas-document').getBoundingClientRect().width <=
+        document.querySelector('.viewport-scroll').clientWidth,
+    )
     const from = (await source.boundingBox())!,
       to = (await page.getByLabel('Form canvas').boundingBox())!
     expect(from.y).toBeGreaterThan(0)
@@ -139,7 +144,7 @@ test.describe('touch authoring', () => {
     ).toBe('auto')
     expect(await source.evaluate((el) => getComputedStyle(el).touchAction)).toBe('none')
     for (let index = 0; index < 6; index++) await source.click()
-    const canvas = page.getByLabel('Form canvas')
+    const canvas = page.locator('.viewport-scroll')
     await canvas.evaluate((el) => {
       el.scrollTop = 0
       el.scrollIntoView({ block: 'center' })
@@ -224,5 +229,5 @@ test('familiar shell keeps draft and preview answers while switching device widt
   )
   await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
-  await expect(page.getByText('Saved draft', { exact: true })).toBeVisible()
+  await expect(page.locator('.form-builder-header small')).toHaveText('Draft saved · Local preview')
 })

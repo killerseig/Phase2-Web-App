@@ -17,7 +17,15 @@ test('opening the library creates nothing; repeated saves and reload retain loca
     ),
   ).toEqual([])
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Form settings tabs' })
+    .getByRole('button', { name: 'Form', exact: true })
+    .click()
   await page.getByLabel('Form title', { exact: true }).fill('Dan committee audit')
+  await page
+    .getByRole('navigation', { name: 'Form settings tabs' })
+    .getByRole('button', { name: 'Form', exact: true })
+    .click()
   await page.getByLabel('Recipients', { exact: true }).fill('dan@example.com, safety@example.com')
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
@@ -70,14 +78,26 @@ test('cancelled discard keeps unsaved edits, versioned forms archive and copies 
   await gotoPhase2App(page, '/admin/forms', createJobsFixture())
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
   await page.getByRole('button', { name: 'Keep local version', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Form settings tabs' })
+    .getByRole('button', { name: 'Form', exact: true })
+    .click()
   await page.getByLabel('Form title', { exact: true }).fill('Unsaved audit title')
   await page.getByRole('button', { name: 'New form', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(page.getByLabel('Form title', { exact: true })).toHaveValue('Unsaved audit title')
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Form palette' })
+    .getByRole('button', { name: 'Library', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Duplicate', exact: true }).click()
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
   await expect(page.getByLabel('Form library')).toContainText('0 retained versions')
+  await page
+    .getByRole('navigation', { name: 'Form palette' })
+    .getByRole('button', { name: 'Library', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Archive', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Archive form', exact: true }).click()
   await expect(page.getByLabel('Form library')).toContainText('Archived')
@@ -100,7 +120,9 @@ test('quota failure preserves unsaved editor work and a retry succeeds', async (
   await expect(page.getByLabel('Form title', { exact: true })).toHaveValue('Committee Site Audit')
   await page.evaluate(() => sessionStorage.setItem('allow-form-save', 'yes'))
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('Saved on this device.')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved on this device.' })).toHaveText(
+    'Saved on this device.',
+  )
 })
 
 test('conflicting local revision is rejected and reload recovers the saved library', async ({
@@ -115,6 +137,10 @@ test('conflicting local revision is rejected and reload recovers the saved libra
     value.revision++
     localStorage.setItem(key, JSON.stringify(value))
   })
+  await page
+    .getByRole('navigation', { name: 'Form settings tabs' })
+    .getByRole('button', { name: 'Form', exact: true })
+    .click()
   await page.getByLabel('Form title', { exact: true }).fill('Still unsaved')
   await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Another tab changed')
@@ -135,7 +161,15 @@ test('leaving unsaved template edits requires an explicit discard; cancel preser
 }) => {
   await gotoPhase2App(page, '/admin/forms', createJobsFixture())
   await page.getByRole('button', { name: 'New form', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Form settings tabs' })
+    .getByRole('button', { name: 'Form', exact: true })
+    .click()
   await page.getByLabel('Form title', { exact: true }).fill('Unsaved navigation draft')
+  await page
+    .getByRole('navigation', { name: 'Form settings tabs' })
+    .getByRole('button', { name: 'Form', exact: true })
+    .click()
   await page.getByLabel('Recipients', { exact: true }).fill('review@example.com')
   await page.getByRole('button', { name: 'Add text', exact: true }).click()
   await page.getByLabel('Selected field label', { exact: true }).fill('Keep this field')

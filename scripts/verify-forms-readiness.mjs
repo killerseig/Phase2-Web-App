@@ -76,6 +76,10 @@ try {
   console.log('await page.goto(http://127.0.0.1:5173/admin/forms)')
   await page.goto('http://127.0.0.1:5173/admin/forms')
   await page.getByRole('button', { name: 'Committee audit starter', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Form settings tabs' })
+    .getByRole('button', { name: 'Form', exact: true })
+    .click()
   await page.getByLabel('Form title', { exact: true }).fill(namespace + ' audit')
   await page.getByLabel('Recipients', { exact: true }).fill(accounts.other.email)
   await page.getByRole('button', { name: 'Full-page preview', exact: true }).click()
@@ -441,7 +445,7 @@ try {
   assert.equal(JSON.stringify(after), before)
   const { buildFormEmailHtml } = require('../functions/formDelivery.js')
   const html = buildFormEmailHtml(submitted)
-  assert.ok(html.includes('1 private photos retained'))
+  assert.ok(html.includes('1 photo'))
   assert.ok(!html.includes('<a '))
   assert.ok(!html.includes('<img '))
   assert.deepEqual(errors, [])
@@ -456,7 +460,7 @@ try {
       uniqueAccountsAndPersonalLayout: true,
       foreignRecipientDenied: true,
       emailRetryPreservesSubmission: true,
-      emailPhotoCountsOnly: true,
+      emailAllAnswersAndPhotoCounts: true,
       adminIssue: true,
       draftResume: true,
       sourceFields: source.fields.length,

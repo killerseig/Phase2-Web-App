@@ -14,7 +14,13 @@ export interface FormField {
         values: string[];
     };
 }
+export interface FormOutputSettings {
+    requireLogin: boolean;
+    pdf: boolean;
+    template: string;
+}
 export interface FormDefinition {
+    output?: FormOutputSettings;
     title: string;
     description: string;
     fields: FormField[];

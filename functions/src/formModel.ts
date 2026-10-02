@@ -23,7 +23,13 @@ export interface FormField {
   integer?: boolean
   requiredWhen?: { fieldId: string; values: string[] }
 }
+export interface FormOutputSettings {
+  requireLogin: boolean
+  pdf: boolean
+  template: string
+}
 export interface FormDefinition {
+  output?: FormOutputSettings
   title: string
   description: string
   fields: FormField[]
@@ -154,7 +160,19 @@ export function validateFormDefinition(value: unknown): FormDefinition {
       )
         throw new Error('Required notes must refer to a choice field and its valid values.')
     }
+  let output: FormOutputSettings | undefined
+  if (data.output !== undefined) {
+    const value = object(data.output)
+    if (typeof value.requireLogin !== 'boolean' || typeof value.pdf !== 'boolean')
+      throw new Error('Invalid form output settings.')
+    output = {
+      requireLogin: value.requireLogin,
+      pdf: value.pdf,
+      template: text(value.template, 20000),
+    }
+  }
   return {
+    ...(output ? { output } : {}),
     title: text(data.title, 160, true),
     description: text(data.description, 5000),
     fields,

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
 import { db } from './runtime'
-import { formId, formAnswerSummary, type FormRecord } from './formModel'
+import { formId, type FormRecord } from './formModel'
 import { buildCurrentFunctionUser } from './roleAccess'
 import { getGraphEmailSecrets } from './functionConfig'
 import { classifyEmailDeliveryError } from './emailDeliveryErrors'
@@ -11,37 +11,23 @@ export interface FormEmailAdapter {
   enabled: () => boolean
   send: (record: FormRecord, recipients: string[]) => Promise<void>
 }
-const escape = (value: unknown) =>
-  String(value).replace(
-    /[&<>"']/g,
-    (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!,
-  )
-export function buildFormEmailHtml(record: FormRecord): string {
-  return (
-    '<h1>' +
-    escape(record.definition.title) +
-    '</h1>' +
-    record.definition.fields
-      .map(
-        (field) =>
-          '<h3>' +
-          escape(field.label) +
-          '</h3><p>' +
-          escape(formAnswerSummary(field, record.answers[field.id])) +
-          '</p>',
-      )
-      .join('')
-  )
-}
+export { buildFormEmailHtml, buildFormEmailText, prepareFormEmail } from './formEmailContent'
+import { prepareFormEmail, FormEmailPreparationError } from './formEmailContent'
 const provider: FormEmailAdapter = {
   enabled: () =>
     !process.env.FIRESTORE_EMULATOR_HOST && !process.env.FUNCTIONS_EMULATOR && isEmailEnabled(),
   send: async (record, recipients) => {
-    await sendEmail({
-      to: recipients,
-      subject: record.definition.title,
-      html: buildFormEmailHtml(record),
-    })
+    let email
+    try {
+      email = await prepareFormEmail(record, recipients)
+    } catch (error) {
+      if (error instanceof FormEmailPreparationError) throw error
+      // Preparation has not contacted the provider, so an explicit retry is safe.
+      throw new FormEmailPreparationError(
+        'The completed form email could not be prepared. The submission is retained.',
+      )
+    }
+    await sendEmail(email)
   },
 }
 // The submission is immutable. Delivery state and claims live in a separate record.
@@ -83,7 +69,12 @@ export async function deliverFormSubmission(
     }
   } catch (error) {
     const failure = classifyEmailDeliveryError(error)
-    status = failure.httpStatus !== undefined && failure.httpStatus < 500 ? 'failed' : 'uncertain'
+    status =
+      error instanceof FormEmailPreparationError ||
+      !failure.retryable ||
+      (failure.httpStatus !== undefined && failure.httpStatus < 500)
+        ? 'failed'
+        : 'uncertain'
   }
   await db.runTransaction(async (tx) => {
     const state = await tx.get(ref)

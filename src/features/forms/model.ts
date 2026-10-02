@@ -109,6 +109,7 @@ export function keepVersion(template: FormTemplate): FormTemplate {
     description,
     fields: clone(fields),
     recipients: [...recipients],
+    ...(next.output ? { output: clone(next.output) } : {}),
     version: (next.versions.at(-1)?.version || 0) + 1,
     createdAt: new Date().toISOString(),
   })
@@ -125,6 +126,11 @@ export function duplicateTemplate(template: FormTemplate): FormTemplate {
     field.id = ids.get(field.id)!
     if (field.requiredWhen) field.requiredWhen.fieldId = ids.get(field.requiredWhen.fieldId)!
   })
+  if (next.output?.template)
+    next.output.template = next.output.template.replace(
+      /{{(.*?)}}/gs,
+      (_match, key: string) => '{{' + (ids.get(key.trim()) || key.trim()) + '}}',
+    )
   return next
 }
 export function removeOrArchive(library: FormLibrary, id: string): FormLibrary {

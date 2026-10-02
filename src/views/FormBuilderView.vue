@@ -6,6 +6,8 @@ import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import BuilderSelectionContext from '@/components/builder/BuilderSelectionContext.vue'
+import FormCanvasViewport from '@/components/forms/FormCanvasViewport.vue'
+import FormOutputSettings from '@/components/forms/FormOutputSettings.vue'
 import FormDefinitionPreview from '@/components/forms/FormDefinitionPreview.vue'
 import {
   clone,
@@ -35,6 +37,8 @@ const fieldGroups: { label: string; kinds: FormFieldKind[] }[] = [
   { label: 'Choices', kinds: ['choice', 'checkbox', 'radio', 'multiselect'] },
   { label: 'Photos', kinds: ['photo'] },
 ]
+const sidebarTab = ref<'library' | 'fields'>('library')
+const settingsTab = ref<'form' | 'field' | 'output'>('field')
 const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
 const previewWidth = computed(() =>
   previewDevice.value === 'phone' ? 390 : previewDevice.value === 'tablet' ? 820 : 1080,
@@ -463,39 +467,108 @@ function beforeUnload(event: BeforeUnloadEvent) {
 onBeforeRouteLeave(leaveEditor)
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+watch(
+  () => draft.value?.id,
+  (id) => {
+    if (id) {
+      sidebarTab.value = 'fields'
+      settingsTab.value = 'form'
+    }
+  },
+)
+watch(
+  () => selectedField.value?.id,
+  (id) => {
+    settingsTab.value = id ? 'field' : 'form'
+  },
+)
 </script>
 <template>
-  <AppShell>
+  <AppShell v-slot="{ openNavigation, mobileNavOpen }" contained compact>
     <section
       ref="builderRoot"
       class="form-builder"
       @click.capture="pointerDrag.guardClick"
       @keydown="editorKeys"
     >
-      <header>
+      <header class="form-builder-header">
+        <button
+          class="mobile-navigation"
+          aria-label="Open navigation"
+          :aria-expanded="mobileNavOpen"
+          @click="openNavigation"
+        >
+          ☰
+        </button>
         <div>
           <h1>Form Builder</h1>
-          <p>Development preview. No production submissions or email.</p>
+          <small>{{ dirty ? 'Unsaved edits' : 'Draft saved' }} · Local preview</small>
         </div>
-        <button :disabled="creationLocked" @click="create()">New form</button
-        ><button :disabled="creationLocked" @click="create(true)">Committee audit starter</button>
+        <nav aria-label="Builder modes">
+          <button :aria-pressed="!preview" @click="preview = false">Edit</button
+          ><button :aria-pressed="preview" @click="preview = true">Preview</button
+          ><button @click="settingsTab = 'output'">Output / review</button>
+        </nav>
+        <div class="header-actions">
+          <button :disabled="creationLocked" @click="create()">New form</button
+          ><button :disabled="creationLocked" @click="create(true)">Committee audit starter</button>
+          <div v-if="serverEnabled" class="toolbar">
+            <button
+              :disabled="authoringLocked"
+              @click="saveServer"
+              aria-label="Save to local server"
+            >
+              Save draft</button
+            ><button :disabled="serverBusy || !draft || draft.archived" @click="issueServer">
+              Issue local server version
+            </button>
+          </div>
+          <div class="toolbar">
+            <button :disabled="authoringLocked || !canUndo" @click="authoring.undo">Undo</button
+            ><button :disabled="authoringLocked || !canRedo" @click="authoring.redo">Redo</button>
+            <button
+              v-if="!serverEnabled"
+              :disabled="blocked || !draft || draft.archived"
+              @click="save()"
+            >
+              Save local draft</button
+            ><button
+              v-if="!serverEnabled"
+              :disabled="blocked || !draft || draft.archived"
+              @click="save(true)"
+            >
+              Keep local version</button
+            ><button @click="preview = !preview">
+              {{ preview ? 'Edit fields' : 'Full-page preview' }}</button
+            ><span>{{ dirty ? 'Unsaved edits' : 'Saved draft' }}</span>
+          </div>
+        </div>
       </header>
-      <p aria-live="polite">
-        {{
-          serverEnabled
-            ? serverAvailable
-              ? 'Source of truth: local emulator server. Device-only drafts are separate and are not listed here.'
-              : 'Emulator backend unavailable. Server edits are blocked; no fallback device records are mixed into this library.'
-            : 'Device-only draft mode. Start the Forms emulator profile for the shared server library; these drafts are not server records.'
-        }}
-      </p>
+      <details class="local-status">
+        <summary>Development preview · no production submissions or email</summary>
+        <p aria-live="polite">
+          {{
+            serverEnabled
+              ? serverAvailable
+                ? 'Source of truth: local emulator server. Device-only drafts are separate and are not listed here.'
+                : 'Emulator backend unavailable. Server edits are blocked; no fallback device records are mixed into this library.'
+              : 'Device-only draft mode. Start the Forms emulator profile for the shared server library; these drafts are not server records.'
+          }}
+        </p>
+      </details>
       <p v-if="legacyError" role="alert">{{ legacyError }}</p>
       <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
       <div class="builder-layout">
         <aside class="builder-sidebar" aria-label="Form library">
-          <h2>Form library</h2>
-          <div class="library-list">
+          <nav class="sidebar-tabs" aria-label="Form palette">
+            <button :aria-pressed="sidebarTab === 'library'" @click="sidebarTab = 'library'">
+              Library</button
+            ><button :aria-pressed="sidebarTab === 'fields'" @click="sidebarTab = 'fields'">
+              Fields
+            </button>
+          </nav>
+          <div v-show="sidebarTab === 'library'" class="library-list">
             <p v-if="!serverEnabled && !library.templates.length">
               Create a form to begin. Opening this page creates nothing.
             </p>
@@ -565,7 +638,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
               </article>
             </section>
           </div>
-          <section v-if="draft && !preview" class="field-palette" aria-label="Field palette">
+          <section
+            v-if="draft && !preview"
+            v-show="sidebarTab === 'fields'"
+            class="field-palette"
+            aria-label="Field palette"
+          >
             <h2>Fields</h2>
             <section v-for="group in fieldGroups" :key="group.label">
               <h3>{{ group.label }}</h3>
@@ -596,142 +674,154 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
         </aside>
         <section v-if="draft" aria-label="Form editor">
           <BuilderSelectionContext kind="Form" :scope="draft.title" />
-          <div v-if="serverEnabled" class="toolbar">
-            <button :disabled="authoringLocked" @click="saveServer">Save to local server</button
-            ><button :disabled="serverBusy || draft.archived" @click="issueServer">
-              Issue local server version
-            </button>
-          </div>
-          <div class="toolbar">
-            <button :disabled="authoringLocked || !canUndo" @click="authoring.undo">Undo</button
-            ><button :disabled="authoringLocked || !canRedo" @click="authoring.redo">Redo</button>
-            <button v-if="!serverEnabled" :disabled="blocked || draft.archived" @click="save()">
-              Save local draft</button
-            ><button
-              v-if="!serverEnabled"
-              :disabled="blocked || draft.archived"
-              @click="save(true)"
-            >
-              Keep local version</button
-            ><button @click="preview = !preview">
-              {{ preview ? 'Edit fields' : 'Full-page preview' }}</button
-            ><span>{{ dirty ? 'Unsaved edits' : 'Saved draft' }}</span>
-          </div>
-          <div class="toolbar" role="group" aria-label="Preview device">
-            <button
-              v-for="device in ['desktop', 'tablet', 'phone'] as const"
-              :key="device"
-              :aria-pressed="previewDevice === device"
-              @click="previewDevice = device"
-            >
-              {{ device[0]!.toUpperCase() + device.slice(1) }}
-            </button>
-            <small>{{
-              preview
-                ? 'Preview fits the available workspace'
-                : 'Choose a device, then open Full-page preview'
-            }}</small>
-          </div>
-          <div v-if="preview" class="form-preview-frame" :style="{ maxWidth: previewWidth + 'px' }">
-            <FormDefinitionPreview :definition="draft" />
-          </div>
-          <div v-else class="authoring-panels">
-            <fieldset class="canvas-panel" :disabled="authoringLocked" @input="dirty = true">
-              <label>Form title<input v-model="draft.title" maxlength="160" /></label
-              ><label>Description<textarea v-model="draft.description" /></label
-              ><label
-                >Recipients<input
-                  v-model="recipientText"
-                  placeholder="name@example.com, another@example.com"
-              /></label>
-              <p>Recipients are configuration only in this local preview; no email is sent.</p>
-              <p>
-                Drag a field onto the ordered canvas, or click Add to append. Select a field for its
-                inspector. Move buttons provide keyboard ordering.
-              </p>
-              <div
-                class="form-canvas field-control-canvas"
-                data-widget-scroll
-                data-widget-surface="form"
-                aria-label="Form canvas"
-              >
-                <p v-if="!draft.fields.length" class="empty-canvas">
-                  Drop a field here or choose Add above.
-                </p>
-                <article
-                  v-for="(field, index) in draft.fields"
-                  :key="field.id"
-                  class="field-row"
-                  :data-widget-id="field.id"
-                  :class="{
-                    selected: selection === field.id,
-                    'drop-before':
-                      pointerTarget?.overId === field.id && pointerTarget.edge === 'before',
-                    'drop-after':
-                      pointerTarget?.overId === field.id && pointerTarget.edge === 'after',
-                  }"
-                  tabindex="0"
-                  @focusin="authoring.select(field.id)"
-                  @click="authoring.select(field.id)"
-                  @keydown.enter.self="authoring.select(field.id)"
-                  @keydown.space.self.prevent="authoring.select(field.id)"
-                  @keydown.delete.self.prevent="removeField(index)"
-                  :aria-description="
-                    field.label + ', ' + field.kind + (field.required ? ', required' : '')
-                  "
-                  :aria-label="'Field ' + (index + 1)"
-                >
+          <div class="authoring-panels">
+            <FormCanvasViewport :device="previewDevice"
+              ><template #devices>
+                <div class="toolbar" role="group" aria-label="Preview device">
                   <button
-                    class="form-grip"
-                    @pointerdown="startFieldDrag($event, field.id, field.label)"
-                    @dragstart.prevent
-                    :aria-label="'Drag ' + field.label"
-                    @keydown.esc="pointerDrag.cancel"
+                    v-for="device in ['desktop', 'tablet', 'phone'] as const"
+                    :key="device"
+                    :aria-pressed="previewDevice === device"
+                    @click="previewDevice = device"
                   >
-                    &#8942;&#8942;
+                    {{ device[0]!.toUpperCase() + device.slice(1) }}
                   </button>
-                  <small class="field-kind"
-                    >{{
-                      field.kind === 'choice'
-                        ? 'Single select'
-                        : field.kind === 'textarea'
-                          ? 'Long text'
-                          : field.kind
-                    }}
-                    · {{ index + 1 }}</small
-                  >
-                  <div class="canvas-field-preview" inert aria-hidden="true">
-                    <FormDefinitionPreview
-                      :definition="draft"
-                      :canvas-field="field"
-                      :previous-section="draft.fields[index - 1]?.section"
-                    />
-                  </div>
-                  <div class="toolbar">
-                    <button
-                      :disabled="index === 0"
-                      :aria-label="'Move ' + field.label + ' up'"
-                      @click="reorder(field.id, index - 1)"
-                    >
-                      ↑</button
-                    ><button
-                      :disabled="index === draft.fields.length - 1"
-                      :aria-label="'Move ' + field.label + ' down'"
-                      @click="reorder(field.id, index + 1)"
-                    >
-                      ↓</button
-                    ><button :aria-label="'Remove ' + field.label" @click="removeField(index)">
-                      Remove
-                    </button>
-                  </div>
-                </article>
+                </div>
+              </template>
+              <div
+                v-if="preview"
+                class="form-preview-frame"
+                :style="{ maxWidth: previewWidth + 'px' }"
+              >
+                <FormDefinitionPreview :definition="draft" />
               </div>
-              <ul v-if="errors.length">
-                <li v-for="item in errors" :key="item">{{ item }}</li>
-              </ul>
-            </fieldset>
+              <fieldset
+                v-else
+                class="canvas-panel"
+                :disabled="authoringLocked"
+                @input="dirty = true"
+              >
+                <h2 class="canvas-title">{{ draft.title }}</h2>
+                <p class="canvas-description">{{ draft.description }}</p>
+                <div
+                  class="form-canvas field-control-canvas"
+                  data-widget-surface="form"
+                  aria-label="Form canvas"
+                >
+                  <p v-if="!draft.fields.length" class="empty-canvas">
+                    Drop a field here or choose Add above.
+                  </p>
+                  <article
+                    v-for="(field, index) in draft.fields"
+                    :key="field.id"
+                    class="field-row"
+                    :data-widget-id="field.id"
+                    :class="{
+                      selected: selection === field.id,
+                      'drop-before':
+                        pointerTarget?.overId === field.id && pointerTarget.edge === 'before',
+                      'drop-after':
+                        pointerTarget?.overId === field.id && pointerTarget.edge === 'after',
+                    }"
+                    tabindex="0"
+                    @focusin="(authoring.select(field.id), (settingsTab = 'field'))"
+                    @click="(authoring.select(field.id), (settingsTab = 'field'))"
+                    @keydown.enter.self="(authoring.select(field.id), (settingsTab = 'field'))"
+                    @keydown.space.self.prevent="
+                      (authoring.select(field.id), (settingsTab = 'field'))
+                    "
+                    @keydown.delete.self.prevent="removeField(index)"
+                    :aria-description="
+                      field.label + ', ' + field.kind + (field.required ? ', required' : '')
+                    "
+                    :aria-label="'Field ' + (index + 1)"
+                  >
+                    <button
+                      class="form-grip"
+                      @pointerdown="startFieldDrag($event, field.id, field.label)"
+                      @dragstart.prevent
+                      :aria-label="'Drag ' + field.label"
+                      @keydown.esc="pointerDrag.cancel"
+                    >
+                      &#8942;&#8942;
+                    </button>
+                    <small class="field-kind"
+                      >{{
+                        field.kind === 'choice'
+                          ? 'Single select'
+                          : field.kind === 'textarea'
+                            ? 'Long text'
+                            : field.kind
+                      }}
+                      · {{ index + 1 }}</small
+                    >
+                    <div class="canvas-field-preview" inert aria-hidden="true">
+                      <FormDefinitionPreview
+                        :definition="draft"
+                        :canvas-field="field"
+                        :previous-section="draft.fields[index - 1]?.section"
+                      />
+                    </div>
+                    <div class="toolbar">
+                      <button
+                        :disabled="index === 0"
+                        :aria-label="'Move ' + field.label + ' up'"
+                        @click="reorder(field.id, index - 1)"
+                      >
+                        ↑</button
+                      ><button
+                        :disabled="index === draft.fields.length - 1"
+                        :aria-label="'Move ' + field.label + ' down'"
+                        @click="reorder(field.id, index + 1)"
+                      >
+                        ↓</button
+                      ><button :aria-label="'Remove ' + field.label" @click="removeField(index)">
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                </div>
+                <ul v-if="errors.length">
+                  <li v-for="item in errors" :key="item">{{ item }}</li>
+                </ul>
+              </fieldset></FormCanvasViewport
+            >
             <fieldset class="inspector-panel" :disabled="authoringLocked" @input="dirty = true">
-              <section v-if="selectedField" aria-label="Field inspector" class="field-inspector">
+              <nav class="settings-tabs" aria-label="Form settings tabs">
+                <button :aria-pressed="settingsTab === 'form'" @click="settingsTab = 'form'">
+                  Form</button
+                ><button :aria-pressed="settingsTab === 'field'" @click="settingsTab = 'field'">
+                  Field</button
+                ><button :aria-pressed="settingsTab === 'output'" @click="settingsTab = 'output'">
+                  Output / issues
+                </button>
+              </nav>
+              <section v-show="settingsTab === 'form'" aria-label="Form settings">
+                <label>Form title<input v-model="draft.title" maxlength="160" /></label
+                ><label>Description<textarea v-model="draft.description" /></label
+                ><label
+                  >Recipients<input
+                    v-model="recipientText"
+                    placeholder="name@example.com, another@example.com"
+                /></label>
+                <p>Recipients are configuration only in this local preview; no email is sent.</p>
+                <p>
+                  Drag a field onto the ordered canvas, or click Add to append. Select a field for
+                  its inspector. Move buttons provide keyboard ordering.
+                </p>
+              </section>
+              <FormOutputSettings
+                v-if="settingsTab === 'output'"
+                :definition="draft"
+                :template-id="draft.id"
+                @update:definition="(Object.assign(draft, $event), (dirty = true))"
+              />
+              <section
+                v-if="selectedField && !preview"
+                v-show="settingsTab === 'field'"
+                aria-label="Field inspector"
+                class="field-inspector"
+              >
                 <BuilderSelectionContext kind="Field" :scope="selectedField.label" />
                 <label
                   >Selected field label<input v-model="selectedField.label" maxlength="160"
@@ -1141,6 +1231,331 @@ p[role='alert'] {
   }
   .field-row > label {
     grid-column: 2/-1;
+  }
+}
+
+.form-builder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 !important;
+  gap: 0 !important;
+}
+.form-builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  flex-wrap: wrap;
+  flex: none;
+}
+.form-builder-header h1 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+.form-builder-header small {
+  font-size: 0.75rem;
+}
+.form-builder-header button {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+.header-actions,
+.form-builder-header nav,
+.header-actions .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.header-actions .toolbar {
+  margin: 0;
+}
+.header-actions .toolbar > span {
+  display: none;
+}
+.local-status {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  flex: none;
+}
+.local-status p {
+  margin: 0.2rem;
+}
+.builder-layout {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: 0.35rem !important;
+  overflow: hidden;
+}
+.builder-sidebar {
+  position: static;
+  max-height: none;
+  min-height: 0;
+  height: 100%;
+  border-radius: 0 !important;
+  padding: 0.35rem !important;
+  overflow: auto;
+}
+.sidebar-tabs,
+.settings-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+.sidebar-tabs button,
+.settings-tabs button {
+  flex: 1;
+  padding: 0.35rem 0.25rem;
+  font-size: 0.8rem;
+}
+.library-list {
+  max-height: none;
+}
+.builder-layout > section[aria-label='Form editor'] {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.builder-layout > section[aria-label='Form editor'] > :deep(.builder-selection-context) {
+  display: none;
+}
+.authoring-panels {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 17rem;
+  gap: 0.35rem;
+}
+.canvas-panel {
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 1rem !important;
+  min-width: 0;
+  margin: 0 !important;
+}
+.canvas-title {
+  font-size: 1.4rem;
+  margin: 0.2rem 0;
+}
+.canvas-description {
+  margin: 0.4rem 0 1rem;
+}
+.form-canvas {
+  max-height: none !important;
+  overflow: visible;
+  border: 0;
+  padding: 0;
+}
+.field-row {
+  margin: 0 0 0.4rem;
+  padding: 0.35rem;
+  border-radius: 0.25rem;
+  background: transparent;
+}
+.field-row > .toolbar {
+  margin: 0;
+  opacity: 0.3;
+}
+.field-row.selected > .toolbar,
+.field-row:hover > .toolbar {
+  opacity: 1;
+}
+.field-row > .toolbar button {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.35rem;
+}
+.field-kind {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+.form-grip {
+  padding: 0.2rem 0.35rem !important;
+}
+.inspector-panel {
+  position: static;
+  max-height: none;
+  height: 100%;
+  overflow: auto;
+  border-radius: 0 !important;
+  padding: 0.5rem !important;
+  margin: 0 !important;
+}
+.form-preview-frame {
+  margin: 0;
+  max-width: none !important;
+}
+.field-palette {
+  position: static;
+}
+.mobile-navigation {
+  display: none;
+}
+.toolbar[aria-label='Preview device'] {
+  margin: 0;
+  display: flex;
+  gap: 0.25rem;
+}
+.toolbar[aria-label='Preview device'] button {
+  padding: 0.3rem 0.45rem;
+  font-size: 0.75rem;
+}
+@media (max-width: 1000px) {
+  .builder-layout {
+    grid-template-columns: 11rem minmax(0, 1fr);
+  }
+  .authoring-panels {
+    grid-template-columns: minmax(0, 1fr) 14rem;
+  }
+  .form-builder-header nav {
+    order: 3;
+  }
+  .header-actions {
+    max-width: 70%;
+  }
+}
+@media (max-width: 760px) {
+  .mobile-navigation {
+    display: block;
+  }
+  .builder-layout {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+  }
+  .builder-sidebar {
+    height: auto;
+    max-height: 14rem;
+    flex: none;
+    display: block;
+  }
+  .builder-layout > section[aria-label='Form editor'] {
+    min-height: 40rem;
+    overflow: visible;
+    flex: none;
+  }
+  .authoring-panels {
+    display: flex;
+    flex-direction: column;
+    min-height: 40rem;
+  }
+  .authoring-panels > :deep(.canvas-viewport) {
+    height: 30rem;
+    flex: none;
+  }
+  .inspector-panel {
+    height: auto;
+    max-height: 30rem;
+    flex: none;
+  }
+  .field-palette {
+    display: block;
+  }
+  .field-palette h2 {
+    display: none;
+  }
+  .palette-options {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .form-builder-header .header-actions {
+    max-width: 100%;
+  }
+  .form-builder .field-row {
+    scroll-margin-top: 0;
+  }
+  .form-builder .form-canvas {
+    scroll-margin-top: 0;
+  }
+  .canvas-panel {
+    padding: 0.65rem !important;
+  }
+}
+@media (max-width: 760px) {
+  .builder-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    max-height: 13rem;
+    background: var(--surface);
+  }
+}
+.form-builder {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+}
+.builder-layout > section[aria-label='Form editor'] > .selection-context {
+  display: none;
+}
+.header-actions {
+  min-width: 0;
+}
+.field-palette h2 {
+  font-size: 1rem;
+  margin: 0.4rem 0;
+}
+.field-palette {
+  padding-top: 0;
+}
+.form-canvas[data-widget-scroll] {
+  overflow: visible;
+}
+@media (max-width: 760px) {
+  :global(.app-shell__content:has(.form-builder)) {
+    scroll-padding-top: 0;
+  }
+  .builder-sidebar {
+    max-height: 12rem;
+  }
+  .form-builder .form-canvas {
+    scroll-margin-top: 0;
+  }
+}
+.authoring-panels {
+  align-items: stretch;
+}
+.form-builder-header > div {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.form-builder-header button {
+  white-space: nowrap;
+}
+.authoring-panels > :deep(.canvas-viewport) {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 760px) {
+  .form-builder-header > .header-actions {
+    flex: 1 0 100%;
+    max-width: 100%;
+  }
+  .form-builder-header nav {
+    order: 0;
+  }
+  .form-builder-header > div:first-of-type {
+    flex: 1;
+  }
+  .header-actions .toolbar {
+    min-width: 0;
+  }
+}
+.form-canvas:has(.empty-canvas) {
+  min-height: 20rem;
+}
+@media (max-width: 760px) {
+  .builder-layout {
+    scroll-padding-top: 13rem;
+  }
+  .canvas-viewport {
+    scroll-margin-top: 13rem;
   }
 }
 </style>
