@@ -950,6 +950,24 @@ button[aria-pressed='true'] {
   }
   .palette-options {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+  .field-palette {
+    padding: 0.35rem 0.5rem;
+  }
+  .field-palette h2 {
+    font-size: 1rem;
+    margin: 0.25rem 0;
+  }
+  .field-palette h3 {
+    font-size: 0.75rem;
+    margin: 0.25rem 0 0.2rem;
+  }
+  .palette-options button {
+    font-size: 0.8rem;
+    line-height: 1.15;
+    padding: 0.35rem 0.25rem;
+    min-height: 2rem;
   }
 }
 .field-palette {
