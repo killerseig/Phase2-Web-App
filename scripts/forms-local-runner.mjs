@@ -18,7 +18,8 @@ const { initializeApp } = require('firebase-admin/app'),
 initializeApp({ projectId, storageBucket: projectId + '.appspot.com' })
 const { formTemplates, formWorkspace } = require('../functions/formFunctions.js'),
   { formEmail, deliverFormSubmission } = require('../functions/formDelivery.js')
-const handlers = { formTemplates, formWorkspace, formEmail },
+const { dashboardWorkspace } = require('../functions/dashboardFunctions.js')
+const handlers = { formTemplates, formWorkspace, formEmail, dashboardWorkspace },
   auth = getAuth(),
   db = getFirestore()
 for (const [uid, email, role] of [

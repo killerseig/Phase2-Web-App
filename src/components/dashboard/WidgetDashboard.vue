@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { CURRENT_EDITABLE_USER_ROLE_KEYS, CURRENT_ROLE_LABELS } from '@/auth/roles'
@@ -14,6 +14,66 @@ import {
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import SdsExplorerModule from './SdsExplorerModule.vue'
 import RoleResourcesModule from './RoleResourcesModule.vue'
+import { formApi, isFormServerEnabled, type ServerFormTemplate } from '@/services/forms'
+const FormDashboardWidget = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('./FormDashboardWidget.vue'))
+  : undefined
+const formWidgets = ref<{ prepareNavigation: () => Promise<boolean> }[]>([])
+const formTemplates = ref<ServerFormTemplate[]>([])
+const formError = ref('')
+const availableWidgetLabels = computed(
+  () =>
+    Object.fromEntries(
+      Object.entries(dashboardWidgetLabels).filter(
+        ([type]) =>
+          type !== 'form' ||
+          (isFormServerEnabled() &&
+            ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole) &&
+            (props.scope !== 'role' ||
+              ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value))),
+      ),
+    ) as Partial<typeof dashboardWidgetLabels>,
+)
+async function prepareFormWidgets() {
+  for (const widget of formWidgets.value) if (!(await widget.prepareNavigation())) return false
+  return true
+}
+async function reloadLayout() {
+  if (await prepareFormWidgets()) await load()
+}
+async function editLayout() {
+  if (!canEdit.value || locked.value) return
+  if (!(await prepareFormWidgets())) return
+  editing.value = true
+  if (
+    !isFormServerEnabled() ||
+    !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole)
+  )
+    return
+  formError.value = ''
+  try {
+    formTemplates.value = (
+      await formApi<{ templates: ServerFormTemplate[] }>('formTemplates', { action: 'list' })
+    ).templates.filter((item) => item.latestVersion && !item.archived)
+  } catch (reason) {
+    formError.value = dashboardError(reason)
+  }
+}
+function selectForm(widget: DashboardWidget, event: Event) {
+  const template = formTemplates.value.find(
+    (item) => item.id === (event.target as HTMLSelectElement).value,
+  )
+  if (!template) {
+    delete widget.form
+    return
+  }
+  widget.form = {
+    templateId: template.id,
+    version: template.latestVersion,
+    presentation: widget.form?.presentation || 'launcher',
+  }
+  widget.title = template.definition?.title || template.draft?.title || 'Form'
+}
 
 const props = defineProps<{ scope: 'personal' | 'role' }>()
 const auth = useAuthStore()
@@ -140,9 +200,9 @@ async function save() {
     busy.value = false
   }
 }
-function changeRole(event: Event) {
+async function changeRole(event: Event) {
   const select = event.target as HTMLSelectElement
-  if (!discard()) {
+  if (!(await prepareFormWidgets()) || !discard()) {
     select.value = role.value
     return
   }
@@ -209,26 +269,29 @@ onBeforeRouteLeave(() => !busy.value && discard())
         <button :disabled="locked || !dirty" @click="save">Save layout</button>
         <button :disabled="locked" @click="cancel">Cancel layout edits</button>
       </template>
-      <button v-else-if="canEdit" :disabled="locked" @click="editing = true">Edit layout</button>
-      <button :disabled="locked" @click="load">Reload layout</button>
+      <button v-else-if="canEdit" :disabled="locked" @click="editLayout">Edit layout</button>
+      <button :disabled="locked" @click="reloadLayout">Reload layout</button>
     </header>
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="message" role="status">{{ message }}</p>
     <fieldset v-if="editing" :disabled="locked" class="dashboard-library">
       <legend>Add widgets</legend>
       <button
-        v-for="(name, type) in dashboardWidgetLabels"
+        v-for="(name, type) in availableWidgetLabels"
         :key="type"
         class="widget-grip"
-        :disabled="!canAdd(type)"
-        @pointerdown="drag.start($event, { kind: 'new', type }, name)"
+        :disabled="!canAdd(type as DashboardWidgetType)"
+        @pointerdown="
+          drag.start($event, { kind: 'new', type: type as DashboardWidgetType }, name || '')
+        "
         @dragstart.prevent
-        @click="add(type)"
+        @click="add(type as DashboardWidgetType)"
       >
         Add {{ name }}
       </button>
       <small>Drag to place, or click to add. Changes take effect when you save the layout.</small>
     </fieldset>
+    <p v-if="formError" role="alert">{{ formError }}</p>
     <div class="dashboard-scroll" data-widget-scroll>
       <div
         class="dashboard-widgets"
@@ -281,6 +344,34 @@ onBeforeRouteLeave(() => !busy.value && discard())
             <button :aria-label="`Remove widget ${index + 1}`" @click="remove(widget)">
               Remove
             </button>
+            <template v-if="widget.type === 'form'">
+              <label
+                >Issued form<select
+                  :value="widget.form?.templateId || ''"
+                  :aria-label="`Widget ${index + 1} form`"
+                  @change="selectForm(widget, $event)"
+                >
+                  <option value="">Choose a form</option>
+                  <option v-for="item in formTemplates" :key="item.id" :value="item.id">
+                    {{ item.definition?.title || item.draft?.title }} · version
+                    {{ item.latestVersion }}
+                  </option>
+                </select></label
+              >
+              <label v-if="widget.form"
+                >Presentation<select
+                  v-model="widget.form.presentation"
+                  :aria-label="`Widget ${index + 1} presentation`"
+                >
+                  <option value="launcher">Full-page launcher</option>
+                  <option value="inline">Inline (small forms)</option>
+                </select></label
+              >
+              <small v-if="widget.form"
+                >Pinned version {{ widget.form.version }}. Select a form again to adopt its latest
+                issued version. Inline is limited to eight fields.</small
+              >
+            </template>
             <template v-if="widget.type === 'notes'">
               <label class="note-field"
                 >Title<input
@@ -299,7 +390,14 @@ onBeforeRouteLeave(() => !busy.value && discard())
             </template>
           </fieldset>
           <div class="widget-content" :inert="editing || locked">
-            <SdsExplorerModule v-if="widget.type === 'documents'" />
+            <component
+              :is="FormDashboardWidget"
+              v-if="widget.type === 'form' && FormDashboardWidget"
+              ref="formWidgets"
+              :widget="widget"
+              :scope="scope"
+            />
+            <SdsExplorerModule v-else-if="widget.type === 'documents'" />
             <RoleResourcesModule v-else-if="widget.type === 'resources'" :fixed-role="role" />
             <section v-else-if="widget.type === 'notes'" class="note-widget">
               <h2>{{ widget.title || 'Notes' }}</h2>

@@ -19,8 +19,8 @@ export declare const formTemplates: import("firebase-functions/v2/https").Callab
     revision?: undefined;
 } | {
     templates: ({
+        definition?: FormVersion | undefined;
         id: string;
-        definition?: undefined;
         latestVersion?: undefined;
     } | {
         id: string;

@@ -75,8 +75,21 @@ exports.formTemplates = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
         const list = [];
         for (const doc of docs) {
             const stored = doc.data();
-            if (profile.role === 'admin')
-                list.push({ id: doc.id, ...stored });
+            if (profile.role === 'admin') {
+                const issued = stored.latestVersion
+                    ? await doc.ref
+                        .collection('versions')
+                        .doc('v' + stored.latestVersion)
+                        .get()
+                    : undefined;
+                list.push({
+                    id: doc.id,
+                    ...stored,
+                    ...(issued?.exists
+                        ? { definition: (0, formModel_1.respondentDefinition)(issued.data()) }
+                        : {}),
+                });
+            }
             else if (!stored.archived && stored.latestVersion) {
                 const issued = await doc.ref
                     .collection('versions')

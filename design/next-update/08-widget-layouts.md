@@ -59,3 +59,9 @@ Deploy the updated `websiteBuilder` function and new `dashboardWorkspace` functi
 
 
 Website pages additionally support optional content-flow layouts, container child sizing, tablet/mobile overrides and scoped page CSS. See [Website Builder](07-website-builder.md#responsive-sizing-and-page-css). These additions apply only to Website Builder and its public renderer; they do not change personal, role or job dashboard layouts.
+
+## Local Forms addition — October 2
+
+In the local Forms emulator profile, the existing Personal/Role palette additionally has one Form widget. Choose an issued template and Full-page launcher or Inline (up to eight fields). The layout pins the issued version; reselection is required to adopt later versions. Opening creates no draft. Inline and full-page share the same respondent component and owner record, and switching saves progress before navigating. Save errors keep the current view/answers. Existing personal ownership and Admin-only shared role editing apply; eligible employees respond as themselves even when a layout is shared. Form selection is excluded for Payroll/No Access. Photos remain in authenticated records and are not linked or attached in email.
+
+This implementation does not add Forms to existing Jobs dashboards or redesign the Dashboard Builder. The job integration hook is the reusable FormDashboardWidget identity/presentation component; job-context ownership and placement are deferred. Form metadata contains no answers. Server validation enforces an issued available version, inline size and emulator-only operation. The Forms routes and widget component are DEV-only. **Do not follow the historical deployment instructions above for this checkpoint: no Forms release is authorized.** See [workspace design](03-workspace-design.md) for startup and verification details.

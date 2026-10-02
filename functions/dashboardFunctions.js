@@ -17,13 +17,21 @@ function validateDashboardWidgets(value) {
             typeof entry.id !== 'string' ||
             !/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) ||
             ids.has(entry.id) ||
-            !['documents', 'resources', 'notes', 'shortcuts'].includes(entry.type) ||
+            !['documents', 'resources', 'notes', 'shortcuts', 'form'].includes(entry.type) ||
             ![4, 6, 8, 12].includes(entry.span) ||
             typeof entry.title !== 'string' ||
             entry.title.length > 100 ||
             typeof entry.text !== 'string' ||
             entry.text.length > 8000)
             throw new https_1.HttpsError('invalid-argument', 'Invalid dashboard widget.');
+        if (entry.type === 'form' &&
+            (!entry.form ||
+                typeof entry.form.templateId !== 'string' ||
+                !/^[a-zA-Z0-9_-]{1,80}$/.test(entry.form.templateId) ||
+                !Number.isSafeInteger(entry.form.version) ||
+                entry.form.version < 1 ||
+                !['inline', 'launcher'].includes(entry.form.presentation)))
+            throw new https_1.HttpsError('invalid-argument', 'Choose an issued form version and presentation.');
         ids.add(entry.id);
         if (entry.type !== 'notes') {
             if (singletons.has(entry.type))
@@ -36,6 +44,15 @@ function validateDashboardWidgets(value) {
             span: entry.span,
             title: entry.title,
             text: entry.text,
+            ...(entry.type === 'form'
+                ? {
+                    form: {
+                        templateId: entry.form.templateId,
+                        version: entry.form.version,
+                        presentation: entry.form.presentation,
+                    },
+                }
+                : {}),
         };
     });
 }
@@ -67,6 +84,21 @@ exports.dashboardWorkspace = (0, https_1.onCall)(async (request) => {
         const canEdit = data.scope === 'personal' || user.role === 'admin';
         if (data.action === 'save' && !canEdit)
             throw new https_1.HttpsError('permission-denied', 'Only admins can edit shared role layouts.');
+        if (widgets?.some((widget) => widget.type === 'form')) {
+            if (!process.env.FIRESTORE_EMULATOR_HOST ||
+                !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(user.role) ||
+                (data.scope === 'role' &&
+                    !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role)))
+                throw new https_1.HttpsError('permission-denied', 'Forms are available only to authorized local emulator respondents.');
+            for (const widget of widgets.filter((item) => item.type === 'form')) {
+                const form = widget.form;
+                const [template, issued] = await transaction.getAll(runtime_1.db.doc('formTemplates/' + form.templateId), runtime_1.db.doc('formTemplates/' + form.templateId + '/versions/v' + form.version));
+                if (!template.exists || template.data()?.archived || !issued.exists)
+                    throw new https_1.HttpsError('failed-precondition', 'Choose an available issued form version.');
+                if (form.presentation === 'inline' && (issued.data()?.fields?.length || 0) > 8)
+                    throw new https_1.HttpsError('invalid-argument', 'Use the full-page launcher for forms with more than eight fields.');
+            }
+        }
         const ref = runtime_1.db.doc(data.scope === 'personal' ? `dashboardPersonal/${uid}` : `dashboardRoles/${role}`);
         const record = await transaction.get(ref);
         const version = record.data()?.version || 0;

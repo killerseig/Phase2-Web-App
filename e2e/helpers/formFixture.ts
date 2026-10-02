@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { Page } from '@playwright/test'
 import audit from '../../functions/src/committeeAudit.json' with { type: 'json' }
 import { createRequire } from 'node:module'
-import type { FormRecord, FormVersion } from '../../functions/src/formModel'
+import type { FormDefinition, FormRecord, FormVersion } from '../../functions/src/formModel'
 const { validateFormAnswers, validateFormDefinition } = createRequire(import.meta.url)(
   '../../functions/formModel.js',
 ) as typeof import('../../functions/src/formModel')
@@ -12,13 +12,15 @@ export async function setupFormServer(
   page: Page,
   options: {
     definition?: FormDefinition
+    initialPath?: string
+    fixture?: ReturnType<typeof createJobsFixture>
     lostCreate?: boolean
     lostSave?: boolean
     lostSubmit?: boolean
     failedDelivery?: boolean
   } = {},
 ) {
-  const fixture = createJobsFixture(),
+  const fixture = options.fixture || createJobsFixture(),
     owner = fixture.auth.user.uid
   const definition = validateFormDefinition({
     ...(options.definition || audit),
@@ -214,7 +216,7 @@ export async function setupFormServer(
         })
       }
     })
-  await gotoPhase2App(page, '/forms/audit-e2e', fixture)
+  await gotoPhase2App(page, options.initialPath || '/forms/audit-e2e', fixture)
   return context
 }
 export async function fillCommitteeAudit(page: Page) {

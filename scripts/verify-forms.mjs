@@ -570,11 +570,110 @@ try {
     (await db.doc('formSubmissions/' + choiceRecord.id).get()).data(),
     choiceSnapshot,
   )
+  const {
+    dashboardWorkspace,
+    validateDashboardWidgets,
+  } = require('../functions/dashboardFunctions.js')
+  const dashboard = (uid, data) => dashboardWorkspace.run({ auth: uid ? { uid } : undefined, data })
+  const shortDefinition = {
+    ...source,
+    title: 'Short inline check',
+    fields: source.fields.slice(0, 2),
+  }
+  await template('admin', 'save', { id: 'inline-widget', revision: 0, definition: shortDefinition })
+  await template('admin', 'issue', { id: 'inline-widget', revision: 1 })
+  const widget = {
+    id: 'quick',
+    type: 'form',
+    span: 12,
+    title: 'Quick check',
+    text: '',
+    form: {
+      templateId: 'inline-widget',
+      version: 1,
+      presentation: 'inline',
+      unexpected: 'discard',
+    },
+  }
+  const personal = { action: 'save', scope: 'personal', version: 0, widgets: [widget] }
+  await reject(() => dashboard(undefined, personal), 'unauthenticated')
+  await reject(() => dashboard('inactive', personal), 'permission-denied')
+  await reject(() => dashboard(signed.uid, { ...personal, uid: 'other' }), 'invalid-argument')
+  await reject(
+    () => dashboard(signed.uid, { ...personal, scope: 'role', role: 'foreman' }),
+    'permission-denied',
+  )
+  await reject(
+    () => dashboard(signed.uid, { action: 'load', scope: 'role', role: 'admin' }),
+    'permission-denied',
+  )
+  await reject(() => dashboard('payroll', personal), 'permission-denied')
+  await reject(
+    () => dashboard('admin', { ...personal, scope: 'role', role: 'payroll' }),
+    'permission-denied',
+  )
+  await reject(
+    () =>
+      dashboard(signed.uid, {
+        ...personal,
+        widgets: [{ ...widget, form: { ...widget.form, version: 0 } }],
+      }),
+    'invalid-argument',
+  )
+  await reject(
+    () =>
+      dashboard(signed.uid, {
+        ...personal,
+        widgets: [{ ...widget, form: { ...widget.form, version: 999 } }],
+      }),
+    'failed-precondition',
+  )
+  await template('admin', 'save', { id: 'large-widget', revision: 0, definition: source })
+  await template('admin', 'issue', { id: 'large-widget', revision: 1 })
+  await reject(
+    () =>
+      dashboard(signed.uid, {
+        ...personal,
+        widgets: [{ ...widget, form: { ...widget.form, templateId: 'large-widget' } }],
+      }),
+    'invalid-argument',
+  )
+  assert.equal(validateDashboardWidgets([widget])[0].form.unexpected, undefined)
+  const layout = await dashboard(signed.uid, personal)
+  assert.deepEqual(layout.widgets[0].form, {
+    templateId: 'inline-widget',
+    version: 1,
+    presentation: 'inline',
+  })
+  assert.equal(layout.canEdit, true)
+  await template('admin', 'save', {
+    id: 'inline-widget',
+    revision: 2,
+    definition: { ...shortDefinition, title: 'Next issued title' },
+  })
+  await template('admin', 'issue', { id: 'inline-widget', revision: 3 })
+  assert.equal(
+    (await dashboard(signed.uid, { action: 'load', scope: 'personal' })).widgets[0].form.version,
+    1,
+  )
+  assert.equal((await dashboard('other', { action: 'load', scope: 'personal' })).version, 0)
+  await dashboard('admin', { ...personal, scope: 'role', role: 'foreman' })
+  assert.equal(
+    (await dashboard(signed.uid, { action: 'load', scope: 'role', role: 'foreman' })).canEdit,
+    false,
+  )
+  const launcher = await dashboard(signed.uid, {
+    ...personal,
+    version: 1,
+    widgets: [{ ...widget, form: { ...widget.form, presentation: 'launcher' } }],
+  })
+  assert.equal(launcher.widgets[0].form.presentation, 'launcher')
   console.log(
     JSON.stringify({
       passed: true,
       sourceFields: 41,
       commonChoiceControls: true,
+      dashboardPresentationPermissionsAndPinnedVersions: true,
       choiceSnapshotsAndEmailSummary: true,
       multiSelectDoesNotConsumePhotos: true,
       rejectionChecks: negatives,

@@ -94,8 +94,21 @@ export const formTemplates = onCall({ memory: '512MiB', timeoutSeconds: 60 }, as
     const list = []
     for (const doc of docs) {
       const stored = doc.data()
-      if (profile.role === 'admin') list.push({ id: doc.id, ...stored })
-      else if (!stored.archived && stored.latestVersion) {
+      if (profile.role === 'admin') {
+        const issued = stored.latestVersion
+          ? await doc.ref
+              .collection('versions')
+              .doc('v' + stored.latestVersion)
+              .get()
+          : undefined
+        list.push({
+          id: doc.id,
+          ...stored,
+          ...(issued?.exists
+            ? { definition: respondentDefinition(issued.data() as FormVersion) }
+            : {}),
+        })
+      } else if (!stored.archived && stored.latestVersion) {
         const issued = await doc.ref
           .collection('versions')
           .doc('v' + stored.latestVersion)

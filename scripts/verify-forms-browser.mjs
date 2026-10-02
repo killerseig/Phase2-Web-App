@@ -228,6 +228,103 @@ try {
         fullPage: true,
       })
   }
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  // Seed only a local-emulator personal layout, using the same real Auth token as the UI.
+  await page.evaluate(async (id) => {
+    const { requireFirebaseServices } = await import('/src/firebase.ts')
+    const token = await requireFirebaseServices().auth.currentUser.getIdToken()
+    const command = async (data) => {
+      const response = await fetch(
+        'http://127.0.0.1:5001/demo-phase2-security/us-central1/dashboardWorkspace',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ data }),
+        },
+      )
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error?.message)
+      return body.result
+    }
+    const layout = await command({ action: 'load', scope: 'personal' })
+    await command({
+      action: 'save',
+      scope: 'personal',
+      version: layout.version,
+      widgets: [
+        {
+          id: 'local-form-check',
+          type: 'form',
+          span: 12,
+          title: 'Common choice control smoke',
+          text: '',
+          form: { templateId: id, version: 1, presentation: 'inline' },
+        },
+      ],
+    })
+  }, choiceIssued.id)
+  await page.goto('http://127.0.0.1:5195/dashboards/personal')
+  // The already-submitted choice record is reused; viewing an inline widget creates nothing.
+  await page.getByText('Record status: submitted', { exact: false }).waitFor()
+  assert.equal(await ack.isChecked(), true)
+  assert.equal(await ack.isDisabled(), true)
+  await page.getByRole('button', { name: 'Start draft', exact: true }).click()
+  await page.getByText('Record status: draft', { exact: false }).waitFor()
+  await ack.check()
+  await page.getByRole('radio', { name: 'North', exact: true }).check()
+  const inlineRecordResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/formWorkspace') &&
+      response.request().postDataJSON()?.data.action === 'save',
+  )
+  await page.getByRole('button', { name: 'Open full-page form', exact: true }).click()
+  const inlineRecord = (await (await inlineRecordResponse).json()).result
+  await page.waitForURL(
+    (url) =>
+      url.pathname === '/forms/' + choiceIssued.id &&
+      url.searchParams.get('record') === inlineRecord.id,
+  )
+  assert.equal(await ack.isChecked(), true)
+  await page.getByRole('radio', { name: 'South', exact: true }).check()
+  await page.getByRole('button', { name: 'Return to dashboard', exact: true }).click()
+  await page.waitForURL((url) => url.pathname === '/dashboards/personal')
+  await page.getByRole('radio', { name: 'South', exact: true }).waitFor()
+  assert.equal(await page.getByRole('radio', { name: 'South', exact: true }).isChecked(), true)
+  await page.reload()
+  await ack.waitFor()
+  assert.equal(await ack.isChecked(), true)
+  assert.equal(await page.getByRole('radio', { name: 'South', exact: true }).isChecked(), true)
+  await page.getByRole('button', { name: 'Edit layout', exact: true }).click()
+  await page.getByLabel('Widget 1 presentation', { exact: true }).selectOption('launcher')
+  await page.getByRole('button', { name: 'Save layout', exact: true }).click()
+  await page.getByRole('link', { name: 'Open full-page form', exact: true }).click()
+  await ack.waitFor()
+  assert.equal(await ack.isChecked(), true)
+  assert.equal(await page.getByRole('radio', { name: 'South', exact: true }).isChecked(), true)
+  await page.getByRole('button', { name: 'Return to dashboard', exact: true }).click()
+  await page.waitForURL((url) => url.pathname === '/dashboards/personal')
+  await page.getByRole('button', { name: 'Edit layout', exact: true }).click()
+  await page.getByLabel('Widget 1 presentation', { exact: true }).selectOption('inline')
+  await page.getByRole('button', { name: 'Save layout', exact: true }).click()
+  await ack.waitFor()
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 })
+    if (width === 390)
+      await page.waitForFunction(
+        () => document.querySelector('.app-shell__sidebar').getBoundingClientRect().right <= 0,
+      )
+    await page.locator('.app-shell__content').evaluate((el) => (el.scrollTop = 0))
+    await page.locator('.dashboard-scroll').evaluate((el) => (el.scrollTop = 0))
+    assert.ok(
+      await page
+        .locator('.dashboard-scroll')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+    )
+    if (process.env.FORMS_SMOKE_ARTIFACTS)
+      await page.locator('[aria-label="Dashboard form"]').screenshot({
+        path: process.env.FORMS_SMOKE_ARTIFACTS + '/real-inline-form-' + width + '.png',
+      })
+  }
   assert.deepEqual(errors, [])
   assert.deepEqual(externalWrites, [])
   console.log(
@@ -235,6 +332,7 @@ try {
       passed: true,
       realEmulatorAuth: true,
       realCommonChoiceControls: true,
+      realDashboardPresentationsAndSharedRecord: true,
       choiceKeyboardAndDraftRoundtrip: true,
       restartHistory: process.env.FORMS_EXPECT_HISTORY === 'true',
       adminIssue: true,

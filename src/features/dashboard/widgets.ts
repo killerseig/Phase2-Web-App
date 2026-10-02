@@ -3,6 +3,7 @@ export const dashboardWidgetLabels = {
   resources: 'Role resources',
   notes: 'Notes',
   shortcuts: 'Quick links',
+  form: 'Form',
 } as const
 export type DashboardWidgetType = keyof typeof dashboardWidgetLabels
 export interface DashboardWidget {
@@ -11,6 +12,7 @@ export interface DashboardWidget {
   span: 4 | 6 | 8 | 12
   title: string
   text: string
+  form?: { templateId: string; version: number; presentation: 'inline' | 'launcher' }
 }
 export interface DashboardLayout {
   widgets: DashboardWidget[]
