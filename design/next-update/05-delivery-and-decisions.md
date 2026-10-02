@@ -84,3 +84,7 @@ Production-built browser checks are required for affected critical pages: develo
 ## Known limitations of this design pass
 
 The sample JHA and estimate attachment were not provided. Vendor account access, licensing/API behavior, production user data, actual SDS content, and current regulatory obligations were not investigated. Public mSDS Source material has since been reviewed as recorded in the SDS design. The user confirmed the master explorer, job checkbox selection, and PDF/printed books using the hierarchy as contents. Initial folder content, detailed output styling, and source retrieval remain discovery items, not reasons to omit the requested features.
+
+## Open Form Builder delivery decision — 2 October 2026
+
+Recipient addresses currently route notifications only. Generated email includes answer text and private-photo counts, without attachments or authenticated record links. Recipient status does not confer record/photo access; owner/Admin access remains enforced. Before accepting the reviewer workflow, decide recipient authorization and authenticated-link versus attachment delivery. Do not infer sharing grants from email configuration. Local checks keep delivery disabled; a coordinated real inbox test is a later explicitly authorized step.
