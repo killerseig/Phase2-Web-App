@@ -66,25 +66,36 @@ test('Shared Phase 2 site opens directly, supports content edits, and renders ev
     await page.screenshot({ path, fullPage: true, animations: 'disabled' })
   }
   const expectCareersFormContained = async () => {
-    const button = await page
-      .getByRole('button', { name: 'Send introduction', exact: true })
-      .boundingBox()
-    const textarea = await page
-      .getByLabel('Tell us about your experience and interests')
-      .boundingBox()
-    const card = await page.locator('.section-form').boundingBox()
-    const footer = await page.locator('.section-footer').boundingBox()
-    expect(button).not.toBeNull()
-    expect(textarea).not.toBeNull()
-    expect(card).not.toBeNull()
-    expect(footer).not.toBeNull()
-    for (const control of [button!, textarea!]) {
-      expect(control.x).toBeGreaterThanOrEqual(card!.x)
-      expect(control.x + control.width).toBeLessThanOrEqual(card!.x + card!.width)
-      expect(control.y).toBeGreaterThanOrEqual(card!.y)
-      expect(control.y + control.height).toBeLessThanOrEqual(card!.y + card!.height)
-      expect(control.y + control.height).toBeLessThanOrEqual(footer!.y)
-    }
+    // ResizeObserver updates responsive layout after the viewport changes. Measure
+    // every bound in one DOM snapshot and wait for the contained layout to settle.
+    await expect
+      .poll(() =>
+        page.locator('.section-form').evaluate((element) => {
+          const card = element.getBoundingClientRect()
+          const footer = document.querySelector('.section-footer')?.getBoundingClientRect()
+          const controls = [
+            element.querySelector('button[type="submit"]'),
+            element.querySelector('textarea'),
+          ]
+          return (
+            !!footer &&
+            controls.every((element) => {
+              if (!element) return false
+              const control = element.getBoundingClientRect()
+              return (
+                control.width > 0 &&
+                control.height > 0 &&
+                control.left >= card.left &&
+                control.right <= card.right &&
+                control.top >= card.top &&
+                control.bottom <= card.bottom &&
+                control.bottom <= footer.top
+              )
+            })
+          )
+        }),
+      )
+      .toBe(true)
   }
   await page.route('**/websiteBuilder', async (route) => {
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }

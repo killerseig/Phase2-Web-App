@@ -1,7 +1,6 @@
 import { buildFormSubmissionPdf } from './formSubmissionPdf'
 import { buildFormEmailHtml, buildFormEmailText, type FormPhotoPreview } from './formEmailRender'
 export { buildFormEmailHtml, buildFormEmailText } from './formEmailRender'
-import { issueFormViewerLink } from './formSubmissionViewer'
 import { db, storageBucket } from './runtime'
 import { type FormRecord } from './formModel'
 import { getAppBaseUrl } from './functionConfig'
@@ -27,7 +26,6 @@ export interface FormEmailDependencies {
   download: (path: string, maxBytes: number) => Promise<Buffer>
   ownerEmail: (uid: string) => Promise<unknown>
   appBaseUrl: () => string
-  viewerUrl?: (record: FormRecord) => Promise<string>
 }
 export class FormEmailPreparationError extends Error {
   constructor(message: string) {
@@ -51,7 +49,6 @@ const defaults: FormEmailDependencies = {
   ownerEmail: async (uid) => (await db.doc('users/' + uid).get()).data()?.email,
   appBaseUrl: () =>
     process.env.FIRESTORE_EMULATOR_HOST ? 'http://127.0.0.1:5173' : getAppBaseUrl(),
-  viewerUrl: async (record) => (await issueFormViewerLink(record.id)).url,
 }
 // Match the existing Daily Log encoder without changing its source or behavior.
 function photoIds(record: FormRecord, fieldId: string): string[] {
@@ -106,10 +103,7 @@ export async function prepareFormEmail(
   recipients: string[],
   deps: FormEmailDependencies = defaults,
 ): Promise<PreparedFormEmail> {
-  const url =
-      record.definition.output?.requireLogin === false && deps.viewerUrl
-        ? await deps.viewerUrl(record)
-        : recordUrl(record, deps.appBaseUrl()),
+  const url = recordUrl(record, deps.appBaseUrl()),
     previews: FormPhotoPreview[] = [],
     attachments: DailyLogInlinePhotoAttachment[] = []
   let totalBytes = 0

@@ -14,8 +14,8 @@ test('output defaults, picker, escaping, omissions and deleted-field errors surv
   await page.getByLabel('Selected field label', { exact: true }).fill('Full notes')
   await page.getByRole('button', { name: 'Output / issues', exact: true }).click()
   await expect(page.getByLabel('Require login', { exact: true })).toBeChecked()
-  await page.getByLabel('Require login', { exact: true }).uncheck()
-  await expect(page.getByRole('status').filter({ hasText: 'Anyone with this link' })).toBeVisible()
+  await expect(page.getByLabel('Require login', { exact: true })).toBeDisabled()
+  await expect(page.getByText(/Public sharing is unavailable/)).toBeVisible()
   await page.getByLabel('Attach completed form PDF', { exact: true }).check()
   await page.getByLabel('Custom email template', { exact: true }).fill('Report <script>\nName: ')
   await page.getByLabel('Insert field', { exact: true }).selectOption({ label: 'Job name' })
@@ -34,7 +34,7 @@ test('output defaults, picker, escaping, omissions and deleted-field errors surv
   await page.reload()
   await page.getByRole('button', { name: 'Output review', exact: true }).click()
   await page.getByRole('button', { name: 'Output / issues', exact: true }).click()
-  await expect(page.getByLabel('Require login', { exact: true })).not.toBeChecked()
+  await expect(page.getByLabel('Require login', { exact: true })).toBeChecked()
   await expect(page.getByLabel('Attach completed form PDF', { exact: true })).toBeChecked()
   await expect(page.getByLabel('Custom email template', { exact: true })).toHaveValue(key)
   await page.getByRole('article', { name: 'Field 1', exact: true }).click()
@@ -97,14 +97,14 @@ test('familiar pane positions and sticky Fit survive device, mode, output and ed
   await page.screenshot({ path: test.info().outputPath('familiar-form-shell.png') })
 })
 
-test('scoped submission viewer shows full answers, photo navigation and denied entries without management grants', async ({
+test('authenticated submission viewer shows full answers, photo navigation and denied entries without management grants', async ({
   page,
 }) => {
   await setupFormServer(page)
   let revoked = false
   await page.route('**/formSubmissionViewer', async (route) => {
     const data = route.request().postDataJSON()?.data
-    if (data.id !== 'entry-one' || data.token !== 'local-viewer-token' || revoked) {
+    if (data.id !== 'entry-one' || revoked) {
       await route.fulfill({
         status: 400,
         json: {
@@ -127,9 +127,7 @@ test('scoped submission viewer shows full answers, photo navigation and denied e
             id: 'entry-one',
             templateVersion: 1,
             submittedAt: 1790899200000,
-            requireLogin: false,
-            linkLifetimeDays: 30,
-            canManage: false,
+            requireLogin: true,
             definition: {
               title: 'Completed entry',
               description: 'Full question / answer view',
@@ -151,7 +149,7 @@ test('scoped submission viewer shows full answers, photo navigation and denied e
           }
     await route.fulfill({ json: { result } })
   })
-  await page.goto('/form-submissions/entry-one#token=local-viewer-token')
+  await page.goto('/form-submissions/entry-one')
   await expect(page.getByRole('heading', { name: 'Completed entry', exact: true })).toBeVisible()
   await expect(page.getByText('First line\nSecond line', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Create share link', exact: true })).toHaveCount(0)
@@ -168,7 +166,7 @@ test('scoped submission viewer shows full answers, photo navigation and denied e
   await page.reload()
   await expect(page.getByRole('alert')).toContainText('unavailable')
   await expect(page.getByRole('heading', { name: 'Completed entry', exact: true })).toHaveCount(0)
-  await page.goto('/form-submissions/another-entry#token=local-viewer-token')
+  await page.goto('/form-submissions/another-entry')
   await expect(page.getByRole('alert')).toContainText('unavailable')
   await expect(page.getByText('First line\nSecond line', { exact: true })).toHaveCount(0)
 })

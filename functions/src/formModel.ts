@@ -166,7 +166,8 @@ export function validateFormDefinition(value: unknown): FormDefinition {
     if (typeof value.requireLogin !== 'boolean' || typeof value.pdf !== 'boolean')
       throw new Error('Invalid form output settings.')
     output = {
-      requireLogin: value.requireLogin,
+      // Employee forms always require login, including imported older drafts.
+      requireLogin: true,
       pdf: value.pdf,
       template: text(value.template, 20000),
     }

@@ -17,29 +17,22 @@ const route = useRoute(),
     templateVersion: number
     submittedAt: number
     requireLogin: boolean
-    linkLifetimeDays: number
-    canManage: boolean
   }>(),
   error = ref(''),
   loading = ref(true),
   photo = ref(''),
   photoLabel = ref(''),
   dialog = ref<HTMLDialogElement>(),
-  busy = ref(false),
-  link = ref(''),
-  notice = ref('')
+  busy = ref(false)
 let generation = 0
 const activeField = ref(''),
   activeIndex = ref(0)
 const activePhotos = computed(() => (record.value?.answers[activeField.value] as string[]) || [])
-const token = computed(() => new URLSearchParams(route.hash.slice(1)).get('token') || ''),
-  id = computed(() => String(route.params.id || ''))
+const id = computed(() => String(route.params.id || ''))
 async function load() {
   const current = ++generation
   record.value = undefined
   photo.value = ''
-  link.value = ''
-  notice.value = ''
   dialog.value?.close()
   loading.value = true
   error.value = ''
@@ -48,7 +41,6 @@ async function load() {
     const next = await formApi<typeof record.value>('formSubmissionViewer', {
       action: 'get',
       id: id.value,
-      token: token.value,
     })
     if (current === generation) record.value = next
   } catch (caught) {
@@ -70,7 +62,6 @@ async function viewPhoto(
     const image = await formApi<{ base64: string; contentType: string }>('formSubmissionViewer', {
       action: 'photo',
       id: id.value,
-      token: token.value,
       assetId,
     })
     if (current !== generation) return
@@ -85,34 +76,6 @@ async function viewPhoto(
     busy.value = false
   }
 }
-async function share() {
-  try {
-    const result = await formApi<{ url: string; expiresAt: number }>('formSubmissionViewer', {
-      action: 'issue-link',
-      id: id.value,
-    })
-    const currentUrl = new URL(result.url)
-    currentUrl.protocol = location.protocol
-    currentUrl.host = location.host
-    link.value = currentUrl.toString()
-    notice.value =
-      'Anyone with this link can view this submission and its photos. Expires ' +
-      new Date(result.expiresAt).toLocaleDateString() +
-      '.'
-  } catch (caught) {
-    error.value = (caught as Error).message
-  }
-}
-async function revoke() {
-  try {
-    await formApi('formSubmissionViewer', { action: 'revoke-links', id: id.value })
-    link.value = ''
-    notice.value = 'All existing share links for this entry are revoked.'
-  } catch (caught) {
-    error.value = (caught as Error).message
-  }
-}
-const canManage = computed(() => record.value?.canManage === true)
 async function stepPhoto(delta: number) {
   const index = activeIndex.value + delta,
     id = activePhotos.value[index]
@@ -127,7 +90,7 @@ async function stepPhoto(delta: number) {
       index,
     )
 }
-watch([id, token], load, { immediate: true })
+watch(id, load, { immediate: true })
 </script>
 <template>
   <main class="submission-view">
@@ -175,16 +138,7 @@ watch([id, token], load, { immediate: true })
         >
         <p v-else class="answer">{{ formAnswerSummary(field, record.answers[field.id]) }}</p>
       </section>
-      <section v-if="canManage && !record.requireLogin" aria-label="Manage submission links">
-        <button @click="share">Create share link</button
-        ><button @click="revoke">Revoke all entry links</button>
-        <p v-if="notice" role="status">{{ notice }}</p>
-        <label v-if="link">Entry share link<input :value="link" readonly /></label>
-      </section>
-      <p v-if="!record.requireLogin">
-        Anyone with this link can view this submission and its photos. Share links expire after
-        {{ record.linkLifetimeDays }} days.
-      </p>
+      <p>Sign in as the record owner or Admin to view this submission and its photos.</p>
     </article>
     <dialog
       ref="dialog"

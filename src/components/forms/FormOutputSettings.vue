@@ -17,9 +17,12 @@ const editor = ref<HTMLTextAreaElement>(),
   records = ref<FormRecord[]>([]),
   selectedRecord = ref(''),
   error = ref('')
-const settings = computed(
-    () => props.definition.output || { requireLogin: true, pdf: false, template: '' },
-  ),
+const settings = computed(() => ({
+    pdf: false,
+    template: '',
+    ...props.definition.output,
+    requireLogin: true,
+  })),
   issues = computed(() => formOutputIssues(props.definition))
 function update(value: Partial<FormOutputSettings>) {
   emit('update:definition', { ...props.definition, output: { ...settings.value, ...value } })
@@ -144,18 +147,11 @@ async function preview() {
 </script>
 <template>
   <section aria-label="Form output settings" class="output-settings">
-    <label
-      ><input
-        type="checkbox"
-        :checked="settings.requireLogin"
-        @change="update({ requireLogin: ($event.target as HTMLInputElement).checked })"
-      />Require login</label
-    >
-    <p v-if="!settings.requireLogin" role="status">
-      Anyone with this link can view this submission and its photos. Links expire after 30 days and
-      can be revoked for each submitted entry.
+    <label><input type="checkbox" checked disabled />Require login</label>
+    <p>
+      Employee forms and their photos require the existing owner or Admin login. Public sharing is
+      unavailable.
     </p>
-    <p v-else>Submitted entries and their photos require the existing owner or Admin login.</p>
     <label
       ><input
         type="checkbox"

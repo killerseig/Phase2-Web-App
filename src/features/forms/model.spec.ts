@@ -26,6 +26,21 @@ function storage() {
   }
 }
 describe('local Form Builder foundation', () => {
+  it('restricts imported output settings to authenticated employee forms', () => {
+    const definition = {
+      title: 'Imported form',
+      description: '',
+      fields: [{ id: 'answer', kind: 'text', label: 'Answer', required: false, options: [] }],
+      recipients: [],
+      output: { requireLogin: false, pdf: true, template: '' },
+    }
+    expect(validateFormDefinition(definition).output).toEqual({
+      requireLogin: true,
+      pdf: true,
+      template: '',
+    })
+    expect(definition.output.requireLogin).toBe(false)
+  })
   const choices: FormDefinition = {
     title: 'Choices',
     description: '',

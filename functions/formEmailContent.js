@@ -11,7 +11,6 @@ const formEmailRender_1 = require("./formEmailRender");
 var formEmailRender_2 = require("./formEmailRender");
 Object.defineProperty(exports, "buildFormEmailHtml", { enumerable: true, get: function () { return formEmailRender_2.buildFormEmailHtml; } });
 Object.defineProperty(exports, "buildFormEmailText", { enumerable: true, get: function () { return formEmailRender_2.buildFormEmailText; } });
-const formSubmissionViewer_1 = require("./formSubmissionViewer");
 const runtime_1 = require("./runtime");
 const functionConfig_1 = require("./functionConfig");
 const emailService_1 = require("./emailService");
@@ -39,7 +38,6 @@ const defaults = {
     },
     ownerEmail: async (uid) => (await runtime_1.db.doc('users/' + uid).get()).data()?.email,
     appBaseUrl: () => process.env.FIRESTORE_EMULATOR_HOST ? 'http://127.0.0.1:5173' : (0, functionConfig_1.getAppBaseUrl)(),
-    viewerUrl: async (record) => (await (0, formSubmissionViewer_1.issueFormViewerLink)(record.id)).url,
 };
 // Match the existing Daily Log encoder without changing its source or behavior.
 function photoIds(record, fieldId) {
@@ -89,9 +87,7 @@ function recordUrl(record, base) {
     return new URL('/form-submissions/' + encodeURIComponent(record.id), url).toString();
 }
 async function prepareFormEmail(record, recipients, deps = defaults) {
-    const url = record.definition.output?.requireLogin === false && deps.viewerUrl
-        ? await deps.viewerUrl(record)
-        : recordUrl(record, deps.appBaseUrl()), previews = [], attachments = [];
+    const url = recordUrl(record, deps.appBaseUrl()), previews = [], attachments = [];
     let totalBytes = 0;
     for (const [fieldIndex, field] of record.definition.fields.entries()) {
         if (field.kind !== 'photo' || totalBytes >= dailyLogEmailPhotos_1.DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES)

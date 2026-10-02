@@ -34,7 +34,7 @@ const router = createRouter({
       path: '/form-submissions/:id',
       name: 'form-submission-view',
       component: () => import('@/views/FormSubmissionView.vue'),
-      meta: { title: 'Completed Form', requiresAuth: false },
+      meta: { title: 'Completed Form', requiresAuth: true },
     },
     {
       path: '/forms/:templateId',

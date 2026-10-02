@@ -12,7 +12,6 @@ export interface FormEmailDependencies {
     download: (path: string, maxBytes: number) => Promise<Buffer>;
     ownerEmail: (uid: string) => Promise<unknown>;
     appBaseUrl: () => string;
-    viewerUrl?: (record: FormRecord) => Promise<string>;
 }
 export declare class FormEmailPreparationError extends Error {
     constructor(message: string);

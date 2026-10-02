@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict'
 import { randomUUID, createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
-assert.match(process.env.GCLOUD_PROJECT || '', /^demo-[a-z0-9-]+$/, 'Only demo emulator projects are allowed')
+import { initializeApp, deleteApp } from 'firebase/app'
+import { getStorage, connectStorageEmulator, ref as photoRef, getBytes } from 'firebase/storage'
+import {
+  getFirestore as clientFirestore,
+  connectFirestoreEmulator,
+  doc,
+  getDoc,
+  terminate,
+} from 'firebase/firestore'
+assert.match(
+  process.env.GCLOUD_PROJECT || '',
+  /^demo-[a-z0-9-]+$/,
+  'Only demo emulator projects are allowed',
+)
 for (const name of [
   'FIRESTORE_EMULATOR_HOST',
   'FIREBASE_AUTH_EMULATOR_HOST',
@@ -61,6 +74,7 @@ async function submit(version) {
   })
   return workspace({ action: 'submit', id: r.id, revision: r.revision, requestId: randomUUID() })
 }
+
 const privateRecord = await submit(1)
 let denied = 0
 async function rejection(data, uid) {
@@ -70,124 +84,127 @@ async function rejection(data, uid) {
   )
   denied++
 }
-await rejection({ action: 'get', id: privateRecord.id })
-await rejection({ action: 'get', id: privateRecord.id }, other)
-await rejection({ action: 'issue-link', id: privateRecord.id }, owner)
-assert.equal((await viewer({ action: 'get', id: privateRecord.id }, owner)).requireLogin, true)
-assert.equal((await viewer({ action: 'get', id: privateRecord.id }, admin)).canManage, true)
-definition = { ...definition, output: { requireLogin: false, pdf: false, template: '' } }
-saved = await templates({ action: 'save', id, revision: issued.revision, definition })
-issued = await templates({ action: 'issue', id, revision: saved.revision })
-const publicRecord = await submit(2),
-  frozen = (await db.doc('formSubmissions/' + publicRecord.id).get()).data()
-const link = await viewer({ action: 'issue-link', id: publicRecord.id }, admin),
-  token = new URLSearchParams(new URL(link.url).hash.slice(1)).get('token')
-assert.match(token, /^[A-Za-z0-9_-]{43}$/)
-assert.ok(link.expiresAt > Date.now() + 29 * 86400000)
-const share = (
-  await db.doc('formViewerShares/' + createHash('sha256').update(token).digest('hex')).get()
-).data()
-assert.ok(!JSON.stringify(share).includes(token))
-const visible = await viewer({ action: 'get', id: publicRecord.id, token })
-assert.equal(visible.answers.notes, 'Full immutable answers')
-assert.equal(visible.canManage, false)
-assert.deepEqual(visible.definition.recipients, [])
-assert.equal((await viewer({ action: 'get', id: publicRecord.id, token }, other)).canManage, false)
-const photo = await viewer({
-  action: 'photo',
-  id: publicRecord.id,
-  token,
-  assetId: publicRecord.answers.photo[0],
-})
-assert.equal(photo.contentType, 'image/webp')
-assert.ok(photo.base64)
-await rejection({ action: 'get', id: privateRecord.id, token })
-await rejection({ action: 'get', id: randomUUID(), token })
-await rejection({ action: 'list', token })
-await rejection({ action: 'save', id: publicRecord.id, token })
-await rejection({
-  action: 'photo',
-  id: publicRecord.id,
-  token,
-  assetId: privateRecord.answers.photo[0],
-})
-await rejection({ action: 'revoke-links', id: publicRecord.id, token })
-await rejection({ action: 'issue-link', id: publicRecord.id, token }, other)
-await rejection({ action: 'get', id: publicRecord.id, token: 'x'.repeat(43) })
-// A later private template setting neither widens old private records nor changes this issued public version.
+const photoId = privateRecord.answers.photo[0]
+// Direct client access stays denied independently of callable route guards.
+const anonymousApp = initializeApp({
+    projectId: process.env.GCLOUD_PROJECT,
+    apiKey: 'local-only',
+    storageBucket: process.env.GCLOUD_PROJECT + '.appspot.com',
+  }),
+  anonymousStorage = getStorage(anonymousApp),
+  anonymousDb = clientFirestore(anonymousApp)
+const [storageHost, storagePort] = process.env.FIREBASE_STORAGE_EMULATOR_HOST.split(':'),
+  [firestoreHost, firestorePort] = process.env.FIRESTORE_EMULATOR_HOST.split(':')
+connectStorageEmulator(anonymousStorage, storageHost, Number(storagePort))
+connectFirestoreEmulator(anonymousDb, firestoreHost, Number(firestorePort))
+await assert.rejects(
+  () =>
+    getBytes(
+      photoRef(anonymousStorage, 'form-photos/' + privateRecord.id + '/' + photoId + '.webp'),
+    ),
+  (e) => e.code === 'storage/unauthorized',
+)
+await assert.rejects(
+  () => getDoc(doc(anonymousDb, 'formSubmissions/' + privateRecord.id)),
+  (e) => e.code === 'permission-denied',
+)
+denied += 2
+await terminate(anonymousDb)
+await deleteApp(anonymousApp)
+for (const uid of [undefined, other]) {
+  await rejection({ action: 'get', id: privateRecord.id }, uid)
+  await rejection({ action: 'photo', id: privateRecord.id, assetId: photoId }, uid)
+}
+for (const uid of [owner, admin]) {
+  const record = await viewer({ action: 'get', id: privateRecord.id }, uid)
+  assert.equal(record.requireLogin, true)
+  assert.deepEqual(record.definition.recipients, [])
+  const photo = await viewer({ action: 'photo', id: privateRecord.id, assetId: photoId }, uid)
+  assert.equal(photo.contentType, 'image/webp')
+  assert.ok(photo.base64)
+}
+// An imported older draft cannot issue a new public version.
 definition = {
   ...definition,
-  output: { requireLogin: true, pdf: true, template: 'Notes: {{notes}}\nPhotos: {{photo}}' },
+  output: { requireLogin: false, pdf: true, template: 'Notes: {{notes}}\nPhotos: {{photo}}' },
 }
 saved = await templates({ action: 'save', id, revision: issued.revision, definition })
+assert.equal(saved.draft.output.requireLogin, true)
 issued = await templates({ action: 'issue', id, revision: saved.revision })
-assert.equal((await viewer({ action: 'get', id: publicRecord.id, token })).requireLogin, false)
-await rejection({ action: 'get', id: privateRecord.id, token })
-const duplicated = await templates({
-  action: 'duplicate',
-  id,
-  targetId: randomUUID(),
-  revision: saved.revision + 1,
+assert.equal(
+  (await db.doc('formTemplates/' + id + '/versions/v2').get()).data().output.requireLogin,
+  true,
+)
+const legacyRecord = await submit(2),
+  token = 'x'.repeat(43)
+// Simulate an immutable previously issued public snapshot and an unexpired link.
+const ref = db.doc('formSubmissions/' + legacyRecord.id)
+const stored = (await ref.get()).data()
+stored.definition.output.requireLogin = false
+await ref.set(stored)
+const frozen = (await ref.get()).data()
+await db.doc('formViewerShares/' + createHash('sha256').update(token).digest('hex')).set({
+  submissionId: legacyRecord.id,
+  generation: 0,
+  expiresAt: Date.now() + 86400000,
 })
-const freshNotes = duplicated.draft.fields.find((field) => field.label === 'Completed notes').id
-assert.notEqual(freshNotes, 'notes')
-assert.ok(duplicated.draft.output.template.includes('{{' + freshNotes + '}}'))
-assert.ok(!duplicated.draft.output.template.includes('{{notes}}'))
+for (const uid of [undefined, other]) {
+  await rejection({ action: 'get', id: legacyRecord.id, token }, uid)
+  await rejection(
+    { action: 'photo', id: legacyRecord.id, token, assetId: legacyRecord.answers.photo[0] },
+    uid,
+  )
+}
+await rejection({ action: 'get', id: randomUUID(), token }, owner)
+await rejection({ action: 'list', token }, admin)
+await rejection({ action: 'save', id: legacyRecord.id }, owner)
+for (const uid of [undefined, other, owner, admin]) {
+  await rejection({ action: 'issue-link', id: legacyRecord.id, token }, uid)
+  await rejection({ action: 'revoke-links', id: legacyRecord.id, token }, uid)
+}
+await rejection({ action: 'photo', id: legacyRecord.id, assetId: photoId }, owner)
+await db.doc('users/' + owner).update({ active: false })
+await rejection({ action: 'get', id: legacyRecord.id }, owner)
+await rejection(
+  { action: 'photo', id: legacyRecord.id, assetId: legacyRecord.answers.photo[0] },
+  owner,
+)
+await db.doc('users/' + owner).update({ active: true })
+const visible = await viewer({ action: 'get', id: legacyRecord.id, token }, owner)
+assert.equal(visible.requireLogin, true)
+assert.equal(visible.definition.output, undefined)
+assert.equal(visible.answers.notes, 'Full immutable answers')
 const pdf = await viewer(
-  { action: 'preview-pdf', definition, answers: { notes: 'PDF full answer', photo: [] } },
+  { action: 'preview-pdf', definition, answers: { notes: 'Full answer', photo: [] } },
   admin,
 )
 assert.ok(Buffer.from(pdf.base64, 'base64').subarray(0, 5).equals(Buffer.from('%PDF-')))
-await rejection({ action: 'preview-pdf', definition, answers: { notes: 'Denied', photo: [] } })
-await rejection(
-  { action: 'preview-pdf', definition, answers: { notes: 'Denied', photo: [] } },
-  other,
-)
-const email = await prepareFormEmail(frozen, ['recipient@example.com'])
-assert.ok(email.html.includes('Anyone with this link'))
-const match = email.html.match(/href="([^\"]*#token=[^\"]*)"/)
-assert.ok(match)
-const params = new URLSearchParams(new URL(match[1].replaceAll('&amp;', '&')).hash.slice(1)),
-  emailToken = params.get('token')
-assert.equal(params.get('field'), 'photo')
-assert.equal(
-  (await viewer({ action: 'get', id: publicRecord.id, token: emailToken })).id,
-  publicRecord.id,
-)
-await viewer({ action: 'revoke-links', id: publicRecord.id }, owner)
-await rejection({ action: 'get', id: publicRecord.id, token })
-await rejection({ action: 'get', id: publicRecord.id, token: emailToken })
-assert.equal((await viewer({ action: 'get', id: publicRecord.id }, owner)).id, publicRecord.id)
-const renewed = await viewer({ action: 'issue-link', id: publicRecord.id }, owner),
-  nextToken = new URLSearchParams(new URL(renewed.url).hash.slice(1)).get('token')
-assert.equal(
-  (await viewer({ action: 'get', id: publicRecord.id, token: nextToken })).id,
-  publicRecord.id,
-)
-await db
-  .doc('formViewerShares/' + createHash('sha256').update(nextToken).digest('hex'))
-  .update({ expiresAt: 0 })
-await rejection({ action: 'get', id: publicRecord.id, token: nextToken })
-assert.deepEqual((await db.doc('formSubmissions/' + publicRecord.id).get()).data(), frozen)
-if (process.env.FORMS_VIEWER_FIXTURE) {
-  const fixtureLink = await viewer({ action: 'issue-link', id: publicRecord.id }, owner)
-  require('node:fs').writeFileSync(
-    process.env.FORMS_VIEWER_FIXTURE,
-    JSON.stringify({ privateId: privateRecord.id, publicUrl: fixtureLink.url }),
+for (const uid of [undefined, owner, other])
+  await rejection(
+    { action: 'preview-pdf', definition, answers: { notes: 'Denied', photo: [] } },
+    uid,
   )
-}
+const email = await prepareFormEmail(frozen, ['recipient@example.com'])
+assert.ok(email.html.includes('Sign in as the record owner or Admin'))
+assert.ok(!email.html.includes('#token='))
+assert.ok(!email.html.includes('Anyone with this link'))
+assert.ok(!email.text.includes('#token='))
+assert.equal((await db.collection('formViewerShares').count().get()).data().count, 1)
+assert.deepEqual((await ref.get()).data(), frozen)
 console.log(
   JSON.stringify({
     passed: true,
     rejectionChecks: denied,
-    privateDefault: true,
-    publicSingleEntryOnly: true,
-    hashed256BitTokens: true,
-    thirtyDayExpiry: true,
-    revocation: true,
-    noEnumeration: true,
-    historicalSettingScope: true,
-    publicEmailTokenPreserved: true,
+    loginAlwaysRequired: true,
+    anonymousAnswersAndPhotosDenied: true,
+    nonOwnerDenied: true,
+    ownerAndAdminAnswersAndPhotos: true,
+    legacyTokensIgnored: true,
+    shareIssuanceDisabled: true,
+    adminOnlyPdfPreview: true,
+    importedDraftsRestricted: true,
+    historicalSubmissionUnchanged: true,
+    emailLoginLinksOnly: true,
     productionWrites: false,
     realEmails: 0,
   }),

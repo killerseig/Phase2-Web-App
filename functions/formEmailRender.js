@@ -68,9 +68,7 @@ function buildFormEmailHtml(record, previews = [], url = '') {
                         '">View all ' +
                         ids.length +
                         ' photos</a><p>' +
-                        (record.definition.output?.requireLogin === false
-                            ? 'Anyone with this link can view this submission and its photos. Link expires in 30 days.'
-                            : 'Record access remains restricted to its owner and Admin.') +
+                        'Sign in as the record owner or Admin to view the submission and photos.' +
                         '</p>';
         }
         const html = section +
@@ -129,9 +127,7 @@ function buildFormEmailText(record, url = '') {
                                     ? '\nView all photos: ' +
                                         photoTarget(url, id) +
                                         '\n' +
-                                        (record.definition.output?.requireLogin === false
-                                            ? 'Anyone with this link can view this submission and its photos. Link expires in 30 days.'
-                                            : 'Record access remains restricted to its owner and Admin.')
+                                        'Sign in as the record owner or Admin to view the submission and photos.'
                                     : '')
                             : 'N/A'));
                 }),
@@ -148,9 +144,7 @@ function buildFormEmailText(record, url = '') {
                                 ? '\nView all photos: ' +
                                     photoTarget(url, field.id) +
                                     '\n' +
-                                    (record.definition.output?.requireLogin === false
-                                        ? 'Anyone with this link can view this submission and its photos. Link expires in 30 days.'
-                                        : 'Record access remains restricted to its owner and Admin.')
+                                    'Sign in as the record owner or Admin to view the submission and photos.'
                                 : '')
                         : 'N/A'
                     : (0, formModel_1.formAnswerSummary)(field, record.answers[field.id]);

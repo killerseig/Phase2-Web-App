@@ -620,7 +620,11 @@ test('hero titles support heading styles and lists with self-hosted fonts throug
   await toolbar.getByRole('button', { name: 'Bulleted list', exact: true }).click()
   await expect(editor.locator('ul li')).toHaveText('Welcome to Phase 2')
   await editor.press('End')
+  await expect
+    .poll(() => editor.evaluate(() => window.getSelection()?.isCollapsed))
+    .toBe(true)
   await editor.press('Enter')
+  await expect(editor.locator('ul li')).toHaveCount(2)
   await editor.pressSequentially('Built together')
   await expect(editor.locator('ul li')).toHaveCount(2)
   await toolbar.getByRole('button', { name: 'Numbered list', exact: true }).click()
