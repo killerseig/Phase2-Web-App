@@ -7,6 +7,8 @@ const https_1 = require("firebase-functions/v2/https");
 const runtime_1 = require("./runtime");
 const formModel_2 = require("./formModel");
 const roleAccess_1 = require("./roleAccess");
+const targetJobAccess_1 = require("./targetJobAccess");
+const jobIdentity_1 = require("./jobIdentity");
 const denied = () => new https_1.HttpsError('permission-denied', 'This submission is unavailable or you do not have access.');
 async function authorizedRecord(id, uid) {
     // Never consult share tokens or historical requireLogin flags. All entries
@@ -25,6 +27,19 @@ async function authorizedRecord(id, uid) {
         !['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(user.role) ||
         (record.ownerUid !== uid && user.role !== 'admin'))
         throw denied();
+    if (record.jobId) {
+        const job = await runtime_1.db.doc('jobs/' + record.jobId).get(), assigned = new Set(user.assignedJobIds);
+        if (job.data()?.assignedForemanIds?.includes(user.uid))
+            assigned.add(record.jobId);
+        if (!job.exists ||
+            !(0, targetJobAccess_1.targetFunctionRoleCanOpenJobDashboard)({
+                role: user.role,
+                jobId: record.jobId,
+                assignedJobIds: [...assigned],
+                isShopJob: (0, jobIdentity_1.isFunctionShopJob)(job.data()),
+            }))
+            throw denied();
+    }
     return record;
 }
 exports.formSubmissionViewer = (0, https_1.onCall)({ timeoutSeconds: 120 }, async (request) => {

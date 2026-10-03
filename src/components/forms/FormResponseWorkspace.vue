@@ -18,6 +18,8 @@ const props = withDefaults(
     templateVersion?: number
     inline?: boolean
     dashboardScope?: 'personal' | 'role'
+    dashboardJobId?: string
+    dashboardReturn?: 'shared-job' | 'shared-role'
   }>(),
   { inline: false },
 )
@@ -47,8 +49,21 @@ const pinnedVersion = computed(
   () =>
     props.templateVersion || Number(route.query.version) || selectedTemplate.value?.latestVersion,
 )
+const dashboardJobId = computed(
+  () =>
+    props.dashboardJobId ||
+    (typeof route.query.dashboardJob === 'string' ? route.query.dashboardJob : ''),
+)
+const contextSuffix = () => (dashboardJobId.value ? ':job:' + dashboardJobId.value : '')
+const contextRequest = () => (dashboardJobId.value ? { dashboardJobId: dashboardJobId.value } : {})
 const activeKey = () =>
-  'form-active-record:v1:' + uid.value + ':' + templateId.value + ':' + pinnedVersion.value
+  'form-active-record:v1:' +
+  uid.value +
+  ':' +
+  templateId.value +
+  ':' +
+  pinnedVersion.value +
+  contextSuffix()
 let sequence = 0
 let saveRequest = { signature: '', id: '' }
 const readOnlyRecord = computed(
@@ -60,6 +75,8 @@ const tooLargeInline = computed(
 )
 const pendingKey = () => 'form-submit-request:v1:' + uid.value + ':' + record.value?.id
 function received(next: FormRecord) {
+  if (dashboardJobId.value && (next.jobId || '') !== dashboardJobId.value)
+    throw new Error('This form record belongs to another job.')
   invalidField.value = ''
   error.value = ''
   message.value = ''
@@ -99,11 +116,15 @@ async function load() {
   try {
     const [forms, saved] = await Promise.all([
       formApi<{ templates: ServerFormTemplate[] }>('formTemplates', { action: 'list' }),
-      formApi<{ records: FormRecord[] }>('formWorkspace', { action: 'list' }),
+      formApi<{ records: FormRecord[] }>('formWorkspace', { action: 'list', ...contextRequest() }),
     ])
     if (current !== sequence || uid.value !== owner) return
     templates.value = forms.templates
-    records.value = saved.records.filter((item) => item.templateId === templateId.value)
+    records.value = saved.records.filter(
+      (item) =>
+        item.templateId === templateId.value &&
+        (!(props.inline || route.query.dashboard) || (item.jobId || '') === dashboardJobId.value),
+    )
     const requested =
       !props.inline && typeof route.query.record === 'string'
         ? route.query.record
@@ -136,7 +157,9 @@ async function load() {
     if (current === sequence) busy.value = false
   }
 }
-watch([uid, templateId, () => props.templateVersion, () => auth.rawRole], load, { immediate: true })
+watch([uid, templateId, dashboardJobId, () => props.templateVersion, () => auth.rawRole], load, {
+  immediate: true,
+})
 async function discard() {
   return (
     !dirty.value ||
@@ -174,7 +197,13 @@ async function start() {
       }
     }
     const createKey =
-      'form-create-request:v1:' + owner + ':' + target.id + ':' + pinnedVersion.value
+      'form-create-request:v1:' +
+      owner +
+      ':' +
+      target.id +
+      ':' +
+      pinnedVersion.value +
+      contextSuffix()
     const existing = localStorage.getItem(createKey)
     const pendingCreate = existing
       ? (JSON.parse(existing) as { version: number; requestId: string })
@@ -183,6 +212,7 @@ async function start() {
     const next = await formApi<FormRecord>('formWorkspace', {
       action: 'create',
       templateId: target.id,
+      ...contextRequest(),
       ...pendingCreate,
     })
     if (uid.value === owner && generation === sequence) {
@@ -417,6 +447,8 @@ async function openFullPage() {
       version: String(pinnedVersion.value || ''),
       ...(record.value ? { record: record.value.id } : {}),
       ...(props.dashboardScope ? { dashboard: props.dashboardScope } : {}),
+      ...(dashboardJobId.value ? { dashboardJob: dashboardJobId.value } : {}),
+      ...(props.dashboardReturn ? { dashboardReturn: props.dashboardReturn } : {}),
     },
   })
 }
@@ -428,6 +460,13 @@ function beforeUnload(event: BeforeUnloadEvent) {
     event.preventDefault()
     event.returnValue = ''
   }
+}
+function returnDashboard() {
+  if (route.query.dashboardReturn === 'shared-job' && dashboardJobId.value)
+    return router.push({ name: 'shared-job-home', params: { jobId: dashboardJobId.value } })
+  if (route.query.dashboardReturn === 'shared-role')
+    return router.push({ name: 'shared-role-home' })
+  return router.push('/dashboards/' + route.query.dashboard)
 }
 window.addEventListener('beforeunload', beforeUnload)
 onBeforeUnmount(() => {
@@ -452,7 +491,7 @@ defineExpose({ prepareNavigation })
     <button
       v-else-if="route.query.dashboard === 'personal' || route.query.dashboard === 'role'"
       :disabled="busy"
-      @click="router.push('/dashboards/' + route.query.dashboard)"
+      @click="returnDashboard"
     >
       Return to dashboard
     </button>

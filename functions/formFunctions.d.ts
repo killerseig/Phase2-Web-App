@@ -34,7 +34,7 @@ export declare const formTemplates: import("firebase-functions/v2/https").Callab
     })[];
 }>, unknown>;
 export declare const formWorkspace: import("firebase-functions/v2/https").CallableFunction<any, Promise<FormRecord | {
-    records: FormRecord[];
+    records: (FormRecord | undefined)[];
     base64?: undefined;
     contentType?: undefined;
 } | {

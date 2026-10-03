@@ -18,6 +18,12 @@ const { initializeApp } = require('firebase-admin/app'),
 initializeApp({ projectId, storageBucket: projectId + '.appspot.com' })
 const { formTemplates, formWorkspace } = require('../functions/formFunctions.js'),
   { formEmail, deliverFormSubmission } = require('../functions/formDelivery.js')
+const { sharedDashboardWorkspace } = require('../functions/sharedDashboardFunctions.js')
+const { sdsWorkspace } = require('../functions/sdsFunctions.js')
+const {
+  listVisibleJobsForCurrentUser,
+  getVisibleJobForCurrentUser,
+} = require('../functions/jobFunctions.js')
 const { dashboardWorkspace } = require('../functions/dashboardFunctions.js')
 const { formSubmissionViewer } = require('../functions/formSubmissionViewer.js')
 const handlers = {
@@ -25,6 +31,10 @@ const handlers = {
     formWorkspace,
     formEmail,
     dashboardWorkspace,
+    sharedDashboardWorkspace,
+    sdsWorkspace,
+    listVisibleJobsForCurrentUser,
+    getVisibleJobForCurrentUser,
     formSubmissionViewer,
   },
   auth = getAuth(),
@@ -41,6 +51,27 @@ for (const [uid, email, role] of [
   await db
     .doc('users/' + uid)
     .set({ role, active: true, email, firstName: 'Local', lastName: role, assignedJobIds: [] })
+}
+// Synthetic fixtures exist only behind the demo-project and emulator assertions above.
+for (const [id, name, code] of [
+  ['dashboard-local-a', 'Synthetic community center', 'DEMO-A'],
+  ['dashboard-local-b', 'Synthetic warehouse', 'DEMO-B'],
+]) {
+  const ref = db.doc('jobs/' + id)
+  if (!(await ref.get()).exists)
+    await ref.set({
+      name,
+      code,
+      active: true,
+      type: 'acoustics',
+      gc: 'Local demo',
+      jobAddress: 'Synthetic address',
+      assignedForemanIds: id.endsWith('-a') ? ['forms-local-foreman'] : [],
+      startDate: '2026-10-03',
+      finishDate: '2026-10-30',
+      notificationRecipients: { dailyLogs: [], timecards: [], shopOrders: [] },
+      productionBurden: 0.33,
+    })
 }
 const server = createServer(async (req, res) => {
   const origin = req.headers.origin || 'http://127.0.0.1:5173'

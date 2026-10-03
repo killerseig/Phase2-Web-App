@@ -30,6 +30,8 @@ function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {path:'/dashboards/role-home',name:'shared-role-home',component:()=>import('@/views/SharedDashboardView.vue'),meta:{title:'Role home',requiresAuth:true}},
+    {path:'/dashboards/job-home/:jobId?',name:'shared-job-home',component:()=>import('@/views/SharedDashboardView.vue'),meta:{title:'Job home',requiresAuth:true}},
     {
       path: '/form-submissions/:id',
       name: 'form-submission-view',

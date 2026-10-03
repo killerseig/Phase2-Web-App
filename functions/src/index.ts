@@ -70,3 +70,5 @@ export { formTemplates, formWorkspace } from './formFunctions'
 export { formEmail, deliverFormEmail } from './formDelivery'
 
 export { formSubmissionViewer } from './formSubmissionViewer'
+
+export {sharedDashboardWorkspace} from './sharedDashboardFunctions'

@@ -10,6 +10,8 @@ const https_1 = require("firebase-functions/v2/https");
 const sharp_1 = __importDefault(require("sharp"));
 const runtime_1 = require("./runtime");
 const roleAccess_1 = require("./roleAccess");
+const targetJobAccess_1 = require("./targetJobAccess");
+const jobIdentity_1 = require("./jobIdentity");
 const formModel_1 = require("./formModel");
 const templates = runtime_1.db.collection('formTemplates'), records = runtime_1.db.collection('formRecords'), assets = runtime_1.db.collection('formAssets');
 const hash = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex');
@@ -193,12 +195,45 @@ exports.formTemplates = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
         fail('invalid-argument', 'Unknown template action.');
     });
 });
+async function authorizedFormJob(profile, value) {
+    if (value === undefined)
+        return undefined;
+    const jobId = validId(value), job = await runtime_1.db.doc('jobs/' + jobId).get();
+    const assigned = new Set(profile.assignedJobIds);
+    if (job.data()?.assignedForemanIds?.includes(profile.uid))
+        assigned.add(jobId);
+    if (!job.exists ||
+        !(0, targetJobAccess_1.targetFunctionRoleCanOpenJobDashboard)({
+            role: profile.role,
+            jobId,
+            assignedJobIds: [...assigned],
+            isShopJob: (0, jobIdentity_1.isFunctionShopJob)(job.data()),
+        }))
+        fail('permission-denied', 'You cannot use a form for this job.');
+    return jobId;
+}
 exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 60, maxInstances: 10 }, async (request) => {
     const profile = await user(request.auth?.uid), data = payload(request.data || {});
+    const dashboardJobId = await authorizedFormJob(profile, data.dashboardJobId);
     if (data.action === 'list') {
         const docs = await records.where('ownerUid', '==', profile.uid).limit(100).get();
         return {
-            records: await Promise.all(docs.docs.map((doc) => output(doc.data()))),
+            records: (await Promise.all(docs.docs
+                .filter((doc) => dashboardJobId === undefined || doc.data().jobId === dashboardJobId)
+                .map(async (doc) => {
+                const record = doc.data();
+                if (record.jobId) {
+                    try {
+                        await authorizedFormJob(profile, record.jobId);
+                    }
+                    catch (error) {
+                        if (error instanceof https_1.HttpsError && error.code === 'permission-denied')
+                            return undefined;
+                        throw error;
+                    }
+                }
+                return output(record);
+            }))).filter(Boolean),
         };
     }
     if (data.action === 'create') {
@@ -207,7 +242,7 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
             !Number.isSafeInteger(data.version) ||
             Number(data.version) < 1)
             fail('invalid-argument', 'Choose an issued form version.');
-        const id = hash(profile.uid + ':' + data.requestId), ref = records.doc(id), template = templates.doc(templateId);
+        const id = hash(profile.uid + ':' + data.requestId + (dashboardJobId ? ':job:' + dashboardJobId : '')), ref = records.doc(id), template = templates.doc(templateId);
         const record = await runtime_1.db.runTransaction(async (tx) => {
             const [existing, current, issued] = await tx.getAll(ref, template, template.collection('versions').doc('v' + data.version));
             if (existing.exists) {
@@ -222,6 +257,7 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
             const record = {
                 id,
                 ownerUid: profile.uid,
+                ...(dashboardJobId ? { jobId: dashboardJobId } : {}),
                 templateId,
                 templateVersion: Number(data.version),
                 definition,
@@ -238,6 +274,11 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
         return output(record);
     }
     const id = validId(data.id), ref = records.doc(id);
+    const storedJob = (await ref.get()).data()?.jobId;
+    if (storedJob)
+        await authorizedFormJob(profile, storedJob);
+    if (dashboardJobId !== undefined && storedJob !== dashboardJobId)
+        fail('permission-denied', 'This form record belongs to another job.');
     if (data.action === 'get')
         return output(allowedRecord((await ref.get()).data(), profile));
     if (data.action === 'photo') {

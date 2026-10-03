@@ -14,4 +14,5 @@ export { submitWebsiteForm, deliverWebsiteFormEmail, websiteFormAdmin, } from '.
 export { formTemplates, formWorkspace } from './formFunctions';
 export { formEmail, deliverFormEmail } from './formDelivery';
 export { formSubmissionViewer } from './formSubmissionViewer';
+export { sharedDashboardWorkspace } from './sharedDashboardFunctions';
 //# sourceMappingURL=index.d.ts.map

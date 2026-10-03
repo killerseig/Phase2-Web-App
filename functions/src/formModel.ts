@@ -41,6 +41,8 @@ export interface FormVersion extends FormDefinition {
 }
 export type FormAnswers = Record<string, string | number | boolean | string[]>
 export interface FormRecord {
+  /** Optional immutable job context for the new shared job dashboard. */
+  jobId?: string
   id: string
   ownerUid: string
   templateId: string

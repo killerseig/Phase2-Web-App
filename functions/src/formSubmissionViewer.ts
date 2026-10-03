@@ -4,6 +4,8 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db, storageBucket } from './runtime'
 import { formId, respondentDefinition, type FormRecord } from './formModel'
 import { buildCurrentFunctionUser } from './roleAccess'
+import { targetFunctionRoleCanOpenJobDashboard } from './targetJobAccess'
+import { isFunctionShopJob } from './jobIdentity'
 
 const denied = () =>
   new HttpsError('permission-denied', 'This submission is unavailable or you do not have access.')
@@ -26,6 +28,21 @@ async function authorizedRecord(id: string, uid?: string): Promise<FormRecord> {
     (record.ownerUid !== uid && user.role !== 'admin')
   )
     throw denied()
+  if (record.jobId) {
+    const job = await db.doc('jobs/' + record.jobId).get(),
+      assigned = new Set(user.assignedJobIds)
+    if (job.data()?.assignedForemanIds?.includes(user.uid)) assigned.add(record.jobId)
+    if (
+      !job.exists ||
+      !targetFunctionRoleCanOpenJobDashboard({
+        role: user.role,
+        jobId: record.jobId,
+        assignedJobIds: [...assigned],
+        isShopJob: isFunctionShopJob(job.data()!),
+      })
+    )
+      throw denied()
+  }
   return record
 }
 export const formSubmissionViewer = onCall({ timeoutSeconds: 120 }, async (request) => {
