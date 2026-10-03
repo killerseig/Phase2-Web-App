@@ -7,13 +7,16 @@ import type { RawRoleKey } from '@/types/domain'
 
 export interface AppShellNavigationItem {
   capability?: AppRouteCapability
+  hidden?: boolean
   label: string
   to: string
 }
 
 const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { label: 'Jobs', to: '/jobs' },
-  // Dashboard routes remain available by direct URL during testing, ahead of announcement.
+  // Remove these visibility flags after review; route authorization is independent of navigation.
+  { label: 'Role home', to: '/dashboards/role-home', hidden: true },
+  { label: 'Job home', to: '/dashboards/job-home', hidden: true },
 ]
 
 const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
@@ -26,7 +29,7 @@ const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
 ]
 
 export function getAppShellWorkspaceNavigationItems(): AppShellNavigationItem[] {
-  return [...WORKSPACE_NAVIGATION_ITEMS]
+  return WORKSPACE_NAVIGATION_ITEMS.filter((item) => !item.hidden)
 }
 
 export function getAppShellAdminNavigationItems(rawRole: RawRoleKey): AppShellNavigationItem[] {

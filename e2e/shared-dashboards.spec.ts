@@ -112,6 +112,9 @@ test('shared job template uses safe styled Text and the same catalog, while job 
   const api = await mockShared(page)
   await gotoPhase2App(page, '/dashboards/job-home/job-1', createJobsFixture())
   await expect(page.locator('.shared-variable-text')).toContainText('Acoustical Remodel')
+  await expect(page.locator('.app-shell__sidebar-main nav a')).toHaveText(['Jobs'])
+  await expect(page.locator('.app-shell__sidebar a[href="/dashboards/role-home"]')).toHaveCount(0)
+  await expect(page.locator('.app-shell__sidebar a[href="/dashboards/job-home"]')).toHaveCount(0)
   await expect(page.getByRole('complementary', { name: 'Dashboard library' })).toHaveCount(0)
   await expect(
     page.getByRole('link', { name: 'Daily Logs', exact: false }).first(),
