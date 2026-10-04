@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import WebsiteScriptFrame from '@/components/website/WebsiteScriptFrame.vue'
 import WebsiteCanvas from '@/components/website/WebsiteCanvas.vue'
 import { loadPublishedWebsite } from '@/services/website'
 import type { WebsiteSite } from '@/features/website/types'
 const route = useRoute()
+const router = useRouter()
+let active = true
 const site = ref<WebsiteSite | null>(null)
 const loading = ref(true)
 const error = ref('')
@@ -16,11 +18,14 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    site.value = await loadPublishedWebsite()
+    const published = await loadPublishedWebsite()
+    if (!active) return
+    site.value = published
+    if (!published) await router.replace({ name: 'login' })
   } catch {
-    error.value = 'The website could not be loaded. Please try again.'
+    if (active) error.value = 'The website could not be loaded. Please try again.'
   } finally {
-    loading.value = false
+    if (active) loading.value = false
   }
 }
 const description = document.createElement('meta')
@@ -29,7 +34,10 @@ onMounted(() => {
   document.head.appendChild(description)
   void load()
 })
-onBeforeUnmount(() => description.remove())
+onBeforeUnmount(() => {
+  active = false
+  description.remove()
+})
 watch(page, (page) => {
   document.title = page ? `${page.title} | ${site.value?.name}` : 'Phase 2'
   description.content = page?.description || ''
@@ -48,9 +56,9 @@ watch(page, (page) => {
       :page-id="page.id"
     />
     <WebsiteCanvas v-else-if="site && page" :site="site" :page-id="page.id" />
-    <div v-else class="unavailable">
-      <h1>{{ site ? 'Page not found' : 'Our website is coming soon' }}</h1>
-      <a v-if="site" href="/website">Back to home</a><a href="/login">Employee Login</a>
+    <div v-else-if="site" class="unavailable">
+      <h1>Page not found</h1>
+      <a href="/website">Back to home</a><a href="/login">Employee Login</a>
     </div>
   </main>
 </template>

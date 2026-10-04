@@ -2864,7 +2864,8 @@ test('non-admin cannot see or open Website Builder', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Website Builder', exact: true })).toHaveCount(0)
   expect(api.actions).toHaveLength(0)
   await page.goto('/website')
-  await expect(page.getByRole('heading', { name: 'Our website is coming soon' })).toBeVisible()
+  await expect(page).toHaveURL(/\/jobs$/)
+  await expect(page.getByTestId('jobs-search')).toBeVisible()
 })
 
 test('admins reuse library images for the logo and sections and publish shared footer content', async ({
