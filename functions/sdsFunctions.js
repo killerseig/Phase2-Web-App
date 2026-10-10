@@ -4,6 +4,7 @@ exports.generateSdsBook = exports.sdsWorkspace = exports.downloadSdsFile = void 
 const node_crypto_1 = require("node:crypto");
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-admin/firestore");
+const sdsIntake_1 = require("./sdsIntake");
 const app_1 = require("firebase-admin/app");
 const promises_1 = require("node:stream/promises");
 const firestore_2 = require("firebase-functions/v2/firestore");
@@ -126,18 +127,72 @@ exports.downloadSdsFile = (0, https_1.onRequest)({ timeoutSeconds: 120, memory: 
 });
 /** New SDS namespace only: no existing job records or workflow permissions are mutated. */
 exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512MiB' }, async (request) => {
+    var _a;
     const user = await userFor(request.auth?.uid);
     const data = request.data ?? {};
     const action = data.action;
     const jobId = (0, sdsModel_1.sdsId)(data.jobId, true);
     if (jobId)
         await jobFor(user, jobId);
+    // Bounded legacy-compatible metadata search; no new indexes or public access.
+    if (action === 'page') {
+        const pageSize = data.pageSize ?? 100;
+        if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
+            throw new https_1.HttpsError('invalid-argument', 'Page size must be 1–100.');
+        const search = (0, sdsModel_1.sdsText)(data.search ?? '', 'Search', 160).toLowerCase();
+        const after = (0, sdsModel_1.sdsId)(data.after, true);
+        const folderId = (0, sdsModel_1.sdsId)(data.folderId, true);
+        const folders = await foldersRef.get();
+        const folderList = folders.docs.map((d) => ({ ...d.data(), id: d.id }));
+        (0, sdsModel_1.folderPath)(folderId, folderList);
+        let query = sheetsRef.orderBy(firestore_1.FieldPath.documentId()).limit(500);
+        if (after)
+            query = query.startAfter(after);
+        const snapshot = await query.get();
+        const found = [];
+        let cursor = after;
+        let scanned = 0;
+        for (const doc of snapshot.docs) {
+            cursor = doc.id;
+            scanned++;
+            const sheet = { ...doc.data(), id: doc.id };
+            const matchesFolder = !folderId ||
+                sheet.folderId === folderId ||
+                (0, sdsModel_1.folderPath)(sheet.folderId, folderList).some((f) => f.id === folderId);
+            const matchesSearch = !search ||
+                `${sheet.name} ${sheet.manufacturer} ${sheet.productCode}`.toLowerCase().includes(search);
+            if ((data.showArchived === true || !sheet.archived) && matchesFolder && matchesSearch)
+                found.push(sheet);
+            if (found.length >= pageSize)
+                break;
+        }
+        return {
+            sheets: found,
+            after: scanned < snapshot.size || snapshot.size === 500 ? cursor : '',
+            scanned,
+            searchMode: 'bounded-metadata-scan',
+        };
+    }
+    if (action === 'preflightImport') {
+        requireAdmin(user);
+        const rows = (0, sdsIntake_1.validateImportIndex)(data.index);
+        const exactByteGroups = {};
+        for (const row of rows)
+            (exactByteGroups[_a = row.sha256] ?? (exactByteGroups[_a] = [])).push(row.path);
+        return {
+            version: 1,
+            files: rows,
+            totalBytes: rows.reduce((total, row) => total + row.size, 0),
+            duplicateByteGroups: Object.values(exactByteGroups).filter((paths) => paths.length > 1),
+            currency: 'unverified',
+        };
+    }
     if (action === 'load') {
         return runtime_1.db.runTransaction(async (tx) => {
             const [state, folders, sheets] = await Promise.all([
                 tx.get(stateRef),
                 tx.get(foldersRef),
-                tx.get(sheetsRef),
+                data.metadataOnly === true ? Promise.resolve(null) : tx.get(sheetsRef),
             ]);
             const binder = jobId ? await tx.get(runtime_1.db.doc(`sdsBinders/${jobId}`)) : null;
             const lastRequest = await tx.get(runtime_1.db.doc(`sdsExportRequests/${user.uid}`));
@@ -147,7 +202,7 @@ exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512Mi
             return {
                 version: state.data()?.version ?? 0,
                 folders: folders.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
-                sheets: sheets.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+                sheets: sheets?.docs.map((doc) => ({ ...doc.data(), id: doc.id })) ?? [],
                 binder: {
                     version: binder?.data()?.version ?? 0,
                     selections: binder?.data()?.selections ?? [],
@@ -204,6 +259,14 @@ exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512Mi
     if (action === 'saveSheet') {
         requireAdmin(user);
         const id = (0, sdsModel_1.sdsId)(data.id, true) || (0, node_crypto_1.randomUUID)();
+        // A resumed indexed row may have committed before the client saw its response.
+        if (data.sourcePath !== undefined && data.expectedSha256 !== undefined) {
+            const previous = await sheetsRef.doc(id).get();
+            if (previous.exists &&
+                previous.data()?.sourcePath === (0, sdsIntake_1.importPath)(data.sourcePath) &&
+                previous.data()?.checksum === String(data.expectedSha256).toLowerCase())
+                return { id, reused: true };
+        }
         const uploadId = (0, sdsModel_1.sdsId)(data.uploadId, true);
         const revisionId = uploadId ? (0, node_crypto_1.randomUUID)() : '';
         const extension = (0, documentFormats_1.documentExtension)(data.uploadExtension || 'pdf');
@@ -223,6 +286,8 @@ exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512Mi
             order: order(data.order),
             archived: data.archived === true,
         };
+        const sourcePath = data.sourcePath === undefined ? undefined : (0, sdsIntake_1.importPath)(data.sourcePath);
+        const provenance = data.provenance === undefined ? undefined : (0, sdsModel_1.sdsText)(data.provenance, 'Provenance', 1000);
         let fileInfo = null;
         if (uploadId) {
             const staged = runtime_1.storageBucket.file(`sds-uploads/${user.uid}/${uploadId}.${extension}`);
@@ -232,6 +297,8 @@ exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512Mi
                 throw new https_1.HttpsError('invalid-argument', 'The upload type does not match its extension, or it exceeds 20 MB.');
             const [bytes] = await staged.download();
             const validated = await (0, documentFormats_1.validateDocument)(bytes, extension);
+            const checksum = (0, node_crypto_1.createHash)('sha256').update(bytes).digest('hex');
+            (0, sdsIntake_1.checkImportBytes)(bytes, checksum, data.expectedSize, data.expectedSha256);
             const originalName = (0, sdsModel_1.sdsText)(data.originalName ?? '', 'Original file name', 180)
                 .replace(/[\\/\x00-\x1F]/g, '_')
                 .replace(/\.[^.]*$/, '')
@@ -242,7 +309,9 @@ exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512Mi
                 mimeType: documentFormats_1.DOCUMENT_MIME[extension],
                 originalName: originalName ? `${originalName}.${extension}` : '',
                 size: bytes.length,
-                checksum: (0, node_crypto_1.createHash)('sha256').update(bytes).digest('hex'),
+                checksum,
+                ...(sourcePath ? { sourcePath, currencyStatus: 'unverified' } : {}),
+                ...(provenance !== undefined ? { provenance } : {}),
             };
             // Server-owned files are immutable and never receive Firebase download tokens.
             await runtime_1.storageBucket.file(filePath).save(bytes, {
@@ -251,20 +320,20 @@ exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512Mi
                 metadata: { cacheControl: 'private, max-age=0' },
             });
         }
+        const masterCount = (await sheetsRef.count().get()).data().count;
         try {
             await runtime_1.db.runTransaction(async (tx) => {
-                const [state, current, folders, sheets] = await Promise.all([
+                const [state, current, folders] = await Promise.all([
                     tx.get(stateRef),
                     tx.get(sheetsRef.doc(id)),
                     tx.get(foldersRef),
-                    tx.get(sheetsRef),
                 ]);
                 checkVersion(state.data()?.version ?? 0, data.version);
                 (0, sdsModel_1.folderPath)(values.folderId, folders.docs.map((d) => ({ ...d.data(), id: d.id })));
                 if (!current.exists && !revisionId)
                     throw new https_1.HttpsError('invalid-argument', 'A file is required for a new document.');
-                if (!current.exists && sheets.size >= 1000)
-                    throw new https_1.HttpsError('resource-exhausted', 'The library supports up to 1,000 sheets.');
+                if (!current.exists && masterCount >= sdsIntake_1.SDS_MASTER_CAPACITY)
+                    throw new https_1.HttpsError('resource-exhausted', 'The master library supports up to 10,000 documents.');
                 if (!revisionId && revisionDate !== current.data()?.revisionDate)
                     throw new https_1.HttpsError('invalid-argument', 'Upload a file to change its revision date.');
                 const saved = {
@@ -297,7 +366,7 @@ exports.sdsWorkspace = (0, https_1.onCall)({ timeoutSeconds: 120, memory: '512Mi
         }
         if (uploadId)
             await runtime_1.storageBucket
-                .file(`sds-uploads/${user.uid}/${uploadId}.pdf`)
+                .file(`sds-uploads/${user.uid}/${uploadId}.${extension}`)
                 .delete()
                 .catch(() => undefined);
         return { id };

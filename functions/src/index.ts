@@ -72,3 +72,6 @@ export { formEmail, deliverFormEmail } from './formDelivery'
 export { formSubmissionViewer } from './formSubmissionViewer'
 
 export {sharedDashboardWorkspace} from './sharedDashboardFunctions'
+
+export { formEntries } from './formEntries'
+export { scopedIntegrationApi } from './integrationApi'

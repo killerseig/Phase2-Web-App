@@ -75,6 +75,7 @@ describe('auth view helpers', () => {
       '/dashboards/role',
       '/dashboard',
       '/admin/website',
+      '/admin/forms',
       '/safety/sds',
       '/exports/timecards/print',
       '/users',

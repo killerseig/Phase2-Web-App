@@ -1,0 +1,67 @@
+import { describe, expect, it, vi, afterEach } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import FormShareLinks from './FormShareLinks.vue'
+import { configuredFormSiteUrl, publishedFormLink, type ServerFormTemplate } from '@/features/forms/publicLinks'
+const template = { id: 'visit', draft: { access: { respondents: 'signed-in' } }, definition: { access: { respondents: 'public' } }, revision: 3, latestVersion: 1, archived: false, used: false } as ServerFormTemplate
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
+describe('published public form links', () => {
+  it('uses configured Hosting instead of the dev origin and supports a custom site URL', () => {
+    expect(configuredFormSiteUrl(undefined, 'phase2-website')).toBe('https://phase2-website.web.app')
+    expect(configuredFormSiteUrl('https://forms.example.com/', 'phase2-website')).toBe('https://forms.example.com')
+    expect(configuredFormSiteUrl('https://localhost:5173/', 'phase2-website')).toBeUndefined()
+    expect(configuredFormSiteUrl('http://127.0.0.1:5173/', 'phase2-website')).toBeUndefined()
+    expect(configuredFormSiteUrl('https://user:secret@example.com/', 'phase2-website')).toBeUndefined()
+  })
+  it('uses issued access rather than pending draft edits and never advertises unavailable forms', () => {
+    expect(publishedFormLink(template, 'https://phase2-website.web.app').url).toBe('https://phase2-website.web.app/forms/visit')
+    expect(publishedFormLink({ ...template, latestVersion: 0 }).state).toContain('Unpublished')
+    expect(publishedFormLink({ ...template, archived: true }).url).toBeUndefined()
+    expect(publishedFormLink({ ...template, definition: undefined }).state).toContain('Private')
+    expect(publishedFormLink(template).state).toContain('configure')
+  })
+  it('copies the canonical URL and opens that same published form in a new tab', async () => {
+    vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'phase2-website')
+    vi.stubEnv('VITE_PUBLIC_SITE_URL', '')
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const wrapper = mount(FormShareLinks, { props: { template } })
+    await wrapper.get('button').trigger('click')
+    expect(writeText).toHaveBeenCalledWith('https://phase2-website.web.app/forms/visit')
+    expect(wrapper.get('a').attributes('href')).toBe('https://phase2-website.web.app/forms/visit')
+    expect(wrapper.get('[role="status"]').text()).toBe('Link copied.')
+    await wrapper.setProps({ template: { ...template, latestVersion: 0 } })
+    expect(wrapper.find('a').exists()).toBe(false)
+    expect(wrapper.find('button').exists()).toBe(false)
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('offers the selectable URL when copying fails', async () => {
+    vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'phase2-website')
+    vi.stubEnv('VITE_PUBLIC_SITE_URL', '')
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Clipboard blocked')) } })
+    const wrapper = mount(FormShareLinks, { props: { template } })
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).toContain('Select and copy')
+    expect((wrapper.get('input').element as HTMLInputElement).value).toBe('https://phase2-website.web.app/forms/visit')
+    expect(wrapper.get('button').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('disables duplicate copy clicks and ignores a late result after changing forms', async () => {
+    vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'phase2-website')
+    vi.stubEnv('VITE_PUBLIC_SITE_URL', '')
+    let finish!: () => void
+    const writeText = vi.fn().mockReturnValue(new Promise<void>(resolve => { finish = resolve }))
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const wrapper = mount(FormShareLinks, { props: { template } })
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.get('button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('button').text()).toBe('Copying link…')
+    await wrapper.setProps({ template: { ...template, latestVersion: 0 } })
+    finish()
+    await flushPromises()
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.find('input').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

@@ -6,7 +6,8 @@ import DocumentExplorer from './DocumentExplorer.vue'
 import SdsFileViewer from './SdsFileViewer.vue'
 import { documentAccept, documentFormatsLabel, printableFile } from '@/features/documents/formats'
 import { useAuthStore } from '@/stores/auth'
-import { loadSds, sdsCommand, uploadDocument, sdsErrorMessage } from '@/services/sds'
+import { loadSds, loadSdsPage, sdsCommand, uploadDocument, sdsErrorMessage } from '@/services/sds'
+import SdsBulkImport from './SdsBulkImport.vue'
 import {
   folderAncestors,
   inFolder,
@@ -19,7 +20,7 @@ import {
 import { getSdsViewState, rememberSdsViewState } from '@/features/sds/viewState'
 import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/explorerMenu'
 
-withDefaults(defineProps<{ expanded?: boolean; title?: string }>(), { title: 'Documents' })
+const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; initialFolderId?: string }>(), { title: 'Documents', initialFolderId: '' })
 const auth = useAuthStore()
 const route = useRoute()
 const viewRoute = route.path
@@ -30,7 +31,7 @@ const restored = previousView?.jobId === requestedJobId ? previousView : undefin
 const isAdmin = computed(() => auth.rawRole === 'admin')
 const jobId = ref(requestedJobId)
 const folderId = ref(
-  typeof route.query.folder === 'string' ? route.query.folder : (restored?.folderId ?? ''),
+  props.initialFolderId || (typeof route.query.folder === 'string' ? route.query.folder : (restored?.folderId ?? '')),
 )
 const search = ref(
   typeof route.query.search === 'string' ? route.query.search : (restored?.search ?? ''),
@@ -50,6 +51,10 @@ const editing = ref(false)
 const selection = ref<SdsSelection[]>([])
 const selectedId = ref('')
 const showArchived = ref(false)
+const nextPage = ref('')
+const pageBusy = ref(false)
+const bulkOpen = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 const editor = ref<'' | 'folder' | 'sheet'>('')
 const progress = ref<number | null>(null)
 const form = reactive({
@@ -124,7 +129,12 @@ async function refresh() {
   loadFailed.value = false
   error.value = ''
   try {
-    const loaded = await loadSds(jobId.value)
+    const loaded = await loadSds(jobId.value, !jobId.value)
+    if (!jobId.value) {
+      const page = await loadSdsPage({ search: search.value, showArchived: showArchived.value })
+      loaded.sheets = page.sheets
+      nextPage.value = page.after
+    }
     if (request !== generation || disposed) return
     library.value = loaded
     selection.value = loaded.binder.selections.map((s) => ({ ...s }))
@@ -143,6 +153,32 @@ async function refresh() {
     if (request === generation) loading.value = false
   }
 }
+async function moreDocuments() {
+  if (!nextPage.value || pageBusy.value) return
+  const request = generation
+  pageBusy.value = true
+  try {
+    const page = await loadSdsPage({
+      after: nextPage.value,
+      search: search.value,
+      showArchived: showArchived.value,
+    })
+    if (request !== generation || disposed) return
+    library.value.sheets.push(...page.sheets)
+    nextPage.value = page.after
+  } catch (e) {
+    error.value = message(e)
+  } finally {
+    pageBusy.value = false
+  }
+}
+watch([search, showArchived], () => {
+  if (jobId.value) return
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    void refresh()
+  }, 300)
+})
 function clearExport() {
   if (timer) clearTimeout(timer)
   exportId.value = ''
@@ -641,6 +677,7 @@ onBeforeUnmount(() => {
     search: search.value,
   })
   disposed = true
+  if (searchTimer) clearTimeout(searchTimer)
   generation++
   if (timer) clearTimeout(timer)
   window.removeEventListener('beforeunload', beforeUnload)
@@ -697,6 +734,18 @@ onBeforeUnmount(() => {
         @open="openSheet(false, $event)"
       >
         <template #toolbar>
+          <Button
+            v-if="!jobId && nextPage"
+            :label="pageBusy ? 'Loading…' : 'Load more files'"
+            :disabled="pageBusy || busy"
+            @click="moreDocuments"
+          />
+          <Button
+            v-if="isAdmin && !jobId"
+            label="Bulk PDF import"
+            :disabled="busy"
+            @click="bulkOpen = !bulkOpen"
+          />
           <RouterLink
             v-if="!expanded"
             :to="expandedLocation"
@@ -806,6 +855,12 @@ onBeforeUnmount(() => {
         </template>
       </DocumentExplorer>
     </fieldset>
+    <SdsBulkImport
+      v-if="bulkOpen && isAdmin && !jobId"
+      :folder-id="folderId"
+      @busy="busy = $event"
+      @completed="refresh"
+    />
     <section v-if="exportState" class="sds-export" aria-label="Book export" aria-live="polite">
       <h3>Document book</h3>
       <p v-if="exportState === 'queued' || exportState === 'running'">

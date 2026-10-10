@@ -1,0 +1,100 @@
+{
+  "title": "BEHAVIOR-BASED SAFETY OBSERVATION",
+  "company": "PHASE 2 COMPANY",
+  "source": {
+    "name": "Phase 2 Behavior Based Safety Observation.docx",
+    "bytes": 32235,
+    "sha256": "be7557eda8d7beabfef401a92e2c1868290632433b002a05aef3a987700aacab",
+    "render_pages": 1,
+    "visual_review": "complete; source unchanged",
+    "comments": false,
+    "tracked_changes": false
+  },
+  "status": "Minimal source-backed REVIEW definition; no live import or publication",
+  "fields_in_order": [
+    {
+      "id": "project",
+      "label": "Project:",
+      "type": "text"
+    },
+    {
+      "id": "date_time",
+      "label": "Date / Time:",
+      "type": "text"
+    },
+    {
+      "id": "observer",
+      "label": "Observer:",
+      "type": "text"
+    },
+    {
+      "id": "crew_department",
+      "label": "Crew / Department:",
+      "type": "text"
+    },
+    {
+      "id": "persons_observed",
+      "label": "Person(s) Observed:",
+      "type": "text"
+    },
+    {
+      "id": "task_observed",
+      "label": "Task Observed:",
+      "type": "text"
+    },
+    {
+      "id": "observation",
+      "label": "OBSERVATION",
+      "type": "checkbox_group",
+      "options": [
+        "SAFE BEHAVIOR",
+        "AT-RISK BEHAVIOR"
+      ]
+    },
+    {
+      "id": "what_observed",
+      "label": "WHAT WAS OBSERVED",
+      "type": "textarea"
+    },
+    {
+      "id": "action_taken",
+      "label": "ACTION TAKEN",
+      "type": "checkbox_group",
+      "options": [
+        "Positive recognition",
+        "Coaching discussion",
+        "Immediate correction",
+        "Follow-up required"
+      ]
+    },
+    {
+      "id": "discussion_followup",
+      "label": "DISCUSSION / FOLLOW-UP",
+      "type": "textarea"
+    },
+    {
+      "id": "observer_signature",
+      "label": "Observer Signature:",
+      "type": "text",
+      "signature_note": "Blank user-completed signature entry only; no prefilled signature or attestation."
+    },
+    {
+      "id": "date",
+      "label": "Date:",
+      "type": "text"
+    },
+    {
+      "id": "photos",
+      "label": "Photos",
+      "type": "photo",
+      "multiple": true,
+      "basis": "User explicitly requested photo attachments; not a question in original DOCX"
+    }
+  ],
+  "purpose": "Purpose: Reinforce safe work, coach at-risk behavior, and identify trends before an injury occurs.",
+  "required_fields": "Unspecified in source; no new required flags imposed.",
+  "selection_rules": "Retain checkbox controls. Source does not say choose one; do not impose exclusive radio behavior or auto-select defaults.",
+  "privacy_note": "The source has observer/person fields. Do not describe this form as anonymous without a verified access and data design.",
+  "live_status": "No respondent URL, hosting, import, issue, submission or photo upload verified.",
+  "respondent_url": null
+}

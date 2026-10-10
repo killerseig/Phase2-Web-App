@@ -2,11 +2,19 @@ import { buildFormSubmissionPdf } from './formSubmissionPdf'
 import { buildFormEmailHtml, buildFormEmailText, type FormPhotoPreview } from './formEmailRender'
 export { buildFormEmailHtml, buildFormEmailText } from './formEmailRender'
 import { db, storageBucket } from './runtime'
-import { type FormRecord } from './formModel'
+import {
+  type FormRecord,
+  type FormField,
+  type FormAnswers,
+  type FormGroupInstance,
+} from './formModel'
 import { getAppBaseUrl } from './functionConfig'
 import { buildSubmissionEmailRouting, type SendEmailOptions } from './emailService'
 import { EMAIL } from './constants'
 import sharp from 'sharp'
+import { prepareFormTranslation } from './formTranslationService'
+import { formTranslationEmailContent } from './formTranslationEmail'
+import type { FormTranslation } from './formTranslation'
 import {
   prepareDailyLogInlinePhotos,
   DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES,
@@ -20,8 +28,11 @@ interface FormPhotoAsset {
   fieldId: string
   ownerUid: string
   path: string
+  groupId?: string
+  instanceId?: string
 }
 export interface FormEmailDependencies {
+  translate?: (record: FormRecord) => Promise<FormTranslation>
   loadAsset: (id: string) => Promise<FormPhotoAsset | undefined>
   download: (path: string, maxBytes: number) => Promise<Buffer>
   ownerEmail: (uid: string) => Promise<unknown>
@@ -34,6 +45,7 @@ export class FormEmailPreparationError extends Error {
   }
 }
 const defaults: FormEmailDependencies = {
+  translate: prepareFormTranslation,
   loadAsset: async (id) =>
     (await db.doc('formAssets/' + id).get()).data() as FormPhotoAsset | undefined,
   download: async (path, maxBytes) => {
@@ -51,9 +63,27 @@ const defaults: FormEmailDependencies = {
     process.env.FIRESTORE_EMULATOR_HOST ? 'http://127.0.0.1:5173' : getAppBaseUrl(),
 }
 // Match the existing Daily Log encoder without changing its source or behavior.
-function photoIds(record: FormRecord, fieldId: string): string[] {
-  const value = record.answers[fieldId]
-  return Array.isArray(value) ? value : []
+function photoIds(answers: FormAnswers, fieldId: string): string[] {
+  const value = answers[fieldId]
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
+function photoFields(
+  fields: FormField[],
+  answers: FormAnswers,
+  groupId?: string,
+  instanceId?: string,
+): { field: FormField; answers: FormAnswers; groupId?: string; instanceId?: string }[] {
+  return fields.flatMap((field) =>
+    field.kind === 'repeat'
+      ? ((answers[field.id] || []) as FormGroupInstance[]).flatMap((instance) =>
+          photoFields(field.fields || [], instance.answers, field.id, instance.instanceId),
+        )
+      : field.kind === 'photo'
+        ? [{ field, answers, groupId, instanceId }]
+        : [],
+  )
 }
 async function createBoundedJpeg(source: Buffer, maxBytes: number): Promise<Buffer | null> {
   const hardLimit = Math.min(DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_BYTES, maxBytes)
@@ -88,6 +118,60 @@ async function createBoundedJpeg(source: Buffer, maxBytes: number): Promise<Buff
   }
   return smallest && smallest.length <= hardLimit ? smallest : null
 }
+/** PDF attachments include every submitted photo, independent of capped HTML thumbnails. */
+export async function prepareFormPdfPhotos(
+  record: FormRecord,
+  deps: FormEmailDependencies,
+): Promise<DailyLogInlinePhotoAttachment[]> {
+  const result: DailyLogInlinePhotoAttachment[] = []
+  for (const { field, answers, groupId, instanceId } of photoFields(
+    record.definition.fields,
+    record.answers,
+  )) {
+    for (const id of photoIds(answers, field.id)) {
+      if (result.length >= 20 || !/^[A-Za-z0-9_-]{1,128}$/.test(id))
+        throw new FormEmailPreparationError(
+          'The complete photo PDF exceeds the supported photo limit. The submission is retained.',
+        )
+      const asset = await deps.loadAsset(id),
+        expected = 'form-photos/' + record.id + '/' + id + '.webp'
+      if (
+        !asset ||
+        asset.recordId !== record.id ||
+        asset.ownerUid !== record.ownerUid ||
+        asset.fieldId !== field.id ||
+        asset.groupId !== groupId ||
+        asset.instanceId !== instanceId ||
+        asset.path !== expected
+      )
+        throw new FormEmailPreparationError(
+          'A submitted photo could not be verified for the complete PDF. The submission is retained.',
+        )
+      let jpeg: Buffer | null
+      try {
+        jpeg = await createBoundedJpeg(await deps.download(expected, 2 * 1024 * 1024), 24 * 1024)
+      } catch {
+        throw new FormEmailPreparationError(
+          'A submitted photo could not be prepared for the complete PDF. The submission is retained.',
+        )
+      }
+      if (!jpeg)
+        throw new FormEmailPreparationError(
+          'A submitted photo cannot fit the complete email PDF budget. The submission is retained; download the full entry PDF.',
+        )
+      const contentId = 'entry-photo-' + id
+      result.push({
+        name: contentId + '.jpg',
+        contentType: 'image/jpeg',
+        contentBytes: jpeg.toString('base64'),
+        contentId,
+        isInline: true,
+      })
+    }
+  }
+  return result
+}
+
 function recordUrl(record: FormRecord, base: string) {
   const url = new URL(base)
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
@@ -107,12 +191,15 @@ export async function prepareFormEmail(
     previews: FormPhotoPreview[] = [],
     attachments: DailyLogInlinePhotoAttachment[] = []
   let totalBytes = 0
-  for (const [fieldIndex, field] of record.definition.fields.entries()) {
+  for (const { field, answers, groupId, instanceId } of photoFields(
+    record.definition.fields,
+    record.answers,
+  )) {
     if (field.kind !== 'photo' || totalBytes >= DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES)
       continue
     const permitted = new Map<string, string>()
     // Resolve only server-owned, submitted references. Never accept storage URLs/paths from answers.
-    for (const id of photoIds(record, field.id).slice(0, EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT)) {
+    for (const id of photoIds(answers, field.id).slice(0, EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT)) {
       if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) continue
       const asset = await deps.loadAsset(id)
       const expected = 'form-photos/' + record.id + '/' + id + '.webp'
@@ -120,6 +207,8 @@ export async function prepareFormEmail(
         asset?.recordId === record.id &&
         asset.fieldId === field.id &&
         asset.ownerUid === record.ownerUid &&
+        asset.groupId === groupId &&
+        asset.instanceId === instanceId &&
         asset.path === expected
       )
         permitted.set('daily-logs/' + record.id + '/' + id + '.webp', expected)
@@ -128,7 +217,7 @@ export async function prepareFormEmail(
     const prepared = await prepareDailyLogInlinePhotos(
       record.id,
       {
-        attachments: photoIds(record, field.id)
+        attachments: photoIds(answers, field.id)
           .slice(0, EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT)
           .map((id) => ({ type: 'photo', path: 'daily-logs/' + record.id + '/' + id + '.webp' })),
       },
@@ -145,19 +234,35 @@ export async function prepareFormEmail(
       const bytes = Buffer.from(attachment.contentBytes, 'base64').length
       if (totalBytes + bytes > DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES) break
       totalBytes += bytes
-      const contentId =
-        'form-photo-' + fieldIndex + '-' + prepared.previews[index]!.position + '@phase2.local'
-      previews.push({ fieldId: field.id, position: prepared.previews[index]!.position, contentId })
+      const assetId = photoIds(answers, field.id)[prepared.previews[index]!.position - 1]!
+      const contentId = 'entry-photo-' + assetId
+      previews.push({
+        fieldId: field.id,
+        groupId,
+        instanceId,
+        position: prepared.previews[index]!.position,
+        contentId,
+      })
       attachments.push({
         ...attachment,
-        name: 'form-photo-' + fieldIndex + '-' + prepared.previews[index]!.position + '.jpg',
+        name: contentId + '.jpg',
         contentId,
       })
     }
   }
   const routing = buildSubmissionEmailRouting(recipients, await deps.ownerEmail(record.ownerUid))
+  let translation: FormTranslation | undefined
+  if (deps.translate) {
+    try {
+      translation = await deps.translate(record)
+    } catch {
+      throw new FormEmailPreparationError(
+        'The English rendering could not be prepared. The submission is retained for retry.',
+      )
+    }
+  }
   const pdf = record.definition.output?.pdf
-    ? await buildFormSubmissionPdf(record, attachments)
+    ? await buildFormSubmissionPdf(record, await prepareFormPdfPhotos(record, deps), translation)
     : undefined
   const html = buildFormEmailHtml(record, previews, url)
   const outputAttachments: NonNullable<SendEmailOptions['attachments']> = [
@@ -180,6 +285,17 @@ export async function prepareFormEmail(
     text: buildFormEmailText(record, url),
     dailyLogPhotoFallbackHtml: buildFormEmailHtml(record, [], url),
     ...(outputAttachments.length ? { attachments: outputAttachments } : {}),
+  }
+  if (translation) {
+    const rendering = formTranslationEmailContent(record, translation)
+    if (rendering.html) {
+      options.html = options.html.replace(/(<body[^>]*>)/, '$1' + rendering.html)
+      options.dailyLogPhotoFallbackHtml = options.dailyLogPhotoFallbackHtml!.replace(
+        /(<body[^>]*>)/,
+        '$1' + rendering.html,
+      )
+      options.text = rendering.text + options.text
+    }
   }
   return fitFormEmailPayload(options)
 }

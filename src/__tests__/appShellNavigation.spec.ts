@@ -9,6 +9,8 @@ describe('app shell navigation policy', () => {
   it('keeps unannounced dashboards out of workspace navigation for every role', () => {
     expect(getAppShellWorkspaceNavigationItems()).toEqual([
       { label: 'Jobs', to: '/jobs' },
+      { label: 'Reports', to: '/reports' },
+      { label: 'Company Library', to: '/company-library' },
     ])
   })
 

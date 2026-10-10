@@ -7,6 +7,7 @@ export declare const formSubmissionViewer: import("firebase-functions/v2/https")
     answers?: undefined;
     submittedAt?: undefined;
     requireLogin?: undefined;
+    filename?: undefined;
 } | {
     id: string;
     templateVersion: number;
@@ -14,6 +15,8 @@ export declare const formSubmissionViewer: import("firebase-functions/v2/https")
         output?: import("./formModel").FormOutputSettings;
         version: number;
         createdAt: string;
+        recipientGroups?: ("job-foremen" | "job-project-managers" | "job-everyone")[];
+        access?: import("./formAccess").FormAccessPolicy;
         title: string;
         description: string;
         fields: import("./formModel").FormField[];
@@ -24,5 +27,16 @@ export declare const formSubmissionViewer: import("firebase-functions/v2/https")
     requireLogin: boolean;
     base64?: undefined;
     contentType?: undefined;
+    filename?: undefined;
+} | {
+    base64: string;
+    contentType: string;
+    filename: string;
+    id?: undefined;
+    templateVersion?: undefined;
+    definition?: undefined;
+    answers?: undefined;
+    submittedAt?: undefined;
+    requireLogin?: undefined;
 }>, unknown>;
 //# sourceMappingURL=formSubmissionViewer.d.ts.map

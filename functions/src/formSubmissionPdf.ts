@@ -1,13 +1,21 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import PDFDocument from 'pdfkit'
-import { formAnswerSummary, type FormRecord } from './formModel'
+import {
+  formAnswerSummary,
+  type FormRecord,
+  type FormField,
+  type FormAnswers,
+  type FormGroupInstance,
+} from './formModel'
 import type { DailyLogInlinePhotoAttachment } from './dailyLogEmailPhotos'
+import { translatedFormProjection, type FormTranslation } from './formTranslation'
 
 /** Printable complete form, independent of custom email omissions. No scripts or external fetches. */
 export function buildFormSubmissionPdf(
   record: FormRecord,
   previews: DailyLogInlinePhotoAttachment[] = [],
+  translation?: FormTranslation,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
@@ -30,42 +38,112 @@ export function buildFormSubmissionPdf(
         .font('FormRegular')
         .fontSize(10)
         .text('Completed form | Version ' + record.templateVersion)
+        .text(
+          'Entry: ' +
+            record.id +
+            (record.submittedAt
+              ? ' | Submitted: ' + new Date(record.submittedAt).toISOString()
+              : ''),
+        )
         .moveDown()
       if (record.definition.description) doc.text(record.definition.description).moveDown()
       let section = ''
-      record.definition.fields.forEach((field, index) => {
-        if (doc.y > 680) doc.addPage()
-        if (field.section && field.section !== section)
-          doc.font('FormBold').fontSize(14).text(field.section).moveDown(0.4)
-        section = field.section || ''
-        doc.font('FormBold').fontSize(11).text(field.label)
-        doc.font('FormRegular').fontSize(10)
-        if (field.hint) doc.text(field.hint).moveDown(0.3)
-        if (field.kind !== 'photo')
-          doc
-            .text(formAnswerSummary(field, record.answers[field.id]).replace(/\t/g, '    '))
-            .moveDown()
-        else {
-          const count = Array.isArray(record.answers[field.id])
-            ? (record.answers[field.id] as string[]).length
-            : 0
+      function render(fields: FormField[], answers: FormAnswers, includePhotos = true) {
+        fields.forEach((field) => {
+          if (field.kind === 'repeat') {
+            for (const [position, instance] of (
+              (answers[field.id] || []) as FormGroupInstance[]
+            ).entries()) {
+              doc
+                .font('FormBold')
+                .fontSize(14)
+                .text(field.label + ' ' + (position + 1))
+                .moveDown(0.4)
+              render(field.fields || [], instance.answers, includePhotos)
+            }
+            return
+          }
+          if (doc.y > 680) doc.addPage()
+          if (field.section && field.section !== section)
+            doc.font('FormBold').fontSize(14).text(field.section).moveDown(0.4)
+          section = field.section || ''
+          doc.font('FormBold').fontSize(11).text(field.label)
+          doc.font('FormRegular').fontSize(10)
+          if (field.hint) doc.text(field.hint).moveDown(0.3)
+          if (field.kind === 'matrix') {
+            const selections = (answers[field.id] || []) as string[]
+            for (const [index, row] of (field.rows || []).entries()) {
+              if (doc.y > 670) doc.addPage()
+              doc.font('FormBold').fontSize(10).text(row.label)
+              doc
+                .font('FormRegular')
+                .fontSize(10)
+                .text(selections[index] || 'Not provided')
+                .moveDown(0.5)
+            }
+            doc.moveDown()
+          } else if (field.kind !== 'photo')
+            doc.text(formAnswerSummary(field, answers[field.id]).replace(/\t/g, '    ')).moveDown()
+          else {
+            const count = Array.isArray(answers[field.id])
+              ? (answers[field.id] as string[]).length
+              : 0
+            doc.text(count + ' attached photos.').moveDown(0.3)
+            if (!includePhotos) {
+              if (count) doc.text('Photos are included with the original submission.').moveDown()
+              return
+            }
+            for (const preview of previews.filter((item) =>
+              ((answers[field.id] as string[]) || []).some(
+                (id) => item.contentId === 'entry-photo-' + id,
+              ),
+            )) {
+              if (doc.y + 155 > 710) doc.addPage()
+              const y = doc.y
+              doc.image(Buffer.from(preview.contentBytes, 'base64'), doc.x, y, { fit: [220, 145] })
+              doc.y = y + 155
+            }
+            doc.moveDown()
+          }
+        })
+      }
+      const projected = translation ? translatedFormProjection(record, translation) : record
+      if (projected !== record)
+        doc.font('FormBold').fontSize(14).text('Original submission').moveDown()
+      if (translation?.status === 'failed')
+        doc
+          .text('English translation failed. Original submitted answers follow unchanged.')
+          .moveDown()
+      render(record.definition.fields, record.answers)
+      if (projected !== record && translation) {
+        doc.addPage()
+        section = ''
+        doc.font('FormBold').fontSize(18).text('English rendering').moveDown()
+        doc
+          .font('FormRegular')
+          .fontSize(10)
+          .text(
+            'Machine translation; review safety meaning. Original submission is preserved above.',
+          )
+          .text(
+            'Translation revision: ' +
+              translation.revision +
+              ' | Provider: ' +
+              translation.provider,
+          )
+          .text('Original source SHA-256: ' + translation.sourceHash)
+          .moveDown()
+        if (translation.correction)
           doc
             .text(
-              count +
-                ' photos. Full-resolution photos are available through the email viewer link.',
+              'Human correction: ' +
+                new Date(translation.correction.at).toISOString() +
+                ' | Reviewer: ' +
+                translation.correction.by,
             )
-            .moveDown(0.3)
-          for (const preview of previews.filter((item) =>
-            item.contentId.startsWith('form-photo-' + index + '-'),
-          )) {
-            if (doc.y + 155 > 710) doc.addPage()
-            const y = doc.y
-            doc.image(Buffer.from(preview.contentBytes, 'base64'), doc.x, y, { fit: [220, 145] })
-            doc.y = y + 155
-          }
-          doc.moveDown()
-        }
-      })
+            .moveDown()
+        render(projected.definition.fields, projected.answers, false)
+      }
       doc.end()
     } catch (error) {
       doc.end()

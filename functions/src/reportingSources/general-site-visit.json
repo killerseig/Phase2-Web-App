@@ -1,0 +1,88 @@
+{
+  "title": "General Site Visit Report",
+  "company": "Phase 2 Company",
+  "status": "REVIEW ONLY. Source-derived definition and local preview. No live form, email draft, submission, or publication.",
+  "design_basis": "Synthesis of recurring topics in nine original site-visit reports, September 8–October 6, 2026, as requested. Labels consolidate recurring topics; this is not a verbatim pre-existing form. Quoted daily logs and forwarded reports were excluded.",
+  "required_fields_policy": "No required answers, fixed rating choices, mandatory owner, due date, or closure fields added.",
+  "report_metadata": [
+    {
+      "id": "visit_date",
+      "label": "Visit date",
+      "type": "date",
+      "required": false,
+      "default": null,
+      "basis": "Proposed organizational metadata replacing the email date context. Keep blank/editable: received date does not prove the date of the visit."
+    },
+    {
+      "id": "visited_by",
+      "label": "Visited by",
+      "type": "text",
+      "required": false,
+      "default": null,
+      "basis": "Source-derived: explicitly stated in the September 24 worksite report and otherwise identified by the report sender."
+    }
+  ],
+  "sites": {
+    "repeatable": true,
+    "min_items": 1,
+    "add_item_label": "Add another site",
+    "basis": "Francisco combines multiple site visits in one email, including October 1 and September 25, 22 and 14.",
+    "fields_in_order": [
+      {
+        "id": "site",
+        "label": "Site visited",
+        "type": "text",
+        "required": false,
+        "source_basis": "Job Site / Worksite / Site Location and subject naming."
+      },
+      {
+        "id": "people",
+        "label": "People on site",
+        "type": "textarea",
+        "required": false,
+        "help": "Foreman, crew/count, and GC or other contacts met.",
+        "source_basis": "Personnel, On-site, Contacts, Foreman, Crew Size, and Personnel Met."
+      },
+      {
+        "id": "work_progress",
+        "label": "Work and progress",
+        "type": "textarea",
+        "required": false,
+        "help": "Areas visited, work completed or underway, and what was discussed.",
+        "source_basis": "Tasks Completed/In Progress, Status &amp; Observations, Tasks &amp; Scope, Current Scope &amp; Operations, and Key Discussion Points &amp; Site Progress."
+      },
+      {
+        "id": "issues_coordination",
+        "label": "Issues and coordination",
+        "type": "textarea",
+        "required": false,
+        "help": "Quality, safety, trade conflicts, access, materials or equipment, if any.",
+        "source_basis": "Consolidates report-specific Issues &amp; Obstacles, Issues &amp; Delays, quality/acceptance, Safety &amp; Compliance, material orders and equipment/resource plans. These were not separate mandatory questions in Francisco's reports."
+      },
+      {
+        "id": "next_steps_schedule",
+        "label": "Next steps and schedule",
+        "type": "textarea",
+        "required": false,
+        "help": "Follow-up, work planned, or schedule changes, if any.",
+        "source_basis": "Next Steps &amp; Scheduling, Status, Immediate Plan, Action Items, Upcoming Work &amp; Projections, Schedule Update."
+      },
+      {
+        "id": "photos",
+        "label": "Photos",
+        "type": "photo",
+        "multiple": true,
+        "required": false,
+        "basis": "Dan's explicit request for photos across the forms. Do not infer field-photo attachments from the presence of signature images or attachment flags."
+      }
+    ]
+  },
+  "proposed_implementation_only": [
+    "Repeatable site block and Add another site control translate his multi-site email pattern into a form.",
+    "Photo attachment control is user requested. Actual upload, persistence and respondent access must be verified in the eventual hosted implementation.",
+    "Preview does not send or save data; selecting images only shows them locally in the page.",
+    "Visit date is an optional editable convenience field. No automatic claims about visit time.",
+    "If a live app supplies author or submission time automatically, disclose it visibly and do not present submission time as visit time."
+  ],
+  "respondent_url": null
+}

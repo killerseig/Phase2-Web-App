@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import Checkbox from 'primevue/checkbox'
 import RadioButton from 'primevue/radiobutton'
 import MultiSelect from 'primevue/multiselect'
@@ -7,8 +8,9 @@ import {
   type FormAnswers,
   type FormDefinition,
   type FormField,
+  type FormGroupInstance,
 } from '../../../functions/src/formModel'
-withDefaults(
+const props = withDefaults(
   defineProps<{
     definition: FormDefinition
     modelValue: FormAnswers
@@ -16,13 +18,14 @@ withDefaults(
     disabled?: boolean
     photosEnabled?: boolean
     photoPreviews?: Record<string, string>
+    idPrefix?: string
     invalidField?: string
   }>(),
-  { readonly: false, disabled: false, photosEnabled: false },
+  { readonly: false, disabled: false, photosEnabled: false, idPrefix: '' },
 )
 const emit = defineEmits<{
   'update:modelValue': [answers: FormAnswers]
-  upload: [fieldId: string, files: File[]]
+  upload: [fieldId: string, files: File[], groupId?: string, instanceId?: string]
   viewPhoto: [id: string]
 }>()
 function value(answers: FormAnswers, id: string): string {
@@ -44,13 +47,69 @@ function accessibility(field: FormField, answers: FormAnswers, invalid?: string)
     'aria-invalid': invalid === field.id || undefined,
     'aria-describedby':
       [
-        field.hint && 'help-' + field.id,
-        field.requiredWhen && 'condition-' + field.id,
+        field.hint && 'help-' + props.idPrefix + field.id,
+        field.requiredWhen && 'condition-' + props.idPrefix + field.id,
         invalid === field.id && 'form-validation-message',
       ]
         .filter(Boolean)
         .join(' ') || undefined,
   }
+}
+function matrixSelection(field: FormField, rowIndex: number, option: string) {
+  const answers = Array.isArray(props.modelValue[field.id])
+    ? [...(props.modelValue[field.id] as string[])]
+    : (field.rows || []).map(() => '')
+  answers[rowIndex] = option
+  update(props.modelValue, field.id, answers)
+}
+function instances(field: FormField): FormGroupInstance[] {
+  const existing = props.modelValue[field.id]
+  return Array.isArray(existing) && existing.length
+    ? (existing as FormGroupInstance[])
+    : Array.from({ length: field.minInstances ?? 1 }, (_, index) => ({
+        instanceId: 'initial-' + index,
+        answers: {},
+      }))
+}
+watch(
+  () => [props.definition, props.modelValue, props.readonly],
+  () => {
+    if (props.readonly) return
+    const answers = { ...props.modelValue }
+    let changed = false
+    for (const field of props.definition.fields) {
+      const current = answers[field.id]
+      if (
+        field.kind === 'repeat' &&
+        (current === undefined || (Array.isArray(current) && !current.length && (field.minInstances ?? 1) > 0))
+      ) {
+        answers[field.id] = instances(field)
+        changed = true
+      }
+    }
+    if (changed) emit('update:modelValue', answers)
+  },
+  { immediate: true },
+)
+function updateInstance(field: FormField, instanceId: string, answers: FormAnswers) {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    [field.id]: instances(field).map((instance) =>
+      instance.instanceId === instanceId ? { ...instance, answers } : instance,
+    ),
+  })
+}
+function addInstance(field: FormField) {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    [field.id]: [...instances(field), { instanceId: crypto.randomUUID(), answers: {} }],
+  })
+}
+function removeInstance(field: FormField, instanceId: string) {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    [field.id]: instances(field).filter((instance) => instance.instanceId !== instanceId),
+  })
 }
 const multiStyle = {
   labelContainer: { style: { minWidth: 0, flex: '1' } },
@@ -89,23 +148,84 @@ function photos(id: string, event: Event) {
 }
 </script>
 <template>
-  <fieldset :disabled="disabled || readonly" class="form-fields">
+  <fieldset :disabled="disabled" class="form-fields">
     <div v-for="(field, index) in definition.fields" :key="field.id" class="form-field">
       <h3 v-if="field.section && definition.fields[index - 1]?.section !== field.section">
         {{ field.section }}
       </h3>
       <label
-        :id="'label-' + field.id"
-        :for="field.kind === 'radio' ? undefined : 'answer-' + field.id"
+        :id="'label-' + idPrefix + field.id"
+        :for="field.kind === 'radio' ? undefined : 'answer-' + idPrefix + field.id"
         >{{ field.label }}<span v-if="isFieldRequired(field, modelValue)"> *</span></label
       >
-      <p v-if="field.hint" :id="'help-' + field.id" class="hint">{{ field.hint }}</p>
-      <p v-if="field.requiredWhen" :id="'condition-' + field.id" class="hint">
+      <p v-if="field.hint" :id="'help-' + idPrefix + field.id" class="hint">{{ field.hint }}</p>
+      <p v-if="field.requiredWhen" :id="'condition-' + idPrefix + field.id" class="hint">
         Notes required for {{ field.requiredWhen.values.join(' or ') }}.
       </p>
+      <div v-if="field.kind === 'matrix'" class="matrix-rows">
+        <fieldset
+          v-for="(row, rowIndex) in field.rows"
+          :key="row.id"
+          :disabled="disabled || readonly"
+        >
+          <legend>{{ row.label }}</legend>
+          <label v-for="(option, optionIndex) in field.options" :key="option" class="radio-option">
+            <input
+              type="radio"
+              :name="idPrefix + field.id + '-' + row.id"
+              :id="'answer-' + idPrefix + field.id + '-' + row.id + '-' + optionIndex"
+              :checked="selected(modelValue, field.id)[rowIndex] === option"
+              :value="option"
+              @change="matrixSelection(field, rowIndex, option)"
+            />{{ option }}
+          </label>
+          <button
+            v-if="!readonly && selected(modelValue, field.id)[rowIndex]"
+            type="button"
+            @click="matrixSelection(field, rowIndex, '')"
+          >
+            Clear {{ row.label }}
+          </button>
+        </fieldset>
+      </div>
+      <section v-else-if="field.kind === 'repeat'" :aria-label="field.label">
+        <section v-for="(instance, instanceIndex) in instances(field)" :key="instance.instanceId">
+          <h4>{{ field.label }} {{ instanceIndex + 1 }}</h4>
+          <FormDefinitionFields
+            :id-prefix="idPrefix + field.id + '-' + instance.instanceId + '-'"
+            :definition="{ ...definition, fields: field.fields || [] }"
+            :model-value="instance.answers"
+            :readonly="readonly"
+            :disabled="disabled"
+            :photos-enabled="photosEnabled"
+            :photo-previews="photoPreviews"
+            @update:model-value="updateInstance(field, instance.instanceId, $event)"
+            @upload="
+              (childId, files) => emit('upload', childId, files, field.id, instance.instanceId)
+            "
+            @view-photo="emit('viewPhoto', $event)"
+          />
+          <button
+            v-if="!readonly"
+            type="button"
+            :disabled="disabled || instances(field).length <= (field.minInstances ?? 1)"
+            @click="removeInstance(field, instance.instanceId)"
+          >
+            Remove {{ field.label }}
+          </button>
+        </section>
+        <button
+          v-if="!readonly"
+          type="button"
+          :disabled="disabled || instances(field).length >= (field.maxInstances ?? 20)"
+          @click="addInstance(field)"
+        >
+          Add another {{ field.label }}
+        </button>
+      </section>
       <Checkbox
-        v-if="field.kind === 'checkbox'"
-        :input-id="'answer-' + field.id"
+        v-else-if="field.kind === 'checkbox'"
+        :input-id="'answer-' + idPrefix + field.id"
         :model-value="modelValue[field.id] === true"
         binary
         :disabled="disabled || readonly"
@@ -121,7 +241,7 @@ function photos(id: string, event: Event) {
       <div
         v-else-if="field.kind === 'radio'"
         role="radiogroup"
-        :aria-labelledby="'label-' + field.id"
+        :aria-labelledby="'label-' + idPrefix + field.id"
         v-bind="accessibility(field, modelValue, invalidField)"
         class="radio-options"
       >
@@ -129,11 +249,11 @@ function photos(id: string, event: Event) {
           v-for="(option, optionIndex) in field.options"
           :key="option"
           class="radio-option"
-          :for="'answer-' + field.id + (optionIndex ? '-' + optionIndex : '')"
+          :for="'answer-' + idPrefix + field.id + (optionIndex ? '-' + optionIndex : '')"
         >
           <RadioButton
-            :input-id="'answer-' + field.id + (optionIndex ? '-' + optionIndex : '')"
-            :name="'answer-' + field.id"
+            :input-id="'answer-' + idPrefix + field.id + (optionIndex ? '-' + optionIndex : '')"
+            :name="'answer-' + idPrefix + field.id"
             :model-value="value(modelValue, field.id)"
             :value="option"
             :disabled="disabled || readonly"
@@ -151,7 +271,7 @@ function photos(id: string, event: Event) {
       </div>
       <MultiSelect
         v-else-if="field.kind === 'multiselect'"
-        :input-id="'answer-' + field.id"
+        :input-id="'answer-' + idPrefix + field.id"
         :model-value="selected(modelValue, field.id)"
         :options="field.options"
         :disabled="disabled || readonly"
@@ -168,14 +288,32 @@ function photos(id: string, event: Event) {
         >
       </MultiSelect>
       <textarea
+        :readonly="readonly"
+        v-else-if="field.kind === 'recipients'"
+        :id="'answer-' + idPrefix + field.id"
+        :value="selected(modelValue, field.id).join('\n')"
+        placeholder="One email address per line"
+        @input="
+          update(
+            modelValue,
+            field.id,
+            ($event.target as HTMLTextAreaElement).value
+              .split(/[\n,;]+/)
+              .map((email) => email.trim())
+              .filter(Boolean),
+          )
+        "
+      />
+      <textarea
+        :readonly="readonly"
         v-else-if="field.kind === 'textarea'"
-        :id="'answer-' + field.id"
+        :id="'answer-' + idPrefix + field.id"
         :aria-required="isFieldRequired(field, modelValue)"
         :aria-invalid="invalidField === field.id || undefined"
         :aria-describedby="
           [
-            field.hint && 'help-' + field.id,
-            field.requiredWhen && 'condition-' + field.id,
+            field.hint && 'help-' + idPrefix + field.id,
+            field.requiredWhen && 'condition-' + idPrefix + field.id,
             invalidField === field.id && 'form-validation-message',
           ]
             .filter(Boolean)
@@ -185,14 +323,15 @@ function photos(id: string, event: Event) {
         @input="set(modelValue, field.id, $event)"
       />
       <select
+        :disabled="readonly"
         v-else-if="field.kind === 'choice'"
-        :id="'answer-' + field.id"
+        :id="'answer-' + idPrefix + field.id"
         :aria-required="isFieldRequired(field, modelValue)"
         :aria-invalid="invalidField === field.id || undefined"
         :aria-describedby="
           [
-            field.hint && 'help-' + field.id,
-            field.requiredWhen && 'condition-' + field.id,
+            field.hint && 'help-' + idPrefix + field.id,
+            field.requiredWhen && 'condition-' + idPrefix + field.id,
             invalidField === field.id && 'form-validation-message',
           ]
             .filter(Boolean)
@@ -207,13 +346,13 @@ function photos(id: string, event: Event) {
       <template v-else-if="field.kind === 'photo'">
         <input
           v-if="photosEnabled && !readonly"
-          :id="'answer-' + field.id"
+          :id="'answer-' + idPrefix + field.id"
           :aria-required="isFieldRequired(field, modelValue)"
           :aria-invalid="invalidField === field.id || undefined"
           :aria-describedby="
             [
-              field.hint && 'help-' + field.id,
-              field.requiredWhen && 'condition-' + field.id,
+              field.hint && 'help-' + idPrefix + field.id,
+              field.requiredWhen && 'condition-' + idPrefix + field.id,
               invalidField === field.id && 'form-validation-message',
             ]
               .filter(Boolean)
@@ -224,20 +363,22 @@ function photos(id: string, event: Event) {
           multiple
           @change="photos(field.id, $event)"
         />
-        <p v-else>Photos stay in the authenticated form record.</p>
+        <p v-else>Photos stay in the private form record.</p>
         <p v-if="photosEnabled" class="hint">
-          Up to five photos per field, 20 per record; 2 MB per photo.
+          JPEG, PNG or WebP up to 20 MB are resized on this device before upload. Up to five photos
+          per field, 20 per record.
         </p>
       </template>
       <input
+        :readonly="readonly"
         v-else
-        :id="'answer-' + field.id"
+        :id="'answer-' + idPrefix + field.id"
         :aria-required="isFieldRequired(field, modelValue)"
         :aria-invalid="invalidField === field.id || undefined"
         :aria-describedby="
           [
-            field.hint && 'help-' + field.id,
-            field.requiredWhen && 'condition-' + field.id,
+            field.hint && 'help-' + idPrefix + field.id,
+            field.requiredWhen && 'condition-' + idPrefix + field.id,
             invalidField === field.id && 'form-validation-message',
           ]
             .filter(Boolean)

@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.formWorkspace = exports.formTemplates = exports.websiteFormAdmin = exports.deliverWebsiteFormEmail = exports.submitWebsiteForm = exports.dashboardWorkspace = exports.websiteImage = exports.getPublishedWebsite = exports.websiteBuilder = exports.sendNewJobNotification = exports.sendFieldUserAssignmentNotification = exports.updateJobRecordCallable = exports.listVisibleJobsForCurrentUser = exports.getVisibleJobForCurrentUser = exports.createJobRecordCallable = exports.updateShopOrderRecordCallable = exports.listShopOrdersForCurrentUser = exports.deleteShopOrderRecordCallable = exports.createShopOrderRecordCallable = exports.getPublicDailyLogGallery = exports.updateDailyLogRecordCallable = exports.listDailyLogsForCurrentUser = exports.deleteDailyLogRecordCallable = exports.createDailyLogRecordCallable = exports.updateTimecardCardRecord = exports.submitTimecardWeekRecord = exports.reopenTimecardWeekRecord = exports.listTimecardWeeksForCurrentUser = exports.listTimecardCardsForCurrentUser = exports.ensureTimecardWeekRecord = exports.deleteTimecardWeekRecord = exports.deleteTimecardCardRecord = exports.createTimecardCardRecord = exports.notifySecretExpiration = exports.verifySetupToken = exports.setUserPassword = exports.sendUserPasswordResetByAdmin = exports.sendPendingUserInvites = exports.resendUserInviteByAdmin = exports.requestPasswordResetEmail = exports.removeEmailFromAllRecipientLists = exports.listAssignableFieldUsers = exports.handleUserAccessRevocationCleanup = exports.deleteUser = exports.createUserByAdmin = exports.downloadSdsFile = exports.generateSdsBook = exports.sdsWorkspace = exports.sendShopOrderEmail = exports.sendDailyLogEmail = void 0;
-exports.sharedDashboardWorkspace = exports.formSubmissionViewer = exports.deliverFormEmail = exports.formEmail = void 0;
+exports.scopedIntegrationApi = exports.formEntries = exports.sharedDashboardWorkspace = exports.formSubmissionViewer = exports.deliverFormEmail = exports.formEmail = void 0;
 var operationsFunctions_1 = require("./operationsFunctions");
 Object.defineProperty(exports, "sendDailyLogEmail", { enumerable: true, get: function () { return operationsFunctions_1.sendDailyLogEmail; } });
 Object.defineProperty(exports, "sendShopOrderEmail", { enumerable: true, get: function () { return operationsFunctions_1.sendShopOrderEmail; } });
@@ -74,4 +74,8 @@ var formSubmissionViewer_1 = require("./formSubmissionViewer");
 Object.defineProperty(exports, "formSubmissionViewer", { enumerable: true, get: function () { return formSubmissionViewer_1.formSubmissionViewer; } });
 var sharedDashboardFunctions_1 = require("./sharedDashboardFunctions");
 Object.defineProperty(exports, "sharedDashboardWorkspace", { enumerable: true, get: function () { return sharedDashboardFunctions_1.sharedDashboardWorkspace; } });
+var formEntries_1 = require("./formEntries");
+Object.defineProperty(exports, "formEntries", { enumerable: true, get: function () { return formEntries_1.formEntries; } });
+var integrationApi_1 = require("./integrationApi");
+Object.defineProperty(exports, "scopedIntegrationApi", { enumerable: true, get: function () { return integrationApi_1.scopedIntegrationApi; } });
 //# sourceMappingURL=index.js.map

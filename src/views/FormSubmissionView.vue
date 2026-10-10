@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { formApi } from '@/services/forms'
-import {
-  formAnswerSummary,
-  type FormAnswers,
-  type FormVersion,
-} from '../../functions/src/formModel'
+import { completedAnswers } from '@/features/forms/completedAnswers'
+import { type FormAnswers, type FormVersion } from '../../functions/src/formModel'
 const route = useRoute(),
   auth = useAuthStore(),
   record = ref<{
@@ -27,7 +24,12 @@ const route = useRoute(),
 let generation = 0
 const activeField = ref(''),
   activeIndex = ref(0)
-const activePhotos = computed(() => (record.value?.answers[activeField.value] as string[]) || [])
+const rows = computed(() =>
+  record.value ? completedAnswers(record.value.definition.fields, record.value.answers) : [],
+)
+const activePhotos = computed(
+  () => rows.value.find((row) => row.key === activeField.value)?.photos || [],
+)
 const id = computed(() => String(route.params.id || ''))
 async function load() {
   const current = ++generation
@@ -42,7 +44,13 @@ async function load() {
       action: 'get',
       id: id.value,
     })
-    if (current === generation) record.value = next
+    if (current === generation) {
+      record.value = next
+      await nextTick()
+      if (route.hash.startsWith('#label-')) {
+        try { document.getElementById(decodeURIComponent(route.hash.slice(1)))?.scrollIntoView() } catch { /* malformed links do not affect private entry loading */ }
+      }
+    }
   } catch (caught) {
     if (current === generation) error.value = (caught as Error).message
   } finally {
@@ -82,13 +90,36 @@ async function stepPhoto(delta: number) {
   if (id)
     await viewPhoto(
       id,
-      (record.value?.definition.fields.find((field) => field.id === activeField.value)?.label ||
-        'Photo') +
+      (rows.value.find((row) => row.key === activeField.value)?.label || 'Photo') +
         ' ' +
         (index + 1),
       activeField.value,
       index,
     )
+}
+async function downloadPdf(language?: 'en') {
+  busy.value = true
+  error.value = ''
+  try {
+    const result = await formApi<{ base64: string; contentType: string; filename: string }>(
+      'formSubmissionViewer',
+      { action: 'pdf', id: id.value, ...(language ? { language } : {}) },
+    )
+    const url = URL.createObjectURL(
+      new Blob([Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0))], {
+        type: result.contentType,
+      }),
+    )
+    const link = document.createElement('a')
+    link.href = url
+    link.download = result.filename
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (caught) {
+    error.value = (caught as Error).message
+  } finally {
+    busy.value = false
+  }
 }
 watch(id, load, { immediate: true })
 </script>
@@ -108,37 +139,21 @@ watch(id, load, { immediate: true })
         Submitted version {{ record.templateVersion }} ·
         {{ new Date(record.submittedAt).toLocaleString() }}
       </p>
-      <section
-        v-for="(field, index) in record.definition.fields"
-        :id="'label-' + field.id"
-        :key="field.id"
-      >
-        <h2 v-if="field.section && record.definition.fields[index - 1]?.section !== field.section">
-          {{ field.section }}
-        </h2>
-        <h3>{{ field.label }}</h3>
-        <p v-if="field.hint">{{ field.hint }}</p>
-        <template v-if="field.kind === 'photo'"
-          ><p>
-            {{
-              Array.isArray(record.answers[field.id])
-                ? (record.answers[field.id] as string[]).length
-                : 0
-            }}
-            photos
-          </p>
-          <button
-            v-for="(assetId, photoIndex) in record.answers[field.id] as string[]"
-            :key="assetId"
-            :disabled="busy"
-            @click="viewPhoto(assetId, field.label + ' ' + (photoIndex + 1), field.id, photoIndex)"
-          >
-            View {{ field.label }} {{ photoIndex + 1 }}
-          </button></template
+      <button :disabled="busy" @click="downloadPdf()">Download original PDF with photos</button>
+      <section v-for="(row, index) in rows" :id="'label-' + row.key" :key="row.key">
+        <h2 v-if="row.group && rows[index - 1]?.group !== row.group">{{ row.group }}</h2>
+        <h3>{{ row.label }}</h3>
+        <p class="answer">{{ row.value }}</p>
+        <button
+          v-for="(assetId, photoIndex) in row.photos"
+          :key="assetId"
+          :disabled="busy"
+          @click="viewPhoto(assetId, row.label + ' ' + (photoIndex + 1), row.key, photoIndex)"
         >
-        <p v-else class="answer">{{ formAnswerSummary(field, record.answers[field.id]) }}</p>
+          View {{ row.label }} {{ photoIndex + 1 }}
+        </button>
       </section>
-      <p>Sign in as the record owner or Admin to view this submission and its photos.</p>
+      <p>Entry and photo access is checked for every private view and download.</p>
     </article>
     <dialog
       ref="dialog"

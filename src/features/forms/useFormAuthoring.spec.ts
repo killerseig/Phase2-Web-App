@@ -3,6 +3,47 @@ import { effectScope, nextTick, ref } from 'vue'
 import { committeeAudit, newField, newTemplate, type FormTemplate } from './model'
 import { useFormAuthoring } from './useFormAuthoring'
 describe('form authoring history', () => {
+  it('undo removes introduced optional policies and redo restores them without changing identity or versions', async () => {
+    const scope = effectScope(),
+      draft = ref<FormTemplate>(newTemplate()),
+      dirty = ref(false)
+    const id = draft.value.id
+    draft.value.versions = [
+      {
+        title: 'Original',
+        description: '',
+        recipients: [],
+        fields: [newField('text')],
+        version: 1,
+        createdAt: '2026-10-08',
+      },
+    ]
+    const versions = JSON.stringify(draft.value.versions)
+    const history = scope.run(() => useFormAuthoring(draft, dirty))!
+    history.reset()
+    draft.value.recipientGroups = ['job-foremen']
+    draft.value.access = {
+      respondents: 'public',
+      identity: 'form-fields',
+      respondentUserIds: [],
+      respondentRoles: [],
+      entryUserIds: [],
+      entryRoles: [],
+    }
+    await nextTick()
+    history.undo()
+    await nextTick()
+    expect(draft.value.recipientGroups).toBeUndefined()
+    expect(draft.value.access).toBeUndefined()
+    expect(dirty.value).toBe(false)
+    history.redo()
+    await nextTick()
+    expect(draft.value.recipientGroups).toEqual(['job-foremen'])
+    expect(draft.value.access?.respondents).toBe('public')
+    expect(draft.value.id).toBe(id)
+    expect(JSON.stringify(draft.value.versions)).toBe(versions)
+    scope.stop()
+  })
   it('undo/redo restores deleted selection and properties without rewriting retained versions', async () => {
     const scope = effectScope(),
       draft = ref<FormTemplate>(committeeAudit()),

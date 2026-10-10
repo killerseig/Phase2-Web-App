@@ -23,6 +23,11 @@ export declare const formTemplates: import("firebase-functions/v2/https").Callab
     latestVersion?: undefined;
     revision?: undefined;
 } | {
+    id: string;
+    latestVersion: any;
+    definition: FormVersion;
+    templates?: undefined;
+} | {
     templates: ({
         definition?: FormVersion | undefined;
         id: string;
@@ -32,6 +37,9 @@ export declare const formTemplates: import("firebase-functions/v2/https").Callab
         definition: FormVersion;
         latestVersion: any;
     })[];
+    id?: undefined;
+    latestVersion?: undefined;
+    definition?: undefined;
 }>, unknown>;
 export declare const formWorkspace: import("firebase-functions/v2/https").CallableFunction<any, Promise<FormRecord | {
     records: (FormRecord | undefined)[];

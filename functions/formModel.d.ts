@@ -1,4 +1,5 @@
-export type FormFieldKind = 'text' | 'textarea' | 'email' | 'phone' | 'time' | 'date' | 'number' | 'choice' | 'checkbox' | 'radio' | 'multiselect' | 'photo';
+import { type FormAccessPolicy } from './formAccess';
+export type FormFieldKind = 'text' | 'textarea' | 'email' | 'phone' | 'time' | 'date' | 'number' | 'choice' | 'checkbox' | 'radio' | 'multiselect' | 'photo' | 'repeat' | 'recipients' | 'matrix';
 export interface FormField {
     id: string;
     kind: FormFieldKind;
@@ -9,6 +10,13 @@ export interface FormField {
     hint?: string;
     minimum?: number;
     integer?: boolean;
+    rows?: {
+        id: string;
+        label: string;
+    }[];
+    fields?: FormField[];
+    minInstances?: number;
+    maxInstances?: number;
     requiredWhen?: {
         fieldId: string;
         values: string[];
@@ -20,6 +28,8 @@ export interface FormOutputSettings {
     template: string;
 }
 export interface FormDefinition {
+    recipientGroups?: ('job-foremen' | 'job-project-managers' | 'job-everyone')[];
+    access?: FormAccessPolicy;
     output?: FormOutputSettings;
     title: string;
     description: string;
@@ -30,8 +40,19 @@ export interface FormVersion extends FormDefinition {
     version: number;
     createdAt: string;
 }
-export type FormAnswers = Record<string, string | number | boolean | string[]>;
+export interface FormGroupInstance {
+    instanceId: string;
+    answers: FormAnswers;
+}
+export type FormAnswers = Record<string, string | number | boolean | string[] | FormGroupInstance[]>;
 export interface FormRecord {
+    /** Receipt count only; never exposes Admin notification addresses. */
+    recipientExclusionCount?: number;
+    /** Self-reported public contact; not verified account identity. */
+    respondentIdentity?: {
+        name: string;
+        email: string;
+    };
     /** Optional immutable job context for the new shared job dashboard. */
     jobId?: string;
     id: string;
@@ -56,4 +77,5 @@ export declare function validateFormAnswers(definition: FormDefinition, value: u
 export declare function attachedPhotoCount(definition: FormDefinition, answers: FormAnswers): number;
 export declare function formAnswerSummary(field: FormField, value: FormAnswers[string] | undefined): string;
 export declare function respondentDefinition(definition: FormVersion): FormVersion;
+export declare function photoAnswerIds(definition: FormDefinition, answers: FormAnswers): string[];
 //# sourceMappingURL=formModel.d.ts.map

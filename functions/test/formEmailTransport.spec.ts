@@ -123,6 +123,7 @@ describe('Forms output through the unchanged Graph transport', () => {
   it('retains the optional PDF and replaces oversized inline images with viewer links before transport', async () => {
     const { prepareFormEmail, fitFormEmailPayload } = await import('../src/formEmailContent'),
       { sendEmail } = await import('../src/emailService')
+    const image = await (await import('sharp')).default({ create: { width: 20, height: 20, channels: 3, background: '#2470aa' } }).webp().toBuffer()
     const prepared = await prepareFormEmail(
       {
         ...record,
@@ -133,15 +134,13 @@ describe('Forms output through the unchanged Graph transport', () => {
       },
       ['recipient@example.com'],
       {
-        loadAsset: async () => undefined,
-        download: async () => {
-          throw new Error('No photo download')
-        },
+        loadAsset: async (id) => ({ recordId: record.id, ownerUid: record.ownerUid, fieldId: 'photos', path: 'form-photos/' + record.id + '/' + id + '.webp' }),
+        download: async () => image,
         ownerEmail: async () => undefined,
         appBaseUrl: () => 'http://127.0.0.1:5173',
       },
     )
-    const pdf = prepared.attachments![0]!
+    const pdf = prepared.attachments!.find(attachment => attachment.contentType === 'application/pdf')!
     const fitted = fitFormEmailPayload({
       ...prepared,
       html: prepared.html + '<img src="cid:large"/>',

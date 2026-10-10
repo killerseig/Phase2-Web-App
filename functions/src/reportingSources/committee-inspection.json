@@ -1,0 +1,197 @@
+{
+  "title": "Site Audit for Committee Members",
+  "company": "Phase 2 Company",
+  "source": {
+    "name": "Committee audit form.docx",
+    "bytes": 17226,
+    "sha256": "a1ba7c1d3b4e25483bc839eab55d1acdd0b00bf44338f92b0a0068ce0cc11315",
+    "render_pages": 1,
+    "visual_review": "complete; source unchanged",
+    "comments": false,
+    "tracked_changes": false
+  },
+  "status": "Minimal REVIEW definition with explicit prior corrections applied; no live import or publication",
+  "fields_in_order": [
+    {
+      "source_paragraph": 1,
+      "label": "Date of Inspection",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 2,
+      "label": "Job Name",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 4,
+      "label": "PM",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 5,
+      "label": "Site Foreman",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 6,
+      "label": "Site Safety assistant",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 8,
+      "label": "# of personnel",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 9,
+      "label": "# of absent",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 10,
+      "label": "Current Cord Color",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 13,
+      "label": "Medical kit and trauma kit",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 15,
+      "label": "First Impression:",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 18,
+      "label": "Site Office: (secure, posters, notices, first aid kit, trauma bag, eye wash, cord test kit, fire extinguisher signed, spill kit)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 21,
+      "label": "Housekeeping: (material stacked and orderly, cleanup decent, waste disposal, fuel and solvent storage, Toilets, Parking lot, site signage and restricted access zones maintained and current)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 24,
+      "label": "PPE: (hard hats, helmets, eye protection, ear protection, gloves, boots, face shields, respirators, sleeves, extra properly stored)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 27,
+      "label": "Ladders: (clean, used as designed, appropriate size, 4-1 rule, extend 3 ‘past landings, tied off securely)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 30,
+      "label": "Electrical: (cord check done, no light gauge or garbage cords, no illegal plug ends, cords hung, GFCI’s as needed, colors in order green purple red yellow)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 33,
+      "label": "Stilts, Walkups: (maintained, good rubber foot pads, no deformities, all parts tight, employee wearing helmet)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 36,
+      "label": "Scaffolds, Lifts: (Signed off by safety assistant and user daily or tagged out, assembled according to P2 guidelines, wheels locked)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 40,
+      "label": "Fall Protection: Properly hung and stored, all employees trained and comfortable with equipment on site, floor and wall openings covered legally or barricaded)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 44,
+      "label": "General attitude on site: (would you like working there)",
+      "type": "textarea",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 52,
+      "label": "Signature",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "source_paragraph": 54,
+      "label": "Date",
+      "type": "text",
+      "required": false,
+      "required_basis": "No mandatory answer rule added; source does not specify it."
+    },
+    {
+      "id": "photos",
+      "label": "Photos",
+      "type": "photo",
+      "multiple": true,
+      "required": false,
+      "basis": "Explicit user photo-attachment request"
+    }
+  ],
+  "applied_corrections": [
+    {
+      "removed": "Job #",
+      "basis": "Explicit earlier user correction: no job numbers line."
+    },
+    {
+      "removed": "Cord Check Complete",
+      "kept": "Electrical: original full wording and comment field",
+      "basis": "Explicit earlier user correction: eliminate duplicate cord-check questions."
+    },
+    {
+      "removed": "Scaffold’s Scissors Booms tagged",
+      "kept": "Scaffolds, Lifts: original full wording and comment field",
+      "basis": "Explicit earlier user correction: eliminate duplicate scaffold/lift/tag questions."
+    }
+  ],
+  "preserved_distinctions": [
+    "Site Safety assistant retained exactly from latest DOCX; it is not Site superintendent.",
+    "Current Cord Color retained as the original specific color entry; no new choice list.",
+    "Medical kit and trauma kit retained as one original entry.",
+    "General attitude on site retained exactly; no Overall condition or Findings fields.",
+    "Original Signature and Date remain blank user-completed fields; no prefill or automatic signing."
+  ],
+  "rating_fields": "None. Latest DOCX has open comment lines, not rating choices.",
+  "publication_gate": "No actual respondent URL or photo persistence verified; web form remains unissued/unpublished.",
+  "respondent_url": null
+}

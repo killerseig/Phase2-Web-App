@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.formWorkspace = exports.formTemplates = void 0;
 const formOutputTemplate_1 = require("./formOutputTemplate");
+const formAccess_1 = require("./formAccess");
+const formRecipients_1 = require("./formRecipients");
 const node_crypto_1 = require("node:crypto");
 const https_1 = require("firebase-functions/v2/https");
 const sharp_1 = __importDefault(require("sharp"));
@@ -63,15 +65,81 @@ function allowedRecord(record, profile, write = false) {
         fail('permission-denied', 'This form record belongs to another user.');
     return record;
 }
+function photoSlots(record, answers = record.answers) {
+    return record.definition.fields.flatMap((field) => {
+        if (field.kind === 'photo')
+            return (answers[field.id] || []).map((assetId) => ({
+                assetId,
+                fieldId: field.id,
+                groupId: '',
+                instanceId: '',
+            }));
+        if (field.kind !== 'repeat')
+            return [];
+        return (answers[field.id] || []).flatMap((instance) => (field.fields || [])
+            .filter((child) => child.kind === 'photo')
+            .flatMap((child) => (instance.answers[child.id] || []).map((assetId) => ({
+            assetId,
+            fieldId: child.id,
+            groupId: field.id,
+            instanceId: instance.instanceId,
+        }))));
+    });
+}
+function photoTarget(record, data) {
+    const group = data.groupId
+        ? record.definition.fields.find((field) => field.id === data.groupId && field.kind === 'repeat')
+        : undefined;
+    const instance = group
+        ? (record.answers[group.id] || []).find((item) => item.instanceId === data.instanceId)
+        : undefined;
+    const field = (group ? group.fields : record.definition.fields)?.find((item) => item.id === data.fieldId && item.kind === 'photo');
+    if (!field || (data.groupId && !instance))
+        fail('failed-precondition', 'Choose a saved photo field and site instance.');
+    return { group, instance, field, answers: instance ? instance.answers : record.answers };
+}
 async function output(record) {
     const delivery = await runtime_1.db.doc('formDeliveries/' + record.id).get();
+    const safe = { ...record };
+    delete safe.publicCapabilityHash;
+    delete safe.publicExpiresAt;
+    delete safe.publicRecipientConsents;
     return {
-        ...record,
+        ...safe,
         definition: (0, formModel_1.respondentDefinition)(record.definition),
         emailStatus: delivery.data()?.status || 'not-submitted',
     };
 }
 exports.formTemplates = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 60 }, async (request) => {
+    const incoming = payload(request.data || {});
+    if (incoming.action === 'respondent') {
+        const id = validId(incoming.id), snapshot = await templates.doc(id).get(), stored = snapshot.data();
+        if (!stored || stored.archived || !stored.latestVersion)
+            fail('not-found', 'This form is unavailable.');
+        const version = incoming.version === undefined ? stored.latestVersion : incoming.version;
+        if (!Number.isSafeInteger(version) || Number(version) < 1)
+            fail('invalid-argument', 'Invalid form version.');
+        const issued = await snapshot.ref
+            .collection('versions')
+            .doc('v' + version)
+            .get();
+        if (!issued.exists)
+            fail('not-found', 'This form version is unavailable.');
+        const definition = issued.data();
+        const current = version === stored.latestVersion
+            ? issued
+            : await snapshot.ref
+                .collection('versions')
+                .doc('v' + stored.latestVersion)
+                .get();
+        const access = current.data()?.access;
+        const profile = (0, formAccess_1.validateFormAccess)(access).respondents === 'signed-in' && request.auth?.uid
+            ? await user(request.auth.uid)
+            : undefined;
+        if (!(0, formAccess_1.canSubmitForm)(access, profile) || !(0, formAccess_1.canSubmitForm)(definition.access, profile))
+            throw new https_1.HttpsError('unauthenticated', 'Sign in to complete this form.');
+        return { id, latestVersion: version, definition: (0, formModel_1.respondentDefinition)(definition) };
+    }
     const profile = await user(request.auth?.uid), data = payload(request.data || {});
     if (data.action === 'list') {
         const docs = (await templates.limit(100).get()).docs;
@@ -88,9 +156,7 @@ exports.formTemplates = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
                 list.push({
                     id: doc.id,
                     ...stored,
-                    ...(issued?.exists
-                        ? { definition: (0, formModel_1.respondentDefinition)(issued.data()) }
-                        : {}),
+                    ...(issued?.exists ? { definition: issued.data() } : {}),
                 });
             }
             else if (!stored.archived && stored.latestVersion) {
@@ -213,7 +279,40 @@ async function authorizedFormJob(profile, value) {
     return jobId;
 }
 exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 60, maxInstances: 10 }, async (request) => {
-    const profile = await user(request.auth?.uid), data = payload(request.data || {});
+    const data = payload(request.data || {});
+    const capability = typeof data.publicCapability === 'string' && /^[a-f0-9]{64}$/.test(data.publicCapability)
+        ? data.publicCapability
+        : '';
+    let profile;
+    if (capability) {
+        if (data.dashboardJobId !== undefined)
+            fail('permission-denied', 'Public forms cannot select private job context.');
+        profile = {
+            uid: 'public-' + hash(capability),
+            role: 'none',
+            active: true,
+            assignedJobIds: [],
+            displayName: null,
+        };
+        if (data.action !== 'create') {
+            const saved = (await records.doc(validId(data.id)).get()).data();
+            if (!saved ||
+                saved.publicCapabilityHash !== hash(capability) ||
+                saved.publicExpiresAt < Date.now())
+                fail('permission-denied', 'This form session expired. Start a new response.');
+            const active = await templates.doc(saved.templateId).get();
+            if (!active.exists || active.data()?.archived)
+                fail('failed-precondition', 'This form is no longer accepting responses.');
+            const latest = await active.ref
+                .collection('versions')
+                .doc('v' + active.data()?.latestVersion)
+                .get();
+            if ((0, formAccess_1.validateFormAccess)(latest.data()?.access).respondents !== 'public')
+                fail('permission-denied', 'This form now requires sign in.');
+        }
+    }
+    else
+        profile = await user(request.auth?.uid);
     const dashboardJobId = await authorizedFormJob(profile, data.dashboardJobId);
     if (data.action === 'list') {
         const docs = await records.where('ownerUid', '==', profile.uid).limit(100).get();
@@ -254,6 +353,38 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
             if (!current.exists || current.data()?.archived || !issued.exists)
                 fail('failed-precondition', 'This form version is not available for new drafts.');
             const definition = issued.data(), now = Date.now();
+            const liveVersion = current.data()?.latestVersion === data.version
+                ? issued
+                : await tx.get(template.collection('versions').doc('v' + current.data()?.latestVersion));
+            if (!liveVersion.exists ||
+                !(0, formAccess_1.canSubmitForm)(liveVersion.data()?.access, capability ? undefined : profile))
+                fail('permission-denied', 'This form audience changed. Open the current form link.');
+            if (!(0, formAccess_1.canSubmitForm)(definition.access, capability ? undefined : profile))
+                fail('permission-denied', 'You cannot complete this form.');
+            if (capability && (0, formAccess_1.validateFormAccess)(definition.access).respondents !== 'public')
+                fail('permission-denied', 'This form requires sign in.');
+            let respondentIdentity;
+            if (capability && (0, formAccess_1.validateFormAccess)(definition.access).identity === 'identified') {
+                const identity = payload(data.respondentIdentity);
+                const name = typeof identity.name === 'string' ? identity.name.trim() : '';
+                const email = typeof identity.email === 'string' ? identity.email.trim().toLowerCase() : '';
+                if (!name ||
+                    name.length > 160 ||
+                    email.length > 254 ||
+                    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+                    fail('invalid-argument', 'Enter your name and email address. These contact details are self-reported, not verified.');
+                respondentIdentity = { name, email };
+            }
+            if (capability) {
+                const bucket = runtime_1.db.doc('formPublicRateLimits/' +
+                    hash(request.rawRequest?.ip || 'unknown') +
+                    '-' +
+                    Math.floor(now / 3600000));
+                const usage = await tx.get(bucket);
+                if (Number(usage.data()?.count || 0) >= 20)
+                    throw new https_1.HttpsError('resource-exhausted', 'Too many form starts. Try later.');
+                tx.set(bucket, { count: Number(usage.data()?.count || 0) + 1, expiresAt: now + 7200000 });
+            }
             const record = {
                 id,
                 ownerUid: profile.uid,
@@ -266,6 +397,10 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
                 status: 'draft',
                 createdAt: now,
                 updatedAt: now,
+                ...(capability
+                    ? { publicCapabilityHash: hash(capability), publicExpiresAt: now + 4 * 3600000 }
+                    : {}),
+                ...(respondentIdentity ? { respondentIdentity } : {}),
             };
             tx.create(ref, record);
             tx.update(template, { used: true });
@@ -284,21 +419,28 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
     if (data.action === 'photo') {
         const record = allowedRecord((await ref.get()).data(), profile);
         const assetId = validId(data.assetId);
-        if (!record.definition.fields.some((field) => field.kind === 'photo' &&
-            Array.isArray(record.answers[field.id]) &&
-            record.answers[field.id].includes(assetId)))
+        if (!photoSlots(record).some((photo) => photo.assetId === assetId))
             fail('permission-denied', 'This photo is not attached to this record.');
         const asset = (await assets.doc(assetId).get()).data();
-        if (!asset || asset.recordId !== id)
+        const slot = photoSlots(record).find((photo) => photo.assetId === assetId);
+        if (!asset ||
+            asset.recordId !== id ||
+            asset.ownerUid !== record.ownerUid ||
+            asset.path !== 'form-photos/' + id + '/' + assetId + '.webp' ||
+            !slot ||
+            asset.fieldId !== slot.fieldId ||
+            (asset.groupId || '') !== slot.groupId ||
+            (asset.instanceId || '') !== slot.instanceId)
             fail('not-found', 'Photo not found.');
         const [bytes] = await runtime_1.storageBucket.file(asset.path).download();
+        if (bytes.length > 2 * 1024 * 1024)
+            fail('failed-precondition', 'This photo exceeds the view limit.');
         return { base64: bytes.toString('base64'), contentType: 'image/webp' };
     }
     if (data.action === 'upload') {
         const record = allowedRecord((await ref.get()).data(), profile, true);
         revision(record.revision, data.revision);
-        if (record.status !== 'draft' ||
-            !record.definition.fields.some((field) => field.id === data.fieldId && field.kind === 'photo'))
+        if (record.status !== 'draft')
             fail('failed-precondition', 'Photos can be attached only to photo fields on your draft.');
         if (typeof data.base64 !== 'string' ||
             !/^[A-Za-z0-9+/]+={0,2}$/.test(data.base64) ||
@@ -318,6 +460,7 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
         catch {
             fail('invalid-argument', 'This image could not be read.');
         }
+        photoTarget(record, data);
         const assetId = (0, node_crypto_1.randomUUID)(), path = 'form-photos/' + id + '/' + assetId + '.webp', file = runtime_1.storageBucket.file(path);
         await file.save(bytes, {
             contentType: 'image/webp',
@@ -332,7 +475,8 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
                 revision(current.revision, data.revision);
                 if (current.status !== 'draft')
                     fail('failed-precondition', 'Submitted photos cannot be changed.');
-                const list = current.answers[String(data.fieldId)];
+                const target = photoTarget(current, data);
+                const list = target.answers[String(data.fieldId)];
                 if (list.length >= 5 ||
                     (0, formModel_1.attachedPhotoCount)(current.definition, current.answers) >= 20 ||
                     Number(current.uploadedCount || 0) >= 40)
@@ -340,11 +484,27 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
                 tx.create(assets.doc(assetId), {
                     recordId: id,
                     fieldId: data.fieldId,
+                    ...(target.group
+                        ? { groupId: target.group.id, instanceId: target.instance.instanceId }
+                        : {}),
                     path,
                     ownerUid: profile.uid,
                 });
                 tx.update(ref, {
-                    answers: { ...current.answers, [String(data.fieldId)]: [...list, assetId] },
+                    answers: target.group
+                        ? {
+                            ...current.answers,
+                            [target.group.id]: current.answers[target.group.id].map((instance) => instance.instanceId === target.instance.instanceId
+                                ? {
+                                    ...instance,
+                                    answers: {
+                                        ...instance.answers,
+                                        [String(data.fieldId)]: [...list, assetId],
+                                    },
+                                }
+                                : instance),
+                        }
+                        : { ...current.answers, [String(data.fieldId)]: [...list, assetId] },
                     revision: current.revision + 1,
                     updatedAt: Date.now(),
                     uploadedCount: Number(current.uploadedCount || 0) + 1,
@@ -357,6 +517,29 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
         }
         return output((await ref.get()).data());
     }
+    const pendingRecord = (await ref.get()).data();
+    const consents = data.action === 'submit' && capability && pendingRecord
+        ? await (0, formRecipients_1.publicRecipientConsentSnapshot)(runtime_1.db, pendingRecord.id)
+        : [];
+    const submissionRecipients = data.action === 'submit' && pendingRecord
+        ? await (0, formRecipients_1.resolveFormSubmissionRecipients)(runtime_1.db, pendingRecord.definition, pendingRecord.answers, pendingRecord.jobId, {
+            publicRespondent: !!capability,
+            verifiedEmails: consents.map((proof) => proof.email),
+        })
+        : [];
+    function enteredAddresses(fields, answers) {
+        return fields.flatMap((field) => field.kind === 'recipients'
+            ? (answers[field.id] || [])
+            : field.kind === 'repeat'
+                ? (answers[field.id] || []).flatMap((instance) => enteredAddresses(field.fields || [], instance.answers))
+                : []);
+    }
+    const publicRecipientConsents = consents.filter((proof) => submissionRecipients.includes(proof.email));
+    const recipientExclusionCount = capability && pendingRecord
+        ? [
+            ...new Set(enteredAddresses(pendingRecord.definition.fields, pendingRecord.answers).map((email) => email.trim().toLowerCase())),
+        ].filter((email) => !submissionRecipients.includes(email)).length
+        : 0;
     const record = await runtime_1.db.runTransaction(async (tx) => {
         const current = allowedRecord((await tx.get(ref)).data(), profile, true);
         if (!requestId(data.requestId))
@@ -378,9 +561,7 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
             return current;
         }
         revision(current.revision, data.revision);
-        const photos = current.definition.fields
-            .filter((field) => field.kind === 'photo')
-            .flatMap((field) => answers[field.id].map((assetId) => ({ assetId, fieldId: field.id })));
+        const photos = photoSlots(current, answers);
         const snapshots = photos.length
             ? await tx.getAll(...photos.map((photo) => assets.doc(photo.assetId)))
             : [];
@@ -389,6 +570,8 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
             if (!photo ||
                 photo.recordId !== id ||
                 photo.fieldId !== photos[index].fieldId ||
+                (photo.groupId || '') !== photos[index].groupId ||
+                (photo.instanceId || '') !== photos[index].instanceId ||
                 photo.ownerUid !== profile.uid)
                 fail('permission-denied', 'A photo belongs to another form record.');
         });
@@ -415,12 +598,14 @@ exports.formWorkspace = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 
             updatedAt: now,
             submittedAt: now,
             submissionRequestId: data.requestId,
+            ...(capability ? { publicRecipientConsents, recipientExclusionCount } : {}),
         };
         tx.create(runtime_1.db.doc('formSubmissions/' + id), next);
         tx.create(runtime_1.db.doc('formDeliveries/' + id), {
             submissionId: id,
-            recipients: current.definition.recipients,
-            status: current.definition.recipients.length ? 'queued' : 'not-configured',
+            recipients: submissionRecipients,
+            ...(capability ? { publicRecipientConsents, recipientExclusionCount } : {}),
+            status: submissionRecipients.length ? 'queued' : 'not-configured',
             attempts: 0,
             updatedAt: now,
         });

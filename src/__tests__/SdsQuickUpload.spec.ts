@@ -1,7 +1,7 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SdsExplorerModule from '@/components/dashboard/SdsExplorerModule.vue'
-import { loadSds, sdsCommand, uploadDocument } from '@/services/sds'
+import { loadSds, loadSdsPage, sdsCommand, uploadDocument } from '@/services/sds'
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ rawRole: 'admin', currentUser: { uid: 'admin' } }),
@@ -13,6 +13,8 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('@/services/sds', () => ({
   loadSds: vi.fn(),
+  loadSdsPage: vi.fn(),
+  preflightSdsImport: vi.fn(),
   sdsCommand: vi.fn(),
   uploadDocument: vi.fn(),
   sdsErrorMessage: (error: Error) => error.message,
@@ -47,6 +49,12 @@ describe('direct document upload', () => {
       sheets: [],
       binder: { version: 0, selections: [] },
     })
+    vi.mocked(loadSdsPage).mockImplementation(async () => ({
+      sheets: (await loadSds()).sheets,
+      after: '',
+      scanned: 0,
+      searchMode: 'bounded-metadata-scan',
+    }))
     vi.mocked(uploadDocument).mockResolvedValue({
       uploadId,
       uploadExtension: 'pdf',

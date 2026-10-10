@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FormEmailPreparationError = exports.buildFormEmailText = exports.buildFormEmailHtml = void 0;
+exports.prepareFormPdfPhotos = prepareFormPdfPhotos;
 exports.prepareFormEmail = prepareFormEmail;
 exports.fitFormEmailPayload = fitFormEmailPayload;
 const formSubmissionPdf_1 = require("./formSubmissionPdf");
@@ -16,6 +17,8 @@ const functionConfig_1 = require("./functionConfig");
 const emailService_1 = require("./emailService");
 const constants_1 = require("./constants");
 const sharp_1 = __importDefault(require("sharp"));
+const formTranslationService_1 = require("./formTranslationService");
+const formTranslationEmail_1 = require("./formTranslationEmail");
 const dailyLogEmailPhotos_1 = require("./dailyLogEmailPhotos");
 class FormEmailPreparationError extends Error {
     constructor(message) {
@@ -25,6 +28,7 @@ class FormEmailPreparationError extends Error {
 }
 exports.FormEmailPreparationError = FormEmailPreparationError;
 const defaults = {
+    translate: formTranslationService_1.prepareFormTranslation,
     loadAsset: async (id) => (await runtime_1.db.doc('formAssets/' + id).get()).data(),
     download: async (path, maxBytes) => {
         const file = runtime_1.storageBucket.file(path);
@@ -40,9 +44,18 @@ const defaults = {
     appBaseUrl: () => process.env.FIRESTORE_EMULATOR_HOST ? 'http://127.0.0.1:5173' : (0, functionConfig_1.getAppBaseUrl)(),
 };
 // Match the existing Daily Log encoder without changing its source or behavior.
-function photoIds(record, fieldId) {
-    const value = record.answers[fieldId];
-    return Array.isArray(value) ? value : [];
+function photoIds(answers, fieldId) {
+    const value = answers[fieldId];
+    return Array.isArray(value)
+        ? value.filter((item) => typeof item === 'string')
+        : [];
+}
+function photoFields(fields, answers, groupId, instanceId) {
+    return fields.flatMap((field) => field.kind === 'repeat'
+        ? (answers[field.id] || []).flatMap((instance) => photoFields(field.fields || [], instance.answers, field.id, instance.instanceId))
+        : field.kind === 'photo'
+            ? [{ field, answers, groupId, instanceId }]
+            : []);
 }
 async function createBoundedJpeg(source, maxBytes) {
     const hardLimit = Math.min(dailyLogEmailPhotos_1.DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_BYTES, maxBytes);
@@ -80,6 +93,43 @@ async function createBoundedJpeg(source, maxBytes) {
     }
     return smallest && smallest.length <= hardLimit ? smallest : null;
 }
+/** PDF attachments include every submitted photo, independent of capped HTML thumbnails. */
+async function prepareFormPdfPhotos(record, deps) {
+    const result = [];
+    for (const { field, answers, groupId, instanceId } of photoFields(record.definition.fields, record.answers)) {
+        for (const id of photoIds(answers, field.id)) {
+            if (result.length >= 20 || !/^[A-Za-z0-9_-]{1,128}$/.test(id))
+                throw new FormEmailPreparationError('The complete photo PDF exceeds the supported photo limit. The submission is retained.');
+            const asset = await deps.loadAsset(id), expected = 'form-photos/' + record.id + '/' + id + '.webp';
+            if (!asset ||
+                asset.recordId !== record.id ||
+                asset.ownerUid !== record.ownerUid ||
+                asset.fieldId !== field.id ||
+                asset.groupId !== groupId ||
+                asset.instanceId !== instanceId ||
+                asset.path !== expected)
+                throw new FormEmailPreparationError('A submitted photo could not be verified for the complete PDF. The submission is retained.');
+            let jpeg;
+            try {
+                jpeg = await createBoundedJpeg(await deps.download(expected, 2 * 1024 * 1024), 24 * 1024);
+            }
+            catch {
+                throw new FormEmailPreparationError('A submitted photo could not be prepared for the complete PDF. The submission is retained.');
+            }
+            if (!jpeg)
+                throw new FormEmailPreparationError('A submitted photo cannot fit the complete email PDF budget. The submission is retained; download the full entry PDF.');
+            const contentId = 'entry-photo-' + id;
+            result.push({
+                name: contentId + '.jpg',
+                contentType: 'image/jpeg',
+                contentBytes: jpeg.toString('base64'),
+                contentId,
+                isInline: true,
+            });
+        }
+    }
+    return result;
+}
 function recordUrl(record, base) {
     const url = new URL(base);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
@@ -89,12 +139,12 @@ function recordUrl(record, base) {
 async function prepareFormEmail(record, recipients, deps = defaults) {
     const url = recordUrl(record, deps.appBaseUrl()), previews = [], attachments = [];
     let totalBytes = 0;
-    for (const [fieldIndex, field] of record.definition.fields.entries()) {
+    for (const { field, answers, groupId, instanceId } of photoFields(record.definition.fields, record.answers)) {
         if (field.kind !== 'photo' || totalBytes >= dailyLogEmailPhotos_1.DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES)
             continue;
         const permitted = new Map();
         // Resolve only server-owned, submitted references. Never accept storage URLs/paths from answers.
-        for (const id of photoIds(record, field.id).slice(0, constants_1.EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT)) {
+        for (const id of photoIds(answers, field.id).slice(0, constants_1.EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT)) {
             if (!/^[A-Za-z0-9_-]{1,128}$/.test(id))
                 continue;
             const asset = await deps.loadAsset(id);
@@ -102,12 +152,14 @@ async function prepareFormEmail(record, recipients, deps = defaults) {
             if (asset?.recordId === record.id &&
                 asset.fieldId === field.id &&
                 asset.ownerUid === record.ownerUid &&
+                asset.groupId === groupId &&
+                asset.instanceId === instanceId &&
                 asset.path === expected)
                 permitted.set('daily-logs/' + record.id + '/' + id + '.webp', expected);
         }
         // Adapt the trusted path lookup, preserving Daily Logs' exact JPEG resizing/quality and fallback behavior.
         const prepared = await (0, dailyLogEmailPhotos_1.prepareDailyLogInlinePhotos)(record.id, {
-            attachments: photoIds(record, field.id)
+            attachments: photoIds(answers, field.id)
                 .slice(0, constants_1.EMAIL.DAILY_LOG_PHOTO_PREVIEW_LIMIT)
                 .map((id) => ({ type: 'photo', path: 'daily-logs/' + record.id + '/' + id + '.webp' })),
         }, {
@@ -124,18 +176,34 @@ async function prepareFormEmail(record, recipients, deps = defaults) {
             if (totalBytes + bytes > dailyLogEmailPhotos_1.DAILY_LOG_EMAIL_INLINE_IMAGE_MAX_TOTAL_BYTES)
                 break;
             totalBytes += bytes;
-            const contentId = 'form-photo-' + fieldIndex + '-' + prepared.previews[index].position + '@phase2.local';
-            previews.push({ fieldId: field.id, position: prepared.previews[index].position, contentId });
+            const assetId = photoIds(answers, field.id)[prepared.previews[index].position - 1];
+            const contentId = 'entry-photo-' + assetId;
+            previews.push({
+                fieldId: field.id,
+                groupId,
+                instanceId,
+                position: prepared.previews[index].position,
+                contentId,
+            });
             attachments.push({
                 ...attachment,
-                name: 'form-photo-' + fieldIndex + '-' + prepared.previews[index].position + '.jpg',
+                name: contentId + '.jpg',
                 contentId,
             });
         }
     }
     const routing = (0, emailService_1.buildSubmissionEmailRouting)(recipients, await deps.ownerEmail(record.ownerUid));
+    let translation;
+    if (deps.translate) {
+        try {
+            translation = await deps.translate(record);
+        }
+        catch {
+            throw new FormEmailPreparationError('The English rendering could not be prepared. The submission is retained for retry.');
+        }
+    }
     const pdf = record.definition.output?.pdf
-        ? await (0, formSubmissionPdf_1.buildFormSubmissionPdf)(record, attachments)
+        ? await (0, formSubmissionPdf_1.buildFormSubmissionPdf)(record, await prepareFormPdfPhotos(record, deps), translation)
         : undefined;
     const html = (0, formEmailRender_1.buildFormEmailHtml)(record, previews, url);
     const outputAttachments = [
@@ -159,6 +227,14 @@ async function prepareFormEmail(record, recipients, deps = defaults) {
         dailyLogPhotoFallbackHtml: (0, formEmailRender_1.buildFormEmailHtml)(record, [], url),
         ...(outputAttachments.length ? { attachments: outputAttachments } : {}),
     };
+    if (translation) {
+        const rendering = (0, formTranslationEmail_1.formTranslationEmailContent)(record, translation);
+        if (rendering.html) {
+            options.html = options.html.replace(/(<body[^>]*>)/, '$1' + rendering.html);
+            options.dailyLogPhotoFallbackHtml = options.dailyLogPhotoFallbackHtml.replace(/(<body[^>]*>)/, '$1' + rendering.html);
+            options.text = rendering.text + options.text;
+        }
+    }
     return fitFormEmailPayload(options);
 }
 function fitFormEmailPayload(options) {

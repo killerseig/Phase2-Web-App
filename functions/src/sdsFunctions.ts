@@ -1,6 +1,7 @@
 import { randomUUID, randomBytes, createHash } from 'node:crypto'
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https'
-import { Timestamp } from 'firebase-admin/firestore'
+import { FieldPath, Timestamp } from 'firebase-admin/firestore'
+import { SDS_MASTER_CAPACITY, checkImportBytes, importPath, validateImportIndex } from './sdsIntake'
 import { getApp } from 'firebase-admin/app'
 import { pipeline } from 'node:stream/promises'
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
@@ -168,12 +169,64 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
   const jobId = sdsId(data.jobId, true)
   if (jobId) await jobFor(user, jobId)
 
+  // Bounded legacy-compatible metadata search; no new indexes or public access.
+  if (action === 'page') {
+    const pageSize = data.pageSize ?? 100
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
+      throw new HttpsError('invalid-argument', 'Page size must be 1–100.')
+    const search = sdsText(data.search ?? '', 'Search', 160).toLowerCase()
+    const after = sdsId(data.after, true)
+    const folderId = sdsId(data.folderId, true)
+    const folders = await foldersRef.get()
+    const folderList = folders.docs.map((d) => ({ ...d.data(), id: d.id }) as SdsFolder)
+    folderPath(folderId, folderList)
+    let query = sheetsRef.orderBy(FieldPath.documentId()).limit(500)
+    if (after) query = query.startAfter(after)
+    const snapshot = await query.get()
+    const found: SdsSheet[] = []
+    let cursor = after
+    let scanned = 0
+    for (const doc of snapshot.docs) {
+      cursor = doc.id
+      scanned++
+      const sheet = { ...doc.data(), id: doc.id } as SdsSheet
+      const matchesFolder =
+        !folderId ||
+        sheet.folderId === folderId ||
+        folderPath(sheet.folderId, folderList).some((f) => f.id === folderId)
+      const matchesSearch =
+        !search ||
+        `${sheet.name} ${sheet.manufacturer} ${sheet.productCode}`.toLowerCase().includes(search)
+      if ((data.showArchived === true || !sheet.archived) && matchesFolder && matchesSearch)
+        found.push(sheet)
+      if (found.length >= pageSize) break
+    }
+    return {
+      sheets: found,
+      after: scanned < snapshot.size || snapshot.size === 500 ? cursor : '',
+      scanned,
+      searchMode: 'bounded-metadata-scan',
+    }
+  }
+  if (action === 'preflightImport') {
+    requireAdmin(user)
+    const rows = validateImportIndex(data.index)
+    const exactByteGroups: Record<string, string[]> = {}
+    for (const row of rows) (exactByteGroups[row.sha256] ??= []).push(row.path)
+    return {
+      version: 1,
+      files: rows,
+      totalBytes: rows.reduce((total, row) => total + row.size, 0),
+      duplicateByteGroups: Object.values(exactByteGroups).filter((paths) => paths.length > 1),
+      currency: 'unverified',
+    }
+  }
   if (action === 'load') {
     return db.runTransaction(async (tx) => {
       const [state, folders, sheets] = await Promise.all([
         tx.get(stateRef),
         tx.get(foldersRef),
-        tx.get(sheetsRef),
+        data.metadataOnly === true ? Promise.resolve(null) : tx.get(sheetsRef),
       ])
       const binder = jobId ? await tx.get(db.doc(`sdsBinders/${jobId}`)) : null
       const lastRequest = await tx.get(db.doc(`sdsExportRequests/${user.uid}`))
@@ -183,7 +236,7 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
       return {
         version: state.data()?.version ?? 0,
         folders: folders.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
-        sheets: sheets.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+        sheets: sheets?.docs.map((doc) => ({ ...doc.data(), id: doc.id })) ?? [],
         binder: {
           version: binder?.data()?.version ?? 0,
           selections: binder?.data()?.selections ?? [],
@@ -253,6 +306,16 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
   if (action === 'saveSheet') {
     requireAdmin(user)
     const id = sdsId(data.id, true) || randomUUID()
+    // A resumed indexed row may have committed before the client saw its response.
+    if (data.sourcePath !== undefined && data.expectedSha256 !== undefined) {
+      const previous = await sheetsRef.doc(id).get()
+      if (
+        previous.exists &&
+        previous.data()?.sourcePath === importPath(data.sourcePath) &&
+        previous.data()?.checksum === String(data.expectedSha256).toLowerCase()
+      )
+        return { id, reused: true }
+    }
     const uploadId = sdsId(data.uploadId, true)
     const revisionId = uploadId ? randomUUID() : ''
     const extension = documentExtension(data.uploadExtension || 'pdf')
@@ -274,6 +337,9 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
       order: order(data.order),
       archived: data.archived === true,
     }
+    const sourcePath = data.sourcePath === undefined ? undefined : importPath(data.sourcePath)
+    const provenance =
+      data.provenance === undefined ? undefined : sdsText(data.provenance, 'Provenance', 1000)
     let fileInfo: Record<string, unknown> | null = null
     if (uploadId) {
       const staged = storageBucket.file(`sds-uploads/${user.uid}/${uploadId}.${extension}`)
@@ -288,6 +354,8 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
         )
       const [bytes] = await staged.download()
       const validated = await validateDocument(bytes, extension)
+      const checksum = createHash('sha256').update(bytes).digest('hex')
+      checkImportBytes(bytes, checksum, data.expectedSize, data.expectedSha256)
       const originalName = sdsText(data.originalName ?? '', 'Original file name', 180)
         .replace(/[\\/\x00-\x1F]/g, '_')
         .replace(/\.[^.]*$/, '')
@@ -298,7 +366,9 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
         mimeType: DOCUMENT_MIME[extension],
         originalName: originalName ? `${originalName}.${extension}` : '',
         size: bytes.length,
-        checksum: createHash('sha256').update(bytes).digest('hex'),
+        checksum,
+        ...(sourcePath ? { sourcePath, currencyStatus: 'unverified' } : {}),
+        ...(provenance !== undefined ? { provenance } : {}),
       }
       // Server-owned files are immutable and never receive Firebase download tokens.
       await storageBucket.file(filePath).save(bytes, {
@@ -307,13 +377,13 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
         metadata: { cacheControl: 'private, max-age=0' },
       })
     }
+    const masterCount = (await sheetsRef.count().get()).data().count
     try {
       await db.runTransaction(async (tx) => {
-        const [state, current, folders, sheets] = await Promise.all([
+        const [state, current, folders] = await Promise.all([
           tx.get(stateRef),
           tx.get(sheetsRef.doc(id)),
           tx.get(foldersRef),
-          tx.get(sheetsRef),
         ])
         checkVersion(state.data()?.version ?? 0, data.version)
         folderPath(
@@ -322,8 +392,11 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
         )
         if (!current.exists && !revisionId)
           throw new HttpsError('invalid-argument', 'A file is required for a new document.')
-        if (!current.exists && sheets.size >= 1000)
-          throw new HttpsError('resource-exhausted', 'The library supports up to 1,000 sheets.')
+        if (!current.exists && masterCount >= SDS_MASTER_CAPACITY)
+          throw new HttpsError(
+            'resource-exhausted',
+            'The master library supports up to 10,000 documents.',
+          )
         if (!revisionId && revisionDate !== current.data()?.revisionDate)
           throw new HttpsError('invalid-argument', 'Upload a file to change its revision date.')
         const saved = {
@@ -355,7 +428,7 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
     }
     if (uploadId)
       await storageBucket
-        .file(`sds-uploads/${user.uid}/${uploadId}.pdf`)
+        .file(`sds-uploads/${user.uid}/${uploadId}.${extension}`)
         .delete()
         .catch(() => undefined)
     return { id }

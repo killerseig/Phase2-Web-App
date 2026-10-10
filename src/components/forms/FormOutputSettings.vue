@@ -7,8 +7,13 @@ import type {
   FormDefinition,
   FormOutputSettings,
   FormRecord,
+  FormField,
 } from '../../../functions/src/formModel'
 import { formApi, isFormServerEnabled } from '@/services/forms'
+import { validateFormAccess } from '../../../functions/src/formAccess'
+import type { FormAccessPolicy } from '../../../functions/src/formAccess'
+import type { FormRecipientGroup } from '../../../functions/src/formRecipients'
+import { withCompanyReportDelivery } from '@/features/forms/companyReports'
 const props = defineProps<{ definition: FormDefinition; templateId: string }>(),
   emit = defineEmits<{ 'update:definition': [value: FormDefinition] }>()
 const editor = ref<HTMLTextAreaElement>(),
@@ -21,11 +26,46 @@ const settings = computed(() => ({
     pdf: false,
     template: '',
     ...props.definition.output,
-    requireLogin: true,
+    requireLogin: props.definition.access?.respondents !== 'public',
   })),
   issues = computed(() => formOutputIssues(props.definition))
 function update(value: Partial<FormOutputSettings>) {
   emit('update:definition', { ...props.definition, output: { ...settings.value, ...value } })
+}
+const access = computed(() => validateFormAccess(props.definition.access))
+const audienceRoles = ['admin', 'project-manager', 'foreman', 'shop-foreman']
+function updateAccess(value: Partial<FormAccessPolicy>) {
+  try {
+    const next = { ...access.value, ...value }
+    if (next.respondents === 'signed-in' && next.identity === 'anonymous')
+      next.identity = 'identified'
+    emit('update:definition', { ...props.definition, access: validateFormAccess(next) })
+    error.value = ''
+  } catch (caught) {
+    error.value = (caught as Error).message
+  }
+}
+function toggleRole(key: 'respondentRoles' | 'entryRoles', role: string, checked: boolean) {
+  updateAccess({
+    [key]: checked
+      ? [...access.value[key], role]
+      : access.value[key].filter((item) => item !== role),
+  })
+}
+function updatePeople(key: 'respondentUserIds' | 'entryUserIds', value: string) {
+  updateAccess({ [key]: value.split(/[\s,;]+/).filter(Boolean) })
+}
+const recipientGroupOptions: { value: FormRecipientGroup; label: string }[] = [
+  { value: 'job-foremen', label: 'Foremen assigned to this job' },
+  { value: 'job-project-managers', label: 'Project managers assigned to this job' },
+  { value: 'job-everyone', label: 'Everyone assigned to this job' },
+]
+function toggleRecipientGroup(group: FormRecipientGroup, checked: boolean) {
+  const groups = props.definition.recipientGroups || []
+  emit('update:definition', {
+    ...props.definition,
+    recipientGroups: checked ? [...groups, group] : groups.filter((item) => item !== group),
+  })
 }
 async function insert() {
   if (!picked.value) return
@@ -39,34 +79,37 @@ async function insert() {
   area?.focus()
   area?.setSelectionRange(start + token.length, start + token.length)
 }
-const samples = computed<FormAnswers>(() =>
-  Object.fromEntries(
-    props.definition.fields.map((field) => [
+function sampleAnswers(fields: FormField[]): FormAnswers {
+  return Object.fromEntries(
+    fields.map((field) => [
       field.id,
-      field.kind === 'photo'
-        ? ['sample-photo']
-        : field.kind === 'checkbox'
-          ? true
-          : field.kind === 'multiselect'
-            ? [field.options[0] || 'Sample']
-            : ['choice', 'radio'].includes(field.kind)
-              ? field.options[0] || 'Sample'
-              : field.kind === 'number'
-                ? 4
-                : field.kind === 'date'
-                  ? '2026-10-02'
-                  : field.kind === 'time'
-                    ? '13:20'
-                    : field.kind === 'email'
-                      ? 'sample@example.com'
-                      : field.kind === 'phone'
-                        ? '+1 555 123 4567'
-                        : field.kind === 'textarea'
-                          ? 'Sample full answer.\nA second line is preserved.'
-                          : 'Sample ' + field.label,
+      field.kind === 'matrix'
+        ? (field.rows || []).map(() => field.options[0] || '')
+        : field.kind === 'repeat'
+          ? [{ instanceId: 'sample-site-1', answers: sampleAnswers(field.fields || []) }]
+          : field.kind === 'recipients'
+            ? ['sample@example.com']
+            : field.kind === 'photo'
+              ? ['sample-photo']
+              : field.kind === 'checkbox'
+                ? true
+                : field.kind === 'multiselect'
+                  ? [field.options[0] || 'Sample']
+                  : ['choice', 'radio'].includes(field.kind)
+                    ? field.options[0] || 'Sample'
+                    : field.kind === 'number'
+                      ? 4
+                      : field.kind === 'date'
+                        ? '2026-10-02'
+                        : field.kind === 'time'
+                          ? '13:20'
+                          : field.kind === 'email'
+                            ? 'sample@example.com'
+                            : 'Sample ' + field.label,
     ]),
-  ),
-)
+  )
+}
+const samples = computed<FormAnswers>(() => sampleAnswers(props.definition.fields))
 const record = computed<FormRecord>(() => ({
   id: 'sample',
   ownerUid: 'sample',
@@ -147,11 +190,91 @@ async function preview() {
 </script>
 <template>
   <section aria-label="Form output settings" class="output-settings">
-    <label><input type="checkbox" checked disabled />Require login</label>
+    <button type="button" @click="emit('update:definition', withCompanyReportDelivery(definition))">Use all-answer email and recipient selection</button>
+    <p>This adds an optional delivery control and restores the all-answer email layout. Review and save the draft separately. Sender uses the existing company email configuration; gallery access remains private.</p>
+    <p v-if="error" role="alert">{{ error }}</p>
+    <label
+      >Who can submit<select
+        :value="access.respondents"
+        @change="
+          updateAccess({
+            respondents: ($event.target as HTMLSelectElement)
+              .value as FormAccessPolicy['respondents'],
+          })
+        "
+      >
+        <option value="signed-in">Selected employees (login required)</option>
+        <option value="public">Everyone with the link (no login)</option>
+      </select></label
+    >
+    <fieldset :disabled="access.respondents === 'public'">
+      <legend>Employee respondent audience</legend>
+      <label v-for="role in audienceRoles" :key="role"
+        ><input
+          type="checkbox"
+          :checked="access.respondentRoles.includes(role)"
+          @change="toggleRole('respondentRoles', role, ($event.target as HTMLInputElement).checked)"
+        />{{ role }}</label
+      ><label
+        >Individual employee IDs<input
+          :value="access.respondentUserIds.join(', ')"
+          @change="updatePeople('respondentUserIds', ($event.target as HTMLInputElement).value)"
+      /></label>
+    </fieldset>
+    <label
+      >Identity policy<select
+        :value="access.identity"
+        @change="
+          updateAccess({
+            identity: ($event.target as HTMLSelectElement).value as FormAccessPolicy['identity'],
+          })
+        "
+      >
+        <option value="identified">Identified response</option>
+        <option value="form-fields">Identity through form fields</option>
+        <option value="anonymous" :disabled="access.respondents !== 'public'">
+          Anonymous response (public links)
+        </option>
+      </select></label
+    >
     <p>
-      Employee forms and their photos require the existing owner or Admin login. Public sharing is
-      unavailable.
+      Opening a form without login does not make its answers anonymous. Review the identity promise
+      before publishing.
     </p>
+    <fieldset>
+      <legend>Notification recipients</legend>
+      <label v-for="group in recipientGroupOptions" :key="group.value"
+        ><input
+          type="checkbox"
+          :checked="definition.recipientGroups?.includes(group.value)"
+          @change="toggleRecipientGroup(group.value, ($event.target as HTMLInputElement).checked)"
+        />{{ group.label }}</label
+      >
+      <p>
+        Groups resolve from the selected job when submitted. Add fixed email addresses in Form
+        settings. An optional Recipient addresses field lets signed-in respondents add up to 10
+        addresses. Public extra addresses are saved with the answers but receive no notification
+        until verified; fixed addresses and job groups still receive the results.
+      </p>
+    </fieldset>
+    <fieldset>
+      <legend>Private entries and photos</legend>
+      <p>
+        Admins and the signed-in owner retain access. Add employee readers separately from email
+        recipients.
+      </p>
+      <label v-for="role in audienceRoles" :key="role"
+        ><input
+          type="checkbox"
+          :checked="access.entryRoles.includes(role)"
+          @change="toggleRole('entryRoles', role, ($event.target as HTMLInputElement).checked)"
+        />{{ role }}</label
+      ><label
+        >Individual reader IDs<input
+          :value="access.entryUserIds.join(', ')"
+          @change="updatePeople('entryUserIds', ($event.target as HTMLInputElement).value)"
+      /></label>
+    </fieldset>
     <label
       ><input
         type="checkbox"

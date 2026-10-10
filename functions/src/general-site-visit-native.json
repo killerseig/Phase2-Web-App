@@ -1,0 +1,86 @@
+{
+  "title": "General Site Visit Report",
+  "description": "Phase 2 Company",
+  "access": {
+    "respondents": "public",
+    "identity": "form-fields",
+    "respondentUserIds": [],
+    "respondentRoles": [],
+    "entryUserIds": [],
+    "entryRoles": []
+  },
+  "recipients": [],
+  "fields": [
+    {
+      "id": "visit_date",
+      "kind": "date",
+      "label": "Visit date",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "visited_by",
+      "kind": "text",
+      "label": "Visited by",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "sites",
+      "kind": "repeat",
+      "label": "site",
+      "required": false,
+      "options": [],
+      "minInstances": 1,
+      "maxInstances": 20,
+      "fields": [
+        {
+          "id": "site",
+          "kind": "text",
+          "label": "Site visited",
+          "required": false,
+          "options": []
+        },
+        {
+          "id": "people",
+          "kind": "textarea",
+          "label": "People on site",
+          "required": false,
+          "options": [],
+          "hint": "Foreman, crew/count, and GC or other contacts met."
+        },
+        {
+          "id": "work_progress",
+          "kind": "textarea",
+          "label": "Work and progress",
+          "required": false,
+          "options": [],
+          "hint": "Areas visited, work completed or underway, and what was discussed."
+        },
+        {
+          "id": "issues_coordination",
+          "kind": "textarea",
+          "label": "Issues and coordination",
+          "required": false,
+          "options": [],
+          "hint": "Quality, safety, trade conflicts, access, materials or equipment, if any."
+        },
+        {
+          "id": "next_steps_schedule",
+          "kind": "textarea",
+          "label": "Next steps and schedule",
+          "required": false,
+          "options": [],
+          "hint": "Follow-up, work planned, or schedule changes, if any."
+        },
+        {
+          "id": "photos",
+          "kind": "photo",
+          "label": "Photos",
+          "required": false,
+          "options": []
+        }
+      ]
+    }
+  ]
+}

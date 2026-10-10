@@ -1,0 +1,116 @@
+{
+  "title": "Safety Observation Report",
+  "description": "Your contribution to Phase 2 Company Safety is important and appreciated.",
+  "access": {
+    "respondents": "public",
+    "identity": "anonymous",
+    "respondentUserIds": [],
+    "respondentRoles": [],
+    "entryUserIds": [],
+    "entryRoles": []
+  },
+  "recipients": [],
+  "fields": [
+    {
+      "id": "name",
+      "kind": "text",
+      "label": "OPTIONAL ANSWER   What is your Name?",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "job",
+      "kind": "text",
+      "label": "What Job are you on?",
+      "required": true,
+      "options": []
+    },
+    {
+      "id": "observation-date",
+      "kind": "date",
+      "label": "Date of Observation",
+      "required": false,
+      "options": [],
+      "hint": "Please enter the date (YYYY-MM-DD)."
+    },
+    {
+      "id": "observation-type",
+      "kind": "radio",
+      "label": "Type of Observation",
+      "required": false,
+      "options": [
+        "Incident Prevented",
+        "Safe Act",
+        "Unsafe Act",
+        "Unsafe Condition",
+        "Near Miss"
+      ]
+    },
+    {
+      "id": "description",
+      "kind": "text",
+      "label": "Please describe the safety observation or concern in detail.",
+      "required": true,
+      "options": [],
+      "hint": "Include as much information as possible to help us understand the situation."
+    },
+    {
+      "id": "resolved",
+      "kind": "radio",
+      "label": "Was the issue resolved immediately?",
+      "required": false,
+      "options": [
+        "Due to the safe act there was no issue",
+        "Yes",
+        "No",
+        "Partially"
+      ]
+    },
+    {
+      "id": "actions",
+      "kind": "multiselect",
+      "label": "Actions Taken",
+      "required": false,
+      "options": [
+        "Reported to Supervisor",
+        "Corrected on the Spot",
+        "Further Investigation Required",
+        "None"
+      ]
+    },
+    {
+      "id": "agreement",
+      "kind": "matrix",
+      "label": "Agreement with the following statements about workplace safety:",
+      "required": false,
+      "options": [
+        "Strongly Disagree",
+        "Disagree",
+        "Neutral",
+        "Agree",
+        "Strongly Agree"
+      ],
+      "rows": [
+        {
+          "id": "training",
+          "label": "Safety training is adequate."
+        },
+        {
+          "id": "response",
+          "label": "Management responds quickly to hazards."
+        },
+        {
+          "id": "procedures",
+          "label": "Employees follow safety procedures."
+        }
+      ]
+    },
+    {
+      "id": "comments",
+      "kind": "textarea",
+      "label": "Additional Comments or Observations",
+      "required": false,
+      "options": []
+    }
+  ]
+}

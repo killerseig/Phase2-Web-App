@@ -30,6 +30,8 @@ function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/reports', name: 'reports', component: () => import('@/views/ReportsView.vue'), meta: { title: 'Reports', requiresAuth: true } },
+    { path: '/company-library', name: 'company-library', component: () => import('@/views/CompanyLibraryView.vue'), meta: { title: 'Company Library', requiresAuth: true } },
     {path:'/dashboards/role-home',name:'shared-role-home',component:()=>import('@/views/SharedDashboardView.vue'),meta:{title:'Role home',requiresAuth:true}},
     {path:'/dashboards/job-home/:jobId?',name:'shared-job-home',component:()=>import('@/views/SharedDashboardView.vue'),meta:{title:'Job home',requiresAuth:true}},
     {
@@ -42,7 +44,7 @@ const router = createRouter({
       path: '/forms/:templateId',
       name: 'form-response',
       component: () => import('@/views/FormResponseView.vue'),
-      meta: { title: 'Complete Form' },
+      meta: { title: 'Complete Form', requiresAuth: false },
     },
     {
       path: '/admin/forms',

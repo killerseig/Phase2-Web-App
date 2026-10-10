@@ -2,7 +2,7 @@ import { httpsCallable } from 'firebase/functions'
 import { ref as storageRef, uploadBytesResumable, deleteObject } from 'firebase/storage'
 import { requireFirebaseServices } from '@/firebase'
 import { uploadExtension, documentMime } from '@/features/documents/formats'
-import type { SdsLibrary } from '@/features/sds/types'
+import type { SdsLibrary, SdsSheet } from '@/features/sds/types'
 
 export function sdsErrorMessage(error: unknown): string {
   const code =
@@ -30,8 +30,49 @@ export async function sdsCommand<T = { ok: boolean }>(
   })
   return (await call({ ...data, action })).data
 }
-export function loadSds(jobId = '') {
-  return sdsCommand<SdsLibrary>('load', { jobId })
+export function loadSds(jobId = '', metadataOnly = false) {
+  return sdsCommand<SdsLibrary>('load', { jobId, metadataOnly })
+}
+
+export interface SdsPage {
+  sheets: SdsSheet[]
+  after: string
+  scanned: number
+  searchMode: 'bounded-metadata-scan'
+}
+/** An empty result with an `after` cursor is not the end of a filtered search. */
+export function loadSdsPage(
+  options: {
+    jobId?: string
+    after?: string
+    search?: string
+    folderId?: string
+    showArchived?: boolean
+    pageSize?: number
+  } = {},
+) {
+  return sdsCommand<SdsPage>('page', options)
+}
+
+export interface SdsImportRow {
+  path: string
+  size: number
+  sha256: string
+  name: string
+  manufacturer: string
+  productCode: string
+  revisionDate: string
+  language: string
+  provenance: string
+}
+export function preflightSdsImport(index: { version: 1; files: SdsImportRow[] }) {
+  return sdsCommand<{
+    version: 1
+    files: SdsImportRow[]
+    totalBytes: number
+    duplicateByteGroups: string[][]
+    currency: 'unverified'
+  }>('preflightImport', { index })
 }
 
 export async function uploadDocument(file: File, progress: (percent: number) => void) {

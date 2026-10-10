@@ -1,0 +1,114 @@
+{
+  "title": "BEHAVIOR-BASED SAFETY OBSERVATION",
+  "description": "PHASE 2 COMPANY\n\nPurpose: Reinforce safe work, coach at-risk behavior, and identify trends before an injury occurs.",
+  "access": {
+    "respondents": "public",
+    "identity": "form-fields",
+    "respondentUserIds": [],
+    "respondentRoles": [],
+    "entryUserIds": [],
+    "entryRoles": []
+  },
+  "recipients": [],
+  "fields": [
+    {
+      "id": "project",
+      "kind": "text",
+      "label": "Project:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "date_time",
+      "kind": "text",
+      "label": "Date / Time:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "observer",
+      "kind": "text",
+      "label": "Observer:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "crew_department",
+      "kind": "text",
+      "label": "Crew / Department:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "persons_observed",
+      "kind": "text",
+      "label": "Person(s) Observed:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "task_observed",
+      "kind": "text",
+      "label": "Task Observed:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "observation",
+      "kind": "multiselect",
+      "label": "OBSERVATION",
+      "required": false,
+      "options": [
+        "SAFE BEHAVIOR",
+        "AT-RISK BEHAVIOR"
+      ]
+    },
+    {
+      "id": "what_observed",
+      "kind": "textarea",
+      "label": "WHAT WAS OBSERVED",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "action_taken",
+      "kind": "multiselect",
+      "label": "ACTION TAKEN",
+      "required": false,
+      "options": [
+        "Positive recognition",
+        "Coaching discussion",
+        "Immediate correction",
+        "Follow-up required"
+      ]
+    },
+    {
+      "id": "discussion_followup",
+      "kind": "textarea",
+      "label": "DISCUSSION / FOLLOW-UP",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "observer_signature",
+      "kind": "text",
+      "label": "Observer Signature:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "date",
+      "kind": "text",
+      "label": "Date:",
+      "required": false,
+      "options": []
+    },
+    {
+      "id": "photos",
+      "kind": "photo",
+      "label": "Photos",
+      "required": false,
+      "options": []
+    }
+  ]
+}

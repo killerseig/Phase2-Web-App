@@ -5,24 +5,56 @@ import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import FormDefinitionFields from '@/components/forms/FormDefinitionFields.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
-  formApi,
+  formApi as serverFormApi,
   isFormServerEnabled,
+  isFormEmulatorEnabled,
   uploadFormPhoto,
   type ServerFormTemplate,
 } from '@/services/forms'
 import type { FormAnswers, FormRecord } from '../../../functions/src/formModel'
-const localPreview = import.meta.env.DEV
+import { answerFingerprint, hydrateDraftAnswers } from '@/features/forms/formDirtyState'
+const localPreview = isFormEmulatorEnabled()
 const props = withDefaults(
   defineProps<{
     templateId: string
     templateVersion?: number
     inline?: boolean
+    allowFullInline?: boolean
+    ignoreRouteContext?: boolean
     dashboardScope?: 'personal' | 'role'
     dashboardJobId?: string
     dashboardReturn?: 'shared-job' | 'shared-role'
   }>(),
   { inline: false },
 )
+// Anonymous session capabilities and request IDs stay in memory; never persist answers on shared devices.
+const publicCapability = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
+  byte.toString(16).padStart(2, '0'),
+).join('')
+const ephemeral = new Map<string, string>()
+const respondentName = ref(''),
+  respondentEmail = ref('')
+const formStorage = {
+  getItem: (key: string) =>
+    !publicSession.value ? localStorage.getItem(key) : ephemeral.get(key) || null,
+  setItem: (key: string, value: string) => {
+    if (!publicSession.value) localStorage.setItem(key, value)
+    else ephemeral.set(key, value)
+  },
+  removeItem: (key: string) => {
+    if (!publicSession.value) localStorage.removeItem(key)
+    else ephemeral.delete(key)
+  },
+}
+async function formApi<T>(
+  name: Parameters<typeof serverFormApi>[0],
+  data: Record<string, unknown>,
+): Promise<T> {
+  return serverFormApi<T>(name, {
+    ...data,
+    ...(publicSession.value && name === 'formWorkspace' ? { publicCapability } : {}),
+  })
+}
 const auth = useAuthStore(),
   route = useRoute(),
   router = useRouter()
@@ -33,6 +65,7 @@ const enabled = isFormServerEnabled(),
   record = ref<FormRecord>(),
   answers = ref<FormAnswers>({}),
   busy = ref(false),
+  loading = ref(false),
   dirty = ref(false),
   error = ref(''),
   message = ref(''),
@@ -45,14 +78,23 @@ const uid = computed(() => auth.currentUser?.uid || ''),
 const selectedTemplate = computed(() =>
   templates.value.find((template) => template.id === templateId.value),
 )
+const publicSession = computed(
+  () =>
+    !uid.value ||
+    (!dashboardJobId.value && selectedTemplate.value?.definition?.access?.respondents === 'public'),
+)
 const pinnedVersion = computed(
   () =>
-    props.templateVersion || Number(route.query.version) || selectedTemplate.value?.latestVersion,
+    props.templateVersion ||
+    (!props.ignoreRouteContext && Number(route.query.version)) ||
+    selectedTemplate.value?.latestVersion,
 )
 const dashboardJobId = computed(
   () =>
     props.dashboardJobId ||
-    (typeof route.query.dashboardJob === 'string' ? route.query.dashboardJob : ''),
+    (!props.ignoreRouteContext && typeof route.query.dashboardJob === 'string'
+      ? route.query.dashboardJob
+      : ''),
 )
 const contextSuffix = () => (dashboardJobId.value ? ':job:' + dashboardJobId.value : '')
 const contextRequest = () => (dashboardJobId.value ? { dashboardJobId: dashboardJobId.value } : {})
@@ -66,12 +108,15 @@ const activeKey = () =>
   contextSuffix()
 let sequence = 0
 let saveRequest = { signature: '', id: '' }
+let savedAnswers = ''
 const readOnlyRecord = computed(
   () =>
-    !!record.value && (record.value.status === 'submitted' || record.value.ownerUid !== uid.value),
+    !!record.value &&
+    (record.value.status === 'submitted' ||
+      (!publicSession.value && record.value.ownerUid !== uid.value)),
 )
 const tooLargeInline = computed(
-  () => props.inline && (record.value?.definition.fields.length || 0) > 8,
+  () => props.inline && !props.allowFullInline && (record.value?.definition.fields.length || 0) > 8,
 )
 const pendingKey = () => 'form-submit-request:v1:' + uid.value + ':' + record.value?.id
 function received(next: FormRecord) {
@@ -81,24 +126,26 @@ function received(next: FormRecord) {
   error.value = ''
   message.value = ''
   record.value = next
-  if (next.templateVersion === pinnedVersion.value) localStorage.setItem(activeKey(), next.id)
-  answers.value = structuredClone(next.answers)
+  if (next.templateVersion === pinnedVersion.value) formStorage.setItem(activeKey(), next.id)
+  answers.value = next.status === 'draft' ? hydrateDraftAnswers(next.definition.fields, next.answers) : structuredClone(next.answers)
+  savedAnswers = answerFingerprint(next.definition, answers.value)
   dirty.value = false
   records.value = [next, ...records.value.filter((item) => item.id !== next.id)]
   previews.value = {}
-  pendingSubmission.value = next.status === 'draft' ? localStorage.getItem(pendingKey()) || '' : ''
-  if (next.status === 'submitted') localStorage.removeItem(pendingKey())
+  pendingSubmission.value = next.status === 'draft' ? formStorage.getItem(pendingKey()) || '' : ''
+  if (next.status === 'submitted') formStorage.removeItem(pendingKey())
 }
 function updateAnswers(value: FormAnswers) {
   invalidField.value = ''
   answers.value = value
-  dirty.value = true
+  dirty.value = !!record.value && answerFingerprint(record.value.definition, value) !== savedAnswers
 }
 async function load() {
   const current = ++sequence,
     owner = uid.value
   record.value = undefined
   answers.value = {}
+  savedAnswers = ''
   records.value = []
   templates.value = []
   dirty.value = false
@@ -107,13 +154,26 @@ async function load() {
   pendingSubmission.value = ''
   message.value = ''
   invalidField.value = ''
-  if (!enabled || !owner) return
-  if (!['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole)) {
-    error.value = 'Your account cannot use this form workflow.'
-    return
-  }
+  if (!enabled) return
   busy.value = true
+  loading.value = true
   try {
+    if (!dashboardJobId.value) {
+      const template = await formApi<ServerFormTemplate>('formTemplates', {
+        action: 'respondent',
+        id: templateId.value,
+        ...(props.templateVersion || (!props.ignoreRouteContext && route.query.version)
+          ? {
+              version:
+                props.templateVersion || (!props.ignoreRouteContext && Number(route.query.version)),
+            }
+          : {}),
+      })
+      if (template.definition?.access?.respondents === 'public' || !owner) {
+        if (current === sequence) templates.value = [template]
+        return
+      }
+    }
     const [forms, saved] = await Promise.all([
       formApi<{ templates: ServerFormTemplate[] }>('formTemplates', { action: 'list' }),
       formApi<{ records: FormRecord[] }>('formWorkspace', { action: 'list', ...contextRequest() }),
@@ -129,7 +189,7 @@ async function load() {
       !props.inline && typeof route.query.record === 'string'
         ? route.query.record
         : props.inline || route.query.dashboard
-          ? localStorage.getItem(activeKey())
+          ? formStorage.getItem(activeKey())
           : String(route.query.record || '')
     const candidate =
       requested ||
@@ -145,7 +205,7 @@ async function load() {
       if (current !== sequence || uid.value !== owner) return
       if (
         next.templateId !== templateId.value ||
-        ((props.templateVersion || route.query.version) &&
+        ((props.templateVersion || (!props.ignoreRouteContext && route.query.version)) &&
           next.templateVersion !== pinnedVersion.value)
       )
         throw new Error('This record does not match the selected form version.')
@@ -154,7 +214,7 @@ async function load() {
   } catch (caught) {
     if (current === sequence) error.value = (caught as Error).message
   } finally {
-    if (current === sequence) busy.value = false
+    if (current === sequence) { busy.value = false; loading.value = false }
   }
 }
 watch([uid, templateId, dashboardJobId, () => props.templateVersion, () => auth.rawRole], load, {
@@ -204,19 +264,22 @@ async function start() {
       ':' +
       pinnedVersion.value +
       contextSuffix()
-    const existing = localStorage.getItem(createKey)
+    const existing = formStorage.getItem(createKey)
     const pendingCreate = existing
       ? (JSON.parse(existing) as { version: number; requestId: string })
       : { version: pinnedVersion.value, requestId: crypto.randomUUID() }
-    localStorage.setItem(createKey, JSON.stringify(pendingCreate))
+    formStorage.setItem(createKey, JSON.stringify(pendingCreate))
     const next = await formApi<FormRecord>('formWorkspace', {
       action: 'create',
       templateId: target.id,
+      ...(publicSession.value && target.definition?.access?.identity === 'identified'
+        ? { respondentIdentity: { name: respondentName.value, email: respondentEmail.value } }
+        : {}),
       ...contextRequest(),
       ...pendingCreate,
     })
     if (uid.value === owner && generation === sequence) {
-      localStorage.removeItem(createKey)
+      formStorage.removeItem(createKey)
       received(next)
     }
   } catch (caught) {
@@ -319,7 +382,7 @@ async function submit() {
     if (!pendingSubmission.value && !(await save())) return
     if (uid.value !== owner || generation !== sequence) return
     pendingSubmission.value ||= crypto.randomUUID()
-    localStorage.setItem(pendingKey(), pendingSubmission.value)
+    formStorage.setItem(pendingKey(), pendingSubmission.value)
     const next = await formApi<FormRecord>('formWorkspace', {
       action: 'submit',
       id: record.value!.id,
@@ -348,7 +411,7 @@ async function submit() {
       problem.code?.includes('permission-denied') ||
       problem.code?.includes('aborted')
     ) {
-      localStorage.removeItem(pendingKey())
+      formStorage.removeItem(pendingKey())
       pendingSubmission.value = ''
     }
   } finally {
@@ -360,7 +423,7 @@ async function submit() {
     }
   }
 }
-async function upload(fieldId: string, files: File[]) {
+async function upload(fieldId: string, files: File[], groupId?: string, instanceId?: string) {
   if (!record.value || busy.value || readOnlyRecord.value || pendingSubmission.value) return
   const generation = sequence,
     owner = uid.value
@@ -368,7 +431,14 @@ async function upload(fieldId: string, files: File[]) {
   try {
     if (dirty.value && !(await save())) return
     for (const file of files) {
-      const next = await uploadFormPhoto(record.value!, fieldId, file)
+      const next = await uploadFormPhoto(
+        record.value!,
+        fieldId,
+        file,
+        publicSession.value ? publicCapability : undefined,
+        groupId,
+        instanceId,
+      )
       if (uid.value !== owner || generation !== sequence) return
       received(next)
     }
@@ -427,8 +497,8 @@ async function retryEmail() {
   }
 }
 async function prepareNavigation(): Promise<boolean> {
-  if (busy.value) return false
-  if (record.value && record.value.ownerUid !== uid.value) return !dirty.value
+  if (busy.value) return loading.value && !dirty.value
+  if (uid.value && record.value && record.value.ownerUid !== uid.value) return !dirty.value
   if (!dirty.value || pendingSubmission.value || record.value?.status !== 'draft') return true
   const generation = sequence
   busy.value = true
@@ -456,7 +526,7 @@ async function reloadRecords() {
   if (await prepareNavigation()) await load()
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value || busy.value) {
+  if (dirty.value || (busy.value && !loading.value)) {
     event.preventDefault()
     event.returnValue = ''
   }
@@ -487,7 +557,9 @@ defineExpose({ prepareNavigation })
         'Complete a form'
       }}
     </component>
-    <button v-if="inline" :disabled="busy" @click="openFullPage">Open full-page form</button>
+    <button v-if="inline && !allowFullInline" :disabled="busy" @click="openFullPage">
+      Open full-page form
+    </button>
     <button
       v-else-if="route.query.dashboard === 'personal' || route.query.dashboard === 'role'"
       :disabled="busy"
@@ -495,9 +567,41 @@ defineExpose({ prepareNavigation })
     >
       Return to dashboard
     </button>
+    <section
+      v-if="publicSession && selectedTemplate?.definition?.access?.identity === 'identified'"
+      aria-label="Respondent contact details"
+    >
+      <label>Your name<input v-model="respondentName" maxlength="160" autocomplete="name" /></label
+      ><label
+        >Your email<input
+          v-model="respondentEmail"
+          type="email"
+          maxlength="254"
+          autocomplete="email"
+      /></label>
+      <p>These contact details are self-reported and saved with your entry.</p>
+    </section>
+    <p
+      v-if="
+        publicSession &&
+        selectedTemplate?.definition?.fields.some((field) => field.kind === 'recipients')
+      "
+    >
+      Extra email addresses are saved with your answers. Submission notices go to the recipients
+      configured by the form administrator.
+    </p>
+    <p v-if="publicSession">
+      This form does not require login. Progress is temporary and is lost when this page closes.
+    </p>
+    <p v-if="publicSession && selectedTemplate?.definition?.access?.identity === 'anonymous'">
+      No signed-in account identity is attached. Answers and photos may identify you.
+    </p>
+    <p v-if="publicSession && selectedTemplate?.definition?.access?.identity === 'form-fields'">
+      Any identifying details come from the answers you enter. These details are self-reported.
+    </p>
     <p v-if="localPreview">Local emulator workflow. Production records and email are not used.</p>
     <p v-if="!enabled" role="alert">
-      Start the local Form Builder emulator profile to use durable drafts and submissions.
+      Configure Firebase to use durable drafts and submissions.
     </p>
     <p v-if="error" id="form-validation-message" role="alert">{{ error }}</p>
     <p v-if="message" role="status">{{ message }}</p>
@@ -506,8 +610,10 @@ defineExpose({ prepareNavigation })
       @click="start"
     >
       Start draft</button
-    ><button :disabled="busy" @click="reloadRecords">Reload saved records</button>
-    <section v-if="!inline" aria-label="Saved form records">
+    ><button v-if="!publicSession" :disabled="busy" @click="reloadRecords">
+      Reload saved records
+    </button>
+    <section v-if="!inline && !publicSession" aria-label="Saved form records">
       <h2>Saved records</h2>
       <button v-for="item in records" :key="item.id" :disabled="busy" @click="resume(item.id)">
         {{ item.status === 'draft' ? 'Resume draft' : 'View submitted form' }} · version
@@ -535,6 +641,18 @@ defineExpose({ prepareNavigation })
         @view-photo="viewPhoto"
       />
       <div class="actions">
+        <FormRecipientVerification
+          v-if="
+            publicSession &&
+            record.status === 'draft' &&
+            record.definition.fields.some((field) => field.kind === 'recipients')
+          "
+          :record="record"
+          :capability="publicCapability"
+          :prepare="save"
+          :disabled="busy || !!pendingSubmission"
+          @busy="busy = $event"
+        />
         <button
           :disabled="busy || tooLargeInline || readOnlyRecord || !!pendingSubmission"
           @click="saveClick"
@@ -546,6 +664,13 @@ defineExpose({ prepareNavigation })
       </div>
       <p v-if="record.status === 'submitted'">
         Email delivery: {{ record.emailStatus }}. The submission is retained independently.
+      </p>
+      <p v-if="record.status === 'submitted' && record.recipientExclusionCount" role="status">
+        {{ record.recipientExclusionCount }} additional email address{{
+          record.recipientExclusionCount === 1 ? '' : 'es'
+        }}
+        did not receive this report because verification was missing or expired. Your report and
+        entered addresses were saved.
       </p>
       <button
         v-if="

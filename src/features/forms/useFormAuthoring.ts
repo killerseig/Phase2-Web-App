@@ -11,6 +11,8 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
   const definition = (): FormDefinition | undefined =>
     draft.value
       ? clone({
+          ...(draft.value.recipientGroups ? { recipientGroups: draft.value.recipientGroups } : {}),
+          ...(draft.value.access ? { access: draft.value.access } : {}),
           output: draft.value.output || { requireLogin: true, pdf: false, template: '' },
           title: draft.value.title,
           description: draft.value.description,
@@ -60,6 +62,8 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
   }, { flush: 'sync' })
   function restore(snapshot: Snapshot) {
     if (!draft.value) return
+    for (const key of ['access', 'recipientGroups', 'output'] as const)
+      if (!(key in snapshot.definition)) delete draft.value[key]
     Object.assign(draft.value, clone(snapshot.definition))
     selection.value = snapshot.selection
     current = clone(snapshot)

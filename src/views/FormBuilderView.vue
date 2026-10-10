@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink } from 'vue-router'
-import { formApi, isFormServerEnabled, type ServerFormTemplate } from '@/services/forms'
+import { formApi, isFormServerEnabled, isFormEmulatorEnabled, type ServerFormTemplate } from '@/services/forms'
 import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import BuilderSelectionContext from '@/components/builder/BuilderSelectionContext.vue'
+import FormEntriesView from '@/components/forms/FormEntriesView.vue'
+import FormShareLinks from '@/components/forms/FormShareLinks.vue'
 import FormCanvasViewport from '@/components/forms/FormCanvasViewport.vue'
 import FormOutputSettings from '@/components/forms/FormOutputSettings.vue'
 import FormDefinitionPreview from '@/components/forms/FormDefinitionPreview.vue'
@@ -19,6 +21,7 @@ import {
   optionFieldKinds,
   keepVersion,
   moveField,
+  moveGroupField,
   newField,
   newTemplate,
   removeOrArchive,
@@ -27,17 +30,20 @@ import {
   type FormTemplate,
 } from '@/features/forms/model'
 import { useFormAuthoring } from '@/features/forms/useFormAuthoring'
+import { reportingStarter, type ReportingStarter } from '@/features/forms/reportingStarters'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { readLibrary, saveLibrary } from '@/features/forms/localLibrary'
-const localPreview = import.meta.env.DEV
+const localPreview = isFormEmulatorEnabled()
 const fieldGroups: { label: string; kinds: FormFieldKind[] }[] = [
   {
     label: 'Basic fields',
     kinds: ['text', 'textarea', 'email', 'phone', 'time', 'date', 'number'],
   },
-  { label: 'Choices', kinds: ['choice', 'checkbox', 'radio', 'multiselect'] },
+  { label: 'Choices', kinds: ['choice', 'checkbox', 'radio', 'multiselect', 'matrix'] },
   { label: 'Photos', kinds: ['photo'] },
+  { label: 'Groups and routing', kinds: ['repeat', 'recipients'] },
 ]
+const entriesMode = ref(false)
 const sidebarTab = ref<'library' | 'fields'>('library')
 const settingsTab = ref<'form' | 'field' | 'output'>('field')
 const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
@@ -95,7 +101,22 @@ async function saveServer(): Promise<ServerFormTemplate | undefined> {
   }
 }
 async function issueServer() {
-  if (serverBusy.value) return
+  if (serverBusy.value || !draft.value) return
+  const issues = definitionErrors(draft.value)
+  if (issues.length) {
+    error.value = issues.join(' ')
+    settingsTab.value = 'output'
+    return
+  }
+  if (
+    !(await confirmation.value?.ask({
+      title: 'Publish this form?',
+      message:
+        'Publish an immutable version of the current saved draft. New respondents use this version; completed entries retain their original questions and answers.',
+      confirmLabel: 'Publish',
+    }))
+  )
+    return
   const saved = await saveServer()
   if (!saved) return
   serverBusy.value = true
@@ -103,8 +124,8 @@ async function issueServer() {
     await formApi('formTemplates', { action: 'issue', id: saved.id, revision: saved.revision })
     await loadServer()
     message.value = localPreview
-      ? 'Immutable local server version issued.'
-      : 'Immutable form version issued.'
+      ? 'Immutable local server version published.'
+      : 'Immutable form version published.'
     error.value = ''
   } catch (caught) {
     error.value = (caught as Error).message
@@ -159,6 +180,44 @@ const library = ref(emptyLibrary()),
 const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const authoring = useFormAuthoring(draft, dirty)
 const { selection, canUndo, canRedo } = authoring
+const publishedChanges = computed(() => {
+  if (!draft.value) return []
+  const previous = serverTemplates.value.find(
+    (template) => template.id === draft.value!.id,
+  )?.definition
+  if (!previous) return ['First published version; no existing version to compare.']
+  const changes: string[] = []
+  for (const key of [
+    'title',
+    'description',
+    'recipients',
+    'recipientGroups',
+    'access',
+    'output',
+  ] as const)
+    if (JSON.stringify(previous[key] ?? null) !== JSON.stringify(draft.value[key] ?? null))
+      changes.push(key + ' changed')
+  const current = draft.value.fields
+  for (const field of previous.fields) {
+    const next = current.find((item) => item.id === field.id)
+    if (!next) changes.push('Removed question: ' + field.label + ' (retained in old entries)')
+    else if (JSON.stringify(next) !== JSON.stringify(field))
+      changes.push('Changed question: ' + field.label)
+  }
+  for (const field of current)
+    if (!previous.fields.some((item) => item.id === field.id))
+      changes.push('Added question: ' + field.label)
+  if (
+    previous.fields.map((field) => field.id).join(',') !==
+    current.map((field) => field.id).join(',')
+  )
+    changes.push('Question order changed')
+  return changes.length ? changes : ['No definition changes from the published version.']
+})
+function addMatrixRow(field: FormField) {
+  if ((field.rows?.length || 0) >= 30) return
+  ;(field.rows ||= []).push({ id: crypto.randomUUID(), label: 'Statement' })
+}
 const selectedField = computed(() =>
   draft.value?.fields.find((field) => field.id === selection.value),
 )
@@ -331,7 +390,7 @@ async function select(template: FormTemplate) {
   message.value = ''
   error.value = ''
 }
-async function create(audit = false) {
+async function create(audit: boolean | ReportingStarter = false) {
   const owner = uid.value
   if (blocked.value) return
   if (
@@ -345,7 +404,10 @@ async function create(audit = false) {
     return
   if (uid.value !== owner) return
   pointerDrag.cancel()
-  draft.value = audit ? committeeAudit() : newTemplate()
+  draft.value =
+    typeof audit === 'string' ? reportingStarter(audit) : audit ? committeeAudit() : newTemplate()
+  // Source starters are reproducible initial content, just like the blank shell.
+  // Establish their baseline now; subsequent user edits still require confirmation.
   authoring.reset()
   preview.value = false
 }
@@ -424,6 +486,20 @@ function changeFieldKind(field: FormField, kind: FormFieldKind) {
     return
   }
   field.kind = kind
+  if (kind !== 'matrix') delete field.rows
+  if (kind !== 'repeat') {
+    delete field.fields
+    delete field.minInstances
+    delete field.maxInstances
+  }
+  if (kind === 'matrix' && !field.rows?.length)
+    field.rows = [{ id: crypto.randomUUID(), label: 'Statement' }]
+  if (kind === 'repeat' && !field.fields?.length)
+    Object.assign(field, {
+      fields: [newField('text', 'Site visited')],
+      minInstances: 1,
+      maxInstances: 20,
+    })
   if (kind !== 'number') {
     delete field.minimum
     delete field.integer
@@ -505,28 +581,39 @@ watch(
         <div>
           <h1>Form Builder</h1>
           <small
-            >{{ dirty ? 'Unsaved edits' : 'Draft saved' }} ·
+            >{{ dirty ? 'Unsaved edits' : draft && !serverTemplates.some(item => item.id === draft?.id) && !library.templates.some(item => item.id === draft?.id) ? 'New form - no edits' : 'Draft saved' }} ·
             {{ localPreview ? 'Local preview' : 'Forms' }}</small
           >
         </div>
         <nav aria-label="Builder modes">
           <button
-            :aria-pressed="!preview && settingsTab !== 'output'"
-            @click="((preview = false), (settingsTab = selection ? 'field' : 'form'))"
+            :aria-pressed="!entriesMode && !preview && settingsTab !== 'output'"
+            @click="
+              ((entriesMode = false),
+              (preview = false),
+              (settingsTab = selection ? 'field' : 'form'))
+            "
           >
             Edit</button
           ><button
-            :aria-pressed="preview && settingsTab !== 'output'"
-            @click="((preview = true), (settingsTab = 'form'))"
+            :aria-pressed="!entriesMode && preview && settingsTab !== 'output'"
+            @click="((entriesMode = false), (preview = true), (settingsTab = 'form'))"
           >
             Preview</button
           ><button
             aria-label="Output / issues"
             title="Output and issues"
-            :aria-pressed="settingsTab === 'output'"
-            @click="settingsTab = 'output'"
+            :aria-pressed="!entriesMode && settingsTab === 'output'"
+            @click="((entriesMode = false), (settingsTab = 'output'))"
           >
-            Output / review
+            Publishing
+          </button>
+          <button
+            :disabled="!serverEnabled || !draft"
+            :aria-pressed="entriesMode"
+            @click="entriesMode = true"
+          >
+            View Entries
           </button>
         </nav>
         <div class="header-actions">
@@ -559,7 +646,7 @@ watch(
               :disabled="serverBusy || !draft || draft.archived"
               @click="issueServer"
             >
-              {{ localPreview ? 'Issue local server version' : 'Issue version' }}
+              {{ localPreview ? 'Publish local version' : 'Publish' }}
             </button>
           </div>
           <div class="toolbar">
@@ -597,13 +684,21 @@ watch(
       <p v-if="legacyError" role="alert">{{ legacyError }}</p>
       <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
-      <div class="builder-layout">
+      <FormEntriesView v-if="entriesMode && draft" :template-id="draft.id" />
+      <div v-else class="builder-layout">
         <aside class="builder-sidebar" aria-label="Form library">
           <div class="library-creation">
             <button :disabled="creationLocked" @click="create()">
               <i class="pi pi-plus" aria-hidden="true" />New form</button
-            ><button :disabled="creationLocked" @click="create(true)">
-              <i class="pi pi-file-edit" aria-hidden="true" />Committee audit starter
+            ><button :disabled="creationLocked" @click="create('committee')">
+              Corrected Committee inspection
+            </button>
+            <button :disabled="creationLocked" @click="create('bbs')">BBS Observation</button>
+            <button :disabled="creationLocked" @click="create('general-visit')">
+              General Site Visit
+            </button>
+            <button :disabled="creationLocked" @click="create('near-miss')">
+              Near Miss / Safety Observation
             </button>
           </div>
           <nav class="sidebar-tabs" aria-label="Form palette">
@@ -697,6 +792,7 @@ watch(
                 class="form-library-row"
                 :class="{ selected: draft?.id === template.id }"
                 v-for="template in serverTemplates"
+                :data-template-id="template.id"
                 :key="template.id"
               >
                 <button
@@ -715,12 +811,13 @@ watch(
                       ? 'Issued version ' + template.latestVersion
                       : 'Draft'
                 }}</span
-                ><RouterLink
-                  v-if="draft?.id === template.id && template.latestVersion"
+                ><FormShareLinks v-if="draft?.id === template.id" :template="template" />
+                <RouterLink
+                  v-if="draft?.id === template.id && template.latestVersion && !template.archived && template.definition?.access?.respondents !== 'public'"
                   :to="'/forms/' + template.id"
                   class="library-open"
                   aria-label="Open authenticated form"
-                  ><i class="pi pi-external-link" aria-hidden="true" />Open form</RouterLink
+                  ><i class="pi pi-external-link" aria-hidden="true" />Open signed-in form</RouterLink
                 ><button
                   v-if="draft?.id === template.id"
                   :disabled="serverBusy || !serverAvailable || template.archived || dirty"
@@ -779,6 +876,9 @@ watch(
                         radio: 'pi-circle',
                         multiselect: 'pi-check-circle',
                         photo: 'pi-image',
+                        repeat: 'pi-clone',
+                        matrix: 'pi-table',
+                        recipients: 'pi-envelope',
                       }[kind],
                     ]"
                     aria-hidden="true"
@@ -953,6 +1053,32 @@ watch(
                   its inspector. Move buttons provide keyboard ordering.
                 </p>
               </section>
+              <section v-if="settingsTab === 'output'" aria-label="Publishing checks">
+                <h2>Publishing checks</h2>
+                <h3>Compared with published version</h3>
+                <ul>
+                  <li v-for="change in publishedChanges" :key="change">{{ change }}</li>
+                </ul>
+                <p>
+                  {{
+                    definitionErrors(draft).length
+                      ? 'Resolve these checks before publishing.'
+                      : 'Definition checks passed.'
+                  }}
+                </p>
+                <ul v-if="definitionErrors(draft).length">
+                  <li v-for="issue in definitionErrors(draft)" :key="issue">{{ issue }}</li>
+                </ul>
+                <p>
+                  Current published version:
+                  {{
+                    serverTemplates.find((template) => template.id === draft?.id)?.latestVersion ||
+                    'None'
+                  }}. Publishing saves this draft as the next immutable version. Existing entries
+                  retain their submitted version.
+                </p>
+                <p v-if="dirty">This draft contains unsaved changes.</p>
+              </section>
               <FormOutputSettings
                 v-if="settingsTab === 'output'"
                 :definition="draft"
@@ -967,7 +1093,7 @@ watch(
               >
                 <BuilderSelectionContext kind="Field" :scope="selectedField.label" />
                 <label
-                  >Selected field label<input v-model="selectedField.label" maxlength="160"
+                  >Selected field label<input v-model="selectedField.label" maxlength="1000"
                 /></label>
                 <label
                   >Selected field type<select
@@ -987,6 +1113,111 @@ watch(
                   ><input v-model="selectedField.required" type="checkbox" />Selected field
                   required</label
                 >
+                <section v-if="selectedField.kind === 'matrix'">
+                  <h3>Matrix statements</h3>
+                  <label v-for="row in selectedField.rows" :key="row.id"
+                    >Statement<input v-model="row.label" maxlength="1000" /><button
+                      type="button"
+                      @click="
+                        selectedField.rows = selectedField.rows?.filter(
+                          (item) => item.id !== row.id,
+                        )
+                      "
+                    >
+                      Remove statement
+                    </button></label
+                  >
+                  <button type="button" @click="addMatrixRow(selectedField)">Add statement</button>
+                </section>
+                <section v-if="selectedField.kind === 'repeat'">
+                  <label
+                    >Minimum groups<input
+                      v-model.number="selectedField.minInstances"
+                      type="number"
+                      min="1"
+                      max="20"
+                  /></label>
+                  <label
+                    >Maximum groups<input
+                      v-model.number="selectedField.maxInstances"
+                      type="number"
+                      min="1"
+                      max="20"
+                  /></label>
+                  <div v-for="(child, childIndex) in selectedField.fields" :key="child.id">
+                    <label>Group field label<input v-model="child.label" maxlength="1000" /></label>
+                    <label
+                      >Type<select
+                        :value="child.kind"
+                        @change="
+                          changeFieldKind(
+                            child,
+                            ($event.target as HTMLSelectElement).value as FormFieldKind,
+                          )
+                        "
+                      >
+                        <option
+                          v-for="kind in fieldKinds.filter((kind) => kind !== 'repeat')"
+                          :key="kind"
+                        >
+                          {{ kind }}
+                        </option>
+                      </select></label
+                    >
+                    <label><input v-model="child.required" type="checkbox" />Required</label>
+                    <section v-if="child.kind === 'matrix'">
+                      <label v-for="row in child.rows" :key="row.id"
+                        >Statement<input v-model="row.label" maxlength="1000" />
+                        <button
+                          type="button"
+                          @click="child.rows = child.rows?.filter((item) => item.id !== row.id)"
+                        >
+                          Remove statement
+                        </button>
+                      </label>
+                      <button type="button" @click="addMatrixRow(child)">Add statement</button>
+                    </section>
+                    <button
+                      type="button"
+                      :disabled="childIndex === 0"
+                      @click="moveGroupField(selectedField, child.id, childIndex - 1)"
+                    >
+                      Move group field up
+                    </button>
+                    <button
+                      type="button"
+                      :disabled="childIndex === (selectedField.fields?.length || 0) - 1"
+                      @click="moveGroupField(selectedField, child.id, childIndex + 1)"
+                    >
+                      Move group field down
+                    </button>
+                    <label>Help text<input v-model="child.hint" maxlength="1000" /></label>
+                    <label v-if="optionFieldKinds.includes(child.kind)"
+                      >Options<textarea
+                        :value="child.options.join('\n')"
+                        @input="
+                          child.options = ($event.target as HTMLTextAreaElement).value.split('\n')
+                        "
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      @click="
+                        selectedField.fields = selectedField.fields?.filter(
+                          (field) => field.id !== child.id,
+                        )
+                      "
+                    >
+                      Remove group field
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    @click="(selectedField.fields ||= []).push(newField('text'))"
+                  >
+                    Add group field
+                  </button>
+                </section>
                 <label v-if="optionFieldKinds.includes(selectedField.kind)"
                   >Selected field options<textarea
                     :value="selectedField.options.join('\n')"
