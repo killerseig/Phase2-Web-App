@@ -346,8 +346,7 @@ async function create(audit = false) {
   if (uid.value !== owner) return
   pointerDrag.cancel()
   draft.value = audit ? committeeAudit() : newTemplate()
-  authoring.reset(true)
-  dirty.value = true
+  authoring.reset()
   preview.value = false
 }
 function save(version = false) {
@@ -838,7 +837,6 @@ watch(
                 v-else
                 class="canvas-panel"
                 :disabled="authoringLocked"
-                @input="dirty = true"
               >
                 <h2 class="canvas-title">{{ draft.title }}</h2>
                 <p class="canvas-description">{{ draft.description }}</p>
@@ -925,7 +923,7 @@ watch(
                 </ul>
               </fieldset></FormCanvasViewport
             >
-            <fieldset class="inspector-panel" :disabled="authoringLocked" @input="dirty = true">
+            <fieldset class="inspector-panel" :disabled="authoringLocked">
               <nav class="settings-tabs" aria-label="Form settings tabs">
                 <button :aria-pressed="settingsTab === 'form'" @click="settingsTab = 'form'">
                   <i class="pi pi-cog" aria-hidden="true" /> Form</button
@@ -959,7 +957,7 @@ watch(
                 v-if="settingsTab === 'output'"
                 :definition="draft"
                 :template-id="draft.id"
-                @update:definition="(Object.assign(draft, $event), (dirty = true))"
+                @update:definition="Object.assign(draft, $event)"
               />
               <section
                 v-if="selectedField && !preview"

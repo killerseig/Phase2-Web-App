@@ -1,12 +1,13 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { clone, type FormTemplate, type FormDefinition } from './model'
+import { stableFormFingerprint } from './formDirtyState'
 type Snapshot = { definition: FormDefinition; selection: string }
 export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Ref<boolean>) {
   const selection = ref(''),
     past = ref<Snapshot[]>([]),
     future = ref<Snapshot[]>([])
   let current: Snapshot | undefined,
-    baseline = ''
+    baseline = ref('')
   const definition = (): FormDefinition | undefined =>
     draft.value
       ? clone({
@@ -17,14 +18,14 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
           recipients: draft.value.recipients,
         })
       : undefined
-  const fingerprint = () => JSON.stringify(definition())
+  const fingerprint = () => stableFormFingerprint(definition())
   function reset(unsaved = false) {
     selection.value = draft.value?.fields[0]?.id || ''
     past.value = []
     future.value = []
     const value = definition()
     current = value ? { definition: value, selection: selection.value } : undefined
-    baseline = unsaved ? '' : fingerprint()
+    baseline.value = unsaved ? '' : fingerprint()
     dirty.value = unsaved
   }
   function select(id: string) {
@@ -33,7 +34,7 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
     if (current) current.selection = id
   }
   function saved() {
-    baseline = fingerprint()
+    baseline.value = fingerprint()
     dirty.value = false
   }
   watch(
@@ -41,21 +42,28 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
     () => {
       const value = definition()
       if (!value || !current) return
-      if (JSON.stringify(value) === JSON.stringify(current.definition)) return
+      if (stableFormFingerprint(value) === stableFormFingerprint(current.definition)) return
       past.value.push(clone(current))
       if (past.value.length > 60) past.value.shift()
       future.value = []
       current = { definition: value, selection: selection.value }
-      dirty.value = fingerprint() !== baseline
+      dirty.value = fingerprint() !== baseline.value
     },
     { deep: true, flush: 'post' },
   )
+  // Navigation can run before the post-flush history watcher. Compare actual data
+  // synchronously rather than treating bubbled preview input events as edits.
+  watch(fingerprint, value => { if (draft.value) dirty.value = value !== baseline.value }, { flush: 'sync' })
+  watch(dirty, () => {
+    const changed = !!draft.value && fingerprint() !== baseline.value
+    if (dirty.value !== changed) dirty.value = changed
+  }, { flush: 'sync' })
   function restore(snapshot: Snapshot) {
     if (!draft.value) return
     Object.assign(draft.value, clone(snapshot.definition))
     selection.value = snapshot.selection
     current = clone(snapshot)
-    dirty.value = fingerprint() !== baseline
+    dirty.value = fingerprint() !== baseline.value
   }
   function undo() {
     const previous = past.value.pop()
