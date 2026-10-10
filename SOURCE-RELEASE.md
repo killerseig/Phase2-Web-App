@@ -22,6 +22,6 @@ Broader Hosting remains pending the established formEntries prerequisite. Prior 
 
 The scopedIntegrationApi is source only; endpoint/invoker deployment and credential provisioning remain separate gates. No key exists from this work.
 
-Prepared formEmail/deliverFormEmail handlers bind FORM_TRANSLATION_API_KEY, unlike their current deployed versions. No secret provisioning/binding or email-function deployment was performed. Review/decouple that dependency or explicitly approve the required secret/configuration before release. Existing sender address/no-reply configuration and actual delivery are unverified.
+Follow-up: ordinary report-email preparation no longer loads the translation service, and formEmail/deliverFormEmail mount only their four existing Graph secrets. Secret metadata confirms all four Graph objects exist and FORM_TRANSLATION_API_KEY does not. No secret values were accessed; none were created. Translation remains deferred. Fresh function metadata shows formEmail exists, but deliverFormEmail is absent: automatic sending requires approval to create that event trigger. Existing sender address/no-reply configuration and actual delivery remain unverified.
 
 No new broader Hosting or Functions deployment was attempted in this source release. Previously deployed dirty-state-only Hosting remains live. Source push does not establish new live report entry, email, API, SDS intake or gallery behavior. Owner-authenticated acceptance and actual delivery remain unverified; no live saves, uploads, submissions or emails were used as tests.

@@ -7,7 +7,6 @@ import { buildCurrentFunctionUser } from './roleAccess'
 import { getGraphEmailSecrets } from './functionConfig'
 import { classifyEmailDeliveryError } from './emailDeliveryErrors'
 import { isEmailEnabled, sendEmail } from './emailService'
-import { formTranslationApiKey } from './formTranslationService'
 export interface FormEmailAdapter {
   enabled: () => boolean
   send: (record: FormRecord, recipients: string[]) => Promise<void>
@@ -84,7 +83,7 @@ export async function deliverFormSubmission(
   })
 }
 export const formEmail = onCall(
-  { secrets: [...getGraphEmailSecrets(), formTranslationApiKey], timeoutSeconds: 120 },
+  { secrets: getGraphEmailSecrets(), timeoutSeconds: 120 },
   async (request) => {
     const id = request.data?.id
     if (!formId(id) || !request.auth?.uid)
@@ -111,7 +110,7 @@ export const formEmail = onCall(
 export const deliverFormEmail = onDocumentCreated(
   {
     document: 'formDeliveries/{id}',
-    secrets: [...getGraphEmailSecrets(), formTranslationApiKey],
+    secrets: getGraphEmailSecrets(),
     timeoutSeconds: 120,
     retry: false,
   },

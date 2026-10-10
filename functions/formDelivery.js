@@ -11,7 +11,6 @@ const roleAccess_1 = require("./roleAccess");
 const functionConfig_1 = require("./functionConfig");
 const emailDeliveryErrors_1 = require("./emailDeliveryErrors");
 const emailService_1 = require("./emailService");
-const formTranslationService_1 = require("./formTranslationService");
 var formEmailContent_1 = require("./formEmailContent");
 Object.defineProperty(exports, "buildFormEmailHtml", { enumerable: true, get: function () { return formEmailContent_1.buildFormEmailHtml; } });
 Object.defineProperty(exports, "buildFormEmailText", { enumerable: true, get: function () { return formEmailContent_1.buildFormEmailText; } });
@@ -82,7 +81,7 @@ async function deliverFormSubmission(id, retry = false, adapter = provider) {
             tx.update(ref, { status, attemptFinishedAt: Date.now() });
     });
 }
-exports.formEmail = (0, https_1.onCall)({ secrets: [...(0, functionConfig_1.getGraphEmailSecrets)(), formTranslationService_1.formTranslationApiKey], timeoutSeconds: 120 }, async (request) => {
+exports.formEmail = (0, https_1.onCall)({ secrets: (0, functionConfig_1.getGraphEmailSecrets)(), timeoutSeconds: 120 }, async (request) => {
     const id = request.data?.id;
     if (!(0, formModel_1.formId)(id) || !request.auth?.uid)
         throw new https_1.HttpsError('unauthenticated', 'Sign in and choose a submission.');
@@ -104,7 +103,7 @@ exports.formEmail = (0, https_1.onCall)({ secrets: [...(0, functionConfig_1.getG
 });
 exports.deliverFormEmail = (0, firestore_1.onDocumentCreated)({
     document: 'formDeliveries/{id}',
-    secrets: [...(0, functionConfig_1.getGraphEmailSecrets)(), formTranslationService_1.formTranslationApiKey],
+    secrets: (0, functionConfig_1.getGraphEmailSecrets)(),
     timeoutSeconds: 120,
     retry: false,
 }, async (event) => {

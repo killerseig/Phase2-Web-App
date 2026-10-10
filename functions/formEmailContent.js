@@ -17,7 +17,6 @@ const functionConfig_1 = require("./functionConfig");
 const emailService_1 = require("./emailService");
 const constants_1 = require("./constants");
 const sharp_1 = __importDefault(require("sharp"));
-const formTranslationService_1 = require("./formTranslationService");
 const formTranslationEmail_1 = require("./formTranslationEmail");
 const dailyLogEmailPhotos_1 = require("./dailyLogEmailPhotos");
 class FormEmailPreparationError extends Error {
@@ -28,7 +27,6 @@ class FormEmailPreparationError extends Error {
 }
 exports.FormEmailPreparationError = FormEmailPreparationError;
 const defaults = {
-    translate: formTranslationService_1.prepareFormTranslation,
     loadAsset: async (id) => (await runtime_1.db.doc('formAssets/' + id).get()).data(),
     download: async (path, maxBytes) => {
         const file = runtime_1.storageBucket.file(path);

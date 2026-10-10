@@ -12,7 +12,6 @@ import { getAppBaseUrl } from './functionConfig'
 import { buildSubmissionEmailRouting, type SendEmailOptions } from './emailService'
 import { EMAIL } from './constants'
 import sharp from 'sharp'
-import { prepareFormTranslation } from './formTranslationService'
 import { formTranslationEmailContent } from './formTranslationEmail'
 import type { FormTranslation } from './formTranslation'
 import {
@@ -45,7 +44,6 @@ export class FormEmailPreparationError extends Error {
   }
 }
 const defaults: FormEmailDependencies = {
-  translate: prepareFormTranslation,
   loadAsset: async (id) =>
     (await db.doc('formAssets/' + id).get()).data() as FormPhotoAsset | undefined,
   download: async (path, maxBytes) => {
