@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.entryReaderAllowed = entryReaderAllowed;
 exports.authorizeFormEntry = authorizeFormEntry;
 exports.authorizeFormEntriesPage = authorizeFormEntriesPage;
 const https_1 = require("firebase-functions/v2/https");
@@ -45,6 +46,14 @@ async function jobAllowed(record, user) {
             isShopJob: (0, jobIdentity_1.isFunctionShopJob)(job.data()),
         }));
 }
+/** Server-created release fixtures never broaden existing private viewer access. */
+function entryReaderAllowed(record, user, policy) {
+    const validationOwner = record.validationOwnerUid;
+    if (validationOwner !== undefined &&
+        (typeof validationOwner !== 'string' || validationOwner !== record.ownerUid || user.uid !== validationOwner))
+        return false;
+    return (0, formAccess_1.canReadFormEntry)(policy, record.ownerUid, user);
+}
 async function authorizeFormEntry(id, uid) {
     if (!(0, formModel_1.formId)(id))
         throw denied();
@@ -52,7 +61,7 @@ async function authorizeFormEntry(id, uid) {
     const record = (await runtime_1.db.doc('formSubmissions/' + id).get()).data();
     if (!record || record.status !== 'submitted')
         throw denied();
-    if (!(0, formAccess_1.canReadFormEntry)(await currentEntryPolicy(record.templateId, record.definition.access), record.ownerUid, user))
+    if (!entryReaderAllowed(record, user, await currentEntryPolicy(record.templateId, record.definition.access)))
         throw denied();
     if (!(await jobAllowed(record, user)))
         throw denied();
@@ -83,7 +92,7 @@ async function authorizeFormEntriesPage(templateId, uid, cursor, snapshotBefore)
         .map((doc) => doc.data())
         .filter((record) => record.status === 'submitted' &&
         (record.submittedAt || 0) <= boundary &&
-        (0, formAccess_1.canReadFormEntry)(policy, record.ownerUid, user));
+        entryReaderAllowed(record, user, policy));
     const records = (await Promise.all(allowed.map(async (record) => ((await jobAllowed(record, user)) ? record : undefined)))).filter((record) => !!record);
     const nextCursor = snapshot.docs.length > 100 ? scanned[scanned.length - 1].id : null;
     return { records, nextCursor, snapshotBefore: boundary, complete: nextCursor === null };

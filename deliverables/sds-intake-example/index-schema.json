@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phase 2 SDS bulk import index version 1",
+  "type": "object",
+  "required": [
+    "version",
+    "files"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "size",
+          "sha256",
+          "name",
+          "language"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.?(?:[/\\\\]|$))(?!.*[/\\\\]{2})(?!.*[:\\u0000-\\u001f]).+\\.[pP][dD][fF]$",
+            "description": "Relative file path. Folder picker includes the selected folder name; individual picker uses the filename. Paths must be unique ignoring case."
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20971520,
+            "description": "Exact PDF byte length."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$",
+            "description": "SHA-256 of the exact PDF bytes."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "\\S"
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
+          "manufacturer": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "productCode": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "revisionDate": {
+            "anyOf": [
+              {
+                "const": ""
+              },
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            ],
+            "description": "Actual revision evidence, not upload date. Empty if unverified."
+          },
+          "provenance": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      }
+    }
+  }
+}

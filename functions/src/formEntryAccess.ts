@@ -39,16 +39,23 @@ async function jobAllowed(record: FormRecord, user: Awaited<ReturnType<typeof re
     })
   )
 }
+/** Server-created release fixtures never broaden existing private viewer access. */
+export function entryReaderAllowed(record: FormRecord, user: { uid: string; role: string; active: boolean }, policy: unknown) {
+  const validationOwner = (record as FormRecord & { validationOwnerUid?: unknown }).validationOwnerUid
+  if (validationOwner !== undefined &&
+      (typeof validationOwner !== 'string' || validationOwner !== record.ownerUid || user.uid !== validationOwner)) return false
+  return canReadFormEntry(policy, record.ownerUid, user)
+}
 export async function authorizeFormEntry(id: string, uid?: string): Promise<FormRecord> {
   if (!formId(id)) throw denied()
   const user = await reader(uid)
   const record = (await db.doc('formSubmissions/' + id).get()).data() as FormRecord | undefined
   if (!record || record.status !== 'submitted') throw denied()
   if (
-    !canReadFormEntry(
-      await currentEntryPolicy(record.templateId, record.definition.access),
-      record.ownerUid,
+    !entryReaderAllowed(
+      record,
       user,
+      await currentEntryPolicy(record.templateId, record.definition.access),
     )
   )
     throw denied()
@@ -90,7 +97,7 @@ export async function authorizeFormEntriesPage(
       (record) =>
         record.status === 'submitted' &&
         (record.submittedAt || 0) <= boundary &&
-        canReadFormEntry(policy, record.ownerUid, user),
+        entryReaderAllowed(record, user, policy),
     )
   const records = (
     await Promise.all(

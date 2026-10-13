@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "synthetic-sds.pdf",
+      "size": 1241,
+      "sha256": "8b87c0f59eb9511437975c9bd23ebd3212b399e6aa608be0de46b063c87087ed",
+      "name": "Synthetic import fixture - not an SDS",
+      "manufacturer": "Synthetic Test Manufacturer",
+      "productCode": "SYNTHETIC-ONLY",
+      "language": "English",
+      "revisionDate": "",
+      "provenance": "Generated harmless validation fixture. Not approved safety content; currency unverified."
+    }
+  ]
+}

@@ -1,4 +1,10 @@
 import { type FormRecord } from './formModel';
+/** Server-created release fixtures never broaden existing private viewer access. */
+export declare function entryReaderAllowed(record: FormRecord, user: {
+    uid: string;
+    role: string;
+    active: boolean;
+}, policy: unknown): boolean;
 export declare function authorizeFormEntry(id: string, uid?: string): Promise<FormRecord>;
 export interface FormEntryPage {
     records: FormRecord[];

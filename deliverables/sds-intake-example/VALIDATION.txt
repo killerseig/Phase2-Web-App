@@ -1,0 +1,13 @@
+Phase 2 SDS index example
+
+This PDF is synthetic and is not an SDS. Nothing is uploaded automatically.
+
+1. Keep example-index.json and synthetic-sds.pdf together. Select the PDF as an individual file so its relative path is synthetic-sds.pdf. Folder selection instead includes the selected folder's name and requires matching index paths.
+2. Verify SHA-256 and byte size before preflight. On Windows: Get-FileHash -Algorithm SHA256 -LiteralPath .\synthetic-sds.pdf; (Get-Item -LiteralPath .\synthetic-sds.pdf).Length
+3. The expected size is 1241 bytes; SHA-256 is 8b87c0f59eb9511437975c9bd23ebd3212b399e6aa608be0de46b063c87087ed.
+4. Admin opens Bulk PDF import, chooses an approved destination folder, selects the index and matching PDFs, and validates the preview before explicitly starting. Do not import this sample into the approved SDS library.
+5. Use index-schema.json as a strict reference schema. JSON Schema cannot prove file hashes, case-insensitive path uniqueness or complete selection matching; the application/server validator must perform those checks. Name/language must remain nonblank after trimming; revision dates must be actual calendar dates.
+6. Only nonempty readable unencrypted PDFs up to 20 MB and 500 pages are accepted by this bulk importer, with at most 10,000 index rows. Missing/orphan files and duplicate paths are rejected. Source paths do not create destination folders.
+7. Do not infer currency from upload date or hash. Leave revisionDate empty unless supported by evidence, and retain provenance. Imported currency remains unverified.
+
+This pack contains no real SDS, personal data, credentials or application source bundle.
