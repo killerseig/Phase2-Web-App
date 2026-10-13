@@ -63,7 +63,7 @@ describe('bulk index import', () => {
       binder: { version: 0, selections: [] },
     })
     vi.mocked(uploadDocument).mockResolvedValue({
-      uploadId: 'staged',
+      uploadId: '00000000-0000-4000-8000-000000000066',
       uploadExtension: 'pdf',
       originalName: 'original.pdf',
       cleanup: vi.fn(async () => undefined),
