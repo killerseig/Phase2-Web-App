@@ -5,7 +5,8 @@ const identity = '792793988588-compute@developer.gserviceaccount.com'
 const selected = ['formTemplates', 'formWorkspace', 'formSubmissionViewer', 'sdsWorkspace', 'formEmail', 'formEntries', 'deliverFormEmail']
 const secrets = ['GRAPH_CLIENT_ID', 'GRAPH_TENANT_ID', 'GRAPH_CLIENT_SECRET', 'OUTLOOK_SENDER_EMAIL']
 const directory = '.forms-local-data/oct13-release'
-const before = JSON.parse(fs.readFileSync(directory + '/before.json'))
+const before = JSON.parse(fs.readFileSync(directory + (process.argv.includes('--worker-only') ? '/after-region-stop.json' : '/before.json')))
+const targets = process.argv.includes('--worker-only') ? ['deliverFormEmail'] : selected
 assert.equal(before.project, project)
 assert.ok(selected.every(name => ['formEntries', 'deliverFormEmail'].includes(name) || before.functions.some(f => f.name === name && f.state === 'ACTIVE')))
 assert.equal(before.deliveryCounts.queued, 0, 'Reinspect queued-delivery effects before activating the worker')
@@ -39,7 +40,8 @@ Client.prototype.request = function(options) {
       const name = requestPath.match(/\/functions\/([^/:]+)$/)?.[1] || options.queryParams?.functionId || options.body?.name?.split('/').at(-1)
       if (method === 'DELETE') stop('Function deletion is not approved', method, requestPath)
       if (['PATCH', 'PUT'].includes(method) || (method === 'POST' && /\/functions$/.test(requestPath))) {
-        if (!selected.includes(name) || !requestPath.includes(`projects/${project}/locations/${region}/`)) stop('Unselected function mutation is not approved', method, requestPath)
+        const allowedRegion = before.functions.find(f => f.name === name)?.region || region
+        if (!targets.includes(name) || !requestPath.includes(`projects/${project}/locations/${allowedRegion}/`)) stop('Unselected function mutation is not approved', method, requestPath)
         const account = options.body?.serviceConfig?.serviceAccountEmail
         if (account && account !== identity) stop('Runtime identity change is not approved', method, requestPath)
         const mounted = options.body?.serviceConfig?.secretEnvironmentVariables
@@ -78,7 +80,7 @@ async function main() {
   fs.writeFileSync(directory + '/selected-manifest.json', JSON.stringify(manifest, null, 2))
   if (process.argv.includes('--verify-only')) { console.log(JSON.stringify({ passed: true, endpoints: selected, secretNames: secrets, noDeferredModules: true, deployment: false })); restore(); return }
   process.env.FUNCTIONS_DISCOVERY_TIMEOUT = '120'
-  process.argv = [process.execPath, 'firebase', 'deploy', '--project', project, '--only', selected.map(x => 'functions:' + x).join(','), '--non-interactive', '--json']
+  process.argv = [process.execPath, 'firebase', 'deploy', '--project', project, '--only', targets.map(x => 'functions:' + x).join(','), '--non-interactive', '--json']
   require('firebase-tools/lib/bin/firebase.js')
 }
 main().catch(error => { restore(); console.error(error.message); process.exitCode = 1 })
