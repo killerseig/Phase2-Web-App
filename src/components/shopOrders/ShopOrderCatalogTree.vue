@@ -186,6 +186,7 @@ function handleQuantityUpdate(node: ShopOrderCatalogTreeNode, value: string) {
 
 <style scoped>
 .shop-orders-tree-pane__list {
+  container: shop-order-catalog / inline-size;
   display: grid;
   flex: 1 1 auto;
   align-content: start;

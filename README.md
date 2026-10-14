@@ -106,6 +106,28 @@ Every feature or fix must add or update meaningful Playwright coverage for the c
 
 All browser writes, email requests and publication checks must use synthetic fixtures or local emulators. Never exercise production-backed write UI or use production records as test data. A production bundle must also be checked for boot/public fallback/login behavior with external requests blocked. The build excludes the fixture runtime, so fixture browser results verify the selected source, not production-service availability.
 
+Hosting's Firebase predeploy hook requires `npm run test:shop-order-layout` before
+the build, including deployments started through `npm run deploy` or the Firebase
+CLI. Install the locked dependencies and Chromium with `npm ci` and
+`npx playwright install chromium` first. The gate starts this checkout on its own
+port with Firebase configuration blank, and runs the catalog, responsive and
+workspace fixture tests. A failure blocks the Hosting deployment.
+The gate also fails if any required Shop Orders regression suite is missing,
+so a release cannot silently omit the new catalog tests while running older tests.
+
+The October 7 catalog fix and its tests were absent from the October 13 release
+baseline. Builds and unit tests alone did not detect the narrow desktop pane.
+Preserve this fix, its browser tests and the predeploy hook when preparing future
+release branches. An older checkout that lacks the hook cannot enforce it.
+
+After a separately approved Hosting deployment, run `npm run verify:shop-order-layout`
+from the exact built release checkout. This read-only command fetches public HTML,
+the entry bundle and Shop Orders CSS, checks the catalog container/compact query,
+and requires the delivered stylesheet to match `dist`. It does not sign in, open
+orders or write data. For visual acceptance, open an existing catalog, search and
+expand a long-label category at 1280px/1366px and phone widths, and check that
+labels, price, quantity and Add remain readable. Do not submit an order as a test.
+
 ### Run End-to-End Tests with [Playwright](https://playwright.dev)
 
 ```sh

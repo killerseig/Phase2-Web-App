@@ -332,7 +332,11 @@ const toggleTestId = computed(() => (props.node.kind === 'root' ? 'shoporder-roo
   .shop-orders-tree-node__indent {
     width: calc(min(var(--node-depth, 0), 3) * 0.5rem);
   }
+}
 
+/* Desktop's catalog pane can be narrower than a phone viewport. Keep the
+   item name and price together whenever the pane needs the compact layout. */
+@container shop-order-catalog (max-width: 28rem) {
   .shop-orders-tree-node--item {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
