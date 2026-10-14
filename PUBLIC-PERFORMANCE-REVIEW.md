@@ -71,3 +71,7 @@ Chris authorized the project deployment on October 14, including the compatible 
 HTML still uses an existing function and Firestore; platform cold starts and real CDN behavior have not been measured after deployment. The change adds server-only generated snapshot records; older snapshots are retained and have no cleanup policy yet. Published image bytes already cached can remain available for up to five minutes after removal/unpublish. Open visible pages refresh on focus or at 30-second intervals, subject to successful network access. Scripted pages still require JavaScript, and mobile adaptation occurs during client initialization. A previous hashed private-app chunk can be unavailable after a future release; the existing preload-error reload behavior is unchanged.
 
 The benchmark uses synthetic images and desktop network simulation, not real phone hardware, actual live image LCP or authenticated intranet performance. No private app performance claim is made.
+
+## Verified release, October 14
+
+The compatible website services and Hosting are now released and verified. See [PUBLIC-WEBSITE-RELEASE-RECEIPT.md](PUBLIC-WEBSITE-RELEASE-RECEIPT.md) for the production commit, Hosting version, service revisions and live checks. Shop Orders passed its 47-test release gate and retains the exact existing live CSS hash. Published content, other functions and invocation policies are unchanged. The post-release matched live performance comparison is pending this release checkpoint.

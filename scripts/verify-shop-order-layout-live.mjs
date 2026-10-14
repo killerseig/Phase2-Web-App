@@ -12,6 +12,7 @@ async function readPublicAsset(path) {
   assert.equal(url.origin, base.origin, 'Assets must stay on the requested site.')
   const response = await fetch(url, {
     method: 'GET', credentials: 'omit', redirect: 'error', cache: 'no-store',
+    headers: { Accept: path === '/' ? 'text/html' : '*/*' },
     signal: AbortSignal.timeout(15000),
   })
   assert(response.ok, `${url.pathname}: HTTP ${response.status}`)
