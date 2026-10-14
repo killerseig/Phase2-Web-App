@@ -13,6 +13,7 @@ const roleAccess_1 = require("./roleAccess");
 const websiteChanges_1 = require("./websiteChanges");
 const publicWebsiteRoutes_1 = require("./publicWebsiteRoutes");
 const publicWebsiteSnapshot_1 = require("./publicWebsiteSnapshot");
+const publicReaderCompatibility_1 = require("./publicReaderCompatibility");
 const websiteModel_1 = require("./websiteModel");
 const state = runtime_1.db.doc('websitePrivate/state');
 const published = runtime_1.db.doc('websitePublished/current');
@@ -321,7 +322,7 @@ exports.websiteBuilder = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds:
     });
 });
 // Anonymous readers receive only the explicitly published snapshot, never draft state.
-exports.getPublishedWebsite = (0, https_1.onRequest)({ cors: true }, async (request, response) => {
+const publishedWebsiteHtml = (0, https_1.onRequest)({ cors: true }, async (request, response) => {
     response.set('Cache-Control', 'no-cache').set('X-Content-Type-Options', 'nosniff').set('Vary', 'Accept');
     if (!['GET', 'HEAD', 'POST'].includes(request.method)) {
         response.status(405).send('Method not allowed.');
@@ -372,6 +373,14 @@ exports.getPublishedWebsite = (0, https_1.onRequest)({ cors: true }, async (requ
         response.set('Cache-Control', 'no-store').status(503).send('The published website is temporarily unavailable.');
     }
 });
+const publishedWebsiteCallable = (0, https_1.onCall)(async () => {
+    const snapshot = (await published.get()).data();
+    const site = snapshot?.site ? (0, publicWebsiteRoutes_1.canonicalPublicSite)(snapshot.site) : null;
+    if (site)
+        (0, publicWebsiteSnapshot_1.assertPublic)(site);
+    return { site: site ? (0, publicWebsiteRoutes_1.legacyPublicSite)(site) : null, version: site ? snapshot?.version || (0, publicWebsiteSnapshot_1.publicVersion)(site, Number(snapshot?.publishedAt || 0)) : null };
+});
+exports.getPublishedWebsite = (0, publicReaderCompatibility_1.withPublicHtmlReader)(publishedWebsiteCallable, publishedWebsiteHtml);
 exports.websiteImage = (0, https_1.onRequest)(async (request, response) => {
     response.set('Cache-Control', 'no-store').set('X-Content-Type-Options', 'nosniff');
     if (!['GET', 'HEAD'].includes(request.method)) {

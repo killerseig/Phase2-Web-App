@@ -4,7 +4,7 @@ const targets = [
   { name: 'Study4Wyoming live', url: 'https://study4wyoming.com/' },
   { name: 'Phase2 live', url: 'https://phase2-website.web.app/' },
   { name: 'Phase2 localhost candidate', url: 'http://127.0.0.1:5822/' },
-]
+].filter(target => !process.argv.includes('--live-only') || !target.url.startsWith('http://127.'))
 const browser = await chromium.launch({ headless: true })
 const rows = []
 try {
@@ -41,5 +41,5 @@ try {
     }
     await context.close()
   }
-  writeFileSync('.forms-local-data/read-only-site-comparison.json', JSON.stringify({ checkedAt: new Date().toISOString(), browser: 'Chromium, fresh context for each cold/warm pair, normal HTTP cache; no routing/interception', conditions: '4Mbps/80ms imposed plus actual server/network latency; LCP captured 4.5s after readable content; two pairs per target/device; localhost is not a live-server comparison', rows }, null, 2))
+  writeFileSync(process.argv.includes('--live-only') ? '.forms-local-data/public-release/live-site-comparison.json' : '.forms-local-data/read-only-site-comparison.json', JSON.stringify({ checkedAt: new Date().toISOString(), browser: 'Chromium, fresh context for each cold/warm pair, normal HTTP cache; no routing/interception', conditions: '4Mbps/80ms imposed plus actual server/network latency; LCP captured 4.5s after readable content; two pairs per target/device; localhost is not a live-server comparison', rows }, null, 2))
 } finally { await browser.close() }

@@ -7,6 +7,7 @@ import { buildCurrentFunctionUser } from './roleAccess'
 import { compareWebsites } from './websiteChanges'
 import { canonicalPublicSite, legacyPublicSite, isReservedPublicSlug, publicPageUrl } from './publicWebsiteRoutes'
 import { assertPublic, generatePublicPages, regeneratePublicPages, publicVersion, publicRendererId, servePublicHtml } from './publicWebsiteSnapshot'
+import { withPublicHtmlReader } from './publicReaderCompatibility'
 import {
   initialWebsite,
   publishedWebsite,
@@ -358,7 +359,7 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
 })
 
 // Anonymous readers receive only the explicitly published snapshot, never draft state.
-export const getPublishedWebsite = onRequest({ cors: true }, async (request, response) => {
+const publishedWebsiteHtml = onRequest({ cors: true }, async (request, response) => {
   response.set('Cache-Control', 'no-cache').set('X-Content-Type-Options', 'nosniff').set('Vary', 'Accept')
   if (!['GET', 'HEAD', 'POST'].includes(request.method)) { response.status(405).send('Method not allowed.'); return }
   try {
@@ -386,6 +387,13 @@ export const getPublishedWebsite = onRequest({ cors: true }, async (request, res
     response.type('html').send(servePublicHtml(site, version, slug, body))
   } catch { response.set('Cache-Control', 'no-store').status(503).send('The published website is temporarily unavailable.') }
 })
+const publishedWebsiteCallable = onCall(async () => {
+  const snapshot = (await published.get()).data()
+  const site = snapshot?.site ? canonicalPublicSite(snapshot.site as WebsiteSite) : null
+  if (site) assertPublic(site)
+  return { site: site ? legacyPublicSite(site) : null, version: site ? snapshot?.version || publicVersion(site, Number(snapshot?.publishedAt || 0)) : null }
+})
+export const getPublishedWebsite = withPublicHtmlReader(publishedWebsiteCallable, publishedWebsiteHtml)
 export const websiteImage = onRequest(async (request, response) => {
   response.set('Cache-Control', 'no-store').set('X-Content-Type-Options', 'nosniff')
   if (!['GET', 'HEAD'].includes(request.method)) {

@@ -50,7 +50,7 @@ Client.prototype.request = function(options) {
         if (options.body?.buildConfig?.runtime && options.body.buildConfig.runtime !== prior.buildConfig.runtime) stop('Runtime version change', method, host, requestPath)
       } else if (!(method === 'POST' && requestPath === '/projects/'+project+'/locations/us-central1/functions:generateUploadUrl')) stop('Unexpected function operation', method, host, requestPath)
     } else if (host.includes('firebasehosting.googleapis.com')) {
-      if (!hosting || !requestPath.startsWith('/projects/'+project+'/sites/'+project+'/') && !requestPath.startsWith('/sites/'+project+'/')) stop('Unselected Hosting mutation', method, host, requestPath)
+      if (!hosting || !/^\/projects\/(?:-|phase2-website|792793988588)\/sites\/phase2-website\/(?:versions|channels\/live\/releases)(?:\/|:|$)/.test(requestPath)) stop('Unselected Hosting mutation', method, host, requestPath)
       if (method === 'DELETE') stop('Hosting deletion', method, host, requestPath)
     } else if (!host.includes('storage.googleapis.com') && !host.includes('upload-firebasehosting.googleapis.com')) stop('Unexpected deployment mutation', method, host, requestPath)
     audit.push({ method, host, path: requestPath })
@@ -79,6 +79,7 @@ async function main() {
     const manifest = await loader.loadStack(path.resolve('functions'))
     assert.deepEqual(Object.keys(manifest.endpoints).sort(), [...selected].sort())
     assert.equal((manifest.params || []).filter(p => p.type === 'secret').length, 0)
+    assert.ok(manifest.endpoints.getPublishedWebsite.callableTrigger, 'Keep the existing callable endpoint declaration')
     fs.writeFileSync(directory + '/selected-manifest.json', JSON.stringify(manifest,null,2))
   }
   if (process.argv.includes('--verify-only')) { console.log('Verified public release selection; no deployment performed.'); restore(); return }
