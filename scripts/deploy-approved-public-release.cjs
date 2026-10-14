@@ -14,7 +14,7 @@ function stop(message, method, host, requestPath) {
   throw Error(message + ': ' + requestPath)
 }
 Client.prototype.request = function(options) {
-  const method = String(options.method || 'GET').toUpperCase(), requestPath = String(options.path || '').split('?')[0], host = String(this.opts?.urlPrefix || '')
+  const method = String(options.method || 'GET').toUpperCase(), requestPath = '/' + String(options.path || '').split('?')[0].replace(/^\/+/, ''), host = String(this.opts?.urlPrefix || '')
   if (method === 'POST' && /:testIamPermissions$|:getIamPolicy$/.test(requestPath)) return originalRequest.call(this, options)
   if (method === 'POST' && /:generateServiceIdentity$/.test(requestPath)) {
     const service = requestPath.match(/services\/([^/:]+):generateServiceIdentity$/)?.[1]
