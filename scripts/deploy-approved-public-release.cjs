@@ -49,6 +49,8 @@ Client.prototype.request = function(options) {
         if (config.secretEnvironmentVariables?.length || config.secretVolumes?.length) stop('Secret binding change', method, host, requestPath)
         if (options.body?.buildConfig?.runtime && options.body.buildConfig.runtime !== prior.buildConfig.runtime) stop('Runtime version change', method, host, requestPath)
       } else if (!(method === 'POST' && requestPath === '/projects/'+project+'/locations/us-central1/functions:generateUploadUrl')) stop('Unexpected function operation', method, host, requestPath)
+    } else if (host.includes('upload-firebasehosting.googleapis.com')) {
+      if (!hosting || !/^https:\/\/upload-firebasehosting\.googleapis\.com\/upload\/sites\/phase2-website\/versions\/[a-z0-9]+\/files$/.test(host) || !/^\/[a-f0-9]{64}$/.test(requestPath) || method !== 'POST') stop('Unselected Hosting file upload', method, host, requestPath)
     } else if (host.includes('firebasehosting.googleapis.com')) {
       if (!hosting || !/^\/projects\/(?:-|phase2-website|792793988588)\/sites\/phase2-website\/(?:versions|channels\/live\/releases)(?:\/|:|$)/.test(requestPath)) stop('Unselected Hosting mutation', method, host, requestPath)
       if (method === 'DELETE') stop('Hosting deletion', method, host, requestPath)
