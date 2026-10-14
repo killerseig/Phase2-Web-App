@@ -102,8 +102,6 @@ export declare const websiteBuilder: import("firebase-functions/v2/https").Calla
     id?: undefined;
     base64?: undefined;
 }>, unknown>;
-export declare const getPublishedWebsite: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
-    site: WebsiteSite;
-}>, unknown>;
+export declare const getPublishedWebsite: import("firebase-functions/v2/https").HttpsFunction;
 export declare const websiteImage: import("firebase-functions/v2/https").HttpsFunction;
 //# sourceMappingURL=websiteFunctions.d.ts.map

@@ -98,7 +98,7 @@ function update(text: string, format?: 'markdown', rich?: RichTextNode) {
         <input
           :value="item.linkUrl"
           maxlength="1000"
-          placeholder="https:// or /website/contact"
+          placeholder="https:// or /contact"
           data-link-url
           @input="emit('update', { linkUrl: ($event.target as HTMLInputElement).value })"
         />

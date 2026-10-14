@@ -6,6 +6,7 @@ exports.websiteAssetIds = websiteAssetIds;
 exports.publishedWebsite = publishedWebsite;
 exports.initialWebsite = initialWebsite;
 const node_vm_1 = require("node:vm");
+const publicWebsiteRoutes_1 = require("./publicWebsiteRoutes");
 const websiteMotion_1 = require("./websiteMotion");
 const websiteFonts_1 = require("./websiteFonts");
 const websiteTextBox_1 = require("./websiteTextBox");
@@ -84,7 +85,7 @@ function link(value) {
     const url = text(value, 1000, 'Link');
     if (!url)
         return '';
-    if (/^\/website(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(url) || url === '/login')
+    if ((0, publicWebsiteRoutes_1.isPublicPagePath)(url) || url === '/login')
         return url;
     if (/^mailto:[^\s<>]+@[^\s<>]+$/.test(url) || /^tel:\+?[0-9() .-]+$/.test(url))
         return url;
@@ -99,7 +100,7 @@ function link(value) {
     catch {
         /* Report one actionable error for all unsupported links. */
     }
-    return invalid('Use an HTTPS, email, phone, /login, or /website/page link.');
+    return invalid('Use an HTTPS, email, phone, /login, or public page link.');
 }
 function item(value) {
     const data = object(value);
@@ -601,6 +602,8 @@ function parsePage(value, shared = false) {
     if (page.chrome !== undefined && page.chrome !== 'widgets')
         invalid('Invalid page structure.');
     const slug = text(page.slug, 64, 'Page URL', true);
+    if (!shared && (0, publicWebsiteRoutes_1.isReservedPublicSlug)(slug))
+        invalid('This page URL is reserved for the employee app. Choose another URL.');
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))
         invalid('Page URLs use lowercase letters, numbers and hyphens.');
     const sections = validateSections(page.sections);
@@ -836,7 +839,7 @@ function publishedWebsite(site) {
             return (0, websiteForms_1.publicForm)(form);
         });
     }
-    const urls = new Set(['/website', '/login', ...site.pages.map((page) => `/website/${page.slug}`)]);
+    const urls = new Set(['/', '/website', '/login', ...site.pages.flatMap(page => [(0, publicWebsiteRoutes_1.publicPageUrl)(page.slug), `/website/${page.slug}`])]);
     if (site.branding?.logoId && !site.branding.logoAlt)
         invalid('Add a description for the website logo.');
     for (const entry of site.pages.some((page) => page.chrome !== 'widgets')
@@ -844,7 +847,7 @@ function publishedWebsite(site) {
         : []) {
         if (!entry.label || !entry.url)
             invalid('Complete or remove each footer link before publishing.');
-        if (entry.url.startsWith('/') && !urls.has(entry.url))
+        if (entry.url.startsWith('/') && !urls.has((0, publicWebsiteRoutes_1.publicLinkPath)(entry.url)))
             invalid('A footer link points to a page that does not exist.');
     }
     for (const page of result.pages) {
@@ -856,7 +859,7 @@ function publishedWebsite(site) {
             if (definition?.kind === 'visual' && !definition.sections.length)
                 invalid('Add visible content to each custom widget.');
             if (definition?.kind === 'code' &&
-                (0, websiteCustom_1.customCodeLinks)(definition.html).some((url) => url.startsWith('/') && !urls.has(url)))
+                (0, websiteCustom_1.customCodeLinks)(definition.html).some((url) => url.startsWith('/') && !urls.has((0, publicWebsiteRoutes_1.publicLinkPath)(url))))
                 invalid('A custom HTML link points to a page that does not exist.');
             if (definition?.kind === 'code' && !definition.html.trim())
                 invalid('Add HTML to each code widget.');
@@ -871,13 +874,13 @@ function publishedWebsite(site) {
                 invalid(`Add an image description on ${page.title}.`);
             if (Boolean(entry.linkUrl) !== Boolean(entry.linkLabel))
                 invalid(`Add both a button label and link on ${page.title}.`);
-            if (entry.linkUrl.startsWith('/') && !urls.has(entry.linkUrl))
+            if (entry.linkUrl.startsWith('/') && !urls.has((0, publicWebsiteRoutes_1.publicLinkPath)(entry.linkUrl)))
                 invalid(`A link on ${page.title} points to a page that does not exist.`);
             if ([
                 ...(entry.textFormat === 'markdown' ? (0, websiteContent_1.textLinks)(entry.text) : []),
                 ...(0, websiteRichText_1.richTextLinks)(entry.textRichText),
                 ...(0, websiteRichText_1.richTextLinks)(entry.titleRichText),
-            ].some((url) => url.startsWith('/') && !urls.has(url)))
+            ].some((url) => url.startsWith('/') && !urls.has((0, publicWebsiteRoutes_1.publicLinkPath)(url))))
                 invalid(`A text link on ${page.title} points to a page that does not exist.`);
         }
         for (const section of contentSections) {
@@ -889,12 +892,12 @@ function publishedWebsite(site) {
                 section.navigation.pageLabels?.some((label) => result.pages.some((page) => page.id === label.id && page.inNavigation) &&
                     !label.label.trim()))
                 invalid(`Complete each page link label on ${page.title}.`);
-            if ((0, websiteRichText_1.richTextLinks)(section.navigation?.brandRichText).some((url) => url.startsWith('/') && !urls.has(url)))
+            if ((0, websiteRichText_1.richTextLinks)(section.navigation?.brandRichText).some((url) => url.startsWith('/') && !urls.has((0, publicWebsiteRoutes_1.publicLinkPath)(url))))
                 invalid(`A brand link on ${page.title} points to a page that does not exist.`);
             for (const entry of (0, websiteContent_1.menuLinks)(section.navigation?.links || [])) {
                 if (!entry.label || (!entry.url && !entry.children?.length))
                     invalid(`Complete each menu link on ${page.title}.`);
-                if (entry.url.startsWith('/') && !urls.has(entry.url))
+                if (entry.url.startsWith('/') && !urls.has((0, publicWebsiteRoutes_1.publicLinkPath)(entry.url)))
                     invalid(`A menu link on ${page.title} points to a page that does not exist.`);
             }
         }
@@ -903,7 +906,7 @@ function publishedWebsite(site) {
         result.sharedLayout = result.pages.pop();
     if (Buffer.byteLength(JSON.stringify(result)) > 900000)
         invalid('The expanded website is too large to publish. Reduce repeated custom content.');
-    return result;
+    return (0, publicWebsiteRoutes_1.canonicalPublicSite)(result);
 }
 function initialWebsite() {
     return {

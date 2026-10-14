@@ -5,8 +5,9 @@ exports.inlineText = inlineText;
 exports.formattedText = formattedText;
 exports.textLinks = textLinks;
 exports.menuLinks = menuLinks;
+const publicWebsiteRoutes_1 = require("./publicWebsiteRoutes");
 function safeWebsiteLink(value) {
-    if (/^\/website(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(value) || value === '/login')
+    if ((0, publicWebsiteRoutes_1.isPublicPagePath)(value) || value === '/login')
         return true;
     if (/^mailto:[^\s<>]+@[^\s<>]+$/.test(value) || /^tel:\+?[0-9() .-]+$/.test(value))
         return true;

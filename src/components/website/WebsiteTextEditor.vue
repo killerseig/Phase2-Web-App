@@ -83,7 +83,7 @@ async function apply(kind: string) {
     </button>
   </div>
   <div v-if="linking">
-    <label>Text link URL<input v-model="link" placeholder="https:// or /website/contact" /></label
+    <label>Text link URL<input v-model="link" placeholder="https:// or /contact" /></label
     ><button type="button" @click="apply('link')">Apply text link</button>
   </div>
   <label

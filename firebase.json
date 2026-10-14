@@ -4,7 +4,7 @@
     "codebase": "default",
     "runtime": "nodejs22",
     "predeploy": [
-      "npm --prefix \"$RESOURCE_DIR\" run build"
+      "npm run build"
     ],
     "ignore": [
       "node_modules",
@@ -74,9 +74,145 @@
             "value": "sandbox allow-scripts allow-forms allow-top-navigation-by-user-activation; default-src 'none'; script-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com 'unsafe-inline'; style-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com 'unsafe-inline'; img-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com data: blob:; font-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com data:; connect-src 'none'; frame-src 'self' https://www.youtube-nocookie.com https://player.vimeo.com; media-src https:; form-action 'none'; base-uri 'none'; frame-ancestors 'self'"
           }
         ]
+      },
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/public-boot.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/public-style.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          },
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          }
+        ],
+        "source": "/public-assets/**"
       }
     ],
     "rewrites": [
+      {
+        "source": "/admin",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/forms",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/form-submissions",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/reports",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/company-library",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/dashboards",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/login",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/forgot-password",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/set-password",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/daily-log-gallery",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/jobs",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/dashboard",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/exports",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/users",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/employees",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/settings",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/assets",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/website-runtime",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/public-boot",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/public-style",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/sds-file",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/employee-app",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/index",
+        "destination": "/employee-app.html"
+      },
+      {
+        "source": "/favicon",
+        "destination": "/employee-app.html"
+      },
       {
         "source": "/website-image",
         "function": {
@@ -92,8 +228,81 @@
         }
       },
       {
+        "function": {
+          "functionId": "getPublishedWebsite",
+          "region": "us-central1"
+        },
+        "source": "/"
+      },
+      {
+        "function": {
+          "region": "us-central1",
+          "functionId": "getPublishedWebsite"
+        },
+        "source": "/website/**"
+      },
+      {
+        "function": {
+          "functionId": "getPublishedWebsite",
+          "region": "us-central1"
+        },
+        "source": "/*"
+      },
+      {
         "source": "**",
-        "destination": "/index.html"
+        "destination": "/employee-app.html"
+      }
+    ],
+    "redirects": [
+      {
+        "regex": "^/website/?$",
+        "destination": "/",
+        "type": 301
+      },
+      {
+        "regex": "^/website/home/?$",
+        "destination": "/",
+        "type": 301
+      },
+      {
+        "regex": "^/website/company/?$",
+        "destination": "/company",
+        "type": 301
+      },
+      {
+        "regex": "^/website/services/?$",
+        "destination": "/services",
+        "type": 301
+      },
+      {
+        "regex": "^/website/location/?$",
+        "destination": "/location",
+        "type": 301
+      },
+      {
+        "regex": "^/website/safety/?$",
+        "destination": "/safety",
+        "type": 301
+      },
+      {
+        "regex": "^/website/careers/?$",
+        "destination": "/careers",
+        "type": 301
+      },
+      {
+        "regex": "^/website/insights/?$",
+        "destination": "/insights",
+        "type": 301
+      },
+      {
+        "regex": "^/website/projects/?$",
+        "destination": "/projects",
+        "type": 301
+      },
+      {
+        "regex": "^/website/awards/?$",
+        "destination": "/awards",
+        "type": 301
       }
     ]
   },

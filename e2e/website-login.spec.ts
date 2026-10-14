@@ -32,7 +32,7 @@ async function mockWebsite(page: Page) {
     }
     await route.fulfill({ headers, json: { result } })
   })
-  await page.route('**/getPublishedWebsite', async (route) => {
+  await page.route('**/getPublishedWebsite*', async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers })
       return

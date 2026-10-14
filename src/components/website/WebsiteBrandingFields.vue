@@ -64,7 +64,7 @@ function addLink() {
           >Link address<input
             :value="link.url"
             maxlength="1000"
-            placeholder="https://, mailto:, tel:, or /website/page"
+            placeholder="https://, mailto:, tel:, or /page"
             @input="updateLink(index, 'url', ($event.target as HTMLInputElement).value)" /></label
         ><button type="button" @click="removeLink(index)">Remove footer link</button>
       </fieldset>

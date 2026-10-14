@@ -37,6 +37,7 @@ import WebsiteWidgetToolbar from '@/components/website/WebsiteWidgetToolbar.vue'
 import WebsiteAlignmentGuides from '@/components/website/WebsiteAlignmentGuides.vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import AppShell from '@/layouts/AppShell.vue'
+import { canonicalPublicUrl } from '../../functions/src/publicWebsiteRoutes'
 import WebsiteCanvas from '@/components/website/WebsiteCanvas.vue'
 import WebsiteAppearanceFields from '@/components/website/WebsiteAppearanceFields.vue'
 import WebsiteInspectorTabs, {
@@ -1026,7 +1027,7 @@ const inlineEditing: InlineEditing = {
 }
 provide(inlineEditingKey, inlineEditing)
 provide(navigationPreviewKey, {
-  pageId: (url) => site.value?.pages.find((entry) => pageUrl(entry.slug) === url)?.id,
+  pageId: (url) => site.value?.pages.find((entry) => pageUrl(entry.slug) === canonicalPublicUrl(url))?.id,
   navigate: (id) => {
     if (locked.value) return
     endInline()
@@ -2514,7 +2515,7 @@ onBeforeRouteLeave(() => {
             ><span class="desktop-label"> Site settings</span></button
           ><a
             v-if="publishedAt"
-            href="/website"
+            href="/"
             target="_blank"
             rel="noopener"
             aria-label="View website"

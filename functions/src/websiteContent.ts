@@ -1,5 +1,6 @@
 // Browser-safe content contracts. Formatted text is rendered as nodes, never HTML.
 import type { RichTextNode } from './websiteRichText'
+import { isPublicPagePath } from './publicWebsiteRoutes'
 export interface ImageSettings {
   focusX?: number
   focusY?: number
@@ -31,7 +32,7 @@ export interface NavigationSettings {
   links: MenuLink[]
 }
 export function safeWebsiteLink(value: string): boolean {
-  if (/^\/website(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(value) || value === '/login') return true
+  if (isPublicPagePath(value) || value === '/login') return true
   if (/^mailto:[^\s<>]+@[^\s<>]+$/.test(value) || /^tel:\+?[0-9() .-]+$/.test(value)) return true
   try {
     const url = new URL(value)

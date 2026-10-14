@@ -37,7 +37,7 @@ test('homepage prototype exercises shared design, mobile flow, images and keyboa
     }
     await route.fulfill({ headers, json: { result } })
   })
-  await page.route('**/getPublishedWebsite', (route) =>
+  await page.route('**/getPublishedWebsite*', (route) =>
     route.fulfill({
       headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
       json: { result: { site: published } },

@@ -230,7 +230,7 @@ async function mockWebsite(page: Page, draft: ReturnType<typeof fixture>) {
     if (data.action === 'save') result = { version: 2 }
     return route.fulfill({ headers, json: { result } })
   })
-  await page.route('**/getPublishedWebsite', (route) =>
+  await page.route('**/getPublishedWebsite*', (route) =>
     route.request().method() === 'OPTIONS'
       ? route.fulfill({ status: 204, headers })
       : route.fulfill({ headers, json: { result: { site: publishedWebsite(draft) } } }),

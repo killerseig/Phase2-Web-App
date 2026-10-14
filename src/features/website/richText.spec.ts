@@ -195,7 +195,7 @@ describe('website rich text', () => {
       sections: [{ ...newSection('text'), textRichText: rich(), titleRichText: rich() }],
     }
     const copied = copyPage(page, [page])
-    expect(richTextLinks(copied.sections[0]!.textRichText)).toEqual(['/website/home-copy'])
+    expect(richTextLinks(copied.sections[0]!.textRichText)).toEqual(['/home-copy'])
     expect(richTextLinks(page.sections[0]!.textRichText)).toEqual(['/website'])
     expect(
       publishingChecks({ name: 'Phase 2', accent: '#174878', pages: [page] }).filter(

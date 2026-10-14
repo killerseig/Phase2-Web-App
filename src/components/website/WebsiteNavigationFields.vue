@@ -136,7 +136,7 @@ function add(parent = -1) {
         >Menu URL<input
           :value="link.url"
           maxlength="1000"
-          placeholder="/website/contact"
+          placeholder="/contact"
           @input="
             change((next) => {
               next.links[index]!.url = ($event.target as HTMLInputElement).value

@@ -37,7 +37,7 @@ async function mockPublicSite(page: Page) {
     form.delivery.to = ['review@example.com']
   })
   const site = publishedWebsite(draft)
-  await page.route('**/getPublishedWebsite', (route) =>
+  await page.route('**/getPublishedWebsite*', (route) =>
     route.request().method() === 'OPTIONS'
       ? route.fulfill({ status: 204, headers })
       : route.fulfill({ headers, json: { result: { site } } }),

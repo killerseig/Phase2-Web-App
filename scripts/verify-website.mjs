@@ -46,7 +46,18 @@ const {
 const clients = []
 const call = (user, action, data = {}) =>
   websiteBuilder.run({ auth: user ? { uid: user.uid } : undefined, data: { action, ...data } })
-const publicSite = () => getPublishedWebsite.run({ data: {} })
+const publicApp = require('express')()
+publicApp.use(require('express').json())
+publicApp.post('/published', getPublishedWebsite)
+publicApp.get('/website', getPublishedWebsite)
+publicApp.get('/website/:slug', getPublishedWebsite)
+publicApp.get('/', getPublishedWebsite)
+publicApp.get('/:slug', getPublishedWebsite)
+const publicReadServer = createServer(publicApp)
+await new Promise(resolve => publicReadServer.listen(0, '127.0.0.1', resolve))
+const publicReadPort = publicReadServer.address().port
+const publicSite = async () => (await (await fetch(`http://127.0.0.1:${publicReadPort}/?format=json`)).json()).result
+const legacyPublicSiteRead = async () => (await (await fetch(`http://127.0.0.1:${publicReadPort}/published`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"data":{}}' })).json()).result
 let checks = 0
 async function reject(operation, code = /permission-denied|unauthenticated|unauthorized/) {
   await assert.rejects(operation, (error) => {
@@ -501,6 +512,22 @@ try {
   await reject(() => call(admin, 'publish', { version: 2 }), /invalid-argument/)
   await call(admin, 'save', { version: 2, site })
   await call(admin, 'publish', { version: 3 })
+  const htmlUrl = `http://127.0.0.1:${publicReadPort}`
+  const firstHtml = await fetch(htmlUrl, { headers: { Accept: 'text/html' } })
+  assert.equal(firstHtml.status, 200)
+  const firstBody = await firstHtml.text()
+  assert.ok(firstBody.includes('data-public-prerender'))
+  assert.ok(firstBody.includes('&lt;script&gt;bad()&lt;/script&gt;'))
+  assert.ok(!firstBody.includes('Library-only content'))
+  assert.equal((await fetch(htmlUrl, { headers: { Accept: 'text/html', 'If-None-Match': firstHtml.headers.get('etag') } })).status, 304)
+  assert.equal((await fetch(htmlUrl + '/missing', { headers: { Accept: 'text/html' } })).status, 404)
+  const firstSnapshot = await publicSite()
+  assert.equal((await legacyPublicSiteRead()).version, firstSnapshot.version)
+  const legacyHtml = await fetch(htmlUrl + '/website/home?source=email', { headers: { Accept: 'text/html' }, redirect: 'manual' })
+  assert.equal(legacyHtml.status, 301)
+  assert.equal(legacyHtml.headers.get('location'), '/?source=email')
+  assert.ok(!firstBody.includes('href="/website'))
+  assert.ok((await db.collection('websitePublishedSnapshots').doc(firstSnapshot.version).collection('pages').doc('home').get()).data().body)
   assert.equal((await call(admin, 'comparePublished', { version: 4, site })).total, 0)
   const comparisonDraft = structuredClone(site)
   comparisonDraft.pages[0].sections[1].title = 'Hidden change'
@@ -544,6 +571,9 @@ try {
   await call(admin, 'save', { version: 4, site })
   assert.equal((await publicSite()).site.name, 'Phase 2')
   await call(admin, 'publish', { version: 5 })
+  assert.notEqual((await publicSite()).version, firstSnapshot.version)
+  assert.equal((await fetch(htmlUrl + '?v=' + firstSnapshot.version, { headers: { Accept: 'text/html' } })).status, 410)
+  assert.ok((await (await fetch(htmlUrl, { headers: { Accept: 'text/html' } })).text()).includes('Private next version'))
   assert.equal((await publicSite()).site.name, 'Private next version')
   await call(admin, 'restore', { version: 6 })
   assert.deepEqual((await call(admin, 'load')).draft.savedSections, site.savedSections)
@@ -570,6 +600,7 @@ try {
     )
   }
   await call(admin, 'unpublish', { version: 8 })
+  assert.equal((await fetch(htmlUrl, { headers: { Accept: 'text/html' }, redirect: 'manual' })).status, 302)
   assert.equal((await publicSite()).site, null)
   assert.equal((await fetch(imageUrl(image.id))).status, 404)
   assert.equal((await fetch(imageUrl(logo.id))).status, 404)
@@ -645,7 +676,7 @@ try {
   assert.equal(
     publishedWebsite(validateWebsite(enhanced)).pages[0].sections[0].navigation.links[0].children[0]
       .url,
-    '/website',
+    '/',
   )
   assert.deepEqual(
     publishedWebsite(validateWebsite(enhanced)).pages[0].sections[0].navigation.brandRichText,
@@ -665,6 +696,7 @@ try {
     ],
   }
   const publishedMenu = publishedWebsite(validateWebsite(enhanced)).pages[0].sections[0].navigation
+  assert.equal(publishedMenu.links[0].children[0].url, '/')
   assert.equal(publishedMenu.loginLabel.label, 'Team sign in')
   assert.equal(publishedMenu.pageLabels[0].label, 'Welcome')
   assert.equal(publishedMenu.links[0].children[0].label, 'Formatted link')
@@ -1298,10 +1330,35 @@ try {
     await reject(async () => publishedWebsite(validateWebsite(candidate)), /invalid-argument/)
   }
 
+  // Exercise public HTML after page removal, code-version mismatch and rollback publication.
+  const minimal = { name: 'Rollback original', accent: '#174878', pages: [
+    { id: 'home', slug: 'home', title: 'Home', description: '', inNavigation: true, sections: [{ id: 'home-text', type: 'text', title: 'Original content', text: 'Public body', hidden: false, imageId: '', alt: '', linkUrl: '', linkLabel: '', items: [] }] },
+    { id: 'removed', slug: 'removed', title: 'Removed', description: '', inNavigation: true, sections: [{ id: 'removed-text', type: 'text', title: 'Removable content', text: 'Public body', hidden: false, imageId: '', alt: '', linkUrl: '', linkLabel: '', items: [] }] },
+  ] }
+  let liveState = await call(admin, 'load')
+  let savedState = await call(admin, 'save', { version: liveState.version, site: minimal })
+  let publishedState = await call(admin, 'publish', { version: savedState.version })
+  assert.equal((await fetch(htmlUrl + '/removed', { headers: { Accept: 'text/html' } })).status, 200)
+  const originalVersion = (await publicSite()).version
+  const changed = { ...minimal, name: 'Changed publication', pages: [minimal.pages[0]] }
+  savedState = await call(admin, 'save', { version: publishedState.version, site: changed })
+  publishedState = await call(admin, 'publish', { version: savedState.version })
+  assert.equal((await fetch(htmlUrl + '/removed', { headers: { Accept: 'text/html' } })).status, 404)
+  const changedVersion = (await publicSite()).version
+  await db.collection('websitePublishedSnapshots').doc(changedVersion).update({ rendererId: 'obsolete-build' })
+  await db.collection('websitePublishedSnapshots').doc(changedVersion).collection('pages').doc('home').update({ body: '<h1>OBSOLETE STORED BODY</h1>' })
+  assert.ok(!(await (await fetch(htmlUrl, { headers: { Accept: 'text/html' } })).text()).includes('OBSOLETE STORED BODY'))
+  const restoredState = await call(admin, 'restore', { version: publishedState.version })
+  await call(admin, 'publish', { version: restoredState.version })
+  assert.equal((await publicSite()).site.name, 'Rollback original')
+  assert.notEqual((await publicSite()).version, originalVersion)
+  assert.equal((await fetch(htmlUrl + '/removed', { headers: { Accept: 'text/html' } })).status, 200)
+
   console.log(
     `Website verification passed: ${checks} rejection checks, private drafts/images, validated publication, version conflicts, restoration, and unpublishing.`,
   )
 } finally {
+  await new Promise(resolve => publicReadServer.close(resolve))
   if (server) await new Promise((resolve) => server.close(resolve))
   await Promise.all(
     clients.map(async (client) => {

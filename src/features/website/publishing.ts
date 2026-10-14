@@ -1,3 +1,4 @@
+import { publicPageUrl, publicLinkPath } from '../../../functions/src/publicWebsiteRoutes'
 import { parseWebsiteHtml } from '../../../functions/src/websiteLayout'
 import { richTextLinks } from '../../../functions/src/websiteRichText'
 import { compilePageCss } from '../../../functions/src/websiteDesign'
@@ -48,7 +49,7 @@ export function publishingChecks(site: WebsiteSite) {
       })
     }
   }
-  const urls = new Set(['/website', '/login', ...site.pages.map((page) => `/website/${page.slug}`)])
+  const urls = new Set(['/', '/website', '/login', ...site.pages.flatMap(page => [publicPageUrl(page.slug), `/website/${page.slug}`])])
   function link(
     url: string,
     pageId: string,
@@ -56,7 +57,7 @@ export function publishingChecks(site: WebsiteSite) {
     sectionId?: string,
     target?: PublishingIssue['target'],
   ) {
-    if (url && (!safeWebsiteLink(url) || (url.startsWith('/') && !urls.has(url))))
+    if (url && (!safeWebsiteLink(url) || (url.startsWith('/') && !urls.has(publicLinkPath(url)))))
       issues.push({
         pageId,
         sectionId,

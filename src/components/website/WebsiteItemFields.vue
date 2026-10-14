@@ -174,7 +174,7 @@ function update(key: keyof WebsiteItem, event: Event) {
               ? 'YouTube, Vimeo, or https://.../video.mp4'
               : kind === 'downloads'
                 ? 'https://.../document.pdf'
-                : 'https:// or /website/contact'
+                : 'https:// or /contact'
           "
           @input="update('linkUrl', $event)"
       /></label>

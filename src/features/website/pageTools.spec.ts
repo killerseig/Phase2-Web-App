@@ -27,7 +27,7 @@ describe('website page tools', () => {
     const copy = copyPage(original, [original])
     expect(copy.slug).toBe('home-copy')
     expect(copy.sections[2]!.imageId).toBe('shared-image')
-    expect(copy.sections[2]!.items[0]!.linkUrl).toBe('/website/home-copy')
+    expect(copy.sections[2]!.items[0]!.linkUrl).toBe('/home-copy')
     expect(copy.sections[2]!.items[0]!.id).not.toBe(cards.items[0]!.id)
     copy.sections[2]!.items[0]!.title = 'Changed copy'
     expect(cards.items[0]!.title).toBe('Add your details')

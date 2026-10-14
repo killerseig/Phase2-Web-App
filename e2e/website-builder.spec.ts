@@ -215,7 +215,7 @@ async function mockWebsite(
           }
     await route.fulfill({ json: { result }, headers: { 'access-control-allow-origin': '*' } })
   })
-  await page.route('**/getPublishedWebsite', (route) =>
+  await page.route('**/getPublishedWebsite*', (route) =>
     route.fulfill({
       json: { result: { site: published } },
       headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },

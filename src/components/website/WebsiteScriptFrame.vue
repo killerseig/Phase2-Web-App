@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { websiteCommand, submitWebsiteForm } from '@/services/website'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { publicAssetVersionKey } from '@/features/website/publicSnapshot'
 import { customDefinition } from '../../../functions/src/websiteCustom'
 import type { WebsiteSite } from '@/features/website/types'
 const props = defineProps<{
@@ -10,6 +10,7 @@ const props = defineProps<{
   viewportHeight?: number
 }>()
 const frame = ref<HTMLIFrameElement>()
+const publicVersion = inject(publicAssetVersionKey, undefined)
 const height = ref(640)
 const frameHeight = computed(() =>
   props.preview &&
@@ -97,10 +98,11 @@ async function initialize() {
     [...ids].map(async (id) => {
       try {
         if (props.preview) {
+          const { websiteCommand } = await import('@/services/website')
           const result = await websiteCommand<{ base64: string }>('getImage', { id })
           images[id] = 'data:image/webp;base64,' + result.base64
         } else {
-          const response = await fetch('/website-image?id=' + encodeURIComponent(id), {
+          const response = await fetch('/website-image?id=' + encodeURIComponent(id) + (publicVersion?.value ? '&v=' + encodeURIComponent(publicVersion.value) : ''), {
             credentials: 'omit',
           })
           if (!response.ok) return
@@ -157,6 +159,7 @@ async function receive(event: MessageEvent) {
   pending.add(data.requestId)
   let message = ''
   try {
+    const { submitWebsiteForm } = await import('@/services/website')
     await submitWebsiteForm({
       formId: data.formId,
       submissionId: data.submissionId,
@@ -191,7 +194,11 @@ watch(
   },
   { deep: true },
 )
-onMounted(() => window.addEventListener('message', receive))
+onMounted(() => {
+  window.addEventListener('message', receive)
+  // A prerendered frame may have sent its ready event before hydration installed this listener.
+  frame.value?.contentWindow?.postMessage({ type: 'website-ping' }, '*')
+})
 onBeforeUnmount(() => window.removeEventListener('message', receive))
 </script>
 <template>

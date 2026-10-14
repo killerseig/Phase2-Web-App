@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
+import { isReservedPublicSlug, publicPageUrl } from '../../functions/src/publicWebsiteRoutes'
 import { getWorkspaceRedirectTarget } from '@/features/auth/authViewHelpers'
 import {
   getRouteAccessDecision,
@@ -59,12 +60,13 @@ const router = createRouter({
       meta: { title: 'Website Builder', requiredCapability: 'manage-website' },
     },
     {
-      path: '/website/:slug?',
-      alias: '/',
+      path: '/:slug?',
       name: 'public-website',
+      beforeEnter: to => isReservedPublicSlug(String(to.params.slug || '')) ? { name: 'not-found', params: { pathMatch: [String(to.params.slug)] }, query: to.query, hash: to.hash } : true,
       component: () => import('@/views/PublicWebsiteView.vue'),
       meta: { title: 'Phase 2', requiresAuth: false },
     },
+    { path: '/website/:slug?', redirect: to => ({ path: publicPageUrl(String(to.params.slug || 'home')), query: to.query, hash: to.hash }) },
     {
       path: '/dashboards/personal',
       name: 'personal-workspace',

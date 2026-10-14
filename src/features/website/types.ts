@@ -281,5 +281,5 @@ export function newSection(type: SectionType): WebsiteSection {
   }
 }
 export function pageUrl(slug: string) {
-  return slug === 'home' ? '/website' : `/website/${slug}`
+  return slug === 'home' ? '/' : `/${slug}`
 }

@@ -1,4 +1,5 @@
 import { Script } from 'node:vm'
+import { canonicalPublicSite, isPublicPagePath, isReservedPublicSlug, publicPageUrl, publicLinkPath } from './publicWebsiteRoutes'
 import { validateMotion } from './websiteMotion'
 import { websiteFonts } from './websiteFonts'
 import { validateTextBoxes, type TextBoxes } from './websiteTextBox'
@@ -204,7 +205,7 @@ function unique(ids: string[]) {
 function link(value: unknown) {
   const url = text(value, 1000, 'Link')
   if (!url) return ''
-  if (/^\/website(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(url) || url === '/login') return url
+  if (isPublicPagePath(url) || url === '/login') return url
   if (/^mailto:[^\s<>]+@[^\s<>]+$/.test(url) || /^tel:\+?[0-9() .-]+$/.test(url)) return url
   try {
     const parsed = new URL(url)
@@ -218,7 +219,7 @@ function link(value: unknown) {
   } catch {
     /* Report one actionable error for all unsupported links. */
   }
-  return invalid('Use an HTTPS, email, phone, /login, or /website/page link.')
+  return invalid('Use an HTTPS, email, phone, /login, or public page link.')
 }
 function item(value: unknown): WebsiteItem {
   const data = object(value)
@@ -708,6 +709,7 @@ function parsePage(value: unknown, shared = false): WebsitePage {
   const page = object(value)
   if (page.chrome !== undefined && page.chrome !== 'widgets') invalid('Invalid page structure.')
   const slug = text(page.slug, 64, 'Page URL', true)
+  if (!shared && isReservedPublicSlug(slug)) invalid('This page URL is reserved for the employee app. Choose another URL.')
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))
     invalid('Page URLs use lowercase letters, numbers and hyphens.')
   const sections = validateSections(page.sections)
@@ -957,7 +959,7 @@ export function publishedWebsite(site: WebsiteSite): WebsiteSite {
         return publicForm(form)
       })
   }
-  const urls = new Set(['/website', '/login', ...site.pages.map((page) => `/website/${page.slug}`)])
+  const urls = new Set(['/', '/website', '/login', ...site.pages.flatMap(page => [publicPageUrl(page.slug), `/website/${page.slug}`])])
   if (site.branding?.logoId && !site.branding.logoAlt)
     invalid('Add a description for the website logo.')
   for (const entry of site.pages.some((page) => page.chrome !== 'widgets')
@@ -965,7 +967,7 @@ export function publishedWebsite(site: WebsiteSite): WebsiteSite {
     : []) {
     if (!entry.label || !entry.url)
       invalid('Complete or remove each footer link before publishing.')
-    if (entry.url.startsWith('/') && !urls.has(entry.url))
+    if (entry.url.startsWith('/') && !urls.has(publicLinkPath(entry.url)))
       invalid('A footer link points to a page that does not exist.')
   }
   for (const page of result.pages) {
@@ -979,7 +981,7 @@ export function publishedWebsite(site: WebsiteSite): WebsiteSite {
         invalid('Add visible content to each custom widget.')
       if (
         definition?.kind === 'code' &&
-        customCodeLinks(definition.html).some((url) => url.startsWith('/') && !urls.has(url))
+        customCodeLinks(definition.html).some((url) => url.startsWith('/') && !urls.has(publicLinkPath(url)))
       )
         invalid('A custom HTML link points to a page that does not exist.')
       if (definition?.kind === 'code' && !definition.html.trim())
@@ -993,14 +995,14 @@ export function publishedWebsite(site: WebsiteSite): WebsiteSite {
       if (entry.imageId && !entry.alt) invalid(`Add an image description on ${page.title}.`)
       if (Boolean(entry.linkUrl) !== Boolean(entry.linkLabel))
         invalid(`Add both a button label and link on ${page.title}.`)
-      if (entry.linkUrl.startsWith('/') && !urls.has(entry.linkUrl))
+      if (entry.linkUrl.startsWith('/') && !urls.has(publicLinkPath(entry.linkUrl)))
         invalid(`A link on ${page.title} points to a page that does not exist.`)
       if (
         [
           ...(entry.textFormat === 'markdown' ? textLinks(entry.text) : []),
           ...richTextLinks(entry.textRichText),
           ...richTextLinks(entry.titleRichText),
-        ].some((url) => url.startsWith('/') && !urls.has(url))
+        ].some((url) => url.startsWith('/') && !urls.has(publicLinkPath(url)))
       )
         invalid(`A text link on ${page.title} points to a page that does not exist.`)
     }
@@ -1022,14 +1024,14 @@ export function publishedWebsite(site: WebsiteSite): WebsiteSite {
         invalid(`Complete each page link label on ${page.title}.`)
       if (
         richTextLinks(section.navigation?.brandRichText).some(
-          (url) => url.startsWith('/') && !urls.has(url),
+          (url) => url.startsWith('/') && !urls.has(publicLinkPath(url)),
         )
       )
         invalid(`A brand link on ${page.title} points to a page that does not exist.`)
       for (const entry of menuLinks(section.navigation?.links || [])) {
         if (!entry.label || (!entry.url && !entry.children?.length))
           invalid(`Complete each menu link on ${page.title}.`)
-        if (entry.url.startsWith('/') && !urls.has(entry.url))
+        if (entry.url.startsWith('/') && !urls.has(publicLinkPath(entry.url)))
           invalid(`A menu link on ${page.title} points to a page that does not exist.`)
       }
     }
@@ -1037,7 +1039,7 @@ export function publishedWebsite(site: WebsiteSite): WebsiteSite {
   if (usedLayout) result.sharedLayout = result.pages.pop()!
   if (Buffer.byteLength(JSON.stringify(result)) > 900000)
     invalid('The expanded website is too large to publish. Reduce repeated custom content.')
-  return result
+  return canonicalPublicSite(result)
 }
 export function initialWebsite(): WebsiteSite {
   return {

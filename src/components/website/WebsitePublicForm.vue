@@ -2,7 +2,6 @@
 import { websiteRuntimeKey } from '@/features/website/runtimeServices'
 import { inject, nextTick, ref, useId, watch } from 'vue'
 import type { WebsiteFormDefinition, WebsiteFormValues } from '../../../functions/src/websiteForms'
-import { submitWebsiteForm } from '@/services/website'
 const props = defineProps<{ form?: WebsiteFormDefinition; preview?: boolean }>()
 const runtime = inject(websiteRuntimeKey, undefined)
 const values = ref<WebsiteFormValues>({}),
@@ -27,6 +26,7 @@ async function submit() {
   sending.value = true
   error.value = ''
   try {
+    const submitWebsiteForm = runtime?.submit || (await import('@/services/website')).submitWebsiteForm
     await (runtime?.submit || submitWebsiteForm)({
       formId: props.form.id,
       submissionId,

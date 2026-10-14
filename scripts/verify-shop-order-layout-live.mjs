@@ -18,7 +18,10 @@ async function readPublicAsset(path) {
   return { url, text: await response.text() }
 }
 
-const html = await readPublicAsset('/')
+let html = await readPublicAsset('/')
+// The public HTML release gives the employee app an explicit static shell.
+// Retain the same Shop Orders CSS/hash checks for both Hosting layouts.
+if (html.text.includes('data-public-prerender')) html = await readPublicAsset('/employee-app.html')
 const entries = [...html.text.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g)]
   .map(match => match[1])
   .filter(path => /\/assets\/index-[\w-]+\.js$/.test(path))

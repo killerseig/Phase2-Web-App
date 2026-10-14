@@ -1,0 +1,5 @@
+import { defineConfig } from 'vite'
+import config from './vite.config.ts'
+import { resolve } from 'node:path'
+const root=resolve('C:/Users/atlas/Documents/Codex/2026-10-14/task/phase2-shop-sizing')
+export default defineConfig({...config,root,cacheDir:resolve('.forms-local-data/baseline-cache'),resolve:{alias:{'@':resolve(root,'src')}},build:{outDir:resolve('.forms-local-data/baseline-dist'),rolldownOptions:{input:{index:resolve(root,'index.html'),websiteRuntime:resolve(root,'website-runtime.html')}}},plugins:[...config.plugins!,{name:'loopback-published-read',enforce:'pre',transform(code,id){if(!id.replaceAll('\\','/').endsWith('/src/services/website.ts'))return;return code.replace(/export async function loadPublishedWebsite\(\) \{[\s\S]*?\n\}/,`export async function loadPublishedWebsite() { requireFirebaseServices(); return (await (await fetch('/getPublishedWebsite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:{}})})).json()).result.site }`)}}]})

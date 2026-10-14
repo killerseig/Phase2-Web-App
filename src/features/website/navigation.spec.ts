@@ -32,14 +32,14 @@ describe('inline navigation labels', () => {
     updateNavigationLabel(settings, 'login', 'Sign in', undefined, site)
     const entries = navigationEntries(settings, site)
     expect(entries.map((entry) => [entry.key, entry.label, entry.url])).toEqual([
-      ['page:same', 'Start', '/website'],
+      ['page:same', 'Start', '/'],
       ['custom:same', 'Menu', ''],
       ['login', 'Sign in', '/login'],
     ])
     expect(entries[1]!.children![0]).toMatchObject({
       key: 'custom:same/same',
       label: 'Nested',
-      url: '/website',
+      url: '/',
     })
     expect(site.pages[0]!.title).toBe('Home')
     delete settings.pageLabels

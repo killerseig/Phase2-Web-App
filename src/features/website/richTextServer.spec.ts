@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
+import { canonicalPublicSite } from '../../../functions/src/publicWebsiteRoutes'
 import {
   initialWebsite,
   validateWebsite,
@@ -145,8 +146,8 @@ describe('server rich-text contract', () => {
     expect(draft.pages[0]!.sections[0]!.title).toBe('Formatted content')
     expect(draft.pages[0]!.sections[0]!.textRichText).toEqual(document())
     const published = publishedWebsite(draft)
-    expect(published.pages[0]!.sections[0]!.titleRichText).toEqual(document())
-    expect(published.pages[0]!.sections[0]!.textRichText).toEqual(document())
+    expect(published.pages[0]!.sections[0]!.titleRichText).toEqual(canonicalPublicSite(document()))
+    expect(published.pages[0]!.sections[0]!.textRichText).toEqual(canonicalPublicSite(document()))
   })
   it('rejects malicious formatting and blocks broken rich-text page links at publication', () => {
     const site = initialWebsite()

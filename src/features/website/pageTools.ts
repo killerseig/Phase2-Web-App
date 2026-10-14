@@ -1,4 +1,5 @@
 import { menuLinks } from '../../../functions/src/websiteContent'
+import { canonicalPublicUrl } from '../../../functions/src/publicWebsiteRoutes'
 import { mapRichTextLinks } from '../../../functions/src/websiteRichText'
 import { newItem, newSection, pageUrl, type WebsitePage, type WebsiteSection } from './types'
 
@@ -79,17 +80,17 @@ export function copyPage(source: WebsitePage, pages: WebsitePage[]): WebsitePage
     if (section.parentId) section.parentId = ids.get(section.parentId)
   for (const section of copy.sections) {
     for (const link of menuLinks(section.navigation?.links || []))
-      if (link.url === pageUrl(source.slug)) link.url = pageUrl(copy.slug)
+      if (canonicalPublicUrl(link.url) === pageUrl(source.slug)) link.url = pageUrl(copy.slug)
     for (const item of [section, ...section.items]) {
       for (const rich of [item.titleRichText, item.textRichText])
-        mapRichTextLinks(rich, (url) => (url === pageUrl(source.slug) ? pageUrl(copy.slug) : url))
+        mapRichTextLinks(rich, (url) => (canonicalPublicUrl(url) === pageUrl(source.slug) ? pageUrl(copy.slug) : url))
       if (item.textFormat === 'markdown')
         item.text = item.text.replace(
           /(\[[^\]\n]+\]\()([^\s)]+)(\))/g,
           (all, prefix, url, suffix) =>
-            url === pageUrl(source.slug) ? prefix + pageUrl(copy.slug) + suffix : all,
+            canonicalPublicUrl(url) === pageUrl(source.slug) ? prefix + pageUrl(copy.slug) + suffix : all,
         )
-      if (item.linkUrl === pageUrl(source.slug)) item.linkUrl = pageUrl(copy.slug)
+      if (canonicalPublicUrl(item.linkUrl) === pageUrl(source.slug)) item.linkUrl = pageUrl(copy.slug)
     }
   }
   return copy

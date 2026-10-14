@@ -7,11 +7,13 @@ export async function websiteCommand<T>(
   data: Record<string, unknown> = {},
 ): Promise<T> {
   const { functions } = requireFirebaseServices()
-  return (
+  const result = (
     await httpsCallable<Record<string, unknown>, T>(functions, 'websiteBuilder', {
       timeout: 90000,
     })({ ...data, action })
   ).data
+  if (action === 'publish' || action === 'unpublish') (await import('./publicWebsite')).clearPublicSnapshotCache()
+  return result
 }
 export async function loadPublishedWebsite() {
   const { functions } = requireFirebaseServices()

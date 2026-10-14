@@ -141,8 +141,8 @@ describe('website content tools', () => {
     expect(layoutLocked(page.sections, nav.id)).toBe(true)
     const copied = copyPage(page, [page])
     const copy = copied.sections[1]!
-    expect(copy.navigation!.links[0]!.children![0]!.url).toBe('/website/home-copy')
-    expect(copy.text).toBe('[Home](/website/home-copy)')
+    expect(copy.navigation!.links[0]!.children![0]!.url).toBe('/home-copy')
+    expect(copy.text).toBe('[Home](/home-copy)')
     copy.imageSettings!.zoom = 2
     expect(nav.imageSettings.zoom).toBe(1.5)
     expect(nav.navigation!.links[0]!.url).toBe('/website')

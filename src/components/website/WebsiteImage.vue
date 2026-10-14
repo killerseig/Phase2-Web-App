@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { websiteRuntimeKey } from '@/features/website/runtimeServices'
 import { inject, ref, watch } from 'vue'
-import { websiteCommand } from '@/services/website'
+import { publicAssetVersionKey } from '@/features/website/publicSnapshot'
 import type { ImageSettings } from '../../../functions/src/websiteContent'
 const props = defineProps<{
   id: string
@@ -13,10 +13,11 @@ const props = defineProps<{
   settings?: ImageSettings
 }>()
 const runtime = inject(websiteRuntimeKey, undefined)
+const version = inject(publicAssetVersionKey, undefined)
 const source = ref('')
 const failed = ref(false)
 watch(
-  () => [props.id, props.preview, props.thumbnail],
+  () => [props.id, props.preview, props.thumbnail, version?.value],
   async (_, __, cleanup) => {
     let active = true
     cleanup(() => {
@@ -31,10 +32,11 @@ watch(
       return
     }
     if (!props.preview) {
-      source.value = `/website-image?id=${encodeURIComponent(props.id)}`
+      source.value = `/website-image?id=${encodeURIComponent(props.id)}${version?.value ? '&v=' + encodeURIComponent(version.value) : ''}`
       return
     }
     try {
+      const { websiteCommand } = await import('@/services/website')
       const image = await websiteCommand<{ base64: string }>('getImage', {
         id: props.id,
         thumbnail: props.thumbnail === true,

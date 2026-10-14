@@ -112,7 +112,7 @@ export function phase2Site(images: Phase2Images): WebsiteSite {
           },
         },
       },
-      ...(home ? { linkLabel: 'Discover Phase 2', linkUrl: '/website/company' } : {}),
+      ...(home ? { linkLabel: 'Discover Phase 2', linkUrl: '/company' } : {}),
     })
   }
   function intro(title: string, text: string) {
@@ -180,7 +180,7 @@ export function phase2Site(images: Phase2Images): WebsiteSite {
           },
           ...(entry.photo ? photo(entry.photo) : {}),
           ...(entry.slug
-            ? { linkLabel: entry.action || 'Explore more →', linkUrl: `/website/${entry.slug}` }
+            ? { linkLabel: entry.action || 'Explore more →', linkUrl: `/${entry.slug}` }
             : {}),
         }),
       ),
@@ -215,7 +215,7 @@ export function phase2Site(images: Phase2Images): WebsiteSite {
         },
       },
       ...(options.slug
-        ? { linkLabel: options.action || 'Explore more →', linkUrl: `/website/${options.slug}` }
+        ? { linkLabel: options.action || 'Explore more →', linkUrl: `/${options.slug}` }
         : {}),
     })
   }
@@ -251,7 +251,7 @@ export function phase2Site(images: Phase2Images): WebsiteSite {
           },
         },
         linkLabel: 'Explore careers →',
-        linkUrl: '/website/careers',
+        linkUrl: '/careers',
       },
     )
     return [
@@ -939,7 +939,7 @@ export function phase2Site(images: Phase2Images): WebsiteSite {
               ].map((slug) => ({
                 id: `footer-${slug}`,
                 label: pages.find((p) => p.slug === slug)!.title,
-                url: slug === 'home' ? '/website' : `/website/${slug}`,
+                url: slug === 'home' ? '/' : `/${slug}`,
               })),
             },
           },

@@ -11,9 +11,12 @@ const firestore_1 = require("firebase-admin/firestore");
 const runtime_1 = require("./runtime");
 const roleAccess_1 = require("./roleAccess");
 const websiteChanges_1 = require("./websiteChanges");
+const publicWebsiteRoutes_1 = require("./publicWebsiteRoutes");
+const publicWebsiteSnapshot_1 = require("./publicWebsiteSnapshot");
 const websiteModel_1 = require("./websiteModel");
 const state = runtime_1.db.doc('websitePrivate/state');
 const published = runtime_1.db.doc('websitePublished/current');
+const publicSnapshots = runtime_1.db.collection('websitePublishedSnapshots');
 const revisions = state.collection('revisions');
 const activity = state.collection('activity');
 function checkVersion(actual, expected) {
@@ -296,8 +299,14 @@ exports.websiteBuilder = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds:
         if (!snapshot.draft)
             throw new https_1.HttpsError('failed-precondition', 'Save a draft before publishing.');
         const site = (0, websiteModel_1.publishedWebsite)((0, websiteModel_1.validateWebsite)(snapshot.draft));
+        // Generate only the already-sanitized public representation. Never run author scripts.
+        const generated = await (0, publicWebsiteSnapshot_1.generatePublicPages)(site, version);
         await recordActivity();
-        transaction.set(published, { site, publishedAt: now, assetIds: (0, websiteModel_1.websiteAssetIds)(site) });
+        const publicRecord = publicSnapshots.doc(generated.version);
+        transaction.create(publicRecord, { site, version: generated.version, generatedAt: now, htmlSchema: 1, rendererId: (0, publicWebsiteSnapshot_1.publicRendererId)() });
+        for (const [slug, body] of Object.entries(generated.pages))
+            transaction.create(publicRecord.collection('pages').doc(slug), { body });
+        transaction.set(published, { site, version: generated.version, publishedAt: now, assetIds: (0, websiteModel_1.websiteAssetIds)(site) });
         transaction.set(runtime_1.db.doc('websitePrivate/publicForms'), {
             publishedAt: now,
             forms: (snapshot.draft.forms || []).filter((form) => site.forms?.some((publicForm) => publicForm.id === form.id)),
@@ -312,9 +321,56 @@ exports.websiteBuilder = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds:
     });
 });
 // Anonymous readers receive only the explicitly published snapshot, never draft state.
-exports.getPublishedWebsite = (0, https_1.onCall)(async () => {
-    const snapshot = (await published.get()).data();
-    return { site: snapshot?.site || null };
+exports.getPublishedWebsite = (0, https_1.onRequest)({ cors: true }, async (request, response) => {
+    response.set('Cache-Control', 'no-cache').set('X-Content-Type-Options', 'nosniff').set('Vary', 'Accept');
+    if (!['GET', 'HEAD', 'POST'].includes(request.method)) {
+        response.status(405).send('Method not allowed.');
+        return;
+    }
+    try {
+        const snapshot = (await published.get()).data(), site = snapshot?.site ? (0, publicWebsiteRoutes_1.canonicalPublicSite)(snapshot.site) : null;
+        if (site)
+            (0, publicWebsiteSnapshot_1.assertPublic)(site);
+        const version = site ? snapshot?.version || (0, publicWebsiteSnapshot_1.publicVersion)(site, Number(snapshot?.publishedAt || 0)) : null;
+        const requestedVersion = request.query.v;
+        if (requestedVersion !== undefined && requestedVersion !== version) {
+            response.set('Cache-Control', 'no-store').status(410).send('Published version unavailable.');
+            return;
+        }
+        const html = request.method !== 'POST' && (request.query.format === 'html' || (request.query.format !== 'json' && String(request.headers.accept || '').includes('text/html')));
+        const legacy = request.path.match(/^\/website(?:\/([a-z0-9-]+))?\/?$/);
+        if (legacy && request.method !== 'POST') {
+            const search = request.originalUrl.includes('?') ? request.originalUrl.slice(request.originalUrl.indexOf('?')) : '';
+            response.redirect(301, (0, publicWebsiteRoutes_1.publicPageUrl)(legacy[1] || 'home') + search);
+            return;
+        }
+        const slug = request.path.replace(/^\/+|\/+$/g, '') || 'home';
+        const etag = '"' + (version || 'unpublished') + (html ? '-' + slug + '-' + (0, publicWebsiteSnapshot_1.publicRendererId)() : '') + '"';
+        response.set('ETag', etag);
+        if (request.method !== 'POST' && request.headers['if-none-match'] === etag) {
+            response.status(304).end();
+            return;
+        }
+        if (!html) {
+            response.json({ result: { site: request.method === 'POST' && site ? (0, publicWebsiteRoutes_1.legacyPublicSite)(site) : site, version } });
+            return;
+        }
+        if (!site || !version) {
+            response.redirect(302, '/login');
+            return;
+        }
+        if ((0, publicWebsiteRoutes_1.isReservedPublicSlug)(slug) || !/^[a-z0-9-]+$/.test(slug) || !site.pages.some(page => page.slug === slug)) {
+            response.status(404).type('html').send('<h1>Page not found</h1><a href="/">Home</a>');
+            return;
+        }
+        const metadata = snapshot?.version ? (await publicSnapshots.doc(version).get()).data() : undefined;
+        const stored = metadata?.rendererId === (0, publicWebsiteSnapshot_1.publicRendererId)() ? (await publicSnapshots.doc(version).collection('pages').doc(slug).get()).data()?.body : undefined;
+        const body = stored || (await (0, publicWebsiteSnapshot_1.regeneratePublicPages)(site, version)).pages[slug];
+        response.type('html').send((0, publicWebsiteSnapshot_1.servePublicHtml)(site, version, slug, body));
+    }
+    catch {
+        response.set('Cache-Control', 'no-store').status(503).send('The published website is temporarily unavailable.');
+    }
 });
 exports.websiteImage = (0, https_1.onRequest)(async (request, response) => {
     response.set('Cache-Control', 'no-store').set('X-Content-Type-Options', 'nosniff');
@@ -331,6 +387,20 @@ exports.websiteImage = (0, https_1.onRequest)(async (request, response) => {
         const record = (await published.get()).data();
         if (!record?.assetIds?.includes(id)) {
             response.status(404).send('Image not found.');
+            return;
+        }
+        const version = record.version || (0, publicWebsiteSnapshot_1.publicVersion)((0, publicWebsiteRoutes_1.canonicalPublicSite)(record.site), Number(record.publishedAt || 0));
+        if (request.query.v !== undefined && request.query.v !== version) {
+            response.status(410).send('Published image version unavailable.');
+            return;
+        }
+        // Bounded cache for already-published website images only; never private form/SDS objects.
+        const etag = '"website-' + id + '-' + version + '"';
+        response.set('ETag', etag);
+        if (request.query.v === version)
+            response.set('Cache-Control', 'public, max-age=300, s-maxage=300');
+        if (request.headers['if-none-match'] === etag) {
+            response.status(304).end();
             return;
         }
         const [bytes] = await runtime_1.storageBucket.file(`website-images/${id}.webp`).download();

@@ -5,6 +5,8 @@ import { FieldPath } from 'firebase-admin/firestore'
 import { db, storageBucket } from './runtime'
 import { buildCurrentFunctionUser } from './roleAccess'
 import { compareWebsites } from './websiteChanges'
+import { canonicalPublicSite, legacyPublicSite, isReservedPublicSlug, publicPageUrl } from './publicWebsiteRoutes'
+import { assertPublic, generatePublicPages, regeneratePublicPages, publicVersion, publicRendererId, servePublicHtml } from './publicWebsiteSnapshot'
 import {
   initialWebsite,
   publishedWebsite,
@@ -15,6 +17,7 @@ import {
 
 const state = db.doc('websitePrivate/state')
 const published = db.doc('websitePublished/current')
+const publicSnapshots = db.collection('websitePublishedSnapshots')
 const revisions = state.collection('revisions')
 const activity = state.collection('activity')
 function checkVersion(actual: number, expected: unknown) {
@@ -327,8 +330,13 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
     if (!snapshot.draft)
       throw new HttpsError('failed-precondition', 'Save a draft before publishing.')
     const site = publishedWebsite(validateWebsite(snapshot.draft))
+    // Generate only the already-sanitized public representation. Never run author scripts.
+    const generated = await generatePublicPages(site, version)
     await recordActivity()
-    transaction.set(published, { site, publishedAt: now, assetIds: websiteAssetIds(site) })
+    const publicRecord = publicSnapshots.doc(generated.version)
+    transaction.create(publicRecord, { site, version: generated.version, generatedAt: now, htmlSchema: 1, rendererId: publicRendererId() })
+    for (const [slug, body] of Object.entries(generated.pages)) transaction.create(publicRecord.collection('pages').doc(slug), { body })
+    transaction.set(published, { site, version: generated.version, publishedAt: now, assetIds: websiteAssetIds(site) })
     transaction.set(db.doc('websitePrivate/publicForms'), {
       publishedAt: now,
       forms: (snapshot.draft.forms || []).filter((form: { id: string }) =>
@@ -350,9 +358,33 @@ export const websiteBuilder = onCall({ memory: '512MiB', timeoutSeconds: 60 }, a
 })
 
 // Anonymous readers receive only the explicitly published snapshot, never draft state.
-export const getPublishedWebsite = onCall(async () => {
-  const snapshot = (await published.get()).data()
-  return { site: (snapshot?.site as WebsiteSite) || null }
+export const getPublishedWebsite = onRequest({ cors: true }, async (request, response) => {
+  response.set('Cache-Control', 'no-cache').set('X-Content-Type-Options', 'nosniff').set('Vary', 'Accept')
+  if (!['GET', 'HEAD', 'POST'].includes(request.method)) { response.status(405).send('Method not allowed.'); return }
+  try {
+    const snapshot = (await published.get()).data(), site = snapshot?.site ? canonicalPublicSite(snapshot.site as WebsiteSite) : null
+    if (site) assertPublic(site)
+    const version = site ? snapshot?.version || publicVersion(site, Number(snapshot?.publishedAt || 0)) : null
+    const requestedVersion = request.query.v
+    if (requestedVersion !== undefined && requestedVersion !== version) { response.set('Cache-Control', 'no-store').status(410).send('Published version unavailable.'); return }
+    const html = request.method !== 'POST' && (request.query.format === 'html' || (request.query.format !== 'json' && String(request.headers.accept || '').includes('text/html')))
+    const legacy = request.path.match(/^\/website(?:\/([a-z0-9-]+))?\/?$/)
+    if (legacy && request.method !== 'POST') {
+      const search = request.originalUrl.includes('?') ? request.originalUrl.slice(request.originalUrl.indexOf('?')) : ''
+      response.redirect(301, publicPageUrl(legacy[1] || 'home') + search); return
+    }
+    const slug = request.path.replace(/^\/+|\/+$/g, '') || 'home'
+    const etag = '"' + (version || 'unpublished') + (html ? '-' + slug + '-' + publicRendererId() : '') + '"'
+    response.set('ETag', etag)
+    if (request.method !== 'POST' && request.headers['if-none-match'] === etag) { response.status(304).end(); return }
+    if (!html) { response.json({ result: { site: request.method === 'POST' && site ? legacyPublicSite(site) : site, version } }); return }
+    if (!site || !version) { response.redirect(302, '/login'); return }
+    if (isReservedPublicSlug(slug) || !/^[a-z0-9-]+$/.test(slug) || !site.pages.some(page => page.slug === slug)) { response.status(404).type('html').send('<h1>Page not found</h1><a href="/">Home</a>'); return }
+    const metadata = snapshot?.version ? (await publicSnapshots.doc(version).get()).data() : undefined
+    const stored = metadata?.rendererId === publicRendererId() ? (await publicSnapshots.doc(version).collection('pages').doc(slug).get()).data()?.body : undefined
+    const body = stored || (await regeneratePublicPages(site, version)).pages[slug]
+    response.type('html').send(servePublicHtml(site, version, slug, body))
+  } catch { response.set('Cache-Control', 'no-store').status(503).send('The published website is temporarily unavailable.') }
 })
 export const websiteImage = onRequest(async (request, response) => {
   response.set('Cache-Control', 'no-store').set('X-Content-Type-Options', 'nosniff')
@@ -371,6 +403,13 @@ export const websiteImage = onRequest(async (request, response) => {
       response.status(404).send('Image not found.')
       return
     }
+    const version = record.version || publicVersion(canonicalPublicSite(record.site), Number(record.publishedAt || 0))
+    if (request.query.v !== undefined && request.query.v !== version) { response.status(410).send('Published image version unavailable.'); return }
+    // Bounded cache for already-published website images only; never private form/SDS objects.
+    const etag = '"website-' + id + '-' + version + '"'
+    response.set('ETag', etag)
+    if (request.query.v === version) response.set('Cache-Control', 'public, max-age=300, s-maxage=300')
+    if (request.headers['if-none-match'] === etag) { response.status(304).end(); return }
     const [bytes] = await storageBucket.file(`website-images/${id}.webp`).download()
     response.type('image/webp').send(bytes)
   } catch {

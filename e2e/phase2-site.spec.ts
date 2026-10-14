@@ -116,7 +116,7 @@ test('Shared Phase 2 site opens directly, supports content edits, and renders ev
     }
     await route.fulfill({ headers, json: { result } })
   })
-  await page.route('**/getPublishedWebsite', (route) => {
+  await page.route('**/getPublishedWebsite*', (route) => {
     const review = structuredClone(draft)
     review.forms.forEach((form: { delivery: { to: string[] } }) => {
       form.delivery.to = ['review@example.com']

@@ -31,7 +31,7 @@ const published: WebsiteSite = {
 }
 async function mockPublished(page: Page, site: WebsiteSite | null, failFirst = false) {
   let calls = 0
-  await page.route('**/getPublishedWebsite', async (route) => {
+  await page.route('**/getPublishedWebsite*', async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers })
       return

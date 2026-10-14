@@ -20,6 +20,7 @@ window.addEventListener('unhandledrejection', (event) =>
 window.addEventListener('message', async (event) => {
   if (event.source !== parent || !event.data) return
   const data = event.data
+  if (data.type === 'website-ping') { send('website-ready'); return }
   if (data.type === 'website-form-result' && data.token === token) {
     const callback = callbacks.get(data.requestId)
     if (callback) {

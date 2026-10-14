@@ -16,7 +16,9 @@ export default defineComponent({
       },
       { immediate: true },
     )
-    return () => h('style', { textContent: compiled.value })
+    // SSR omits DOM-only textContent. Preserve validated CSS in the initial HTML
+    // and prevent any style-element closing token from reaching raw markup.
+    return () => h('style', { innerHTML: compiled.value.replace(/</g, '\\3c ') })
   },
 })
 </script>

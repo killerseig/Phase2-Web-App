@@ -1,6 +1,7 @@
 import type { MenuLabel, MenuLink, NavigationSettings } from '../../../functions/src/websiteContent'
 import type { RichTextNode } from '../../../functions/src/websiteRichText'
 import { pageUrl, type WebsiteSite } from './types'
+import { canonicalPublicUrl } from '../../../functions/src/publicWebsiteRoutes'
 
 export interface NavigationEntry extends MenuLabel {
   key: string
@@ -14,7 +15,7 @@ export function navigationEntries(
 ): NavigationEntry[] {
   function custom(link: MenuLink, parent = ''): NavigationEntry {
     const key = parent ? `${parent}/${link.id}` : `custom:${link.id}`
-    return { ...link, key, children: link.children?.map((child) => custom(child, key)) }
+    return { ...link, url: canonicalPublicUrl(link.url), key, children: link.children?.map((child) => custom(child, key)) }
   }
   return [
     ...(settings.showPages
