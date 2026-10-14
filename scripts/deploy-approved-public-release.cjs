@@ -15,6 +15,15 @@ function stop(message, method, host, requestPath) {
 }
 Client.prototype.request = function(options) {
   const method = String(options.method || 'GET').toUpperCase(), requestPath = String(options.path || '').split('?')[0], host = String(this.opts?.urlPrefix || '')
+  if (method === 'POST' && /:testIamPermissions$|:getIamPolicy$/.test(requestPath)) return originalRequest.call(this, options)
+  if (method === 'POST' && /:generateServiceIdentity$/.test(requestPath)) {
+    const service = requestPath.match(/services\/([^/:]+):generateServiceIdentity$/)?.[1]
+    const existing = before.existingServiceAgents?.[service]
+    if (!existing || !requestPath.includes('projects/792793988588/')) stop('Existing service identity is unverified', method, host, requestPath)
+    audit.push({ method, host, path: requestPath, suppressedExistingIdentity: true })
+    fs.writeFileSync(directory + '/audit-functions.json', JSON.stringify(audit, null, 2))
+    return Promise.resolve({ status: 200, body: { done: true, response: { email: existing.email } }, headers: {} })
+  }
   if (!['GET','HEAD'].includes(method)) {
     if (/:enable$|:batchEnable$|generateServiceIdentity|:addIamPolicyBinding$/.test(requestPath)) stop('API or identity provisioning is outside this release', method, host, requestPath)
     if (/setIamPolicy/.test(requestPath)) {
