@@ -80,13 +80,19 @@ export async function setupFormServer(
                 {
                   id: 'audit-e2e',
                   draft: clone(context.definition),
+                  definition: clone(versions.get(context.latestVersion)!),
                   revision: context.templatesRevision,
                   latestVersion: context.latestVersion,
                   archived: context.archived,
                 },
               ],
             }
-          else if (data.action === 'save') {
+          else if (data.action === 'respondent') {
+            const version = data.version ?? context.latestVersion
+            const issued = versions.get(version)
+            if (context.archived || !issued) throw new Error('This form version is unavailable.')
+            result = { id: 'audit-e2e', latestVersion: version, definition: clone(issued) }
+          } else if (data.action === 'save') {
             if (data.revision !== context.templatesRevision)
               throw new Error('Another edit changed this draft.')
             context.definition = validateFormDefinition(data.definition)

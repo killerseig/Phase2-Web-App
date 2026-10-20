@@ -40,13 +40,6 @@
       "options": []
     },
     {
-      "id": "committee-5",
-      "kind": "text",
-      "label": "Site Safety assistant",
-      "required": false,
-      "options": []
-    },
-    {
       "id": "committee-6",
       "kind": "text",
       "label": "# of personnel",
@@ -141,20 +134,6 @@
       "id": "committee-19",
       "kind": "textarea",
       "label": "General attitude on site: (would you like working there)",
-      "required": false,
-      "options": []
-    },
-    {
-      "id": "committee-20",
-      "kind": "text",
-      "label": "Signature",
-      "required": false,
-      "options": []
-    },
-    {
-      "id": "committee-21",
-      "kind": "text",
-      "label": "Date",
       "required": false,
       "options": []
     },

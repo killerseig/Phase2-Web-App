@@ -41,13 +41,6 @@
       "required_basis": "No mandatory answer rule added; source does not specify it."
     },
     {
-      "source_paragraph": 6,
-      "label": "Site Safety assistant",
-      "type": "text",
-      "required": false,
-      "required_basis": "No mandatory answer rule added; source does not specify it."
-    },
-    {
       "source_paragraph": 8,
       "label": "# of personnel",
       "type": "text",
@@ -146,20 +139,6 @@
       "required_basis": "No mandatory answer rule added; source does not specify it."
     },
     {
-      "source_paragraph": 52,
-      "label": "Signature",
-      "type": "text",
-      "required": false,
-      "required_basis": "No mandatory answer rule added; source does not specify it."
-    },
-    {
-      "source_paragraph": 54,
-      "label": "Date",
-      "type": "text",
-      "required": false,
-      "required_basis": "No mandatory answer rule added; source does not specify it."
-    },
-    {
       "id": "photos",
       "label": "Photos",
       "type": "photo",
@@ -185,11 +164,10 @@
     }
   ],
   "preserved_distinctions": [
-    "Site Safety assistant retained exactly from latest DOCX; it is not Site superintendent.",
     "Current Cord Color retained as the original specific color entry; no new choice list.",
     "Medical kit and trauma kit retained as one original entry.",
     "General attitude on site retained exactly; no Overall condition or Findings fields.",
-    "Original Signature and Date remain blank user-completed fields; no prefill or automatic signing."
+    "Date of Inspection retained; Site Safety assistant and closing Signature/Date removed by explicit user correction."
   ],
   "rating_fields": "None. Latest DOCX has open comment lines, not rating choices.",
   "publication_gate": "No actual respondent URL or photo persistence verified; web form remains unissued/unpublished.",

@@ -19,3 +19,14 @@ describe('requested company report delivery', () => {
     expect(reportingStarter('near-miss').fields).toEqual(reportingStarterDefinitions['near-miss'].fields)
   })
 })
+
+it('preserves an explicitly configured PDF choice while the new-form default stays off', () => {
+  const source = reportingStarter('committee')
+  expect(source.output?.pdf).toBe(false)
+  source.output = { ...source.output!, pdf: true }
+  const result = withCompanyReportDelivery(source)
+  expect(result.output?.pdf).toBe(true)
+  expect(result.output?.template).toBe('')
+  expect(result.access).toEqual(source.access)
+  expect(result.recipients).toEqual(source.recipients)
+})

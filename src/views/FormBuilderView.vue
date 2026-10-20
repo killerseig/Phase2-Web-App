@@ -31,6 +31,7 @@ import {
 } from '@/features/forms/model'
 import { useFormAuthoring } from '@/features/forms/useFormAuthoring'
 import { reportingStarter, type ReportingStarter } from '@/features/forms/reportingStarters'
+import { committeeFieldsToRemove, applyApprovedCommitteeCorrections } from '@/features/forms/committeeCorrection'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { readLibrary, saveLibrary } from '@/features/forms/localLibrary'
 const localPreview = isFormEmulatorEnabled()
@@ -389,6 +390,13 @@ async function select(template: FormTemplate) {
   preview.value = false
   message.value = ''
   error.value = ''
+}
+function correctCommitteeDraft() {
+  if (!draft.value || authoringLocked.value) return
+  draft.value = applyApprovedCommitteeCorrections(draft.value)
+  authoring.select(draft.value.fields[0]?.id || '')
+  message.value = 'Removed the obsolete Committee fields from this draft. Date of Inspection and prior versions are retained. Save and publish separately after reviewing the draft.'
+  settingsTab.value = 'output'
 }
 async function create(audit: boolean | ReportingStarter = false) {
   const owner = uid.value
@@ -1034,6 +1042,10 @@ watch(
                 </button>
               </nav>
               <section v-show="settingsTab === 'form'" aria-label="Form settings">
+                <div v-if="committeeFieldsToRemove(draft).length">
+                  <p>This Committee draft still contains obsolete fields. The correction removes Site Safety assistant and the closing Signature/Date while retaining Date of Inspection, all other wording and existing access/output settings. Published versions and submissions are unchanged.</p>
+                  <button type="button" @click="correctCommitteeDraft">Apply approved Committee field removals</button>
+                </div>
                 <label>Form title<input v-model="draft.title" maxlength="160" /></label
                 ><label>Description<textarea v-model="draft.description" /></label
                 ><label

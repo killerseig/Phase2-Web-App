@@ -11,6 +11,15 @@ describe('source-faithful editable reporting starters', () => {
     expect(form.fields.filter(field => field.kind !== 'recipients').map((field) => field.label)).toEqual(
       committee.fields_in_order.map((field) => field.label),
     )
+    const labels = form.fields.map((field) => field.label)
+    expect(labels).toContain('Date of Inspection')
+    expect(labels.filter((label) => label === 'Date of Inspection')).toHaveLength(1)
+    expect(labels.map((label) => label.toLowerCase())).not.toContain('site safety assistant')
+    expect(labels).not.toContain('Signature')
+    expect(labels).not.toContain('Date')
+    for (const removedId of ['committee-5', 'committee-20', 'committee-21']) {
+      expect(form.fields.map((field) => field.id)).not.toContain(removedId)
+    }
     expect(form.fields.every((field) => !field.required)).toBe(true)
     expect(Math.max(...form.fields.map((field) => field.label.length))).toBeGreaterThan(160)
     expect(
