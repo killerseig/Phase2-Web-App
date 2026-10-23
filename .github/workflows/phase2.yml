@@ -12,7 +12,7 @@ permissions:
 jobs:
   validate:
     name: Validate application
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -54,7 +54,7 @@ jobs:
     name: Deploy main to Firebase Hosting
     needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     concurrency:
       group: phase2-production-hosting
