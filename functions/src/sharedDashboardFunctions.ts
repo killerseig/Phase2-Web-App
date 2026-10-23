@@ -9,6 +9,7 @@ import {
   sharedDashboardKey,
   validateSharedWidgets,
   validateSharedCalendar,
+  upgradeDashboardWidgets,
   type SharedDashboardScope,
 } from './sharedDashboardModel'
 
@@ -51,22 +52,22 @@ function jobData(id: string, job: Record<string, unknown>) {
   }
 }
 
-// Separate additive surfaces; never reads or writes the existing dashboardPersonal/dashboardRoles layouts.
+// Legacy layouts are read only as a fallback; new saves never overwrite those records.
 export const sharedDashboardWorkspace = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use dashboards.')
   const data = request.data || {}
   if (
     !['load', 'save-template', 'save-notes', 'save-calendar'].includes(data.action) ||
-    !['job', 'role'].includes(data.scope) ||
+    !['personal', 'job', 'role'].includes(data.scope) ||
     data.uid !== undefined ||
     data.ownerId !== undefined
   )
     throw new HttpsError('invalid-argument', 'Choose a shared job or role dashboard.')
   const scope = data.scope as SharedDashboardScope
-  if (scope === 'role' && data.jobId !== undefined)
+  if (scope !== 'job' && data.jobId !== undefined)
     throw new HttpsError(
       'invalid-argument',
-      'Role home uses the signed-in person, not a supplied job context.',
+      'This dashboard uses the signed-in person, not a supplied job context.',
     )
   return db.runTransaction(async (tx) => {
     const profile = await tx.get(db.doc('users/' + request.auth!.uid))
@@ -80,7 +81,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         (user.role !== 'admin' && role !== user.role))
     )
       throw denied()
-    if (scope === 'job' && data.role !== undefined)
+    if (scope !== 'role' && data.role !== undefined)
       throw new HttpsError(
         'invalid-argument',
         'The job template is shared by all jobs, not by role.',
@@ -110,30 +111,43 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       (user.role !== 'admin' || ['save-notes', 'save-calendar'].includes(data.action))
     )
       throw denied('Choose a job you can access.')
-    const templateRef = db.doc('sharedDashboardTemplates/' + sharedDashboardKey(scope, role))
+    const templateRef = db.doc(scope === 'personal'
+      ? 'sharedDashboardPersonal/' + user.uid
+      : 'sharedDashboardTemplates/' + sharedDashboardKey(scope, role))
     const template = await tx.get(templateRef),
       version = Number(template.data()?.version || 0)
     const allowRoleEditing = template.data()?.allowRoleEditing === true
     const canEdit =
-      user.role === 'admin' || (scope === 'role' && role === user.role && allowRoleEditing)
+      scope === 'personal' || user.role === 'admin' || (scope === 'role' && role === user.role && allowRoleEditing)
     if (data.action === 'save-template' && !canEdit)
       throw denied('This role cannot edit its shared dashboard.')
     let widgets = template.data()?.widgets || defaultSharedWidgets(scope)
+    if (!template.exists && scope !== 'job') {
+      const legacy = await tx.get(db.doc(scope === 'personal' ? 'dashboardPersonal/' + user.uid : 'dashboardRoles/' + role))
+      if (legacy.exists) {
+        try { widgets = upgradeDashboardWidgets(legacy.data()?.widgets, scope) }
+        catch { throw new HttpsError('failed-precondition', 'The previous layout needs review. Its original record has been preserved.') }
+      }
+    }
     const notesRef =
-      scope === 'role'
-        ? db.doc('sharedDashboardUserData/' + user.uid)
+      scope === 'personal'
+        ? db.doc('sharedDashboardPersonalData/' + user.uid)
+        : scope === 'role' ? db.doc('sharedDashboardUserData/' + user.uid)
         : jobId
           ? db.doc('sharedDashboardJobData/' + jobId)
           : undefined
     const notes = notesRef ? await tx.get(notesRef) : undefined
     const content = notes?.data() || {}
-    const prefix = scope === 'role' ? role + ':' : ''
+    const contentKey = scope === 'personal' ? 'personal' : role
+    const prefix = scope !== 'job' ? contentKey + ':' : ''
     const visibleNotes = Object.fromEntries(
       Object.entries(content.notes || {})
         .filter(([key]) => key.startsWith(prefix))
         .map(([key, value]) => [key.slice(prefix.length), value]),
     )
-    const events = scope === 'role' ? content.calendars?.[role] || [] : content.events || []
+    for (const widget of widgets.filter((item: { type: string }) => item.type === 'notes'))
+      if (!(widget.id in visibleNotes) && widget.text) visibleNotes[widget.id] = widget.text
+    const events = scope !== 'job' ? content.calendars?.[contentKey] || [] : content.events || []
     if (data.action === 'save-template') {
       checkVersion(data.version, version)
       try {
@@ -207,8 +221,8 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       tx.set(notesRef!, {
         ...content,
         version: Number(content.version || 0) + 1,
-        ...(scope === 'role'
-          ? { calendars: { ...content.calendars, [role]: entries } }
+        ...(scope !== 'job'
+          ? { calendars: { ...content.calendars, [contentKey]: entries } }
           : { events: entries }),
         updatedBy: user.uid,
         updatedAt: Date.now(),

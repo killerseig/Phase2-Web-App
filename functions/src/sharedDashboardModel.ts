@@ -1,6 +1,6 @@
 import type { UserRole } from './constants'
 
-export type SharedDashboardScope = 'job' | 'role'
+export type SharedDashboardScope = 'personal' | 'job' | 'role'
 export type SharedDashboardWidgetType =
   | 'workflows'
   | 'text'
@@ -56,14 +56,18 @@ export function defaultSharedWidgets(scope: SharedDashboardScope): SharedDashboa
         : '',
   }))
 }
-export function sharedDashboardKey(scope: SharedDashboardScope, role: UserRole) {
+export function sharedDashboardKey(scope: SharedDashboardScope, role: UserRole, uid?: string) {
+  if (scope === 'personal') {
+    if (!uid) throw Error('Personal layouts require their authenticated owner.')
+    return 'personal-' + uid
+  }
   return scope === 'job' ? 'all-jobs' : 'role-' + role
 }
 export function validateSharedWidgets(
   value: unknown,
   scope: SharedDashboardScope,
 ): SharedDashboardWidget[] {
-  if (!Array.isArray(value) || !value.length || value.length > 12)
+  if (!Array.isArray(value) || (scope !== 'personal' && !value.length) || value.length > 12)
     throw Error('Use between one and twelve widgets.')
   const ids = new Set<string>(),
     types = new Set<string>()
@@ -146,13 +150,25 @@ export function validateSharedWidgets(
     return widget
   })
   const required = scope === 'job' ? 'workflows' : 'jobs'
-  if (!types.has(required))
+  if (scope !== 'personal' && !types.has(required))
     throw Error(
       scope === 'job'
         ? 'Keep Job tools available for every job.'
         : 'Keep My jobs available on each role home.',
     )
   return widgets
+}
+// Read compatibility only: original records are never overwritten by conversion.
+export function upgradeDashboardWidgets(value: unknown, scope: 'personal' | 'role'): SharedDashboardWidget[] {
+  if (!Array.isArray(value)) throw Error('The previous layout is invalid; its original record is preserved.')
+  const widgets = value.map(entry => ({
+    id: entry.id, type: entry.type === 'shortcuts' ? 'jobs' : entry.type,
+    span: entry.span, title: entry.title, text: entry.text,
+    ...(entry.form ? { form: entry.form } : {}),
+  }))
+  if (scope === 'role' && !widgets.some(widget => widget.type === 'jobs'))
+    widgets.push({ id: 'shared-jobs', type: 'jobs', span: 12, title: 'Assigned jobs', text: '' })
+  return validateSharedWidgets(widgets, scope)
 }
 export interface SharedCalendarEntry {
   id: string

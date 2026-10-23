@@ -5,9 +5,19 @@ import {
   sharedWidgetTypes,
   validateSharedWidgets,
   validateSharedCalendar,
+  upgradeDashboardWidgets,
 } from '../../functions/src/sharedDashboardModel'
 import { resolveDashboardText } from '@/features/dashboard/sharedText'
 describe('parallel shared dashboard contracts', () => {
+  it('keeps personal identities separate and preserves older personal notes without requiring shared navigation', () => {
+    expect(sharedDashboardKey('personal', 'foreman', 'a')).not.toBe(sharedDashboardKey('personal', 'foreman', 'b'))
+    expect(() => sharedDashboardKey('personal', 'foreman')).toThrow()
+    expect(validateSharedWidgets([], 'personal')).toEqual([])
+    const old = [{ id: 'my-notes', type: 'notes', span: 6, title: 'Private notes', text: 'Keep this text' }]
+    expect(upgradeDashboardWidgets(old, 'personal')).toEqual(old)
+    expect(old[0]?.text).toBe('Keep this text')
+    expect(upgradeDashboardWidgets(old, 'role').some(widget => widget.type === 'jobs')).toBe(true)
+  })
   it('shares the job template across roles and keeps role templates distinct', () => {
     expect(sharedDashboardKey('job', 'admin')).toBe(sharedDashboardKey('job', 'foreman'))
     expect(sharedDashboardKey('role', 'foreman')).not.toBe(

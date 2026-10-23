@@ -1,5 +1,11 @@
 # Widget placement and dashboard layouts
 
+## October 23 completion work: all three scopes
+
+The user confirmed Personal, Role and Job dashboards are all in this milestone, with common functionality and different scope. The first verified source milestone adds owner-derived Personal support to `sharedDashboardWorkspace`. New layouts use `sharedDashboardPersonal/{uid}` and personal content uses `sharedDashboardPersonalData/{uid}`; Role and Job templates/content retain their existing independent stores. Existing `dashboardPersonal`/`dashboardRoles` layouts are a read-only fallback when a new layout does not exist. Conversion preserves notes and the original records; only an explicit save creates the new layout. Client-supplied owners and role/job context on Personal requests are rejected.
+
+The local Firestore verification covers owner separation, legacy retention, optimistic conflicts, unchanged Role/Job authorization and direct-client rule denials. Editor/Company Library/Forms integration and the remaining documented business widgets are subsequent verified units. This is source on `test`, not a production release, permission change or approval to merge `main`. Weather remains deferred.
+
 Implemented locally September 18, 2026. Production deployment remains separate.
 
 ## Confirmed ownership

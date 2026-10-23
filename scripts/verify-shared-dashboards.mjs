@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { randomUUID } from 'node:crypto'
+import { initializeApp as initializeClientApp, deleteApp } from 'firebase/app'
+import { getFirestore as getClientFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, terminate } from 'firebase/firestore'
 const projectId = process.env.GCLOUD_PROJECT || 'demo-phase2-shared-dashboards'
 assert.match(projectId, /^demo-/)
 assert.equal(
@@ -14,6 +16,9 @@ require('firebase-admin/app').initializeApp({
   storageBucket: projectId + '.appspot.com',
 })
 const db = require('firebase-admin/firestore').getFirestore()
+const clientApp = initializeClientApp({ projectId }, 'dashboard-rules-audit')
+const clientDb = getClientFirestore(clientApp)
+connectFirestoreEmulator(clientDb, '127.0.0.1', 8280, { mockUserToken: { sub: 'dash-a' } })
 const { sharedDashboardWorkspace } = require('../functions/sharedDashboardFunctions.js')
 const { formTemplates, formWorkspace } = require('../functions/formFunctions.js')
 const { formSubmissionViewer } = require('../functions/formSubmissionViewer.js')
@@ -58,6 +63,29 @@ try {
       assignedForemanIds: ['dash-a'],
     })
   for (const uid of ['dash-none', 'dash-inactive']) await denied(() => call(uid, 'role'))
+  // All three scopes use the same editor, but personal identity is always server-derived.
+  for (const uid of ['dash-none', 'dash-inactive']) await denied(() => call(uid, 'personal'))
+  await denied(() => call('dash-a', 'personal', 'load', { ownerId: 'dash-b' }), 'invalid-argument')
+  await denied(() => call('dash-a', 'personal', 'load', { role: 'admin' }), 'invalid-argument')
+  await db.doc('dashboardPersonal/dash-a').set({ version: 7, widgets: [{ id: 'old-note', type: 'notes', span: 6, title: 'My notes', text: 'Original private note' }] })
+  const personal = await call('dash-a', 'personal')
+  equal(personal.canEdit, true)
+  equal(personal.notes['old-note'], 'Original private note')
+  equal((await db.doc('sharedDashboardPersonal/dash-a').get()).exists, false)
+  equal((await call('dash-b', 'personal')).notes['old-note'], undefined)
+  await call('dash-a', 'personal', 'save-template', { version: 0, widgets: personal.widgets })
+  equal((await db.doc('dashboardPersonal/dash-a').get()).data().version, 7)
+  equal((await call('dash-a', 'personal')).notes['old-note'], 'Original private note')
+  await call('dash-a', 'personal', 'save-notes', { version: 0, widgetId: 'old-note', text: 'Updated only for me' })
+  equal((await call('dash-a', 'personal')).notes['old-note'], 'Updated only for me')
+  equal((await call('dash-a', 'role')).notes['old-note'], undefined)
+  equal((await call('dash-a', 'role')).notesVersion, 0)
+  equal((await call('dash-b', 'personal')).notes['old-note'], undefined)
+  for (const collection of ['sharedDashboardPersonal', 'sharedDashboardPersonalData', 'sharedDashboardTemplates']) {
+    await denied(() => getDoc(doc(clientDb, collection, 'dash-a')))
+    await denied(() => setDoc(doc(clientDb, collection, 'dash-a'), { widgets: [] }))
+  }
+  await denied(() => call('dash-a', 'personal', 'save-template', { version: 0, widgets: personal.widgets }), 'aborted')
   await denied(() => call(undefined, 'role'), 'unauthenticated')
   await denied(() => call('dash-a', 'job', 'load', { jobId: 'dash-job-b' }))
   equal((await call('dash-a', 'job', 'load', { jobId: 'dash-job-uid' })).job.id, 'dash-job-uid')
@@ -291,5 +319,7 @@ try {
   )
   console.log(JSON.stringify({ projectId, assertions, deniedCases: negatives, result: 'passed' }))
 } finally {
+  await terminate(clientDb)
+  await deleteApp(clientApp)
   await db.terminate()
 }
