@@ -11,6 +11,12 @@ import FormShareLinks from '@/components/forms/FormShareLinks.vue'
 import FormCanvasViewport from '@/components/forms/FormCanvasViewport.vue'
 import FormOutputSettings from '@/components/forms/FormOutputSettings.vue'
 import FormDefinitionPreview from '@/components/forms/FormDefinitionPreview.vue'
+import FormSelectorList from '@/components/forms/FormSelectorList.vue'
+import BuilderEditingTools from '@/components/builder/BuilderEditingTools.vue'
+import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
+import BuilderSettingsTabs from '@/components/builder/BuilderSettingsTabs.vue'
+import { formOutputIssues } from '../../functions/src/formOutputTemplate'
+import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
 import {
   clone,
   committeeAudit,
@@ -34,6 +40,10 @@ import { reportingStarter, type ReportingStarter } from '@/features/forms/report
 import { committeeFieldsToRemove, applyApprovedCommitteeCorrections } from '@/features/forms/committeeCorrection'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { readLibrary, saveLibrary } from '@/features/forms/localLibrary'
+import { usePrivateReferences } from '@/features/intranet/usePrivateReferences'
+import { suppliedReportStarter, suppliedStarterDecision } from '@/features/forms/suppliedStarters'
+import type { IntranetForm } from '@/features/intranet/content'
+import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus.vue'
 const localPreview = isFormEmulatorEnabled()
 const fieldGroups: { label: string; kinds: FormFieldKind[] }[] = [
   {
@@ -45,17 +55,36 @@ const fieldGroups: { label: string; kinds: FormFieldKind[] }[] = [
   { label: 'Groups and routing', kinds: ['repeat', 'recipients'] },
 ]
 const entriesMode = ref(false)
-const sidebarTab = ref<'library' | 'fields'>('library')
+const fieldsExpanded = ref(false), formActionsExpanded = ref(false)
+const activePane = ref<'outline' | 'preview' | 'inspector'>('outline')
+const inspectorPane = ref<HTMLElement>()
+function focusInspector() {
+  activePane.value = 'inspector'
+  void nextTick(() => {
+    if (window.matchMedia?.('(max-width: 900px)').matches) inspectorPane.value?.focus({ preventScroll: true })
+  })
+}
+function selectCanvasField(id: string) {
+  authoring.select(id)
+  settingsTab.value = 'field'
+  focusInspector()
+}
+function openPublishing() {
+  entriesMode.value = false
+  preview.value = false
+  settingsTab.value = 'output'
+  focusInspector()
+}
 const settingsTab = ref<'form' | 'field' | 'output'>('field')
 const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
-const previewWidth = computed(() =>
-  previewDevice.value === 'phone' ? 390 : previewDevice.value === 'tablet' ? 820 : 1080,
-)
 const auth = useAuthStore()
+const { content: suppliedContent, packages: sourcePackages, selectedPackage: sourcePackage, loading: sourcesLoading, error: sourcesError, notice: sourceNotice, selectSource, reload: reloadSources, cancel: cancelSource } = usePrivateReferences(() => auth.rawRole === 'admin')
+const suppliedStarters = computed(() => suppliedContent.value?.forms.filter(form => !suppliedStarterDecision(form)) ?? [])
 const serverEnabled = isFormServerEnabled(),
   serverTemplates = ref<ServerFormTemplate[]>([]),
   serverBusy = ref(false)
 const serverAvailable = ref(false)
+const publishPhase = ref<'' | 'confirming' | 'saving' | 'publishing'>('')
 const legacyImportId = ref(''),
   legacyError = ref('')
 async function loadServer() {
@@ -83,17 +112,18 @@ async function saveServer(): Promise<ServerFormTemplate | undefined> {
   serverBusy.value = true
   try {
     const existing = serverTemplates.value.find((item) => item.id === draft.value!.id)
+    const definition = clone(draft.value)
     const result = await formApi<ServerFormTemplate>('formTemplates', {
       action: 'save',
-      id: draft.value.id,
+      id: definition.id,
       revision: existing?.revision || 0,
-      definition: draft.value,
+      definition,
     })
     if (uid.value !== owner) return
     await loadServer()
     if (JSON.stringify(draft.value) === submitted) authoring.saved()
     message.value = localPreview ? 'Draft saved to the local server.' : 'Draft saved.'
-    error.value = ''
+    if (serverAvailable.value) error.value = ''
     return result
   } catch (caught) {
     error.value = (caught as Error).message
@@ -102,36 +132,50 @@ async function saveServer(): Promise<ServerFormTemplate | undefined> {
   }
 }
 async function issueServer() {
-  if (serverBusy.value || !draft.value) return
-  const issues = definitionErrors(draft.value)
+  if (serverBusy.value || publishPhase.value || !draft.value || localPreview || draft.value.archived || !serverAvailable.value) return
+  message.value = ''
+  const issues = [...definitionErrors(draft.value), ...formOutputIssues(draft.value).filter(issue => issue.severity === 'error').map(issue => issue.message)]
   if (issues.length) {
     error.value = issues.join(' ')
     settingsTab.value = 'output'
     return
   }
-  if (
-    !(await confirmation.value?.ask({
+  const owner = uid.value, id = draft.value.id, submitted = JSON.stringify(draft.value)
+  const stillCurrent = () => uid.value === owner && draft.value?.id === id && JSON.stringify(draft.value) === submitted
+  publishPhase.value = 'confirming'
+  try {
+    if (!(await confirmation.value?.ask({
       title: 'Publish this form?',
       message:
-        'Publish an immutable version of the current saved draft. New respondents use this version; completed entries retain their original questions and answers.',
-      confirmLabel: 'Publish',
-    }))
-  )
-    return
-  const saved = await saveServer()
-  if (!saved) return
-  serverBusy.value = true
-  try {
+        'Save this draft and publish it as an immutable version. New respondents use this version; completed entries retain their original questions and answers.',
+      confirmLabel: 'Save and publish',
+    }))) return
+    if (!stillCurrent()) {
+      error.value = 'The draft or signed-in account changed. Review it before publishing again.'
+      return
+    }
+    publishPhase.value = 'saving'
+    const saved = await saveServer()
+    if (!saved) return
+    if (!stillCurrent() || saved.id !== id) {
+      error.value = 'The draft changed during saving. Review it before publishing again.'
+      return
+    }
+    publishPhase.value = 'publishing'
+    serverBusy.value = true
     await formApi('formTemplates', { action: 'issue', id: saved.id, revision: saved.revision })
+    if (uid.value !== owner) return
     await loadServer()
-    message.value = localPreview
-      ? 'Immutable local server version published.'
-      : 'Immutable form version published.'
-    error.value = ''
+    message.value = 'Draft saved and immutable form version published.'
+    if (serverAvailable.value) error.value = ''
   } catch (caught) {
-    error.value = (caught as Error).message
+    if (uid.value === owner) {
+      message.value = ''
+      error.value = (publishPhase.value === 'publishing' ? 'Draft saved, but publication failed: ' : '') + (caught as Error).message
+    }
   } finally {
     serverBusy.value = false
+    publishPhase.value = ''
   }
 }
 async function removeServer(template: ServerFormTemplate) {
@@ -181,6 +225,32 @@ const library = ref(emptyLibrary()),
 const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const authoring = useFormAuthoring(draft, dirty)
 const { selection, canUndo, canRedo } = authoring
+const starterSelection = ref('')
+const selectedServerForm = computed(() => serverEnabled ? serverTemplates.value.find(item => item.id === draft.value?.id) : undefined)
+const selectedLocalForm = computed(() => !serverEnabled ? library.value.templates.find(item => item.id === draft.value?.id) : undefined)
+const selectedFormKey = computed(() => !draft.value ? '' : selectedServerForm.value ? 'server:' + draft.value.id : selectedLocalForm.value ? 'local:' + draft.value.id : starterSelection.value)
+type FormChoice = { key: string; label: string; meta: string; disabled: boolean; templateId?: string } & (
+  { kind: 'starter'; starter: ReportingStarter } | { kind: 'source'; source: IntranetForm } |
+  { kind: 'server'; server: ServerFormTemplate } | { kind: 'local'; local: FormTemplate })
+const formChoices = computed(() => {
+  const starters: { starter: ReportingStarter; label: string }[] = [
+    { starter: 'committee', label: 'Corrected Committee inspection' }, { starter: 'bbs', label: 'BBS Observation' },
+    { starter: 'general-visit', label: 'General Site Visit' }, { starter: 'near-miss', label: 'Near Miss / Safety Observation' },
+  ]
+  const rows: FormChoice[] = starters.map(item => ({ ...item, key: 'starter:' + item.starter, kind: 'starter', meta: 'Starter', disabled: creationLocked.value }))
+  if (auth.rawRole === 'admin') rows.push(...suppliedStarters.value.map(source => ({ key: 'source:' + source.id, label: source.title + ' draft', meta: 'Starter', disabled: creationLocked.value, kind: 'source' as const, source })))
+  if (serverEnabled) rows.push(...serverTemplates.value.map(server => ({ key: 'server:' + server.id, templateId: server.id, label: server.draft.title, meta: server.archived ? 'Archived' : server.latestVersion ? 'Published' : 'Draft', disabled: serverBusy.value || !!publishPhase.value, kind: 'server' as const, server })))
+  else rows.push(...library.value.templates.map(local => ({ key: 'local:' + local.id, templateId: local.id, label: local.title, meta: local.archived ? 'Archived' : local.versions.length ? 'Published' : 'Draft', disabled: blocked.value, kind: 'local' as const, local })))
+  return alphabetizeFormChoices(rows)
+})
+async function chooseForm(key: string) {
+  const choice = formChoices.value.find(item => item.key === key)
+  if (!choice || choice.disabled) return
+  if (choice.kind === 'starter') await create(choice.starter)
+  else if (choice.kind === 'source') await create(choice.source)
+  else if (choice.kind === 'server') await selectServer(choice.server)
+  else await select(choice.local)
+}
 const publishedChanges = computed(() => {
   if (!draft.value) return []
   const previous = serverTemplates.value.find(
@@ -224,12 +294,13 @@ const selectedField = computed(() =>
 )
 const builderRoot = ref<HTMLElement>()
 const creationLocked = computed(
-  () => blocked.value || serverBusy.value || (serverEnabled && !serverAvailable.value),
+  () => blocked.value || serverBusy.value || !!publishPhase.value || (serverEnabled && !serverAvailable.value),
 )
 const authoringLocked = computed(
   () =>
     blocked.value ||
     serverBusy.value ||
+    !!publishPhase.value ||
     !!draft.value?.archived ||
     (serverEnabled && !serverAvailable.value),
 )
@@ -398,9 +469,10 @@ function correctCommitteeDraft() {
   message.value = 'Removed the obsolete Committee fields from this draft. Date of Inspection and prior versions are retained. Save and publish separately after reviewing the draft.'
   settingsTab.value = 'output'
 }
-async function create(audit: boolean | ReportingStarter = false) {
+async function create(audit: boolean | ReportingStarter | IntranetForm = false) {
   const owner = uid.value
   if (blocked.value) return
+  if (typeof audit === 'object' && (auth.rawRole !== 'admin' || creationLocked.value)) return
   if (
     dirty.value &&
     !(await confirmation.value?.ask({
@@ -412,12 +484,20 @@ async function create(audit: boolean | ReportingStarter = false) {
     return
   if (uid.value !== owner) return
   pointerDrag.cancel()
-  draft.value =
-    typeof audit === 'string' ? reportingStarter(audit) : audit ? committeeAudit() : newTemplate()
+  try {
+    draft.value = typeof audit === 'object' ? suppliedReportStarter(audit) :
+      typeof audit === 'string' ? reportingStarter(audit) : audit ? committeeAudit() : newTemplate()
+  } catch (caught) { error.value = (caught as Error).message; return }
+  starterSelection.value = typeof audit === 'string' ? 'starter:' + audit : typeof audit === 'object' ? 'source:' + audit.id : ''
   // Source starters are reproducible initial content, just like the blank shell.
   // Establish their baseline now; subsequent user edits still require confirmation.
   authoring.reset()
   preview.value = false
+  if (typeof audit === 'object') {
+    await nextTick()
+    settingsTab.value = 'form'
+    message.value = 'Prepared an unsaved Admin-only draft. Review fields, audience and delivery before saving or publishing. No notification was sent.'
+  }
 }
 function save(version = false) {
   if (!draft.value || blocked.value || !uid.value) return
@@ -533,7 +613,7 @@ function removeField(index: number) {
 }
 const errors = computed(() => (draft.value ? definitionErrors(draft.value) : []))
 async function leaveEditor() {
-  if (serverBusy.value) return false
+  if (serverBusy.value || publishPhase.value) return false
   if (!dirty.value) return true
   const owner = uid.value
   const discard = await confirmation.value?.ask({
@@ -545,7 +625,7 @@ async function leaveEditor() {
   return !!discard && uid.value === owner && !serverBusy.value
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value || serverBusy.value) {
+  if (dirty.value || serverBusy.value || publishPhase.value) {
     event.preventDefault()
     event.returnValue = ''
   }
@@ -557,7 +637,9 @@ watch(
   () => draft.value?.id,
   (id) => {
     if (id) {
-      sidebarTab.value = 'fields'
+      focusInspector()
+      fieldsExpanded.value = false
+      formActionsExpanded.value = false
       settingsTab.value = 'form'
     }
   },
@@ -609,10 +691,10 @@ watch(
           >
             Preview</button
           ><button
-            aria-label="Output / issues"
-            title="Output and issues"
+            aria-label="Publishing settings"
+            title="Audience, delivery and publishing checks"
             :aria-pressed="!entriesMode && settingsTab === 'output'"
-            @click="((entriesMode = false), (settingsTab = 'output'))"
+            @click="openPublishing"
           >
             Publishing
           </button>
@@ -650,11 +732,12 @@ watch(
             >
               Save draft</button
             ><button
-              class="primary"
-              :disabled="serverBusy || !draft || draft.archived"
+                v-if="settingsTab === 'output'"
+                :disabled="serverBusy || !!publishPhase || !serverAvailable || !draft || draft.archived || localPreview"
+                :title="localPreview ? 'Publishing is disabled in this local preview.' : undefined"
               @click="issueServer"
             >
-              {{ localPreview ? 'Publish local version' : 'Publish' }}
+              {{ publishPhase === 'saving' ? 'Saving draft…' : publishPhase === 'publishing' ? 'Publishing…' : 'Publish' }}
             </button>
           </div>
           <div class="toolbar">
@@ -670,245 +753,40 @@ watch(
               @click="save(true)"
             >
               Keep local version</button
-            ><button @click="preview = !preview">
-              <i :class="['pi', preview ? 'pi-pencil' : 'pi-eye']" aria-hidden="true" />
-              {{ preview ? 'Edit fields' : 'Full-page preview' }}</button
             ><span>{{ dirty ? 'Unsaved edits' : 'Saved draft' }}</span>
           </div>
-        </div>
-      </header>
-      <details v-if="localPreview" class="local-status">
-        <summary>Development preview · no production submissions or email</summary>
-        <p aria-live="polite">
-          {{
-            serverEnabled
-              ? serverAvailable
-                ? 'Source of truth: local emulator server. Device-only drafts are separate and are not listed here.'
-                : 'Emulator backend unavailable. Server edits are blocked; no fallback device records are mixed into this library.'
-              : 'Device-only draft mode. Start the Forms emulator profile for the shared server library; these drafts are not server records.'
-          }}
-        </p>
-      </details>
-      <p v-if="legacyError" role="alert">{{ legacyError }}</p>
-      <p v-if="error" role="alert">{{ error }}</p>
-      <p v-if="message" role="status">{{ message }}</p>
-      <FormEntriesView v-if="entriesMode && draft" :template-id="draft.id" />
-      <div v-else class="builder-layout">
-        <aside class="builder-sidebar" aria-label="Form library">
-          <div class="library-creation">
-            <button :disabled="creationLocked" @click="create()">
-              <i class="pi pi-plus" aria-hidden="true" />New form</button
-            ><button :disabled="creationLocked" @click="create('committee')">
-              Corrected Committee inspection
-            </button>
-            <button :disabled="creationLocked" @click="create('bbs')">BBS Observation</button>
-            <button :disabled="creationLocked" @click="create('general-visit')">
-              General Site Visit
-            </button>
-            <button :disabled="creationLocked" @click="create('near-miss')">
-              Near Miss / Safety Observation
-            </button>
-          </div>
-          <nav class="sidebar-tabs" aria-label="Form palette">
-            <button :aria-pressed="sidebarTab === 'library'" @click="sidebarTab = 'library'">
-              <i class="pi pi-file" aria-hidden="true" /> Library</button
-            ><button :aria-pressed="sidebarTab === 'fields'" @click="sidebarTab = 'fields'">
-              <i class="pi pi-th-large" aria-hidden="true" /> Fields
-            </button>
-          </nav>
-          <div v-show="sidebarTab === 'library'" class="library-list">
-            <p v-if="!serverEnabled && !library.templates.length">
-              Create a form to begin. Opening this page creates nothing.
-            </p>
-            <article
-              class="form-library-row"
-              :class="{ selected: draft?.id === template.id }"
-              v-for="template in serverEnabled ? [] : library.templates"
-              :key="template.id"
-            >
-              <button
-                class="library-target"
-                :aria-label="template.title"
-                :aria-pressed="draft?.id === template.id"
-                @click="select(template).then(() => (sidebarTab = 'library'))"
-              >
-                <i class="pi pi-file" aria-hidden="true" /><span>{{ template.title }}</span></button
-              ><span v-if="template.archived" class="library-meta">Archived</span
-              ><small class="library-meta">{{ template.versions.length }} retained versions</small
-              ><button
-                class="library-action"
-                v-if="draft?.id === template.id"
-                :disabled="template.archived || blocked"
-                @click="duplicate(template)"
-              >
-                <i class="pi pi-copy" aria-hidden="true" /> Duplicate</button
-              ><button
-                class="library-action"
-                v-if="draft?.id === template.id"
-                :disabled="template.archived || blocked"
-                @click="remove(template)"
-              >
-                <i
-                  :class="['pi', template.versions.length ? 'pi-inbox' : 'pi-trash']"
-                  aria-hidden="true"
-                />
-                {{ template.versions.length ? 'Archive' : 'Delete' }}
-              </button>
-            </article>
+          <details class="builder-library-tools" :open="!!sourcesError">
+            <summary>Library tools</summary><div class="builder-library-menu">          <PrivateReferenceStatus v-if="auth.rawRole === 'admin'" :loading="sourcesLoading" :error="sourcesError" :notice="sourceNotice" :packages="sourcePackages" :selected="sourcePackage" @select="selectSource" @retry="reloadSources" @cancel="cancelSource" />
+          <div class="library-tools-content">
+            <p v-if="!serverEnabled && !library.templates.length">No saved forms yet. Choose a starter or New form.</p>
             <section v-if="serverEnabled" aria-label="Server form library">
-              <div class="library-utilities">
-                <h3>Forms</h3>
-                <button
-                  class="library-refresh"
-                  aria-label="Refresh server library"
-                  title="Refresh server library"
-                  :disabled="serverBusy"
-                  @click="loadServer"
-                >
-                  <i class="pi pi-refresh" aria-hidden="true" />
-                </button>
-              </div>
+              <div class="library-utilities"><button class="library-refresh" aria-label="Refresh server library" title="Refresh server library" :disabled="serverBusy" @click="loadServer"><i class="pi pi-refresh" aria-hidden="true" /> Refresh forms</button></div>
               <details v-if="library.templates.length">
                 <summary>Import an existing device draft</summary>
-                <p>
-                  Creates a new server draft. Device versions stay on this device and are not merged
-                  with server history.
-                </p>
-                <label
-                  >Device draft to import<select
-                    v-model="legacyImportId"
-                    aria-label="Device draft to import"
-                  >
-                    <option value="">Choose a device draft</option>
-                    <option
-                      v-for="item in library.templates.filter((item) => !item.archived)"
-                      :key="item.id"
-                      :value="item.id"
-                    >
-                      {{ item.title }}
-                    </option>
-                  </select></label
-                ><button
-                  :disabled="!legacyImportId || !serverAvailable || serverBusy || dirty"
-                  @click="importDeviceDraft"
-                >
-                  Import as new server draft
-                </button>
+                <p>Creates a new server draft. Device versions stay on this device and are not merged with server history.</p>
+                <label>Device draft to import<select v-model="legacyImportId" aria-label="Device draft to import"><option value="">Choose a device draft</option><option v-for="item in library.templates.filter((item) => !item.archived)" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
+                <button :disabled="!legacyImportId || !serverAvailable || serverBusy || dirty" @click="importDeviceDraft">Import as new server draft</button>
               </details>
-
-              <article
-                class="form-library-row"
-                :class="{ selected: draft?.id === template.id }"
-                v-for="template in serverTemplates"
-                :data-template-id="template.id"
-                :key="template.id"
-              >
-                <button
-                  class="library-target"
-                  :aria-label="template.draft.title"
-                  :aria-pressed="draft?.id === template.id"
-                  :disabled="serverBusy"
-                  @click="selectServer(template).then(() => (sidebarTab = 'library'))"
-                >
-                  <i class="pi pi-file" aria-hidden="true" />
-                  <span>{{ template.draft.title }}</span></button
-                ><span class="library-meta">{{
-                  template.archived
-                    ? 'Archived'
-                    : template.latestVersion
-                      ? 'Issued version ' + template.latestVersion
-                      : 'Draft'
-                }}</span
-                ><FormShareLinks v-if="draft?.id === template.id" :template="template" />
-                <RouterLink
-                  v-if="draft?.id === template.id && template.latestVersion && !template.archived && template.definition?.access?.respondents !== 'public'"
-                  :to="'/forms/' + template.id"
-                  class="library-open"
-                  aria-label="Open authenticated form"
-                  ><i class="pi pi-external-link" aria-hidden="true" />Open signed-in form</RouterLink
-                ><button
-                  v-if="draft?.id === template.id"
-                  :disabled="serverBusy || !serverAvailable || template.archived || dirty"
-                  class="library-action"
-                  aria-label="Duplicate server form"
-                  @click="duplicateServer(template)"
-                >
-                  <i class="pi pi-copy" aria-hidden="true" />Duplicate</button
-                ><button
-                  v-if="draft?.id === template.id"
-                  :disabled="serverBusy || !serverAvailable || template.archived"
-                  class="library-action"
-                  aria-label="Remove or archive server form"
-                  @click="removeServer(template)"
-                >
-                  <i class="pi pi-inbox" aria-hidden="true" />{{
-                    template.latestVersion || template.used ? 'Archive' : 'Delete'
-                  }}
-                </button>
-              </article>
             </section>
           </div>
-          <section
-            v-if="draft && !preview"
-            v-show="sidebarTab === 'fields'"
-            class="field-palette"
-            aria-label="Field palette"
-          >
-            <h2>Fields</h2>
-            <section v-for="group in fieldGroups" :key="group.label">
-              <h3>{{ group.label }}</h3>
-              <div class="palette-options">
-                <button
-                  v-for="kind in group.kinds"
-                  :key="kind"
-                  class="form-grip"
-                  :disabled="authoringLocked || draft.fields.length >= 60"
-                  @pointerdown="pointerDrag.start($event, { kind: 'new', type: kind }, kind)"
-                  @dragstart.prevent
-                  @click="add(kind)"
-                  :aria-label="'Add ' + kind"
-                >
-                  <i
-                    :class="[
-                      'pi',
-                      {
-                        text: 'pi-align-left',
-                        textarea: 'pi-align-justify',
-                        email: 'pi-envelope',
-                        phone: 'pi-phone',
-                        time: 'pi-clock',
-                        date: 'pi-calendar',
-                        number: 'pi-hashtag',
-                        choice: 'pi-list',
-                        checkbox: 'pi-check-square',
-                        radio: 'pi-circle',
-                        multiselect: 'pi-check-circle',
-                        photo: 'pi-image',
-                        repeat: 'pi-clone',
-                        matrix: 'pi-table',
-                        recipients: 'pi-envelope',
-                      }[kind],
-                    ]"
-                    aria-hidden="true"
-                  />
-                  {{
-                    kind === 'choice'
-                      ? 'Single select'
-                      : kind === 'textarea'
-                        ? 'Long text'
-                        : kind === 'multiselect'
-                          ? 'Multi select'
-                          : kind[0]!.toUpperCase() + kind.slice(1)
-                  }}
-                </button>
-              </div>
-            </section>
-          </section>
+</div>
+          </details>
+        </div>
+      </header>
+      <p v-if="legacyError" role="alert">{{ legacyError }}</p>
+      <p v-if="error" role="alert">{{ error }}</p>
+      <p v-if="message && !preview" role="status">{{ message }}</p>
+      <BuilderPanelSwitcher v-if="!entriesMode && !preview" v-model="activePane" outline-label="Forms" outline-controls="form-library" canvas-controls="form-canvas-pane" inspector-controls="form-inspector" />
+      <FormEntriesView v-if="entriesMode && draft" :template-id="draft.id" />
+      <FormDefinitionPreview v-else-if="preview && draft" class="builder-full-preview" :definition="draft" />
+      <div v-else class="builder-layout" :data-active-pane="activePane">
+        <aside id="form-library" class="builder-sidebar" aria-label="Form library">
+          <FormSelectorList :options="formChoices" :selected-key="selectedFormKey" :create-disabled="creationLocked" @create="create()" @select="chooseForm" />
         </aside>
         <section v-if="draft" aria-label="Form editor">
           <BuilderSelectionContext kind="Form" :scope="draft.title" />
           <div class="authoring-panels">
-            <FormCanvasViewport :device="previewDevice"
+            <FormCanvasViewport id="form-canvas-pane" :device="previewDevice"
               ><template #devices>
                 <div class="toolbar device-controls" role="group" aria-label="Preview device">
                   <button
@@ -933,16 +811,7 @@ watch(
                   </button>
                 </div>
               </template>
-              <div
-                v-if="preview"
-                class="form-preview-frame"
-                data-builder-preview
-                :style="{ maxWidth: previewWidth + 'px' }"
-              >
-                <FormDefinitionPreview :definition="draft" />
-              </div>
               <fieldset
-                v-else
                 class="canvas-panel"
                 :disabled="authoringLocked"
               >
@@ -969,11 +838,10 @@ watch(
                         pointerTarget?.overId === field.id && pointerTarget.edge === 'after',
                     }"
                     tabindex="0"
-                    @focusin="(authoring.select(field.id), (settingsTab = 'field'))"
-                    @click="(authoring.select(field.id), (settingsTab = 'field'))"
-                    @keydown.enter.self="(authoring.select(field.id), (settingsTab = 'field'))"
+                    @click="selectCanvasField(field.id)"
+                    @keydown.enter.self="selectCanvasField(field.id)"
                     @keydown.space.self.prevent="
-                      (authoring.select(field.id), (settingsTab = 'field'))
+                      selectCanvasField(field.id)
                     "
                     @keydown.delete.self.prevent="removeField(index)"
                     :aria-description="
@@ -1031,23 +899,91 @@ watch(
                 </ul>
               </fieldset></FormCanvasViewport
             >
-            <fieldset class="inspector-panel" :disabled="authoringLocked">
-              <nav class="settings-tabs" aria-label="Form settings tabs">
-                <button :aria-pressed="settingsTab === 'form'" @click="settingsTab = 'form'">
-                  <i class="pi pi-cog" aria-hidden="true" /> Form</button
-                ><button :aria-pressed="settingsTab === 'field'" @click="settingsTab = 'field'">
-                  <i class="pi pi-sliders-h" aria-hidden="true" /> Field</button
-                ><button :aria-pressed="settingsTab === 'output'" @click="settingsTab = 'output'">
-                  <i class="pi pi-check-circle" aria-hidden="true" /> Output
+            <aside id="form-inspector" ref="inspectorPane" class="inspector-panel" aria-label="Form inspector" tabindex="-1">
+              <BuilderEditingTools add-label="Add fields" :add-expanded="fieldsExpanded" add-controls="form-field-palette" :add-disabled="authoringLocked" action-label="Form actions" :action-expanded="formActionsExpanded" action-controls="form-actions-panel" :action-disabled="serverBusy || !!publishPhase || (!selectedServerForm && !selectedLocalForm)" @add="fieldsExpanded = !fieldsExpanded" @actions="formActionsExpanded = !formActionsExpanded" />
+              <section v-if="selectedServerForm || selectedLocalForm" v-show="formActionsExpanded" id="form-actions-panel" class="builder-form-actions__content" aria-label="Form actions">
+                  <p v-if="selectedServerForm" class="builder-context-meta">Published version: {{ selectedServerForm.latestVersion || 'None' }} · Draft revision: {{ selectedServerForm.revision }}</p>
+                  <p v-else-if="selectedLocalForm" class="builder-context-meta">{{ selectedLocalForm.versions.length }} retained versions on this device.</p>
+
+              <template v-if="selectedServerForm">
+                <FormShareLinks :template="selectedServerForm" />
+                <RouterLink v-if="selectedServerForm.latestVersion && !selectedServerForm.archived && selectedServerForm.definition?.access?.respondents !== 'public'" :to="'/forms/' + selectedServerForm.id" class="library-open" aria-label="Open authenticated form"><i class="pi pi-external-link" aria-hidden="true" />Open signed-in form</RouterLink>
+                <button :disabled="serverBusy || !!publishPhase || !serverAvailable || selectedServerForm.archived || dirty" class="library-action" aria-label="Duplicate server form" @click="duplicateServer(selectedServerForm)"><i class="pi pi-copy" aria-hidden="true" />Duplicate</button>
+                <button :disabled="serverBusy || !!publishPhase || !serverAvailable || selectedServerForm.archived" class="library-action" aria-label="Remove or archive server form" @click="removeServer(selectedServerForm)"><i class="pi pi-inbox" aria-hidden="true" />{{ selectedServerForm.latestVersion || selectedServerForm.used ? 'Archive' : 'Delete' }}</button>
+              </template>
+              <template v-else-if="selectedLocalForm">
+                <button class="library-action" :disabled="selectedLocalForm.archived || blocked" @click="duplicate(selectedLocalForm)"><i class="pi pi-copy" aria-hidden="true" />Duplicate</button>
+                <button class="library-action" :disabled="selectedLocalForm.archived || blocked" @click="remove(selectedLocalForm)"><i :class="['pi', selectedLocalForm.versions.length ? 'pi-inbox' : 'pi-trash']" aria-hidden="true" />{{ selectedLocalForm.versions.length ? 'Archive' : 'Delete' }}</button>
+              </template>
+
+                </section>
+              <fieldset class="inspector-fields" :disabled="authoringLocked">
+              <section
+            v-if="draft && !preview"
+            v-show="fieldsExpanded"
+            id="form-field-palette"
+            class="field-palette"
+            aria-label="Field palette"
+          >
+            <h2>Fields</h2>
+            <section v-for="group in fieldGroups" :key="group.label">
+              <h3>{{ group.label }}</h3>
+              <div class="palette-options">
+                <button
+                  v-for="kind in group.kinds"
+                  :key="kind"
+                  class="form-grip"
+                  :disabled="authoringLocked || draft.fields.length >= 60"
+                  @pointerdown="pointerDrag.start($event, { kind: 'new', type: kind }, kind)"
+                  @dragstart.prevent
+                  @click="add(kind); fieldsExpanded = false"
+                  :aria-label="'Add ' + kind"
+                >
+                  <i
+                    :class="[
+                      'pi',
+                      {
+                        text: 'pi-align-left',
+                        textarea: 'pi-align-justify',
+                        email: 'pi-envelope',
+                        phone: 'pi-phone',
+                        time: 'pi-clock',
+                        date: 'pi-calendar',
+                        number: 'pi-hashtag',
+                        choice: 'pi-list',
+                        checkbox: 'pi-check-square',
+                        radio: 'pi-circle',
+                        multiselect: 'pi-check-circle',
+                        photo: 'pi-image',
+                        repeat: 'pi-clone',
+                        matrix: 'pi-table',
+                        recipients: 'pi-envelope',
+                      }[kind],
+                    ]"
+                    aria-hidden="true"
+                  />
+                  {{
+                    kind === 'choice'
+                      ? 'Single select'
+                      : kind === 'textarea'
+                        ? 'Long text'
+                        : kind === 'multiselect'
+                          ? 'Multi select'
+                          : kind[0]!.toUpperCase() + kind.slice(1)
+                  }}
                 </button>
-              </nav>
-              <section v-show="settingsTab === 'form'" aria-label="Form settings">
+              </div>
+            </section>
+          </section>
+
+              <BuilderSettingsTabs v-model="settingsTab" class="settings-tabs" label="Form settings" id-prefix="form-settings" :disabled="authoringLocked" :tabs="[{ id: 'form', label: 'Form' }, { id: 'field', label: 'Field', disabled: !selectedField }, { id: 'output', label: 'Publishing' }]" />
+              <section v-show="settingsTab === 'form'" id="form-settings-panel-form" role="tabpanel" aria-labelledby="form-settings-tab-form" aria-label="Form settings">
                 <div v-if="committeeFieldsToRemove(draft).length">
                   <p>This Committee draft still contains obsolete fields. The correction removes Site Safety assistant and the closing Signature/Date while retaining Date of Inspection, all other wording and existing access/output settings. Published versions and submissions are unchanged.</p>
                   <button type="button" @click="correctCommitteeDraft">Apply approved Committee field removals</button>
                 </div>
                 <label>Form title<input v-model="draft.title" maxlength="160" /></label
-                ><label>Description<textarea v-model="draft.description" /></label
+                ><label>Description<textarea v-model="draft.description" class="form-description-editor" /></label
                 ><label
                   >Recipients<input
                     v-model="recipientText"
@@ -1065,12 +1001,14 @@ watch(
                   its inspector. Move buttons provide keyboard ordering.
                 </p>
               </section>
-              <section v-if="settingsTab === 'output'" aria-label="Publishing checks">
+              <div v-if="settingsTab === 'output'" id="form-settings-panel-output" role="tabpanel" aria-labelledby="form-settings-tab-output">
+              <section aria-label="Publishing checks">
                 <h2>Publishing checks</h2>
-                <h3>Compared with published version</h3>
+                <details><summary>Changes since publication</summary>
                 <ul>
                   <li v-for="change in publishedChanges" :key="change">{{ change }}</li>
                 </ul>
+                </details>
                 <p>
                   {{
                     definitionErrors(draft).length
@@ -1086,20 +1024,21 @@ watch(
                   {{
                     serverTemplates.find((template) => template.id === draft?.id)?.latestVersion ||
                     'None'
-                  }}. Publishing saves this draft as the next immutable version. Existing entries
-                  retain their submitted version.
+                  }}. Publish saves this draft first. Existing entries keep their original version.
                 </p>
-                <p v-if="dirty">This draft contains unsaved changes.</p>
               </section>
               <FormOutputSettings
-                v-if="settingsTab === 'output'"
                 :definition="draft"
                 :template-id="draft.id"
                 @update:definition="Object.assign(draft, $event)"
               />
+              </div>
               <section
                 v-if="selectedField && !preview"
                 v-show="settingsTab === 'field'"
+                id="form-settings-panel-field"
+                role="tabpanel"
+                aria-labelledby="form-settings-tab-field"
                 aria-label="Field inspector"
                 class="field-inspector"
               >
@@ -1324,6 +1263,7 @@ watch(
 
               <p v-if="!selectedField">Select a field on the canvas to edit its properties.</p>
             </fieldset>
+            </aside>
           </div>
         </section>
         <section v-else>
@@ -1394,13 +1334,6 @@ watch(
   max-height: calc(100dvh - 6rem);
   overflow: auto;
 }
-.library-list {
-  max-height: 16rem;
-  overflow: auto;
-}
-.library-list article {
-  padding: 0.35rem 0;
-}
 .palette-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1444,16 +1377,10 @@ button[aria-pressed='true'] {
   .builder-sidebar > h2 {
     display: none;
   }
-  .library-list {
-    grid-row: 1;
-  }
   .field-palette {
     grid-row: 2;
     position: sticky;
     top: 0;
-  }
-  .library-list {
-    max-height: 10rem;
   }
   .palette-options {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1686,20 +1613,10 @@ p[role='alert'] {
   padding: 0.35rem !important;
   overflow: auto;
 }
-.sidebar-tabs,
 .settings-tabs {
   display: flex;
   gap: 0.25rem;
   margin-bottom: 0.5rem;
-}
-.sidebar-tabs button,
-.settings-tabs button {
-  flex: 1;
-  padding: 0.35rem 0.25rem;
-  font-size: 0.8rem;
-}
-.library-list {
-  max-height: none;
 }
 .builder-layout > section[aria-label='Form editor'] {
   height: 100%;
@@ -1925,6 +1842,8 @@ p[role='alert'] {
   }
   .form-builder-header nav {
     order: 0;
+    flex: 1 0 100%;
+    justify-content: space-between;
   }
   .form-builder-header > div:first-of-type {
     flex: 1;
@@ -1936,6 +1855,21 @@ p[role='alert'] {
 .form-canvas:has(.empty-canvas) {
   min-height: 20rem;
 }
+.inspector-fields { border: 0; border-radius: 0; margin: 0; padding: 0; min-width: 0; }
+.inspector-panel { overflow-anchor: none; }
+.inspector-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.inspector-panel .field-palette { position: static; padding: .5rem 0 .75rem; margin: 0; }
+.builder-library-tools summary { cursor: pointer; padding: .4rem .5rem; border: 1px solid var(--border); border-radius: .35rem; font-size: .8rem; }
+.builder-form-actions__content { display: grid; gap: .5rem; padding: .75rem 0; }
+.builder-context-meta { color: var(--text-muted); font-size: .8rem; }
+.builder-library-tools { position: relative; }
+.builder-library-menu { position: absolute; right: 0; top: calc(100% + .35rem); z-index: 30; width: min(22rem, calc(100vw - 2rem)); max-height: min(28rem, 70vh); overflow: auto; padding: .85rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); box-shadow: var(--shadow); }
+.form-builder .builder-sidebar { display: flex; flex-direction: column; overflow: hidden; }
+.form-builder .builder-sidebar :deep(.form-selector) { flex: 1; }
+@media (max-width: 760px) { .form-builder .builder-sidebar { width: 100%; box-sizing: border-box; height: 12rem; max-height: 12rem; position: static; } }
+.builder-full-preview { flex: 1; min-height: 0; overflow: auto; box-sizing: border-box; padding: .9rem; }
+.form-builder .inspector-panel textarea.form-description-editor { height: calc(4lh + 36px); resize: vertical; }
+@media (max-width: 760px) { .builder-full-preview { padding: .75rem; } }
 @media (max-width: 760px) {
   .builder-layout {
     scroll-padding-top: 13rem;
@@ -1943,6 +1877,19 @@ p[role='alert'] {
   .canvas-viewport {
     scroll-margin-top: 13rem;
   }
+}
+@media (max-width: 900px) {
+  .form-builder .builder-layout { display: block; flex: 1; min-height: 0; overflow: hidden; scroll-padding: 0; }
+  .form-builder .builder-sidebar { position: static; width: 100%; height: 100%; max-height: none; padding: .6rem !important; }
+  .form-builder .builder-layout > section[aria-label='Form editor'] { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .form-builder .authoring-panels { display: block; flex: 1; min-height: 0; height: 100%; overflow: hidden; }
+  .form-builder .canvas-viewport { height: 100%; min-height: 0; scroll-margin: 0; }
+  .form-builder .form-canvas { max-height: none; }
+  .form-builder .inspector-panel { height: 100%; max-height: none; box-sizing: border-box; overflow: auto; padding: .75rem; }
+  .form-builder .builder-layout:not([data-active-pane='outline']) > .builder-sidebar,
+  .form-builder .builder-layout[data-active-pane='outline'] > section[aria-label='Form editor'],
+  .form-builder .builder-layout:not([data-active-pane='preview']) .canvas-viewport,
+  .form-builder .builder-layout:not([data-active-pane='inspector']) .inspector-panel { display: none; }
 }
 </style>
 

@@ -3,6 +3,8 @@ import { watch } from 'vue'
 import Checkbox from 'primevue/checkbox'
 import RadioButton from 'primevue/radiobutton'
 import MultiSelect from 'primevue/multiselect'
+import AppButton from '@/components/common/AppButton.vue'
+import FormPhotoPicker from './FormPhotoPicker.vue'
 import {
   isFieldRequired,
   type FormAnswers,
@@ -141,11 +143,6 @@ const multiStyle = {
   }),
   pcOptionCheckbox: { root: { style: { display: 'none' } } },
 }
-function photos(id: string, event: Event) {
-  const input = event.target as HTMLInputElement
-  emit('upload', id, Array.from(input.files || []))
-  input.value = ''
-}
 </script>
 <template>
   <fieldset :disabled="disabled" class="form-fields">
@@ -155,17 +152,18 @@ function photos(id: string, event: Event) {
       </h3>
       <label
         :id="'label-' + idPrefix + field.id"
-        :for="field.kind === 'radio' ? undefined : 'answer-' + idPrefix + field.id"
+        :for="['radio', 'matrix', 'repeat'].includes(field.kind) ? undefined : 'answer-' + idPrefix + field.id"
         >{{ field.label }}<span v-if="isFieldRequired(field, modelValue)"> *</span></label
       >
       <p v-if="field.hint" :id="'help-' + idPrefix + field.id" class="hint">{{ field.hint }}</p>
       <p v-if="field.requiredWhen" :id="'condition-' + idPrefix + field.id" class="hint">
         Notes required for {{ field.requiredWhen.values.join(' or ') }}.
       </p>
-      <div v-if="field.kind === 'matrix'" class="matrix-rows">
+      <div v-if="field.kind === 'matrix'" class="matrix-rows" role="group" :aria-labelledby="'label-' + idPrefix + field.id">
         <fieldset
           v-for="(row, rowIndex) in field.rows"
           :key="row.id"
+          class="matrix-row"
           :disabled="disabled || readonly"
         >
           <legend>{{ row.label }}</legend>
@@ -177,15 +175,15 @@ function photos(id: string, event: Event) {
               :checked="selected(modelValue, field.id)[rowIndex] === option"
               :value="option"
               @change="matrixSelection(field, rowIndex, option)"
-            />{{ option }}
+            /><span class="choice-option-label">{{ option }}</span>
           </label>
-          <button
+          <AppButton
             v-if="!readonly && selected(modelValue, field.id)[rowIndex]"
             type="button"
             @click="matrixSelection(field, rowIndex, '')"
           >
             Clear {{ row.label }}
-          </button>
+          </AppButton>
         </fieldset>
       </div>
       <section v-else-if="field.kind === 'repeat'" :aria-label="field.label">
@@ -205,23 +203,23 @@ function photos(id: string, event: Event) {
             "
             @view-photo="emit('viewPhoto', $event)"
           />
-          <button
+          <AppButton
             v-if="!readonly"
             type="button"
             :disabled="disabled || instances(field).length <= (field.minInstances ?? 1)"
             @click="removeInstance(field, instance.instanceId)"
           >
             Remove {{ field.label }}
-          </button>
+          </AppButton>
         </section>
-        <button
+        <AppButton
           v-if="!readonly"
           type="button"
           :disabled="disabled || instances(field).length >= (field.maxInstances ?? 20)"
           @click="addInstance(field)"
         >
           Add another {{ field.label }}
-        </button>
+        </AppButton>
       </section>
       <Checkbox
         v-else-if="field.kind === 'checkbox'"
@@ -266,7 +264,7 @@ function photos(id: string, event: Event) {
             }"
             @update:model-value="update(modelValue, field.id, $event)"
           />
-          {{ option }}
+          <span class="choice-option-label">{{ option }}</span>
         </label>
       </div>
       <MultiSelect
@@ -344,9 +342,11 @@ function photos(id: string, event: Event) {
         <option v-for="option in field.options" :key="option">{{ option }}</option>
       </select>
       <template v-else-if="field.kind === 'photo'">
-        <input
+        <FormPhotoPicker
           v-if="photosEnabled && !readonly"
           :id="'answer-' + idPrefix + field.id"
+          :label="field.label"
+          :disabled="disabled"
           :aria-required="isFieldRequired(field, modelValue)"
           :aria-invalid="invalidField === field.id || undefined"
           :aria-describedby="
@@ -358,10 +358,7 @@ function photos(id: string, event: Event) {
               .filter(Boolean)
               .join(' ') || undefined
           "
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          @change="photos(field.id, $event)"
+          @select="files => emit('upload', field.id, files)"
         />
         <p v-else>Photos stay in the private form record.</p>
         <p v-if="photosEnabled" class="hint">
@@ -406,8 +403,8 @@ function photos(id: string, event: Event) {
       v-for="field in definition.fields.filter((field) => field.kind === 'photo')"
       :key="field.id"
       ><div v-for="id in (modelValue[field.id] as string[]) || []" :key="id">
-        <button type="button" :disabled="disabled" @click="emit('viewPhoto', id)">
-          View {{ field.label }}</button
+        <AppButton type="button" :disabled="disabled" @click="emit('viewPhoto', id)">
+          View {{ field.label }}</AppButton
         ><img v-if="photoPreviews?.[id]" :src="photoPreviews[id]" :alt="field.label" /></div
     ></template>
   </section>
@@ -417,16 +414,27 @@ function photos(id: string, event: Event) {
   display: grid;
   gap: 0.5rem;
 }
-.radio-option {
-  display: flex;
-  align-items: center;
+.form-fields .radio-option {
+  display: grid;
+  grid-template-columns: 1.3rem minmax(0, 1fr);
+  align-items: start;
   gap: 0.65rem;
   min-height: 44px;
+  padding-block: 0.35rem;
+  box-sizing: border-box;
   cursor: pointer;
   font-weight: 400;
 }
+.choice-option-label { min-width: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.radio-option > input[type='radio'] { appearance: auto; flex: none; width: 1.25rem; height: 1.25rem; padding: 0; margin: .15rem 0 0; accent-color: var(--brand-sky, #58bae9); }
+.radio-option > input[type='radio']:focus-visible { outline: 2px solid var(--brand-sky, #58bae9); outline-offset: 3px; }
+.matrix-rows { display: grid; gap: 1rem; min-width: 0; }
+.matrix-row { min-width: 0; margin: 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-sm, .4rem); }
+.matrix-row legend { max-width: 100%; padding: 0 .25rem; box-sizing: border-box; overflow-wrap: anywhere; }
+.matrix-row > .app-button { box-sizing: border-box; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .form-check-control {
   display: inline-flex;
+  flex: none;
   align-items: center;
   width: 1.3rem;
 }
@@ -488,7 +496,7 @@ h3 {
   border-top: 1px solid var(--border);
   padding-top: 1.2rem;
 }
-input,
+input:not([type='checkbox']):not([type='radio']),
 textarea,
 select {
   width: 100%;

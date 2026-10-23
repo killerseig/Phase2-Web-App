@@ -500,7 +500,7 @@ test('manual zoom preserves magnification until Fit is requested', async ({ page
   await expect(fit).toHaveAttribute('aria-pressed', 'true')
   await controls.getByRole('button', { name: 'Tablet', exact: true }).click()
   await expect(fit).toHaveAttribute('aria-pressed', 'true')
-  await controls.getByRole('button', { name: 'Mobile', exact: true }).click()
+  await controls.getByRole('button', { name: 'Phone', exact: true }).click()
   await expect.poll(scale).toBeGreaterThan(initialScale)
   await expect(fit).toHaveAttribute('aria-pressed', 'true')
 

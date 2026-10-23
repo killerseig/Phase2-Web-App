@@ -242,7 +242,7 @@ test('explicit phone row sizing and scale layouts remain authoritative', async (
   const api = await mockWebsite(page, fixture)
   await page.setViewportSize({ width: 1700, height: 1100 })
   await gotoPhase2App(page, '/admin/website', createJobsFixture())
-  await page.getByRole('button', { name: 'Mobile', exact: true }).click()
+  await page.getByRole('button', { name: 'Phone', exact: true }).click()
   const canvas = page.locator('.preview-frame')
   const row = canvas.locator('.custom-row')
   await expect(row.locator('> .container-children')).toHaveCSS('flex-direction', 'row')

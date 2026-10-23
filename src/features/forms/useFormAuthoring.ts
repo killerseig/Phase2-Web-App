@@ -6,8 +6,8 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
   const selection = ref(''),
     past = ref<Snapshot[]>([]),
     future = ref<Snapshot[]>([])
-  let current: Snapshot | undefined,
-    baseline = ref('')
+  let current: Snapshot | undefined
+  const baseline = ref('')
   const definition = (): FormDefinition | undefined =>
     draft.value
       ? clone({

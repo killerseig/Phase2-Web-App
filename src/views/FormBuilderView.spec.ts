@@ -44,10 +44,10 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     expect((wrapper.get('.inspector-panel input[maxlength="160"]').element as HTMLInputElement).value).toBe('Actual edit')
     ask.mockResolvedValue(true); await clickNew(); ask.mockClear()
     for (const label of ['Corrected Committee inspection', 'BBS Observation', 'General Site Visit', 'Near Miss / Safety Observation']) {
-      await wrapper.findAll('button').find(button => button.text() === label)!.trigger('click'); await flushPromises()
+      await wrapper.findAll('button').find(button => button.attributes('aria-label') === label || button.text() === label)!.trigger('click'); await flushPromises()
       await clickNew(); expect(ask).not.toHaveBeenCalled() // untouched starter -> New
     }
-    await wrapper.findAll('button').find(button => button.text() === 'Corrected Committee inspection')!.trigger('click'); await flushPromises()
+    await wrapper.findAll('button').find(button => button.attributes('aria-label') === 'Corrected Committee inspection' || button.text() === 'Corrected Committee inspection')!.trigger('click'); await flushPromises()
     await wrapper.get('.inspector-panel input[maxlength="160"]').setValue('Edited starter')
     ask.mockResolvedValue(false)
     await clickNew()
@@ -123,10 +123,10 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Unpublished draft — no respondent link.')
     expect(wrapper.find('.form-share-links a').exists()).toBe(false)
-    await wrapper.findAll('button').find(button => button.text() === 'Full-page preview')!.trigger('click')
-    expect(wrapper.text()).toContain('Edit fields')
+    await wrapper.get('[aria-label="Builder modes"]').findAll('button').find(button => button.text() === 'Preview')!.trigger('click')
+    expect(wrapper.find('[aria-label="Full-page form preview"]').exists()).toBe(true)
     expect(api.mock.calls.some(([name]) => name === 'formEntries')).toBe(false)
-    await wrapper.findAll('button').find(button => button.text() === 'Edit fields')!.trigger('click')
+    await wrapper.get('[aria-label="Builder modes"]').findAll('button').find(button => button.text() === 'Edit')!.trigger('click')
     await wrapper.get('[data-template-id="synthetic-published"] .library-target').trigger('click')
     await flushPromises()
     expect(wrapper.get('.form-share-links a').attributes('href')).toBe('https://phase2-website.web.app/forms/synthetic-published')

@@ -47,3 +47,29 @@ playwright-report/
 
 # Firebase CLI local export staging (demo fixtures only)
 firebase-export-*/
+
+# Environment and private/local work must never enter source control.
+.env
+.env.*
+!.env.example
+functions/.env*
+private-inputs/
+private-tools/
+evidence/
+.firebase/
+.intranet-cache/
+.candidate-cache/
+firebase.local-review.json
+vite.live-release.config.ts
+playwright.final-bounded-qa.config.ts
+*.pem
+*.key
+*service-account*.json
+
+# Generated Functions output is rebuilt from functions/src before deployment.
+functions/*.js
+functions/*.js.map
+functions/*.d.ts
+functions/*.d.ts.map
+functions/generated/
+deliverables/*.zip

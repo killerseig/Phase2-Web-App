@@ -1,6 +1,9 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import ReportsView from './ReportsView.vue'
+import { ref } from 'vue'
+import { sampleContent } from '@/features/intranet/__tests__/fixtures'
+vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref(sampleContent()), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: ref(''), notice: ref(''), selectSource: vi.fn(), reload: vi.fn(), cancel: vi.fn() }) }))
 const api = vi.hoisted(() => vi.fn())
 vi.mock('@/services/forms', () => ({ formApi: api }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ rawRole: 'payroll', hasWorkspaceAccess: true, currentUser: { uid: 'payroll-user' } }) }))
@@ -16,9 +19,11 @@ describe('Reports permissions and states', () => {
       { id: 'archived', definition, latestVersion: 1, archived: true },
     ] })
     const view = render(); await flushPromises()
+    expect(view.find('details summary').text()).toContain('Synthetic form reference')
     expect(view.findAll('a').map(a => a.attributes('href'))).toEqual(['/forms/public'])
     expect(view.text()).not.toContain('Manage forms in Form Builder')
     await view.find('input').setValue('missing')
+    expect(view.find('details').exists()).toBe(false)
     expect(view.text()).toContain('No published reports match')
   })
   it('reports service failures instead of presenting false empty success', async () => {

@@ -4,6 +4,8 @@ import { onBeforeRouteLeave, RouterLink, useRoute } from 'vue-router'
 import Button from './DashboardButton.vue'
 import DocumentExplorer from './DocumentExplorer.vue'
 import SdsFileViewer from './SdsFileViewer.vue'
+import SuppliedReferenceReader from '@/components/intranet/SuppliedReferenceReader.vue'
+import type { IntranetContent, IntranetResource, LibraryCategory, ReadingPair } from '@/features/intranet/content'
 import { documentAccept, documentFormatsLabel, printableFile } from '@/features/documents/formats'
 import { useAuthStore } from '@/stores/auth'
 import { loadSds, loadSdsPage, sdsCommand, uploadDocument, sdsErrorMessage } from '@/services/sds'
@@ -20,7 +22,7 @@ import {
 import { getSdsViewState, rememberSdsViewState } from '@/features/sds/viewState'
 import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/explorerMenu'
 
-const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; initialFolderId?: string }>(), { title: 'Documents', initialFolderId: '' })
+const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; initialFolderId?: string; references?: IntranetContent | null; referenceCategory?: LibraryCategory }>(), { title: 'Documents', initialFolderId: '' })
 const auth = useAuthStore()
 const route = useRoute()
 const viewRoute = route.path
@@ -73,6 +75,7 @@ const file = ref<File | null>(null)
 const addFileInput = ref<HTMLInputElement>()
 let addFileFolder = ''
 const editorElement = ref<HTMLFormElement>()
+const moduleElement = ref<HTMLElement>()
 const exportId = ref('')
 const exportState = ref('')
 const exportError = ref('')
@@ -106,6 +109,28 @@ const folders = computed(() =>
 )
 const selected = computed(() => sheets.value.find((s) => s.id === selectedId.value))
 const currentFolder = computed(() => library.value.folders.find((f) => f.id === folderId.value))
+const referenceId = ref(''), referencePage = ref(0)
+const referenceRows = computed(() => {
+  if (!props.references || !props.referenceCategory || jobId.value || editing.value) return []
+  const identity = (value: string) => value.toLowerCase().trim().replace(/\.[a-z0-9]{2,5}$/, '')
+  const uploaded = new Set(sheets.value.flatMap(sheet => [identity(sheet.name), identity(sheet.originalName || '')]).filter(Boolean))
+  const rows: { id: string; title: string; resource?: IntranetResource; paragraphs?: ReadingPair[] }[] = props.references.resources.filter(item => search.value.trim() && item.category === props.referenceCategory &&
+    !uploaded.has(identity(item.title)) && !(item.filename && uploaded.has(identity(item.filename))))
+    .map(resource => ({ id: 'resource:' + resource.id, title: resource.title, resource }))
+  if (props.referenceCategory === 'Safety') {
+    rows.push(...props.references.inspections.map(item => ({ id: 'inspection:' + item.id, title: item.title, paragraphs: item.paragraphs })))
+    rows.push({ id: 'orientation', title: 'New-to-job orientation', paragraphs: props.references.orientation })
+  }
+  return rows.filter(item => (item.title + ' ' + (item.resource?.keywords ?? '') + ' ' + (item.resource?.filename ?? '')).toLowerCase().includes(search.value.trim().toLowerCase()))
+})
+const selectedReference = computed(() => referenceRows.value.find(item => item.id === referenceId.value))
+watch([search, () => props.referenceCategory, () => props.references], () => { referenceId.value = ''; referencePage.value = 0 })
+watch([() => props.initialFolderId, () => props.referenceCategory], ([id]) => {
+  // Keep one explorer mounted so changing collection cannot detach its search input.
+  folderId.value = id || ''
+  selectedId.value = ''
+})
+
 
 const expandedLocation = computed(() => ({
   path: '/safety/sds',
@@ -272,6 +297,17 @@ function openEditor(kind: 'folder' | 'sheet', record?: SdsSheet | ExplorerFolder
   })
   return true
 }
+function prepareReferenceUpload(resource: IntranetResource) {
+  if (!isAdmin.value || jobId.value || editing.value || busy.value || loading.value) return
+  if (!openEditor('sheet')) return
+  form.name = resource.title.slice(0, 160)
+  notice.value = 'Select the original document and review its details. No file has been uploaded yet.'
+}
+function cancelEditor() {
+  const restoreReferenceFocus = !!selectedReference.value
+  editor.value = ''
+  if (restoreReferenceFocus) void nextTick(() => moduleElement.value?.querySelector<HTMLButtonElement>('[data-reference-upload]')?.focus())
+}
 function menuActions(target: ExplorerMenuTarget): ExplorerMenuAction[] {
   const items: ExplorerMenuAction[] = []
   const sheet =
@@ -381,6 +417,7 @@ async function menuAction(action: string, target: ExplorerMenuTarget) {
   const folder =
     target.kind !== 'document' ? library.value.folders.find((f) => f.id === target.id) : undefined
   if (sheet) {
+    referenceId.value = ''
     selectedId.value = sheet.id
     if (action === 'open' || action === 'download') return openSheet(action === 'download', sheet)
     if (action === 'edit-sheet' || action === 'revision') {
@@ -685,7 +722,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="sds-module" :class="{ 'sds-module--expanded': expanded }" data-testid="sds-module">
+  <div ref="moduleElement" class="sds-module" :class="{ 'sds-module--expanded': expanded }" data-testid="sds-module">
     <div v-if="error" role="alert" class="sds-message sds-message--error">{{ error }}</div>
     <p v-if="notice" role="status" class="sds-message">{{ notice }}</p>
     <input
@@ -713,7 +750,7 @@ onBeforeUnmount(() => {
     <p v-if="loadFailed" role="status">
       The documents have not loaded. <button type="button" @click="reload">Retry</button>
     </p>
-    <fieldset v-if="!loadFailed" :disabled="busy || loading" class="sds-fieldset">
+    <fieldset v-if="!loadFailed" :disabled="busy" class="sds-fieldset">
       <DocumentExplorer
         v-model:folder-id="folderId"
         v-model:search="search"
@@ -727,25 +764,33 @@ onBeforeUnmount(() => {
         :editing="editing"
         :checked-ids="checkedIds"
         :search-text="sheetSearch"
-        @select="selectedId = $event.id"
+        @select="referenceId = ''; selectedId = $event.id"
         @toggle="toggle"
         @toggle-folder="toggleFolder"
         @action="menuAction"
         @open="openSheet(false, $event)"
       >
+        <template #navigation><slot name="navigation" :disabled="busy || loading || hasDraft" /></template>
         <template #toolbar>
+          <Button
+            v-if="isAdmin && !jobId"
+            label="Upload document"
+            :disabled="busy || loading"
+            @click="menuAction('new-sheet', { kind: 'background', id: folderId })"
+          />
+          <Button
+            v-if="isAdmin && !jobId"
+            label="New folder"
+            :disabled="busy || loading"
+            @click="menuAction('new-folder', { kind: 'background', id: folderId })"
+          />
           <Button
             v-if="!jobId && nextPage"
             :label="pageBusy ? 'Loading…' : 'Load more files'"
             :disabled="pageBusy || busy"
             @click="moreDocuments"
           />
-          <Button
-            v-if="isAdmin && !jobId"
-            label="Bulk PDF import"
-            :disabled="busy"
-            @click="bulkOpen = !bulkOpen"
-          />
+          <details v-if="isAdmin && !jobId" class="sds-more"><summary>More</summary><Button label="Bulk PDF import" :disabled="busy" @click="bulkOpen = !bulkOpen" /></details>
           <RouterLink
             v-if="!expanded"
             :to="expandedLocation"
@@ -755,9 +800,20 @@ onBeforeUnmount(() => {
             ><i class="pi pi-expand" aria-hidden="true"
           /></RouterLink>
         </template>
+        <template #references>
+          <template v-if="referenceRows.length">
+            <p class="reference-note">{{ referenceRows.length }} {{ search.trim() ? 'supplied references - original files omitted' : 'reading references' }}</p>
+            <button v-for="item in referenceRows.slice(referencePage * 25, (referencePage + 1) * 25)" :key="item.id" type="button" class="reference-row" :aria-pressed="referenceId === item.id" @click="referenceId = item.id; selectedId = ''">{{ item.title }} <small>Reference only</small></button>
+            <div v-if="referenceRows.length > 25" class="reference-pages"><button type="button" :disabled="!referencePage" @click="referencePage--">Previous references</button><span>{{ referencePage + 1 }} / {{ Math.ceil(referenceRows.length / 25) }}</span><button type="button" :disabled="(referencePage + 1) * 25 >= referenceRows.length" @click="referencePage++">Next references</button></div>
+          </template>
+        </template>
         <template #viewer>
+          <template v-if="selectedReference && !editor">
+            <SuppliedReferenceReader :title="selectedReference.title" :resource="selectedReference.resource" :paragraphs="selectedReference.paragraphs" />
+            <Button v-if="isAdmin && !jobId && !editing && selectedReference.resource" data-reference-upload label="Upload file for this reference" :disabled="busy || loading" @click="prepareReferenceUpload(selectedReference.resource)" />
+          </template>
           <SdsFileViewer
-            v-if="!editor"
+            v-else-if="!editor"
             :sheet="selected"
             :job-id="jobId"
             :version="library.version + ':' + library.binder.version"
@@ -848,7 +904,7 @@ onBeforeUnmount(() => {
                 label="Cancel"
                 severity="secondary"
                 :disabled="busy"
-                @click="editor = ''"
+                @click="cancelEditor"
               />
             </div>
           </form>
@@ -896,6 +952,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.reference-note { margin: .6rem .2rem; font-size: .8rem; }
+.sds-more { position: relative; font-size: .85rem; }
+.sds-more summary { cursor: pointer; padding: .65rem .4rem; }
+.sds-more[open] > :last-child { position: absolute; z-index: 20; right: 0; top: 100%; min-width: 11rem; box-shadow: var(--shadow); }
+.reference-row { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; font: inherit; padding: .4rem .2rem; cursor: pointer; overflow-wrap: anywhere; }
+.reference-row[aria-pressed=true] { background: var(--field-hover, #3289bf22); box-shadow: inset 2px 0 var(--accent); }
+.reference-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.reference-row small { display: block; opacity: .75; }
+.reference-pages { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 .sds-module {
   display: grid;
   gap: 0.35rem;

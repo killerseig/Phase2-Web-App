@@ -3,6 +3,13 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import FormDefinitionFields from '@/components/forms/FormDefinitionFields.vue'
+import FormRecipientVerification from '@/components/forms/FormRecipientVerification.vue'
+import FormPresentation from './FormPresentation.vue'
+import AppCard from '@/components/common/AppCard.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
+import AppButton from '@/components/common/AppButton.vue'
+import AppListButton from '@/components/common/AppListButton.vue'
+import AppBadge from '@/components/common/AppBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   formApi as serverFormApi,
@@ -24,6 +31,7 @@ const props = withDefaults(
     dashboardScope?: 'personal' | 'role'
     dashboardJobId?: string
     dashboardReturn?: 'shared-job' | 'shared-role'
+    openForJob?: boolean
   }>(),
   { inline: false },
 )
@@ -97,6 +105,8 @@ const dashboardJobId = computed(
       : ''),
 )
 const contextSuffix = () => (dashboardJobId.value ? ':job:' + dashboardJobId.value : '')
+const jobWorkflow = computed(() => !!props.openForJob && !!dashboardJobId.value && !!uid.value)
+const reuseDraft = computed(() => props.inline || !!route.query.dashboard || jobWorkflow.value)
 const contextRequest = () => (dashboardJobId.value ? { dashboardJobId: dashboardJobId.value } : {})
 const activeKey = () =>
   'form-active-record:v1:' +
@@ -183,17 +193,17 @@ async function load() {
     records.value = saved.records.filter(
       (item) =>
         item.templateId === templateId.value &&
-        (!(props.inline || route.query.dashboard) || (item.jobId || '') === dashboardJobId.value),
+        (!reuseDraft.value || (item.jobId || '') === dashboardJobId.value),
     )
     const requested =
       !props.inline && typeof route.query.record === 'string'
         ? route.query.record
-        : props.inline || route.query.dashboard
+        : reuseDraft.value
           ? formStorage.getItem(activeKey())
           : String(route.query.record || '')
     const candidate =
       requested ||
-      (props.inline || route.query.dashboard
+      (reuseDraft.value
         ? records.value
             .filter(
               (item) => item.status === 'draft' && item.templateVersion === pinnedVersion.value,
@@ -216,6 +226,10 @@ async function load() {
   } finally {
     if (current === sequence) { busy.value = false; loading.value = false }
   }
+  // A named form chosen for a job should open its editable draft immediately.
+  // Existing create/get handlers still enforce the published audience and job access.
+  if (current === sequence && uid.value === owner && jobWorkflow.value && !error.value && !record.value)
+    await start()
 }
 watch([uid, templateId, dashboardJobId, () => props.templateVersion, () => auth.rawRole], load, {
   immediate: true,
@@ -231,7 +245,7 @@ async function discard() {
   )
 }
 async function start() {
-  if ((props.inline || route.query.dashboard) && record.value?.status === 'draft') return
+  if (reuseDraft.value && record.value?.status === 'draft') return
   const generation = sequence,
     owner = uid.value,
     target = selectedTemplate.value
@@ -246,7 +260,7 @@ async function start() {
     return
   busy.value = true
   try {
-    if (props.inline || route.query.dashboard) {
+    if (reuseDraft.value) {
       if (record.value?.status === 'draft') return
       const draft = records.value
         .filter((item) => item.status === 'draft' && item.templateVersion === pinnedVersion.value)
@@ -549,25 +563,22 @@ defineExpose({ prepareNavigation })
 </script>
 <template>
   <section ref="root" class="response" :class="{ 'response-inline': inline }">
-    <component :is="inline ? 'h2' : 'h1'">
-      {{
-        record?.definition.title ||
-        selectedTemplate?.definition?.title ||
-        selectedTemplate?.draft?.title ||
-        'Complete a form'
-      }}
-    </component>
-    <button v-if="inline && !allowFullInline" :disabled="busy" @click="openFullPage">
-      Open full-page form
-    </button>
-    <button
-      v-else-if="route.query.dashboard === 'personal' || route.query.dashboard === 'role'"
-      :disabled="busy"
-      @click="returnDashboard"
-    >
-      Return to dashboard
-    </button>
-    <section
+    <FormPresentation :title="record?.definition.title || selectedTemplate?.definition?.title || selectedTemplate?.draft?.title || 'Complete a form'" :inline="inline" :main-label="record ? 'Current form record' : 'Start form'">
+      <template #header-actions>
+        <div class="response-actions">
+          <small v-if="localPreview" class="response-preview-status" title="Temporary local demo data. Submission and email delivery are disabled.">Local preview</small>
+          <AppButton v-if="jobWorkflow" @click="router.push('/jobs/' + encodeURIComponent(dashboardJobId))">Back to job</AppButton>
+          <AppButton v-if="inline && !allowFullInline" :disabled="busy" @click="openFullPage">Open full-page form</AppButton>
+          <AppButton v-else-if="route.query.dashboard === 'personal' || route.query.dashboard === 'role'" :disabled="busy" @click="returnDashboard">Return to dashboard</AppButton>
+        </div>
+      </template>
+      <template #messages>
+        <p v-if="!enabled" role="alert">Configure Firebase to use durable drafts and submissions.</p>
+        <p v-if="error" id="form-validation-message" role="alert">{{ error }}</p>
+        <p v-if="message" role="status">{{ message }}</p>
+        <p v-if="loading" role="status">Opening form.</p>
+      </template>
+          <section
       v-if="publicSession && selectedTemplate?.definition?.access?.identity === 'identified'"
       aria-label="Respondent contact details"
     >
@@ -599,36 +610,16 @@ defineExpose({ prepareNavigation })
     <p v-if="publicSession && selectedTemplate?.definition?.access?.identity === 'form-fields'">
       Any identifying details come from the answers you enter. These details are self-reported.
     </p>
-    <p v-if="localPreview">Local emulator workflow. Production records and email are not used.</p>
-    <p v-if="!enabled" role="alert">
-      Configure Firebase to use durable drafts and submissions.
-    </p>
-    <p v-if="error" id="form-validation-message" role="alert">{{ error }}</p>
-    <p v-if="message" role="status">{{ message }}</p>
-    <button
-      :disabled="busy || !selectedTemplate?.latestVersion || selectedTemplate.archived"
-      @click="start"
-    >
-      Start draft</button
-    ><button v-if="!publicSession" :disabled="busy" @click="reloadRecords">
-      Reload saved records
-    </button>
-    <section v-if="!inline && !publicSession" aria-label="Saved form records">
-      <h2>Saved records</h2>
-      <button v-for="item in records" :key="item.id" :disabled="busy" @click="resume(item.id)">
-        {{ item.status === 'draft' ? 'Resume draft' : 'View submitted form' }} · version
-        {{ item.templateVersion }} · {{ item.id.slice(0, 8) }}
-      </button>
-      <p v-if="!records.length">Opening this page creates no draft.</p>
-    </section>
-    <section v-if="record" aria-label="Current form record">
-      <h2>{{ record.definition.title }} · version {{ record.templateVersion }}</h2>
-      <p>Record status: {{ record.status }} · {{ dirty ? 'Unsaved answers' : 'Saved answers' }}</p>
-      <p v-if="tooLargeInline">
+
+      <AppButton v-if="!record" :disabled="busy || !selectedTemplate?.latestVersion || selectedTemplate.archived" variant="primary" @click="start">Start draft</AppButton>
+      <template v-if="record">
+        <p v-if="record.definition.description" class="form-description">{{ record.definition.description }}</p>
+              <p v-if="tooLargeInline">
         This form has more than eight fields. Open the full-page form to continue.
       </p>
       <FormDefinitionFields
         v-else
+        :key="record.id"
         :definition="record.definition"
         :model-value="answers"
         :invalid-field="invalidField"
@@ -640,27 +631,28 @@ defineExpose({ prepareNavigation })
         @upload="upload"
         @view-photo="viewPhoto"
       />
-      <div class="actions">
+
+              <div class="response-actions">
         <FormRecipientVerification
           v-if="
             publicSession &&
-            record.status === 'draft' &&
-            record.definition.fields.some((field) => field.kind === 'recipients')
+            record.status === 'draft'
           "
           :record="record"
+          :answers="answers"
           :capability="publicCapability"
           :prepare="save"
           :disabled="busy || !!pendingSubmission"
           @busy="busy = $event"
         />
-        <button
+        <AppButton
           :disabled="busy || tooLargeInline || readOnlyRecord || !!pendingSubmission"
           @click="saveClick"
         >
-          Save progress</button
-        ><button :disabled="busy || tooLargeInline || readOnlyRecord" @click="submit">
+          Save progress</AppButton
+        ><AppButton variant="primary" :disabled="busy || tooLargeInline || readOnlyRecord || localPreview" :title="localPreview ? 'Submission is disabled in this local preview.' : undefined" @click="submit">
           {{ pendingSubmission ? 'Retry submission confirmation' : 'Submit form' }}
-        </button>
+        </AppButton>
       </div>
       <p v-if="record.status === 'submitted'">
         Email delivery: {{ record.emailStatus }}. The submission is retained independently.
@@ -672,7 +664,7 @@ defineExpose({ prepareNavigation })
         did not receive this report because verification was missing or expired. Your report and
         entered addresses were saved.
       </p>
-      <button
+      <AppButton
         v-if="
           record.ownerUid === uid &&
           record.status === 'submitted' &&
@@ -682,46 +674,30 @@ defineExpose({ prepareNavigation })
         @click="retryEmail"
       >
         Retry email delivery
-      </button>
-    </section>
+      </AppButton>
+
+      </template>
+      <template #sidebar>
+        <AppCard class="response-information">
+          <AppSectionHeader title="Response details" title-tag="h2" />
+          <div class="response-actions"><AppBadge tone="accent">{{ record?.status || 'Not started' }}</AppBadge><AppBadge v-if="record" :tone="dirty ? 'warning' : 'accent'">{{ dirty ? 'Unsaved answers' : 'Saved answers' }}</AppBadge></div>
+          <details v-if="record"><summary>Record details</summary><dl><dt>Version</dt><dd>{{ record.templateVersion }}</dd><dt>Record</dt><dd>{{ record.id }}</dd></dl></details>
+          <p v-if="localPreview" class="response-preview-status">Local preview. Submission and email delivery are disabled.</p>
+          <AppButton v-if="record && (!jobWorkflow || record.status === 'submitted')" :disabled="busy || !selectedTemplate?.latestVersion || selectedTemplate.archived" @click="start">Start draft</AppButton>
+        </AppCard>
+        <AppCard v-if="!inline && !publicSession" as="section" aria-label="Saved form records" class="response-information">
+          <AppSectionHeader title="Saved records" title-tag="h2"><template #actions><AppButton :disabled="busy" aria-label="Reload saved records" @click="reloadRecords"><i class="pi pi-refresh" aria-hidden="true" /></AppButton></template></AppSectionHeader>
+          <div v-if="records.length" class="response-history"><AppListButton v-for="item in records" :key="item.id" :disabled="busy" :active="record?.id === item.id" @click="resume(item.id)"><strong>{{ item.status === 'draft' ? 'Resume draft' : 'View submitted form' }}</strong><small>{{ new Date(item.updatedAt).toLocaleString() }}</small></AppListButton></div>
+          <p v-else>No saved records.</p>
+        </AppCard>
+      </template>
+    </FormPresentation>
     <BuilderConfirmDialog ref="confirm" />
   </section>
 </template>
 <style scoped>
-.response {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow-wrap: anywhere;
-  max-width: 52rem;
-  margin: auto;
-  padding: 1rem;
-}
-.response-inline {
-  padding: 0.75rem;
-  margin: 0;
-}
-button {
-  max-width: 100%;
-  white-space: normal;
-  padding: 0.65rem;
-  margin: 0.4rem 0.4rem 0.4rem 0;
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
-  background: var(--surface);
-  color: var(--text);
-}
-section[aria-label] {
-  border-top: 1px solid var(--border);
-  margin-top: 1rem;
-  padding-top: 1rem;
-}
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-p[role='alert'] {
-  color: var(--danger, #e99);
-}
+.response { width: 100%; min-width: 0; box-sizing: border-box; }
+.response-preview-status { color: var(--text-muted); font-size: .85rem; align-self: center; }
+.response-inline { padding: .75rem; }
+p[role='alert'] { color: var(--danger, #e99); }
 </style>

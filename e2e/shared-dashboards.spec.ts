@@ -164,7 +164,7 @@ test('shared job template uses safe styled Text and the same catalog, while job 
     .toBeLessThanOrEqual(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({
-    path: 'C:/Users/atlas/Documents/Codex/2026-10-01/task-3/shared-job-phone.png',
+    path: 'test-results/shared-job-phone.png',
     fullPage: true,
   })
 })
@@ -186,7 +186,7 @@ test('Admin explicitly enables a selected role; editor and permission controls s
   expect(api.templates.get('role-foreman')!.allowRoleEditing).toBe(true)
   await expect(page.locator('.shared-variable-text')).toHaveText('Welcome Dan Admin')
   await page.screenshot({
-    path: 'C:/Users/atlas/Documents/Codex/2026-10-01/task-3/shared-role-desktop.png',
+    path: 'test-results/shared-role-desktop.png',
     fullPage: true,
   })
 })

@@ -24,7 +24,6 @@
   line-height: 1.4;
 }
 .form-builder .form-builder-header nav,
-.form-builder .sidebar-tabs,
 .form-builder .settings-tabs {
   padding: 3px;
   gap: 2px;
@@ -79,12 +78,6 @@
   border-right: 1px solid var(--editor-border);
   background: var(--editor-panel);
   padding: 10px !important;
-}
-.form-builder .sidebar-tabs button,
-.form-builder .settings-tabs button {
-  background: transparent;
-  border-color: transparent;
-  font-size: 12px;
 }
 .form-builder .field-palette {
   border: 0;
@@ -235,19 +228,6 @@
 .form-builder .local-status summary {
   padding: 0;
 }
-.form-builder .library-list article {
-  padding: 0;
-  margin: 0;
-}
-.form-builder .library-list h3 {
-  font-size: 12px;
-  margin: 8px 0;
-  color: var(--editor-muted);
-}
-.form-builder .library-list {
-  display: grid;
-  gap: 4px;
-}
 .form-builder .library-utilities {
   display: flex;
   align-items: center;
@@ -305,7 +285,6 @@
     border-left: 0;
     border-top: 1px solid var(--editor-border);
   }
-  .form-builder .sidebar-tabs button,
   .form-builder .settings-tabs button {
     min-height: 40px;
   }
@@ -369,9 +348,6 @@
   padding: 4px;
   min-width: 28px;
 }
-.form-builder .library-list details {
-  margin: 0 0 8px;
-}
 .form-builder .canvas-field-preview input,
 .form-builder .canvas-field-preview textarea,
 .form-builder .canvas-field-preview select {
@@ -405,7 +381,7 @@
   font-size: 15px;
 }
 .form-builder
-  :is(.sidebar-tabs, .settings-tabs, .form-builder-header nav, .device-controls)
+  :is(.settings-tabs, .form-builder-header nav, .device-controls)
   button[aria-pressed='true'] {
   color: #e9f6ff;
   background: var(--editor-selected);

@@ -9,5 +9,6 @@ const route = useRoute()
     ><FormResponseWorkspace
       :key="route.fullPath"
       :template-id="String(route.params.templateId || '')"
+      :open-for-job="typeof route.query.dashboardJob === 'string' && !!route.query.dashboardJob"
   /></AppShell>
 </template>

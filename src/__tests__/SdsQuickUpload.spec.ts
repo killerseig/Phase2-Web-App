@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SdsExplorerModule from '@/components/dashboard/SdsExplorerModule.vue'
 import { loadSds, loadSdsPage, sdsCommand, uploadDocument } from '@/services/sds'
 
+const access = vi.hoisted(() => ({ role: 'admin', jobId: '' }))
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ rawRole: 'admin', currentUser: { uid: 'admin' } }),
+  useAuthStore: () => ({ rawRole: access.role, currentUser: { uid: 'admin' } }),
 }))
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ path: '/test-upload', query: {} }),
+  useRoute: () => ({ path: '/test-upload', query: access.jobId ? { sdsJob: access.jobId } : {} }),
   onBeforeRouteLeave: vi.fn(),
   RouterLink: { template: '<a><slot /></a>' },
 }))
@@ -21,13 +22,14 @@ vi.mock('@/services/sds', () => ({
 }))
 const cleanup = vi.fn()
 const uploadId = '00000000-0000-4000-8000-000000000001'
-const mountModule = () =>
+const mountModule = (toolbar = false, initialFolderId = '') =>
   mount(SdsExplorerModule, {
+    props: { initialFolderId },
     global: {
       stubs: {
         DocumentExplorer: {
           props: ['selectedId'],
-          template: `<div :data-selected="selectedId"><button @click="$emit('action', 'new-sheet', {kind: 'folder', id: 'materials'})">Add file here</button><slot name="viewer" /></div>`,
+          template: `<div :data-selected="selectedId">${toolbar ? '<slot name="toolbar" />' : ''}<button @click="$emit('action', 'new-sheet', {kind: 'folder', id: 'materials'})">Add file here</button><slot name="viewer" /></div>`,
         },
         SdsFileViewer: true,
       },
@@ -43,6 +45,8 @@ async function choose(wrapper: ReturnType<typeof mountModule>, file?: File) {
 describe('direct document upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    access.role = 'admin'; access.jobId = ''; localStorage.clear()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true })
     vi.mocked(loadSds).mockResolvedValue({
       version: 7,
       folders: [{ id: 'materials', name: 'Materials', parentId: '', order: 0 }],
@@ -114,5 +118,36 @@ describe('direct document upload', () => {
     expect(wrapper.text()).toContain('File added.')
     expect(sdsCommand).toHaveBeenCalledTimes(2)
     wrapper.unmount()
+  })
+  it('makes upload discoverable and saves into the displayed folder using the existing service', async () => {
+    const wrapper = mountModule(true, 'materials'); await flushPromises()
+    const upload = wrapper.findAll('button').find(button => button.text() === 'Upload document')!
+    expect(upload.exists()).toBe(true)
+    await upload.trigger('click')
+    await choose(wrapper, new File(['pdf'], 'Safety sheet.pdf', { type: 'application/pdf' }))
+    expect(sdsCommand).toHaveBeenCalledWith('saveSheet', expect.objectContaining({ folderId: 'materials', uploadId }))
+    wrapper.unmount()
+  })
+  it('canceling the visible picker or new-folder editor makes no writes', async () => {
+    const wrapper = mountModule(true); await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'Upload document')!.trigger('click')
+    await choose(wrapper)
+    await wrapper.findAll('button').find(button => button.text() === 'New folder')!.trigger('click')
+    expect(wrapper.find('form').exists()).toBe(true)
+    await wrapper.findAll('form button').find(button => button.text() === 'Cancel')!.trigger('click')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(uploadDocument).not.toHaveBeenCalled(); expect(sdsCommand).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('keeps master upload controls unavailable to readers and job views', async () => {
+    access.role = 'foreman'
+    const reader = mountModule(true); await flushPromises()
+    expect(reader.text()).not.toContain('Upload document'); expect(reader.find('input[type=file]').exists()).toBe(false)
+    reader.unmount()
+    access.role = 'admin'; access.jobId = 'job-one'
+    const job = mountModule(true); await flushPromises()
+    expect(job.text()).not.toContain('Upload document'); expect(job.text()).not.toContain('New folder')
+    expect(job.find('input[type=file]').exists()).toBe(false)
+    job.unmount()
   })
 })

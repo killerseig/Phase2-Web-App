@@ -14,6 +14,7 @@ import { validateFormAccess } from '../../../functions/src/formAccess'
 import type { FormAccessPolicy } from '../../../functions/src/formAccess'
 import type { FormRecipientGroup } from '../../../functions/src/formRecipients'
 import { withCompanyReportDelivery } from '@/features/forms/companyReports'
+import AppButton from '@/components/common/AppButton.vue'
 const props = defineProps<{ definition: FormDefinition; templateId: string }>(),
   emit = defineEmits<{ 'update:definition': [value: FormDefinition] }>()
 const editor = ref<HTMLTextAreaElement>(),
@@ -34,6 +35,7 @@ function update(value: Partial<FormOutputSettings>) {
 }
 const access = computed(() => validateFormAccess(props.definition.access))
 const audienceRoles = ['admin', 'project-manager', 'foreman', 'shop-foreman']
+const roleLabels: Record<string, string> = { admin: 'Admin', 'project-manager': 'Project manager', foreman: 'Foreman', 'shop-foreman': 'Shop foreman' }
 function updateAccess(value: Partial<FormAccessPolicy>) {
   try {
     const next = { ...access.value, ...value }
@@ -190,9 +192,8 @@ async function preview() {
 </script>
 <template>
   <section aria-label="Form output settings" class="output-settings">
-    <button type="button" @click="emit('update:definition', withCompanyReportDelivery(definition))">Use all-answer email and recipient selection</button>
-    <p>This adds an optional delivery control and restores the all-answer email layout. Review and save the draft separately. Sender uses the existing company email configuration; gallery access remains private.</p>
     <p v-if="error" role="alert">{{ error }}</p>
+    <h3>Audience</h3>
     <label
       >Who can submit<select
         :value="access.respondents"
@@ -207,19 +208,19 @@ async function preview() {
         <option value="public">Everyone with the link (no login)</option>
       </select></label
     >
-    <fieldset :disabled="access.respondents === 'public'">
+    <fieldset v-if="access.respondents !== 'public'">
       <legend>Employee respondent audience</legend>
       <label v-for="role in audienceRoles" :key="role"
         ><input
           type="checkbox"
           :checked="access.respondentRoles.includes(role)"
           @change="toggleRole('respondentRoles', role, ($event.target as HTMLInputElement).checked)"
-        />{{ role }}</label
-      ><label
+        />{{ roleLabels[role] }}</label
+      ><details><summary>Individual employees</summary><label
         >Individual employee IDs<input
           :value="access.respondentUserIds.join(', ')"
           @change="updatePeople('respondentUserIds', ($event.target as HTMLInputElement).value)"
-      /></label>
+      /></label></details>
     </fieldset>
     <label
       >Identity policy<select
@@ -237,9 +238,8 @@ async function preview() {
         </option>
       </select></label
     >
-    <p>
-      Opening a form without login does not make its answers anonymous. Review the identity promise
-      before publishing.
+    <p v-if="access.respondents === 'public'" class="output-notice">
+      Anyone with the link can submit. No login does not mean anonymous; check the identity policy.
     </p>
     <fieldset>
       <legend>Notification recipients</legend>
@@ -251,30 +251,32 @@ async function preview() {
         />{{ group.label }}</label
       >
       <p>
-        Groups resolve from the selected job when submitted. Add fixed email addresses in Form
-        settings. An optional Recipient addresses field lets signed-in respondents add up to 10
-        addresses. Public extra addresses are saved with the answers but receive no notification
-        until verified; fixed addresses and job groups still receive the results.
+        Job groups use the selected job. Fixed email addresses are in Form settings.
       </p>
+      <p v-if="access.respondents === 'public'" class="output-notice">Public extra addresses receive no notification until verified. Fixed addresses and job groups still receive results.</p>
+      <details><summary>Additional recipients</summary><p>An optional Recipient addresses field lets signed-in respondents add up to 10 addresses. Email delivery does not grant access to private entries or photos.</p></details>
     </fieldset>
     <fieldset>
       <legend>Private entries and photos</legend>
       <p>
-        Admins and the signed-in owner retain access. Add employee readers separately from email
-        recipients.
+        Admins and the signed-in owner retain access. Email recipients do not automatically get private access.
       </p>
+      <p>Additional readers: {{ access.entryRoles.map(role => roleLabels[role] || role).join(', ') || 'No additional roles' }}{{ access.entryUserIds.length ? '; ' + access.entryUserIds.length + ' individual employees' : '' }}.</p>
+      <details><summary>Manage additional readers</summary>
       <label v-for="role in audienceRoles" :key="role"
         ><input
           type="checkbox"
           :checked="access.entryRoles.includes(role)"
           @change="toggleRole('entryRoles', role, ($event.target as HTMLInputElement).checked)"
-        />{{ role }}</label
+        />{{ roleLabels[role] }}</label
       ><label
         >Individual reader IDs<input
           :value="access.entryUserIds.join(', ')"
           @change="updatePeople('entryUserIds', ($event.target as HTMLInputElement).value)"
       /></label>
+      </details>
     </fieldset>
+    <h3>Email and PDF</h3>
     <label
       ><input
         type="checkbox"
@@ -283,9 +285,11 @@ async function preview() {
       />Attach completed form PDF</label
     >
     <p>
-      Default email includes every question and answer. Photos use small inline previews and a
-      viewer link, as Daily Logs does.
+      {{ settings.template ? 'Custom email layout is active.' : 'Standard email includes all answers and inline photo thumbnails.' }} Full photos require permitted private access.
     </p>
+    <details class="output-options"><summary>Email layout options</summary>
+    <AppButton @click="emit('update:definition', withCompanyReportDelivery(definition))">Apply standard email setup</AppButton>
+    <p>Adds optional recipient selection and restores the all-answer email layout. Review before publishing. Sender configuration and private access stay unchanged.</p>
     <label
       >Custom email template<textarea
         ref="editor"
@@ -302,12 +306,13 @@ async function preview() {
           {{ field.label }}
         </option>
       </select></label
-    ><button :disabled="!picked" @click="insert">Insert selected field</button>
+    ><AppButton :disabled="!picked" @click="insert">Insert selected field</AppButton>
     <p>
       Field keys stay stable when labels change. Text is escaped; templates cannot run HTML or code.
     </p>
+    </details>
     <section aria-label="Output issues">
-      <h3>Issues / review</h3>
+      <h3>Output checks</h3>
       <p v-if="!issues.length">No output issues. Default email includes all answers.</p>
       <p
         v-for="issue in issues"
@@ -317,7 +322,7 @@ async function preview() {
         {{ issue.severity === 'error' ? 'Error' : 'Warning' }}: {{ issue.message }}
       </p>
     </section>
-    <button @click="preview">Preview output</button>
+    <AppButton @click="preview">Preview output</AppButton>
     <section v-if="showPreview" aria-label="Output preview">
       <label
         >Preview answers<select v-model="selectedRecord" aria-label="Preview answers">
@@ -333,11 +338,11 @@ async function preview() {
         retain their original definition.
       </p>
       <iframe v-if="html" title="Completed form email preview" :srcdoc="html" sandbox="" />
-      <button
+      <AppButton
         :disabled="pdfBusy || issues.some((issue) => issue.severity === 'error')"
         @click="previewPdf"
       >
-        Generate PDF preview</button
+        {{ pdfBusy ? 'Generating PDF…' : 'Generate PDF preview' }}</AppButton
       ><a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener">Open completed form PDF</a>
       <p>
         PDF preview uses the chosen answers; sample photos are placeholders. Emailed PDFs include
@@ -353,7 +358,7 @@ async function preview() {
 <style scoped>
 .output-settings {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.75rem;
   min-width: 0;
 }
 .output-settings label {
@@ -372,13 +377,16 @@ async function preview() {
   min-height: 9rem;
 }
 .output-settings textarea,
-.output-settings select {
+.output-settings select,
+.output-settings input:not([type='checkbox']) {
   width: 100%;
   box-sizing: border-box;
   padding: 0.5rem;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
 }
 .output-settings iframe {
   width: 100%;
@@ -390,7 +398,6 @@ async function preview() {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.output-settings button,
 .output-settings a {
   display: inline-block;
   padding: 0.45rem 0.65rem;
@@ -401,11 +408,15 @@ async function preview() {
   font: inherit;
   text-decoration: none;
 }
-.output-settings button:disabled {
-  opacity: 0.55;
-}
 .output-settings p {
   margin: 0.2rem 0;
   font-size: 0.85rem;
 }
+.output-settings h3 { margin: .25rem 0 0; font-size: .95rem; }
+.output-settings fieldset { display: grid; gap: .6rem; min-width: 0; margin: 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.output-settings legend { padding: 0 .25rem; font-size: .9rem; font-weight: var(--font-weight-heading); }
+.output-settings details > summary { cursor: pointer; padding: .4rem 0; font-size: .85rem; font-weight: 500; }
+.output-settings details[open] > :not(summary) { margin-top: .6rem; }
+.output-settings .output-notice { padding: .6rem; border-left: 2px solid var(--accent); background: var(--bg-accent); }
+.output-settings :deep(.app-button) { max-width: 100%; white-space: normal; text-align: left; }
 </style>

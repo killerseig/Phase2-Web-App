@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import FormDefinitionFields from './FormDefinitionFields.vue'
+import FormPresentation from './FormPresentation.vue'
+import AppCard from '@/components/common/AppCard.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
+import AppButton from '@/components/common/AppButton.vue'
+import { hydrateDraftAnswers } from '@/features/forms/formDirtyState'
 import { validateFormAnswers, type FormAnswers } from '../../../functions/src/formModel'
 import type { FormDefinition, FormField } from '@/features/forms/model'
 const props = defineProps<{
@@ -10,7 +15,7 @@ const props = defineProps<{
   }>(),
   answers = ref<FormAnswers>({}),
   errors = ref<string[]>([]),
-  invalidField = ref('')
+  invalidField = ref(''), photoNotice = ref('')
 const canvasDefinition = computed(() =>
   props.canvasField
     ? {
@@ -30,10 +35,11 @@ const canvasDefinition = computed(() =>
 watch(
   () => (props.canvasField ? undefined : props.definition),
   () => {
-    answers.value = {}
+    answers.value = hydrateDraftAnswers(props.definition.fields, {})
     errors.value = []
+    photoNotice.value = ''
   },
-  { deep: true },
+  { deep: true, immediate: true },
 )
 async function validate() {
   invalidField.value = ''
@@ -63,19 +69,20 @@ async function validate() {
     />
   </div>
   <section v-else class="form-preview" aria-label="Full-page form preview">
-    <h2>{{ definition.title }}</h2>
-    <p>{{ definition.description }}</p>
-    <form novalidate @submit.prevent="validate">
+    <FormPresentation :title="definition.title" main-label="Form preview fields">
+      <template #header-actions><small>Preview · not saved</small></template>
+      <template #messages><p v-if="errors.length" id="form-validation-message" role="alert">{{ errors.join(' ') }}</p></template>
+      <p v-if="definition.description" class="form-description">{{ definition.description }}</p>
       <FormDefinitionFields
         :definition="definition"
         v-model="answers"
         :invalid-field="invalidField"
-      /><button type="submit">Check required fields</button>
-      <ul v-if="errors.length" id="form-validation-message" role="alert">
-        <li v-for="error in errors" :key="error">{{ error }}</li>
-      </ul>
-      <p role="status">Preview only. No submission or email is created.</p>
-    </form>
+        photos-enabled
+        @upload="(_fieldId, files) => { photoNotice = files.length + ' photo(s) selected for preview only. Nothing was uploaded.' }"
+      />
+      <div class="response-actions"><AppButton disabled>Save progress</AppButton><AppButton variant="primary" @click="validate">Check required fields</AppButton></div>
+      <template #sidebar><AppCard class="response-information"><AppSectionHeader title="Response details" title-tag="h2" /><p>Preview of the current form, including unsaved edits.</p><p role="status">Preview only. No submission or email is created.</p><p v-if="photoNotice" role="status">{{ photoNotice }}</p><p>Record history appears here when filling a saved form.</p></AppCard></template>
+    </FormPresentation>
   </section>
 </template>
 <style scoped>
@@ -93,12 +100,8 @@ async function validate() {
 }
 
 .form-preview {
-  max-width: 48rem;
-  margin: auto;
-  padding: clamp(1rem, 3vw, 2.5rem);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 1rem;
+  width: 100%;
+  min-width: 0;
 }
 .preview-field {
   display: grid;
@@ -108,7 +111,7 @@ async function validate() {
 label {
   font-weight: 600;
 }
-input,
+input:not([type='checkbox']):not([type='radio']),
 textarea,
 select {
   width: 100%;

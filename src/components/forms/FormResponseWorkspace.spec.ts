@@ -7,13 +7,41 @@ vi.mock('@/services/forms', () => ({ formApi: api, isFormServerEnabled: () => tr
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { uid: 'respondent' }, rawRole: 'foreman' }) }))
 afterEach(() => { api.mockReset(); localStorage.clear() })
 const definition = { title: 'Visit', description: '', recipients: [], fields: [{ id: 'sites', kind: 'repeat', label: 'Sites', required: false, options: [], minInstances: 1, maxInstances: 3, fields: [{ id: 'notes', kind: 'text', label: 'Notes', required: false, options: [] }] }] }
-async function render() {
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: FormResponseWorkspace, props: { templateId: 'visit', inline: true, allowFullInline: true } }, { path: '/other', component: { template: '<p>Other</p>' } }] })
-  await router.push('/'); await router.isReady()
+async function render(job = false) {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: FormResponseWorkspace, props: { templateId: 'visit', inline: !job, allowFullInline: true, openForJob: job } }, { path: '/other', component: { template: '<p>Other</p>' } }] })
+  await router.push(job ? '/?dashboardJob=job-1' : '/'); await router.isReady()
   const host = mount(RouterView, { global: { plugins: [router], stubs: { BuilderConfirmDialog: true, FormRecipientVerification: true } } })
   return { host, view: host.findComponent(FormResponseWorkspace), router }
 }
 describe('respondent hydration versus unsaved answers', () => {
+  it('opens a job form into an editable draft and resumes that same job draft on reload', async () => {
+    const record = { id: 'job-record', ownerUid: 'respondent', jobId: 'job-1', templateId: 'visit', templateVersion: 1, revision: 1, status: 'draft', definition: { ...definition, version: 1 }, answers: { sites: [] }, updatedAt: 1 }
+    const template = { id: 'visit', definition, latestVersion: 1 }
+    let created = false
+    api.mockImplementation(async (name, data) => {
+      if (name === 'formTemplates') return { templates: [template] }
+      if (data.action === 'list') return { records: created ? [record] : [] }
+      if (data.action === 'create') { created = true; return record }
+      if (data.action === 'get') return record
+      throw new Error('Unexpected mutation')
+    })
+    let result = await render(true); await flushPromises()
+    expect(result.view.find('[aria-label="Current form record"] input[type=text]').exists()).toBe(true)
+    expect(api.mock.calls.filter(([, data]) => data.action === 'create')).toHaveLength(1)
+    expect(api.mock.calls.find(([, data]) => data.action === 'create')![1]).toMatchObject({ templateId: 'visit', dashboardJobId: 'job-1', version: 1 })
+    result.host.unmount()
+    result = await render(true); await flushPromises()
+    expect(result.view.find('[aria-label="Current form record"] input[type=text]').exists()).toBe(true)
+    expect(api.mock.calls.filter(([, data]) => data.action === 'create')).toHaveLength(1)
+    result.host.unmount()
+  })
+  it('does not create a job draft after an access failure', async () => {
+    api.mockRejectedValue(new Error('You cannot use a form for this job.'))
+    const { host, view } = await render(true); await flushPromises()
+    expect(view.get('[role=alert]').text()).toContain('cannot use a form for this job')
+    expect(api.mock.calls.some(([, data]) => data.action === 'create')).toBe(false)
+    host.unmount()
+  })
   it('does not save or warn for initialized repeat rows; real edits save once and establish a clean baseline', async () => {
     let record = { id: 'record', ownerUid: 'respondent', templateId: 'visit', templateVersion: 1, revision: 1, status: 'draft', definition: { ...definition, version: 1 }, answers: { sites: [] }, updatedAt: 1 }
     const template = { id: 'visit', definition, latestVersion: 1 }

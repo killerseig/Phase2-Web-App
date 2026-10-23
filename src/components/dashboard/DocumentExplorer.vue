@@ -192,6 +192,7 @@ function folderState(folder: ExplorerFolder) {
         class="document-explorer__folders"
         @contextmenu="showMenu($event, { kind: 'background', id: folderId })"
       >
+        <slot name="navigation" />
         <div class="tree-row tree-root">
           <button
             class="tree-name"
@@ -310,6 +311,7 @@ function folderState(folder: ExplorerFolder) {
             {{ search ? 'No matching files. Try another search.' : 'No files in this collection.' }}
           </p>
         </template>
+        <slot name="references" />
       </nav>
       <section class="document-explorer__viewer" aria-label="File viewer">
         <slot name="viewer"><p class="viewer-empty">Select a file to preview it.</p></slot>

@@ -27,6 +27,30 @@ const definition: FormDefinition = {
   ],
 }
 describe('repeat group rendering', () => {
+  it('keeps matrix groups independent, blank by default and clearable without losing other answers', async () => {
+    const matrix: FormDefinition = { title: 'Survey', description: '', recipients: [], fields: [{ id: 'agreement', kind: 'matrix', label: 'Safety agreement', required: false, options: ['Disagree', 'Neutral', 'Agree'], rows: [{ id: 'a', label: 'Training' }, { id: 'b', label: 'Response' }] }] }
+    const wrapper = mount(FormDefinitionFields, { props: { definition: matrix, modelValue: {}, idPrefix: 'site-one-' } })
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.findAll('input:checked')).toHaveLength(0)
+    expect(wrapper.get('[role="group"]').attributes('aria-labelledby')).toBe('label-site-one-agreement')
+    expect(wrapper.findAll('legend').map(legend => legend.text())).toEqual(['Training', 'Response'])
+    await wrapper.get('#answer-site-one-agreement-a-2').setValue(true)
+    let answers = wrapper.emitted('update:modelValue')!.at(-1)![0] as FormAnswers
+    expect(answers.agreement).toEqual(['Agree', ''])
+    await wrapper.setProps({ modelValue: answers })
+    await wrapper.get('#answer-site-one-agreement-b-1').setValue(true)
+    answers = wrapper.emitted('update:modelValue')!.at(-1)![0] as FormAnswers
+    expect(answers.agreement).toEqual(['Agree', 'Neutral'])
+    await wrapper.setProps({ modelValue: answers })
+    await wrapper.findAll('button').find(button => button.text() === 'Clear Training')!.trigger('click')
+    answers = wrapper.emitted('update:modelValue')!.at(-1)![0] as FormAnswers
+    expect(answers.agreement).toEqual(['', 'Neutral'])
+    await wrapper.setProps({ modelValue: answers, readonly: true })
+    expect(wrapper.findAll('input').every(input => input.element.matches(':disabled'))).toBe(true)
+    expect(wrapper.findAll('button')).toHaveLength(0)
+    expect(new Set(wrapper.findAll('input').map(input => input.attributes('id'))).size).toBe(6)
+    wrapper.unmount()
+  })
   it('does not repeatedly initialize an already empty optional group', async () => {
     const optional = { ...definition, fields: [{ ...definition.fields[0]!, minInstances: 0 }] }
     const wrapper = mount(FormDefinitionFields, { props: { definition: optional, modelValue: { sites: [] } } })

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import BuilderHelpDialog from '@/components/builder/BuilderHelpDialog.vue'
+import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
+import BuilderEditingTools from '@/components/builder/BuilderEditingTools.vue'
 import { commandKey, editorHelp } from '@/features/website/editorHelp'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import BuilderPanelResize from '@/components/builder/BuilderPanelResize.vue'
@@ -187,6 +189,7 @@ type BuilderTool = 'pages' | 'widgets' | 'layers' | 'publishing'
 const builderTool = ref<BuilderTool>('pages')
 const leftPanelOpen = ref(true)
 const rightPanelOpen = ref(true)
+const objectActionsExpanded = ref(false)
 const builderTools = computed(() => [
   { id: 'pages' as const, label: 'Pages', icon: 'pi-file' },
   ...(editorMode.value !== 'content'
@@ -205,6 +208,14 @@ function openBuilderTool(tool: BuilderTool) {
 function openWidgetLibrary() {
   if (!designMode.value) changeMode('design')
   openBuilderTool('widgets')
+  void nextTick(() => builderRoot.value?.querySelector<HTMLInputElement>('.widget-library input[type="search"]')?.focus({ preventScroll: true }))
+}
+function toggleWidgetLibrary() {
+  if (builderTool.value === 'widgets' && leftPanelOpen.value) {
+    openBuilderTool('pages')
+    activePane.value = 'inspector'
+  }
+  else openWidgetLibrary()
 }
 function togglePanels() {
   const open = !leftPanelOpen.value && !rightPanelOpen.value
@@ -382,6 +393,7 @@ const widgetGroups = computed(() => {
 const device = ref<WebsiteDevice>('desktop')
 const mobile = computed(() => device.value !== 'desktop')
 const activePane = ref<'outline' | 'preview' | 'inspector'>('inspector')
+watch([selectedPage, selectedSection, settingsPanel, editorMode], () => { objectActionsExpanded.value = false })
 const inspectorPane = ref<HTMLElement>()
 
 const contentPage = computed(() => site.value?.pages.find((page) => page.id === selectedPage.value))
@@ -2579,29 +2591,7 @@ onBeforeRouteLeave(() => {
       <p v-if="cssError" role="alert" class="notice error">{{ cssError }}</p>
       <p v-if="error" role="alert" class="notice error">{{ error }}</p>
       <p v-if="loading" role="status">Loading website draft…</p>
-      <nav v-if="site" class="pane-switcher builder-controls" aria-label="Builder panels">
-        <button
-          type="button"
-          :aria-pressed="activePane === 'outline'"
-          @click="activePane = 'outline'"
-        >
-          Pages & widgets
-        </button>
-        <button
-          type="button"
-          :aria-pressed="activePane === 'preview'"
-          @click="activePane = 'preview'"
-        >
-          Preview
-        </button>
-        <button
-          type="button"
-          :aria-pressed="activePane === 'inspector'"
-          @click="activePane = 'inspector'"
-        >
-          Editor
-        </button>
-      </nav>
+      <BuilderPanelSwitcher v-if="site" v-model="activePane" class="builder-controls" outline-controls="website-structure" canvas-controls="website-canvas-pane" inspector-controls="website-inspector" :disabled="locked" />
       <fieldset
         v-if="site"
         ref="builderRoot"
@@ -2767,9 +2757,6 @@ onBeforeRouteLeave(() => {
                   This page is empty. Switch to Design to add widgets.
                 </p>
               </div>
-              <button v-if="designMode" class="add-widget-shortcut" @click="openWidgetLibrary">
-                <i class="pi pi-plus" aria-hidden="true"></i> Add widgets
-              </button>
             </div>
             <WebsiteLayersPanel
               v-if="page && builderTool === 'layers' && designMode"
@@ -2990,7 +2977,7 @@ onBeforeRouteLeave(() => {
           @commit="panels.save"
           @reset="panels.reset('left')"
         />
-        <div class="preview-pane">
+        <div id="website-canvas-pane" class="preview-pane">
           <div class="preview-toolbar builder-controls" role="group" aria-label="Canvas controls">
             <div class="canvas-tool-group panel-tools" role="group" aria-label="Canvas panels">
               <button
@@ -3057,7 +3044,7 @@ onBeforeRouteLeave(() => {
                 v-for="option in ['desktop', 'tablet', 'mobile'] as const"
                 :key="option"
                 :aria-pressed="device === option"
-                :aria-label="option[0]!.toUpperCase() + option.slice(1)"
+                :aria-label="option === 'mobile' ? 'Phone' : option[0]!.toUpperCase() + option.slice(1)"
                 :title="`${option === 'mobile' ? 'Phone' : option[0]!.toUpperCase() + option.slice(1)} preview · ${option === 'desktop' ? canvasWidth : deviceWidth[option]} × ${deviceHeight[option]} CSS pixels · ${autoFit ? 'fits the workspace' : 'keeps manual zoom'}`"
                 @click="chooseDevice(option)"
               >
@@ -3266,6 +3253,17 @@ onBeforeRouteLeave(() => {
           aria-label="Content editor"
           tabindex="-1"
         >
+          <BuilderEditingTools v-if="designMode && settingsPanel === 'page'" add-label="Add widgets" :add-expanded="builderTool === 'widgets' && leftPanelOpen" add-controls="website-structure" :add-disabled="locked || !page" :action-label="section ? 'Widget actions' : 'Page actions'" :action-expanded="objectActionsExpanded" action-controls="website-object-actions" :action-disabled="locked || !page || section?.type === 'page-content' || (editingLayout && !section)" @add="toggleWidgetLibrary" @actions="objectActionsExpanded = !objectActionsExpanded" />
+          <section v-if="designMode && settingsPanel === 'page' && page" v-show="objectActionsExpanded" id="website-object-actions" class="object-actions" :aria-label="section ? 'Widget actions' : 'Page actions'">
+            <template v-if="section && section.type !== 'page-content'">
+              <button :disabled="page.sections.length >= 30" @click="duplicateSection">Duplicate widget</button>
+              <button class="danger remove-section" @click="removeSection">Remove widget</button>
+            </template>
+            <template v-else-if="!section">
+              <button v-if="!editingLayout" :disabled="site.pages.length >= 30" @click="duplicatePage">Duplicate page</button>
+              <button :disabled="page.id === homePageId" class="danger" @click="removePage">Remove page</button>
+            </template>
+          </section>
           <BuilderSelectionContext
             :kind="
               settingsPanel === 'site'
@@ -3811,17 +3809,6 @@ onBeforeRouteLeave(() => {
                 </template>
               </div>
             </template>
-            <div v-if="designMode && section.type !== 'page-content'" class="widget-actions">
-              <button
-                v-if="designMode"
-                :disabled="!page || page.sections.length >= 30"
-                @click="duplicateSection"
-              >
-                Duplicate widget
-              </button>
-
-              <button class="danger remove-section" @click="removeSection">Remove widget</button>
-            </div>
           </template>
           <template v-else-if="page">
             <div class="inspector-header settings-header">
@@ -3952,21 +3939,7 @@ onBeforeRouteLeave(() => {
               /></label
             ><label class="check"
               ><input v-model="page.inNavigation" type="checkbox" /> Show in navigation</label
-            ><button
-              v-if="designMode && !editingLayout"
-              :disabled="site.pages.length >= 30"
-              @click="duplicatePage"
             >
-              Duplicate page
-            </button>
-            <button
-              v-if="designMode"
-              :disabled="page.id === homePageId"
-              class="danger"
-              @click="removePage"
-            >
-              Remove page
-            </button>
             <hr />
             <p class="subtle">
               Select a widget in the preview or outline to edit its content.
@@ -3998,6 +3971,8 @@ onBeforeRouteLeave(() => {
   </AppShell>
 </template>
 <style scoped>
+.inspector { overflow-anchor: none; }
+.object-actions { display: grid; gap: .5rem; padding: 0 0 .75rem; }
 .recovery-notice {
   display: flex;
   flex-wrap: wrap;
@@ -4138,9 +4113,6 @@ onBeforeRouteLeave(() => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-.pane-switcher {
-  display: none;
 }
 .builder-actions {
   display: flex;
@@ -4361,10 +4333,6 @@ a {
 .on-page-heading {
   margin: 1.2rem 0 0.65rem;
 }
-.add-widget-shortcut {
-  width: 100%;
-  margin-top: 0.7rem;
-}
 .icon-tool {
   min-width: 30px;
   min-height: 30px;
@@ -4418,18 +4386,6 @@ a {
 .inspector-fields {
   display: grid;
   gap: 0.8rem;
-}
-.widget-actions {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
-  padding-top: 0.8rem;
-}
-.widget-actions button {
-  flex: 1;
-  margin-top: 0;
 }
 @media (min-width: 901px) {
   .outline {
@@ -4892,16 +4848,6 @@ hr {
   }
   .desktop-tool {
     display: none;
-  }
-  .pane-switcher {
-    display: flex;
-    gap: 0.35rem;
-    flex: 0 0 auto;
-    padding-bottom: 0.25rem;
-  }
-  .pane-switcher button {
-    flex: 1;
-    min-height: 40px;
   }
   .builder-grid {
     grid-template-columns: minmax(0, 1fr);
