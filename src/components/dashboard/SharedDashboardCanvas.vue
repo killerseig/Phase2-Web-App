@@ -3,7 +3,7 @@ import { computed, defineAsyncComponent, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import ModuleLauncherGrid from '@/components/jobs/ModuleLauncherGrid.vue'
 import { getJobDashboardModules } from '@/features/jobs/jobDashboardModules'
-import SdsExplorerModule from './SdsExplorerModule.vue'
+import CompanyLibraryWidget from './CompanyLibraryWidget.vue'
 import RoleResourcesModule from './RoleResourcesModule.vue'
 import {
   sharedWidgetLabels,
@@ -131,7 +131,7 @@ function textStyle(widget: SharedDashboardWidget) {
         {{ resolveDashboardText(widget.text, textContext).text }}
       </div>
       <template v-else-if="widget.type === 'workflows'">
-        <label v-if="scope === 'role' && !editing"
+        <label v-if="scope !== 'job' && !editing"
           >Choose job for tools<select v-model="toolJobId">
             <option value="">Choose a job</option>
             <option v-for="entry in jobs" :key="entry.id" :value="entry.id">
@@ -247,16 +247,18 @@ function textStyle(widget: SharedDashboardWidget) {
         </p></template
       >
       <p v-else-if="scope==='job'&&!job&&(widget.type==='form'||widget.type==='documents')">Choose a job to use {{sharedWidgetLabels[widget.type].toLowerCase()}}.</p>
-      <SdsExplorerModule
+      <CompanyLibraryWidget
         v-else-if="widget.type === 'documents'"
         :key="scope === 'job' ? job?.id : 'role-documents'"
-        :title="widget.title || 'Documents'"
+        class="shared-library-widget"
+        :show-heading="false"
       />
       <RoleResourcesModule v-else-if="widget.type === 'resources'" :key="role" :fixed-role="role" />
       <SharedDashboardForm
         v-else-if="widget.type === 'form'"
         ref="forms"
         :widget="widget"
+        :scope="scope"
         :can-respond="['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role)"
         :job-id="scope === 'job' ? job?.id : undefined"
       />

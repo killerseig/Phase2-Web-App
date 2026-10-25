@@ -1,11 +1,18 @@
 import type { Page } from '@playwright/test'
-import type { DashboardWidget } from '../../src/features/dashboard/widgets.js'
+import type { SharedDashboardWidget as DashboardWidget } from '../../functions/src/sharedDashboardModel.js'
 
 export async function mockDashboard(page: Page, admin = true) {
   const layouts = new Map<string, { version: number; widgets: DashboardWidget[] }>()
   let failSave = false
   const requests: Record<string, unknown>[] = []
-  await page.route('**/dashboardWorkspace', async (route) => {
+  const contents = new Map<string, { notes: Record<string,string>; events: unknown[]; version: number }>()
+  await page.addInitScript(() => { window.__PHASE2_FORM_SERVER__ = true })
+  await page.route('**/formTemplates', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return }
+    await route.fulfill({ headers, json: { result: { templates: [] } } })
+  })
+  await page.route(/\/(?:dashboardWorkspace|sharedDashboardWorkspace)$/, async (route) => {
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers })
@@ -27,7 +34,7 @@ export async function mockDashboard(page: Page, admin = true) {
       ],
     }
     const canEdit = data.scope === 'personal' || admin
-    if (data.action === 'save') {
+    if (data.action === 'save' || data.action === 'save-template') {
       if (failSave || !canEdit) {
         await route.fulfill({
           status: failSave ? 409 : 403,
@@ -47,7 +54,14 @@ export async function mockDashboard(page: Page, admin = true) {
       state.widgets = structuredClone(data.widgets)
       layouts.set(key, state)
     }
-    await route.fulfill({ headers, json: { result: { ...state, canEdit } } })
+    const content = contents.get(key) || { notes: {}, events: [], version: 0 }
+    if (data.action === 'save-notes') { content.notes[data.widgetId] = data.text; content.version++; contents.set(key, content) }
+    if (data.action === 'save-calendar') { content.events = data.events; content.version++; contents.set(key, content) }
+    await route.fulfill({ headers, json: { result: {
+      ...state, canEdit, role: data.role || (admin ? 'admin' : 'foreman'), allowRoleEditing: false, job: null,
+      notes: content.notes, events: content.events, notesVersion: content.version,
+      ...(['save-notes','save-calendar'].includes(data.action) ? { version: content.version } : {}),
+    } } })
   })
   return {
     layouts,

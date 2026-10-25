@@ -198,10 +198,6 @@
         "destination": "/employee-app.html"
       },
       {
-        "source": "/sds-file",
-        "destination": "/employee-app.html"
-      },
-      {
         "source": "/employee-app",
         "destination": "/employee-app.html"
       },

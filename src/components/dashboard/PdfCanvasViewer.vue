@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
+import { previewFileUrl } from '@/features/documents/formats'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 const props = defineProps<{ url: string }>()
@@ -18,17 +19,10 @@ watch(
   () => props.url,
   async (url, _, cleanup) => {
     let active = true
-    const ticket = new URL(url).searchParams.get('ticket')
-    const task = getDocument({
-      url: `/sds-file?ticket=${encodeURIComponent(ticket ?? '')}`,
-      cMapUrl: '/sds-pdf-assets/cmaps/',
-      cMapPacked: true,
-      standardFontDataUrl: '/sds-pdf-assets/standard_fonts/',
-      wasmUrl: '/sds-pdf-assets/wasm/',
-    })
+    let task: ReturnType<typeof getDocument> | undefined
     cleanup(() => {
       active = false
-      void task.destroy()
+      void task?.destroy()
     })
     pdf.value = undefined
     surface.value?.replaceChildren()
@@ -37,6 +31,13 @@ watch(
     pageNumber.value = 1
     zoom.value = 1
     try {
+      task = getDocument({
+        url: previewFileUrl(url),
+        cMapUrl: '/sds-pdf-assets/cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: '/sds-pdf-assets/standard_fonts/',
+        wasmUrl: '/sds-pdf-assets/wasm/',
+      })
       const document = await task.promise
       if (active) pdf.value = document
     } catch {

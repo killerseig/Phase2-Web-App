@@ -17,13 +17,14 @@ const componentIntegrationImportPattern = /from\s+['"](@\/(?:services|stores)\/[
 // Feature containers coordinate existing service boundaries. Shared presentation
 // components remain disconnected; adding a dependency requires explicit review.
 const connectedContainers: Record<string, string[]> = {
+  'dashboard/CompanyLibraryWidget.vue': ['@/stores/auth', '@/services/sds'],
+  'intranet/PrivateReferenceStatus.vue': ['@/stores/auth'],
+  'jobs/JobFormsList.vue': ['@/stores/auth', '@/services/forms'],
   'auth/LocalFormsSignIn.vue': ['@/stores/auth'],
-  'dashboard/FormDashboardWidget.vue': ['@/services/forms', '@/stores/auth'],
   'dashboard/RoleResourcesModule.vue': ['@/stores/auth', '@/services/sds'],
   'dashboard/SdsExplorerModule.vue': ['@/stores/auth', '@/services/sds'],
   'dashboard/SdsBulkImport.vue': ['@/stores/auth', '@/services/sds'],
   'dashboard/SdsFileViewer.vue': ['@/services/sds'],
-  'dashboard/WidgetDashboard.vue': ['@/stores/auth', '@/services/dashboard', '@/services/forms'],
   'forms/FormOutputSettings.vue': ['@/services/forms'],
   'forms/FormEntriesView.vue': ['@/services/forms'],
   'forms/FormEntryTranslation.vue': ['@/services/forms'],

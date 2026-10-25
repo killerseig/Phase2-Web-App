@@ -16,6 +16,7 @@
     "test:security-rules": "npm --prefix functions run build && firebase emulators:exec --project demo-phase2-security --only auth,firestore,storage \"node ./scripts/verify-security-rules.mjs\"",
     "test:e2e": "playwright test",
     "test:shop-order-layout": "playwright test --config=playwright.config.shop-orders.ts",
+    "test:dashboards": "playwright test --config=playwright.dashboard.config.ts",
     "verify:shop-order-layout": "node scripts/verify-shop-order-layout-live.mjs",
     "test:e2e:all-browsers": "node ./scripts/run-playwright-all-browsers.mjs",
     "smoke:daily-log-email": "npm --prefix functions run smoke:daily-log-email",

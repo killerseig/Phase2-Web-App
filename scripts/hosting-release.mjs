@@ -10,6 +10,19 @@ export const site = 'phase2-website'
 const root = `/projects/${site}/sites/${site}`
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
 
+// Remove only the shadowing employee-shell rewrite. Keep the private file handler,
+// all public-site rules and every other Hosting setting unchanged.
+export function documentPreviewHostingConfig(config) {
+  const next = structuredClone(config)
+  const source = rule => rule.glob ?? rule.source
+  const fileHandler = rule => [rule.function?.functionId, rule.function, rule.run?.serviceId]
+    .some(name => typeof name === 'string' && name.toLowerCase() === 'downloadsdsfile')
+  assert(next.rewrites?.some(rule => source(rule) === '/sds-file' && fileHandler(rule)), 'Private document handler rewrite is missing; no release sent')
+  next.rewrites = next.rewrites.filter(rule => !(source(rule) === '/sds-file' && (rule.path ?? rule.destination) === '/employee-app.html'))
+  assert(fileHandler(next.rewrites.find(rule => source(rule) === '/sds-file')), 'Document preview route is still shadowed')
+  return next
+}
+
 export function employeeFiles(directory) {
   const files = new Map()
   function walk(folder) {
@@ -44,7 +57,8 @@ export async function deployEmployeeHosting({ api, files, commit, record = () =>
   assert(previous?.startsWith(`${root.slice(1)}/versions/`), 'Unexpected live site/version')
   const versionBefore = await api('GET', '/' + previous)
   assert.equal(versionBefore.status, 'FINALIZED')
-  assert(versionBefore.config?.rewrites?.some(rule => rule.function?.functionId === 'getPublishedWebsite'), 'Existing public renderer rewrite is missing')
+  assert(versionBefore.config?.rewrites?.some(rule => [rule.function?.functionId, rule.function, rule.run?.serviceId].some(name => typeof name === 'string' && name.toLowerCase() === 'getpublishedwebsite')), 'Existing public renderer rewrite is missing')
+  const releaseConfig = documentPreviewHostingConfig(versionBefore.config)
   async function inventory(version) {
     const result = {}
     let pageToken
@@ -66,7 +80,7 @@ export async function deployEmployeeHosting({ api, files, commit, record = () =>
     uploads.set(hash, file.compressed)
     manifest.push({ path: name, hash, sha256: sha256(file.raw) })
   }
-  const receipt = { commit, project: site, site, previousVersion: previous, previousRelease: channel.release.name, manifest, hostingConfigUnchanged: true, publicAssetsPreserved: true }
+  const receipt = { commit, project: site, site, previousVersion: previous, previousRelease: channel.release.name, manifest, hostingConfigUnchanged: JSON.stringify(releaseConfig) === JSON.stringify(versionBefore.config), documentPreviewRoutingRepaired: true, publicAssetsPreserved: true }
   record({ ...receipt, state: 'PREPARED' })
   if (versionBefore.labels?.['phase2-commit'] === commit) {
     for (const [name, hash] of Object.entries(merged)) assert.equal(before[name], hash, 'Same commit has different build bytes; investigate before retrying')
@@ -74,7 +88,7 @@ export async function deployEmployeeHosting({ api, files, commit, record = () =>
     return { ...receipt, version: previous, state: 'ALREADY_RELEASED' }
   }
   await assertCurrentMain()
-  const version = (await api('POST', `${root}/versions`, { config: versionBefore.config, labels: { 'phase2-commit': commit, 'deployment-tool': 'github-actions' } })).name
+  const version = (await api('POST', `${root}/versions`, { config: releaseConfig, labels: { 'phase2-commit': commit, 'deployment-tool': 'github-actions' } })).name
   assert(version?.startsWith(`${root.slice(1)}/versions/`), 'Unexpected staged version')
   record({ ...receipt, version, state: 'CREATED' })
   const pairs = Object.entries(merged)
@@ -91,7 +105,7 @@ export async function deployEmployeeHosting({ api, files, commit, record = () =>
   await api('PATCH', '/' + version, { status: 'FINALIZED' }, { updateMask: 'status' })
   const staged = await api('GET', '/' + version)
   assert.equal(staged.status, 'FINALIZED')
-  assert.deepEqual(staged.config, versionBefore.config, 'Hosting config changed')
+  assert.deepEqual(staged.config, releaseConfig, 'Hosting config differs from the reviewed document-route correction')
   assert.deepEqual(await inventory(version), merged, 'Staged file inventory differs')
   assert.equal((await api('GET', channelPath)).release.version.name, previous, 'Live changed during preparation; no release sent')
   await assertCurrentMain()

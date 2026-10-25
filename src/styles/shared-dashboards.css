@@ -362,6 +362,20 @@
   flex: 1;
   min-height: 0;
 }
+.shared-dashboard .shared-dashboard-widget > .shared-library-widget {
+  height: clamp(25rem, 65dvh, 40rem);
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .shared-dashboard.is-editing .shared-dashboard-body { display: flex; flex-direction: column; }
+  .shared-dashboard.is-editing [role='separator'] { display: none; }
+  .shared-dashboard.is-editing .shared-dashboard-body[data-active-pane='outline'] > :not(#shared-palette),
+  .shared-dashboard.is-editing .shared-dashboard-body[data-active-pane='preview'] > :not(#shared-canvas),
+  .shared-dashboard.is-editing .shared-dashboard-body[data-active-pane='inspector'] > :not(#shared-inspector) { display: none; }
+  .shared-dashboard.is-editing .shared-builder-sidebar { max-height: none; flex: 1; }
+  .shared-dashboard.is-editing .shared-dashboard-stage { flex: 1; }
+}
 .shared-dashboard-widget input,
 .shared-dashboard-widget select {
   max-width: 100%;

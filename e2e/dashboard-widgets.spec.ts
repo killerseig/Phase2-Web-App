@@ -7,8 +7,10 @@ import {
 import { mockDashboard } from './helpers/dashboardFixture.js'
 
 async function emptyDocuments(page: Page) {
-  await page.route('**/sdsWorkspace', (route) =>
-    route.fulfill({
+  await page.route('**/sdsWorkspace', async (route) => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return }
+    await route.fulfill({
       json: {
         result: {
           version: 0,
@@ -18,85 +20,73 @@ async function emptyDocuments(page: Page) {
           resources: [],
         },
       },
-      headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
-    }),
-  )
+      headers,
+    })
+  })
 }
 
-test('admin builds a shared role layout with draggable widgets and saves it independently', async ({
-  page,
-}) => {
+test('Admin reuses the shared editor for a role layout, drag placement and responsive viewing', async ({ page }) => {
   const api = await mockDashboard(page)
   await emptyDocuments(page)
   await gotoPhase2App(page, '/dashboards/role', createJobsFixture())
+  const categories = page.getByRole('navigation', { name: 'Library categories' })
+  await expect(categories).toBeVisible()
+  await categories.getByRole('button', { name: 'Safety', exact: true }).click()
+  await expect(page.getByText('No Safety category folder is configured.', { exact: false })).toBeVisible()
+  expect(await page.locator('.shared-library-widget').evaluate(element => element.getBoundingClientRect().height)).toBeLessThanOrEqual(640)
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
   await page.getByLabel('Shared layout for', { exact: true }).selectOption('foreman')
-  await page.getByRole('button', { name: 'Edit layout', exact: true }).click()
-  page.once('dialog', (dialog) => dialog.accept())
-  await page.getByRole('button', { name: 'Remove widget 1', exact: true }).click()
   await page.getByRole('button', { name: 'Add Notes', exact: true }).click()
-  await page.getByLabel('Widget 1 title', { exact: true }).fill('Field reminders')
-  await page
-    .getByLabel('Widget 1 notes', { exact: true })
-    .fill('Review the job documents before starting work.')
-  const source = page.getByRole('button', { name: 'Add Quick links', exact: true })
+  await page.getByLabel('Title', { exact: true }).fill('Field reminders')
+  const source = page.getByRole('button', { name: 'Add Text', exact: true })
   const start = (await source.boundingBox())!
-  const destination = (await page.locator('.dashboard-widget').boundingBox())!
+  const destination = (await page.locator('.shared-dashboard-widget').first().boundingBox())!
   await page.mouse.move(start.x + 10, start.y + 10)
   await page.mouse.down()
   await page.mouse.move(destination.x + 30, destination.y + 10, { steps: 15 })
-  await expect(page.locator('.dashboard-drag-ghost')).toBeVisible()
+  await expect(page.locator('.shared-drag-ghost')).toBeVisible()
   await page.mouse.up()
-  await expect(page.locator('.dashboard-widget')).toHaveCount(2)
-  await expect(page.locator('.dashboard-widget').first()).toContainText('Quick links')
-  await page.getByRole('button', { name: 'Save layout', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('Shared role layout saved.')
-  expect(api.layouts.get('role-foreman')!.widgets.map((widget) => widget.type)).toEqual([
-    'shortcuts',
-    'notes',
-  ])
+  await expect(page.locator('.shared-dashboard-widget')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await expect(page.locator('.shared-dashboard > [role="status"]')).toHaveText('Template saved for everyone in this role.')
+  expect(api.layouts.get('role-foreman')!.widgets.some(widget => widget.type === 'text')).toBe(true)
   expect(api.layouts.has('personal')).toBe(false)
-  await page.getByRole('button', { name: 'Reload layout', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Field reminders', exact: true })).toBeVisible()
-  await page.getByLabel('Shared layout for', { exact: true }).selectOption('admin')
-  await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Field reminders', exact: true })).toHaveCount(0)
-  await page.getByLabel('Shared layout for', { exact: true }).selectOption('foreman')
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Field reminders', exact: true })).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
-  const widgets = page.locator('.dashboard-widget')
-  expect((await widgets.nth(1).boundingBox())!.y).toBeGreaterThan(
-    (await widgets.first().boundingBox())!.y,
-  )
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  )
+  const widgets = page.locator('.shared-dashboard-widget')
+  expect((await widgets.nth(1).boundingBox())!.y).toBeGreaterThan((await widgets.first().boundingBox())!.y)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-test('foremen can edit personal layouts but shared layouts are read only; failed saves retain edits', async ({
-  page,
-}) => {
+test('Foreman owns the personal editor while role editing stays protected; failures and cancelled discard retain work', async ({ page }) => {
   const api = await mockDashboard(page, false)
   await emptyDocuments(page)
   await gotoPhase2App(page, '/dashboards/role', createJobDashboardFixture())
-  await expect(page.getByText('Loading layout…', { exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Edit layout', exact: true })).toHaveCount(0)
-  await expect(page.getByLabel('Shared layout for', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Loading dashboard.', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0)
   await gotoPhase2App(page, '/dashboards/personal', createJobDashboardFixture())
-  await page.getByRole('button', { name: 'Edit layout', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  const switcher = page.getByRole('navigation', { name: 'Builder panels' })
+  await switcher.getByRole('button', { name: 'Widgets', exact: true }).click()
   await page.getByRole('button', { name: 'Add Notes', exact: true }).click()
-  await page.getByLabel('Widget 2 notes', { exact: true }).fill('Keep my private draft')
+  await expect(switcher.getByRole('button', { name: 'Editor', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByLabel('Title', { exact: true }).fill('Keep my private draft')
   api.failSave()
-  await page.getByRole('button', { name: 'Save layout', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('changed elsewhere')
-  await expect(page.getByLabel('Widget 2 notes', { exact: true })).toHaveValue(
-    'Keep my private draft',
-  )
-  page.once('dialog', (dialog) => dialog.dismiss())
-  await page.getByRole('button', { name: 'Reload layout', exact: true }).click()
-  await expect(page.getByLabel('Widget 2 notes', { exact: true })).toHaveValue(
-    'Keep my private draft',
-  )
-  page.once('dialog', (dialog) => dialog.accept())
-  await page.getByRole('button', { name: 'Cancel layout edits', exact: true }).click()
-  await expect(page.locator('.dashboard-widget')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await expect(page.locator('.shared-dashboard > [role="alert"]')).toContainText('changed elsewhere')
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Keep my private draft')
+  await page.screenshot({ path: test.info().outputPath('personal-phone-editor.png') })
+  await switcher.getByRole('button', { name: 'Editor', exact: true }).focus()
+  await page.keyboard.press('Home')
+  await expect(switcher.getByRole('button', { name: 'Widgets', exact: true })).toBeFocused()
+  await expect(page.getByRole('complementary', { name: 'Dashboard library' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Widget settings' })).toBeHidden()
+  await page.getByRole('button', { name: 'Cancel edits', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click()
+  await expect(page.locator('.shared-dashboard-widget')).toHaveCount(1)
+  expect(api.requests.filter(request => request.scope === 'personal').every(request => !('ownerId' in request) && !('uid' in request) && !('role' in request))).toBe(true)
 })

@@ -10,6 +10,8 @@ import {
 import AppShell from '@/layouts/AppShell.vue'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import BuilderPanelResize from '@/components/builder/BuilderPanelResize.vue'
+import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
+import { canSubmitForm } from '../../functions/src/formAccess'
 import SharedDashboardCanvas from '@/components/dashboard/SharedDashboardCanvas.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
@@ -36,7 +38,7 @@ const auth = useAuthStore(),
   route = useRoute(),
   router = useRouter()
 const scope = computed<SharedDashboardScope>(() =>
-  route.name === 'shared-role-home' ? 'role' : 'job',
+  route.name === 'personal-workspace' ? 'personal' : route.name === 'shared-job-home' ? 'job' : 'role',
 )
 const jobId = computed(() => (typeof route.params.jobId === 'string' ? route.params.jobId : ''))
 const role = ref<RawRoleKey>(auth.rawRole),
@@ -64,12 +66,13 @@ const confirm = ref<InstanceType<typeof BuilderConfirmDialog>>(),
   canvas = ref<InstanceType<typeof SharedDashboardCanvas>>()
 const forms = ref<ServerFormTemplate[]>([]),
   formsError = ref('')
+const activePane = ref<'outline' | 'preview' | 'inspector'>('preview')
 const isAdmin = computed(() => auth.rawRole === 'admin'),
   canEdit = computed(() => auth.hasWorkspaceAccess && !!layout.value?.canEdit)
 const snapshot = () =>
   JSON.stringify({ widgets: widgets.value, allowRoleEditing: allowRoleEditing.value })
 const dirty = computed(() => !!saved.value && snapshot() !== saved.value)
-const requiredType = computed(() => (scope.value === 'job' ? 'workflows' : 'jobs'))
+const requiredType = computed(() => (scope.value === 'personal' ? undefined : scope.value === 'job' ? 'workflows' : 'jobs'))
 const selectedWidget = computed(() => widgets.value.find((widget) => widget.id === selected.value))
 const assigned = computed(() => [
   ...auth.assignedJobIds,
@@ -87,7 +90,9 @@ const visibleJobs = computed(() => {
   )
   return jobsStore.jobs.filter((job) => ids.has(job.id))
 })
-const palette = computed(() => sharedWidgetTypes(scope.value))
+const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => type !== 'form' ||
+  (['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole) &&
+   ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value))))
 const textContext = computed(() => ({
   job: layout.value?.job ? { ...layout.value.job } : null,
   user: { name: auth.displayName, role: CURRENT_ROLE_LABELS[auth.rawRole] },
@@ -123,7 +128,7 @@ function setTextStyle(key: string, value: string | number) {
   }
 }
 const pageTitle = computed(() =>
-  scope.value === 'role' ? `${CURRENT_ROLE_LABELS[role.value]} home` : 'Job home',
+  scope.value === 'personal' ? 'Personal dashboard' : scope.value === 'role' ? `${CURRENT_ROLE_LABELS[role.value]} home` : 'Job home',
 )
 const previewWidth = computed(() =>
   device.value === 'phone' ? 390 : device.value === 'tablet' ? 820 : 1100,
@@ -198,6 +203,7 @@ function drop(payload: Payload, destination: WidgetDrop) {
     widget.title = sharedWidgetLabels[payload.type]
     widgets.value.splice(at, 0, widget)
     selected.value = widget.id
+    activePane.value = 'inspector'
   } else {
     const from = widgets.value.findIndex((w) => w.id === payload.id)
     if (from < 0 || from === at) return
@@ -256,7 +262,7 @@ async function prepare() {
 function context() {
   return {
     scope: scope.value,
-    ...(scope.value === 'job' ? { jobId: jobId.value } : { role: role.value }),
+    ...(scope.value === 'job' ? { jobId: jobId.value } : scope.value === 'role' ? { role: role.value } : {}),
   }
 }
 async function load() {
@@ -291,6 +297,7 @@ async function reload() {
 async function beginEdit() {
   if (!canEdit.value || loading.value || !(await prepare())) return
   editing.value = true
+  activePane.value = 'preview'
   fit.value = true
   message.value = ''
   undo.value = []
@@ -306,7 +313,8 @@ async function beginEdit() {
         action: 'list',
       })
       if (request === generation)
-        forms.value = response.templates.filter((form) => form.latestVersion && !form.archived)
+        forms.value = response.templates.filter((form) => form.latestVersion && !form.archived && form.definition &&
+          canSubmitForm(form.definition.access, { uid: auth.currentUser!.uid, role: role.value, active: auth.hasWorkspaceAccess }))
     } catch (reason) {
       if (request === generation) formsError.value = dashboardError(reason)
     }
@@ -343,7 +351,7 @@ async function save() {
     saved.value = snapshot()
     editing.value = false
     message.value =
-      scope.value === 'job'
+      scope.value === 'personal' ? 'Your layout was saved.' : scope.value === 'job'
         ? 'Template saved for all jobs.'
         : 'Template saved for everyone in this role.'
   } catch (reason) {
@@ -483,17 +491,17 @@ onBeforeUnmount(() => {
       ref="root"
       class="shared-dashboard"
       :class="{ 'is-editing': editing }"
-      :aria-label="scope === 'job' ? 'Shared job dashboard' : 'Shared role home'"
+      :aria-label="scope === 'personal' ? 'Personal dashboard' : scope === 'job' ? 'Shared job dashboard' : 'Shared role home'"
       @click.capture="drag.guardClick"
       @keydown="keydown"
     >
       <header class="shared-dashboard-header" :class="{ 'builder-controls': editing }">
         <div>
-          <p class="shared-dashboard-eyebrow">{{ scope === 'job' ? 'Job home' : 'Role home' }}</p>
+          <p class="shared-dashboard-eyebrow">{{ scope === 'personal' ? 'Personal dashboard' : scope === 'job' ? 'Job home' : 'Role home' }}</p>
           <h1>{{ pageTitle }}</h1>
           <p>
             {{
-              scope === 'job'
+              scope === 'personal' ? 'Your layout and information, private to your account.' : scope === 'job'
                 ? 'Your job tools and information in one place.'
                 : 'Your jobs and the tools your team uses.'
             }}
@@ -542,8 +550,10 @@ onBeforeUnmount(() => {
       <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
       <p v-if="loading" role="status">Loading dashboard…</p>
+      <BuilderPanelSwitcher v-if="editing" v-model="activePane" outline-label="Widgets" outline-controls="shared-palette" canvas-controls="shared-canvas" inspector-controls="shared-inspector" :disabled="busy" />
       <div
         class="shared-dashboard-body"
+        :data-active-pane="activePane"
         :style="{
           '--palette-width': paletteWidth + 'px',
           '--inspector-width': inspectorWidth + 'px',
@@ -558,7 +568,7 @@ onBeforeUnmount(() => {
           <h2>Template</h2>
           <p>
             {{
-              scope === 'job'
+              scope === 'personal' ? 'Changes apply only to your dashboard.' : scope === 'job'
                 ? 'Changes apply to every job. Job data stays separate.'
                 : 'Changes apply to everyone in this role.'
             }}
@@ -600,7 +610,7 @@ onBeforeUnmount(() => {
             :key="widget.id"
             type="button"
             :aria-pressed="selected === widget.id"
-            @click="selected = widget.id"
+            @click="selected = widget.id; activePane = 'inspector'"
           >
             {{ widget.title || sharedWidgetLabels[widget.type] }}
           </button>
@@ -614,7 +624,7 @@ onBeforeUnmount(() => {
           :max="340"
           :disabled="busy"
         />
-        <main class="shared-dashboard-stage" aria-label="Dashboard page">
+        <main id="shared-canvas" class="shared-dashboard-stage" aria-label="Dashboard page">
           <div
             v-if="editing"
             class="shared-preview-controls builder-controls"
@@ -813,7 +823,7 @@ onBeforeUnmount(() => {
                 <option value="inline">Inline (up to eight fields)</option>
               </select></label
             >
-            <p v-if="formsError" role="alert">{{ formsError }}</p>
+            <p v-if="formsError && selectedWidget.type === 'form'" role="alert">{{ formsError }}</p>
             <button type="button" @click="move(-1)">Move up</button
             ><button type="button" @click="move(1)">Move down</button
             ><button type="button" :disabled="selectedWidget.type === requiredType" @click="remove">

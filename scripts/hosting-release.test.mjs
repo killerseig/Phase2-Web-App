@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { gzipSync } from 'node:zlib'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { deployEmployeeHosting, sha256 } from './hosting-release.mjs'
+import { deployEmployeeHosting, sha256, documentPreviewHostingConfig } from './hosting-release.mjs'
 
 const prefix = 'projects/phase2-website/sites/phase2-website'
 const previous = `${prefix}/versions/old`, next = `${prefix}/versions/new`
@@ -14,7 +14,7 @@ const files = new Map([['/employee-app.html', { raw, compressed }]])
 function fixture(options = {}) {
   const writes = [], records = []
   const before = { '/employee-app.html': 'old-hash', '/public-boot.js': 'preserved-hash', '/assets/public.js': 'public-hash' }
-  const config = { rewrites: [{ source: '/', function: { functionId: 'getPublishedWebsite' } }], headers: [{ source: '**', headers: [] }] }
+  const config = { rewrites: [{ source: '/sds-file', function: { functionId: 'downloadSdsFile' } }, { source: '/', function: { functionId: 'getPublishedWebsite' } }], headers: [{ source: '**', headers: [] }] }
   let live = previous, inventory, channelReads = 0
   async function api(method, path, body) {
     if (method !== 'GET') writes.push({ method, path, body })
@@ -90,4 +90,27 @@ test('workflow validates both branches and gates cloud authentication behind mai
   assert.match(workflow.jobs.deploy.steps[0].run, /exit 1/)
   assert.equal(workflow.jobs.deploy.steps[0].env.APPROVED, '${{ vars.PHASE2_DEPLOY_AUTH_APPROVED }}')
   assert(!JSON.stringify(workflow).includes('credentials_json'))
+})
+test('source Hosting configuration routes private previews before the application fallback', () => {
+  const config = JSON.parse(readFileSync(new URL('../firebase.json', import.meta.url), 'utf8')).hosting
+  const rules = config.rewrites.filter(rule => rule.source === '/sds-file')
+  assert.equal(rules.length, 1)
+  assert.equal(rules[0].function.functionId, 'downloadSdsFile')
+  assert.deepEqual(documentPreviewHostingConfig(config), config)
+})
+test('live Gen2 ServingConfig repair removes only the document route collision', () => {
+  const config = { headers: [{ glob: '**', headers: { 'X-Frame-Options': 'DENY' } }], rewrites: [
+    { glob: '/sds-file', path: '/employee-app.html' },
+    { glob: '/sds-file', run: { serviceId: 'downloadsdsfile', region: 'us-central1' } },
+    { glob: '/', run: { serviceId: 'getpublishedwebsite', region: 'us-central1' } },
+    { glob: '**', path: '/employee-app.html' },
+  ] }
+  const original = structuredClone(config)
+  const fixed = documentPreviewHostingConfig(config)
+  assert.deepEqual(config, original)
+  assert.deepEqual(fixed, { ...config, rewrites: config.rewrites.slice(1) })
+  assert.deepEqual(documentPreviewHostingConfig(fixed), fixed)
+})
+test('missing private file handler fails closed', () => {
+  assert.throws(() => documentPreviewHostingConfig({ rewrites: [{ glob: '/sds-file', path: '/employee-app.html' }] }), /handler rewrite is missing/)
 })

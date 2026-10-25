@@ -45,6 +45,7 @@ watch(
         cache: 'no-store',
       })
       if (!response.ok) throw new Error('File unavailable')
+      if (/text\/html/i.test(response.headers.get('Content-Type') || '')) throw new Error('The file request returned a web page instead of a document')
       const bytes = await response.arrayBuffer()
       if (!active) return
       if (bytes.byteLength > 20 * 1024 * 1024) throw new Error('File too large')

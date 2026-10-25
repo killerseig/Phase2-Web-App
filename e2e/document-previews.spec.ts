@@ -1,11 +1,16 @@
 import { expect, test } from './helpers/test.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
+import { mockDashboard } from './helpers/dashboardFixture.js'
 
-test('previews images, text, CSV, Word and Excel locally and explicitly excludes nonprintable files from books', async ({
+test('previews PDF, images, text, CSV, Word and Excel locally and explicitly excludes nonprintable files from books', async ({
   page,
 }) => {
   const formats = [
+    { id: 'pdf', name: 'Synthetic PDF', extension: 'pdf', fixture: 'sds-preview.pdf', mime: 'application/pdf' },
     { id: 'photo', name: 'Site photo', extension: 'png', fixture: 'site.png', mime: 'image/png' },
+    { id: 'jpg', name: 'Site JPG', extension: 'jpg', fixture: 'site.jpeg', mime: 'image/jpeg' },
+    { id: 'jpeg', name: 'Site JPEG', extension: 'jpeg', fixture: 'site.jpeg', mime: 'image/jpeg' },
+    { id: 'webp', name: 'Site WebP', extension: 'webp', fixture: 'site.webp', mime: 'image/webp' },
     { id: 'text', name: 'Text notes', extension: 'txt', fixture: 'notes.txt', mime: 'text/plain' },
     {
       id: 'csv',
@@ -41,7 +46,7 @@ test('previews images, text, CSV, Word and Excel locally and explicitly excludes
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
     const data = route.request().postDataJSON().data
     let result: unknown = {}
-    if (data.action === 'load')
+    if (data.action === 'load' || data.action === 'page')
       result = {
         version: 1,
         folders: [],
@@ -72,11 +77,25 @@ test('previews images, text, CSV, Word and Excel locally and explicitly excludes
     if (data.action === 'exportStatus') result = { status: 'complete', pageCount: 3 }
     await route.fulfill({ json: { result }, headers })
   })
+  await mockDashboard(page)
   await gotoPhase2App(page, '/dashboards/personal', createJobsFixture())
+  await page.getByRole('button', { name: 'Synthetic PDF', exact: true }).click()
+  const pdf = page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })
+  await expect(pdf).toBeVisible()
+  expect(await pdf.evaluate((canvas: HTMLCanvasElement) => {
+    const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data
+    return pixels.some((value, index) => index % 4 !== 3 && value < 100)
+  })).toBe(true)
   await page.getByRole('button', { name: 'Site photo', exact: true }).click()
   const photo = page.getByRole('img', { name: 'Site photo', exact: true })
   await expect(photo).toBeVisible()
   expect(await photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(400)
+  for (const name of ['Site JPG', 'Site JPEG', 'Site WebP']) {
+    await page.getByRole('button', { name, exact: true }).click()
+    const image = page.getByRole('img', { name, exact: true })
+    await expect(image).toBeVisible()
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
+  }
   await page.getByRole('button', { name: 'Text notes', exact: true }).click()
   await expect(page.locator('pre')).toContainText('Review delivery schedule.')
   await expect(page.locator('pre')).toContainText('<script>window.previewInjected=true</script>')

@@ -1,9 +1,6 @@
 <script setup lang="ts">
-import AppShell from '@/layouts/AppShell.vue'
-import WidgetDashboard from '@/components/dashboard/WidgetDashboard.vue'
+import SharedDashboardView from './SharedDashboardView.vue'
 </script>
 <template>
-  <AppShell>
-    <WidgetDashboard scope="role" />
-  </AppShell>
+  <SharedDashboardView />
 </template>

@@ -39,7 +39,7 @@ async function mockSds(page: Page, fail = false) {
       })
       return
     }
-    if (data.action === 'load')
+    if (data.action === 'load' || data.action === 'page') {
       result = {
         version: 3,
         folders: [
@@ -75,6 +75,14 @@ async function mockSds(page: Page, fail = false) {
         ],
         binder: { version, selections: data.jobId ? selections : [] },
       }
+      if (data.action === 'page') {
+        const library = result as { sheets: { name: string }[] }
+        result = {
+          sheets: library.sheets.filter(sheet => !data.search || sheet.name.toLowerCase().includes(String(data.search).toLowerCase())),
+          after: '', scanned: library.sheets.length, searchMode: 'bounded-metadata-scan',
+        }
+      }
+    }
     if (data.action === 'saveSelection') {
       selections = data.selections
       version++
@@ -137,14 +145,15 @@ test('personal SDS module saves only deliberate job selections and exports the s
   await expect(page.getByRole('button', { name: 'Download PDF', exact: true })).toBeVisible()
   expect(api.exports()).toBe(1)
   expect(api.actions.filter((a) => a === 'saveSelection')).toHaveLength(1)
-  await page.getByRole('link', { name: 'Expand explorer' }).click()
+  // The shared dashboard now embeds the complete bounded Library widget.
+  // Route navigation preserves the existing in-memory explorer view state.
+  await page.getByRole('navigation', { name: 'Dashboard actions', exact: true }).getByRole('link', { name: 'Jobs', exact: true }).click()
+  await expect(page).toHaveURL(/\/jobs$/)
+  await page.goBack()
   await expect(page.getByRole('searchbox')).toHaveValue('Paint')
   await expect(page).toHaveURL(/sdsJob=job-e2e/)
   await expect(page.getByRole('button', { name: 'Add file here', exact: true })).toHaveCount(0)
   await page.screenshot({ path: '.security-work/sds-desktop.png', fullPage: true })
-  await page.goBack()
-  await expect(page.getByRole('searchbox')).toHaveValue('Paint')
-  await expect(page).toHaveURL(/sdsJob=job-e2e/)
 })
 
 test('role workspace uses the compact document widget and Admin can manage the master', async ({
@@ -152,7 +161,9 @@ test('role workspace uses the compact document widget and Admin can manage the m
 }) => {
   await mockSds(page)
   await gotoPhase2App(page, '/dashboards/role', createJobsFixture())
-  await expect(page.getByRole('main').getByRole('heading')).toHaveText(['Documents'])
+  await expect(page.getByRole('heading', { name: 'Admin home', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Company Library widget', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Role tools' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Add resource', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Current folder actions', exact: true }).click()
@@ -175,7 +186,7 @@ test('failed SDS module leaves existing Jobs navigation and dashboard unchanged'
   await expect(page.getByRole('alert')).toContainText('The document service could not be reached')
   await expect(page.getByText('No files in this collection.', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Add file here', exact: true })).toHaveCount(0)
-  await page.getByRole('link', { name: 'Jobs', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Dashboard actions', exact: true }).getByRole('link', { name: 'Jobs', exact: true }).click()
   await expect(page).toHaveURL(/\/jobs$/)
   await page.goto('/jobs/job-e2e')
   await expect(page.getByTestId('job-dashboard-module-timecards')).toBeVisible()
