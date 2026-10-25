@@ -39,6 +39,9 @@ async function openNavigation(page: Page) {
   const toggle = page.getByRole('button', { name: 'Open navigation', exact: true })
   if (await toggle.isVisible()) { await toggle.focus(); await page.keyboard.press('Enter') }
 }
+async function openBuilderFormsPanel(page: Page, width: number) {
+  if (width <= 900) await page.getByRole('navigation', { name: 'Builder panels' }).getByRole('button', { name: 'Forms', exact: true }).click()
+}
 for (const width of [390, 1280]) test('existing library reads supplied content at ' + width + 'px', async ({ page }) => {
   await page.setViewportSize({ width, height: 900 })
   const actions = await setup(page)
@@ -55,7 +58,7 @@ for (const width of [390, 1280]) test('existing library reads supplied content a
   await expect(page.locator('.reference-pages')).toContainText('2 /')
   await page.getByRole('button', { name: 'Previous references', exact: true }).click()
   await expect(page.locator('.reference-pages')).toContainText('1 /')
-  await page.getByRole('navigation', { name: 'Library categories' }).getByRole('button', { name: 'Safety', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Library categories' })).toHaveCount(0)
   const resource = content.resources.find(item => item.category === 'Safety')!
   await page.getByRole('searchbox', { name: 'Search files' }).fill(resource.title)
   await page.locator('.reference-row').filter({ hasText: resource.title }).first().click()
@@ -116,7 +119,7 @@ test('Admin picker cancel and failed upload never save a document', async ({ pag
 
 test('a missing-document reference opens the existing upload editor without creating a file', async ({ page }) => {
   const actions = await setup(page)
-  await page.getByRole('navigation', { name: 'Library categories' }).getByRole('button', { name: 'Safety', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Library categories' })).toHaveCount(0)
   const resource = content.resources.find(item => item.category === 'Safety')!
   await page.getByRole('searchbox', { name: 'Search files' }).fill(resource.title)
   await page.locator('.reference-row').filter({ hasText: resource.title }).first().click()
@@ -132,7 +135,7 @@ test('a missing-document reference opens the existing upload editor without crea
 
 test('an uploaded document takes precedence over its supplied reference in existing search', async ({ page }) => {
   const actions = await setup(page, false, false, '/company-library', true)
-  await page.getByRole('navigation', { name: 'Library categories' }).getByRole('button', { name: 'Safety', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Library categories' })).toHaveCount(0)
   const resource = content.resources.find(item => item.category === 'Safety')!
   await page.getByRole('searchbox', { name: 'Search files' }).fill(resource.title)
   await expect(page.locator('.tree-file').filter({ hasText: resource.title })).toBeVisible()
@@ -188,10 +191,7 @@ test('supplied ideas become editable drafts in the existing builder, with repeat
 for (const width of [390, 1280]) test('keyboard and native layout review at ' + width + 'px', async ({ page }) => {
   await page.setViewportSize({ width, height: 900 })
   const actions = await setup(page)
-  const category = page.getByRole('navigation', { name: 'Library categories' }).getByRole('button', { name: 'Safety', exact: true })
-  await expect(category).toBeEnabled()
-  await category.focus(); await page.keyboard.press('Enter')
-  await expect(category).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('navigation', { name: 'Library categories' })).toHaveCount(0)
   const resource = content.resources.find(item => item.category === 'Safety')!
   const search = page.getByRole('searchbox', { name: 'Search files' })
   await search.focus(); await page.keyboard.insertText(resource.title)
@@ -218,7 +218,7 @@ for (const width of [390, 1280]) test('keyboard and native layout review at ' + 
   await expect(row).toHaveAttribute('open', '')
   const builderLink = row.getByRole('link', { name: 'Prepare an editable draft in Form Builder', exact: true })
   await builderLink.focus(); await page.keyboard.press('Enter')
-  if (width <= 900) await page.getByRole('navigation', { name: 'Builder panels' }).getByRole('button', { name: 'Forms', exact: true }).click()
+  await openBuilderFormsPanel(page, width)
   const starter = page.getByRole('button', { name: form.title + ' draft', exact: true })
   await starter.focus(); await page.keyboard.press('Enter')
   await expect(page.getByLabel('Form title', { exact: true })).toBeVisible()

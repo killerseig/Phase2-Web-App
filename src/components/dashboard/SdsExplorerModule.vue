@@ -111,13 +111,13 @@ const selected = computed(() => sheets.value.find((s) => s.id === selectedId.val
 const currentFolder = computed(() => library.value.folders.find((f) => f.id === folderId.value))
 const referenceId = ref(''), referencePage = ref(0)
 const referenceRows = computed(() => {
-  if (!props.references || !props.referenceCategory || jobId.value || editing.value) return []
+  if (!props.references || jobId.value || editing.value || (!props.referenceCategory && !search.value.trim())) return []
   const identity = (value: string) => value.toLowerCase().trim().replace(/\.[a-z0-9]{2,5}$/, '')
   const uploaded = new Set(sheets.value.flatMap(sheet => [identity(sheet.name), identity(sheet.originalName || '')]).filter(Boolean))
-  const rows: { id: string; title: string; resource?: IntranetResource; paragraphs?: ReadingPair[] }[] = props.references.resources.filter(item => search.value.trim() && item.category === props.referenceCategory &&
+  const rows: { id: string; title: string; resource?: IntranetResource; paragraphs?: ReadingPair[] }[] = props.references.resources.filter(item => search.value.trim() && (!props.referenceCategory || item.category === props.referenceCategory) &&
     !uploaded.has(identity(item.title)) && !(item.filename && uploaded.has(identity(item.filename))))
     .map(resource => ({ id: 'resource:' + resource.id, title: resource.title, resource }))
-  if (props.referenceCategory === 'Safety') {
+  if (!props.referenceCategory || props.referenceCategory === 'Safety') {
     rows.push(...props.references.inspections.map(item => ({ id: 'inspection:' + item.id, title: item.title, paragraphs: item.paragraphs })))
     rows.push({ id: 'orientation', title: 'New-to-job orientation', paragraphs: props.references.orientation })
   }

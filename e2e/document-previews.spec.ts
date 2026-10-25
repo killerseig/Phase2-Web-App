@@ -1,6 +1,7 @@
 import { expect, test } from './helpers/test.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 import { mockDashboard } from './helpers/dashboardFixture.js'
+import { sampleContent } from '../src/features/intranet/__tests__/fixtures.js'
 
 test('previews PDF, images, text, CSV, Word and Excel locally and explicitly excludes nonprintable files from books', async ({
   page,
@@ -238,4 +239,44 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await surface.focus(); await page.keyboard.press('End')
   await expect(page.getByRole('img', { name: 'PDF page 2 of 2', exact: true })).toBeInViewport()
   await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toHaveCount(0)
+})
+
+test('real library folders and cross-category search remain reachable without category shortcuts', async ({ page }) => {
+  const folders = ['SDS', 'Safety', 'AHA'].map(name => ({ id: name.toLowerCase(), name, parentId: '', order: 0 }))
+  const documents = folders.map(folder => ({ id: folder.id + '-file', name: folder.name + ' document', extension: 'pdf', folderId: folder.id, revisionId: 'r1', archived: false }))
+  const content = sampleContent()
+  content.resources.push({ id: 'sds-source', title: 'Synthetic SDS reference', category: 'SDS', kind: 'Reference', keywords: '', filename: 'sds.pdf' }, { id: 'aha-source', title: 'Synthetic AHA reference', category: 'AHA', kind: 'Reference', keywords: '', filename: 'aha.pdf' })
+  const actions: string[] = []
+  await page.route('**/sdsWorkspace', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    const data = route.request().postDataJSON().data; actions.push(data.action)
+    let result: unknown = { version: 1, folders, sheets: [], binder: { version: 0, selections: [] } }
+    if (data.action === 'page') result = { sheets: data.search === 'Phase2 intranet content' ? [{ id: 'reference-package', name: 'Private source', originalName: 'Phase2 intranet content.txt', extension: 'txt', revisionId: 'r1', archived: false }] : documents.filter(file => !data.search || file.name.toLowerCase().includes(String(data.search).toLowerCase())), after: '' }
+    if (data.action === 'openSheet') result = { url: `https://example.invalid/file?ticket=${data.id}`, extension: data.id === 'reference-package' ? 'txt' : 'pdf' }
+    return route.fulfill({ headers, json: { result } })
+  })
+  await page.route('**/sds-file?*', route => new URL(route.request().url()).searchParams.get('ticket') === 'reference-package' ? route.fulfill({ json: content }) : route.fulfill({ path: 'e2e/fixtures/sds-preview.pdf', contentType: 'application/pdf' }))
+  await mockDashboard(page)
+  await gotoPhase2App(page, '/company-library', createJobsFixture())
+  await expect(page.getByRole('navigation', { name: 'Library categories' })).toHaveCount(0)
+  await expect(page.locator('.library-collections')).toHaveCount(0)
+  const tree = page.getByRole('navigation', { name: 'Folders', exact: true })
+  for (const folder of folders) {
+    await expect(tree.getByRole('button', { name: folder.name, exact: true })).toBeVisible()
+    await expect(tree.getByRole('button', { name: folder.name + ' document', exact: true })).toBeVisible()
+  }
+  expect((await tree.getByRole('button', { name: 'Root folder', exact: true }).boundingBox())!.y - (await tree.boundingBox())!.y).toBeLessThan(15)
+  await tree.getByRole('button', { name: 'Safety document', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toBeEnabled()
+  const search = page.getByRole('searchbox', { name: 'Search files', exact: true })
+  await search.fill('AHA document')
+  await expect(tree.getByRole('button', { name: 'AHA document', exact: true })).toBeVisible()
+  await search.fill('Synthetic')
+  await expect(page.locator('.reference-row')).toHaveCount(4)
+  for (const title of ['Synthetic safety reference', 'Synthetic SDS reference', 'Synthetic AHA reference']) await expect(page.locator('.reference-row').filter({ hasText: title })).toBeVisible()
+  await search.fill('')
+  for (const document of documents) await expect(tree.getByRole('button', { name: document.name, exact: true })).toBeVisible()
+  expect(actions.filter(action => !['load', 'page', 'openSheet'].includes(action))).toEqual([])
 })

@@ -5,35 +5,29 @@ import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus
 import { ref } from 'vue'
 import { sampleContent } from '@/features/intranet/__tests__/fixtures'
 const load = vi.hoisted(() => vi.fn())
+const referenceError = ref('')
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ rawRole: 'admin' }) }))
 vi.mock('@/services/sds', () => ({ loadSds: load, sdsErrorMessage: (error: Error) => error.message }))
-vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref(sampleContent()), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: ref(''), notice: ref(''), selectSource: vi.fn(), reload: vi.fn(), cancel: vi.fn() }) }))
-function render() { return mount(CompanyLibraryView, { global: { stubs: { AppShell: { template: '<div><slot /></div>' }, PrivateReferenceStatus: true, SdsExplorerModule: { props: ['title', 'initialFolderId', 'references', 'referenceCategory'], template: '<div data-explorer :data-folder="initialFolderId" :data-category="referenceCategory"><slot name="navigation" :disabled="false" />{{ title }}</div>' } } } }) }
-beforeEach(() => { load.mockReset() })
-describe('Company Library categories', () => {
-  it('uses existing categories and explorer for supplied references, without a separate tab or page', async () => {
-    load.mockResolvedValue({ folders: [{ id: 'safety-root', name: 'Safety', parentId: '' }] })
+vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref(sampleContent()), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: referenceError, notice: ref(''), selectSource: vi.fn(), reload: vi.fn(), cancel: vi.fn() }) }))
+function render() { return mount(CompanyLibraryView, { global: { stubs: { AppShell: { template: '<div><slot /></div>' }, SdsExplorerModule: { props: ['title', 'initialFolderId', 'references', 'referenceCategory'], template: '<div data-explorer :data-folder="initialFolderId" :data-category="referenceCategory"><slot name="navigation" :disabled="false" />{{ title }}</div>' } } } }) }
+beforeEach(() => { load.mockReset(); referenceError.value = '' })
+describe('Company Library master navigation', () => {
+  it('uses the ordinary explorer without category shortcuts or a hidden category filter', async () => {
     const view = render(); await flushPromises()
-    expect(load).toHaveBeenCalledWith('', true)
-    expect(view.findAll('[aria-label="Library categories"]')).toHaveLength(1)
-    expect(view.find('[data-explorer] [aria-label="Library categories"]').exists()).toBe(true)
+    expect(load).not.toHaveBeenCalled()
+    expect(view.find('[aria-label="Library categories"]').exists()).toBe(false)
     expect(view.text()).not.toContain('Company intranet')
     expect(view.find('h1').exists()).toBe(false)
     expect(view.getComponent(PrivateReferenceStatus).props('showEmptyState')).toBe(false)
-    const explorer = view.get('[data-explorer]').element
-    await view.findAll('[aria-label="Library categories"] button')[1]!.trigger('click')
-    expect(view.find('[data-explorer]').attributes('data-folder')).toBe('safety-root')
-    expect(view.find('[data-explorer]').attributes('data-category')).toBe('Safety')
-    await view.findAll('[aria-label="Library categories"] button')[2]!.trigger('click')
-    expect(view.get('[data-explorer]').element).toBe(explorer)
-    expect(view.text()).toContain('No AHA category folder is configured')
-    expect(view.find('[data-explorer]').attributes('data-category')).toBe('AHA')
+    expect(view.find('[data-explorer]').attributes('data-folder')).toBeUndefined()
+    expect(view.find('[data-explorer]').attributes('data-category')).toBeUndefined()
+    expect(view.find('[data-explorer]').text()).toBe('Documents')
   })
-  it('keeps authorization failures visible', async () => {
-    load.mockRejectedValue(new Error('Access denied'))
+  it('keeps private reference errors visible without hiding the file explorer', async () => {
+    referenceError.value = 'Access denied'
     const view = render(); await flushPromises()
     expect(view.find('[role="alert"]').text()).toContain('Access denied')
-    expect(view.find('[data-explorer]').exists()).toBe(false)
+    expect(view.find('[data-explorer]').exists()).toBe(true)
   })
   it('omits the obsolete reference paragraph while retaining genuine loading errors', async () => {
     const status = mount(PrivateReferenceStatus, { props: { loading: false, error: '', notice: '', packages: [], selected: '', showEmptyState: false } })
