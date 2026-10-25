@@ -178,3 +178,64 @@ for (const width of [1280, 390]) test(`Word pages preserve images, scroll and re
   await page.getByRole('button', { name: 'Paged Word', exact: true }).click()
   await expect(word.getByRole('region', { name: 'Document page 2 of 2' })).toContainText('Second page heading')
 })
+
+for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages in a lazy 387-page book at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 })
+  const files = [{ id: 'book', name: 'Long SDS book', fixture: 'sds-book-387.pdf' }, { id: 'short', name: 'Short PDF', fixture: 'sds-preview.pdf' }]
+  await page.route('**/sds-file?*', route => {
+    const file = files.find(file => file.id === new URL(route.request().url()).searchParams.get('ticket'))!
+    return route.fulfill({ path: `e2e/fixtures/${file.fixture}`, contentType: 'application/pdf' })
+  })
+  await page.route('**/sdsWorkspace', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    const data = route.request().postDataJSON().data
+    const result = data.action === 'openSheet' ? { url: `https://example.invalid/file?ticket=${data.id}`, extension: 'pdf' } : {
+      version: 1, folders: [], binder: { version: 0, selections: [] }, after: '',
+      sheets: files.map(file => ({ ...file, extension: 'pdf', folderId: '', revisionId: 'r1', archived: false })),
+    }
+    return route.fulfill({ headers, json: { result } })
+  })
+  await mockDashboard(page)
+  await gotoPhase2App(page, '/company-library', createJobsFixture())
+  await expect(page.getByRole('heading', { name: 'Company Library', exact: true })).toHaveCount(0)
+  await expect(page.getByText('No supplied references have been uploaded.', { exact: false })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Long SDS book', exact: true }).click()
+  const surface = page.getByRole('region', { name: 'PDF pages', exact: true }), number = page.getByRole('spinbutton', { name: 'PDF page', exact: true })
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  await expect(page.locator('[data-pdf-page]')).toHaveCount(387)
+  expect((await surface.boundingBox())!.height).toBeGreaterThan(337)
+  expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
+  const step = await page.locator('[data-pdf-page="1"]').evaluate(element => element.getBoundingClientRect().height + 12)
+  await surface.hover(); await page.mouse.wheel(0, step)
+  await expect(number).toHaveValue('2')
+  const second = page.getByRole('img', { name: 'PDF page 2 of 387', exact: true })
+  await expect(second).toBeInViewport()
+  await page.mouse.wheel(0, step * 4)
+  await expect(number).toHaveValue('6')
+  const sixth = page.getByRole('img', { name: 'PDF page 6 of 387', exact: true })
+  await expect(sixth).toBeInViewport()
+  expect(await sixth.evaluate((canvas: HTMLCanvasElement) => canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 !== 3 && value < 100))).toBe(true)
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toHaveCount(0)
+  expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
+  await number.fill('200'); await number.press('Tab')
+  const distant = page.getByRole('img', { name: 'PDF page 200 of 387', exact: true })
+  await expect(distant).toBeInViewport()
+  const before = (await distant.boundingBox())!.width
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  await expect.poll(async () => (await distant.boundingBox())?.width || 0).toBeGreaterThan(before)
+  await expect(number).toHaveValue('200')
+  await page.getByRole('button', { name: 'Fit page width', exact: true }).click()
+  await expect.poll(async () => (await distant.boundingBox())?.width || 0).toBeCloseTo(before, 0)
+  await number.fill('387'); await number.press('Tab')
+  await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toBeInViewport()
+  expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
+  await surface.screenshot({ path: test.info().outputPath(`pdf-continuous-${width}.png`) })
+  await page.getByRole('button', { name: 'Short PDF', exact: true }).click()
+  await expect(number).toHaveValue('1')
+  await expect(page.locator('[data-pdf-page]')).toHaveCount(2)
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await surface.focus(); await page.keyboard.press('End')
+  await expect(page.getByRole('img', { name: 'PDF page 2 of 2', exact: true })).toBeInViewport()
+  await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toHaveCount(0)
+})

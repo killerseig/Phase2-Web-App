@@ -25,7 +25,7 @@ onMounted(() => { void load() })
 <template>
   <section class="company-library-widget" aria-label="Company Library widget">
     <AppPaneHeader v-if="showHeading" title="Company Library" title-tag="h1" />
-    <PrivateReferenceStatus :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" @cancel="cancel" />
+    <PrivateReferenceStatus :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" :show-empty-state="false" @select="selectSource" @retry="reload" @cancel="cancel" />
     <p v-if="loading" role="status">Loading library categories.</p>
     <p v-else-if="error" role="alert">{{ error }} <button @click="load">Retry</button></p>
     <SdsExplorerModule v-else expanded :title="category" :initial-folder-id="activeFolder" :references="content" :reference-category="category">

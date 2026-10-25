@@ -1,6 +1,7 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import CompanyLibraryView from './CompanyLibraryView.vue'
+import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus.vue'
 import { ref } from 'vue'
 import { sampleContent } from '@/features/intranet/__tests__/fixtures'
 const load = vi.hoisted(() => vi.fn())
@@ -17,6 +18,8 @@ describe('Company Library categories', () => {
     expect(view.findAll('[aria-label="Library categories"]')).toHaveLength(1)
     expect(view.find('[data-explorer] [aria-label="Library categories"]').exists()).toBe(true)
     expect(view.text()).not.toContain('Company intranet')
+    expect(view.find('h1').exists()).toBe(false)
+    expect(view.getComponent(PrivateReferenceStatus).props('showEmptyState')).toBe(false)
     const explorer = view.get('[data-explorer]').element
     await view.findAll('[aria-label="Library categories"] button')[1]!.trigger('click')
     expect(view.find('[data-explorer]').attributes('data-folder')).toBe('safety-root')
@@ -31,5 +34,12 @@ describe('Company Library categories', () => {
     const view = render(); await flushPromises()
     expect(view.find('[role="alert"]').text()).toContain('Access denied')
     expect(view.find('[data-explorer]').exists()).toBe(false)
+  })
+  it('omits the obsolete reference paragraph while retaining genuine loading errors', async () => {
+    const status = mount(PrivateReferenceStatus, { props: { loading: false, error: '', notice: '', packages: [], selected: '', showEmptyState: false } })
+    expect(status.text()).toBe('')
+    await status.setProps({ error: 'Reference access denied' })
+    expect(status.get('[role=alert]').text()).toContain('Reference access denied')
+    status.unmount()
   })
 })
