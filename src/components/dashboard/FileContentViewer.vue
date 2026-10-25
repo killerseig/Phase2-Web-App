@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, shallowRef, watch } from 'vue'
 import { previewFileUrl, type FilePreview } from '@/features/documents/formats'
 const props = defineProps<{ url: string; extension: string; name: string }>()
 const imageUrl = ref('')
@@ -8,6 +8,8 @@ const loading = ref(true)
 const error = ref('')
 const sheetIndex = ref(0)
 const zoom = ref(1)
+const docxBytes = shallowRef<ArrayBuffer>()
+const DocxDocumentViewer = defineAsyncComponent(() => import('./DocxDocumentViewer.vue'))
 const table = computed(() =>
   preview.value && 'tables' in preview.value ? preview.value.tables[sheetIndex.value] : undefined,
 )
@@ -28,6 +30,7 @@ watch(
     loading.value = true
     imageUrl.value = ''
     preview.value = undefined
+    docxBytes.value = undefined
     error.value = ''
     sheetIndex.value = 0
     zoom.value = 1
@@ -56,6 +59,10 @@ watch(
           }),
         )
         imageUrl.value = objectUrl
+        loading.value = false
+        clearTimeout(timeout)
+      } else if (props.extension === 'docx') {
+        docxBytes.value = bytes
         loading.value = false
         clearTimeout(timeout)
       } else {
@@ -115,14 +122,12 @@ watch(
         />
       </div>
     </template>
+    <DocxDocumentViewer v-else-if="docxBytes && !error" :key="url" :bytes="docxBytes" :name="name" />
     <template v-else-if="preview && 'text' in preview">
-      <p v-if="extension === 'docx'" class="content-note">
-        Text preview. Download the original for images and full formatting.
-      </p>
       <p v-if="preview.truncated" class="content-note">
         Showing the first 200,000 characters. Download for the full document.
       </p>
-      <pre>{{ preview.text || 'This document contains no previewable text.' }}</pre>
+      <pre>{{ preview.text.trim() ? preview.text : 'This document contains no previewable text.' }}</pre>
     </template>
     <template v-else-if="preview && 'tables' in preview">
       <div class="content-toolbar">

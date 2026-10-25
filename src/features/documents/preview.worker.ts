@@ -63,10 +63,7 @@ self.onmessage = async (event: MessageEvent<{ extension: string; bytes: ArrayBuf
     } else if (extension === 'csv') {
       result = { tables: [csvRows(new TextDecoder('utf-8', { fatal: true }).decode(bytes))] }
     } else {
-      const text =
-        extension === 'docx'
-          ? (await (await import('mammoth')).extractRawText({ arrayBuffer: bytes })).value
-          : new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
       result = { text: text.slice(0, 200000), truncated: text.length > 200000 }
     }
     self.postMessage({ result })

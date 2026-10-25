@@ -102,8 +102,9 @@ test('previews PDF, images, text, CSV, Word and Excel locally and explicitly exc
   await page.getByRole('button', { name: 'Materials CSV', exact: true }).click()
   await expect(page.getByRole('cell', { name: 'First floor, west', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Word notes', exact: true }).click()
-  await expect(page.locator('pre')).toContainText('Review the delivery schedule.')
-  await expect(page.locator('pre')).toContainText('<script>window.previewInjected=true</script>')
+  const word = page.frameLocator('iframe.docx-pages')
+  await expect(word.locator('body')).toContainText('Review the delivery schedule.')
+  await expect(word.locator('body')).toContainText('<script>window.previewInjected=true</script>')
   expect(await page.evaluate(() => 'previewInjected' in window)).toBe(false)
   await page.getByRole('button', { name: 'Workbook', exact: true }).click()
   await expect(page.getByRole('cell', { name: 'Drywall', exact: true })).toBeVisible()
@@ -121,4 +122,59 @@ test('previews PDF, images, text, CSV, Word and Excel locally and explicitly exc
   await page.getByRole('menuitem', { name: 'Make PDF / print book' }).click()
   await expect(page.getByRole('button', { name: 'Download PDF', exact: true })).toBeVisible()
   expect(exports[0]?.printableOnly).toBe(true)
+})
+
+for (const width of [1280, 390]) test(`Word pages preserve images, scroll and recover on file switching at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 })
+  const formats = [
+    { id: 'pages', name: 'Paged Word', fixture: 'docx-pages.docx' },
+    { id: 'poster', name: 'Image poster', fixture: 'docx-poster.docx' },
+    { id: 'empty', name: 'Empty Word', fixture: 'docx-empty.docx' },
+    { id: 'corrupt', name: 'Broken Word', fixture: '' },
+  ]
+  const external: string[] = []
+  page.on('request', request => { if (request.url().startsWith('https://example.invalid/')) external.push(request.url()) })
+  await page.route('**/sds-file?*', route => {
+    const file = formats.find(file => file.id === new URL(route.request().url()).searchParams.get('ticket'))!
+    return file.fixture ? route.fulfill({ path: `e2e/fixtures/${file.fixture}`, contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }) : route.fulfill({ body: 'not a Word file' })
+  })
+  await page.route('**/sdsWorkspace', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    const data = route.request().postDataJSON().data
+    const result = data.action === 'openSheet' ? { url: `https://example.invalid/document?ticket=${data.id}`, extension: 'docx' } : {
+      version: 1, folders: [], binder: { version: 0, selections: [] }, after: '',
+      sheets: formats.map(file => ({ ...file, extension: 'docx', folderId: '', revisionId: 'r1', archived: false })),
+    }
+    return route.fulfill({ headers, json: { result } })
+  })
+  await mockDashboard(page)
+  await gotoPhase2App(page, '/company-library', createJobsFixture())
+  await page.getByRole('button', { name: 'Paged Word', exact: true }).click()
+  const iframe = page.locator('iframe.docx-pages'), word = page.frameLocator('iframe.docx-pages')
+  await expect(iframe).toBeVisible()
+  await expect(iframe).toHaveAttribute('sandbox', '')
+  await expect(word.getByRole('region', { name: 'Document page 2 of 2' })).toContainText('Second page heading')
+  await expect.poll(() => word.locator('img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true)
+  const dimensions = await word.locator('html').evaluate(element => ({ height: element.scrollHeight, viewport: element.clientHeight, width: element.scrollWidth, inner: window.innerWidth }))
+  expect(dimensions.height).toBeGreaterThan(dimensions.viewport)
+  expect(dimensions.width).toBeLessThanOrEqual(dimensions.inner + 2)
+  expect(dimensions.viewport).toBeGreaterThan(150)
+  await iframe.screenshot({ path: test.info().outputPath(`word-pages-${width}.png`) })
+  await iframe.hover(); await page.mouse.wheel(0, 1200)
+  await expect.poll(() => word.locator('html').evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+  await expect(word.locator('table')).toContainText('Inspection')
+  expect(await word.locator('body').evaluate(() => (window as unknown as { previewInjected?: boolean }).previewInjected)).not.toBe(true)
+  expect(external).toEqual([])
+  await page.getByRole('button', { name: 'Image poster', exact: true }).click()
+  await expect(iframe).toHaveAttribute('title', 'Image poster — document pages')
+  await expect.poll(() => word.locator('img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true)
+  await expect(word.locator('body')).not.toContainText('Second page heading')
+  await page.getByRole('button', { name: 'Empty Word', exact: true }).click()
+  await expect(iframe).toHaveCount(0)
+  await expect(page.getByText('This document has no displayable text or images.', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: 'Broken Word', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('could not be previewed')
+  await page.getByRole('button', { name: 'Paged Word', exact: true }).click()
+  await expect(word.getByRole('region', { name: 'Document page 2 of 2' })).toContainText('Second page heading')
 })

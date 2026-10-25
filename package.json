@@ -43,6 +43,8 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
     "@tiptap/vue-3": "^3.31.3",
+    "docx-preview": "0.4.1",
+    "fflate": "0.8.3",
     "firebase": "^12.18.0",
     "mammoth": "^1.12.3",
     "pdfjs-dist": "^6.3.289",
