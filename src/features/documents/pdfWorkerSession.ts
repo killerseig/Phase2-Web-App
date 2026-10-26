@@ -35,7 +35,7 @@ export function createPdfWorkerSession() {
       if (disposal) return disposal
       disposed = true
       for (const task of tasks) void release(task)
-      disposal = Promise.all([...closing]).then(() => { worker.destroy() })
+      disposal = Promise.all(closing).then(() => { worker.destroy() })
       return disposal
     },
   }

@@ -13,7 +13,7 @@ describe('local Word page rendering', () => {
     for (const [name, value] of Object.entries(original)) {
       if (!name.endsWith('.rels')) continue
       const xml = new DOMParser().parseFromString(strFromU8(value), 'text/xml')
-      for (const relation of [...xml.getElementsByTagNameNS('*', 'Relationship')])
+      for (const relation of Array.from(xml.getElementsByTagNameNS('*', 'Relationship')))
         if (relation.getAttribute('TargetMode')?.toLowerCase() === 'external' || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(relation.getAttribute('Target') || '')) relation.remove()
       original[name] = strToU8(new XMLSerializer().serializeToString(xml))
     }
@@ -56,8 +56,21 @@ describe('local Word page rendering', () => {
     expect(strFromU8(parts['word/_rels/document.xml.rels']!)).not.toContain('example.invalid')
     expect(parts['word/media/poster.png']!.length).toBeGreaterThan(0)
   })
+  it('removes consecutive external relationships without skipping live collection entries', () => {
+    const bytes = zipSync({
+      'word/document.xml': strToU8('<document/>'),
+      'word/_rels/document.xml.rels': strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="external-1" TargetMode="External" Target="https://example.invalid/1"/><Relationship Id="external-2" Target="https://example.invalid/2"/><Relationship Id="external-3" TargetMode="External" Target="https://example.invalid/3"/><Relationship Id="image" Target="media/poster.png"/></Relationships>'),
+    })
+    const original = bytes.slice()
+    const prepared = prepareDocx(new Uint8Array(bytes).buffer)
+    const relationships = strFromU8(unzipSync(prepared.bytes)['word/_rels/document.xml.rels']!)
+    expect(relationships).not.toContain('example.invalid')
+    expect(relationships).toContain('media/poster.png')
+    expect(prepared.omittedExternalContent).toBe(true)
+    expect(bytes).toEqual(original)
+  })
   it('rejects corrupt and oversized expanded packages without rendering', async () => {
-    await expect(renderDocxPages(new Uint8Array([1, 2, 3]).buffer)).rejects.toThrow()
+    await expect(renderDocxPages(new Uint8Array([1, 2, 3]).buffer)).rejects.toThrow(/zip|invalid/i)
     const file = new Uint8Array(fixture('docx-empty.docx')), view = new DataView(file.buffer)
     for (let offset = 0; offset < file.length - 28; offset++) {
       if (view.getUint32(offset, true) === 0x02014b50) { view.setUint32(offset + 24, 65 * 1024 * 1024, true); break }

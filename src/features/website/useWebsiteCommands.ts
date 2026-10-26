@@ -1,6 +1,6 @@
 import { nextTick, type Ref } from 'vue'
 import { websiteCommand, websiteError } from '@/services/website'
-import { withWebsiteDefaults, type WebsiteSite, type WebsiteState } from './types'
+import { withWebsiteDefaults, type WebsiteSite } from './types'
 import type { useWebsiteAutosave } from './useWebsiteAutosave'
 import type { useWebsiteHistory } from './useWebsiteHistory'
 

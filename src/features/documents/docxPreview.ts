@@ -24,7 +24,8 @@ export function prepareDocx(bytes: ArrayBuffer) {
     const xml = new DOMParser().parseFromString(strFromU8(data), 'application/xml')
     if (xml.querySelector('parsererror')) throw new Error('The document contains unreadable relationships.')
     let changed = false
-    for (const relation of [...xml.getElementsByTagNameNS('*', 'Relationship')]) {
+    // Relationship/attribute collections are live: snapshot before removing entries.
+    for (const relation of Array.from(xml.getElementsByTagNameNS('*', 'Relationship'))) {
       const target = relation.getAttribute('Target') || ''
       if (relation.getAttribute('TargetMode')?.toLowerCase() === 'external' || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(target)) {
         relation.remove(); omittedExternalContent = true; changed = true
@@ -50,7 +51,7 @@ export async function renderDocxPages(bytes: ArrayBuffer): Promise<DocxPages> {
   // Defense in depth: document content lives only in a scriptless sandbox below.
   for (const element of body.querySelectorAll('script,iframe,object,embed,form,input,button,link,meta,base,foreignObject')) element.remove()
   for (const element of body.querySelectorAll('*')) {
-    for (const attribute of [...element.attributes]) {
+    for (const attribute of Array.from(element.attributes)) {
       if (/^on/i.test(attribute.name) || ['href', 'xlink:href', 'target', 'ping', 'srcset', 'action', 'formaction'].includes(attribute.name.toLowerCase())) element.removeAttribute(attribute.name)
     }
     if (element instanceof HTMLImageElement && !/^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);base64,/i.test(element.getAttribute('src') || '')) element.remove()

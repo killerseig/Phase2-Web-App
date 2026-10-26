@@ -35,10 +35,6 @@ async function setup(page: Page, reader = false, denied = false, path = '/compan
   await gotoPhase2App(page, path, reader ? createJobDashboardFixture() : createJobsFixture())
   return actions
 }
-async function openNavigation(page: Page) {
-  const toggle = page.getByRole('button', { name: 'Open navigation', exact: true })
-  if (await toggle.isVisible()) { await toggle.focus(); await page.keyboard.press('Enter') }
-}
 async function openBuilderFormsPanel(page: Page, width: number) {
   if (width <= 900) await page.getByRole('navigation', { name: 'Builder panels' }).getByRole('button', { name: 'Forms', exact: true }).click()
 }

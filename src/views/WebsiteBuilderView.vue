@@ -461,7 +461,7 @@ function setDesign(
         device.value === 'desktop'
           ? section.value.appearance?.rotation
           : section.value.devices?.[device.value]?.appearance?.rotation
-      const next = { ...((value as WidgetAppearance) || {}) }
+      const next = { ...(value as WidgetAppearance) }
       if (rotation === undefined) delete next.rotation
       else next.rotation = rotation
       value = Object.keys(next).length ? next : undefined
