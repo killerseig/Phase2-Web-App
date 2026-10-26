@@ -15,7 +15,7 @@ import FormSelectorList from '@/components/forms/FormSelectorList.vue'
 import BuilderEditingTools from '@/components/builder/BuilderEditingTools.vue'
 import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
 import BuilderSettingsTabs from '@/components/builder/BuilderSettingsTabs.vue'
-import { formOutputIssues } from '../../functions/src/formOutputTemplate'
+import { useFormPersistence } from '@/features/forms/useFormPersistence'
 import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
 import {
   clone,
@@ -25,7 +25,6 @@ import {
   emptyLibrary,
   fieldKinds,
   optionFieldKinds,
-  keepVersion,
   moveField,
   moveGroupField,
   newField,
@@ -39,7 +38,7 @@ import { useFormAuthoring } from '@/features/forms/useFormAuthoring'
 import { reportingStarter, type ReportingStarter } from '@/features/forms/reportingStarters'
 import { committeeFieldsToRemove, applyApprovedCommitteeCorrections } from '@/features/forms/committeeCorrection'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
-import { readLibrary, saveLibrary } from '@/features/forms/localLibrary'
+import { readLibrary } from '@/features/forms/localLibrary'
 import { usePrivateReferences } from '@/features/intranet/usePrivateReferences'
 import { suppliedReportStarter, suppliedStarterDecision } from '@/features/forms/suppliedStarters'
 import type { IntranetForm } from '@/features/intranet/content'
@@ -78,106 +77,11 @@ function openPublishing() {
 const settingsTab = ref<'form' | 'field' | 'output'>('field')
 const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
 const auth = useAuthStore()
+const uid = computed(() => auth.currentUser?.uid || '')
 const { content: suppliedContent, packages: sourcePackages, selectedPackage: sourcePackage, loading: sourcesLoading, error: sourcesError, notice: sourceNotice, selectSource, reload: reloadSources, cancel: cancelSource } = usePrivateReferences(() => auth.rawRole === 'admin')
 const suppliedStarters = computed(() => suppliedContent.value?.forms.filter(form => !suppliedStarterDecision(form)) ?? [])
-const serverEnabled = isFormServerEnabled(),
-  serverTemplates = ref<ServerFormTemplate[]>([]),
-  serverBusy = ref(false)
-const serverAvailable = ref(false)
-const publishPhase = ref<'' | 'confirming' | 'saving' | 'publishing'>('')
-const legacyImportId = ref(''),
-  legacyError = ref('')
-async function loadServer() {
-  if (!serverEnabled || !uid.value) return
-  const owner = uid.value
-  try {
-    const result = await formApi<{ templates: ServerFormTemplate[] }>('formTemplates', {
-      action: 'list',
-    })
-    if (uid.value === owner) {
-      serverTemplates.value = result.templates
-      serverAvailable.value = true
-    }
-  } catch (caught) {
-    if (uid.value === owner) {
-      serverAvailable.value = false
-      error.value = (caught as Error).message
-    }
-  }
-}
-async function saveServer(): Promise<ServerFormTemplate | undefined> {
-  if (!draft.value || serverBusy.value || !serverAvailable.value) return
-  const owner = uid.value,
-    submitted = JSON.stringify(draft.value)
-  serverBusy.value = true
-  try {
-    const existing = serverTemplates.value.find((item) => item.id === draft.value!.id)
-    const definition = clone(draft.value)
-    const result = await formApi<ServerFormTemplate>('formTemplates', {
-      action: 'save',
-      id: definition.id,
-      revision: existing?.revision || 0,
-      definition,
-    })
-    if (uid.value !== owner) return
-    await loadServer()
-    if (JSON.stringify(draft.value) === submitted) authoring.saved()
-    message.value = localPreview ? 'Draft saved to the local server.' : 'Draft saved.'
-    if (serverAvailable.value) error.value = ''
-    return result
-  } catch (caught) {
-    error.value = (caught as Error).message
-  } finally {
-    serverBusy.value = false
-  }
-}
-async function issueServer() {
-  if (serverBusy.value || publishPhase.value || !draft.value || localPreview || draft.value.archived || !serverAvailable.value) return
-  message.value = ''
-  const issues = [...definitionErrors(draft.value), ...formOutputIssues(draft.value).filter(issue => issue.severity === 'error').map(issue => issue.message)]
-  if (issues.length) {
-    error.value = issues.join(' ')
-    settingsTab.value = 'output'
-    return
-  }
-  const owner = uid.value, id = draft.value.id, submitted = JSON.stringify(draft.value)
-  const stillCurrent = () => uid.value === owner && draft.value?.id === id && JSON.stringify(draft.value) === submitted
-  publishPhase.value = 'confirming'
-  try {
-    if (!(await confirmation.value?.ask({
-      title: 'Publish this form?',
-      message:
-        'Save this draft and publish it as an immutable version. New respondents use this version; completed entries retain their original questions and answers.',
-      confirmLabel: 'Save and publish',
-    }))) return
-    if (!stillCurrent()) {
-      error.value = 'The draft or signed-in account changed. Review it before publishing again.'
-      return
-    }
-    publishPhase.value = 'saving'
-    const saved = await saveServer()
-    if (!saved) return
-    if (!stillCurrent() || saved.id !== id) {
-      error.value = 'The draft changed during saving. Review it before publishing again.'
-      return
-    }
-    publishPhase.value = 'publishing'
-    serverBusy.value = true
-    await formApi('formTemplates', { action: 'issue', id: saved.id, revision: saved.revision })
-    if (uid.value !== owner) return
-    await loadServer()
-    message.value = 'Draft saved and immutable form version published.'
-    if (serverAvailable.value) error.value = ''
-  } catch (caught) {
-    if (uid.value === owner) {
-      message.value = ''
-      error.value = (publishPhase.value === 'publishing' ? 'Draft saved, but publication failed: ' : '') + (caught as Error).message
-    }
-  } finally {
-    serverBusy.value = false
-    publishPhase.value = ''
-  }
-}
+const serverEnabled = isFormServerEnabled()
+const legacyImportId = ref(''), legacyError = ref('')
 async function removeServer(template: ServerFormTemplate) {
   const owner = uid.value
   if (
@@ -224,6 +128,17 @@ const library = ref(emptyLibrary()),
   dirty = ref(false)
 const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const authoring = useFormAuthoring(draft, dirty)
+const persistence = useFormPersistence({
+  uid, draft, library, dirty, blocked, message, error, authoring, serverEnabled, localPreview,
+  storage: () => localStorage,
+  confirmPublish: async () => confirmation.value?.ask({
+    title: 'Publish this form?',
+    message: 'Save this draft and publish it as an immutable version. New respondents use this version; completed entries retain their original questions and answers.',
+    confirmLabel: 'Save and publish',
+  }),
+  showPublicationIssues: () => { settingsTab.value = 'output' },
+})
+const { serverTemplates, serverBusy, serverAvailable, publishPhase, loadServer, saveServer, issueServer, persist, save } = persistence
 const { selection, canUndo, canRedo } = authoring
 const starterSelection = ref('')
 const selectedServerForm = computed(() => serverEnabled ? serverTemplates.value.find(item => item.id === draft.value?.id) : undefined)
@@ -375,16 +290,8 @@ async function duplicateServer(template: ServerFormTemplate) {
 }
 
 async function importDeviceDraft() {
-  if (!serverAvailable.value || serverBusy.value || dirty.value) return
-  const source = library.value.templates.find(
-    (item) => item.id === legacyImportId.value && !item.archived,
-  )
-  if (!source) return
-  draft.value = duplicateTemplate(source)
-  authoring.reset(true)
-  await saveServer()
+  await persistence.importDeviceDraft(legacyImportId.value)
 }
-const uid = computed(() => auth.currentUser?.uid || '')
 const recipientText = computed({
   get: () => draft.value?.recipients.join(', ') || '',
   set: (value) => {
@@ -431,17 +338,6 @@ watch(
   },
   { immediate: true },
 )
-function persist(next = library.value) {
-  try {
-    library.value = saveLibrary(localStorage, uid.value, next)
-    error.value = ''
-    message.value = 'Saved on this device.'
-    return true
-  } catch (caught) {
-    error.value = (caught as Error).message
-    return false
-  }
-}
 async function select(template: FormTemplate) {
   const owner = uid.value
   if (
@@ -497,25 +393,6 @@ async function create(audit: boolean | ReportingStarter | IntranetForm = false) 
     await nextTick()
     settingsTab.value = 'form'
     message.value = 'Prepared an unsaved Admin-only draft. Review fields, audience and delivery before saving or publishing. No notification was sent.'
-  }
-}
-function save(version = false) {
-  if (!draft.value || blocked.value || !uid.value) return
-  let saved: FormTemplate
-  try {
-    saved = version ? keepVersion(draft.value) : clone(draft.value)
-  } catch (caught) {
-    error.value = (caught as Error).message
-    return
-  }
-  const next = clone(library.value)
-  const index = next.templates.findIndex((template) => template.id === saved.id)
-  if (index < 0) next.templates.push(saved)
-  else next.templates[index] = saved
-  if (persist(next)) {
-    draft.value = clone(saved)
-    authoring.saved()
-    dirty.value = false
   }
 }
 async function remove(template: FormTemplate) {
