@@ -12,6 +12,9 @@ export default defineConfig({
   cacheDir: '.forms-local-data/vite-cache',
   build: { rolldownOptions: { input: { index: fileURLToPath(new URL('./index.html', import.meta.url)), publicSite: fileURLToPath(new URL('./public-site.html', import.meta.url)), websiteRuntime: fileURLToPath(new URL('./website-runtime.html', import.meta.url)) } } },
   server: {
+    // Rapid editor/formatter saves can land inside the watcher's change-event
+    // throttle. Emit a stable final write rather than leaving stale template/CSS.
+    watch: { awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 20 } },
     fs: { allow: [fileURLToPath(new URL('.', import.meta.url)), realpathSync(fileURLToPath(new URL('./node_modules', import.meta.url)))] },
     cors: { origin: ['null', /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/] },
     proxy: {

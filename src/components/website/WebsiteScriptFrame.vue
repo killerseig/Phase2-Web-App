@@ -37,6 +37,13 @@ const allowedForms = computed(
     ),
 )
 const pending = new Set<string>()
+function resetFrame() {
+  ready.value = false
+  token.value = crypto.randomUUID()
+  revision.value++
+  error.value = ''
+  pending.clear()
+}
 function publicDraft() {
   const site = JSON.parse(JSON.stringify(props.site)) as WebsiteSite
   delete site.savedSections
@@ -185,15 +192,20 @@ async function receive(event: MessageEvent) {
 // Replacing the entire frame stops old listeners, timers and scripts on page/draft changes.
 watch(
   () => [props.site, props.pageId],
-  () => {
-    ready.value = false
-    token.value = crypto.randomUUID()
-    revision.value++
-    error.value = ''
-    pending.clear()
-  },
+  resetFrame,
   { deep: true },
 )
+// The isolated document deliberately cannot open a WebSocket. Let its parent
+// receive Vite updates and recreate only the preview, preserving the authoring
+// draft and keeping the iframe's CSP/sandbox and production behavior unchanged.
+if (import.meta.env.DEV && import.meta.hot) {
+  const hot = import.meta.hot
+  const refreshPreview = ({ updates }: { updates: { path: string }[] }) => {
+    if (updates.some(({ path }) => /^\/(?:src\/(?:components\/(?:website|common)\/|features\/website\/|websiteRuntime\.ts|styles\/)|functions\/src\/website)/.test(path))) resetFrame()
+  }
+  onMounted(() => hot.on('vite:afterUpdate', refreshPreview))
+  onBeforeUnmount(() => hot.off('vite:afterUpdate', refreshPreview))
+}
 onMounted(() => {
   window.addEventListener('message', receive)
   // A prerendered frame may have sent its ready event before hydration installed this listener.

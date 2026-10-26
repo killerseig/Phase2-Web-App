@@ -73,6 +73,8 @@ Run this in the canonical checkout and use the local URL printed by Vite. Vite m
 
 `npm run test:hmr` starts an isolated `npm run dev` server with synthetic data, checks repeated template/CSS edits and WebSocket delivery, verifies an unsaved dashboard edit survives individual updates, then restores the files. Run it when nobody is editing `SharedDashboardView.vue` or `shared-dashboards.css`; it does not reuse the operator's preview server. It does not guarantee component state retention for batched multi-file updates.
 
+Development watching waits for a short stable write so rapid editor/formatter saves do not lose the final CSS/template update. The sandboxed website code preview receives relevant HMR refreshes through its parent; its `connect-src 'none'` policy stays intact, and that bridge is excluded from production. The opt-in HMR check also exercises/restores the Form Builder, form preview and WebsiteCanvas source files, including iframe listener cleanup and draft/answer retention. Do not run it concurrently with edits to those files.
+
 ### Type-Check, Compile and Minify for Production
 
 ```sh
