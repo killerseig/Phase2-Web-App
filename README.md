@@ -180,8 +180,12 @@ npm run test:e2e -- tests/example.spec.ts
 npm run test:e2e -- --debug
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+### Check or fix lint
+
+`npm run lint` (or `npm run lint:check`) checks with Oxlint and ESLint without changing source files. Use `npm run lint:fix` explicitly to apply automatic fixes. Verification callers should use the check commands; generated lint caches remain ignored.
 
 ```sh
-npm run lint
+npm run lint:check
+# Apply fixes only when intended:
+npm run lint:fix
 ```
