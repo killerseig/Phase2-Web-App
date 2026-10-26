@@ -4,6 +4,7 @@ import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import { SDS_MASTER_CAPACITY, checkImportBytes, importPath, validateImportIndex } from './sdsIntake'
 import { getApp } from 'firebase-admin/app'
 import { pipeline } from 'node:stream/promises'
+import { byteRange } from './httpByteRange'
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
 import {
   DOCUMENT_MIME,
@@ -140,9 +141,21 @@ export const downloadSdsFile = onRequest(
       const [metadata] = await file.getMetadata()
       const extension = documentExtension(record.extension ?? 'pdf')
       const filename = record.originalName || `${record.filename}.${extension}`
+      const size = Number(metadata.size)
+      if (!Number.isSafeInteger(size) || size < 0) throw new Error('Invalid file size')
+      // Ticket expiry and active user/job access are checked on every request.
+      // Without an emitted validator, If-Range conservatively falls back to 200.
+      const range = byteRange(request.method === 'GET' && !request.headers['if-range'] ? request.headers.range : undefined, size)
       response
         .set('Content-Type', DOCUMENT_MIME[extension])
-        .set('Content-Length', String(metadata.size))
+        .set('Accept-Ranges', 'bytes')
+        .set('Content-Length', String(range.length))
+      if (range.status === 416) {
+        response.status(416).set('Content-Range', `bytes */${size}`).end()
+        return
+      }
+      if (range.status === 206)
+        response.status(206).set('Content-Range', `bytes ${range.start}-${range.end}/${size}`)
       response.set(
         'Content-Disposition',
         `${record.download || ['docx', 'xlsx'].includes(extension) ? 'attachment' : 'inline'}; filename="${filename.replace(/[^a-zA-Z0-9 ._-]/g, '_').slice(0, 180)}"`,
@@ -151,7 +164,7 @@ export const downloadSdsFile = onRequest(
         response.end()
         return
       }
-      await pipeline(file.createReadStream(), response)
+      await pipeline(file.createReadStream(range.status === 206 ? { start: range.start, end: range.end } : {}), response)
     } catch {
       if (!response.headersSent && !response.destroyed)
         response
@@ -478,7 +491,7 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
     }
     const revision = await sheetsRef.doc(id).collection('revisions').doc(revisionId).get()
     if (!revision.exists) throw new HttpsError('not-found', 'PDF revision is unavailable.')
-    return fileUrl(
+    const link = await fileUrl(
       user,
       jobId,
       revision.data()!.filePath,
@@ -486,6 +499,7 @@ export const sdsWorkspace = onCall({ timeoutSeconds: 120, memory: '512MiB' }, as
       data.download === true,
       revision.data()!,
     )
+    return { ...link, revisionId }
   }
 
   if (action === 'requestExport') {

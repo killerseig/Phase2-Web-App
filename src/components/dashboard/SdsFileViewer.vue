@@ -18,37 +18,42 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ open: [download: boolean] }>()
 const url = ref('')
+const cacheKey = ref('')
 const extension = ref('pdf')
 const loading = ref(false)
 const error = ref('')
 const retry = ref(0)
+function reloadPreview() { session.cache.clear(); retry.value++ }
 watch(
   () => [props.sheet?.id, props.sheet?.revisionId, props.jobId, props.version, retry.value],
   async (_, __, cleanup) => {
+    const accessContext = session.cache.generation
     let active = true
     cleanup(() => {
       active = false
     })
     url.value = ''
+    cacheKey.value = ''
     extension.value = props.sheet?.extension ?? 'pdf'
     error.value = ''
     loading.value = !!props.sheet
-    if (!props.sheet) return
+    if (!props.sheet || !session.isCurrent(accessContext)) { loading.value = false; return }
     // Only public renderer code/worker startup overlaps authorization. The
     // private file is still requested only after openSheet succeeds.
     void session.prepare(extension.value).catch(() => undefined)
     try {
-      const result = await sdsCommand<{ url: string; extension?: string }>('openSheet', {
+      const result = await sdsCommand<{ url: string; extension?: string; revisionId?: string }>('openSheet', {
         id: props.sheet.id,
         jobId: props.jobId,
         download: false,
       })
-      if (active) {
+      if (active && session.isCurrent(accessContext)) {
+        cacheKey.value = session.cache.authorize(props.sheet.id, result.revisionId)
         url.value = result.url
         extension.value = result.extension ?? props.sheet.extension ?? 'pdf'
       }
     } catch (e) {
-      if (active) error.value = sdsErrorMessage(e)
+      if (active && session.isCurrent(accessContext)) { session.cache.clear(); error.value = sdsErrorMessage(e) }
     } finally {
       if (active) loading.value = false
     }
@@ -74,7 +79,7 @@ watch(
         aria-label="Reload preview"
         title="Reload preview"
         :disabled="loading"
-        @click="retry++"
+        @click="reloadPreview"
       >
         <i class="pi pi-refresh" aria-hidden="true" />
       </button>
@@ -104,15 +109,16 @@ watch(
     <p v-if="loading" class="viewer-state" role="status">Loading preview…</p>
     <div v-else-if="error" class="viewer-state" role="alert">
       <p>{{ error }}</p>
-      <button type="button" @click="retry++">Retry preview</button>
+      <button type="button" @click="reloadPreview">Retry preview</button>
     </div>
-    <PdfCanvasViewer v-else-if="url && extension === 'pdf'" :key="url" :url="url" />
+    <PdfCanvasViewer v-else-if="url && extension === 'pdf'" :key="url" :url="url" :cache-key="cacheKey" />
     <FileContentViewer
       v-else-if="url"
       :key="url"
       :url="url"
       :extension="extension"
       :name="sheet.name"
+      :cache-key="cacheKey"
     />
   </template>
   <div v-else class="viewer-state viewer-placeholder">

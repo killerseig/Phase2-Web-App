@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, inject, ref, shallowRef, watch } from 'vue'
 import { previewFileUrl, type FilePreview } from '@/features/documents/formats'
-import { loadDocxViewer } from '@/features/documents/viewerSession'
-const props = defineProps<{ url: string; extension: string; name: string }>()
+import { loadDocxViewer, viewerSessionKey } from '@/features/documents/viewerSession'
+const props = defineProps<{ url: string; extension: string; name: string; cacheKey?: string }>()
+const session = inject(viewerSessionKey, undefined)
 const imageUrl = ref('')
 const preview = ref<FilePreview>()
 const loading = ref(true)
@@ -17,6 +18,7 @@ const table = computed(() =>
 watch(
   () => [props.url, props.extension],
   async (_, __, cleanup) => {
+    const cacheGeneration = session?.cache.generation ?? -1, key = props.cacheKey || ''
     let active = true,
       objectUrl = ''
     let worker: Worker | undefined
@@ -44,19 +46,21 @@ watch(
       }
     }, 20000)
     try {
-      const response = await fetch(previewFileUrl(props.url), {
+      const cached = session?.cache.read(key)
+      const response = cached ? undefined : await fetch(previewFileUrl(props.url), {
         signal: controller.signal,
         cache: 'no-store',
       })
-      if (!response.ok) throw new Error('File unavailable')
-      if (/text\/html/i.test(response.headers.get('Content-Type') || '')) throw new Error('The file request returned a web page instead of a document')
-      const bytes = await response.arrayBuffer()
-      if (!active) return
+      if (response && !response.ok) throw new Error('File unavailable')
+      if (response && /text\/html/i.test(response.headers.get('Content-Type') || '')) throw new Error('The file request returned a web page instead of a document')
+      const bytes = cached?.buffer ?? await response!.arrayBuffer()
+      if (!active || (session && !session.isCurrent(cacheGeneration))) return
       if (bytes.byteLength > 20 * 1024 * 1024) throw new Error('File too large')
+      if (!cached) session?.cache.put(key, bytes, cacheGeneration)
       if (['jpg', 'jpeg', 'png', 'webp'].includes(props.extension)) {
         objectUrl = URL.createObjectURL(
           new Blob([bytes], {
-            type: response.headers.get('Content-Type') ?? 'application/octet-stream',
+            type: response?.headers.get('Content-Type') ?? ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[props.extension] || 'application/octet-stream'),
           }),
         )
         imageUrl.value = objectUrl

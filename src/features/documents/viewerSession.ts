@@ -1,11 +1,13 @@
 import type { InjectionKey } from 'vue'
 import type { PdfWorkerSession } from './pdfWorkerSession'
+import { createDocumentCache } from './documentCache'
 
 export const loadPdfViewer = () => import('../../components/dashboard/PdfCanvasViewer.vue')
 export const loadFileViewer = () => import('../../components/dashboard/FileContentViewer.vue')
 export const loadDocxViewer = () => import('../../components/dashboard/DocxDocumentViewer.vue')
 
 export function createViewerSession() {
+  const cache = createDocumentCache()
   let generation = 0
   let disposed = false
   let enabled = true
@@ -35,6 +37,7 @@ export function createViewerSession() {
     return runtime
   }
   function reset(active = true) {
+    cache.clear()
     enabled = active
     generation++
     const previous = runtime
@@ -44,6 +47,8 @@ export function createViewerSession() {
     void previous?.then(session => session.dispose()).catch(() => undefined)
   }
   return {
+    cache,
+    isCurrent: (context: number) => !disposed && enabled && cache.generation === context,
     pdf,
     async prepare(extension: string) {
       if (disposed || !enabled) throw new Error('Document workspace closed')

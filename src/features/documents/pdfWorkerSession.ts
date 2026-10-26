@@ -24,9 +24,9 @@ export function createPdfWorkerSession() {
   }
   return {
     ready,
-    async open(url: string) {
+    async open(url: string, data?: Uint8Array<ArrayBuffer>) {
       await ready()
-      const task = getDocument({ worker, url: previewFileUrl(url), cMapUrl: '/sds-pdf-assets/cmaps/', cMapPacked: true, standardFontDataUrl: '/sds-pdf-assets/standard_fonts/', wasmUrl: '/sds-pdf-assets/wasm/' })
+      const task = getDocument({ worker, ...(data ? { data } : { url: previewFileUrl(url), disableAutoFetch: true, disableStream: true }), cMapUrl: '/sds-pdf-assets/cmaps/', cMapPacked: true, standardFontDataUrl: '/sds-pdf-assets/standard_fonts/', wasmUrl: '/sds-pdf-assets/wasm/' })
       tasks.add(task)
       return task
     },

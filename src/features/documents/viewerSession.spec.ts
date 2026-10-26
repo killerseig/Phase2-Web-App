@@ -24,12 +24,19 @@ describe('document viewer workspace lifetime', () => {
     await preparing
     expect(await session.pdf()).toBe(runtime)
     expect(fake.create).toHaveBeenCalledOnce()
+    const cacheKey = session.cache.authorize('private', 'revision-1')
+    session.cache.put(cacheKey, new Uint8Array([1]), session.cache.generation)
+    const previousContext = session.cache.generation
+    expect(session.isCurrent(previousContext)).toBe(true)
     session.reset(false)
+    expect(session.isCurrent(previousContext)).toBe(false)
+    expect(session.cache.size).toBe(0)
     expect(runtime.dispose).toHaveBeenCalled()
     await expect(session.prepare('pdf')).rejects.toThrow('closed')
     await expect(session.pdf()).rejects.toThrow('closed')
     expect(fake.create).toHaveBeenCalledOnce()
     session.reset(true)
+    expect(session.isCurrent(previousContext)).toBe(false)
     const next = { ready: vi.fn().mockResolvedValue(undefined), dispose: vi.fn().mockResolvedValue(undefined) }
     fake.create.mockReturnValue(next)
     expect(await session.pdf()).toBe(next)

@@ -2,6 +2,9 @@ import { expect, test, type Page } from './helpers/test.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 import { mockDashboard } from './helpers/dashboardFixture.js'
 import { sampleContent } from '../src/features/intranet/__tests__/fixtures.js'
+import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 
 async function openMobileNavigation(page: Page, width: number) {
   if (width < 600) await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
@@ -205,15 +208,19 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
     }
   })
   const files = [{ id: 'book', name: 'Long SDS book', fixture: 'sds-book-387.pdf' }, { id: 'short', name: 'Short PDF', fixture: 'sds-preview.pdf' }]
+  const downloads: Record<string, number> = {}, authorizations: string[] = []
   await page.route('**/sds-file?*', route => {
-    const file = files.find(file => file.id === new URL(route.request().url()).searchParams.get('ticket'))!
+    const id = new URL(route.request().url()).searchParams.get('ticket')!.split('_')[0]
+    const file = files.find(file => file.id === id)!
+    downloads[id!] = (downloads[id!] || 0) + 1
     return route.fulfill({ path: `e2e/fixtures/${file.fixture}`, contentType: 'application/pdf' })
   })
   await page.route('**/sdsWorkspace', async route => {
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
     const data = route.request().postDataJSON().data
-    const result = data.action === 'openSheet' ? { url: `https://example.invalid/file?ticket=${data.id}`, extension: 'pdf' } : {
+    if (data.action === 'openSheet') authorizations.push(data.id)
+    const result = data.action === 'openSheet' ? { url: `https://example.invalid/file?ticket=${data.id}_${authorizations.length}`, extension: 'pdf', revisionId: 'r1' } : {
       version: 1, folders: [], binder: { version: 0, selections: [] }, after: '',
       sheets: files.map(file => ({ ...file, extension: 'pdf', folderId: '', revisionId: 'r1', archived: false })),
     }
@@ -267,6 +274,8 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
   const stats = () => page.evaluate(() => (window as unknown as { pdfWorkerStats: { started: number; terminated: number } }).pdfWorkerStats)
   expect(await stats()).toEqual({ started: 1, terminated: 0 })
+  expect(authorizations).toEqual(['book', 'short', 'book'])
+  expect(downloads.book).toBe(1)
   expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
   await openMobileNavigation(page, width)
   await page.getByRole('link', { name: 'Jobs', exact: true }).first().click()
@@ -275,6 +284,7 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await page.getByRole('button', { name: 'Long SDS book', exact: true }).click()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
   expect(await stats()).toEqual({ started: 2, terminated: 1 })
+  expect(downloads.book).toBe(2)
   await openMobileNavigation(page, width)
   await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)
@@ -308,6 +318,122 @@ test('preloads PDF worker during authorization without requesting private bytes 
   authorize()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
   expect(downloads).toBe(1)
+})
+
+test('cached Word and image previews reauthorize, invalidate revisions and discard denied bytes', async ({ page }) => {
+  let revision = 'r1', allowed = true, wordDownloads = 0, wordAuthorizations = 0
+  const files = [{ id: 'word', name: 'Revisioned Word', extension: 'docx' }, { id: 'photo', name: 'Revisioned photo', extension: 'png' }]
+  await page.route('**/sds-file?*', route => {
+    const word = new URL(route.request().url()).searchParams.get('ticket')!.startsWith('word')
+    if (word) wordDownloads++
+    return route.fulfill({ path: word ? 'e2e/fixtures/docx-pages.docx' : 'e2e/fixtures/site.png', contentType: word ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'image/png' })
+  })
+  await page.route('**/sdsWorkspace', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    const data = route.request().postDataJSON().data
+    if (data.action === 'openSheet' && !allowed) return route.fulfill({ status: 403, headers, json: { error: { status: 'PERMISSION_DENIED', message: 'Your access has changed.' } } })
+    if (data.action === 'openSheet' && data.id === 'word') wordAuthorizations++
+    return route.fulfill({ headers, json: { result: data.action === 'openSheet' ? { url: `https://example.invalid/file?ticket=${data.id}_${wordAuthorizations}`, extension: files.find(file => file.id === data.id)!.extension, revisionId: revision } : {
+      version: 1, folders: [], binder: { version: 0, selections: [] }, after: '', sheets: files.map(file => ({ ...file, folderId: '', revisionId: revision, archived: false })),
+    } } })
+  })
+  await mockDashboard(page); await gotoPhase2App(page, '/company-library', createJobsFixture())
+  const word = page.frameLocator('iframe.docx-pages')
+  const openWord = async () => {
+    await page.getByRole('button', { name: 'Revisioned Word', exact: true }).click()
+    await expect(word.getByRole('region', { name: 'Document page 2 of 2' })).toContainText('Second page heading')
+  }
+  const openPhoto = async () => {
+    await page.getByRole('button', { name: 'Revisioned photo', exact: true }).click()
+    await expect(page.getByRole('img', { name: 'Revisioned photo' })).toBeVisible()
+  }
+  await openWord(); await openPhoto(); await openWord()
+  expect(wordAuthorizations).toBe(2); expect(wordDownloads).toBe(1)
+  await page.getByRole('button', { name: 'Reload preview', exact: true }).click()
+  await expect(word.getByRole('region', { name: 'Document page 2 of 2' })).toBeVisible()
+  expect(wordDownloads).toBe(2)
+  revision = 'r2'; await openPhoto(); await openWord()
+  expect(wordDownloads).toBe(3)
+  allowed = false
+  await page.getByRole('button', { name: 'Reload preview', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('access has changed')
+  await expect(page.locator('iframe.docx-pages')).toHaveCount(0)
+  expect(wordDownloads).toBe(3)
+  allowed = true
+  await page.getByRole('button', { name: 'Reload preview', exact: true }).click()
+  await expect(word.getByRole('region', { name: 'Document page 2 of 2' })).toBeVisible()
+  expect(wordDownloads).toBe(4)
+})
+
+test('large PDFs use bounded authenticated ranges and retain full-download fallback', async ({ page }) => {
+  const requireFunctions = createRequire(new URL('../functions/package.json', import.meta.url))
+  const { PDFDocument, PDFName } = requireFunctions('pdf-lib')
+  const { byteRange } = requireFunctions('./httpByteRange.js')
+  const document = await PDFDocument.load(readFileSync('e2e/fixtures/sds-book-387.pdf'))
+  // A valid unused embedded stream represents bytes not needed for page one.
+  const padding = document.context.register(document.context.stream(new Uint8Array(4 * 1024 * 1024).fill(46)))
+  document.catalog.set(PDFName.of('SyntheticLaterContent'), padding)
+  const large = Buffer.from(await document.save({ useObjectStreams: false }))
+  const small = readFileSync('e2e/fixtures/sds-preview.pdf')
+  const transferred: Record<string, number> = {}, ranges: string[] = []
+  const server = createServer((request, response) => {
+    const id = new URL(request.url!, 'http://localhost').searchParams.get('ticket')!
+    const bytes = id === 'warmup' ? small : large
+    const part = byteRange(id === 'partial' ? request.headers.range : undefined, bytes.length)
+    response.setHeader('Content-Type', 'application/pdf')
+    response.setHeader('Cache-Control', 'private, no-store')
+    response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5196')
+    response.setHeader('Access-Control-Expose-Headers', 'Accept-Ranges, Content-Length, Content-Range')
+    if (id === 'partial') response.setHeader('Accept-Ranges', 'bytes')
+    response.statusCode = part.status
+    response.setHeader('Content-Length', part.length)
+    if (part.status === 206) { response.setHeader('Content-Range', `bytes ${part.start}-${part.end}/${bytes.length}`); ranges.push(request.headers.range!) }
+    let position = part.start
+    const send = () => {
+      if (response.destroyed) return
+      const end = Math.min(position + 64 * 1024, part.end + 1)
+      response.write(bytes.subarray(position, end))
+      transferred[id] = (transferred[id] || 0) + end - position; position = end
+      if (position > part.end) response.end()
+      else setTimeout(send, 5)
+    }
+    send()
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address() as { port: number }
+  try {
+    await page.route('**/sds-file?*', route => route.continue({ url: `http://127.0.0.1:${address.port}/?${new URL(route.request().url()).searchParams}` }))
+    await page.route('**/sdsWorkspace', async route => {
+      const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+      if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+      const data = route.request().postDataJSON().data
+      return route.fulfill({ headers, json: { result: data.action === 'openSheet' ? { url: `https://example.invalid/file?ticket=${data.id}`, extension: 'pdf' } : {
+        version: 1, folders: [], binder: { version: 0, selections: [] }, after: '', sheets: ['warmup', 'full', 'partial'].map(id => ({ id, name: id, extension: 'pdf', folderId: '', revisionId: 'r1', archived: false })),
+      } } })
+    })
+    await mockDashboard(page); await gotoPhase2App(page, '/company-library', createJobsFixture())
+    await page.getByRole('button', { name: 'warmup', exact: true }).click()
+    await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+    const timings: Record<string, number> = {}
+    for (const id of ['full', 'partial']) {
+      const start = performance.now()
+      await page.getByRole('button', { name: id, exact: true }).click()
+      await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+      timings[id] = Math.round(performance.now() - start)
+    }
+    expect(ranges.length).toBeGreaterThan(0)
+    expect(transferred.partial!).toBeLessThan(large.length / 2)
+    expect(transferred.full).toBe(large.length)
+    expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
+    test.info().annotations.push({ type: 'synthetic-range-measurement', description: JSON.stringify({ fileBytes: large.length, transferredAtFirstPage: { ...transferred }, timingsMs: timings, conditions: '64KiB chunks every 5ms, warmed worker, local fixture; not production latency' }) })
+    const number = page.getByRole('spinbutton', { name: 'PDF page', exact: true })
+    await number.fill('387'); await number.press('Tab')
+    await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toBeVisible()
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  }
 })
 
 test('real library folders and cross-category search remain reachable without category shortcuts', async ({ page }) => {

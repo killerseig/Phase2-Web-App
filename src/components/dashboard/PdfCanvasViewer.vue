@@ -7,7 +7,7 @@ import PdfPageCanvas from './PdfPageCanvas.vue'
 const inheritedSession = inject(viewerSessionKey, undefined)
 const session = inheritedSession ?? createViewerSession()
 onBeforeUnmount(() => { if (!inheritedSession) session.dispose() })
-const props = defineProps<{ url: string }>()
+const props = defineProps<{ url: string; cacheKey?: string }>()
 const pdf = shallowRef<PDFDocumentProxy>(), pageNumber = ref(1), zoom = ref(1)
 const loading = ref(true), error = ref(''), surface = ref<HTMLElement>()
 const width = ref(300), viewportHeight = ref(600), scrollTop = ref(0), firstRatio = ref(792 / 612)
@@ -68,6 +68,7 @@ function measure(number: number, ratio: number) {
   }
 }
 watch(() => props.url, async (url, _, cleanup) => {
+  const cacheGeneration = session.cache.generation, key = props.cacheKey || ''
   let active = true, task: PDFDocumentLoadingTask | undefined, runtime: PdfWorkerSession | undefined
   cleanup(() => { active = false; if (task) void runtime?.release(task) })
   pdf.value = undefined; loading.value = true; error.value = ''; pageNumber.value = 1; zoom.value = 1
@@ -75,10 +76,17 @@ watch(() => props.url, async (url, _, cleanup) => {
   try {
     runtime = await session.pdf()
     if (!active) return
-    task = await runtime.open(url)
+    task = await runtime.open(url, session.cache.read(key))
     if (!active) { void runtime.release(task); return }
     const document = await task.promise
     if (!active) return
+    // Never force a range-loaded book to download fully just to fill the cache.
+    // Copy only a naturally completed small document, while it is still active.
+    void document.getDownloadInfo().then(async ({ length }) => {
+      if (!active || !key || length > session.cache.maxBytes) return
+      const bytes = await document.getData()
+      if (active) session.cache.put(key, bytes, cacheGeneration)
+    }).catch(() => undefined)
     const first = await document.getPage(1)
     if (!active) { first.cleanup(); return }
     const base = first.getViewport({ scale: 1 }); firstRatio.value = base.height / base.width; first.cleanup()

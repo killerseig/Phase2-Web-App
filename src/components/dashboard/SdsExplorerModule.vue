@@ -27,7 +27,6 @@ const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; ini
 const auth = useAuthStore()
 const viewerSession = createViewerSession()
 provide(viewerSessionKey, viewerSession)
-watch([() => auth.currentUser?.uid, () => auth.hasWorkspaceAccess], ([uid, access]) => viewerSession.reset(!!uid && access), { flush: 'sync' })
 onBeforeUnmount(() => viewerSession.dispose())
 const route = useRoute()
 const viewRoute = route.path
@@ -37,6 +36,10 @@ const previousView = getSdsViewState(viewUid, viewRoute)
 const restored = previousView?.jobId === requestedJobId ? previousView : undefined
 const isAdmin = computed(() => auth.rawRole === 'admin')
 const jobId = ref(requestedJobId)
+const viewerContext = ref(0)
+watch([() => auth.currentUser?.uid, () => auth.hasWorkspaceAccess, () => JSON.stringify([auth.rawRole, auth.profile?.active, auth.assignedJobIds]), jobId], ([uid, access]) => {
+  viewerSession.reset(!!uid && access); viewerContext.value++
+}, { flush: 'sync' })
 const folderId = ref(
   props.initialFolderId || (typeof route.query.folder === 'string' ? route.query.folder : (restored?.folderId ?? '')),
 )
@@ -821,7 +824,7 @@ onBeforeUnmount(() => {
             v-else-if="!editor"
             :sheet="selected"
             :job-id="jobId"
-            :version="library.version + ':' + library.binder.version"
+            :version="library.version + ':' + library.binder.version + ':' + viewerContext"
             :earlier-revision="!!selected && revisionChanged(selected)"
             @open="openSheet"
           />

@@ -23,15 +23,19 @@ export function prepareDocx(bytes: ArrayBuffer) {
     if (!name.endsWith('.rels')) continue
     const xml = new DOMParser().parseFromString(strFromU8(data), 'application/xml')
     if (xml.querySelector('parsererror')) throw new Error('The document contains unreadable relationships.')
+    let changed = false
     for (const relation of [...xml.getElementsByTagNameNS('*', 'Relationship')]) {
       const target = relation.getAttribute('Target') || ''
       if (relation.getAttribute('TargetMode')?.toLowerCase() === 'external' || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(target)) {
-        relation.remove(); omittedExternalContent = true
+        relation.remove(); omittedExternalContent = true; changed = true
       }
     }
-    files[name] = strToU8(new XMLSerializer().serializeToString(xml))
+    if (changed) files[name] = strToU8(new XMLSerializer().serializeToString(xml))
   }
-  return { bytes: zipSync(files), omittedExternalContent }
+  // Most files need no relationship edits: preserve their original compressed
+  // bytes instead of deflating every image and XML part again. All archive size
+  // checks, relationship validation and sandbox/output sanitization still run.
+  return { bytes: omittedExternalContent ? zipSync(files) : new Uint8Array(bytes), omittedExternalContent }
 }
 
 export async function renderDocxPages(bytes: ArrayBuffer): Promise<DocxPages> {

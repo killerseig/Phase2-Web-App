@@ -343,7 +343,38 @@ try {
   assert.equal(download.status, 200)
   assert.equal(download.headers.get('content-type'), 'application/pdf')
   assert.equal((await download.arrayBuffer()).byteLength, output.length)
+  assert.equal(download.headers.get('accept-ranges'), 'bytes')
+  for (const [header, start, end] of [['bytes=0-31', 0, 31], ['bytes=32-', 32, output.length - 1], ['bytes=-16', output.length - 16, output.length - 1], ['bytes=0-999999999999', 0, output.length - 1]]) {
+    const part = await fetch(localUrl, { headers: { Range: header } })
+    assert.equal(part.status, 206)
+    assert.equal(part.headers.get('content-range'), `bytes ${start}-${end}/${output.length}`)
+    assert.equal(part.headers.get('content-length'), String(end - start + 1))
+    assert.equal(part.headers.get('cache-control'), 'private, no-store')
+    assert.deepEqual(Buffer.from(await part.arrayBuffer()), output.subarray(start, end + 1))
+    checks++
+  }
+  const unsatisfiable = await fetch(localUrl, { headers: { Range: `bytes=${output.length}-` } })
+  assert.equal(unsatisfiable.status, 416)
+  assert.equal(unsatisfiable.headers.get('content-range'), `bytes */${output.length}`)
+  assert.equal((await unsatisfiable.arrayBuffer()).byteLength, 0)
+  for (const headers of [{ Range: 'bytes=invalid' }, { Range: 'bytes=0-1,4-5' }, { Range: 'bytes=0-31', 'If-Range': '"not-a-validator"' }]) {
+    const fallback = await fetch(localUrl, { headers })
+    assert.equal(fallback.status, 200)
+    assert.deepEqual(Buffer.from(await fallback.arrayBuffer()), output)
+    checks++
+  }
+  const head = await fetch(localUrl, { method: 'HEAD', headers: { Range: 'bytes=0-31' } })
+  assert.equal(head.status, 200)
+  assert.equal(head.headers.get('content-length'), String(output.length))
+  assert.equal((await head.arrayBuffer()).byteLength, 0)
+  const jobLink = await call(foreman, 'openSheet', { id: 'sheet-a', jobId: 'sds-job' })
+  assert.equal(jobLink.revisionId, firstRevision, 'Cache identity must be the authorized job revision')
+  const jobUrl = `http://127.0.0.1:${server.address().port}/?${new URL(jobLink.url).searchParams}`
+  await db.doc(`users/${foreman.uid}`).update({ assignedJobIds: [] })
+  assert.equal((await fetch(jobUrl, { headers: { Range: 'bytes=0-31' } })).status, 403, 'Ranges must recheck job membership')
+  await db.doc(`users/${foreman.uid}`).update({ assignedJobIds: ['sds-job'] })
   await db.doc(`users/${payroll.uid}`).update({ active: false })
+  assert.equal((await fetch(localUrl, { headers: { Range: 'bytes=0-31' } })).status, 403, 'Ranges must recheck active user')
   assert.equal(
     (await fetch(localUrl)).status,
     403,
@@ -354,6 +385,7 @@ try {
   await db
     .doc(`sdsDownloads/${createHash('sha256').update(ticket).digest('hex')}`)
     .update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) })
+  assert.equal((await fetch(localUrl, { headers: { Range: 'bytes=0-31' } })).status, 403, 'Expired range ticket must be denied')
   assert.equal((await fetch(localUrl)).status, 403, 'Expired ticket must be denied')
   await denied('Cross-job export', () =>
     call(outsider, 'requestExport', {
@@ -479,6 +511,7 @@ try {
     assert.equal(entry.extension, extension)
     const link = await call(foreman, 'openSheet', { id: uploadId, download: true })
     assert.equal(link.extension, extension)
+    assert.equal(link.revisionId, entry.revisionId)
     const response = await fetch(
       `http://127.0.0.1:${server.address().port}/?${new URL(link.url).searchParams}`,
     )

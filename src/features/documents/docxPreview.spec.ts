@@ -1,13 +1,29 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { strFromU8, unzipSync } from 'fflate'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { docxFrame, prepareDocx, renderDocxPages } from './docxPreview'
 function fixture(name: string) {
   const file = readFileSync(resolve('e2e/fixtures', name))
   return Uint8Array.from(file).buffer
 }
 describe('local Word page rendering', () => {
+  it('reuses unchanged archive bytes while retaining images and all validation', async () => {
+    const original = unzipSync(new Uint8Array(fixture('docx-poster.docx')))
+    for (const [name, value] of Object.entries(original)) {
+      if (!name.endsWith('.rels')) continue
+      const xml = new DOMParser().parseFromString(strFromU8(value), 'text/xml')
+      for (const relation of [...xml.getElementsByTagNameNS('*', 'Relationship')])
+        if (relation.getAttribute('TargetMode')?.toLowerCase() === 'external' || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(relation.getAttribute('Target') || '')) relation.remove()
+      original[name] = strToU8(new XMLSerializer().serializeToString(xml))
+    }
+    const bytes = new Uint8Array(zipSync(original)).buffer
+    const prepared = prepareDocx(bytes)
+    expect(prepared.omittedExternalContent).toBe(false)
+    expect(prepared.bytes.buffer).toBe(bytes)
+    const pages = await renderDocxPages(bytes)
+    expect(pages.empty).toBe(false); expect(pages.markup).toContain('data:image/png;base64,')
+  })
   it('preserves an image-only poster instead of depending on extracted text', async () => {
     const pages = await renderDocxPages(fixture('docx-poster.docx'))
     expect(pages.empty).toBe(false)
