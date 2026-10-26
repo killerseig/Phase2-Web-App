@@ -132,6 +132,7 @@ export const downloadSdsFile = onRequest(
       const record = (await ref.get()).data()
       if (!record || record.expiresAt.toMillis() <= Date.now()) {
         if (record) await ref.delete()
+        response.set('X-Document-Error', 'ticket-expired')
         response.status(403).send('This file link expired. Open it again from the SDS library.')
         return
       }

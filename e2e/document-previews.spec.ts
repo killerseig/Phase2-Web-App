@@ -436,6 +436,79 @@ test('large PDFs use bounded authenticated ranges and retain full-download fallb
   }
 })
 
+for (const outcome of ['renew', 'denied', 'switch', 'logout', 'changed']) test(`expired PDF ranges ${outcome} without stale state or authorization loops`, async ({ page }) => {
+  const requireFunctions = createRequire(new URL('../functions/package.json', import.meta.url))
+  const { PDFDocument } = requireFunctions('pdf-lib'), { byteRange } = requireFunctions('./httpByteRange.js')
+  const document = await PDFDocument.load(readFileSync('e2e/fixtures/sds-book-387.pdf'))
+  const padding = document.context.register(document.context.stream(new Uint8Array(3 * 1024 * 1024).fill(32)))
+  document.getPage(386).node.addContentStream(padding)
+  const large = Buffer.from(await document.save({ useObjectStreams: false })), small = readFileSync('e2e/fixtures/sds-preview.pdf')
+  let expired = false, longAuthorizations = 0, renewedDownloads = 0
+  let releaseRenewal!: () => void
+  const renewalGate = new Promise<void>(resolve => { releaseRenewal = resolve })
+  await page.route('**/sds-file?*', route => {
+    const ticket = new URL(route.request().url()).searchParams.get('ticket')!
+    if (expired && ticket === 'long_1') return route.fulfill({ status: 403, headers: { 'X-Document-Error': 'ticket-expired' }, body: 'Expired' })
+    if (ticket === 'long_2') renewedDownloads++
+    const bytes = ticket.startsWith('long') ? large : small
+    const range = byteRange(route.request().headers().range, bytes.length)
+    return route.fulfill({ status: range.status, headers: { 'Content-Type': 'application/pdf', 'Content-Length': String(range.length), 'Accept-Ranges': 'bytes', ...(range.status === 206 ? { 'Content-Range': `bytes ${range.start}-${range.end}/${bytes.length}` } : {}) }, body: bytes.subarray(range.start, range.end + 1) })
+  })
+  await page.route('**/sdsWorkspace', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    const data = route.request().postDataJSON().data
+    if (data.action === 'openSheet' && data.id === 'long') {
+      longAuthorizations++
+      if (longAuthorizations > 1) {
+        await renewalGate
+        if (outcome === 'denied') return route.fulfill({ status: 403, headers, json: { error: { status: 'PERMISSION_DENIED', message: 'Your access was revoked.' } } })
+      }
+    }
+    return route.fulfill({ headers, json: { result: data.action === 'openSheet' ? { url: `https://example.invalid/file?ticket=${data.id}_${longAuthorizations}`, extension: 'pdf', revisionId: outcome === 'changed' && longAuthorizations > 1 ? 'r2' : 'r1' } : {
+      version: 1, folders: [], binder: { version: 0, selections: [] }, after: '', sheets: ['long', 'short'].map(id => ({ id, name: id, extension: 'pdf', folderId: '', revisionId: 'r1', archived: false })),
+    } } })
+  })
+  await mockDashboard(page); await gotoPhase2App(page, '/company-library', createJobsFixture())
+  await page.getByRole('button', { name: 'long', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  expired = true
+  const number = page.getByRole('spinbutton', { name: 'PDF page', exact: true }), surface = page.getByRole('region', { name: 'PDF pages', exact: true })
+  await number.fill('387'); await number.press('Tab')
+  await expect.poll(() => longAuthorizations).toBe(2)
+  await expect(page.getByText('Renewing document access…', { exact: true })).toBeVisible()
+  const position = await surface.evaluate(element => element.scrollTop)
+  const width = await page.locator('[data-pdf-page="387"]').evaluate(element => element.getBoundingClientRect().width)
+  const finish = {
+    renew: async () => {
+      const start = performance.now(); releaseRenewal()
+      await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toBeVisible()
+      await expect(number).toHaveValue('387')
+      expect(await surface.evaluate(element => element.scrollTop)).toBeCloseTo(position, 0)
+      expect(await page.locator('[data-pdf-page="387"]').evaluate(element => element.getBoundingClientRect().width)).toBeCloseTo(width, 0)
+      expect(longAuthorizations).toBe(2); expect(renewedDownloads).toBeGreaterThan(0)
+      expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
+      test.info().annotations.push({ type: 'synthetic-renewal', description: JSON.stringify({ renewalToPageMs: Math.round(performance.now() - start), page: 387, zoomPreserved: true, scrollPreserved: true, authorizations: longAuthorizations }) })
+    },
+    denied: async () => { releaseRenewal(); await expect(page.getByRole('alert')).toContainText('revoked'); expect(longAuthorizations).toBe(2); expect(renewedDownloads).toBe(0); await expect(page.locator('.pdf-surface canvas')).toHaveCount(0) },
+    changed: async () => { releaseRenewal(); await expect(page.getByRole('alert')).toContainText('version changed'); expect(longAuthorizations).toBe(2); expect(renewedDownloads).toBe(0) },
+    switch: async () => {
+      await page.getByRole('button', { name: 'short', exact: true }).click()
+      await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+      releaseRenewal()
+      await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toHaveCount(0)
+      expect(renewedDownloads).toBe(0)
+    },
+    logout: async () => {
+      await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+      await expect(page).toHaveURL(/\/login$/); releaseRenewal()
+      expect(renewedDownloads).toBe(0)
+    },
+  }
+  await finish[outcome as keyof typeof finish]()
+})
+
 test('real library folders and cross-category search remain reachable without category shortcuts', async ({ page }) => {
   const folders = ['SDS', 'Safety', 'AHA'].map(name => ({ id: name.toLowerCase(), name, parentId: '', order: 0 }))
   const documents = folders.map(folder => ({ id: folder.id + '-file', name: folder.name + ' document', extension: 'pdf', folderId: folder.id, revisionId: 'r1', archived: false }))

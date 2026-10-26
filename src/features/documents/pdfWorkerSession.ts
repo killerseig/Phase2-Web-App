@@ -1,4 +1,4 @@
-import { getDocument, GlobalWorkerOptions, PDFWorker, type PDFDocumentLoadingTask } from 'pdfjs-dist'
+import { getDocument, GlobalWorkerOptions, PDFWorker, type PDFDataRangeTransport, type PDFDocumentLoadingTask } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import { previewFileUrl } from './formats'
 
@@ -24,9 +24,9 @@ export function createPdfWorkerSession() {
   }
   return {
     ready,
-    async open(url: string, data?: Uint8Array<ArrayBuffer>) {
+    async open(url: string, data?: Uint8Array<ArrayBuffer>, range?: PDFDataRangeTransport) {
       await ready()
-      const task = getDocument({ worker, ...(data ? { data } : { url: previewFileUrl(url), disableAutoFetch: true, disableStream: true }), cMapUrl: '/sds-pdf-assets/cmaps/', cMapPacked: true, standardFontDataUrl: '/sds-pdf-assets/standard_fonts/', wasmUrl: '/sds-pdf-assets/wasm/' })
+      const task = getDocument({ worker, ...(data ? { data } : range ? { range, disableAutoFetch: true, disableStream: true } : { url: previewFileUrl(url), disableAutoFetch: true, disableStream: true }), cMapUrl: '/sds-pdf-assets/cmaps/', cMapPacked: true, standardFontDataUrl: '/sds-pdf-assets/standard_fonts/', wasmUrl: '/sds-pdf-assets/wasm/' })
       tasks.add(task)
       return task
     },

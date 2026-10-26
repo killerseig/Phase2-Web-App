@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, inject, ref, shallowRef, watch } from 'vue'
-import { previewFileUrl, type FilePreview } from '@/features/documents/formats'
+import type { FilePreview } from '@/features/documents/formats'
+import { createAuthorizedFetch, type RenewDocumentTicket } from '@/features/documents/authorizedFetch'
 import { loadDocxViewer, viewerSessionKey } from '@/features/documents/viewerSession'
-const props = defineProps<{ url: string; extension: string; name: string; cacheKey?: string }>()
+const props = defineProps<{ url: string; extension: string; name: string; cacheKey?: string; renewTicket?: RenewDocumentTicket }>()
 const session = inject(viewerSessionKey, undefined)
 const imageUrl = ref('')
 const preview = ref<FilePreview>()
@@ -47,10 +48,9 @@ watch(
     }, 20000)
     try {
       const cached = session?.cache.read(key)
-      const response = cached ? undefined : await fetch(previewFileUrl(props.url), {
-        signal: controller.signal,
-        cache: 'no-store',
-      })
+      const response = cached ? undefined : await createAuthorizedFetch(props.url, {
+        signal: controller.signal, isCurrent: () => active && (!session || session.isCurrent(cacheGeneration)), renew: props.renewTicket,
+      }).request()
       if (response && !response.ok) throw new Error('File unavailable')
       if (response && /text\/html/i.test(response.headers.get('Content-Type') || '')) throw new Error('The file request returned a web page instead of a document')
       const bytes = cached?.buffer ?? await response!.arrayBuffer()

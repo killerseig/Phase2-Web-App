@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { defineAsyncComponent, inject, onBeforeUnmount, provide, ref, watch } from 'vue'
+import { defineAsyncComponent, inject, onBeforeUnmount, provide, ref, shallowRef, watch } from 'vue'
 import type { SdsSheet } from '@/features/sds/types'
 import { sdsCommand, sdsErrorMessage } from '@/services/sds'
 import { createViewerSession, loadFileViewer, loadPdfViewer, viewerSessionKey } from '@/features/documents/viewerSession'
+import type { RenewDocumentTicket } from '@/features/documents/authorizedFetch'
 const PdfCanvasViewer = defineAsyncComponent(loadPdfViewer)
 const FileContentViewer = defineAsyncComponent(loadFileViewer)
 const inheritedSession = inject(viewerSessionKey, undefined)
@@ -19,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{ open: [download: boolean] }>()
 const url = ref('')
 const cacheKey = ref('')
+const renewTicket = shallowRef<RenewDocumentTicket>()
 const extension = ref('pdf')
 const loading = ref(false)
 const error = ref('')
@@ -34,6 +36,7 @@ watch(
     })
     url.value = ''
     cacheKey.value = ''
+    renewTicket.value = undefined
     extension.value = props.sheet?.extension ?? 'pdf'
     error.value = ''
     loading.value = !!props.sheet
@@ -48,6 +51,17 @@ watch(
         download: false,
       })
       if (active && session.isCurrent(accessContext)) {
+        const id = props.sheet.id, jobId = props.jobId
+        const expectedExtension = result.extension ?? props.sheet.extension ?? 'pdf'
+        renewTicket.value = async () => {
+          const current = () => active && session.isCurrent(accessContext)
+          if (!current()) throw new DOMException('Document closed', 'AbortError')
+          const fresh = await sdsCommand<{ url: string; revisionId?: string; extension?: string }>('openSheet', { id, jobId, download: false })
+          if (!current()) throw new DOMException('Document closed', 'AbortError')
+          if (!result.revisionId || fresh.revisionId !== result.revisionId || (fresh.extension ?? expectedExtension) !== expectedExtension)
+            throw new Error('The document version changed. Reopen it to continue.')
+          return fresh.url
+        }
         cacheKey.value = session.cache.authorize(props.sheet.id, result.revisionId)
         url.value = result.url
         extension.value = result.extension ?? props.sheet.extension ?? 'pdf'
@@ -111,7 +125,7 @@ watch(
       <p>{{ error }}</p>
       <button type="button" @click="reloadPreview">Retry preview</button>
     </div>
-    <PdfCanvasViewer v-else-if="url && extension === 'pdf'" :key="url" :url="url" :cache-key="cacheKey" />
+    <PdfCanvasViewer v-else-if="url && extension === 'pdf'" :key="url" :url="url" :cache-key="cacheKey" :renew-ticket="renewTicket" />
     <FileContentViewer
       v-else-if="url"
       :key="url"
@@ -119,6 +133,7 @@ watch(
       :extension="extension"
       :name="sheet.name"
       :cache-key="cacheKey"
+      :renew-ticket="renewTicket"
     />
   </template>
   <div v-else class="viewer-state viewer-placeholder">

@@ -385,7 +385,9 @@ try {
   await db
     .doc(`sdsDownloads/${createHash('sha256').update(ticket).digest('hex')}`)
     .update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) })
-  assert.equal((await fetch(localUrl, { headers: { Range: 'bytes=0-31' } })).status, 403, 'Expired range ticket must be denied')
+  const expiredRange = await fetch(localUrl, { headers: { Range: 'bytes=0-31' } })
+  assert.equal(expiredRange.status, 403, 'Expired range ticket must be denied')
+  assert.equal(expiredRange.headers.get('x-document-error'), 'ticket-expired')
   assert.equal((await fetch(localUrl)).status, 403, 'Expired ticket must be denied')
   await denied('Cross-job export', () =>
     call(outsider, 'requestExport', {
