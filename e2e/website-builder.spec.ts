@@ -4977,6 +4977,7 @@ test('editor modes and site settings remain usable on a phone without changing t
   const modes = page.getByRole('group', { name: 'Editor mode', exact: true })
   await page.getByRole('button', { name: 'Site settings', exact: true }).click()
   await expect(page.getByLabel('Website name', { exact: true })).toBeVisible()
+  await page.screenshot({ path: '.security-work/site-settings-mobile.png' })
   await expect(page.getByRole('button', { name: 'Enable shared design', exact: true })).toHaveCount(
     0,
   )

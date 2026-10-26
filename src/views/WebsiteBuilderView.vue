@@ -11,7 +11,7 @@ import { useBuilderPanels } from '@/features/builder/useBuilderPanels'
 import WebsitePageCode from '@/components/website/WebsitePageCode.vue'
 import WebsiteScriptFrame from '@/components/website/WebsiteScriptFrame.vue'
 import { parseWebsiteHtml, reconcileWebsiteHtml } from '../../functions/src/websiteLayout'
-import WebsiteThemeFields from '@/components/website/WebsiteThemeFields.vue'
+import WebsiteSiteInspector from '@/components/website/WebsiteSiteInspector.vue'
 import { widgetCategories, widgetCategory, widgetInfo } from '@/features/website/widgetCatalog'
 import WebsiteBlockFields from '@/components/website/WebsiteBlockFields.vue'
 import { blockCollections } from '../../functions/src/websiteBlocks'
@@ -94,7 +94,7 @@ import WebsiteRevisionHistory from '@/components/website/WebsiteRevisionHistory.
 import WebsitePublishComparison from '@/components/website/WebsitePublishComparison.vue'
 import { publishingChecks, type PublishingIssue } from '@/features/website/publishing'
 import WebsiteItemFields from '@/components/website/WebsiteItemFields.vue'
-import WebsiteBrandingFields from '@/components/website/WebsiteBrandingFields.vue'
+import WebsiteCollectionInspector from '@/components/website/WebsiteCollectionInspector.vue'
 import ExplorerContextMenu from '@/components/dashboard/ExplorerContextMenu.vue'
 import { arrangementActions } from '@/features/website/arrangement'
 import {
@@ -3058,52 +3058,13 @@ onBeforeRouteLeave(() => {
             {{ selectedWidgets.length }} widgets selected. Drag or use arrow keys to move them
             together. Fields below edit the primary widget.
           </p>
-          <template v-if="settingsPanel === 'site'">
-            <div class="inspector-header settings-header">
-              <h2><i class="pi pi-cog" aria-hidden="true" /> Site settings</h2>
-              <p class="selection-name">Shared across your website</p>
-            </div>
-            <label>Website name<input v-model="site.name" maxlength="100" /></label>
-            <WebsitePageCode
-              v-if="codeMode"
-              shared
-              :css="site.css"
-              :js="site.js"
-              @css="site.css = $event"
-              @js="site.js = $event"
-            />
-            <label v-if="designMode"
-              >Accent color<input v-model="site.accent" type="color"
-            /></label>
-            <WebsiteThemeFields
-              v-if="designMode"
-              :theme="site.theme"
-              :accent="site.accent"
-              @apply="
-                history.change(() => {
-                  site!.theme = $event.theme
-                  site!.accent = $event.accent
-                })
-              "
-              @update="
-                history.change(() => {
-                  if ($event) site!.theme = $event
-                  else delete site!.theme
-                })
-              "
-            />
-            <WebsiteBrandingFields
-              v-if="site.branding"
-              :branding="site.branding"
-              :hide-footer="page?.chrome === 'widgets'"
-              @update="site.branding = $event"
-              @uploading="uploading = $event"
-            />
-
-            <p v-if="!designMode" class="subtle">
-              Switch to Design to change shared colors, typography and spacing.
-            </p>
-          </template>
+          <WebsiteSiteInspector v-if="settingsPanel === 'site'"
+            :site="site" :code-mode="codeMode" :design-mode="designMode" :hide-footer="page?.chrome === 'widgets'"
+            @update="Object.assign(site!, $event)"
+            @apply-theme="history.change(() => { site!.theme = $event.theme; site!.accent = $event.accent })"
+            @theme="history.change(() => { if ($event) site!.theme = $event; else delete site!.theme })"
+            @uploading="uploading = $event"
+          />
           <template v-else-if="codeMode && page">
             <h2>{{ section ? sectionLabels[section.type] + ' code' : 'Page code' }}</h2>
             <label v-if="section"
@@ -3332,56 +3293,15 @@ onBeforeRouteLeave(() => {
                     ...blockCollections,
                   ].includes(section.type)
                 "
-                ><h3>
-                  {{
-                    section.type === 'gallery'
-                      ? 'Photos'
-                      : section.type === 'cards'
-                        ? 'Cards'
-                        : 'Items'
-                  }}
-                </h3>
-                <div
-                  v-for="(item, index) in section.items"
-                  :key="item.id"
-                  class="item-editor"
-                  v-show="!focusedItem || focusedItem.id === item.id"
-                >
-                  <details :open="focusedItem?.id === item.id ? true : undefined">
-                    <summary>{{ item.title || `Item ${index + 1}` }}</summary>
-                    <WebsiteItemFields
-                      :item="item"
-                      :design-tools="designMode"
-                      collection-item
-                      :kind="section.type"
-                      @update="Object.assign(item, $event)"
-                      @uploading="uploading = $event"
-                    />
-                  </details>
-                  <div class="item-actions">
-                    <button
-                      :disabled="index === 0"
-                      :aria-label="`Move item ${index + 1} up`"
-                      @click="move(section.items, index, -1)"
-                    >
-                      ↑</button
-                    ><button
-                      :disabled="index === section.items.length - 1"
-                      :aria-label="`Move item ${index + 1} down`"
-                      @click="move(section.items, index, 1)"
-                    >
-                      ↓</button
-                    ><button @click="history.change(() => section!.items.splice(index, 1))">
-                      Remove item
-                    </button>
-                  </div>
-                </div>
-                <button
-                  :disabled="section.items.length >= 12"
-                  @click="history.change(() => section!.items.push(newItem()))"
-                >
-                  + Add item
-                </button></template
+              >
+                <WebsiteCollectionInspector :items="section.items" :kind="section.type" :design-tools="designMode" :focused-id="focusedItem?.id"
+                  @update="Object.assign(section!.items[$event.index]!, $event.value)"
+                  @move="move(section!.items, $event.index, $event.direction)"
+                  @remove="history.change(() => section!.items.splice($event, 1))"
+                  @add="history.change(() => section!.items.push(newItem()))"
+                  @uploading="uploading = $event"
+                />
+              </template
               >
             </div>
             <template v-if="designMode && section.type !== 'page-content'">
@@ -4525,16 +4445,6 @@ select {
 small {
   overflow-wrap: anywhere;
   color: var(--text-muted);
-}
-.item-editor {
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.item-actions {
-  display: flex;
-  gap: 0.3rem;
-  margin-top: 0.5rem;
 }
 summary {
   cursor: pointer;
