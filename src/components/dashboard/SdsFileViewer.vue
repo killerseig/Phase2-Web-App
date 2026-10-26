@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref, watch } from 'vue'
+import { defineAsyncComponent, inject, onBeforeUnmount, provide, ref, watch } from 'vue'
 import type { SdsSheet } from '@/features/sds/types'
 import { sdsCommand, sdsErrorMessage } from '@/services/sds'
-const PdfCanvasViewer = defineAsyncComponent(() => import('./PdfCanvasViewer.vue'))
-const FileContentViewer = defineAsyncComponent(() => import('./FileContentViewer.vue'))
+import { createViewerSession, loadFileViewer, loadPdfViewer, viewerSessionKey } from '@/features/documents/viewerSession'
+const PdfCanvasViewer = defineAsyncComponent(loadPdfViewer)
+const FileContentViewer = defineAsyncComponent(loadFileViewer)
+const inheritedSession = inject(viewerSessionKey, undefined)
+const session = inheritedSession ?? createViewerSession()
+provide(viewerSessionKey, session)
+onBeforeUnmount(() => { if (!inheritedSession) session.dispose() })
 
 const props = defineProps<{
   sheet?: SdsSheet
@@ -29,6 +34,9 @@ watch(
     error.value = ''
     loading.value = !!props.sheet
     if (!props.sheet) return
+    // Only public renderer code/worker startup overlaps authorization. The
+    // private file is still requested only after openSheet succeeds.
+    void session.prepare(extension.value).catch(() => undefined)
     try {
       const result = await sdsCommand<{ url: string; extension?: string }>('openSheet', {
         id: props.sheet.id,

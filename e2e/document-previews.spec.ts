@@ -1,7 +1,11 @@
-import { expect, test } from './helpers/test.js'
+import { expect, test, type Page } from './helpers/test.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 import { mockDashboard } from './helpers/dashboardFixture.js'
 import { sampleContent } from '../src/features/intranet/__tests__/fixtures.js'
+
+async function openMobileNavigation(page: Page, width: number) {
+  if (width < 600) await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
+}
 
 test('previews PDF, images, text, CSV, Word and Excel locally and explicitly excludes nonprintable files from books', async ({
   page,
@@ -182,6 +186,24 @@ for (const width of [1280, 390]) test(`Word pages preserve images, scroll and re
 
 for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages in a lazy 387-page book at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 844 })
+  await page.addInitScript(() => {
+    const state = { started: 0, terminated: 0 }
+    Object.assign(window, { pdfWorkerStats: state })
+    const NativeWorker = window.Worker
+    window.Worker = class extends NativeWorker {
+      private pdf: boolean
+      private stopped = false
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options)
+        this.pdf = String(url).includes('pdf.worker')
+        if (this.pdf) state.started++
+      }
+      terminate() {
+        if (this.pdf && !this.stopped) { this.stopped = true; state.terminated++ }
+        super.terminate()
+      }
+    }
+  })
   const files = [{ id: 'book', name: 'Long SDS book', fixture: 'sds-book-387.pdf' }, { id: 'short', name: 'Short PDF', fixture: 'sds-preview.pdf' }]
   await page.route('**/sds-file?*', route => {
     const file = files.find(file => file.id === new URL(route.request().url()).searchParams.get('ticket'))!
@@ -239,6 +261,53 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await surface.focus(); await page.keyboard.press('End')
   await expect(page.getByRole('img', { name: 'PDF page 2 of 2', exact: true })).toBeInViewport()
   await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toHaveCount(0)
+  // A fresh authorization/download still occurs on a repeat open, but the
+  // explorer retains its worker. Leaving the library must terminate it.
+  await page.getByRole('button', { name: 'Long SDS book', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  const stats = () => page.evaluate(() => (window as unknown as { pdfWorkerStats: { started: number; terminated: number } }).pdfWorkerStats)
+  expect(await stats()).toEqual({ started: 1, terminated: 0 })
+  expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
+  await openMobileNavigation(page, width)
+  await page.getByRole('link', { name: 'Jobs', exact: true }).first().click()
+  await expect.poll(stats).toEqual({ started: 1, terminated: 1 })
+  await page.goBack()
+  await page.getByRole('button', { name: 'Long SDS book', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  expect(await stats()).toEqual({ started: 2, terminated: 1 })
+  await openMobileNavigation(page, width)
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await expect.poll(stats).toEqual({ started: 2, terminated: 2 })
+})
+
+test('preloads PDF worker during authorization without requesting private bytes early', async ({ page }) => {
+  let authorize!: () => void, downloads = 0
+  const authorized = new Promise<void>(resolve => { authorize = resolve })
+  await page.route('**/sds-file?*', route => {
+    downloads++
+    return route.fulfill({ path: 'e2e/fixtures/sds-preview.pdf', contentType: 'application/pdf' })
+  })
+  await page.route('**/sdsWorkspace', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    const data = route.request().postDataJSON().data
+    if (data.action === 'openSheet') await authorized
+    return route.fulfill({ headers, json: { result: data.action === 'openSheet' ? { url: 'https://example.invalid/file?ticket=private', extension: 'pdf' } : {
+      version: 1, folders: [], binder: { version: 0, selections: [] }, after: '',
+      sheets: [{ id: 'private', name: 'Authorized PDF', extension: 'pdf', folderId: '', revisionId: 'r1', archived: false }],
+    } } })
+  })
+  await mockDashboard(page)
+  await gotoPhase2App(page, '/company-library', createJobsFixture())
+  const workerStarted = page.waitForEvent('worker', worker => worker.url().includes('pdf.worker'))
+  await page.getByRole('button', { name: 'Authorized PDF', exact: true }).click()
+  await workerStarted
+  expect(downloads).toBe(0)
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toHaveCount(0)
+  authorize()
+  await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  expect(downloads).toBe(1)
 })
 
 test('real library folders and cross-category search remain reachable without category shortcuts', async ({ page }) => {

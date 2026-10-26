@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, shallowRef, watch } from 'vue'
 import { previewFileUrl, type FilePreview } from '@/features/documents/formats'
+import { loadDocxViewer } from '@/features/documents/viewerSession'
 const props = defineProps<{ url: string; extension: string; name: string }>()
 const imageUrl = ref('')
 const preview = ref<FilePreview>()
@@ -9,7 +10,7 @@ const error = ref('')
 const sheetIndex = ref(0)
 const zoom = ref(1)
 const docxBytes = shallowRef<ArrayBuffer>()
-const DocxDocumentViewer = defineAsyncComponent(() => import('./DocxDocumentViewer.vue'))
+const DocxDocumentViewer = defineAsyncComponent(loadDocxViewer)
 const table = computed(() =>
   preview.value && 'tables' in preview.value ? preview.value.tables[sheetIndex.value] : undefined,
 )

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink, useRoute } from 'vue-router'
 import Button from './DashboardButton.vue'
 import DocumentExplorer from './DocumentExplorer.vue'
@@ -7,6 +7,7 @@ import SdsFileViewer from './SdsFileViewer.vue'
 import SuppliedReferenceReader from '@/components/intranet/SuppliedReferenceReader.vue'
 import type { IntranetContent, IntranetResource, LibraryCategory, ReadingPair } from '@/features/intranet/content'
 import { documentAccept, documentFormatsLabel, printableFile } from '@/features/documents/formats'
+import { createViewerSession, viewerSessionKey } from '@/features/documents/viewerSession'
 import { useAuthStore } from '@/stores/auth'
 import { loadSds, loadSdsPage, sdsCommand, uploadDocument, sdsErrorMessage } from '@/services/sds'
 import SdsBulkImport from './SdsBulkImport.vue'
@@ -24,6 +25,10 @@ import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/expl
 
 const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; initialFolderId?: string; references?: IntranetContent | null; referenceCategory?: LibraryCategory }>(), { title: 'Documents', initialFolderId: '' })
 const auth = useAuthStore()
+const viewerSession = createViewerSession()
+provide(viewerSessionKey, viewerSession)
+watch([() => auth.currentUser?.uid, () => auth.hasWorkspaceAccess], ([uid, access]) => viewerSession.reset(!!uid && access), { flush: 'sync' })
+onBeforeUnmount(() => viewerSession.dispose())
 const route = useRoute()
 const viewRoute = route.path
 const viewUid = auth.currentUser?.uid ?? ''

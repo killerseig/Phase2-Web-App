@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
-import { previewFileUrl } from '@/features/documents/formats'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist'
+import { createViewerSession, viewerSessionKey } from '@/features/documents/viewerSession'
+import type { PdfWorkerSession } from '@/features/documents/pdfWorkerSession'
 import PdfPageCanvas from './PdfPageCanvas.vue'
-GlobalWorkerOptions.workerSrc = workerUrl
+const inheritedSession = inject(viewerSessionKey, undefined)
+const session = inheritedSession ?? createViewerSession()
+onBeforeUnmount(() => { if (!inheritedSession) session.dispose() })
 const props = defineProps<{ url: string }>()
 const pdf = shallowRef<PDFDocumentProxy>(), pageNumber = ref(1), zoom = ref(1)
 const loading = ref(true), error = ref(''), surface = ref<HTMLElement>()
@@ -66,12 +68,15 @@ function measure(number: number, ratio: number) {
   }
 }
 watch(() => props.url, async (url, _, cleanup) => {
-  let active = true, task: ReturnType<typeof getDocument> | undefined
-  cleanup(() => { active = false; void task?.destroy().catch(() => undefined) })
+  let active = true, task: PDFDocumentLoadingTask | undefined, runtime: PdfWorkerSession | undefined
+  cleanup(() => { active = false; if (task) void runtime?.release(task) })
   pdf.value = undefined; loading.value = true; error.value = ''; pageNumber.value = 1; zoom.value = 1
   ratios.value = {}; scrollTop.value = 0; if (surface.value) surface.value.scrollTop = 0
   try {
-    task = getDocument({ url: previewFileUrl(url), cMapUrl: '/sds-pdf-assets/cmaps/', cMapPacked: true, standardFontDataUrl: '/sds-pdf-assets/standard_fonts/', wasmUrl: '/sds-pdf-assets/wasm/' })
+    runtime = await session.pdf()
+    if (!active) return
+    task = await runtime.open(url)
+    if (!active) { void runtime.release(task); return }
     const document = await task.promise
     if (!active) return
     const first = await document.getPage(1)
