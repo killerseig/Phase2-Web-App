@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWebsiteCommands } from '@/features/website/useWebsiteCommands'
+import { useWebsiteWidgetEditing } from '@/features/website/useWebsiteWidgetEditing'
 import BuilderHelpDialog from '@/components/builder/BuilderHelpDialog.vue'
 import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
 import BuilderEditingTools from '@/components/builder/BuilderEditingTools.vue'
@@ -71,8 +73,6 @@ import type {
   ItemSizing,
 } from '@/features/website/types'
 import {
-  descendants,
-  canContain,
   visibleSections,
   layoutLocked,
 } from '@/features/website/containers'
@@ -96,13 +96,11 @@ import { publishingChecks, type PublishingIssue } from '@/features/website/publi
 import WebsiteItemFields from '@/components/website/WebsiteItemFields.vue'
 import WebsiteBrandingFields from '@/components/website/WebsiteBrandingFields.vue'
 import ExplorerContextMenu from '@/components/dashboard/ExplorerContextMenu.vue'
-import { arrangeSelection, arrangementActions } from '@/features/website/arrangement'
+import { arrangementActions } from '@/features/website/arrangement'
 import {
   translateSelection,
   cloneWidgets,
   layerSelection,
-  selectionBounds,
-  type GeometryMap,
 } from '@/features/website/selection'
 import {
   newItem,
@@ -117,7 +115,7 @@ import {
   type WebsitePage,
   type WebsiteState,
 } from '@/features/website/types'
-import { websiteCommand, websiteError } from '@/services/website'
+import { websiteCommand } from '@/services/website'
 import {
   copyPage,
   pageFromTemplate,
@@ -503,117 +501,30 @@ function resetDevice() {
     delete section.value!.devices?.[device.value as 'tablet' | 'mobile']
   })
 }
-const selectedWidgets = computed(
-  () => page.value?.sections.filter((entry) => selectedIds.value.includes(entry.id)) || [],
-)
-const selectedLayoutLocked = computed(() =>
-  selectedWidgets.value.some((entry) => layoutLocked(page.value?.sections || [], entry.id)),
-)
-const sectionFixed = computed(
-  () => !!section.value && layoutLocked(page.value?.sections || [], section.value.id),
-)
-const selectedTree = computed(() => descendants(page.value?.sections || [], selectedIds.value))
-const containerOptions = computed(() =>
-  (page.value?.sections || []).filter(
-    (entry) =>
-      entry.type === 'container' &&
-      canContain(page.value!.sections, section.value?.id || '', entry.id),
-  ),
-)
-const canGroup = computed(
-  () =>
-    !selectedWidgets.value.some((section) => section.type === 'page-content') &&
-    selectedWidgets.value.length >= 2 &&
-    !selectedLayoutLocked.value &&
-    new Set(selectedWidgets.value.map((entry) => entry.parentId || '')).size === 1 &&
-    (page.value?.sections.length || 0) < 30,
-)
-function groupWidgets() {
-  if (locked.value || !page.value || !canGroup.value) return
-  const layout = selectionBounds(
-    Object.fromEntries(selectedWidgets.value.map((entry) => [entry.id, entry.layout!])),
-  )!
-  const container = {
-    ...newSection('container'),
-    parentId: selectedWidgets.value[0]?.parentId,
-    container: { direction: 'row' as const, gap: 16 },
-    layout: { ...layout, z: Math.max(...selectedWidgets.value.map((entry) => entry.layout!.z)) },
-  }
-  history.change(() => {
-    for (const entry of selectedWidgets.value) entry.parentId = container.id
-    page.value!.sections.push(container)
-  })
-  setSelection([container.id])
-  activePane.value = 'inspector'
-}
-function moveIntoContainer(event: Event) {
-  if (locked.value || !page.value || !section.value || sectionFixed.value) return
-  const parentId = (event.target as HTMLSelectElement).value
-  if (parentId && layoutLocked(page.value.sections, parentId)) return
-  if (!canContain(page.value.sections, section.value.id, parentId)) return
-  widgetDrag.cancel()
-  history.change(() => {
-    section.value!.parentId = parentId || undefined
-  })
-}
-function unwrapContainer() {
-  if (locked.value || !page.value || section.value?.type !== 'container' || sectionFixed.value)
-    return
-  const target = section.value
-  history.change(() => {
-    for (const entry of page.value!.sections)
-      if (entry.parentId === target.id) entry.parentId = target.parentId
-    page.value!.sections = page.value!.sections.filter((entry) => entry.id !== target.id)
-  })
-  setSelection([])
-}
-const arrangementOptions = computed(() =>
-  arrangementActions.map((action) => ({
-    ...action,
-    layouts: arrangeSelection(groupGeometry(), action.id, selectedSection.value),
-  })),
-)
-function arrangeWidgets(action: string) {
-  if (locked.value || !page.value || !geometryEditable.value || selectedLayoutLocked.value) return
-  const option = arrangementOptions.value.find((option) => option.id === action)
-  if (!option || !Object.keys(option.layouts).length) return
-  widgetDrag.cancel()
-  history.change(() => {
-    for (const entry of page.value!.sections) {
-      if (option.layouts[entry.id]) entry.layout = option.layouts[entry.id]
-    }
-  })
-  // Completed actions may disable their own button. Keep keyboard history in the editor.
-  void nextTick(() => arrangementPanel.value?.focus({ preventScroll: true }))
-}
-watch(
-  selectedSection,
-  (id) => {
-    if (id) settingsPanel.value = 'page'
-    if (!id) selectedIds.value = []
-    else if (!selectedIds.value.includes(id)) selectedIds.value = [id]
-  },
-  { flush: 'sync' },
-)
-watch(
-  () => page.value?.sections.map((entry) => entry.id).join(','),
-  () => {
-    selectedIds.value = selectedIds.value.filter((id) =>
-      page.value?.sections.some((entry) => entry.id === id),
-    )
-  },
-)
-function groupGeometry(): GeometryMap {
-  return Object.fromEntries(
-    selectedWidgets.value
-      .filter(
-        (entry) =>
-          entry.layout && !entry.parentId && !layoutLocked(page.value?.sections || [], entry.id),
-      )
-      .map((entry) => [entry.id, entry.layout!]),
-  )
-}
 const selectedText = ref<ElementTarget>()
+const locked = computed(() => loading.value || busy.value || uploading.value)
+const widgetEditing = useWebsiteWidgetEditing({
+ page, section, selectedSection, selectedIds, selectedText, settingsPanel, activePane, locked, designMode, geometryEditable, device, history,
+ cancelDrag: () => widgetDrag.cancel(),
+ focusArrangement: () => { void nextTick(() => arrangementPanel.value?.focus({ preventScroll: true })) },
+})
+const { selectedWidgets, selectedLayoutLocked, sectionFixed, selectedTree, containerOptions, canGroup, groupWidgets, moveIntoContainer, unwrapContainer, arrangementOptions, arrangeWidgets, groupGeometry, selectionPath, setSelection, commitGeometry } = widgetEditing
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 const canvasElements = shallowRef<{ target: ElementTarget; element: HTMLElement }[]>([])
 const selectedElement = computed(() =>
   canvasElements.value.find((entry) => sameText(entry.target, selectedText.value)),
@@ -641,17 +552,7 @@ const selectedElementDisplay = computed(() => {
       }
     : item
 })
-const selectionPath = computed(() => {
-  const path: { id: string; label: string }[] = []
-  const seen = new Set<string>()
-  let owner = section.value
-  while (owner && !seen.has(owner.id)) {
-    seen.add(owner.id)
-    path.unshift({ id: owner.id, label: owner.title || sectionLabels[owner.type] })
-    owner = page.value?.sections.find((entry) => entry.id === owner!.parentId)
-  }
-  return path
-})
+
 const selectionDetail = computed(() => {
   const target =
     selectedText.value ||
@@ -773,11 +674,7 @@ function changeElement(patch: TextBoxValues, reset?: (keyof TextBoxValues)[]) {
     }
   })
 }
-function setSelection(ids: string[]) {
-  selectedText.value = undefined
-  selectedIds.value = ids.filter((id) => page.value?.sections.some((entry) => entry.id === id))
-  selectedSection.value = selectedIds.value.at(-1) || ''
-}
+
 const checks = computed(() => (site.value ? publishingChecks(site.value) : []))
 const publishBlocked = computed(() => checks.value.some((issue) => issue.level === 'error'))
 const draftSnapshot = computed(() => (site.value ? JSON.stringify(site.value) : ''))
@@ -802,7 +699,7 @@ const draftState = computed(() =>
 watch(dirty, (changed) => {
   if (changed && message.value.startsWith('Draft saved.')) message.value = ''
 })
-const locked = computed(() => loading.value || busy.value || uploading.value)
+
 const inlineTarget = ref<InlineTarget>()
 const focusedItemId = ref<string>()
 const focusedItem = computed(() =>
@@ -1231,61 +1128,7 @@ watch([device, canvasWidth, gridDraft, activePane, selectedPage, editorMode, run
   await nextTick()
   scheduleFit()
 })
-function commitGeometry(
-  id: string,
-  layout: WidgetGeometry,
-  type?: string,
-  layouts?: GeometryMap,
-  rotation?: number,
-  heightOnly = false,
-) {
-  if (!designMode.value) return
-  if (locked.value || !page.value || (type && page.value.sections.length >= 30)) return
-  if (heightOnly) {
-    const entry = page.value.sections.find((entry) => entry.id === id)
-    if (!entry || layoutLocked(page.value.sections, id)) return
-    history.change(() => {
-      const height = Math.max(32, Math.min(2000, Math.round(layout.h * 32)))
-      if (device.value === 'desktop') entry.sizing = { ...entry.sizing, height }
-      else
-        entry.devices = {
-          ...entry.devices,
-          [device.value]: {
-            ...entry.devices?.[device.value],
-            sizing: { ...entry.devices?.[device.value]?.sizing, height },
-          },
-        }
-    })
-    return
-  }
-  history.change(() => {
-    page.value!.sections = materializeGrid(page.value!.sections)
-    if (!type && !layouts && rotation === undefined && geometryEditable.value)
-      layouts = resizeWithFollowing(page.value!.sections, id, layout)
-    if (type) {
-      const entry = { ...newSection(type as SectionType), layout }
-      page.value!.sections.push(entry)
-      selectedSection.value = entry.id
-    } else {
-      for (const entry of page.value!.sections) {
-        if (layoutLocked(page.value!.sections, entry.id)) continue
-        const next = layouts?.[entry.id] || (entry.id === id ? layout : undefined)
-        if (next && rotation === undefined) entry.layout = { ...next }
-        if (entry.id === id && rotation !== undefined) {
-          if (device.value === 'desktop') entry.appearance = { ...entry.appearance, rotation }
-          else
-            entry.devices = {
-              ...entry.devices,
-              [device.value]: {
-                ...entry.devices?.[device.value],
-                appearance: { ...entry.devices?.[device.value]?.appearance, rotation },
-              },
-            }
-        }
-      }
-    }
-  })
-}
+
 function startWidgetMove(event: PointerEvent, id: string, action: WidgetAction = 'move') {
   if (!designMode.value || locked.value) return
   chooseSectionScope(id)
@@ -1740,6 +1583,13 @@ const recovery = computed(
 let loadedServer = false
 let loadedSnapshot = ''
 let loadedVersion = 0
+const { load, command } = useWebsiteCommands({
+ site, locked, dirty, cssError, publishBlocked, loading, busy, saving, error, message, saved, version, starterReview, publishedAt, hasPrevious, homePageId, selectedPage, selectedSection, history, autosave, canDiscard, fitView,
+ confirm: (request, trigger) => confirmation.value?.ask(request, trigger),
+ onLoaded(value) { loadedSnapshot = JSON.stringify(site.value); loadedVersion = value; loadedServer = true },
+ onRestored(value) { loadedSnapshot = draftSnapshot.value; loadedVersion = value },
+})
+
 const draftSync = useWebsiteDraftSync({
   scope: () =>
     auth.currentUser?.uid
@@ -1894,146 +1744,8 @@ async function canDiscard(trigger?: Event) {
     ))
   )
 }
-async function load(trigger?: Event) {
-  if (!(await canDiscard(trigger))) return
-  autosave.stash()
-  autosave.ready.value = false
-  loading.value = true
-  error.value = ''
-  message.value = ''
-  let receivedDraft = false
-  try {
-    await autosave.settle()
-    const result = await websiteCommand<WebsiteState>('load')
-    history.reset(withWebsiteDefaults(result.draft))
-    starterReview.value = false
-    loadedSnapshot = JSON.stringify(site.value)
-    loadedVersion = result.version
-    version.value = result.version
-    saved.value = JSON.stringify(result.draft)
-    receivedDraft = true
-    loadedServer = true
-    autosave.conflict.value = false
-    autosave.problem.value = ''
-    autosave.discover(saved.value)
-    if (dirty.value)
-      message.value =
-        'This draft is ready for the grid editor. Review the layout and save it before publishing.'
-    publishedAt.value = result.publishedAt
-    hasPrevious.value = result.hasPrevious
-    homePageId.value = result.draft.pages.find((page) => page.slug === 'home')?.id || ''
-    selectedPage.value = result.draft.pages[0]?.id || ''
-    selectedSection.value = ''
-    await nextTick()
-    fitView()
-  } catch (reason) {
-    error.value = websiteError(reason)
-  } finally {
-    loading.value = false
-    if (site.value) autosave.begin(!receivedDraft)
-  }
-}
-async function command(
-  action: 'save' | 'publish' | 'restore' | 'unpublish' | 'restoreRevision',
-  revisionId?: string,
-  trigger?: Event,
-) {
-  if (locked.value || !site.value) return
-  if ((action === 'save' || action === 'publish') && cssError.value) {
-    error.value = cssError.value
-    return
-  }
-  if (action === 'save' && !autosave.online.value) {
-    autosave.persist()
-    message.value = autosave.protectedLocally.value
-      ? 'Saved in this browser. Your draft will sync when the connection returns.'
-      : ''
-    return
-  }
-  if (
-    action === 'publish' &&
-    !(await confirmation.value?.ask(
-      {
-        title: 'Publish website?',
-        message: 'Your saved pages and images will be visible to anyone with the website link.',
-        confirmLabel: 'Publish website',
-      },
-      trigger,
-    ))
-  )
-    return
-  if (
-    action === 'unpublish' &&
-    !(await confirmation.value?.ask(
-      {
-        title: 'Take website offline?',
-        message:
-          'Visitors will no longer see the published website. Your saved draft will remain available.',
-        confirmLabel: 'Take offline',
-        destructive: true,
-      },
-      trigger,
-    ))
-  )
-    return
-  if ((action === 'restore' || action === 'restoreRevision') && !(await canDiscard(trigger))) return
-  if (locked.value || !site.value) return
-  if (action === 'publish' && publishBlocked.value) {
-    error.value = 'Resolve the publishing checks before publishing.'
-    return
-  }
-  history.checkpoint()
-  busy.value = true
-  saving.value = action === 'save'
-  error.value = ''
-  message.value = ''
-  try {
-    await autosave.settle()
-    const snapshot = JSON.stringify(site.value)
-    const result = await websiteCommand<{
-      version: number
-      draft?: WebsiteSite
-      publishedAt?: number | null
-      hasPrevious?: boolean
-    }>(action, {
-      version: version.value,
-      ...(action === 'save' ? { site: JSON.parse(snapshot) } : {}),
-      ...(action === 'restoreRevision' ? { revisionId } : {}),
-    })
-    version.value = result.version
-    if (action === 'save') {
-      starterReview.value = false
-      saved.value = snapshot
-      autosave.problem.value = ''
-      autosave.conflict.value = false
-    }
-    if (result.draft) {
-      history.reset(withWebsiteDefaults(result.draft))
-      loadedSnapshot = draftSnapshot.value
-      loadedVersion = result.version
-      saved.value = JSON.stringify(result.draft)
-      homePageId.value = result.draft.pages.find((page) => page.slug === 'home')?.id || ''
-      selectedPage.value = result.draft.pages[0]?.id || ''
-      selectedSection.value = ''
-    }
-    if (result.publishedAt !== undefined) publishedAt.value = result.publishedAt
-    if (result.hasPrevious !== undefined) hasPrevious.value = result.hasPrevious
-    autosave.persist()
-    message.value = {
-      save: 'Draft saved. The published website has not changed.',
-      publish: 'Website published.',
-      restore: 'Previous published version restored to your draft. Review it before publishing.',
-      unpublish: 'Website taken offline. Your draft is retained.',
-      restoreRevision: 'Saved version restored to your draft. Review it before publishing.',
-    }[action]
-  } catch (reason) {
-    error.value = websiteError(reason)
-    if (action === 'save') autosave.reportFailure(reason)
-  } finally {
-    busy.value = false
-    saving.value = false
-  }
-}
+
+
 function choosePage(id: string) {
   runningCode.value = false
   if (locked.value) return
