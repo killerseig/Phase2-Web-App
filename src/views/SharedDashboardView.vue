@@ -431,18 +431,14 @@ const canEditContent = computed(() =>
 )
 async function saveContent(
   action: 'save-notes' | 'save-calendar',
-  payload: Record<string, unknown>,
+  payload: { widgetId: string; text: string } | { events: SharedCalendarEntry[] },
 ) {
   if (!canEditContent.value || busy.value || !layout.value) return
   busy.value = true
   error.value = ''
   const request = generation
   try {
-    const result = await sharedDashboardCommand<{
-      version: number
-      notes: Record<string, string>
-      events: SharedCalendarEntry[]
-    }>(action, { ...context(), version: layout.value.notesVersion, ...payload })
+    const result = await sharedDashboardCommand(action, { ...context(), version: layout.value.notesVersion, ...payload })
     if (request !== generation) return
     layout.value.notes = result.notes
     layout.value.events = result.events

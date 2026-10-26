@@ -85,7 +85,7 @@ export function useWebsiteCommands(options: {
     let receivedDraft = false
     try {
       await autosave.settle()
-      const result = await websiteCommand<WebsiteState>('load')
+      const result = await websiteCommand('load')
       history.reset(withWebsiteDefaults(result.draft))
       starterReview.value = false
       options.onLoaded(result.version)
@@ -173,12 +173,7 @@ export function useWebsiteCommands(options: {
     try {
       await autosave.settle()
       const snapshot = JSON.stringify(site.value)
-      const result = await websiteCommand<{
-        version: number
-        draft?: WebsiteSite
-        publishedAt?: number | null
-        hasPrevious?: boolean
-      }>(action, {
+      const result = await websiteCommand(action, {
         version: version.value,
         ...(action === 'save' ? { site: JSON.parse(snapshot) } : {}),
         ...(action === 'restoreRevision' ? { revisionId } : {}),

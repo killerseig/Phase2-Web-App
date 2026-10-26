@@ -1572,7 +1572,7 @@ const autosave = useWebsiteAutosave({
   manualSave: () => starterReview.value,
   blocked: () => locked.value || starterReview.value || starterConfirmation.value || !!cssError.value || !auth.currentUser || remoteChangePending.value,
   save: (draft, baseVersion) =>
-    websiteCommand<{ version: number }>('save', { site: draft, version: baseVersion }),
+    websiteCommand('save', { site: draft, version: baseVersion }),
 })
 const recoveryKey = ref('')
 const recovery = computed(
@@ -1618,7 +1618,7 @@ const draftSync = useWebsiteDraftSync({
     !!document.activeElement?.closest(
       'input, textarea, select, [contenteditable], dialog[open], [role="dialog"]',
     ),
-  load: () => websiteCommand<WebsiteState>('load'),
+  load: () => websiteCommand('load'),
   apply: applySharedDraft,
 })
 watch(draftSync.newerVersion, (value) => (remoteChangePending.value = value !== null), {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { adminTemplateCommand } from '@/features/forms/templateCommands'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink } from 'vue-router'
-import { formApi, isFormServerEnabled, isFormEmulatorEnabled, type ServerFormTemplate } from '@/services/forms'
+import { isFormServerEnabled, isFormEmulatorEnabled, type ServerFormTemplate } from '@/services/forms'
 import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
@@ -95,8 +96,7 @@ async function removeServer(template: ServerFormTemplate) {
     return
   serverBusy.value = true
   try {
-    await formApi('formTemplates', {
-      action: 'remove',
+    await adminTemplateCommand('remove', {
       id: template.id,
       revision: template.revision,
     })
@@ -271,8 +271,7 @@ async function duplicateServer(template: ServerFormTemplate) {
   localStorage.setItem(key, targetId)
   serverBusy.value = true
   try {
-    const result = await formApi<ServerFormTemplate>('formTemplates', {
-      action: 'duplicate',
+    const result = await adminTemplateCommand('duplicate', {
       id: template.id,
       revision: template.revision,
       targetId,

@@ -1,5 +1,6 @@
+import { adminTemplateCommand } from '@/features/forms/templateCommands'
 import { ref, type Ref } from 'vue'
-import { formApi, type ServerFormTemplate } from '@/services/forms'
+import { type ServerFormTemplate } from '@/services/forms'
 import { formOutputIssues } from '../../../functions/src/formOutputTemplate'
 import {
   clone,
@@ -50,9 +51,7 @@ export function useFormPersistence(options: FormPersistenceOptions) {
     if (!serverEnabled || !uid.value) return
     const owner = uid.value
     try {
-      const result = await formApi<{ templates: ServerFormTemplate[] }>('formTemplates', {
-        action: 'list',
-      })
+      const result = await adminTemplateCommand('list')
       if (uid.value === owner) {
         serverTemplates.value = result.templates
         serverAvailable.value = true
@@ -72,8 +71,7 @@ export function useFormPersistence(options: FormPersistenceOptions) {
     try {
       const existing = serverTemplates.value.find((item) => item.id === draft.value!.id)
       const definition = clone(draft.value)
-      const result = await formApi<ServerFormTemplate>('formTemplates', {
-        action: 'save',
+      const result = await adminTemplateCommand('save', {
         id: definition.id,
         revision: existing?.revision || 0,
         definition,
@@ -133,7 +131,10 @@ export function useFormPersistence(options: FormPersistenceOptions) {
       }
       publishPhase.value = 'publishing'
       serverBusy.value = true
-      await formApi('formTemplates', { action: 'issue', id: saved.id, revision: saved.revision })
+      await adminTemplateCommand('issue', {
+        id: saved.id,
+        revision: saved.revision,
+      })
       if (uid.value !== owner) return
       await loadServer()
       message.value = 'Draft saved and immutable form version published.'

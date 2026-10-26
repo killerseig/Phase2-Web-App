@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { libraryCommand } from '@/features/sds/commands'
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink, useRoute } from 'vue-router'
 import Button from './DashboardButton.vue'
@@ -9,7 +10,7 @@ import type { IntranetContent, IntranetResource, LibraryCategory, ReadingPair } 
 import { documentAccept, documentFormatsLabel, printableFile } from '@/features/documents/formats'
 import { createViewerSession, viewerSessionKey } from '@/features/documents/viewerSession'
 import { useAuthStore } from '@/stores/auth'
-import { sdsCommand, sdsErrorMessage } from '@/services/sds'
+import { sdsErrorMessage } from '@/services/sds'
 import { useLibraryMutation } from '@/features/sds/useLibraryMutation'
 import { useLibraryQuery } from '@/features/sds/useLibraryQuery'
 import SdsBulkImport from './SdsBulkImport.vue'
@@ -215,7 +216,7 @@ async function saveSelection() {
   busy.value = true
   error.value = ''
   try {
-    await sdsCommand('saveSelection', {
+    await libraryCommand('saveSelection', {
       jobId: jobId.value,
       selections: selection.value,
       version: library.value.binder.version,
@@ -404,7 +405,7 @@ async function menuAction(action: string, target: ExplorerMenuTarget) {
       busy.value = true
       error.value = ''
       try {
-        await sdsCommand('saveSheet', {
+        await libraryCommand('saveSheet', {
           ...sheet,
           archived: !sheet.archived,
           version: library.value.version,
@@ -466,7 +467,7 @@ async function addFile(event: Event) {
   progress.value = 0
   await runMutation(async stageFile => {
     const staged = await stageFile(picked)
-    const result = await sdsCommand<{ id: string }>('saveSheet', {
+    const result = await libraryCommand('saveSheet', {
       name: picked.name.slice(0, 160),
       folderId: destination,
       manufacturer: '',
@@ -497,7 +498,7 @@ async function saveRecord() {
     if (editor.value === 'sheet' && !form.id && !file.value)
       throw new Error('Choose a file before saving.')
     const staged = file.value ? await stageFile(file.value) : undefined
-    await sdsCommand(editor.value === 'folder' ? 'saveFolder' : 'saveSheet', {
+    await libraryCommand(editor.value === 'folder' ? 'saveFolder' : 'saveSheet', {
       ...form,
       version: library.value.version,
       uploadId: staged?.uploadId ?? '',
@@ -514,7 +515,7 @@ async function deleteFolder(folder = currentFolder.value) {
   if (!folder || !window.confirm(`Remove empty folder “${folder.name}”?`)) return
   busy.value = true
   try {
-    await sdsCommand('deleteFolder', { id: folder.id, version: library.value.version })
+    await libraryCommand('deleteFolder', { id: folder.id, version: library.value.version })
     if (folderId.value === folder.id) folderId.value = folder.parentId
     await refresh()
   } catch (e) {
@@ -535,7 +536,7 @@ async function openSheet(download = false, sheet = selected.value) {
     tab.document.body.textContent = 'Opening your file…'
   }
   try {
-    const result = await sdsCommand<{ url: string }>('openSheet', {
+    const result = await libraryCommand('openSheet', {
       id,
       jobId: jobId.value,
       download,
@@ -551,7 +552,7 @@ async function openSheet(download = false, sheet = selected.value) {
 }
 async function pollExport(id: string) {
   try {
-    const result = await sdsCommand<{ status: string; error?: string; pageCount?: number }>(
+    const result = await libraryCommand(
       'exportStatus',
       { id },
     )
@@ -588,7 +589,7 @@ async function exportBook() {
   clearExport()
   const id = crypto.randomUUID()
   try {
-    await sdsCommand('requestExport', {
+    await libraryCommand('requestExport', {
       requestId: id,
       printableOnly: excluded > 0,
       jobId: jobId.value,
@@ -612,12 +613,13 @@ async function retrieveBook(download: boolean) {
     tab.document.body.textContent = 'Opening your document book…'
   }
   try {
-    const result = await sdsCommand<{ url: string }>('exportStatus', {
+    const result = await libraryCommand('exportStatus', {
       id: exportId.value,
       download,
       link: true,
     })
-    if (tab) tab.location.replace(result.url)
+    // Link controls are shown only for completed exports, as before this extraction.
+    if (tab) tab.location.replace(result.url!)
     else {
       error.value = 'Allow a new tab to open the PDF, then try again.'
     }

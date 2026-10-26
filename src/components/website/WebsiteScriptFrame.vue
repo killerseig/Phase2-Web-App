@@ -106,7 +106,7 @@ async function initialize() {
       try {
         if (props.preview) {
           const { websiteCommand } = await import('@/services/website')
-          const result = await websiteCommand<{ base64: string }>('getImage', { id })
+          const result = await websiteCommand('getImage', { id })
           images[id] = 'data:image/webp;base64,' + result.base64
         } else {
           const response = await fetch('/website-image?id=' + encodeURIComponent(id) + (publicVersion?.value ? '&v=' + encodeURIComponent(publicVersion.value) : ''), {

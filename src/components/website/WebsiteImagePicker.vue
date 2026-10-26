@@ -52,7 +52,7 @@ async function loadImages() {
   loading.value = true
   libraryError.value = ''
   try {
-    const result = await websiteCommand<{ images: WebsiteAsset[]; nextCursor: string | null }>(
+    const result = await websiteCommand(
       'listImages',
       cursor.value ? { cursor: cursor.value } : {},
     )

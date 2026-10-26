@@ -37,7 +37,7 @@ watch(
     }
     try {
       const { websiteCommand } = await import('@/services/website')
-      const image = await websiteCommand<{ base64: string }>('getImage', {
+      const image = await websiteCommand('getImage', {
         id: props.id,
         thumbnail: props.thumbnail === true,
       })

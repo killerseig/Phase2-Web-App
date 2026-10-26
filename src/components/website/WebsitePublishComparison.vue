@@ -25,7 +25,7 @@ async function compare() {
   busy.value = true
   error.value = ''
   try {
-    const comparison = await websiteCommand<NonNullable<typeof result.value>>('comparePublished', {
+    const comparison = await websiteCommand('comparePublished', {
       site: JSON.parse(JSON.stringify(props.site)),
       version: props.version,
     })

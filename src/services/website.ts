@@ -1,18 +1,23 @@
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
 import type { WebsiteSite } from '@/features/website/types'
+import type { WebsiteRequests, WebsiteResponses } from '@/features/website/commandContracts'
 
-export async function websiteCommand<T>(
-  action: string,
-  data: Record<string, unknown> = {},
-): Promise<T> {
+export async function websiteCommand<A extends keyof WebsiteRequests>(
+  action: A,
+  ...payload: undefined extends WebsiteRequests[A]
+    ? [data?: WebsiteRequests[A]]
+    : [data: WebsiteRequests[A]]
+): Promise<WebsiteResponses[A]> {
+  const data = payload[0] ?? {}
   const { functions } = requireFirebaseServices()
   const result = (
-    await httpsCallable<Record<string, unknown>, T>(functions, 'websiteBuilder', {
+    await httpsCallable<Record<string, unknown>, WebsiteResponses[A]>(functions, 'websiteBuilder', {
       timeout: 90000,
     })({ ...data, action })
   ).data
-  if (action === 'publish' || action === 'unpublish') (await import('./publicWebsite')).clearPublicSnapshotCache()
+  if (action === 'publish' || action === 'unpublish')
+    (await import('./publicWebsite')).clearPublicSnapshotCache()
   return result
 }
 export async function loadPublishedWebsite() {
@@ -42,7 +47,7 @@ export async function uploadWebsiteImage(file: File) {
     reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
     reader.readAsDataURL(file)
   })
-  return websiteCommand<{ id: string; base64: string }>('uploadImage', { base64, name: file.name })
+  return websiteCommand('uploadImage', { base64, name: file.name })
 }
 
 export async function submitWebsiteForm(data: Record<string, unknown>) {

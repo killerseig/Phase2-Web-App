@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { libraryCommand } from '@/features/sds/commands'
 import { defineAsyncComponent, inject, onBeforeUnmount, provide, ref, shallowRef, watch } from 'vue'
 import type { SdsSheet } from '@/features/sds/types'
-import { sdsCommand, sdsErrorMessage } from '@/services/sds'
+import { sdsErrorMessage } from '@/services/sds'
 import { createViewerSession, loadFileViewer, loadPdfViewer, viewerSessionKey } from '@/features/documents/viewerSession'
 import type { RenewDocumentTicket } from '@/features/documents/authorizedFetch'
 import AppButton from '@/components/common/AppButton.vue'
@@ -48,7 +49,7 @@ watch(
     // private file is still requested only after openSheet succeeds.
     void session.prepare(extension.value).catch(() => undefined)
     try {
-      const result = await sdsCommand<{ url: string; extension?: string; revisionId?: string }>('openSheet', {
+      const result = await libraryCommand('openSheet', {
         id: props.sheet.id,
         jobId: props.jobId,
         download: false,
@@ -59,7 +60,7 @@ watch(
         renewTicket.value = async () => {
           const current = () => active && session.isCurrent(accessContext)
           if (!current()) throw new DOMException('Document closed', 'AbortError')
-          const fresh = await sdsCommand<{ url: string; revisionId?: string; extension?: string }>('openSheet', { id, jobId, download: false })
+          const fresh = await libraryCommand('openSheet', { id, jobId, download: false })
           if (!current()) throw new DOMException('Document closed', 'AbortError')
           if (!result.revisionId || fresh.revisionId !== result.revisionId || (fresh.extension ?? expectedExtension) !== expectedExtension)
             throw new Error('The document version changed. Reopen it to continue.')

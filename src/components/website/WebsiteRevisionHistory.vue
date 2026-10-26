@@ -43,7 +43,7 @@ async function compare(entry: (typeof entries.value)[number]) {
   comparing.value = entry.id
   error.value = ''
   try {
-    const { draft } = await websiteCommand<{ draft: WebsiteSite }>('getRevision', {
+    const { draft } = await websiteCommand('getRevision', {
       revisionId: entry.id,
     })
     if (generation === comparisonRequest)
@@ -59,10 +59,7 @@ async function load() {
   busy.value = true
   error.value = ''
   try {
-    const result = await websiteCommand<{
-      revisions: typeof entries.value
-      activity?: typeof activity.value
-    }>('listRevisions')
+    const result = await websiteCommand('listRevisions')
     if (generation === request) {
       entries.value = result.revisions
       activity.value = result.activity || []
