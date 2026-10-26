@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { sdsErrorMessage } from '@/services/sds'
 import { useLibraryMutation } from './useLibraryMutation'
 
-const fake = vi.hoisted(() => ({ upload: vi.fn() }))
+const fake = vi.hoisted(() => ({ upload: vi.fn<typeof import('@/services/sds').uploadDocument>() }))
 vi.mock('@/services/sds', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/sds')>(),
   uploadDocument: fake.upload,
@@ -13,6 +13,7 @@ function fixture() {
   const state = { busy: ref(false), error: ref('Previous error'), progress: ref<number | null>(null) }
   return { ...state, ...useLibraryMutation(state) }
 }
+const uploadId = '00000000-0000-4000-8000-000000000001' as const
 const file = new File(['synthetic contents'], 'document.txt', { type: 'text/plain' })
 
 describe('Library mutation staging lifetime', () => {
@@ -20,7 +21,7 @@ describe('Library mutation staging lifetime', () => {
 
   it('keeps metadata-only edits and folder saves free of file uploads', async () => {
     const state = fixture()
-    const command = vi.fn(async () => {
+    const command = vi.fn<() => Promise<void>>(async () => {
       expect(state.busy.value).toBe(true)
       expect(state.error.value).toBe('')
     })
@@ -43,8 +44,8 @@ describe('Library mutation staging lifetime', () => {
     const state = fixture(), events: string[] = []
     let finishCleanup!: () => void
     const staged = {
-      uploadId: 'staged-id', uploadExtension: 'txt', originalName: file.name,
-      cleanup: vi.fn(() => new Promise<void>(resolve => {
+      uploadId, uploadExtension: 'txt' as const, originalName: file.name,
+      cleanup: vi.fn<() => Promise<void>>(() => new Promise<void>(resolve => {
         events.push('cleanup'); finishCleanup = resolve
       })),
     }
@@ -56,7 +57,7 @@ describe('Library mutation staging lifetime', () => {
     })
     const pending = state.runMutation(async stageFile => {
       const metadata = await stageFile(file)
-      expect(metadata).toMatchObject({ uploadId: 'staged-id', uploadExtension: 'txt', originalName: file.name })
+      expect(metadata).toMatchObject({ uploadId, uploadExtension: 'txt', originalName: file.name })
       expect(state.progress.value).toBe(65)
       expect(staged.cleanup).not.toHaveBeenCalled()
       events.push('save', 'refresh')
@@ -72,7 +73,7 @@ describe('Library mutation staging lifetime', () => {
   })
 
   it('does not save after a failed upload and clears busy/progress for retry', async () => {
-    const state = fixture(), save = vi.fn()
+    const state = fixture(), save = vi.fn<() => void>()
     const failure = { code: 'functions/unavailable' }
     fake.upload.mockImplementation(async (_file: File, progress: (percent: number) => void) => {
       progress(30)
@@ -86,8 +87,8 @@ describe('Library mutation staging lifetime', () => {
   })
 
   it.each(['save', 'refresh'])('cleans staging after a failed %s without swallowing its message', async phase => {
-    const state = fixture(), cleanup = vi.fn().mockResolvedValue(undefined)
-    fake.upload.mockResolvedValue({ uploadId: 'staged-id', uploadExtension: 'txt', originalName: file.name, cleanup })
+    const state = fixture(), cleanup = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+    fake.upload.mockResolvedValue({ uploadId, uploadExtension: 'txt', originalName: file.name, cleanup })
     await state.runMutation(async stageFile => {
       await stageFile(file)
       throw new Error(`${phase} failed`)

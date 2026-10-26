@@ -14,7 +14,7 @@ function fixture() {
     const page = computed(() => site.value.pages[0]!)
     const selectedSection = ref(''), selectedIds = ref<string[]>([]), selectedText = ref<ElementTarget>()
     const section = computed(() => page.value.sections.find(item => item.id === selectedSection.value))
-    const locked = ref(false), device = ref<WebsiteDevice>('desktop'), cancelDrag = vi.fn(), focusArrangement = vi.fn()
+    const locked = ref(false), device = ref<WebsiteDevice>('desktop'), cancelDrag = vi.fn<() => void>(), focusArrangement = vi.fn<() => void>()
     const editing = useWebsiteWidgetEditing({
       page, section, selectedSection, selectedIds, selectedText, locked, device,
       settingsPanel: ref<'site' | 'page'>('site'), activePane: ref<'outline' | 'preview' | 'inspector'>('preview'),

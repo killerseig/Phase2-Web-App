@@ -2,20 +2,22 @@ import { effectScope, nextTick, ref, type EffectScope } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLibraryQuery } from './useLibraryQuery'
 import type { SdsLibrary } from './types'
+import type { SdsPage } from '@/services/sds'
 
-const fake = vi.hoisted(() => ({ load: vi.fn(), page: vi.fn() }))
+const fake = vi.hoisted(() => ({ load: vi.fn<typeof import('@/services/sds').loadSds>(), page: vi.fn<typeof import('@/services/sds').loadSdsPage>() }))
 vi.mock('@/services/sds', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/sds')>(), loadSds: fake.load, loadSdsPage: fake.page,
 }))
 const scopes: EffectScope[] = []
 const library = (): SdsLibrary => ({ version: 3, folders: [], sheets: [], binder: { version: 2, selections: [] } })
+const pageResult = (after: string): SdsPage => ({ sheets: [], after, scanned: 0, searchMode: 'bounded-metadata-scan' })
 function fixture(job = '') {
   const scope = effectScope(); scopes.push(scope)
   return scope.run(() => {
     const state = {
       jobId: ref(job), search: ref(''), showArchived: ref(false), library: ref(library()),
       loading: ref(true), loadFailed: ref(false), nextPage: ref(''), pageBusy: ref(false), error: ref(''),
-      onLoaded: vi.fn(),
+      onLoaded: vi.fn<(library: SdsLibrary) => void>(),
     }
     return { ...state, ...useLibraryQuery(state) }
   })!
@@ -26,14 +28,14 @@ afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); vi.useRealTim
 describe('bounded Library queries', () => {
   it('retains the newer search cursor when an older page completes last', async () => {
     const state = fixture()
-    let finish!: (value: { sheets: never[]; after: string }) => void
+    let finish!: (value: SdsPage) => void
     fake.page.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
     const old = state.refresh()
     await Promise.resolve()
     state.search.value = 'new query'
-    fake.page.mockResolvedValueOnce({ sheets: [], after: 'new-cursor' })
+    fake.page.mockResolvedValueOnce(pageResult('new-cursor'))
     await state.refresh()
-    finish({ sheets: [], after: 'old-cursor' }); await old
+    finish(pageResult('old-cursor')); await old
     expect(state.nextPage.value).toBe('new-cursor')
     expect(state.onLoaded).toHaveBeenCalledOnce()
     state.dispose()
@@ -54,10 +56,10 @@ describe('bounded Library queries', () => {
   })
   it('does not publish a page cursor or error after disposal', async () => {
     const state = fixture()
-    let finish!: (value: { sheets: never[]; after: string }) => void
+    let finish!: (value: SdsPage) => void
     fake.page.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
     const old = state.refresh(); await Promise.resolve()
-    state.dispose(); finish({ sheets: [], after: 'stale' }); await old
+    state.dispose(); finish(pageResult('stale')); await old
     expect(state.nextPage.value).toBe('')
     expect(state.onLoaded).not.toHaveBeenCalled()
   })
@@ -65,11 +67,11 @@ describe('bounded Library queries', () => {
     vi.useFakeTimers()
     const state = fixture()
     state.nextPage.value = 'old-cursor'
-    let finish!: (value: { sheets: never[]; after: string }) => void
+    let finish!: (value: SdsPage) => void
     fake.page.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
     const pending = state.moreDocuments()
     state.search.value = 'new search'; await nextTick()
-    finish({ sheets: [], after: 'stale' }); await pending
+    finish(pageResult('stale')); await pending
     expect(state.nextPage.value).toBe('old-cursor')
     expect(state.library.value.sheets).toEqual([])
     state.dispose()
@@ -77,17 +79,17 @@ describe('bounded Library queries', () => {
   it('does not clear a newer page busy flag when an older page completes', async () => {
     const state = fixture()
     state.nextPage.value = 'old'
-    let finishOld!: (value: { sheets: never[]; after: string }) => void
-    let finishNew!: (value: { sheets: never[]; after: string }) => void
+    let finishOld!: (value: SdsPage) => void
+    let finishNew!: (value: SdsPage) => void
     fake.page.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve }))
     const old = state.moreDocuments()
-    fake.page.mockResolvedValueOnce({ sheets: [], after: 'new' })
+    fake.page.mockResolvedValueOnce(pageResult('new'))
     await state.refresh()
     fake.page.mockReturnValueOnce(new Promise(resolve => { finishNew = resolve }))
     const newer = state.moreDocuments()
-    finishOld({ sheets: [], after: 'stale' }); await old
+    finishOld(pageResult('stale')); await old
     expect(state.pageBusy.value).toBe(true)
-    finishNew({ sheets: [], after: 'final' }); await newer
+    finishNew(pageResult('final')); await newer
     expect(state.nextPage.value).toBe('final')
     expect(state.pageBusy.value).toBe(false)
     state.dispose()
@@ -95,12 +97,12 @@ describe('bounded Library queries', () => {
   it('loads company metadata then one filtered page and retains a continuation through empty results', async () => {
     const state = fixture()
     state.search.value = 'safety'; state.showArchived.value = true
-    fake.page.mockResolvedValue({ sheets: [], after: 'continuation' })
+    fake.page.mockResolvedValue(pageResult('continuation'))
     await state.refresh()
     expect(fake.load).toHaveBeenCalledWith('', true)
     expect(fake.page).toHaveBeenCalledWith({ search: 'safety', showArchived: true })
     expect(state.nextPage.value).toBe('continuation')
-    fake.page.mockResolvedValue({ sheets: [], after: '' })
+    fake.page.mockResolvedValue(pageResult(''))
     await state.moreDocuments()
     expect(fake.page).toHaveBeenLastCalledWith({ after: 'continuation', search: 'safety', showArchived: true })
     expect(state.nextPage.value).toBe('')
@@ -142,7 +144,7 @@ describe('bounded Library queries', () => {
   it('debounces company searches and cancels pending work when disposed', async () => {
     vi.useFakeTimers()
     const state = fixture()
-    fake.page.mockResolvedValue({ sheets: [], after: '' })
+    fake.page.mockResolvedValue(pageResult(''))
     state.search.value = 'a'; await nextTick()
     state.search.value = 'ab'; await nextTick()
     await vi.advanceTimersByTimeAsync(299)
@@ -156,12 +158,12 @@ describe('bounded Library queries', () => {
   it('does not start duplicate pages and ignores a pending page after disposal', async () => {
     const state = fixture()
     state.nextPage.value = 'cursor'
-    let finish!: (value: { sheets: never[]; after: string }) => void
+    let finish!: (value: SdsPage) => void
     fake.page.mockReturnValue(new Promise(resolve => { finish = resolve }))
     const pending = state.moreDocuments()
     await state.moreDocuments()
     expect(fake.page).toHaveBeenCalledOnce()
-    state.dispose(); finish({ sheets: [], after: 'later' }); await pending
+    state.dispose(); finish(pageResult('later')); await pending
     expect(state.nextPage.value).toBe('cursor')
     expect(state.pageBusy.value).toBe(false)
   })

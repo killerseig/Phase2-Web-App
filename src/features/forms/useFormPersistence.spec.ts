@@ -6,7 +6,7 @@ import { useFormAuthoring } from './useFormAuthoring'
 import { useFormPersistence } from './useFormPersistence'
 import type { ServerFormTemplate } from '@/services/forms'
 
-const fake = vi.hoisted(() => ({ api: vi.fn() }))
+const fake = vi.hoisted(() => ({ api: vi.fn<(name: string, data: Record<string, unknown>) => Promise<unknown>>() }))
 vi.mock('@/services/forms', () => ({ formApi: fake.api }))
 
 const scopes: EffectScope[] = []
@@ -23,10 +23,10 @@ function fixture(localPreview = false) {
     authoring.reset()
     const values = new Map<string, string>()
     const storage = {
-      getItem: vi.fn((key: string) => values.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => { values.set(key, value) }),
+      getItem: vi.fn<Storage['getItem']>((key: string) => values.get(key) ?? null),
+      setItem: vi.fn<Storage['setItem']>((key: string, value: string) => { values.set(key, value) }),
     }
-    const confirmPublish = vi.fn().mockResolvedValue(true), showPublicationIssues = vi.fn()
+    const confirmPublish = vi.fn<() => Promise<boolean>>().mockResolvedValue(true), showPublicationIssues = vi.fn<() => void>()
     const controller = useFormPersistence({
       uid, draft, library, dirty, blocked, message, error, authoring,
       serverEnabled: true, localPreview, storage: () => storage, confirmPublish, showPublicationIssues,
@@ -44,20 +44,24 @@ function installServer(state: ReturnType<typeof fixture>) {
     id: state.draft.value.id, draft: clone(state.draft.value), revision: 4,
     latestVersion: 0, archived: false, used: false,
   }
-  fake.api.mockImplementation(async (_name: string, data: Record<string, unknown>) => {
-    if (data.action === 'list') return { templates: [clone(server)] }
-    if (data.action === 'save') {
+  const handlers: Record<string, (data: Record<string, unknown>) => unknown> = {
+    list: () => ({ templates: [clone(server)] }),
+    save(data) {
       expect(data.revision).toBe(server.revision)
       server.draft = clone(data.definition as FormTemplate)
       server.revision++
       return clone(server)
-    }
-    if (data.action === 'issue') {
+    },
+    issue(data) {
       expect(data).toMatchObject({ id: server.id, revision: server.revision })
       server.latestVersion++
       return { ok: true }
-    }
-    throw new Error('Unexpected synthetic request')
+    },
+  }
+  fake.api.mockImplementation(async (_name, data) => {
+    const handler = handlers[String(data.action)]
+    if (!handler) throw new Error('Unexpected synthetic request')
+    return handler(data)
   })
   return server
 }

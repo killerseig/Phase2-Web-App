@@ -1,10 +1,13 @@
 import { computed, effectScope, ref, type EffectScope } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWebsiteCommands } from './useWebsiteCommands'
+import type { useWebsiteAutosave } from './useWebsiteAutosave'
+type CommandOptions = Parameters<typeof useWebsiteCommands>[0]
+type Autosave = ReturnType<typeof useWebsiteAutosave>
 import { useWebsiteHistory } from './useWebsiteHistory'
 import { withWebsiteDefaults, type WebsiteSite, type WebsiteState } from './types'
 
-const fake = vi.hoisted(() => ({ command: vi.fn() }))
+const fake = vi.hoisted(() => ({ command: vi.fn<(action: string, data: unknown) => Promise<unknown>>() }))
 vi.mock('@/services/website', async importOriginal => ({ ...await importOriginal<typeof import('@/services/website')>(), websiteCommand: fake.command }))
 const scopes: EffectScope[] = []
 function fixture() {
@@ -14,14 +17,14 @@ function fixture() {
     const history = useWebsiteHistory(site); history.reset(site.value)
     const saved = ref(JSON.stringify(site.value)), version = ref(3), loading = ref(false), busy = ref(false)
     const autosave = {
-      stash: vi.fn(), ready: ref(true), settle: vi.fn().mockResolvedValue(undefined), conflict: ref(false), problem: ref(''),
-      discover: vi.fn(), begin: vi.fn(), online: ref(true), persist: vi.fn(), protectedLocally: computed(() => true), reportFailure: vi.fn(),
+      stash: vi.fn<Autosave['stash']>(), ready: ref(true), settle: vi.fn<Autosave['settle']>().mockResolvedValue(undefined), conflict: ref(false), problem: ref(''),
+      discover: vi.fn<Autosave['discover']>(), begin: vi.fn<Autosave['begin']>(), online: ref(true), persist: vi.fn<Autosave['persist']>(), protectedLocally: computed(() => true), reportFailure: vi.fn<Autosave['reportFailure']>(),
     }
     const state = {
       site, saved, version, loading, busy, history, autosave, dirty: computed(() => JSON.stringify(site.value) !== saved.value),
       locked: computed(() => loading.value || busy.value), cssError: ref(''), publishBlocked: ref(false), saving: ref(false), error: ref(''), message: ref(''), starterReview: ref(false),
       publishedAt: ref<number | null>(null), hasPrevious: ref(false), homePageId: ref(''), selectedPage: ref(''), selectedSection: ref(''),
-      canDiscard: vi.fn().mockResolvedValue(true), confirm: vi.fn().mockResolvedValue(true), onLoaded: vi.fn(), onRestored: vi.fn(), fitView: vi.fn(),
+      canDiscard: vi.fn<CommandOptions['canDiscard']>().mockResolvedValue(true), confirm: vi.fn<CommandOptions['confirm']>().mockResolvedValue(true), onLoaded: vi.fn<CommandOptions['onLoaded']>(), onRestored: vi.fn<CommandOptions['onRestored']>(), fitView: vi.fn<CommandOptions['fitView']>(),
     }
     return { ...state, ...useWebsiteCommands(state) }
   })!
