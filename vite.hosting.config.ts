@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
-import base from './vite.config'
+import base from './vite.config.ts'
 
 // Public Firebase SDK configuration only. Never load workstation .env files.
 const sdk = JSON.parse(readFileSync('.forms-local-data/hosting-sdk.json', 'utf8'))
