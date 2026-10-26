@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
-const { buildFormEmailHtml, buildFormEmailText } = require('../formEmailRender')
-const { buildFormSubmissionPdf } = require('../formSubmissionPdf')
-const { formAnswerSummary } = require('../formModel')
+const { buildFormEmailHtml, buildFormEmailText } = require('../lib/formEmailRender')
+const { buildFormSubmissionPdf } = require('../lib/formSubmissionPdf')
+const { formAnswerSummary } = require('../lib/formModel')
 const matrix = {
   id: 'assessment',
   kind: 'matrix',

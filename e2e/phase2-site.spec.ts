@@ -4,7 +4,7 @@ import { expect, test } from './helpers/test.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 import { phase2Site } from '../src/features/website/phase2Site.js'
 const { validateWebsite, publishedWebsite } = createRequire(import.meta.url)(
-  '../functions/websiteModel.js',
+  '../functions/lib/websiteModel.js',
 )
 
 test('Shared Phase 2 site opens directly, supports content edits, and renders every page', async ({

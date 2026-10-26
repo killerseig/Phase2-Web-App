@@ -11,7 +11,7 @@ const app = initializeApp({
   storageBucket: 'demo-phase2-security.appspot.com',
 })
 const db = getFirestore()
-const { updateDailyLogRecordCallable } = require('../functions/dailyLogRecordFunctions.js')
+const { updateDailyLogRecordCallable } = require('../functions/lib/dailyLogRecordFunctions.js')
 const logRef = db.doc('dailyLogs/retry-log')
 const submit = (uid, data = {}) =>
   updateDailyLogRecordCallable.run({

@@ -19,8 +19,8 @@ const require = createRequire(new URL('../functions/package.json', import.meta.u
   { getFirestore } = require('firebase-admin/firestore')
 adminApp({ projectId, storageBucket: projectId + '.appspot.com' })
 const db = getFirestore(),
-  { formTemplates, formWorkspace } = require('../functions/formFunctions.js'),
-  { deliverFormSubmission, formEmail, buildFormEmailHtml } = require('../functions/formDelivery.js')
+  { formTemplates, formWorkspace } = require('../functions/lib/formFunctions.js'),
+  { deliverFormSubmission, formEmail, buildFormEmailHtml } = require('../functions/lib/formDelivery.js')
 const template = (uid, action, data = {}) =>
     formTemplates.run({ auth: uid ? { uid } : undefined, data: { action, ...data } }),
   record = (uid, action, data = {}) =>
@@ -575,7 +575,7 @@ try {
   const {
     dashboardWorkspace,
     validateDashboardWidgets,
-  } = require('../functions/dashboardFunctions.js')
+  } = require('../functions/lib/dashboardFunctions.js')
   const dashboard = (uid, data) => dashboardWorkspace.run({ auth: uid ? { uid } : undefined, data })
   const shortDefinition = {
     ...source,

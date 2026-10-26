@@ -1,6 +1,20 @@
 # Phase2 Web Application
 
-This template should help get you started developing with Vue 3 in Vite.
+Phase 2 uses Vue 3 and Vite for the browser app and a separate TypeScript package for Firebase Functions. See [GIT-WORKFLOW.md](GIT-WORKFLOW.md) for the canonical checkout, `test`/`main` workflow and reviewed release process.
+
+## Project structure and build contracts
+
+- Root HTML files are Vite entry points. `src/` contains the browser app: views, components, features, services, stores and the router. These folder names are project conventions, not a Firebase/Vite requirement.
+- `src/firebase.ts` owns lazy initialization of the modular browser SDK and the existing development-only emulator connections. `VITE_*` values are public browser configuration, never server secrets.
+- Root Vite configurations select the employee, public and server-renderer builds. Reusable build plugins live in `scripts/`; they retain production fixture exclusion and iframe isolation. Imported assets go through Vite; files in `public/` are copied directly when that build enables `publicDir`.
+- `functions/src/` contains backend TypeScript. Its own package and compiler build generated JavaScript/declarations into ignored `functions/lib/`; `functions/package.json` points to `lib/index.js`. Keep the named exports in `functions/src/index.ts` stable, because they identify deployed handlers. Shared pure model modules are imported as source by the browser; server runtime modules stay on the backend.
+- `functions/assets/` contains packaged fonts. `functions/generated/` contains the generated public HTML template and SSR renderer. Both locations are runtime inputs to Functions; they are not frontend document storage.
+- The normal frontend build writes `dist/`, matching `firebase.json` Hosting's `public` directory. The reviewed employee-only release build writes `hosting-dist/` and preserves the live public website through the existing release script. Do not substitute one artifact for the other or reorder the private-file/API rewrites behind the application fallback.
+- Tests live in `e2e/`, source-adjacent specs and maintained verification scripts. Temporary evidence, emulator state and generated builds remain ignored by Git. Essential source, configuration, tests and lockfiles are tracked.
+
+`npm run build` type-checks the frontend, builds the browser entries/public template, compiles Functions and builds its SSR renderer. Vite transpilation does not replace `vue-tsc` or the Functions compiler. After that build, `npm run verify:functions-build` checks the compiled entry/handler names, Firebase package inclusion, packaged fonts and public rendering using only synthetic local data; it makes no cloud calls.
+
+This follows the supported [Vite entry/assets model](https://vite.dev/guide/), [Vue TypeScript tooling](https://vuejs.org/guide/typescript/overview), [Firebase Functions TypeScript layout](https://firebase.google.com/docs/functions/typescript) and [Hosting configuration contracts](https://firebase.google.com/docs/hosting/full-config). Multiple entry points and separate server rendering are supported project requirements, not reasons to replace the framework.
 
 ## Recommended IDE Setup
 

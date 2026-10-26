@@ -8,7 +8,7 @@ import { createRequire } from 'node:module'
 import type { SharedDashboardWidget } from '../functions/src/sharedDashboardModel'
 import type { FormRecord } from '../functions/src/formModel'
 const { defaultSharedWidgets } = createRequire(import.meta.url)(
-  '../functions/sharedDashboardModel.js',
+  '../functions/lib/sharedDashboardModel.js',
 ) as typeof import('../functions/src/sharedDashboardModel')
 async function mockShared(page: Page, admin = true, enabled = false) {
   const templates = new Map<

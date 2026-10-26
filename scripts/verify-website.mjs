@@ -33,16 +33,16 @@ const {
   websiteBuilder,
   getPublishedWebsite,
   websiteImage,
-} = require('../functions/websiteFunctions.js')
+} = require('../functions/lib/websiteFunctions.js')
 const {
   validateWebsite,
   publishedWebsite,
   websiteAssetIds,
-} = require('../functions/websiteModel.js')
+} = require('../functions/lib/websiteModel.js')
 const {
   dashboardWorkspace,
   validateDashboardWidgets,
-} = require('../functions/dashboardFunctions.js')
+} = require('../functions/lib/dashboardFunctions.js')
 const clients = []
 const call = (user, action, data = {}) =>
   websiteBuilder.run({ auth: user ? { uid: user.uid } : undefined, data: { action, ...data } })
@@ -912,12 +912,12 @@ try {
   assert.deepEqual(restoredCustom.draft.customWidgets, checkedCustom.customWidgets)
   assert.deepEqual((await publicSite()).site.pages[0].sections, publicCustom.pages[0].sections)
 
-  const { newWebsiteForm } = require('../functions/websiteForms.js')
+  const { newWebsiteForm } = require('../functions/lib/websiteForms.js')
   const {
     submitWebsiteForm,
     websiteFormAdmin,
     deliverWebsiteSubmission,
-  } = require('../functions/websiteFormFunctions.js')
+  } = require('../functions/lib/websiteFormFunctions.js')
   const formAdmin = (actor, action, data = {}) =>
     websiteFormAdmin.run({
       auth: actor ? { uid: actor.uid } : undefined,
@@ -982,7 +982,7 @@ try {
     () => submit({ ...payload, values: { ...payload.values, message: 'Changed' } }),
     /already-exists/,
   )
-  const emailService = require('../functions/emailService.js')
+  const emailService = require('../functions/lib/emailService.js')
   const originalSend = emailService.sendEmail,
     originalEnabled = emailService.isEmailEnabled
   const sent = []
@@ -1180,7 +1180,7 @@ try {
     await reject(async () => validateWebsite(candidate), /invalid-argument/)
   }
   // Component widgets preserve their data/settings and validate nested custom source content.
-  const { blockTypes } = require('../functions/websiteBlocks.js')
+  const { blockTypes } = require('../functions/lib/websiteBlocks.js')
   for (const type of blockTypes) {
     const row = {
       id: 'row',

@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { buildDailyLogEmail, normalizeDailyLogEmailPayload } = require('../emailService.js')
+const { buildDailyLogEmail, normalizeDailyLogEmailPayload } = require('../lib/emailService.js')
 
 const nestedDailyLogRecord = {
   id: 'daily-log-1',

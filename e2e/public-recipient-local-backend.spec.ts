@@ -12,10 +12,10 @@ process.env.FIREBASE_CONFIG = JSON.stringify({ projectId, storageBucket: project
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'; process.env.FUNCTIONS_EMULATOR = 'true'; process.env.METADATA_SERVER_DETECTION = 'none'
 const backend = createRequire(resolve('functions/package.json'))
 type Callable = { run: (request: Record<string, unknown>) => Promise<unknown> }
-const { formTemplates, formWorkspace } = backend(resolve('functions/formFunctions.js')) as { formTemplates: Callable; formWorkspace: Callable }
-const { verifyPublicFormRecipient } = backend(resolve('functions/formRecipientVerification.js')) as typeof import('../functions/src/formRecipientVerification')
-const { publicRecipientConsentSnapshot, resolveRecipientEmails } = backend(resolve('functions/formRecipients.js')) as typeof import('../functions/src/formRecipients')
-const { db } = backend(resolve('functions/runtime.js')) as typeof import('../functions/src/runtime')
+const { formTemplates, formWorkspace } = backend(resolve('functions/lib/formFunctions.js')) as { formTemplates: Callable; formWorkspace: Callable }
+const { verifyPublicFormRecipient } = backend(resolve('functions/lib/formRecipientVerification.js')) as typeof import('../functions/src/formRecipientVerification')
+const { publicRecipientConsentSnapshot, resolveRecipientEmails } = backend(resolve('functions/lib/formRecipients.js')) as typeof import('../functions/src/formRecipients')
+const { db } = backend(resolve('functions/lib/runtime.js')) as typeof import('../functions/src/runtime')
 const checks: Record<string, unknown>[] = [], sha = (value: string) => createHash('sha256').update(value).digest('hex')
 
 test.afterAll(async () => { writeFileSync('evidence/recipient-browser-local-backend.json', JSON.stringify({ checkedAt: new Date().toISOString(), projectId, browserTransport: 'Playwright callable transport; actual existing backend handlers and Firestore transactions', mailer: 'in-memory only', productionReads: false, productionWrites: false, externalEmails: false, reviewProjectUntouched: true, checks }, null, 2)); await db.terminate() })

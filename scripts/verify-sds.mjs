@@ -37,8 +37,8 @@ const { createHash } = require('node:crypto')
 initializeAdmin({ projectId, storageBucket: `${projectId}.appspot.com` })
 const db = getAdminFirestore()
 const bucket = getAdminStorage().bucket()
-const { sdsWorkspace, generateSdsBook, downloadSdsFile } = require('../functions/sdsFunctions.js')
-const { buildSdsBook } = require('../functions/sdsBook.js')
+const { sdsWorkspace, generateSdsBook, downloadSdsFile } = require('../functions/lib/sdsFunctions.js')
+const { buildSdsBook } = require('../functions/lib/sdsBook.js')
 const clients = []
 let checks = 0
 let server
@@ -479,7 +479,7 @@ try {
     assert.equal(large.manifest[i].startPage, large.manifest[i - 1].startPage + 2)
   assert.equal(large.pageCount, large.manifest.at(-1).startPage + 1)
   // Mixed document formats use the same protected revision and download paths.
-  const { DOCUMENT_MIME, validateDocument } = require('../functions/documentFormats.js')
+  const { DOCUMENT_MIME, validateDocument } = require('../functions/lib/documentFormats.js')
   const fixtures = {
     png: 'site.png',
     jpeg: 'site.jpeg',

@@ -19,10 +19,10 @@ const db = require('firebase-admin/firestore').getFirestore()
 const clientApp = initializeClientApp({ projectId }, 'dashboard-rules-audit')
 const clientDb = getClientFirestore(clientApp)
 connectFirestoreEmulator(clientDb, '127.0.0.1', 8280, { mockUserToken: { sub: 'dash-a' } })
-const { sharedDashboardWorkspace } = require('../functions/sharedDashboardFunctions.js')
-const { formTemplates, formWorkspace } = require('../functions/formFunctions.js')
-const { formSubmissionViewer } = require('../functions/formSubmissionViewer.js')
-const { defaultSharedWidgets } = require('../functions/sharedDashboardModel.js')
+const { sharedDashboardWorkspace } = require('../functions/lib/sharedDashboardFunctions.js')
+const { formTemplates, formWorkspace } = require('../functions/lib/formFunctions.js')
+const { formSubmissionViewer } = require('../functions/lib/formSubmissionViewer.js')
+const { defaultSharedWidgets } = require('../functions/lib/sharedDashboardModel.js')
 const call = (uid, scope, action = 'load', data = {}) =>
   sharedDashboardWorkspace.run({
     auth: uid ? { uid } : undefined,

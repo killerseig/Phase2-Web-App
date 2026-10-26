@@ -4,7 +4,7 @@ const {
   translateFormRecord,
   translatedFormProjection,
   currentFormTranslation,
-} = require('../formTranslation')
+} = require('../lib/formTranslation')
 const field = (id, kind) => ({ id, kind, label: id, required: false, options: ['Seguro'] })
 const record = {
   id: 'synthetic',
@@ -89,13 +89,13 @@ const original = JSON.stringify(record)
     translationSource(record).sourceHash,
     translationSource(structuredClone(record)).sourceHash,
   )
-  const { formTranslationEmailContent } = require('../formTranslationEmail')
+  const { formTranslationEmailContent } = require('../lib/formTranslationEmail')
   const rendered = formTranslationEmailContent(record, translation)
   assert.match(rendered.text, /English: Peligro de caída/)
   assert.match(rendered.html, /English rendering/)
   assert.match(formTranslationEmailContent(record, failed).text, /translation failed/)
-  require.cache[require.resolve('../runtime')] = { exports: { db: {}, storageBucket: {} } }
-  const { prepareFormEmail, fitFormEmailPayload } = require('../formEmailContent')
+  require.cache[require.resolve('../lib/runtime')] = { exports: { db: {}, storageBucket: {} } }
+  const { prepareFormEmail, fitFormEmailPayload } = require('../lib/formEmailContent')
   const email = await prepareFormEmail(
     { ...record, ownerUid: 'synthetic-owner', templateVersion: 1 },
     ['review@example.test'],

@@ -4,7 +4,7 @@ import audit from '../../functions/src/committeeAudit.json' with { type: 'json' 
 import { createRequire } from 'node:module'
 import type { FormDefinition, FormRecord, FormVersion } from '../../functions/src/formModel'
 const { validateFormAnswers, validateFormDefinition } = createRequire(import.meta.url)(
-  '../../functions/formModel.js',
+  '../../functions/lib/formModel.js',
 ) as typeof import('../../functions/src/formModel')
 import { createJobsFixture, gotoPhase2App } from './phase2AppFixture.js'
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T

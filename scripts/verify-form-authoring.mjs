@@ -17,7 +17,7 @@ require('firebase-admin/app').initializeApp({
   storageBucket: projectId + '.appspot.com',
 })
 const db = require('firebase-admin/firestore').getFirestore(),
-  { formTemplates, formWorkspace } = require('../functions/formFunctions.js')
+  { formTemplates, formWorkspace } = require('../functions/lib/formFunctions.js')
 const run = randomUUID(),
   admin = 'authoring-admin-' + run,
   foreman = 'authoring-foreman-' + run,

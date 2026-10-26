@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
-require.cache[require.resolve('../runtime')] = { exports: { db: {}, storageBucket: {} } }
-const { prepareFormEmail } = require('../formEmailContent')
-const { translateFormRecord } = require('../formTranslation')
+require.cache[require.resolve('../lib/runtime')] = { exports: { db: {}, storageBucket: {} } }
+const { prepareFormEmail } = require('../lib/formEmailContent')
+const { translateFormRecord } = require('../lib/formTranslation')
 const { PDFDocument, PDFName } = require('pdf-lib')
 const sharp = require('sharp')
 ;(async () => {

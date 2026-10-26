@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const sharp = require('sharp')
 const { PDFDocument, PDFName } = require('pdf-lib')
-const { buildFormSubmissionPdf } = require('../formSubmissionPdf.js')
+const { buildFormSubmissionPdf } = require('../lib/formSubmissionPdf.js')
 ;(async () => {
   const photo = await sharp({
     create: { width: 40, height: 40, channels: 3, background: '#336699' },

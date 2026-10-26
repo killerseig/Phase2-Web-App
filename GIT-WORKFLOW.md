@@ -8,6 +8,8 @@ Open this repository's root folder in VS Code, or use **File → Add local repos
 
 Install dependencies with `npm ci` and `npm --prefix functions ci`. Copy `.env.example` to `.env.local` and provide the public Firebase web configuration for the intended environment. Keep provider credentials and private documents out of Git. Functions output is generated with `npm --prefix functions run build`; the full build also produces the public renderer.
 
+Functions TypeScript now compiles from `functions/src/` to ignored `functions/lib/`, with `functions/package.json` selecting `lib/index.js`. The existing flat handler exports, runtime assets and deployment identities remain the same. Run `npm run build` then `npm run verify:functions-build` to check fresh packaged output offline; scripts/tests must import compiled modules from `functions/lib/`, not legacy generated files beside the package manifest. Older local generated root files are not source and are no longer used by the maintained commands.
+
 Before pushing, run the appropriate type, lint, unit and browser checks. The Shop Orders release gate remains `npm run test:shop-order-layout` (47 synthetic browser cases); `npm run verify:shop-order-layout` checks the delivered live CSS. Main pushes enter the guarded deployment workflow described below.
 
 ## Recorded live application

@@ -3,7 +3,7 @@ import { expect, test, type Page } from './helpers/test.js'
 import { phase2Site } from '../src/features/website/phase2Site.js'
 
 const { validateWebsite, publishedWebsite } = createRequire(import.meta.url)(
-  '../functions/websiteModel.js',
+  '../functions/lib/websiteModel.js',
 )
 const images: Record<string, { path: string; contentType: string }> = {
   'site-logo': { path: 'src/assets/images/phase2-logo.png', contentType: 'image/png' },

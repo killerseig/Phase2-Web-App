@@ -7,7 +7,7 @@ import { phase2Site } from '../src/features/website/phase2Site.js'
 import { newSection, type WebsiteSection, type WebsiteSite } from '../src/features/website/types.js'
 
 const { validateWebsite, publishedWebsite } = createRequire(import.meta.url)(
-  '../functions/websiteModel.js',
+  '../functions/lib/websiteModel.js',
 )
 const imagePath = 'src/assets/images/phase2-logo.png'
 const image = readFileSync(imagePath).toString('base64')

@@ -70,6 +70,7 @@ playwright.final-bounded-qa.config.ts
 *service-account*.json
 
 # Generated Functions output is rebuilt from functions/src before deployment.
+functions/lib/
 functions/*.js
 functions/*.js.map
 functions/*.d.ts

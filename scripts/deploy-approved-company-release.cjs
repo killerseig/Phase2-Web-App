@@ -67,7 +67,7 @@ function restore() {
 }
 process.on('exit', restore)
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { restore(); process.exit(130) })
-fs.writeFileSync(entryPath, "'use strict';const forms=require('./formFunctions');exports.formTemplates=forms.formTemplates;exports.formWorkspace=forms.formWorkspace;exports.formSubmissionViewer=require('./formSubmissionViewer').formSubmissionViewer;exports.sdsWorkspace=require('./sdsFunctions').sdsWorkspace;const email=require('./formDelivery');exports.formEmail=email.formEmail;exports.deliverFormEmail=email.deliverFormEmail;exports.formEntries=require('./formEntries').formEntries;\n")
+fs.writeFileSync(entryPath, "'use strict';const forms=require('./lib/formFunctions');exports.formTemplates=forms.formTemplates;exports.formWorkspace=forms.formWorkspace;exports.formSubmissionViewer=require('./lib/formSubmissionViewer').formSubmissionViewer;exports.sdsWorkspace=require('./lib/sdsFunctions').sdsWorkspace;const email=require('./lib/formDelivery');exports.formEmail=email.formEmail;exports.deliverFormEmail=email.deliverFormEmail;exports.formEntries=require('./lib/formEntries').formEntries;\n")
 const pkg = JSON.parse(packageBefore); pkg.main = 'approvedCompanyReleaseEntry.js'; fs.writeFileSync(packagePath, JSON.stringify(pkg, null, 2) + '\n')
 process.env.GCLOUD_PROJECT = project
 process.env.FIREBASE_CONFIG = JSON.stringify({ projectId: project, storageBucket: project + '.firebasestorage.app' })

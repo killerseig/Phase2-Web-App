@@ -1,6 +1,7 @@
 {
   "name": "functions",
   "description": "Cloud Functions for phase2 app",
+  "main": "lib/index.js",
   "engines": {
     "node": "22"
   },

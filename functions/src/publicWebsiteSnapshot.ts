@@ -6,7 +6,7 @@ import { publicPageUrl } from './publicWebsiteRoutes'
 export interface PublishedRepresentation { version: string; site: WebsiteSite; pages: Record<string, string> }
 let rendererId: string | undefined
 export function publicRendererId() {
-  return rendererId ||= createHash('sha256').update(readFileSync(path.join(__dirname, 'generated/publicWebsiteRenderer.cjs'))).digest('hex').slice(0, 16)
+  return rendererId ||= createHash('sha256').update(readFileSync(path.join(__dirname, '../generated/publicWebsiteRenderer.cjs'))).digest('hex').slice(0, 16)
 }
 export function assertPublic(site: WebsiteSite) {
   const allowed = new Set(['name', 'accent', 'pages', 'sharedLayout', 'css', 'js', 'theme', 'forms', 'branding'])
@@ -24,7 +24,7 @@ export function publicSnapshotJson(site: WebsiteSite, version: string) {
 export async function generatePublicPages(site: WebsiteSite, revision: number, renderer?: (site: WebsiteSite, slug: string, version: string) => Promise<string>, existingVersion?: string): Promise<PublishedRepresentation> {
   assertPublic(site)
   const version = existingVersion || publicVersion(site, revision)
-  const render = renderer || (require('./generated/publicWebsiteRenderer.cjs') as { renderPublicPage: NonNullable<typeof renderer> }).renderPublicPage
+  const render = renderer || (require('../generated/publicWebsiteRenderer.cjs') as { renderPublicPage: NonNullable<typeof renderer> }).renderPublicPage
   const pages: Record<string, string> = {}
   for (const page of site.pages) {
     const html = await render(site, page.slug, version)
@@ -49,7 +49,7 @@ export function servePublicHtml(site: WebsiteSite, version: string, slug: string
   assertPublic(site)
   const page = site.pages.find(page => page.slug === slug)
   if (!page) throw new Error('Unknown public page')
-  const shell = template || readFileSync(path.join(__dirname, 'generated/publicTemplate.html'), 'utf8')
+  const shell = template || readFileSync(path.join(__dirname, '../generated/publicTemplate.html'), 'utf8')
   if (!shell.includes('<div id="app"></div>')) throw new Error('Invalid public HTML template')
   return shell.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.title + ' | ' + site.name)}</title><link rel="canonical" href="${publicPageUrl(slug)}">`).replace('<div id="app"></div>', `<div id="app" data-public-prerender>${body}</div><script type="application/json" id="published-website-snapshot">${publicSnapshotJson(site, version)}</script>`)
 }

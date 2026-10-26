@@ -15,13 +15,13 @@ require('firebase-admin/app').initializeApp({
   storageBucket: process.env.GCLOUD_PROJECT + '.appspot.com',
 })
 const db = require('firebase-admin/firestore').getFirestore(),
-  { formTemplates, formWorkspace } = require('../functions/formFunctions.js')
+  { formTemplates, formWorkspace } = require('../functions/lib/formFunctions.js')
 const {
     prepareFormEmail,
     fitFormEmailPayload,
     FormEmailPreparationError,
-  } = require('../functions/formEmailContent.js'),
-  { deliverFormSubmission } = require('../functions/formDelivery.js')
+  } = require('../functions/lib/formEmailContent.js'),
+  { deliverFormSubmission } = require('../functions/lib/formDelivery.js')
 const id = randomUUID(),
   admin = 'email-admin-' + id,
   owner = 'email-owner-' + id,
@@ -180,7 +180,7 @@ assert.throws(
     }),
   FormEmailPreparationError,
 )
-const { formOutputIssues } = require('../functions/formOutputTemplate.js')
+const { formOutputIssues } = require('../functions/lib/formOutputTemplate.js')
 const custom = {
   ...snapshot,
   definition: {

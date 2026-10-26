@@ -9,8 +9,8 @@ process.env.FIREBASE_CONFIG =
     storageBucket: 'phase2-web-app-test.appspot.com',
   })
 
-const { buildDailyLogEmail } = require('../emailService.js')
-const { EMAIL } = require('../constants.js')
+const { buildDailyLogEmail } = require('../lib/emailService.js')
+const { EMAIL } = require('../lib/constants.js')
 
 const defaultOutputPath = path.resolve(__dirname, '..', 'tmp', 'daily-log-email-preview.html')
 

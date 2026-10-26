@@ -6,7 +6,7 @@ const {
   buildShopOrderEmail,
   buildShopOrderPdfBuffer,
   buildShopOrderPdfFilename,
-} = require('../emailService.js')
+} = require('../lib/emailService.js')
 
 function extractInlineField(html, label) {
   const match = html.match(new RegExp(`<strong>${label}:<\\/strong>\\s*([^<]+)`))

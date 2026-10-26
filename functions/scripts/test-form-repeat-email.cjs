@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict')
-const { buildFormEmailHtml, buildFormEmailText } = require('../formEmailRender')
+const { buildFormEmailHtml, buildFormEmailText } = require('../lib/formEmailRender')
 const field = (id, kind, label) => ({ id, kind, label, required: false, options: [] })
 const record = {
   id: 'entry',
@@ -61,8 +61,8 @@ assert.match(buildFormEmailHtml(record, previews), /cid:entry-photo-asset-two/)
 console.log('Repeated form email rendering passed; no email or network operations.')
 
 // Preparation must reject a storage asset attached to the wrong repeat instance.
-require.cache[require.resolve('../runtime')] = { exports: {db: {}, storageBucket: {}} }
-const { prepareFormEmail } = require('../formEmailContent')
+require.cache[require.resolve('../lib/runtime')] = { exports: {db: {}, storageBucket: {}} }
+const { prepareFormEmail } = require('../lib/formEmailContent')
 const sharp = require('sharp')
 ;(async () => {
   record.definition.output.pdf = false

@@ -73,7 +73,7 @@ for (const signal of ['SIGINT','SIGTERM']) process.on(signal, () => { restore();
 async function main() {
   if (!hosting) {
     assert.ok(!fs.existsSync(entryPath))
-    fs.writeFileSync(entryPath, "'use strict';const website=require('./websiteFunctions');exports.websiteBuilder=website.websiteBuilder;exports.getPublishedWebsite=website.getPublishedWebsite;exports.websiteImage=website.websiteImage;\n")
+    fs.writeFileSync(entryPath, "'use strict';const website=require('./lib/websiteFunctions');exports.websiteBuilder=website.websiteBuilder;exports.getPublishedWebsite=website.getPublishedWebsite;exports.websiteImage=website.websiteImage;\n")
     const pkg = JSON.parse(packageBefore); pkg.main = 'approvedPublicReleaseEntry.js'; fs.writeFileSync(packagePath, JSON.stringify(pkg, null, 2)+'\n')
     process.env.GCLOUD_PROJECT = project
     process.env.FIREBASE_CONFIG = JSON.stringify({ projectId: project, storageBucket: project+'.firebasestorage.app' })

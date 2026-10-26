@@ -29,7 +29,7 @@ export async function buildSdsBook(
   const book = await PDFDocument.create()
   book.registerFontkit(fontkit)
   const font = await book.embedFont(
-    readFileSync(join(__dirname, 'assets/SourceSans3-Regular.ttf')),
+    readFileSync(join(__dirname, '../assets/SourceSans3-Regular.ttf')),
     { subset: true },
   )
   book.setTitle(title)

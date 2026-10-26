@@ -369,7 +369,7 @@ test('cached Word and image previews reauthorize, invalidate revisions and disca
 test('large PDFs use bounded authenticated ranges and retain full-download fallback', async ({ page }) => {
   const requireFunctions = createRequire(new URL('../functions/package.json', import.meta.url))
   const { PDFDocument, PDFName } = requireFunctions('pdf-lib')
-  const { byteRange } = requireFunctions('./httpByteRange.js')
+  const { byteRange } = requireFunctions('./lib/httpByteRange.js')
   const document = await PDFDocument.load(readFileSync('e2e/fixtures/sds-book-387.pdf'))
   // A valid unused embedded stream represents bytes not needed for page one.
   const padding = document.context.register(document.context.stream(new Uint8Array(4 * 1024 * 1024).fill(46)))
@@ -438,7 +438,7 @@ test('large PDFs use bounded authenticated ranges and retain full-download fallb
 
 for (const outcome of ['renew', 'denied', 'switch', 'logout', 'changed']) test(`expired PDF ranges ${outcome} without stale state or authorization loops`, async ({ page }) => {
   const requireFunctions = createRequire(new URL('../functions/package.json', import.meta.url))
-  const { PDFDocument } = requireFunctions('pdf-lib'), { byteRange } = requireFunctions('./httpByteRange.js')
+  const { PDFDocument } = requireFunctions('pdf-lib'), { byteRange } = requireFunctions('./lib/httpByteRange.js')
   const document = await PDFDocument.load(readFileSync('e2e/fixtures/sds-book-387.pdf'))
   const padding = document.context.register(document.context.stream(new Uint8Array(3 * 1024 * 1024).fill(32)))
   document.getPage(386).node.addContentStream(padding)

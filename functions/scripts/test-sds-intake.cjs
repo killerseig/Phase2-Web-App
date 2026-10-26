@@ -6,7 +6,7 @@ const {
   checkImportBytes,
   importPath,
   SDS_MASTER_CAPACITY,
-} = require('../sdsIntake')
+} = require('../lib/sdsIntake')
 const bytes = Buffer.from('%PDF-test-only')
 const hash = createHash('sha256').update(bytes).digest('hex')
 const row = (path = 'folder/source.pdf') => ({

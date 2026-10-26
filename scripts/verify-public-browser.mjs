@@ -7,7 +7,7 @@ import { gzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
 const require = createRequire(import.meta.url)
  const { chromium } = require('@playwright/test')
-const { generatePublicPages, servePublicHtml } = require('../functions/publicWebsiteSnapshot.js')
+const { generatePublicPages, servePublicHtml } = require('../functions/lib/publicWebsiteSnapshot.js')
 const sharp = require('../functions/node_modules/sharp')
 const site = JSON.parse(readFileSync('.forms-local-data/public-site-fixture.json','utf8'))
 const generated = await generatePublicPages(site, 42)

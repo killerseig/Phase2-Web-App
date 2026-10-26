@@ -16,16 +16,16 @@ const { initializeApp } = require('firebase-admin/app'),
   { getAuth } = require('firebase-admin/auth'),
   { getFirestore } = require('firebase-admin/firestore')
 initializeApp({ projectId, storageBucket: projectId + '.appspot.com' })
-const { formTemplates, formWorkspace } = require('../functions/formFunctions.js'),
-  { formEmail, deliverFormSubmission } = require('../functions/formDelivery.js')
-const { sharedDashboardWorkspace } = require('../functions/sharedDashboardFunctions.js')
-const { sdsWorkspace } = require('../functions/sdsFunctions.js')
+const { formTemplates, formWorkspace } = require('../functions/lib/formFunctions.js'),
+  { formEmail, deliverFormSubmission } = require('../functions/lib/formDelivery.js')
+const { sharedDashboardWorkspace } = require('../functions/lib/sharedDashboardFunctions.js')
+const { sdsWorkspace } = require('../functions/lib/sdsFunctions.js')
 const {
   listVisibleJobsForCurrentUser,
   getVisibleJobForCurrentUser,
-} = require('../functions/jobFunctions.js')
-const { dashboardWorkspace } = require('../functions/dashboardFunctions.js')
-const { formSubmissionViewer } = require('../functions/formSubmissionViewer.js')
+} = require('../functions/lib/jobFunctions.js')
+const { dashboardWorkspace } = require('../functions/lib/dashboardFunctions.js')
+const { formSubmissionViewer } = require('../functions/lib/formSubmissionViewer.js')
 const handlers = {
     formTemplates,
     formWorkspace,

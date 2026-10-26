@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 const { validateWebsite, publishedWebsite } = createRequire(import.meta.url)(
-  '../functions/websiteModel.js',
+  '../functions/lib/websiteModel.js',
 )
 import { readFileSync } from 'node:fs'
 import { expect, test } from './helpers/test.js'

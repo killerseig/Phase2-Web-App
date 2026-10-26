@@ -106,7 +106,7 @@ try {
   await signOut(foreman.auth)
   await denied('Signed-out thumbnail read', () => getBytes(ref(foreman.storage, thumb)))
 
-  const { setUserPassword, verifySetupToken, hashSetupToken } = require('../functions/userFunctions.js')
+  const { setUserPassword, verifySetupToken, hashSetupToken } = require('../functions/lib/userFunctions.js')
   const setupUid = 'setup-user'
   await adminAuth.createUser({ uid: setupUid, email: 'setup@example.invalid', password: 'Original-test-password' })
   const token = 'a'.repeat(64)

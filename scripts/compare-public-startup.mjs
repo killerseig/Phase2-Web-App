@@ -6,8 +6,8 @@ import { createRequire } from 'node:module'
 import assert from 'node:assert/strict'
 import { chromium } from '@playwright/test'
 const require=createRequire(import.meta.url)
-const {generatePublicPages,servePublicHtml}=require('../functions/publicWebsiteSnapshot.js')
-const {canonicalPublicSite}=require('../functions/publicWebsiteRoutes.js')
+const {generatePublicPages,servePublicHtml}=require('../functions/lib/publicWebsiteSnapshot.js')
+const {canonicalPublicSite}=require('../functions/lib/publicWebsiteRoutes.js')
 const site=canonicalPublicSite(JSON.parse(readFileSync('.forms-local-data/public-site-fixture.json')))
 const generated=await generatePublicPages(site,42)
 const image=await require('../functions/node_modules/sharp')({create:{width:1200,height:700,channels:3,background:'#67869b'}}).webp().toBuffer()

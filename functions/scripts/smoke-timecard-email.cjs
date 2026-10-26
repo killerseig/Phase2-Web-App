@@ -6,12 +6,12 @@ process.env.FIREBASE_CONFIG = process.env.FIREBASE_CONFIG || JSON.stringify({
   storageBucket: 'phase2-web-app-test.appspot.com',
 })
 
-const { buildTimecardsEmail } = require('../emailService.js')
+const { buildTimecardsEmail } = require('../lib/emailService.js')
 const {
   normalizeTimecardForEmail,
   buildTimecardCsv,
   buildTimecardPdfBuffer,
-} = require('../operationsFunctions.js')
+} = require('../lib/operationsFunctions.js')
 
 async function main() {
   const workbookCard = {

@@ -27,9 +27,9 @@ require('firebase-admin/app').initializeApp({
   storageBucket: process.env.GCLOUD_PROJECT + '.appspot.com',
 })
 const db = require('firebase-admin/firestore').getFirestore(),
-  { formTemplates, formWorkspace } = require('../functions/formFunctions.js'),
-  { formSubmissionViewer } = require('../functions/formSubmissionViewer.js'),
-  { prepareFormEmail } = require('../functions/formEmailContent.js')
+  { formTemplates, formWorkspace } = require('../functions/lib/formFunctions.js'),
+  { formSubmissionViewer } = require('../functions/lib/formSubmissionViewer.js'),
+  { prepareFormEmail } = require('../functions/lib/formEmailContent.js')
 const id = randomUUID(),
   owner = 'viewer-owner-' + id,
   admin = 'viewer-admin-' + id,

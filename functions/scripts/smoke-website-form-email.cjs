@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- CommonJS smoke test patches dependencies before loading the compiled email service. */
 const assert = require('node:assert/strict')
 const axios = require('axios')
-const config = require('../functionConfig.js')
+const config = require('../lib/functionConfig.js')
 config.emailEnabled.value = () => true
 config.graphClientId.value = () => 'local-test-client'
 config.graphTenantId.value = () => 'local-test-tenant'
@@ -15,7 +15,7 @@ axios.post = async (url, payload) => {
   message = payload.message
   return {status:202}
 }
-const {sendEmail} = require('../emailService.js')
+const {sendEmail} = require('../lib/emailService.js')
 ;(async()=>{
   await sendEmail({to:['office@example.test'],cc:['office@example.test','manager@example.test'],replyTo:'visitor@example.test',subject:'Website inquiry',html:'<p>Test</p>'})
   assert.deepEqual(message.toRecipients,[{emailAddress:{address:'office@example.test'}}])

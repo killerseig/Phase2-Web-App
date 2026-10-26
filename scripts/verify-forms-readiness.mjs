@@ -377,7 +377,7 @@ try {
         path: process.env.FORMS_SMOKE_ARTIFACTS + '/real-inline-form-' + width + '.png',
       })
   }
-  const { formWorkspace, formTemplates } = require('../functions/formFunctions.js')
+  const { formWorkspace, formTemplates } = require('../functions/lib/formFunctions.js')
   const records = (
     await formWorkspace.run({ auth: { uid: accounts.foreman.uid }, data: { action: 'list' } })
   ).records
@@ -432,7 +432,7 @@ try {
       }),
     (e) => e.code === 'permission-denied',
   )
-  const { formEmail } = require('../functions/formDelivery.js')
+  const { formEmail } = require('../functions/lib/formDelivery.js')
   const delivery = await formEmail.run({
     auth: { uid: accounts.foreman.uid },
     data: { action: 'retry', id: submitted.id },
@@ -443,7 +443,7 @@ try {
     data: { action: 'get', id: submitted.id },
   })
   assert.equal(JSON.stringify(after), before)
-  const { buildFormEmailHtml } = require('../functions/formDelivery.js')
+  const { buildFormEmailHtml } = require('../functions/lib/formDelivery.js')
   const html = buildFormEmailHtml(submitted)
   assert.ok(html.includes('1 photo'))
   assert.ok(!html.includes('<a '))

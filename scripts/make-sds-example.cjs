@@ -2,8 +2,8 @@ const fs = require('node:fs'), path = require('node:path'), crypto = require('no
 const requireFunctions = require('node:module').createRequire(path.resolve('functions/package.json'))
 const { PDFDocument, StandardFonts } = requireFunctions('pdf-lib')
 const { zipSync, strToU8 } = require('fflate')
-const { validateImportIndex, checkImportBytes } = require('../functions/sdsIntake')
-const { validateDocument } = require('../functions/documentFormats')
+const { validateImportIndex, checkImportBytes } = require('../functions/lib/sdsIntake')
+const { validateDocument } = require('../functions/lib/documentFormats')
 async function main() {
   const destination = path.resolve('deliverables/sds-intake-example')
   fs.mkdirSync(destination, { recursive: true })

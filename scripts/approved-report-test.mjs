@@ -4,10 +4,10 @@ import { createHash } from 'node:crypto'
 const require = createRequire(import.meta.url)
 const requireFunctions = createRequire(new URL('../functions/package.json', import.meta.url))
 const sharp = requireFunctions('sharp')
-const { validateFormDefinition, validateFormAnswers } = requireFunctions('./formModel')
+const { validateFormDefinition, validateFormAnswers } = requireFunctions('./lib/formModel')
 // Use only the pure ownership predicate locally; production calls still use real runtime services.
-require.cache[requireFunctions.resolve('./runtime')] = { exports: { db: {}, storageBucket: {} } }
-const { entryReaderAllowed } = requireFunctions('./formEntryAccess')
+require.cache[requireFunctions.resolve('./lib/runtime')] = { exports: { db: {}, storageBucket: {} } }
+const { entryReaderAllowed } = requireFunctions('./lib/formEntryAccess')
 const auth = require('firebase-tools/lib/auth.js'), { requireAuth } = require('firebase-tools/lib/requireAuth.js'), { Client } = require('firebase-tools/lib/apiv2.js')
 const project = 'phase2-website', email = 'cjlarsen1165@gmail.com', id = 'release-test-20261013-8c0e16c', bucket = project + '.firebasestorage.app'
 const options = { project, projectRoot: process.cwd(), nonInteractive: true }

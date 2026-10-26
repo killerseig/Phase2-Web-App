@@ -7,7 +7,7 @@ const {
   buildShopOrderEmail,
   buildShopOrderPdfBuffer,
   buildShopOrderPdfFilename,
-} = require('../emailService.js')
+} = require('../lib/emailService.js')
 
 const sampleFixturePath = path.resolve(__dirname, 'shop-order-email.sample.json')
 const defaultOutputPath = path.resolve(__dirname, '..', 'tmp', 'shop-order-email-preview.html')

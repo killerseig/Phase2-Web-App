@@ -1,9 +1,9 @@
 import { createRequire } from 'node:module'
 const { customDefinition, customMarkup, resolvedCustom, visibleCustomSections } = createRequire(
   import.meta.url,
-)('../functions/websiteCustom.js')
+)('../functions/lib/websiteCustom.js')
 import { readFileSync } from 'node:fs'
-const { compareWebsites } = createRequire(import.meta.url)('../functions/websiteChanges.js')
+const { compareWebsites } = createRequire(import.meta.url)('../functions/lib/websiteChanges.js')
 import { expect, test, type Page } from './helpers/test.js'
 
 import {
@@ -5122,7 +5122,7 @@ test('site and page scripts run in isolation and restart on page navigation', as
 test('script runtime keeps public forms working and blocks preview submissions', async ({
   page,
 }) => {
-  const { newWebsiteForm } = createRequire(import.meta.url)('../functions/websiteForms.js')
+  const { newWebsiteForm } = createRequire(import.meta.url)('../functions/lib/websiteForms.js')
   const content = structuredClone(initial)
   content.js = "document.body.dataset.siteScript = 'ready'"
   const form = newWebsiteForm('contact')

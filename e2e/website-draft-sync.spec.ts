@@ -5,7 +5,7 @@ import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 import { phase2Site } from '../src/features/website/phase2Site.js'
 import type { WebsiteSite } from '../src/features/website/types.js'
 
-const { validateWebsite } = createRequire(import.meta.url)('../functions/websiteModel.js')
+const { validateWebsite } = createRequire(import.meta.url)('../functions/lib/websiteModel.js')
 const image = readFileSync('src/assets/images/phase2-logo.png').toString('base64')
 const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
 

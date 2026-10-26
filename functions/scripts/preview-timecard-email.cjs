@@ -7,8 +7,8 @@ process.env.FIREBASE_CONFIG = process.env.FIREBASE_CONFIG || JSON.stringify({
   storageBucket: 'phase2-web-app-test.appspot.com',
 })
 
-const { buildTimecardsEmail } = require('../emailService.js')
-const { normalizeTimecardForEmail } = require('../operationsFunctions.js')
+const { buildTimecardsEmail } = require('../lib/emailService.js')
+const { normalizeTimecardForEmail } = require('../lib/operationsFunctions.js')
 
 const defaultOutputPath = path.resolve(__dirname, '..', 'tmp', 'timecard-email-preview.html')
 
