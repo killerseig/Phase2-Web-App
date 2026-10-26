@@ -14,6 +14,8 @@ Phase 2 uses Vue 3 and Vite for the browser app and a separate TypeScript packag
 
 `npm run build` type-checks the frontend, builds the browser entries/public template, compiles Functions and builds its SSR renderer. Vite transpilation does not replace `vue-tsc` or the Functions compiler. After that build, `npm run verify:functions-build` checks the compiled entry/handler names, Firebase package inclusion, packaged fonts and public rendering using only synthetic local data; it makes no cloud calls.
 
+The Node/tooling TypeScript project includes all named Vite, Vitest and Playwright configurations, so specialized build/review configurations receive the same type-checking as their base configuration.
+
 This follows the supported [Vite entry/assets model](https://vite.dev/guide/), [Vue TypeScript tooling](https://vuejs.org/guide/typescript/overview), [Firebase Functions TypeScript layout](https://firebase.google.com/docs/functions/typescript) and [Hosting configuration contracts](https://firebase.google.com/docs/hosting/full-config). Multiple entry points and separate server rendering are supported project requirements, not reasons to replace the framework.
 
 ## Recommended IDE Setup
