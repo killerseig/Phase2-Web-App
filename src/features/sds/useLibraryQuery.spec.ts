@@ -24,6 +24,74 @@ beforeEach(() => { fake.load.mockReset(); fake.page.mockReset(); fake.load.mockI
 afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); vi.useRealTimers() })
 
 describe('bounded Library queries', () => {
+  it('retains the newer search cursor when an older page completes last', async () => {
+    const state = fixture()
+    let finish!: (value: { sheets: never[]; after: string }) => void
+    fake.page.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const old = state.refresh()
+    await Promise.resolve()
+    state.search.value = 'new query'
+    fake.page.mockResolvedValueOnce({ sheets: [], after: 'new-cursor' })
+    await state.refresh()
+    finish({ sheets: [], after: 'old-cursor' }); await old
+    expect(state.nextPage.value).toBe('new-cursor')
+    expect(state.onLoaded).toHaveBeenCalledOnce()
+    state.dispose()
+  })
+  it('ignores an old pagination failure after a new context loads', async () => {
+    const state = fixture()
+    state.nextPage.value = 'cursor'
+    let fail!: (error: Error) => void
+    fake.page.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject }))
+    const old = state.moreDocuments()
+    state.jobId.value = 'job-2'
+    await state.refresh()
+    fail(new Error('Old context unavailable')); await old
+    expect(state.error.value).toBe('')
+    expect(state.nextPage.value).toBe('')
+    expect(state.pageBusy.value).toBe(false)
+    state.dispose()
+  })
+  it('does not publish a page cursor or error after disposal', async () => {
+    const state = fixture()
+    let finish!: (value: { sheets: never[]; after: string }) => void
+    fake.page.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const old = state.refresh(); await Promise.resolve()
+    state.dispose(); finish({ sheets: [], after: 'stale' }); await old
+    expect(state.nextPage.value).toBe('')
+    expect(state.onLoaded).not.toHaveBeenCalled()
+  })
+  it('ignores a pending page as soon as search changes, before debounce fires', async () => {
+    vi.useFakeTimers()
+    const state = fixture()
+    state.nextPage.value = 'old-cursor'
+    let finish!: (value: { sheets: never[]; after: string }) => void
+    fake.page.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const pending = state.moreDocuments()
+    state.search.value = 'new search'; await nextTick()
+    finish({ sheets: [], after: 'stale' }); await pending
+    expect(state.nextPage.value).toBe('old-cursor')
+    expect(state.library.value.sheets).toEqual([])
+    state.dispose()
+  })
+  it('does not clear a newer page busy flag when an older page completes', async () => {
+    const state = fixture()
+    state.nextPage.value = 'old'
+    let finishOld!: (value: { sheets: never[]; after: string }) => void
+    let finishNew!: (value: { sheets: never[]; after: string }) => void
+    fake.page.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve }))
+    const old = state.moreDocuments()
+    fake.page.mockResolvedValueOnce({ sheets: [], after: 'new' })
+    await state.refresh()
+    fake.page.mockReturnValueOnce(new Promise(resolve => { finishNew = resolve }))
+    const newer = state.moreDocuments()
+    finishOld({ sheets: [], after: 'stale' }); await old
+    expect(state.pageBusy.value).toBe(true)
+    finishNew({ sheets: [], after: 'final' }); await newer
+    expect(state.nextPage.value).toBe('final')
+    expect(state.pageBusy.value).toBe(false)
+    state.dispose()
+  })
   it('loads company metadata then one filtered page and retains a continuation through empty results', async () => {
     const state = fixture()
     state.search.value = 'safety'; state.showArchived.value = true

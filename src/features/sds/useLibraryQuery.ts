@@ -19,26 +19,37 @@ export function useLibraryQuery(options: {
   let generation = 0
   let disposed = false
   let searchTimer: ReturnType<typeof setTimeout> | undefined
+  const context = () => ({ jobId: options.jobId.value, search: options.search.value, showArchived: options.showArchived.value })
+  const current = (request: number, scope: ReturnType<typeof context>) =>
+    !disposed && request === generation && scope.jobId === options.jobId.value &&
+    scope.search === options.search.value && scope.showArchived === options.showArchived.value
   async function refresh() {
+    if (disposed) return
     const request = ++generation
+    const scope = context()
     loading.value = true
+    pageBusy.value = false
+    nextPage.value = ''
     loadFailed.value = false
     error.value = ''
     try {
-      const loaded = await loadSds(options.jobId.value, !options.jobId.value)
-      if (!options.jobId.value) {
+      const loaded = await loadSds(scope.jobId, !scope.jobId)
+      if (!current(request, scope)) return
+      let after = ''
+      if (!scope.jobId) {
         const page = await loadSdsPage({
-          search: options.search.value,
-          showArchived: options.showArchived.value,
+          search: scope.search,
+          showArchived: scope.showArchived,
         })
         loaded.sheets = page.sheets
-        nextPage.value = page.after
+        after = page.after
       }
-      if (request !== generation || disposed) return
+      if (!current(request, scope)) return
+      nextPage.value = after
       library.value = loaded
       options.onLoaded(loaded)
     } catch (e) {
-      if (request !== generation || disposed) return
+      if (!current(request, scope)) return
       loadFailed.value = true
       library.value = {
         version: 0,
@@ -48,26 +59,28 @@ export function useLibraryQuery(options: {
       }
       error.value = sdsErrorMessage(e)
     } finally {
-      if (request === generation) loading.value = false
+      if (current(request, scope)) loading.value = false
     }
   }
   async function moreDocuments() {
-    if (!nextPage.value || pageBusy.value) return
+    if (disposed || !nextPage.value || pageBusy.value) return
     const request = generation
+    const scope = context()
     pageBusy.value = true
     try {
       const page = await loadSdsPage({
         after: nextPage.value,
-        search: options.search.value,
-        showArchived: options.showArchived.value,
+        search: scope.search,
+        showArchived: scope.showArchived,
       })
-      if (request !== generation || disposed) return
+      if (!current(request, scope)) return
       library.value.sheets.push(...page.sheets)
       nextPage.value = page.after
     } catch (e) {
+      if (!current(request, scope)) return
       error.value = sdsErrorMessage(e)
     } finally {
-      pageBusy.value = false
+      if (current(request, scope)) pageBusy.value = false
     }
   }
   const stopSearch = watch([options.search, options.showArchived], () => {
@@ -81,6 +94,7 @@ export function useLibraryQuery(options: {
   function dispose() {
     disposed = true
     generation++
+    pageBusy.value = false
     stopSearch()
     if (searchTimer) clearTimeout(searchTimer)
   }
