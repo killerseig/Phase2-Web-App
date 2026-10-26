@@ -1,14 +1,8 @@
 import { httpsCallable } from 'firebase/functions'
 import { requireFirebaseServices } from '@/firebase'
-import { isE2EActive } from '@/testing/e2eRuntime'
-import { hasConfiguredFirebase } from '@/services/firebaseConfig'
+import { isWorkspaceServerEnabled } from '@/services/workspaceServer'
 import type { FormDefinition, FormRecord } from '../../functions/src/formModel'
 import { normalizeFormPhoto } from './formPhotoNormalization'
-declare global {
-  interface Window {
-    __PHASE2_FORM_SERVER__?: boolean
-  }
-}
 export interface ServerFormTemplate {
   id: string
   draft: FormDefinition
@@ -19,8 +13,7 @@ export interface ServerFormTemplate {
   definition?: FormRecord['definition']
 }
 export function isFormServerEnabled(): boolean {
-  if (isE2EActive()) return window.__PHASE2_FORM_SERVER__ === true
-  return hasConfiguredFirebase
+  return isWorkspaceServerEnabled()
 }
 export function isFormEmulatorEnabled(): boolean {
   return import.meta.env.DEV && import.meta.env.VITE_FORM_EMULATORS === 'true' &&
