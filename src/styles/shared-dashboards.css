@@ -32,8 +32,8 @@
   align-items: center;
   flex-wrap: wrap;
 }
-.shared-dashboard button,
-.shared-dashboard select {
+.shared-header-actions .app-button,
+.shared-job-picker select {
   min-height: 38px;
 }
 .shared-job-picker {
@@ -63,7 +63,7 @@
 .shared-dashboard-widget {
   grid-column: span var(--widget-span);
   min-width: 0;
-  background: var(--surface, #fff);
+  background: var(--panel-background);
   border: 1px solid var(--border);
   border-radius: 9px;
   padding: 18px;
@@ -101,8 +101,11 @@
   gap: 14px;
 }
 .shared-job-links article {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  padding: var(--space-3);
+  overflow-wrap: anywhere;
 }
 .shared-job-links article > a {
   font-weight: 600;
@@ -113,6 +116,7 @@
   flex-wrap: wrap;
   margin-top: 10px;
 }
+.shared-job-links .app-button { min-height: 2rem; padding: 0 .65rem; font-size: var(--font-size-sm); }
 .shared-dates {
   list-style: none;
   padding: 0;
@@ -131,15 +135,15 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.shared-dashboard-widget form label {
+.shared-widget-tools form label {
   display: grid;
   gap: 8px;
 }
-.shared-dashboard-widget textarea {
+.shared-widget-tools textarea {
   width: 100%;
   min-height: 130px;
 }
-.shared-dashboard-widget form button {
+.shared-widget-tools form > .app-button {
   margin: 10px 8px 0 0;
 }
 .shared-dashboard.is-editing {
@@ -210,7 +214,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  background: #e7edf1;
+  background: var(--bg-elevated);
   border-radius: 8px;
 }
 .shared-preview-controls {
@@ -229,14 +233,11 @@
   margin: 0 auto;
 }
 .shared-dashboard-widget.is-selected {
-  outline: 2px solid #2b7eaa;
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 .shared-dashboard.is-editing .shared-dashboard-widget {
   cursor: pointer;
-  background: #fff;
-  color: #142e3e;
-  border-color: #cad7df;
 }
 .shared-widget-move {
   font-size: 12px;
@@ -312,41 +313,35 @@
   font-size: 24px;
   line-height: 1.5;
 }
-.shared-dashboard-widget {
-  --text: #142e3e;
-  --text-muted: #496171;
-  --border: #cad7df;
-  --surface: #fff;
-  --panel-background: #f4f8fa;
-  --field: #fff;
-  --field-hover: #edf3f7;
-  background: #fff;
-  color: var(--text);
+.shared-dashboard-widget a:not(.app-button) {
+  color: var(--accent-strong);
 }
-.shared-dashboard-widget a {
-  color: #145c89;
-}
-.shared-dashboard button:not(.builder-floating),
-.shared-dashboard select,
-.shared-dashboard input,
-.shared-dashboard textarea {
+.shared-job-picker select,
+.shared-widget-tools :is(select, input, textarea) {
   font: inherit;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
-  background: var(--field, #fff);
+  background: var(--field);
   color: var(--text);
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
-.shared-dashboard button:focus-visible,
-.shared-dashboard a:focus-visible,
-.shared-dashboard input:focus-visible,
-.shared-dashboard select:focus-visible,
-.shared-dashboard textarea:focus-visible {
-  outline: 2px solid #3498d0;
+.shared-dashboard-widget a:not(.app-button):focus-visible,
+.shared-job-picker select:focus-visible,
+.shared-widget-tools :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-.shared-dashboard button:disabled {
-  opacity: 0.55;
+.shared-header-actions .app-button--primary {
+  background: var(--button-primary);
+  border-color: var(--button-primary);
+  color: var(--accent-ink);
+}
+.shared-header-actions .app-button--primary:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+  border-color: var(--button-primary-hover);
 }
 .shared-calendar-entry {
   display: grid;

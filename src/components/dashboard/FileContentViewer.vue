@@ -2,6 +2,9 @@
 import { computed, defineAsyncComponent, inject, ref, shallowRef, watch } from 'vue'
 import type { FilePreview } from '@/features/documents/formats'
 import { createAuthorizedFetch, type RenewDocumentTicket } from '@/features/documents/authorizedFetch'
+import AppButton from '@/components/common/AppButton.vue'
+import AppIconButton from '@/components/common/AppIconButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import { loadDocxViewer, viewerSessionKey } from '@/features/documents/viewerSession'
 const props = defineProps<{ url: string; extension: string; name: string; cacheKey?: string; renewTicket?: RenewDocumentTicket }>()
 const session = inject(viewerSessionKey, undefined)
@@ -108,15 +111,15 @@ watch(
 <template>
   <div class="file-content">
     <p v-if="loading" role="status">Loading preview…</p>
-    <p v-if="error" role="alert">{{ error }}</p>
+    <AppStatusMessage v-if="error" :message="error" tone="error" />
     <template v-if="imageUrl && !error">
       <div class="content-toolbar">
-        <button aria-label="Zoom out" type="button" :disabled="zoom <= 0.5" @click="zoom -= 0.25">
-          −</button
-        ><button type="button" @click="zoom = 1">Fit</button
-        ><button aria-label="Zoom in" type="button" :disabled="zoom >= 3" @click="zoom += 0.25">
+        <AppIconButton label="Zoom out" :disabled="zoom <= 0.5" @click="zoom -= 0.25">
+          -</AppIconButton
+        ><AppButton variant="ghost" @click="zoom = 1">Fit</AppButton
+        ><AppIconButton label="Zoom in" :disabled="zoom >= 3" @click="zoom += 0.25">
           +
-        </button>
+        </AppIconButton>
       </div>
       <div class="image-scroll">
         <img
@@ -184,7 +187,6 @@ watch(
   padding: 0.2rem;
   font-size: 0.8rem;
 }
-button,
 select {
   font: inherit;
   color: inherit;
@@ -194,10 +196,8 @@ select {
   padding: 0.3rem;
   max-width: 100%;
 }
-button {
-  cursor: pointer;
-  min-width: 28px;
-}
+.content-toolbar { gap: .25rem; }
+.content-toolbar .app-button { min-height: 2rem; padding: 0 .65rem; }
 .content-note {
   color: var(--text-muted);
 }

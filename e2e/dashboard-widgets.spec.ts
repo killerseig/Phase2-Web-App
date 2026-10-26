@@ -25,6 +25,68 @@ async function emptyDocuments(page: Page) {
   })
 }
 
+async function showWidgetPalette(page: Page) {
+  const panels = page.getByRole('navigation', { name: 'Builder panels' })
+  if (await panels.isVisible()) await panels.getByRole('button', { name: 'Widgets', exact: true }).click()
+}
+
+for (const scheme of ['dark', 'light'] as const) for (const width of [1280, 390]) test(`dashboard visual consistency ${scheme} at ${width}px`, async ({ page }) => {
+  await page.emulateMedia({ colorScheme: scheme })
+  await page.setViewportSize({ width, height: 900 })
+  const api = await mockDashboard(page)
+  await emptyDocuments(page)
+  api.layouts.set('role-admin', { version: 1, widgets: [
+    { id: 'jobs', type: 'jobs', title: 'Jobs', text: '', span: 6 },
+    { id: 'notes', type: 'notes', title: 'Notes', text: '', span: 6 },
+    { id: 'dates', type: 'dates', title: 'Calendar', text: '', span: 6 },
+    { id: 'documents', type: 'documents', title: 'Documents', text: '', span: 12 },
+  ] })
+  await gotoPhase2App(page, '/dashboards/role', createJobsFixture())
+  const jobs = page.locator('[data-widget-id="jobs"]')
+  await expect(jobs.locator('.shared-job-links article').first()).toBeVisible()
+  await page.locator('.shared-dashboard').screenshot({ path: test.info().outputPath(`dashboard-${scheme}-${width}.png`) })
+  const expected = await page.locator('.shared-dashboard').evaluate(element => {
+    const sample = document.createElement('span')
+    sample.style.cssText = 'background:var(--panel-background);color:var(--text);border:1px solid var(--border)'
+    element.append(sample)
+    const style = getComputedStyle(sample), result = { background: style.backgroundColor, color: style.color }
+    sample.remove(); return result
+  })
+  await expect(jobs).toHaveCSS('background-color', expected.background)
+  await expect(jobs).toHaveCSS('color', expected.color)
+  await page.getByRole('button', { name: 'Edit notes', exact: true }).click()
+  const save = page.getByRole('button', { name: 'Save notes', exact: true })
+  await expect(save).toHaveClass(/app-button--primary/)
+  await expect(save).toBeDisabled()
+  await page.getByLabel('Your notes', { exact: true }).fill('Synthetic visual review')
+  await expect(save).toBeEnabled()
+  await page.getByRole('button', { name: 'Cancel notes', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit calendar', exact: true }).click()
+  await page.getByRole('button', { name: 'Add date', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Save calendar', exact: true })).toHaveClass(/app-button--primary/)
+  await page.getByRole('button', { name: 'Cancel calendar', exact: true }).click()
+  const embeddedUpload = page.getByRole('button', { name: 'Upload document', exact: true })
+  const background = await embeddedUpload.evaluate(element => getComputedStyle(element).backgroundColor)
+  await expect(embeddedUpload).toHaveClass(/app-button--primary/)
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Save template', exact: true })).toBeDisabled()
+  await showWidgetPalette(page)
+  await page.getByRole('button', { name: 'Add Text', exact: true }).click()
+  await page.getByLabel('Font size (px)', { exact: true }).fill('28')
+  await page.getByLabel('Font size (px)', { exact: true }).press('Tab')
+  await expect(page.locator('.shared-variable-text')).toHaveCSS('color', expected.color)
+  await page.getByRole('button', { name: 'Cancel edits', exact: true }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click()
+  await page.goto('/company-library')
+  await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toHaveCSS('background-color', background)
+  await page.getByText('More', { exact: true }).click()
+  await page.getByRole('button', { name: 'Bulk PDF import', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Validate and preview', exact: true })).toHaveClass(/app-button/)
+  await page.locator('.company-library-widget').screenshot({ path: test.info().outputPath(`library-${scheme}-${width}.png`) })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
 test('Admin reuses the shared editor for a role layout, drag placement and responsive viewing', async ({ page }) => {
   const api = await mockDashboard(page)
   await emptyDocuments(page)

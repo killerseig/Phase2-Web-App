@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import AppButton from '@/components/common/AppButton.vue'
+import AppButtonLink from '@/components/common/AppButtonLink.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  RouterLink,
   onBeforeRouteLeave,
   onBeforeRouteUpdate,
   useRoute,
@@ -114,12 +115,16 @@ function insertVariable(key: string) {
     input?.setSelectionRange(start + token.length, start + token.length)
   })
 }
+function defaultTextColor() {
+  const color = root.value ? getComputedStyle(root.value).getPropertyValue('--text').trim() : ''
+  return /^#[\da-f]{6}$/i.test(color) ? color : '#e5e5e5'
+}
 function setTextStyle(key: string, value: string | number) {
   const widget = selectedWidget.value
   if (widget?.type !== 'text') return
   widget.textStyle = {
     size: 24,
-    color: '#142e3e',
+    color: defaultTextColor(),
     weight: 400,
     align: 'left',
     lineHeight: 1.5,
@@ -509,29 +514,29 @@ onBeforeUnmount(() => {
         </div>
         <nav class="shared-header-actions" aria-label="Dashboard actions">
           <template v-if="editing"
-            ><button
+            ><AppButton
               type="button"
               :disabled="busy || !undo.length"
               aria-label="Undo template edit"
               @click="undoChange"
             >
-              Undo</button
-            ><button
+              Undo</AppButton
+            ><AppButton
               type="button"
               :disabled="busy || !redo.length"
               aria-label="Redo template edit"
               @click="redoChange"
             >
-              Redo</button
-            ><button type="button" :disabled="busy || !dirty" @click="save">Save template</button
-            ><button type="button" :disabled="busy" @click="cancel">Cancel edits</button></template
+              Redo</AppButton
+            ><AppButton variant="primary" type="button" :disabled="busy || !dirty" @click="save">Save template</AppButton
+            ><AppButton type="button" :disabled="busy" @click="cancel">Cancel edits</AppButton></template
           >
-          <button v-else-if="canEdit" type="button" :disabled="loading || busy" @click="beginEdit">
-            Edit</button
-          ><button type="button" :disabled="loading || busy" @click="reload">Refresh</button>
-          <RouterLink :to="scope === 'job' && jobId ? `/jobs/${jobId}` : '/jobs'">{{
+          <AppButton v-else-if="canEdit" variant="primary" type="button" :disabled="loading || busy" @click="beginEdit">
+            Edit</AppButton
+          ><AppButton type="button" :disabled="loading || busy" @click="reload">Refresh</AppButton>
+          <AppButtonLink :to="scope === 'job' && jobId ? `/jobs/${jobId}` : '/jobs'">{{
             scope === 'job' && jobId ? 'Existing job page' : 'Jobs'
-          }}</RouterLink>
+          }}</AppButtonLink>
         </nav>
       </header>
       <label v-if="scope === 'job'" class="shared-job-picker"
@@ -592,7 +597,7 @@ onBeforeUnmount(() => {
             edit its dashboard</label
           >
           <h2>Widgets</h2>
-          <button
+          <AppButton
             v-for="type in palette"
             :key="type"
             type="button"
@@ -602,10 +607,10 @@ onBeforeUnmount(() => {
             @click="add(type)"
           >
             Add {{ sharedWidgetLabels[type] }}
-          </button>
+          </AppButton>
           <small>Drag a widget into the page, or click to add it.</small>
           <h2>Layers</h2>
-          <button
+          <AppButton
             v-for="widget in widgets"
             :key="widget.id"
             type="button"
@@ -613,7 +618,7 @@ onBeforeUnmount(() => {
             @click="selected = widget.id; activePane = 'inspector'"
           >
             {{ widget.title || sharedWidgetLabels[widget.type] }}
-          </button>
+          </AppButton>
         </aside>
         <BuilderPanelResize
           v-if="editing"
@@ -631,18 +636,18 @@ onBeforeUnmount(() => {
             role="group"
             aria-label="Preview device"
           >
-            <button
+            <AppButton
               v-for="item in ['desktop', 'tablet', 'phone'] as const"
               :key="item"
               type="button"
               :aria-pressed="device === item"
               @click="device = item"
             >
-              {{ item === 'desktop' ? 'Desktop' : item === 'tablet' ? 'Tablet' : 'Phone' }}</button
-            ><button type="button" :aria-pressed="fit" @click="fit = true">Fit</button
-            ><button type="button" aria-label="Zoom out" @click="manualZoom(-0.1)">−</button
+              {{ item === 'desktop' ? 'Desktop' : item === 'tablet' ? 'Tablet' : 'Phone' }}</AppButton
+            ><AppButton type="button" :aria-pressed="fit" @click="fit = true">Fit</AppButton
+            ><AppButton type="button" aria-label="Zoom out" @click="manualZoom(-0.1)">−</AppButton
             ><span>{{ Math.round(previewScale * 100) }}%</span
-            ><button type="button" aria-label="Zoom in" @click="manualZoom(0.1)">+</button>
+            ><AppButton type="button" aria-label="Zoom in" @click="manualZoom(0.1)">+</AppButton>
           </div>
           <div ref="viewport" class="shared-dashboard-viewport" data-widget-scroll>
             <div
@@ -739,14 +744,14 @@ onBeforeUnmount(() => {
               <details open>
                 <summary>Insert variable</summary>
                 <p>Click a variable to insert it at the cursor.</p>
-                <button
+                <AppButton
                   v-for="(label, key) in dashboardTextVariables"
                   :key="key"
                   type="button"
                   @click="insertVariable(key)"
                 >
                   {{ label }}
-                </button>
+                </AppButton>
               </details>
               <p v-if="textResult.unavailable.length">
                 These variables need a context or value: {{ textResult.unavailable.join(', ') }}.
@@ -766,7 +771,7 @@ onBeforeUnmount(() => {
               ><label
                 >Text color<input
                   type="color"
-                  :value="selectedWidget.textStyle?.color || '#142e3e'"
+                  :value="selectedWidget.textStyle?.color || defaultTextColor()"
                   @input="
                     setTextStyle('color', ($event.target as HTMLInputElement).value)
                   " /></label
@@ -824,11 +829,11 @@ onBeforeUnmount(() => {
               </select></label
             >
             <p v-if="formsError && selectedWidget.type === 'form'" role="alert">{{ formsError }}</p>
-            <button type="button" @click="move(-1)">Move up</button
-            ><button type="button" @click="move(1)">Move down</button
-            ><button type="button" :disabled="selectedWidget.type === requiredType" @click="remove">
+            <AppButton type="button" @click="move(-1)">Move up</AppButton
+            ><AppButton type="button" @click="move(1)">Move down</AppButton
+            ><AppButton type="button" :disabled="selectedWidget.type === requiredType" @click="remove">
               Remove widget
-            </button>
+            </AppButton>
           </fieldset>
         </aside>
       </div>

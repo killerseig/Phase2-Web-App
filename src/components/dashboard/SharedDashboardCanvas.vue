@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppButton from '@/components/common/AppButton.vue'
+import AppButtonLink from '@/components/common/AppButtonLink.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import { computed, defineAsyncComponent, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import ModuleLauncherGrid from '@/components/jobs/ModuleLauncherGrid.vue'
@@ -116,7 +119,7 @@ function textStyle(widget: SharedDashboardWidget) {
     >
       <header class="shared-widget-heading">
         <h2>{{ widget.title || sharedWidgetLabels[widget.type] }}</h2>
-        <button
+        <AppButton
           v-if="editing"
           class="shared-widget-move builder-floating"
           type="button"
@@ -125,13 +128,13 @@ function textStyle(widget: SharedDashboardWidget) {
           @click.stop="emit('select', widget.id)"
         >
           Move
-        </button>
+        </AppButton>
       </header>
       <div v-if="widget.type === 'text'" class="shared-variable-text" :style="textStyle(widget)">
         {{ resolveDashboardText(widget.text, textContext).text }}
       </div>
       <template v-else-if="widget.type === 'workflows'">
-        <label v-if="scope !== 'job' && !editing"
+        <label v-if="scope !== 'job' && !editing" class="shared-widget-tools"
           >Choose job for tools<select v-model="toolJobId">
             <option value="">Choose a job</option>
             <option v-for="entry in jobs" :key="entry.id" :value="entry.id">
@@ -148,19 +151,20 @@ function textStyle(widget: SharedDashboardWidget) {
         <p v-else>Choose a job to open Timecards, Daily Logs and Shop Orders.</p>
       </template>
       <div v-else-if="widget.type === 'jobs'" class="shared-job-links" :inert="editing">
+        <AppEmptyState v-if="!jobs.length" message="No jobs are available for your account." />
         <p v-if="!jobs.length">No jobs are available for your account.</p>
         <article v-for="entry in jobs" :key="entry.id">
           <RouterLink :to="{ name: 'shared-job-home', params: { jobId: entry.id } }"
             >{{ entry.code || 'No Job #' }} · {{ entry.name }}</RouterLink
           >
           <nav :aria-label="`${entry.name} tools`">
-            <RouterLink :to="`/jobs/${entry.id}/timecards`">Timecards</RouterLink
-            ><RouterLink :to="`/jobs/${entry.id}/daily-logs`">Daily Logs</RouterLink
-            ><RouterLink :to="`/jobs/${entry.id}/shop-orders`">Shop Orders</RouterLink>
+            <AppButtonLink :to="`/jobs/${entry.id}/timecards`">Timecards</AppButtonLink
+            ><AppButtonLink :to="`/jobs/${entry.id}/daily-logs`">Daily Logs</AppButtonLink
+            ><AppButtonLink :to="`/jobs/${entry.id}/shop-orders`">Shop Orders</AppButtonLink>
           </nav>
         </article>
       </div>
-      <div v-else-if="widget.type === 'dates'">
+      <div v-else-if="widget.type === 'dates'" class="shared-widget-tools">
         <p v-if="editing">
           Calendar entries stay separate for each
           {{ scope === 'job' ? 'job' : 'signed-in person' }}.
@@ -178,19 +182,19 @@ function textStyle(widget: SharedDashboardWidget) {
                 maxlength="200"
                 :disabled="busy" /></label
             ><label>Date<input v-model="entry.date" type="date" required :disabled="busy" /></label
-            ><button
+            ><AppButton
               type="button"
               :disabled="busy"
               :aria-label="`Remove calendar date ${index + 1}`"
               @click="calendarDraft.splice(index, 1)"
             >
               Remove
-            </button>
+            </AppButton>
           </div>
-          <button type="button" :disabled="busy || calendarDraft.length >= 100" @click="addDate">
-            Add date</button
-          ><button type="submit" :disabled="busy">Save calendar</button
-          ><button type="button" :disabled="busy" @click="cancelNote">Cancel calendar</button>
+          <AppButton type="button" :disabled="busy || calendarDraft.length >= 100" @click="addDate">
+            Add date</AppButton
+          ><AppButton variant="primary" type="submit" :disabled="busy">Save calendar</AppButton
+          ><AppButton type="button" :disabled="busy" @click="cancelNote">Cancel calendar</AppButton>
         </form>
         <template v-else
           ><p v-if="!dates.length">No calendar dates yet.</p>
@@ -200,17 +204,17 @@ function textStyle(widget: SharedDashboardWidget) {
               ><span>{{ date.title }}</span>
             </li>
           </ul>
-          <button
+          <AppButton
             v-if="canEditNotes"
             type="button"
             :disabled="busy || !!noteId"
             @click="editCalendar"
           >
             Edit calendar
-          </button></template
+          </AppButton></template
         >
       </div>
-      <div v-else-if="widget.type === 'notes'">
+      <div v-else-if="widget.type === 'notes'" class="shared-widget-tools">
         <p v-if="editing">
           Notes stay separate for each {{ scope === 'job' ? 'job' : 'signed-in person' }}.
         </p>
@@ -226,19 +230,19 @@ function textStyle(widget: SharedDashboardWidget) {
               maxlength="8000"
               :disabled="busy"
             /></label
-          ><button type="submit" :disabled="busy || !notesDirty">Save notes</button
-          ><button type="button" :disabled="busy" @click="cancelNote">Cancel notes</button>
+          ><AppButton variant="primary" type="submit" :disabled="busy || !notesDirty">Save notes</AppButton
+          ><AppButton type="button" :disabled="busy" @click="cancelNote">Cancel notes</AppButton>
         </form>
         <template v-else
           ><p class="shared-note-text">{{ notes[widget.id] || 'No notes yet.' }}</p>
-          <button
+          <AppButton
             v-if="canEditNotes"
             type="button"
             :disabled="busy || !!noteId || calendarEditing"
             @click="beginNote(widget.id)"
           >
             Edit notes
-          </button></template
+          </AppButton></template
         >
       </div>
       <template v-else-if="editing"

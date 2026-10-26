@@ -5,6 +5,9 @@ import { createViewerSession, viewerSessionKey } from '@/features/documents/view
 import type { PdfWorkerSession } from '@/features/documents/pdfWorkerSession'
 import { createAuthorizedFetch, type RenewDocumentTicket } from '@/features/documents/authorizedFetch'
 import { openPdfRangeSource } from '@/features/documents/pdfRangeSource'
+import AppButton from '@/components/common/AppButton.vue'
+import AppIconButton from '@/components/common/AppIconButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import PdfPageCanvas from './PdfPageCanvas.vue'
 const inheritedSession = inject(viewerSessionKey, undefined)
 const session = inheritedSession ?? createViewerSession()
@@ -125,17 +128,17 @@ onBeforeUnmount(() => observer?.disconnect())
 <template>
   <div class="pdf-canvas-viewer">
     <div v-if="pdf" class="pdf-controls">
-      <button type="button" aria-label="Previous page" :disabled="pageNumber <= 1" @click="jumpTo(pageNumber - 1)">&lt;</button>
+      <AppIconButton label="Previous page" :disabled="pageNumber <= 1" @click="jumpTo(pageNumber - 1)">&lt;</AppIconButton>
       <input aria-label="PDF page" type="number" min="1" :max="pdf.numPages" :value="pageNumber" @change="changePage" />
       <span>/ {{ pdf.numPages }}</span>
-      <button type="button" aria-label="Next page" :disabled="pageNumber >= pdf.numPages" @click="jumpTo(pageNumber + 1)">&gt;</button>
-      <button type="button" aria-label="Zoom out" :disabled="zoom <= .5" @click="setZoom(Math.max(.5, zoom - .25))">-</button>
-      <button type="button" aria-label="Fit page width" @click="setZoom(1)">Fit</button>
-      <button type="button" aria-label="Zoom in" :disabled="zoom >= 3" @click="setZoom(Math.min(3, zoom + .25))">+</button>
+      <AppIconButton label="Next page" :disabled="pageNumber >= pdf.numPages" @click="jumpTo(pageNumber + 1)">&gt;</AppIconButton>
+      <AppIconButton label="Zoom out" :disabled="zoom <= .5" @click="setZoom(Math.max(.5, zoom - .25))">-</AppIconButton>
+      <AppButton variant="ghost" aria-label="Fit page width" @click="setZoom(1)">Fit</AppButton>
+      <AppIconButton label="Zoom in" :disabled="zoom >= 3" @click="setZoom(Math.min(3, zoom + .25))">+</AppIconButton>
     </div>
     <p v-if="loading" class="pdf-status" role="status">Loading PDF.</p>
     <span v-if="renewing" class="pdf-renewal" role="status">Renewing document access…</span>
-    <p v-if="error" class="pdf-status" role="alert">{{ error }}</p>
+    <AppStatusMessage v-if="error" class="pdf-status" :message="error" tone="error" />
     <div ref="surface" class="pdf-surface" role="region" aria-label="PDF pages" tabindex="0" :aria-busy="loading" @scroll.passive="readScroll">
       <div class="pdf-page-stack">
         <div v-for="row in layouts" :key="row.number" :data-pdf-page="row.number" class="pdf-page" :style="{ width: row.width + 'px', height: row.height + 'px' }">
@@ -147,7 +150,7 @@ onBeforeUnmount(() => observer?.disconnect())
   </div>
 </template>
 <style scoped>
-.pdf-renewal { position: absolute; top: 3rem; right: .5rem; z-index: 1; padding: .25rem .5rem; border-radius: .25rem; background: var(--surface-card, #202733); color: var(--text-color, white); font-size: .8rem; pointer-events: none; }
+.pdf-renewal { position: absolute; top: 3rem; right: .5rem; z-index: 1; padding: .25rem .5rem; border-radius: var(--radius-sm); background: var(--panel-background); color: var(--text); font-size: .8rem; pointer-events: none; }
 .pdf-canvas-viewer {
   position: relative;
   flex: 1;
@@ -161,34 +164,22 @@ onBeforeUnmount(() => observer?.disconnect())
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 0.15rem;
-  padding: 0.15rem;
-  font-size: 0.75rem;
+  gap: .25rem;
+  padding: .25rem;
+  font-size: .8rem;
   border-bottom: 1px solid var(--border);
 }
-button,
 input {
   font: inherit;
   color: inherit;
-  background: transparent;
-  border: 0;
-  border-radius: 3px;
+  background: var(--field);
+  border-radius: var(--radius-sm);
 }
-button {
-  min-width: 26px;
-  min-height: 28px;
-  cursor: pointer;
-}
-button:hover:not(:disabled),
-button:focus-visible {
-  background: var(--field-hover);
-  outline: 1px solid var(--accent);
-}
-button:disabled {
-  opacity: 0.4;
-}
+.pdf-controls .app-button { min-height: 2rem; padding: 0 .65rem; }
 input {
-  width: 2.6rem;
+  width: 3.5rem;
+  min-height: 2rem;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   text-align: center;
   padding: 0.15rem;

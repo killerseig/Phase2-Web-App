@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppButton from '@/components/common/AppButton.vue'
 import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -152,9 +153,9 @@ function pickFiles(event: Event) {
         :disabled="busy"
         @change="pickFiles"
     /></label>
-    <button :disabled="busy || !indexFile || !selectedFiles.length" @click="preflight">
+    <AppButton :disabled="busy || !indexFile || !selectedFiles.length" @click="preflight">
       Validate and preview
-    </button>
+    </AppButton>
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="busy" role="status">Processing {{ progress }}%</p>
     <template v-if="rows.length">
@@ -162,10 +163,10 @@ function pickFiles(event: Event) {
         {{ complete }} / {{ rows.length }} saved. {{ duplicates }} duplicate-byte groups remain
         separate records for review. Destination: {{ destination || 'Root folder' }}.
       </p>
-      <button :disabled="busy || complete === rows.length" @click="run">
+      <AppButton :disabled="busy || complete === rows.length" @click="run">
         {{ complete ? 'Resume import' : 'Import validated files' }}
-      </button>
-      <button v-if="busy" @click="paused = true">Pause after current file</button>
+      </AppButton>
+      <AppButton v-if="busy" @click="paused = true">Pause after current file</AppButton>
       <p>
         Retry resumes saved rows. After closing or refreshing, reselect the same index and files;
         matching committed rows are reused.
@@ -183,6 +184,9 @@ function pickFiles(event: Event) {
 .bulk-import {
   padding: 1rem;
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-background);
+  color: var(--text);
 }
 label {
   display: block;
@@ -191,4 +195,8 @@ label {
 button {
   margin: 0.4rem;
 }
+input[type='file'] { display: block; max-width: 100%; min-width: 0; margin-top: .35rem; font: inherit; color: var(--text); }
+input[type='file']::file-selector-button { min-height: 2rem; margin-inline-end: .5rem; padding: .3rem .65rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--button-secondary-background, var(--bg-softest)); color: var(--text); font: inherit; cursor: pointer; }
+input[type='file']:hover:not(:disabled)::file-selector-button { background: var(--field-hover); }
+input[type='file']:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

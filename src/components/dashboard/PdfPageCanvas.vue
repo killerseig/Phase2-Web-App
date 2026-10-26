@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import AppButton from '@/components/common/AppButton.vue'
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
 const props = defineProps<{ document: PDFDocumentProxy; number: number; width: number; pixelBudget: number }>()
 const emit = defineEmits<{ measure: [number: number, ratio: number] }>()
@@ -37,7 +38,7 @@ watch(() => [props.document, props.number, props.width, retry.value] as const, a
   <div class="pdf-page-canvas" :aria-busy="loading">
     <div ref="host" />
     <p v-if="loading" class="page-state" role="status">Rendering page {{ number }}.</p>
-    <div v-if="error" class="page-state" role="alert">{{ error }} <button type="button" @click="retry++">Retry page</button></div>
+    <div v-if="error" class="page-state" role="alert">{{ error }} <AppButton @click="retry++">Retry page</AppButton></div>
   </div>
 </template>
 <style scoped>

@@ -4,6 +4,9 @@ import type { SdsSheet } from '@/features/sds/types'
 import { sdsCommand, sdsErrorMessage } from '@/services/sds'
 import { createViewerSession, loadFileViewer, loadPdfViewer, viewerSessionKey } from '@/features/documents/viewerSession'
 import type { RenewDocumentTicket } from '@/features/documents/authorizedFetch'
+import AppButton from '@/components/common/AppButton.vue'
+import AppIconButton from '@/components/common/AppIconButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 const PdfCanvasViewer = defineAsyncComponent(loadPdfViewer)
 const FileContentViewer = defineAsyncComponent(loadFileViewer)
 const inheritedSession = inject(viewerSessionKey, undefined)
@@ -88,31 +91,31 @@ watch(
         "
         >{{ sheet.name }}</span
       >
-      <button
+      <AppIconButton
         type="button"
-        aria-label="Reload preview"
+        label="Reload preview"
         title="Reload preview"
         :disabled="loading"
         @click="reloadPreview"
       >
         <i class="pi pi-refresh" aria-hidden="true" />
-      </button>
-      <button
+      </AppIconButton>
+      <AppIconButton
         type="button"
-        :aria-label="extension === 'pdf' ? 'Open PDF' : 'Open original'"
+        :label="extension === 'pdf' ? 'Open PDF' : 'Open original'"
         title="Open original in a new tab"
         @click="emit('open', false)"
       >
         <i class="pi pi-external-link" aria-hidden="true" />
-      </button>
-      <button
+      </AppIconButton>
+      <AppIconButton
         type="button"
-        aria-label="Download file"
+        label="Download file"
         title="Download file"
         @click="emit('open', true)"
       >
         <i class="pi pi-download" aria-hidden="true" />
-      </button>
+      </AppIconButton>
     </div>
     <p v-if="sheet.archived" class="viewer-note">
       Archived — resolve before exporting the job book.
@@ -121,9 +124,9 @@ watch(
       Job’s saved revision. Choose “Use latest revision” from the file menu to update it.
     </p>
     <p v-if="loading" class="viewer-state" role="status">Loading preview…</p>
-    <div v-else-if="error" class="viewer-state" role="alert">
-      <p>{{ error }}</p>
-      <button type="button" @click="reloadPreview">Retry preview</button>
+    <div v-else-if="error" class="viewer-state">
+      <AppStatusMessage :message="error" tone="error" />
+      <AppButton type="button" @click="reloadPreview">Retry preview</AppButton>
     </div>
     <PdfCanvasViewer v-else-if="url && extension === 'pdf'" :key="url" :url="url" :cache-key="cacheKey" :renew-ticket="renewTicket" />
     <FileContentViewer
@@ -159,23 +162,8 @@ watch(
   white-space: nowrap;
   font-size: 0.85rem;
 }
-button {
-  font: inherit;
-  color: inherit;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  padding: 0.35rem;
-  cursor: pointer;
-}
-button:hover,
-button:focus-visible {
-  background: var(--field-hover);
-  outline: 2px solid var(--accent);
-}
-button:disabled {
-  opacity: 0.5;
-}
+.viewer-toolbar .app-icon-button { flex-shrink: 0; }
+.viewer-state > .app-button { margin-top: .75rem; }
 .viewer-pdf {
   width: 100%;
   flex: 1;
