@@ -9,8 +9,9 @@ import type { IntranetContent, IntranetResource, LibraryCategory, ReadingPair } 
 import { documentAccept, documentFormatsLabel, printableFile } from '@/features/documents/formats'
 import { createViewerSession, viewerSessionKey } from '@/features/documents/viewerSession'
 import { useAuthStore } from '@/stores/auth'
-import { loadSds, loadSdsPage, sdsCommand, sdsErrorMessage } from '@/services/sds'
+import { sdsCommand, sdsErrorMessage } from '@/services/sds'
 import { useLibraryMutation } from '@/features/sds/useLibraryMutation'
+import { useLibraryQuery } from '@/features/sds/useLibraryQuery'
 import SdsBulkImport from './SdsBulkImport.vue'
 import {
   folderAncestors,
@@ -65,7 +66,6 @@ const showArchived = ref(false)
 const nextPage = ref('')
 const pageBusy = ref(false)
 const bulkOpen = ref(false)
-let searchTimer: ReturnType<typeof setTimeout> | undefined
 const editor = ref<'' | 'folder' | 'sheet'>('')
 const progress = ref<number | null>(null)
 const { runMutation } = useLibraryMutation({ busy, error, progress })
@@ -91,7 +91,6 @@ const exportState = ref('')
 const exportError = ref('')
 const exportPages = ref(0)
 let timer: ReturnType<typeof setTimeout> | undefined
-let generation = 0
 let disposed = false
 const dirty = computed(
   () =>
@@ -158,20 +157,9 @@ const revisionChanged = (sheet: SdsSheet) =>
 const sheetSearch = (sheet: SdsSheet) => `${sheet.name} ${sheet.manufacturer} ${sheet.productCode}`
 const message = sdsErrorMessage
 
-async function refresh() {
-  const request = ++generation
-  loading.value = true
-  loadFailed.value = false
-  error.value = ''
-  try {
-    const loaded = await loadSds(jobId.value, !jobId.value)
-    if (!jobId.value) {
-      const page = await loadSdsPage({ search: search.value, showArchived: showArchived.value })
-      loaded.sheets = page.sheets
-      nextPage.value = page.after
-    }
-    if (request !== generation || disposed) return
-    library.value = loaded
+const query = useLibraryQuery({
+  jobId, search, showArchived, library, loading, loadFailed, nextPage, pageBusy, error,
+  onLoaded(loaded) {
     selection.value = loaded.binder.selections.map((s) => ({ ...s }))
     if (!folders.value.some((f) => f.id === folderId.value)) folderId.value = ''
     if (loaded.exportId && loaded.exportId !== exportId.value) {
@@ -179,41 +167,9 @@ async function refresh() {
       exportId.value = loaded.exportId
       void pollExport(loaded.exportId)
     }
-  } catch (e) {
-    if (request !== generation || disposed) return
-    loadFailed.value = true
-    library.value = { version: 0, folders: [], sheets: [], binder: { version: 0, selections: [] } }
-    error.value = message(e)
-  } finally {
-    if (request === generation) loading.value = false
-  }
-}
-async function moreDocuments() {
-  if (!nextPage.value || pageBusy.value) return
-  const request = generation
-  pageBusy.value = true
-  try {
-    const page = await loadSdsPage({
-      after: nextPage.value,
-      search: search.value,
-      showArchived: showArchived.value,
-    })
-    if (request !== generation || disposed) return
-    library.value.sheets.push(...page.sheets)
-    nextPage.value = page.after
-  } catch (e) {
-    error.value = message(e)
-  } finally {
-    pageBusy.value = false
-  }
-}
-watch([search, showArchived], () => {
-  if (jobId.value) return
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    void refresh()
-  }, 300)
+  },
 })
+const { refresh, moreDocuments } = query
 function clearExport() {
   if (timer) clearTimeout(timer)
   exportId.value = ''
@@ -701,8 +657,7 @@ onBeforeUnmount(() => {
     search: search.value,
   })
   disposed = true
-  if (searchTimer) clearTimeout(searchTimer)
-  generation++
+  query.dispose()
   if (timer) clearTimeout(timer)
   window.removeEventListener('beforeunload', beforeUnload)
 })
