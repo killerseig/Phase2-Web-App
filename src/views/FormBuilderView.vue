@@ -631,8 +631,8 @@ watch(
               Keep local version</button
             ><span>{{ dirty ? 'Unsaved edits' : 'Saved draft' }}</span>
           </div>
-          <details class="builder-library-tools" :open="!!sourcesError">
-            <summary>Library tools</summary><div class="builder-library-menu">          <PrivateReferenceStatus v-if="auth.rawRole === 'admin'" :loading="sourcesLoading" :error="sourcesError" :notice="sourceNotice" :packages="sourcePackages" :selected="sourcePackage" @select="selectSource" @retry="reloadSources" @cancel="cancelSource" />
+          <details class="builder-library-tools">
+            <summary>Library tools<span v-if="sourcesError"> — references unavailable</span></summary><div class="builder-library-menu">          <PrivateReferenceStatus v-if="auth.rawRole === 'admin'" :loading="sourcesLoading" :error="sourcesError" :notice="sourceNotice" :packages="sourcePackages" :selected="sourcePackage" @select="selectSource" @retry="reloadSources" @cancel="cancelSource" />
           <div class="library-tools-content">
             <p v-if="!serverEnabled && !library.templates.length">No saved forms yet. Choose a starter or New form.</p>
             <section v-if="serverEnabled" aria-label="Server form library">
@@ -1739,7 +1739,7 @@ p[role='alert'] {
 .builder-form-actions__content { display: grid; gap: .5rem; padding: .75rem 0; }
 .builder-context-meta { color: var(--text-muted); font-size: .8rem; }
 .builder-library-tools { position: relative; }
-.builder-library-menu { position: absolute; right: 0; top: calc(100% + .35rem); z-index: 30; width: min(22rem, calc(100vw - 2rem)); max-height: min(28rem, 70vh); overflow: auto; padding: .85rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); box-shadow: var(--shadow); }
+.builder-library-menu { position: static; margin-top: .35rem; width: min(22rem, calc(100vw - 2rem)); max-height: min(28rem, 70vh); overflow: auto; padding: .85rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); box-shadow: var(--shadow); }
 .form-builder .builder-sidebar { display: flex; flex-direction: column; overflow: hidden; }
 .form-builder .builder-sidebar :deep(.form-selector) { flex: 1; }
 @media (max-width: 760px) { .form-builder .builder-sidebar { width: 100%; box-sizing: border-box; height: 12rem; max-height: 12rem; position: static; } }
