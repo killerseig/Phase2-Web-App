@@ -186,6 +186,52 @@
   font-size: 13px;
   margin: 6px 0;
 }
+.shared-widget-group, .shared-widget-list {
+  display: grid;
+  gap: var(--space-2);
+}
+.shared-widget-group h3 {
+  margin: .35rem 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+.shared-widget-group .shared-widget-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: .25rem;
+  padding: .55rem .65rem;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.35;
+}
+.shared-widget-picker small {
+  font-weight: 400;
+  font-size: .75rem;
+}
+.shared-widget-list .app-button {
+  justify-content: start;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.shared-widget-list .app-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.shared-widget-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.shared-widget-actions .app-button {
+  min-width: 0;
+  padding-inline: .45rem;
+  font-size: var(--font-size-sm);
+  white-space: normal;
+}
+.shared-widget-heading h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.shared-widget-heading .shared-widget-edit { min-height: 2rem; font-size: .75rem; padding-inline: .6rem; }
 .shared-builder-sidebar label {
   display: grid;
   gap: 5px;

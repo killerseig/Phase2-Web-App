@@ -35,6 +35,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   select: [id: string]
+  edit: [id: string]
   move: [event: PointerEvent, id: string]
   'save-note': [id: string, text: string]
   'save-calendar': [events: SharedCalendarEntry[]]
@@ -121,8 +122,16 @@ function textStyle(widget: SharedDashboardWidget) {
         <h2>{{ widget.title || sharedWidgetLabels[widget.type] }}</h2>
         <AppButton
           v-if="editing"
+          class="shared-widget-edit builder-floating"
+          :disabled="busy"
+          :aria-label="`Edit ${widget.title || sharedWidgetLabels[widget.type]}`"
+          @click.stop="emit('edit', widget.id)"
+        >Edit</AppButton>
+        <AppButton
+          v-if="editing"
           class="shared-widget-move builder-floating"
           type="button"
+          :disabled="busy"
           :aria-label="`Move ${widget.title || sharedWidgetLabels[widget.type]}`"
           @pointerdown="emit('move', $event, widget.id)"
           @click.stop="emit('select', widget.id)"

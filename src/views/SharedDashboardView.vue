@@ -94,6 +94,49 @@ const visibleJobs = computed(() => {
 const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => type !== 'form' ||
   (['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole) &&
    ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value))))
+const widgetSearch = ref('')
+const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
+  workflows: 'Open the tools for a job.',
+  jobs: 'Find the jobs you can access.',
+  form: 'Launch or fill an issued employee form.',
+  documents: 'Browse authorized folders and documents.',
+  resources: 'Open resources available to your role.',
+  text: 'Add text and contextual variables.',
+  notes: 'Keep notes separate for each dashboard scope.',
+  dates: 'Show job dates and calendar entries.',
+}
+const paletteGroups = computed(() => [
+  { title: 'Work tools', types: ['workflows', 'jobs', 'form'] },
+  { title: 'Files & resources', types: ['documents', 'resources'] },
+  { title: 'Content & planning', types: ['text', 'notes', 'dates'] },
+].map(group => ({ ...group, types: group.types.filter((type): type is SharedDashboardWidget['type'] =>
+  palette.value.includes(type as SharedDashboardWidget['type']) &&
+  `${sharedWidgetLabels[type as SharedDashboardWidget['type']]} ${widgetDescriptions[type as SharedDashboardWidget['type']]}`
+    .toLowerCase().includes(widgetSearch.value.trim().toLowerCase())) })).filter(group => group.types.length))
+const selectedIndex = computed(() => widgets.value.findIndex(widget => widget.id === selected.value))
+const repeatable = (type: SharedDashboardWidget['type']) => ['notes', 'text', 'form'].includes(type)
+const settingsHeading = ref<HTMLElement>()
+function focusSettings() {
+  void nextTick(() => settingsHeading.value?.focus())
+}
+function editWidget(id: string) {
+  if (!editing.value || busy.value || !canEdit.value) return
+  selected.value = id
+  activePane.value = 'inspector'
+  focusSettings()
+}
+function navigateWidgets(event: KeyboardEvent) {
+  if (busy.value) return
+  const rows = [...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')]
+  const from = rows.indexOf(event.target as HTMLButtonElement)
+  if (from < 0) return
+  const next = event.key === 'ArrowDown' ? Math.min(from + 1, rows.length - 1) :
+    event.key === 'ArrowUp' ? Math.max(0, from - 1) : event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : -1
+  if (next < 0) return
+  event.preventDefault()
+  selected.value = widgets.value[next]!.id
+  rows[next]?.focus()
+}
 const textContext = computed(() => ({
   job: layout.value?.job ? { ...layout.value.job } : null,
   user: { name: auth.displayName, role: CURRENT_ROLE_LABELS[auth.rawRole] },
@@ -192,7 +235,7 @@ const { dragging, point, label } = drag
 function canAdd(type: SharedDashboardWidget['type']) {
   return (
     widgets.value.length < 12 &&
-    (['notes', 'text', 'form'].includes(type) || !widgets.value.some((w) => w.type === type))
+    (repeatable(type) || !widgets.value.some((w) => w.type === type))
   )
 }
 function drop(payload: Payload, destination: WidgetDrop) {
@@ -209,11 +252,14 @@ function drop(payload: Payload, destination: WidgetDrop) {
     widgets.value.splice(at, 0, widget)
     selected.value = widget.id
     activePane.value = 'inspector'
+    focusSettings()
   } else {
     const from = widgets.value.findIndex((w) => w.id === payload.id)
     if (from < 0 || from === at) return
-    const [w] = widgets.value.splice(from, 1)
-    widgets.value.splice(at > from ? at - 1 : at, 0, w!)
+    const reordered = [...widgets.value]
+    const [w] = reordered.splice(from, 1)
+    reordered.splice(at > from ? at - 1 : at, 0, w!)
+    widgets.value = reordered
     selected.value = w!.id
   }
 }
@@ -224,26 +270,41 @@ function add(type: SharedDashboardWidget['type']) {
   )
 }
 function move(direction: number) {
+  if (!editing.value || busy.value || !canEdit.value) return
   const from = widgets.value.findIndex((w) => w.id === selected.value),
     to = from + direction
   if (from < 0 || to < 0 || to >= widgets.value.length) return
-  const [w] = widgets.value.splice(from, 1)
-  widgets.value.splice(to, 0, w!)
+  const reordered = [...widgets.value]
+  const [w] = reordered.splice(from, 1)
+  reordered.splice(to, 0, w!)
+  widgets.value = reordered
+}
+function duplicateWidget() {
+  const widget = selectedWidget.value
+  if (!editing.value || busy.value || !canEdit.value || !widget || !repeatable(widget.type) || !palette.value.includes(widget.type) || !canAdd(widget.type)) return
+  const copy: SharedDashboardWidget = JSON.parse(JSON.stringify(widget))
+  copy.id = crypto.randomUUID()
+  copy.title = `${widget.title || sharedWidgetLabels[widget.type]} copy`.slice(0, 100)
+  widgets.value.splice(selectedIndex.value + 1, 0, copy)
+  editWidget(copy.id)
 }
 async function remove() {
+  if (!editing.value || busy.value || !canEdit.value) return
   const widget = selectedWidget.value
   if (!widget || widget.type === requiredType.value) return
   if (
     await confirm.value?.ask({
       title: 'Remove widget?',
       message:
-        'This changes the shared layout. Stored job notes, documents and form submissions are retained.',
+        'This removes the widget from this layout. Saved notes, documents and form submissions are retained.',
       confirmLabel: 'Remove',
       destructive: true,
     })
   ) {
+    const index = selectedIndex.value
     widgets.value = widgets.value.filter((w) => w.id !== widget.id)
-    selected.value = widgets.value[0]?.id || ''
+    selected.value = widgets.value[Math.min(index, widgets.value.length - 1)]?.id || ''
+    focusSettings()
   }
 }
 async function prepare() {
@@ -555,7 +616,7 @@ onBeforeUnmount(() => {
       <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
       <p v-if="loading" role="status">Loading dashboard…</p>
-      <BuilderPanelSwitcher v-if="editing" v-model="activePane" outline-label="Widgets" outline-controls="shared-palette" canvas-controls="shared-canvas" inspector-controls="shared-inspector" :disabled="busy" />
+      <BuilderPanelSwitcher v-if="editing" v-model="activePane" class="builder-controls" outline-label="Widgets" outline-controls="shared-palette" canvas-controls="shared-canvas" inspector-controls="shared-inspector" :disabled="busy" />
       <div
         class="shared-dashboard-body"
         :data-active-pane="activePane"
@@ -597,28 +658,40 @@ onBeforeUnmount(() => {
             edit its dashboard</label
           >
           <h2>Widgets</h2>
-          <AppButton
-            v-for="type in palette"
-            :key="type"
-            type="button"
-            :disabled="busy || !canAdd(type)"
-            @pointerdown="drag.start($event, { kind: 'new', type }, sharedWidgetLabels[type])"
-            @dragstart.prevent
-            @click="add(type)"
-          >
-            Add {{ sharedWidgetLabels[type] }}
-          </AppButton>
-          <small>Drag a widget into the page, or click to add it.</small>
-          <h2>Layers</h2>
-          <AppButton
-            v-for="widget in widgets"
-            :key="widget.id"
-            type="button"
-            :aria-pressed="selected === widget.id"
-            @click="selected = widget.id; activePane = 'inspector'"
-          >
-            {{ widget.title || sharedWidgetLabels[widget.type] }}
-          </AppButton>
+          <label>Find a widget<input v-model="widgetSearch" type="search" maxlength="80" :disabled="busy" /></label>
+          <small>Drag onto the canvas, or select to add. {{ widgets.length }} of 12 used.</small>
+          <section v-for="group in paletteGroups" :key="group.title" class="shared-widget-group" :aria-label="group.title">
+            <h3>{{ group.title }}</h3>
+            <AppButton
+              v-for="type in group.types"
+              :key="type"
+              class="shared-widget-picker"
+              type="button"
+              :aria-label="`Add ${sharedWidgetLabels[type]}`"
+              :disabled="busy || !canAdd(type)"
+              @pointerdown="drag.start($event, { kind: 'new', type }, sharedWidgetLabels[type])"
+              @dragstart.prevent
+              @click="add(type)"
+            >
+              <strong>{{ sharedWidgetLabels[type] }}</strong>
+              <small>{{ !repeatable(type) && widgets.some(widget => widget.type === type) ? 'Already on dashboard' : widgetDescriptions[type] }}</small>
+            </AppButton>
+          </section>
+          <p v-if="!paletteGroups.length" role="status">No widgets match your search.</p>
+          <h2 id="shared-widget-list-title">On this dashboard</h2>
+          <div class="shared-widget-list" role="group" aria-labelledby="shared-widget-list-title" @keydown="navigateWidgets">
+            <AppButton
+              v-for="widget in widgets"
+              :key="widget.id"
+              type="button"
+              :disabled="busy"
+              :aria-pressed="selected === widget.id"
+              :tabindex="selected === widget.id ? 0 : -1"
+              @click="editWidget(widget.id)"
+            >
+              {{ widget.title || sharedWidgetLabels[widget.type] }}
+            </AppButton>
+          </div>
         </aside>
         <BuilderPanelResize
           v-if="editing"
@@ -691,6 +764,7 @@ onBeforeUnmount(() => {
                   :busy="busy"
                   :phone="editing && device === 'phone'"
                   @select="selected = $event"
+                  @edit="editWidget"
                   @move="
                     (event, id) =>
                       drag.start(
@@ -722,9 +796,18 @@ onBeforeUnmount(() => {
           class="shared-builder-sidebar builder-controls"
           aria-label="Widget settings"
         >
-          <h2>Widget settings</h2>
+          <h2 ref="settingsHeading" tabindex="-1">Widget settings</h2>
           <fieldset v-if="selectedWidget" :disabled="busy">
             <legend>{{ sharedWidgetLabels[selectedWidget.type] }}</legend>
+            <div class="shared-widget-actions" role="group" aria-label="Selected widget actions">
+              <AppButton type="button" :disabled="selectedIndex <= 0" @click="move(-1)">Move up</AppButton>
+              <AppButton type="button" :disabled="selectedIndex >= widgets.length - 1" @click="move(1)">Move down</AppButton>
+              <AppButton type="button" :disabled="!repeatable(selectedWidget.type) || !palette.includes(selectedWidget.type) || !canAdd(selectedWidget.type)" @click="duplicateWidget">Duplicate widget</AppButton>
+              <AppButton type="button" :disabled="selectedWidget.type === requiredType" @click="remove">Remove widget</AppButton>
+            </div>
+            <small v-if="selectedWidget.type === requiredType">Required for this layout.</small>
+            <small v-if="!repeatable(selectedWidget.type)">This tool can appear once per dashboard.</small>
+            <small v-else>Duplicate copies settings, not saved notes or form entries.</small>
             <label>Title<input v-model="selectedWidget.title" maxlength="100" /></label
             ><label
               >Width<select aria-label="Width" v-model.number="selectedWidget.span">
@@ -829,12 +912,8 @@ onBeforeUnmount(() => {
               </select></label
             >
             <p v-if="formsError && selectedWidget.type === 'form'" role="alert">{{ formsError }}</p>
-            <AppButton type="button" @click="move(-1)">Move up</AppButton
-            ><AppButton type="button" @click="move(1)">Move down</AppButton
-            ><AppButton type="button" :disabled="selectedWidget.type === requiredType" @click="remove">
-              Remove widget
-            </AppButton>
           </fieldset>
+          <p v-else>Select a widget on the canvas or from the list to edit it.</p>
         </aside>
       </div>
       <div
