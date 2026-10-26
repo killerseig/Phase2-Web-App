@@ -182,7 +182,7 @@ npm run test:e2e -- --debug
 
 ### Check or fix lint
 
-`npm run lint` (or `npm run lint:check`) checks with Oxlint and ESLint without changing source files. Use `npm run lint:fix` explicitly to apply automatic fixes. Verification callers should use the check commands; generated lint caches remain ignored.
+`npm run lint` (or `npm run lint:check`) checks with Oxlint and ESLint without changing source files. Use `npm run lint:fix` explicitly to apply automatic fixes. Verification callers should use the check commands; generated lint caches remain ignored. Generated build/review outputs and legacy root-level Functions compiler output are excluded in ESLint, matching `.gitignore`; `functions/src`, `functions/scripts`, application source and maintained tests remain checked. Run `node --test scripts/lint-scope.test.mjs` to verify that boundary.
 
 ```sh
 npm run lint:check

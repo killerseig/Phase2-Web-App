@@ -17,7 +17,9 @@ export default defineConfigWithVueTs(
     files: ['**/*.{vue,ts,mts,tsx}'],
   },
 
-  globalIgnores(['**/dist/**', '**/dist-ssr/**', '**/coverage/**', 'functions/lib/**', 'functions/generated/**', 'hosting-dist/**']),
+  // Generated artifacts already excluded from Git are not maintained source.
+  // Keep functions/src and functions/scripts subject to the normal rules.
+  globalIgnores(['**/dist/**', '**/dist-ssr/**', '**/coverage/**', 'functions/lib/**', 'functions/generated/**', 'functions/*.js', 'functions/*.d.ts', 'hosting-dist/**', '.forms-local-data/**', '.security-work/**', 'evidence/**', 'test-results/**', '.intranet-cache/**']),
 
   ...pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
