@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test:hmr": "node scripts/verify-vite-hmr.mjs",
     "build": "run-s type-check build-only build:functions",
     "build:functions": "npm --prefix functions run build && vite build --config vite.public-ssr.config.ts",
     "verify:functions-build": "node scripts/verify-functions-build.mjs",

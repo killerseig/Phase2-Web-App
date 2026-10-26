@@ -1,10 +1,13 @@
 import { defineConfig } from '@playwright/test'
 import gate from './playwright.config.shop-orders'
+const verifyHmr = process.env.PHASE2_VERIFY_HMR === 'true'
 
 // Maintained, portable synthetic harness. Never connects to production Firebase.
 export default defineConfig({
   ...gate,
-  testMatch: ['shared-dashboards.spec.ts', 'dashboard-widgets.spec.ts', 'form-dashboard-presentations.spec.ts', 'document-previews.spec.ts', 'sds-workspace.spec.ts'],
+  // The opt-in HMR check temporarily edits/restores source. Keep it isolated
+  // from other journeys and never run it against an operator's preview server.
+  testMatch: verifyHmr ? ['vite-hmr.spec.ts'] : ['shared-dashboards.spec.ts', 'dashboard-widgets.spec.ts', 'form-dashboard-presentations.spec.ts', 'document-previews.spec.ts', 'sds-workspace.spec.ts'],
   reporter: [['line'], ['json', { outputFile: 'test-results/dashboard-results.json' }]],
   outputDir: 'test-results/dashboard-artifacts',
   use: {
@@ -14,7 +17,7 @@ export default defineConfig({
   },
   webServer: {
     ...gate.webServer,
-    command: 'node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5196 --strictPort',
+    command: verifyHmr ? 'npm run dev -- --host 127.0.0.1 --port 5196 --strictPort' : 'node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5196 --strictPort',
     url: 'http://127.0.0.1:5196',
     env: {
       VITE_FIREBASE_API_KEY: 'synthetic-dashboard-test-key',
