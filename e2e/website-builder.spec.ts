@@ -1,3 +1,4 @@
+import { routeWebsiteBuilderFixture, websiteFixtureFailure } from './helpers/websiteCallableFixture.js'
 import { createRequire } from 'node:module'
 const { customDefinition, customMarkup, resolvedCustom, visibleCustomSections } = createRequire(
   import.meta.url,
@@ -95,32 +96,18 @@ async function mockWebsite(
   }[] = []
   const actions: string[] = []
   let failSave = false
-  await page.route('**/websiteBuilder', async (route) => {
-    if (route.request().method() === 'OPTIONS') {
-      await route.fulfill({
-        status: 204,
-        headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
-      })
-      return
-    }
-    const data = route.request().postDataJSON().data
+  await routeWebsiteBuilderFixture(page, async (data) => {
     actions.push(data.action)
     let result: unknown = { version }
     if (data.action === 'load')
       result = { draft, version, publishedAt: published ? 1 : null, hasPrevious: Boolean(previous) }
     if (data.action === 'save') {
       if (failSave) {
-        await route.fulfill({
-          status: 409,
-          json: {
-            error: {
-              status: 'ABORTED',
-              message: 'Another admin changed the website. Reload and review before saving.',
-            },
-          },
-          headers: { 'access-control-allow-origin': '*' },
-        })
-        return
+        return websiteFixtureFailure(
+          409,
+          'ABORTED',
+          'Another admin changed the website. Reload and review before saving.',
+        )
       }
       draft = structuredClone(data.site)
       version++
@@ -213,7 +200,7 @@ async function mockWebsite(
             images: [{ id: 'photo', name: 'Project photo.webp', size: 1000, createdAt: 1 }],
             nextCursor: 'photo',
           }
-    await route.fulfill({ json: { result }, headers: { 'access-control-allow-origin': '*' } })
+    return result
   })
   await page.route('**/getPublishedWebsite*', (route) =>
     route.fulfill({

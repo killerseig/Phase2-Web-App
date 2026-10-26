@@ -1,3 +1,4 @@
+import { routeWebsiteBuilderFixture, websiteFixtureFailure } from './helpers/websiteCallableFixture.js'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { expect, test, type Page } from './helpers/test.js'
@@ -18,12 +19,7 @@ async function sharedDraftApi(page: Page) {
   let heldLoad = false
   const saves: number[] = []
 
-  await page.route('**/websiteBuilder', async (route) => {
-    if (route.request().method() === 'OPTIONS') {
-      await route.fulfill({ status: 204, headers })
-      return
-    }
-    const data = route.request().postDataJSON().data
+  await routeWebsiteBuilderFixture(page, async (data) => {
     let result: unknown = { version }
     if (data.action === 'load') {
       loadCount++
@@ -46,24 +42,18 @@ async function sharedDraftApi(page: Page) {
     if (data.action === 'save') {
       saves.push(data.version)
       if (data.version !== version) {
-        await route.fulfill({
-          status: 409,
-          headers,
-          json: {
-            error: {
-              status: 'ABORTED',
-              message: 'Another admin changed the website. Reload and review before saving.',
-            },
-          },
-        })
-        return
+        return websiteFixtureFailure(
+          409,
+          'ABORTED',
+          'Another admin changed the website. Reload and review before saving.',
+        )
       }
       draft = validateWebsite(data.site)
       result = { version: ++version }
     }
     if (data.action === 'getImage') result = { base64: image, contentType: 'image/png' }
     if (data.action === 'listRevisions') result = { revisions: [], activity: [] }
-    await route.fulfill({ headers, json: { result } })
+    return result
   })
 
   return {

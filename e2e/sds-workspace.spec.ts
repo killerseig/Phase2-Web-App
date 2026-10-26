@@ -6,7 +6,7 @@ import {
   gotoPhase2App,
 } from './helpers/phase2AppFixture.js'
 
-async function mockSds(page: Page, fail = false) {
+async function mockSds(page: Page, fail = false, ready: Promise<void> = Promise.resolve()) {
   await mockDashboard(page)
   await page.route('**/sds-file?*', (route) =>
     route.fulfill({
@@ -28,6 +28,7 @@ async function mockSds(page: Page, fail = false) {
       return
     }
     const data = route.request().postDataJSON().data
+    if (data.action === 'load') await ready
     actions.push(data.action)
     requests.push(data)
     let result: unknown = { ok: true }
@@ -302,12 +303,22 @@ test('Admin context menus target the clicked folder and sheet and preserve cance
 test('keyboard and background menus dismiss cleanly and job actions remain explicit drafts', async ({
   page,
 }) => {
-  const api = await mockSds(page)
+  let releaseLoad!: () => void
+  const ready = new Promise<void>(resolve => { releaseLoad = resolve })
+  const api = await mockSds(page, false, ready)
   await gotoPhase2App(page, '/safety/sds', createJobDashboardFixture())
   const root = page
     .getByRole('navigation', { name: 'Folders', exact: true })
     .getByRole('button', { name: 'Root folder', exact: true })
   await expect(root).toBeEnabled()
+  // Root remains focusable while loading, but the component intentionally
+  // rejects menus until metadata is ready. Exercise that state explicitly.
+  await expect(page.getByText('Loading documents…', { exact: true })).toBeVisible()
+  await root.focus()
+  await root.press('Shift+F10')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  releaseLoad()
+  await expect(page.getByText('Loading documents…', { exact: true })).toHaveCount(0)
   await root.focus()
   await root.press('Shift+F10')
   await expect(page.getByRole('menu')).toBeVisible()

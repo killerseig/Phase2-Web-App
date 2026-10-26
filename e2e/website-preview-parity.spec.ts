@@ -1,3 +1,4 @@
+import { routeWebsiteBuilderFixture } from './helpers/websiteCallableFixture.js'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import type { Locator } from '@playwright/test'
@@ -213,11 +214,7 @@ function fixture() {
 }
 
 async function mockWebsite(page: Page, draft: ReturnType<typeof fixture>) {
-  await page.route('**/websiteBuilder', async (route) => {
-    if (route.request().method() === 'OPTIONS') {
-      return route.fulfill({ status: 204, headers })
-    }
-    const data = route.request().postDataJSON().data
+  await routeWebsiteBuilderFixture(page, async (data) => {
     let result: unknown = { draft, version: 1, publishedAt: null, hasPrevious: false }
     if (data.action === 'getImage') {
       const image = images[data.id]!
@@ -228,7 +225,7 @@ async function mockWebsite(page: Page, draft: ReturnType<typeof fixture>) {
     }
     if (data.action === 'listRevisions') result = { revisions: [], activity: [] }
     if (data.action === 'save') result = { version: 2 }
-    return route.fulfill({ headers, json: { result } })
+    return result
   })
   await page.route('**/getPublishedWebsite*', (route) =>
     route.request().method() === 'OPTIONS'
@@ -597,7 +594,7 @@ test('device screens have fixed heights, scroll internally and restart at the to
 for (const device of [
   { label: 'Desktop', width: 1080, key: 'desktop', maxScale: 0.99 },
   { label: 'Tablet', width: 820, key: 'tablet', maxScale: 1 },
-  { label: 'Mobile', width: 390, key: 'mobile', maxScale: 1 },
+  { label: 'Phone', width: 390, key: 'mobile', maxScale: 1 },
 ]) {
   test(`${device.label} Content and Design previews match public layout at ${device.width} CSS pixels`, async ({
     page,
