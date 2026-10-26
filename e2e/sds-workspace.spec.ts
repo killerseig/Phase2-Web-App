@@ -163,7 +163,7 @@ test('role workspace uses the compact document widget and Admin can manage the m
   await gotoPhase2App(page, '/dashboards/role', createJobsFixture())
   await expect(page.getByRole('heading', { name: 'Admin home', exact: true })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Company Library widget', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
+  await expect(page.getByTestId('sds-module').getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Role tools' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Add resource', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Current folder actions', exact: true }).click()
@@ -246,10 +246,10 @@ test('split widget renders PDF pages, zooms, collapses folders and recovers a fa
   await expect.poll(async () => (await second.boundingBox())?.width ?? 0).toBeCloseTo(size, 0)
   await page.getByTestId('sds-module').screenshot({ path: '.security-work/sds-split-desktop.png' })
   await page.route('**/sds-file?*', (route) =>
-    route.fulfill({ status: 403, body: 'Expired ticket' }),
+    route.fulfill({ status: 403, body: 'Access denied' }),
   )
   await page.getByRole('button', { name: 'Reload preview', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('The PDF could not be loaded')
+  await expect(page.getByRole('alert')).toContainText('Your document access has changed. Reopen the library or contact Admin.')
   await page.route('**/sds-file?*', (route) =>
     route.fulfill({ path: 'e2e/fixtures/sds-preview.pdf', contentType: 'application/pdf' }),
   )

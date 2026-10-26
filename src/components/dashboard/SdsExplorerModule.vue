@@ -9,7 +9,8 @@ import type { IntranetContent, IntranetResource, LibraryCategory, ReadingPair } 
 import { documentAccept, documentFormatsLabel, printableFile } from '@/features/documents/formats'
 import { createViewerSession, viewerSessionKey } from '@/features/documents/viewerSession'
 import { useAuthStore } from '@/stores/auth'
-import { loadSds, loadSdsPage, sdsCommand, uploadDocument, sdsErrorMessage } from '@/services/sds'
+import { loadSds, loadSdsPage, sdsCommand, sdsErrorMessage } from '@/services/sds'
+import { useLibraryMutation } from '@/features/sds/useLibraryMutation'
 import SdsBulkImport from './SdsBulkImport.vue'
 import {
   folderAncestors,
@@ -67,6 +68,7 @@ const bulkOpen = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 const editor = ref<'' | 'folder' | 'sheet'>('')
 const progress = ref<number | null>(null)
+const { runMutation } = useLibraryMutation({ busy, error, progress })
 const form = reactive({
   id: '',
   name: '',
@@ -504,15 +506,10 @@ async function addFile(event: Event) {
   input.value = ''
   if (!picked || busy.value || loading.value || !isAdmin.value || jobId.value) return
   const destination = addFileFolder
-  busy.value = true
-  error.value = ''
   notice.value = ''
   progress.value = 0
-  let staged: Awaited<ReturnType<typeof uploadDocument>> | undefined
-  try {
-    staged = await uploadDocument(picked, (percent) => {
-      progress.value = percent
-    })
+  await runMutation(async stageFile => {
+    const staged = await stageFile(picked)
     const result = await sdsCommand<{ id: string }>('saveSheet', {
       name: picked.name.slice(0, 160),
       folderId: destination,
@@ -533,29 +530,17 @@ async function addFile(event: Event) {
     selectedId.value = result.id
     await refresh()
     notice.value = 'File added.'
-  } catch (e) {
-    error.value = message(e)
-  } finally {
-    await staged?.cleanup()
-    busy.value = false
-    progress.value = null
-  }
+  })
 }
 function pickFile(event: Event) {
   file.value = (event.target as HTMLInputElement).files?.[0] ?? null
   if (file.value && !form.name) form.name = file.value.name.replace(/\.[^.]+$/, '').slice(0, 160)
 }
 async function saveRecord() {
-  busy.value = true
-  error.value = ''
-  let staged: Awaited<ReturnType<typeof uploadDocument>> | undefined
-  try {
+  await runMutation(async stageFile => {
     if (editor.value === 'sheet' && !form.id && !file.value)
       throw new Error('Choose a file before saving.')
-    if (file.value)
-      staged = await uploadDocument(file.value, (percent) => {
-        progress.value = percent
-      })
+    const staged = file.value ? await stageFile(file.value) : undefined
     await sdsCommand(editor.value === 'folder' ? 'saveFolder' : 'saveSheet', {
       ...form,
       version: library.value.version,
@@ -567,13 +552,7 @@ async function saveRecord() {
     clearExport()
     await refresh()
     notice.value = 'Company documents updated.'
-  } catch (e) {
-    error.value = message(e)
-  } finally {
-    await staged?.cleanup()
-    busy.value = false
-    progress.value = null
-  }
+  })
 }
 async function deleteFolder(folder = currentFolder.value) {
   if (!folder || !window.confirm(`Remove empty folder “${folder.name}”?`)) return
