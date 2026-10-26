@@ -19,6 +19,8 @@ Phase 2 uses Vue 3 and Vite for the browser app and a separate TypeScript packag
 
 The Node/tooling TypeScript project includes all named Vite, Vitest and Playwright configurations, so specialized build/review configurations receive the same type-checking as their base configuration.
 
+`npm run dev:forms` and `npm run test:forms:browser` retain local demo records in `.forms-local-data/emulator-state/current`, with exactly one `previous` recovery generation. Firebase CLI staging runs inside that managed folder and is cleared after a verified export; a failed first export is preserved and blocks another run rather than accumulating more copies. Concurrent runners are blocked. A designated legacy `latest.json` seed can be copied without deleting it; unassigned root exports and historical backups are never pruned automatically. Normal `npm run dev`, builds and the GitHub push workflow do not invoke this exporter. Run `npm run test:emulator-state` for synthetic repeated-run, interrupted-export and retention checks. This is local emulator state, not production database backup management.
+
 This follows the supported [Vite entry/assets model](https://vite.dev/guide/), [Vue TypeScript tooling](https://vuejs.org/guide/typescript/overview), [Firebase Functions TypeScript layout](https://firebase.google.com/docs/functions/typescript) and [Hosting configuration contracts](https://firebase.google.com/docs/hosting/full-config). Multiple entry points and separate server rendering are supported project requirements, not reasons to replace the framework.
 
 ## Recommended IDE Setup
