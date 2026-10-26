@@ -144,6 +144,13 @@ test('personal SDS module saves only deliberate job selections and exports the s
   await page.getByRole('button', { name: 'Current folder actions', exact: true }).click()
   await page.getByRole('menuitem', { name: 'Make PDF / print book' }).click()
   await expect(page.getByRole('button', { name: 'Download PDF', exact: true })).toBeVisible()
+  await page.context().route('https://example.invalid/sds-book.pdf', route => route.fulfill({ body: 'Synthetic exported book', contentType: 'text/plain' }))
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: 'Download PDF', exact: true }).click()
+  const popup = await popupPromise
+  await expect(popup).toHaveURL('https://example.invalid/sds-book.pdf')
+  expect(api.requests).toContainEqual({ action: 'exportStatus', id: expect.any(String), download: true, link: true })
+  await popup.close()
   expect(api.exports()).toBe(1)
   expect(api.actions.filter((a) => a === 'saveSelection')).toHaveLength(1)
   // The shared dashboard now embeds the complete bounded Library widget.

@@ -13,6 +13,8 @@ import { useAuthStore } from '@/stores/auth'
 import { sdsErrorMessage } from '@/services/sds'
 import { useLibraryMutation } from '@/features/sds/useLibraryMutation'
 import { useLibraryQuery } from '@/features/sds/useLibraryQuery'
+import { useLibraryBookExport } from '@/features/sds/useLibraryBookExport'
+import { createDocumentOpener } from '@/features/documents/documentWindow'
 import SdsBulkImport from './SdsBulkImport.vue'
 import {
   folderAncestors,
@@ -29,6 +31,7 @@ import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/expl
 const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; initialFolderId?: string; references?: IntranetContent | null; referenceCategory?: LibraryCategory }>(), { title: 'Documents', initialFolderId: '' })
 const auth = useAuthStore()
 const viewerSession = createViewerSession()
+const documentOpener = createDocumentOpener()
 provide(viewerSessionKey, viewerSession)
 onBeforeUnmount(() => viewerSession.dispose())
 const route = useRoute()
@@ -41,7 +44,7 @@ const isAdmin = computed(() => auth.rawRole === 'admin')
 const jobId = ref(requestedJobId)
 const viewerContext = ref(0)
 watch([() => auth.currentUser?.uid, () => auth.hasWorkspaceAccess, () => JSON.stringify([auth.rawRole, auth.profile?.active, auth.assignedJobIds]), jobId], ([uid, access]) => {
-  viewerSession.reset(!!uid && access); viewerContext.value++
+  viewerSession.reset(!!uid && access); documentOpener.reset(); viewerContext.value++
 }, { flush: 'sync' })
 const folderId = ref(
   props.initialFolderId || (typeof route.query.folder === 'string' ? route.query.folder : (restored?.folderId ?? '')),
@@ -87,12 +90,8 @@ const addFileInput = ref<HTMLInputElement>()
 let addFileFolder = ''
 const editorElement = ref<HTMLFormElement>()
 const moduleElement = ref<HTMLElement>()
-const exportId = ref('')
-const exportState = ref('')
-const exportError = ref('')
-const exportPages = ref(0)
-let timer: ReturnType<typeof setTimeout> | undefined
-let disposed = false
+const bookExport = useLibraryBookExport({ error, opener: documentOpener })
+const { id: exportId, state: exportState, error: exportError, pages: exportPages, clear: clearExport, retrieve: retrieveBook } = bookExport
 const dirty = computed(
   () =>
     editing.value &&
@@ -164,19 +163,11 @@ const query = useLibraryQuery({
     selection.value = loaded.binder.selections.map((s) => ({ ...s }))
     if (!folders.value.some((f) => f.id === folderId.value)) folderId.value = ''
     if (loaded.exportId && loaded.exportId !== exportId.value) {
-      clearExport()
-      exportId.value = loaded.exportId
-      void pollExport(loaded.exportId)
+      bookExport.resume(loaded.exportId)
     }
   },
 })
 const { refresh, moreDocuments } = query
-function clearExport() {
-  if (timer) clearTimeout(timer)
-  exportId.value = ''
-  exportState.value = ''
-  exportError.value = ''
-}
 async function reload() {
   if (hasDraft.value && !window.confirm('Discard your unsaved changes and reload?')) return
   editing.value = false
@@ -529,44 +520,12 @@ async function openSheet(download = false, sheet = selected.value) {
   const id = sheet.id
   busy.value = true
   error.value = ''
-  const tab = window.open('about:blank', '_blank')
-  if (tab) {
-    tab.opener = null
-    tab.document.title = 'Opening file'
-    tab.document.body.textContent = 'Opening your file…'
-  }
   try {
-    const result = await libraryCommand('openSheet', {
-      id,
-      jobId: jobId.value,
-      download,
-    })
-    if (tab) tab.location.replace(result.url)
-    else error.value = 'Allow a new tab to open the PDF, then try again.'
+    await documentOpener.open(() => libraryCommand('openSheet', { id, jobId: jobId.value, download }), 'Opening file', 'Opening your file…')
   } catch (e) {
-    tab?.close()
     error.value = message(e)
   } finally {
     busy.value = false
-  }
-}
-async function pollExport(id: string) {
-  try {
-    const result = await libraryCommand(
-      'exportStatus',
-      { id },
-    )
-    if (disposed || id !== exportId.value) return
-    exportState.value = result.status
-    exportError.value = result.error ?? ''
-    exportPages.value = result.pageCount ?? 0
-    if (result.status === 'queued' || result.status === 'running')
-      timer = setTimeout(() => void pollExport(id), 2500)
-  } catch (e) {
-    if (id === exportId.value) {
-      exportError.value = message(e)
-      exportState.value = 'failed'
-    }
   }
 }
 async function exportBook() {
@@ -586,46 +545,10 @@ async function exportBook() {
     return
   busy.value = true
   error.value = ''
-  clearExport()
-  const id = crypto.randomUUID()
   try {
-    await libraryCommand('requestExport', {
-      requestId: id,
-      printableOnly: excluded > 0,
-      jobId: jobId.value,
-      version: library.value.binder.version,
-    })
-    exportId.value = id
-    exportState.value = 'queued'
-    void pollExport(id)
-  } catch (e) {
-    error.value = message(e)
+    await bookExport.request({ printableOnly: excluded > 0, jobId: jobId.value, version: library.value.binder.version })
   } finally {
     busy.value = false
-  }
-}
-async function retrieveBook(download: boolean) {
-  // Open synchronously to avoid popup blocking after the authorization request.
-  const tab = window.open('about:blank', '_blank')
-  if (tab) {
-    tab.opener = null
-    tab.document.title = 'Opening document book'
-    tab.document.body.textContent = 'Opening your document book…'
-  }
-  try {
-    const result = await libraryCommand('exportStatus', {
-      id: exportId.value,
-      download,
-      link: true,
-    })
-    // Link controls are shown only for completed exports, as before this extraction.
-    if (tab) tab.location.replace(result.url!)
-    else {
-      error.value = 'Allow a new tab to open the PDF, then try again.'
-    }
-  } catch (e) {
-    tab?.close()
-    error.value = message(e)
   }
 }
 function beforeUnload(event: BeforeUnloadEvent) {
@@ -658,9 +581,9 @@ onBeforeUnmount(() => {
     folderId: folderId.value,
     search: search.value,
   })
-  disposed = true
   query.dispose()
-  if (timer) clearTimeout(timer)
+  bookExport.dispose()
+  documentOpener.dispose()
   window.removeEventListener('beforeunload', beforeUnload)
 })
 </script>
