@@ -5,7 +5,7 @@ import { createViewerSession, viewerSessionKey } from '@/features/documents/view
 import type { PdfWorkerSession } from '@/features/documents/pdfWorkerSession'
 import { createAuthorizedFetch, type RenewDocumentTicket } from '@/features/documents/authorizedFetch'
 import { openPdfRangeSource } from '@/features/documents/pdfRangeSource'
-import AppButton from '@/components/common/AppButton.vue'
+import DocumentZoomControls from './DocumentZoomControls.vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
 import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import PdfPageCanvas from './PdfPageCanvas.vue'
@@ -132,9 +132,7 @@ onBeforeUnmount(() => observer?.disconnect())
       <input aria-label="PDF page" type="number" min="1" :max="pdf.numPages" :value="pageNumber" @change="changePage" />
       <span>/ {{ pdf.numPages }}</span>
       <AppIconButton label="Next page" :disabled="pageNumber >= pdf.numPages" @click="jumpTo(pageNumber + 1)">&gt;</AppIconButton>
-      <AppIconButton label="Zoom out" :disabled="zoom <= .5" @click="setZoom(Math.max(.5, zoom - .25))">-</AppIconButton>
-      <AppButton variant="ghost" aria-label="Fit page width" @click="setZoom(1)">Fit</AppButton>
-      <AppIconButton label="Zoom in" :disabled="zoom >= 3" @click="setZoom(Math.min(3, zoom + .25))">+</AppIconButton>
+      <DocumentZoomControls :zoom="zoom" fit-label="Fit page width" @change="setZoom" />
     </div>
     <p v-if="loading" class="pdf-status" role="status">Loading PDF.</p>
     <span v-if="renewing" class="pdf-renewal" role="status">Renewing document access…</span>
@@ -175,7 +173,6 @@ input {
   background: var(--field);
   border-radius: var(--radius-sm);
 }
-.pdf-controls .app-button { min-height: 2rem; padding: 0 .65rem; }
 input {
   width: 3.5rem;
   min-height: 2rem;

@@ -2,8 +2,7 @@
 import { computed, defineAsyncComponent, inject, ref, shallowRef, watch } from 'vue'
 import type { FilePreview } from '@/features/documents/formats'
 import { createAuthorizedFetch, type RenewDocumentTicket } from '@/features/documents/authorizedFetch'
-import AppButton from '@/components/common/AppButton.vue'
-import AppIconButton from '@/components/common/AppIconButton.vue'
+import DocumentZoomControls from './DocumentZoomControls.vue'
 import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import { loadDocxViewer, viewerSessionKey } from '@/features/documents/viewerSession'
 const props = defineProps<{ url: string; extension: string; name: string; cacheKey?: string; renewTicket?: RenewDocumentTicket }>()
@@ -113,14 +112,7 @@ watch(
     <p v-if="loading" role="status">Loading preview…</p>
     <AppStatusMessage v-if="error" :message="error" tone="error" />
     <template v-if="imageUrl && !error">
-      <div class="content-toolbar">
-        <AppIconButton label="Zoom out" :disabled="zoom <= 0.5" @click="zoom -= 0.25">
-          -</AppIconButton
-        ><AppButton variant="ghost" @click="zoom = 1">Fit</AppButton
-        ><AppIconButton label="Zoom in" :disabled="zoom >= 3" @click="zoom += 0.25">
-          +
-        </AppIconButton>
-      </div>
+      <DocumentZoomControls class="content-toolbar" :zoom="zoom" @change="zoom = $event" />
       <div class="image-scroll">
         <img
           :src="imageUrl"
@@ -197,7 +189,6 @@ select {
   max-width: 100%;
 }
 .content-toolbar { gap: .25rem; }
-.content-toolbar .app-button { min-height: 2rem; padding: 0 .65rem; }
 .content-note {
   color: var(--text-muted);
 }
