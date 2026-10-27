@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { gzipSync } from 'node:zlib'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { resolve, sep } from 'node:path'
 import { createRequire } from 'node:module'
-import { deployEmployeeHosting, sha256, documentPreviewHostingConfig } from './hosting-release.mjs'
+import { analyticsHostingConfig, deployCombinedHosting, deployEmployeeHosting, publicFiles, sha256, documentPreviewHostingConfig } from './hosting-release.mjs'
 
 const prefix = 'projects/phase2-website/sites/phase2-website'
 const previous = `${prefix}/versions/old`, next = `${prefix}/versions/new`
@@ -15,29 +17,94 @@ function fixture(options = {}) {
   const writes = [], records = []
   const before = { '/employee-app.html': 'old-hash', '/public-boot.js': 'preserved-hash', '/assets/public.js': 'public-hash' }
   const config = { rewrites: [{ source: '/sds-file', function: { functionId: 'downloadSdsFile' } }, { source: '/', function: { functionId: 'getPublishedWebsite' } }], headers: [{ source: '**', headers: [] }] }
-  let live = previous, inventory, channelReads = 0
+  if (options.analytics) config.headers = [
+    { glob: '**', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data:; connect-src 'self'; object-src 'none'", 'X-Frame-Options': 'DENY' } },
+    { glob: '/website-runtime.html', headers: { 'Content-Security-Policy': "sandbox allow-scripts; connect-src 'none'" } },
+  ]
+  let live = previous, inventory, channelReads = 0, stagedConfig = config
   async function api(method, path, body) {
     if (method !== 'GET') writes.push({ method, path, body })
     if (path.endsWith('/channels/live') && method === 'GET') {
       channelReads++
       return { release: { name: 'release-old', version: { name: options.race && channelReads === 2 ? 'unexpected-version' : live } } }
     }
-    if (path === '/' + previous) return { status: 'FINALIZED', config }
+    if (path === '/' + previous) return { status: 'FINALIZED', config, ...(options.alreadyReleased ? { labels: { 'phase2-commit': commit } } : {}) }
     if (path === '/' + previous + '/files') return { files: Object.entries(before).map(([path, hash]) => ({ path, hash })) }
-    if (path.endsWith('/versions') && method === 'POST') { assert.deepEqual(body.config, config); return { name: next } }
+    if (path.endsWith('/versions') && method === 'POST') { assert.deepEqual(body.config, options.analytics ? analyticsHostingConfig(config) : config); stagedConfig = body.config; return { name: next } }
     if (path.endsWith(':populateFiles')) {
       inventory = body.files
       return { uploadUrl: 'https://upload-firebasehosting.googleapis.com/upload/sites/phase2-website/versions/new/files', uploadRequiredHashes: [options.unknownHash ? 'unknown-live-hash' : sha256(compressed)] }
     }
     if (method === 'UPLOAD') { if (options.uploadFailure) throw Error('synthetic upload failure'); return {} }
     if (path === '/' + next && method === 'PATCH') return {}
-    if (path === '/' + next && method === 'GET') return { status: 'FINALIZED', config }
+    if (path === '/' + next && method === 'GET') return { status: 'FINALIZED', config: stagedConfig }
     if (path === '/' + next + '/files') return { files: Object.entries(inventory).map(([path, hash]) => ({ path, hash: options.badInventory ? 'wrong' : hash })) }
     if (path.endsWith('/releases')) { live = next; return { name: 'release-new' } }
     throw Error(`Unexpected synthetic API: ${method} ${path}`)
   }
-  return { api, writes, records, before, record: data => records.push(data) }
+  return { api, writes, records, before, config, record: data => records.push(data) }
 }
+
+const asset = value => { const raw = Buffer.from(value); return { raw, compressed: gzipSync(raw, { level: 9 }) } }
+const publicArtifact = () => new Map(['/public-boot.js', '/public-style.css', '/website-runtime.html', '/public-assets/public-1234.js'].map(name => [name, asset('synthetic ' + name)]))
+test('combined release updates selected public/employee artifacts and only approved policy, retaining rollback and other files', async () => {
+  const f = fixture({ analytics: true }), original = structuredClone(f.config)
+  const result = await deployCombinedHosting({ ...f, employee: files, public: publicArtifact(), commit })
+  assert.equal(result.state, 'RELEASED')
+  assert.equal(result.previousVersion, previous)
+  assert.equal(result.publicAssetsUpdated, true)
+  assert.equal(result.analyticsCspApplied, true)
+  assert.equal(result.publicAssetsPreserved, false)
+  const created = f.writes.find(write => write.path.endsWith('/versions'))
+  assert.deepEqual(created.body.config.rewrites, original.rewrites)
+  assert.deepEqual(created.body.config.headers[1], original.headers[1])
+  assert.deepEqual(f.config, original)
+  const published = f.writes.find(write => write.path.endsWith(':populateFiles')).body.files
+  assert.equal(published['/public-boot.js'], sha256(publicArtifact().get('/public-boot.js').compressed))
+  assert.equal(published['/assets/public.js'], f.before['/assets/public.js'])
+  assert.equal(f.writes.filter(write => write.path.endsWith('/releases')).length, 1)
+})
+test('approved policy transformation is idempotent and rejects ambiguous/missing policy without guessing', () => {
+  const f = fixture({ analytics: true })
+  const updated = analyticsHostingConfig(f.config)
+  assert.deepEqual(analyticsHostingConfig(updated), updated)
+  assert.throws(() => analyticsHostingConfig({ headers: [] }), /default Hosting header/)
+  const bad = structuredClone(f.config)
+  bad.headers[0].headers['Content-Security-Policy'] += "; script-src-elem 'self'"
+  assert.throws(() => analyticsHostingConfig(bad), /separate review/)
+  bad.headers[0].headers['Content-Security-Policy'] = "script-src 'none'; img-src 'self'; connect-src 'self'"
+  assert.throws(() => analyticsHostingConfig(bad), /deny-all/)
+})
+for (const [name, options, message] of [
+  ['upload fails', { uploadFailure: true }, /upload failure/],
+  ['live changes', { race: true }, /Live changed/],
+  ['inventory differs', { badInventory: true }, /inventory differs/],
+  ['same commit has another policy', { alreadyReleased: true }, /different intended policy/],
+]) test(`combined release stops when ${name}`, async () => {
+  const f = fixture({ analytics: true, ...options })
+  await assert.rejects(deployCombinedHosting({ ...f, employee: files, public: publicArtifact(), commit }), message)
+  assert(!f.writes.some(write => write.path.endsWith('/releases')))
+})
+test('combined release rejects incomplete or out-of-scope artifacts before network requests', () => {
+  const f = fixture({ analytics: true }), publicAssets = publicArtifact()
+  publicAssets.set('/sds-file', asset('not an authorized artifact'))
+  assert.throws(() => deployCombinedHosting({ ...f, employee: files, public: publicAssets, commit }), /Unexpected public/)
+  assert.throws(() => deployCombinedHosting({ ...f, employee: files, public: new Map(), commit }), /incomplete/)
+  assert.equal(f.writes.length, 0)
+})
+test('public artifact selection reads only intended output and verifies boot/runtime dependency presence', t => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'phase2-public-artifact-'))
+  t.after(() => { assert(directory.startsWith(resolve(tmpdir()) + sep)); rmSync(directory, { recursive: true, force: true }) })
+  mkdirSync(resolve(directory, 'public-assets'))
+  writeFileSync(resolve(directory, 'public-assets/public-1234.js'), 'export {}')
+  writeFileSync(resolve(directory, 'public-boot.js'), 'import "/public-assets/public-1234.js";')
+  writeFileSync(resolve(directory, 'public-style.css'), 'body{}')
+  writeFileSync(resolve(directory, 'website-runtime.html'), '<script type="module" src="/public-assets/public-1234.js"></script>')
+  writeFileSync(resolve(directory, 'unrelated-private.json'), 'offline-fixture-only')
+  assert.deepEqual([...publicFiles(directory).keys()].sort(), ['/public-assets/public-1234.js', '/public-boot.js', '/public-style.css', '/website-runtime.html'])
+  writeFileSync(resolve(directory, 'public-boot.js'), 'import "/public-assets/missing.js";')
+  assert.throws(() => publicFiles(directory), /entry is missing/)
+})
 
 test('releases only employee assets, preserving public assets/config and rollback reference', async () => {
   const f = fixture()

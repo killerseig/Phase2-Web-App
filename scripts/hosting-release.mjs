@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { lstatSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { resolve, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -9,6 +9,67 @@ import { gzipSync } from 'node:zlib'
 export const site = 'phase2-website'
 const root = `/projects/${site}/sites/${site}`
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
+
+const analyticsOrigins = ['https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://region1.google-analytics.com']
+/** Apply only the owner's approved default-policy additions, including Gen2 ServingConfig shape. */
+export function analyticsHostingConfig(config) {
+  const next = structuredClone(config)
+  const defaults = next.headers?.filter(rule => (rule.source ?? rule.glob) === '**') ?? []
+  assert.equal(defaults.length, 1, 'Expected one default Hosting header rule; no policy guessed')
+  const headers = defaults[0].headers
+  const entries = Array.isArray(headers) ? headers.filter(header => header.key.toLowerCase() === 'content-security-policy') : Object.keys(headers || {}).filter(key => key.toLowerCase() === 'content-security-policy')
+  assert.equal(entries.length, 1, 'Expected one existing CSP; no policy guessed')
+  const entry = entries[0], policy = Array.isArray(headers) ? entry.value : headers[entry]
+  const found = new Set()
+  const updated = policy.split(';').map(directive => {
+    const [name, ...values] = directive.trim().split(/\s+/)
+    assert(name !== 'script-src-elem', 'Specific script element policy requires separate review')
+    const additions = name === 'script-src' ? analyticsOrigins.slice(0, 1) : ['img-src', 'connect-src'].includes(name) ? analyticsOrigins : []
+    if (!additions.length) return directive
+    assert(!found.has(name), 'Ambiguous duplicate CSP directive; no release sent')
+    assert(!values.includes("'none'"), 'Refusing to replace a deny-all CSP directive')
+    found.add(name)
+    const missing = additions.filter(origin => !values.includes(origin))
+    return missing.length ? directive.trimEnd() + ' ' + missing.join(' ') : directive
+  }).join(';')
+  assert.equal(found.size, 3, 'Required CSP directives are absent; no policy guessed')
+  if (Array.isArray(headers)) entry.value = updated
+  else headers[entry] = updated
+  return next
+}
+
+/** Select public build output only, never source/configuration/private data from the output root. */
+export function publicFiles(directory) {
+  const files = new Map(), base = resolve(directory)
+  assert(!lstatSync(base).isSymbolicLink(), 'Release directory must not be a symbolic link')
+  function add(filename) {
+    assert(!lstatSync(filename).isSymbolicLink(), 'Release files must not be symbolic links')
+    const name = '/' + relative(base, filename).replaceAll('\\', '/')
+    const raw = readFileSync(filename)
+    for (const marker of ['synthetic-verification-only', 'demo-phase2-verification', 'demo-phase2-security', 'offline-fixture-only', 'Local review sign-in', 'Intranet - No Documents - Send to CJ'])
+      assert(!raw.includes(Buffer.from(marker)), `Local/private marker found in ${name}`)
+    files.set(name, { raw, compressed: gzipSync(raw, { level: 9 }) })
+  }
+  function walk(folder) {
+    assert(!lstatSync(folder).isSymbolicLink(), 'Release directory must not be a symbolic link')
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      assert(!entry.isSymbolicLink(), 'Release files must not be symbolic links')
+      const filename = resolve(folder, entry.name)
+      if (entry.isDirectory()) walk(filename)
+      else add(filename)
+    }
+  }
+  for (const name of ['public-boot.js', 'public-style.css', 'website-runtime.html']) add(resolve(base, name))
+  walk(resolve(base, 'public-assets'))
+  const boot = files.get('/public-boot.js').raw.toString().match(/^\s*import ["'](\/public-assets\/[\w.-]+\.js)["'];?\s*$/)
+  assert(boot && files.has(boot[1]), 'Public boot entry is missing from this artifact')
+  const runtime = files.get('/website-runtime.html').raw.toString()
+  const runtimeScript = runtime.match(/<script[^>]+src="(\/public-assets\/[\w.-]+\.js)"/)
+  assert(runtimeScript && files.has(runtimeScript[1]), 'Public iframe entry is missing from this artifact')
+  for (const match of runtime.matchAll(/(?:src|href)="(\/public-assets\/[^"?#]+)(?:[?#][^"]*)?"/g))
+    assert(files.has(match[1]), 'Public iframe references a missing artifact')
+  return files
+}
 
 // Remove only the shadowing employee-shell rewrite. Keep the private file handler,
 // all public-site rules and every other Hosting setting unchanged.
@@ -49,8 +110,9 @@ export function employeeFiles(directory) {
 }
 
 // api is deliberately injectable: release failure/race paths use synthetic APIs in tests.
-export async function deployEmployeeHosting({ api, files, commit, record = () => {}, assertCurrentMain = async () => {} }) {
+async function deployHosting({ api, files, commit, artifactSourceCommit = commit, record = () => {}, assertCurrentMain = async () => {}, combined = false }) {
   assert.match(commit, /^[a-f0-9]{40}$/)
+  assert.match(artifactSourceCommit, /^[a-f0-9]{40}$/)
   const channelPath = `${root}/channels/live`
   const channel = await api('GET', channelPath)
   const previous = channel.release?.version?.name
@@ -58,7 +120,9 @@ export async function deployEmployeeHosting({ api, files, commit, record = () =>
   const versionBefore = await api('GET', '/' + previous)
   assert.equal(versionBefore.status, 'FINALIZED')
   assert(versionBefore.config?.rewrites?.some(rule => [rule.function?.functionId, rule.function, rule.run?.serviceId].some(name => typeof name === 'string' && name.toLowerCase() === 'getpublishedwebsite')), 'Existing public renderer rewrite is missing')
-  const releaseConfig = documentPreviewHostingConfig(versionBefore.config)
+  // The combined path preserves live rewrites verbatim and changes only approved CSP origins.
+  const releaseConfig = combined ? analyticsHostingConfig(versionBefore.config) : documentPreviewHostingConfig(versionBefore.config)
+  if (combined) assert.deepEqual(documentPreviewHostingConfig(versionBefore.config).rewrites, versionBefore.config.rewrites, 'Private file routing needs separate review')
   async function inventory(version) {
     const result = {}
     let pageToken
@@ -75,20 +139,21 @@ export async function deployEmployeeHosting({ api, files, commit, record = () =>
   for (const [name, file] of files) {
     const hash = sha256(file.compressed)
     // Hashed shared assets must never silently overwrite the public renderer's graph.
-    if (name.startsWith('/assets/') && before[name]) assert.equal(hash, before[name], `Existing asset collision: ${name}`)
+    if ((name.startsWith('/assets/') || name.startsWith('/public-assets/')) && before[name]) assert.equal(hash, before[name], `Existing asset collision: ${name}`)
     merged[name] = hash
     uploads.set(hash, file.compressed)
     manifest.push({ path: name, hash, sha256: sha256(file.raw) })
   }
-  const receipt = { commit, project: site, site, previousVersion: previous, previousRelease: channel.release.name, manifest, hostingConfigUnchanged: JSON.stringify(releaseConfig) === JSON.stringify(versionBefore.config), documentPreviewRoutingRepaired: true, publicAssetsPreserved: true }
+  const receipt = { commit, artifactSourceCommit, project: site, site, previousVersion: previous, previousRelease: channel.release.name, manifest, hostingConfigUnchanged: JSON.stringify(releaseConfig) === JSON.stringify(versionBefore.config), documentPreviewRoutingRepaired: !combined, publicAssetsPreserved: !combined, publicAssetsUpdated: combined, analyticsCspApplied: combined }
   record({ ...receipt, state: 'PREPARED' })
   if (versionBefore.labels?.['phase2-commit'] === commit) {
+    assert.deepEqual(versionBefore.config, releaseConfig, 'Same commit has different intended policy; investigate before retrying')
     for (const [name, hash] of Object.entries(merged)) assert.equal(before[name], hash, 'Same commit has different build bytes; investigate before retrying')
     record({ ...receipt, version: previous, state: 'ALREADY_RELEASED' })
     return { ...receipt, version: previous, state: 'ALREADY_RELEASED' }
   }
   await assertCurrentMain()
-  const version = (await api('POST', `${root}/versions`, { config: releaseConfig, labels: { 'phase2-commit': commit, 'deployment-tool': 'github-actions' } })).name
+  const version = (await api('POST', `${root}/versions`, { config: releaseConfig, labels: { 'phase2-commit': commit, 'deployment-tool': combined ? 'reviewed-combined-release' : 'github-actions' } })).name
   assert(version?.startsWith(`${root.slice(1)}/versions/`), 'Unexpected staged version')
   record({ ...receipt, version, state: 'CREATED' })
   const pairs = Object.entries(merged)
@@ -110,11 +175,28 @@ export async function deployEmployeeHosting({ api, files, commit, record = () =>
   assert.equal((await api('GET', channelPath)).release.version.name, previous, 'Live changed during preparation; no release sent')
   await assertCurrentMain()
   record({ ...receipt, version, state: 'FINALIZED' })
-  const release = await api('POST', `${channelPath}/releases`, { message: `Employee frontend ${commit}; public assets and backend preserved` }, { versionName: version })
+  const release = await api('POST', `${channelPath}/releases`, { message: combined ? `Public and employee frontend ${commit}; approved analytics CSP; backend preserved` : `Employee frontend ${commit}; public assets and backend preserved` }, { versionName: version })
   assert.equal((await api('GET', channelPath)).release.version.name, version, 'Release sent but live confirmation differs; inspect before retrying')
   const result = { ...receipt, version, release: release.name, state: 'RELEASED', url: 'https://phase2-website.web.app/login' }
   record(result)
   return result
+}
+
+export const deployEmployeeHosting = options => deployHosting(options)
+export function deployCombinedHosting(options) {
+  const files = new Map(options.employee)
+  for (const name of files.keys()) {
+    assert(name === '/employee-app.html' || name.startsWith('/assets/') || name.startsWith('/sds-pdf-assets/'), 'Unexpected employee release path')
+    assert(!name.split('/').some(part => part === '..' || part === '.') && !/[\\?#%]/.test(name), 'Unsafe employee release path')
+  }
+  for (const [name, value] of options.public) {
+    assert(['/public-boot.js', '/public-style.css', '/website-runtime.html'].includes(name) || name.startsWith('/public-assets/'), 'Unexpected public release path')
+    assert(!name.split('/').some(part => part === '..' || part === '.') && !/[\\?#%]/.test(name), 'Unsafe public release path')
+    assert(!files.has(name), 'Ambiguous public/employee release path')
+    files.set(name, value)
+  }
+  for (const name of ['/employee-app.html', '/public-boot.js', '/public-style.css', '/website-runtime.html']) assert(files.has(name), 'Combined release artifact is incomplete')
+  return deployHosting({ ...options, files, combined: true })
 }
 
 async function main() {
