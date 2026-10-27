@@ -114,3 +114,22 @@ test('live Gen2 ServingConfig repair removes only the document route collision',
 test('missing private file handler fails closed', () => {
   assert.throws(() => documentPreviewHostingConfig({ rewrites: [{ glob: '/sds-file', path: '/employee-app.html' }] }), /handler rewrite is missing/)
 })
+
+test('analytics CSP adds only the approved origins and keeps the script iframe isolated', () => {
+  const config = JSON.parse(readFileSync(new URL('../firebase.json', import.meta.url), 'utf8')).hosting
+  const readPolicy = source => config.headers.find(rule => rule.source === source).headers.find(header => header.key === 'Content-Security-Policy').value
+  const policy = Object.fromEntries(readPolicy('**').split(';').map(directive => directive.trim().split(/\s+/)).filter(([name]) => name).map(([name, ...values]) => [name, values]))
+  const approved = ['https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://region1.google-analytics.com']
+  assert.deepEqual(policy['script-src'], ["'self'", "'wasm-unsafe-eval'", approved[0]])
+  assert.deepEqual(policy['img-src'], ["'self'", 'data:', 'blob:', 'https://firebasestorage.googleapis.com', 'https://storage.googleapis.com', ...approved])
+  assert.deepEqual(policy['connect-src'], ["'self'", 'https://*.googleapis.com', 'https://*.cloudfunctions.net', 'https://*.run.app', 'https://*.firebaseio.com', 'wss://*.firebaseio.com', ...approved])
+  const { 'script-src': script, 'img-src': images, 'connect-src': connections, ...other } = policy
+  assert(script && images && connections)
+  assert.deepEqual(other, {
+    'default-src': ["'self'"], 'style-src': ["'self'", "'unsafe-inline'"], 'font-src': ["'self'", 'data:'],
+    'frame-src': ["'self'", 'https://*.firebaseapp.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
+    'media-src': ["'self'", 'https:'], 'worker-src': ["'self'", 'blob:'], 'object-src': ["'none'"],
+    'base-uri': ["'self'"], 'frame-ancestors': ["'none'"], 'form-action': ["'self'"], 'upgrade-insecure-requests': [],
+  })
+  assert.equal(readPolicy('/website-runtime.html'), "sandbox allow-scripts allow-forms allow-top-navigation-by-user-activation; default-src 'none'; script-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com 'unsafe-inline'; style-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com 'unsafe-inline'; img-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com data: blob:; font-src 'self' https://phase2-website.web.app https://phase2-website.firebaseapp.com data:; connect-src 'none'; frame-src 'self' https://www.youtube-nocookie.com https://player.vimeo.com; media-src https:; form-action 'none'; base-uri 'none'; frame-ancestors 'self'")
+})
