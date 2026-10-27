@@ -8,6 +8,14 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string
   readonly VITE_FIREBASE_APP_ID?: string
   readonly VITE_FIREBASE_MEASUREMENT_ID?: string
+  readonly VITE_PUBLIC_ANALYTICS_ENABLED?: string
+  readonly VITE_PUBLIC_ANALYTICS_APPROVED?: string
+  readonly VITE_PUBLIC_GA4_MEASUREMENT_ID?: string
+  readonly VITE_PUBLIC_ANALYTICS_HOSTS?: string
+  readonly VITE_EMPLOYEE_ANALYTICS_ENABLED?: string
+  readonly VITE_EMPLOYEE_ANALYTICS_APPROVED?: string
+  readonly VITE_EMPLOYEE_GA4_MEASUREMENT_ID?: string
+  readonly VITE_EMPLOYEE_ANALYTICS_HOSTS?: string
 }
 
 interface ImportMeta {

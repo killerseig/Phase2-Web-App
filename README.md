@@ -29,6 +29,18 @@ For credential-free production-mode compilation checks, run `npm run type-check`
 
 This follows the supported [Vite entry/assets model](https://vite.dev/guide/), [Vue TypeScript tooling](https://vuejs.org/guide/typescript/overview), [Firebase Functions TypeScript layout](https://firebase.google.com/docs/functions/typescript) and [Hosting configuration contracts](https://firebase.google.com/docs/hosting/full-config). Multiple entry points and separate server rendering are supported project requirements, not reasons to replace the framework.
 
+## Optional analytics (not activated)
+
+Public marketing and employee feature usage have independent `VITE_PUBLIC_*` and `VITE_EMPLOYEE_*` analytics settings in `.env.example`. Both default off. Collection requires a production HTTPS build, exact approved hostname, valid measurement ID, per-scope enabled/approved flags and explicit consent for the current visit. Employee collection additionally requires existing workspace access; logout clears that visit's consent. There is no consent persistence, historical event backlog or identity lookup. Development, editor previews and SSR do not send analytics.
+
+Two separate GA4 **properties** must be confirmed by the owner before setting either approval flag. Different streams within one property are not separate reporting destinations. Code rejects reused measurement IDs, uses explicit `send_to`, separate cookie prefixes and refuses a different/unrelated tag owner in the same document. It cannot establish property ownership or property membership from measurement IDs alone.
+
+The public allowlist emits `page_view` for fixed page keys (home, company, services, projects, safety, careers, awards, location, contact). Initial UTM values are reduced to fixed source/medium categories and a tagged yes/no flag; campaign names, terms, content, click IDs and arbitrary query values are not forwarded. Employee `feature_view` emits only fixed feature keys from known route names. No raw URLs, route parameters, user IDs, identities, role/profile data, file/job/document/form/submission IDs or operational values are accepted. Provider page metadata uses synthetic `/usage/public/...` or `/usage/employee/...` locations and fixed titles, with an empty referrer. New published pages require explicit allowlisting.
+
+This is privacy-minimized telemetry, **not anonymous analytics**: after activation Google can receive client/session identifiers, cookies, IP/network and browser/device metadata, and coarse work-usage patterns. Before activation the owner must confirm privacy/employee notice, access and retention choices; turn off automatic/enhanced measurement (including history and form interactions), Google Signals and advertising features in both properties; approve the narrowly required public/employee CSP origins; and explicitly propagate reviewed configuration through the release process. Current CSP/settings are unchanged. No account, property, credential or billing setup has been performed. A settings flag is an operational gate, not backend authorization or proof of provider privacy configuration.
+
+`src/features/analytics` contains the config/schema gate, consent/authorization controller and lazy GA4 transport. `PublicRoot` provides only the public controller; `App` observes only employee route names and a workspace-access boolean. No provider script loads before the first consented allowlisted event. Tests use captured script nodes/mocked transports rather than Google; actual provider acceptance and metadata require a separately approved activation check.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).

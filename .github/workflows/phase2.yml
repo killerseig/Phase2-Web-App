@@ -33,6 +33,7 @@ jobs:
         run: >-
           npx vitest run src/components/builder src/components/forms src/features/builder
           src/features/forms src/components/jobs/JobFormsList.spec.ts src/services/forms.spec.ts
+          src/features/analytics
           src/views/CompanyLibraryView.spec.ts src/views/FormBuilderPublishing.spec.ts
           src/views/FormBuilderSupplied.spec.ts src/views/FormBuilderView.spec.ts
           src/views/FormSubmissionView.spec.ts

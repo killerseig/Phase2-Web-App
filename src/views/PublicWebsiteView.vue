@@ -7,6 +7,8 @@ import { initialPublicSnapshot, loadPublicSnapshot } from '@/services/publicWebs
 import { publicApplicationKey, publicAssetVersionKey, publicSnapshotKey } from '@/features/website/publicSnapshot'
 import type { WebsiteSite } from '@/features/website/types'
 import { pageUrl } from '@/features/website/types'
+import { publicUsageKey } from '@/features/analytics/useUsageAnalytics'
+const analytics = inject(publicUsageKey, undefined)
 const route = useRoute()
 const router = useRouter()
 let active = true
@@ -59,6 +61,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('focus', refresh)
 })
 watch(page, (page) => {
+  // Only the standalone public application provides this controller; editor previews do not.
+  analytics?.view(page?.slug, typeof window === 'undefined' ? '' : window.location.search)
   if (typeof document !== 'undefined') document.title = page ? `${page.title} | ${site.value?.name}` : 'Phase 2'
   if (description) description.content = page?.description || ''
   if (canonical && page) canonical.setAttribute('href', pageUrl(page.slug))
