@@ -2,6 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppPageLayout from '@/components/common/AppPageLayout.vue'
+import AppCard from '@/components/common/AppCard.vue'
+import AppIconButton from '@/components/common/AppIconButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import brandLogo from '@/assets/images/phase2-logo.png'
+import '@/components/common/button-family.css'
 import '@/styles/brand-workspace.css'
 import {
   fetchLegacyPublicDailyLogGallery,
@@ -171,7 +176,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="daily-log-gallery public-page" data-testid="public-daily-log-gallery">
     <header class="daily-log-gallery__masthead">
-      <div class="daily-log-gallery__brand-mark" aria-hidden="true">P2</div>
+      <div class="daily-log-gallery__brand-mark"><img :src="brandLogo" alt="Phase 2" width="26" height="42" /></div>
       <div>
         <strong>Phase 2</strong>
         <span>Daily Log Photo Gallery</span>
@@ -179,17 +184,12 @@ onBeforeUnmount(() => {
     </header>
 
     <main class="daily-log-gallery__main">
-      <div v-if="loading" class="daily-log-gallery__state" role="status">
-        Loading photo gallery...
-      </div>
+      <AppStatusMessage v-if="loading" class="daily-log-gallery__state" message="Loading photo gallery..." />
 
-      <div
-        v-else-if="errorMessage"
-        class="daily-log-gallery__state daily-log-gallery__state--error"
-      >
+      <AppCard v-else-if="errorMessage" class="daily-log-gallery__state daily-log-gallery__state--error">
         <h1>Gallery unavailable</h1>
-        <p>{{ errorMessage }}</p>
-      </div>
+        <AppStatusMessage tone="error" :message="errorMessage" />
+      </AppCard>
 
       <AppPageLayout
         v-else-if="gallery"
@@ -198,7 +198,7 @@ onBeforeUnmount(() => {
         eyebrow="Submitted Daily Log"
         description="Daily Log Photos"
       >
-        <div class="daily-log-gallery__header">
+        <AppCard as="section" class="daily-log-gallery__header" aria-label="Daily log details">
           <dl class="daily-log-gallery__details">
             <div>
               <dt>Log Date</dt>
@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
               <dd>{{ gallery.attachments.length }}</dd>
             </div>
           </dl>
-        </div>
+        </AppCard>
 
         <nav
           v-if="gallerySections.length > 1"
@@ -228,13 +228,14 @@ onBeforeUnmount(() => {
             v-for="section in gallerySections"
             :key="section.key"
             :href="`#gallery-${section.key}`"
+            class="app-button"
           >
             {{ section.title }} ({{ section.photos.length }})
           </a>
         </nav>
 
         <template v-if="gallerySections.length">
-          <section
+          <AppCard as="section"
             v-for="section in gallerySections"
             :id="`gallery-${section.key}`"
             :key="section.key"
@@ -273,7 +274,7 @@ onBeforeUnmount(() => {
                 </figcaption>
               </figure>
             </div>
-          </section>
+          </AppCard>
         </template>
 
         <section v-else class="daily-log-gallery__photos" aria-labelledby="gallery-empty-title">
@@ -302,33 +303,31 @@ onBeforeUnmount(() => {
           {{ activePhotoSection?.title }}: {{ photoPosition }} of
           {{ activePhotoSection?.photos.length ?? 0 }}
         </span>
-        <button type="button" aria-label="Close photo viewer" @click="closePhoto">
+        <AppIconButton label="Close photo viewer" @click="closePhoto">
           <i class="pi pi-times" aria-hidden="true"></i>
-        </button>
+        </AppIconButton>
       </div>
 
       <div class="daily-log-gallery__lightbox-stage">
-        <button
+        <AppIconButton
           v-if="(activePhotoSection?.photos.length ?? 0) > 1"
-          type="button"
           class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--previous"
-          aria-label="Previous photo"
+          label="Previous photo"
           @click="movePhoto(-1)"
         >
           <i class="pi pi-chevron-left" aria-hidden="true"></i>
-        </button>
+        </AppIconButton>
 
         <img :src="activePhoto.url" :alt="activePhoto.name" />
 
-        <button
+        <AppIconButton
           v-if="(activePhotoSection?.photos.length ?? 0) > 1"
-          type="button"
           class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--next"
-          aria-label="Next photo"
+          label="Next photo"
           @click="movePhoto(1)"
         >
           <i class="pi pi-chevron-right" aria-hidden="true"></i>
-        </button>
+        </AppIconButton>
       </div>
 
       <div class="daily-log-gallery__lightbox-caption">
@@ -349,7 +348,7 @@ onBeforeUnmount(() => {
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   color: var(--text);
-  background: var(--panel-background);
+  background: var(--bg);
 }
 
 .daily-log-gallery__masthead,
@@ -362,22 +361,21 @@ onBeforeUnmount(() => {
 .daily-log-gallery__masthead {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  min-height: 4.5rem;
+  gap: 0.85rem;
+  min-height: 5rem;
   border-bottom: 1px solid var(--border-soft);
 }
 
 .daily-log-gallery__brand-mark {
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: var(--field);
-  font-weight: var(--font-weight-heading);
+  flex: 0 0 48px;
+  height: 58px;
+  border-radius: 4px;
+  background: #fff;
 }
+
+.daily-log-gallery__brand-mark img { display: block; object-fit: contain; }
 
 .daily-log-gallery__masthead > div:last-child {
   display: grid;
@@ -385,7 +383,8 @@ onBeforeUnmount(() => {
 }
 
 .daily-log-gallery__masthead strong {
-  font-size: var(--font-size-section-title);
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
   font-weight: var(--font-weight-heading);
 }
 
@@ -473,19 +472,8 @@ onBeforeUnmount(() => {
 .daily-log-gallery__section-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--list-gap);
-  padding: 1rem clamp(1rem, 3vw, 2rem) 0;
-}
-
-.daily-log-gallery__section-nav a {
-  padding: 0.55rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: var(--field);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  text-decoration: none;
+  gap: .5rem;
+  padding: 0;
 }
 
 .daily-log-gallery__section-nav a:hover,
@@ -505,7 +493,7 @@ onBeforeUnmount(() => {
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 }
 
 .daily-log-gallery__section-heading h2 {
@@ -595,6 +583,9 @@ onBeforeUnmount(() => {
 .daily-log-gallery__lightbox {
   position: fixed;
   inset: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   z-index: 2000;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -615,18 +606,7 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-help);
 }
 
-.daily-log-gallery__lightbox button {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: var(--field);
-  cursor: pointer;
-}
+.daily-log-gallery__lightbox :deep(.app-icon-button) { --app-icon-button-size: 2.75rem; --app-icon-button-background: var(--surface-raised); }
 
 .daily-log-gallery__lightbox-stage {
   position: relative;
@@ -638,9 +618,13 @@ onBeforeUnmount(() => {
 }
 
 .daily-log-gallery__lightbox-stage img {
+  position: absolute;
+  inset: 0;
   display: block;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
