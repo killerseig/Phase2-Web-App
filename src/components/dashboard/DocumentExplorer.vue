@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="T extends ExplorerDocument">
 import { computed, ref, watch } from 'vue'
+import DocumentExplorerSearch from './DocumentExplorerSearch.vue'
 import AppLoadingOverlay from '@/components/common/AppLoadingOverlay.vue'
 import ExplorerContextMenu from './ExplorerContextMenu.vue'
 import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/explorerMenu'
@@ -17,6 +18,8 @@ const props = defineProps<{
   folderId: string
   search: string
   selectedId: string
+  sidebarTools?: boolean
+  pageLoading?: boolean
   loading?: boolean
   disabled?: boolean
   menuActions?: (target: ExplorerMenuTarget) => ExplorerMenuAction[]
@@ -172,24 +175,21 @@ function folderState(folder: ExplorerFolder) {
 
 <template>
   <section class="document-explorer" :aria-label="title">
-    <header class="document-explorer__header">
+    <header v-if="!sidebarTools" class="document-explorer__header">
       <h2>{{ title }}</h2>
       <slot name="context" />
-      <label class="document-explorer__search">
-        <span class="sr-only">Search files</span>
-        <i class="pi pi-search" aria-hidden="true" />
-        <input
-          type="search"
-          :value="search"
-          placeholder="Search files…"
-          @input="emit('update:search', ($event.target as HTMLInputElement).value)"
-        />
-      </label>
+      <DocumentExplorerSearch :model-value="search" @update:model-value="emit('update:search', $event)" />
       <slot name="toolbar" />
     </header>
     <div class="document-explorer__body" :aria-busy="loading">
+      <section class="document-explorer__sidebar" aria-label="Library sidebar">
+        <div v-if="sidebarTools" class="document-explorer__sidebar-tools">
+          <h2>{{ title }}</h2>
+          <DocumentExplorerSearch sidebar :model-value="search" @update:model-value="emit('update:search', $event)" />
+        </div>
+        <div class="document-explorer__folder-content" :aria-busy="!!(loading || pageLoading)">
       <nav
-        :inert="loading"
+        :inert="loading || pageLoading || undefined"
         aria-label="Folders"
         class="document-explorer__folders"
         @contextmenu="showMenu($event, { kind: 'background', id: folderId })"
@@ -210,9 +210,9 @@ function folderState(folder: ExplorerFolder) {
             v-if="menuActions"
             class="more"
             type="button"
-            aria-label="Current folder actions"
+            :aria-label="sidebarTools ? 'Root folder actions' : 'Current folder actions'"
             aria-haspopup="menu"
-            @click="showMenu($event, { kind: 'background', id: folderId })"
+            @click="showMenu($event, { kind: 'background', id: sidebarTools ? '' : folderId })"
           >
             <i class="pi pi-ellipsis-h" aria-hidden="true" />
           </button>
@@ -314,10 +314,13 @@ function folderState(folder: ExplorerFolder) {
         </template>
         <slot name="references" />
       </nav>
-      <section class="document-explorer__viewer" aria-label="File viewer" :inert="loading">
+          <AppLoadingOverlay :loading="sidebarTools ? !!(loading || pageLoading) : !!pageLoading" :label="loading ? 'Loading documents…' : 'Loading more files…'" />
+        </div>
+      </section>
+      <section class="document-explorer__viewer" aria-label="File viewer" :inert="(!sidebarTools && loading) || undefined">
         <slot name="viewer"><p class="viewer-empty">Select a file to preview it.</p></slot>
       </section>
-      <AppLoadingOverlay :loading="!!loading" label="Loading documents…" />
+      <AppLoadingOverlay :loading="!sidebarTools && !!loading" label="Loading documents…" />
     </div>
     <ExplorerContextMenu
       v-if="menu && actions.length"
@@ -353,31 +356,6 @@ h2 {
   font-size: 1rem;
   white-space: nowrap;
 }
-.document-explorer__search {
-  position: relative;
-  flex: 0 1 230px;
-  min-width: 90px;
-  margin-left: auto;
-}
-.document-explorer__search > i {
-  position: absolute;
-  left: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.8rem;
-  pointer-events: none;
-}
-input[type='search'] {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 0.35rem 0.4rem 0.35rem 1.8rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font: inherit;
-  font-size: 0.85rem;
-  background: transparent;
-  color: inherit;
-}
 .document-explorer__body {
   position: relative;
   display: grid;
@@ -385,9 +363,15 @@ input[type='search'] {
   height: var(--explorer-height, 440px);
 }
 .document-explorer__body > [inert] { visibility: hidden; }
+.document-explorer__sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
+.document-explorer__sidebar-tools { display: grid; gap: .6rem; padding: .65rem .5rem .5rem; flex: none; }
+.document-explorer__folder-content { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
+.document-explorer__folders[inert] { visibility: hidden; }
+.document-explorer__sidebar-tools ~ .document-explorer__folder-content :deep(.more) { min-width: 2.25rem; min-height: 2.25rem; }
 .document-explorer__folders {
+  flex: 1;
+  min-height: 0;
   padding: 0.35rem;
-  border-right: 1px solid var(--border);
   overflow: auto;
   min-width: 0;
   font-size: 0.85rem;

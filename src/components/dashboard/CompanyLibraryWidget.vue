@@ -17,7 +17,7 @@ function documentLoadingChanged(value: boolean) { if (!value) documentsReady.val
   <AppLoadingRegion class="company-library-widget" aria-label="Company Library widget" :loading="loading" label="Loading Company Library…">
     <AppPaneHeader v-if="showHeading" title="Company Library" title-tag="h1" />
     <PrivateReferenceStatus :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" :show-empty-state="false" :show-loading="false" @select="selectSource" @retry="reload" />
-    <SdsExplorerModule expanded title="Documents" :references="content" @loading-change="documentLoadingChanged" />
+    <SdsExplorerModule expanded sidebar-tools title="Documents" :references="content" @loading-change="documentLoadingChanged" />
     <div class="library-footer">
       <details class="library-help"><summary>Library help</summary><p v-if="auth.rawRole === 'admin'">Choose a folder, then Upload document. New folder organizes files; a file's menu lets you upload a new revision. Bulk PDF import is under More.</p><p v-else>Browse and search documents available to your account. An Admin manages uploads.</p></details>
     </div>

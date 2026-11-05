@@ -49,3 +49,20 @@ describe('document explorer', () => {
     expect(wrapper.find('input[type=checkbox]').exists()).toBe(false)
   })
 })
+
+
+it('places its search above Root in the opt-in sidebar and leaves the legacy toolbar available elsewhere', async () => {
+  const view = mount(DocumentExplorer, { props: { title: 'Documents', folders, documents, folderId: '', search: '', selectedId: '', sidebarTools: true }, slots: { toolbar: '<button>Legacy toolbar action</button>' } })
+  const sidebar = view.get('.document-explorer__sidebar')
+  expect(sidebar.find('input[type=search]').exists()).toBe(true)
+  const input = sidebar.get('input[type=search]'), root = sidebar.get('.tree-root')
+  expect(input.element.compareDocumentPosition(root.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(view.find('.document-explorer__header').exists()).toBe(false)
+  expect(view.text()).not.toContain('Legacy toolbar action')
+  await input.setValue('Interior')
+  expect(view.emitted('update:search')).toEqual([['Interior']])
+  await view.setProps({ sidebarTools: false })
+  expect(view.find('.document-explorer__header input[type=search]').exists()).toBe(true)
+  expect(view.text()).toContain('Legacy toolbar action')
+  view.unmount()
+})

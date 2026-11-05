@@ -33,6 +33,7 @@ async function setup(page: Page, reader = false, denied = false, path = '/compan
   await page.route('**/formTemplates', route => route.fulfill({ json: { result: { templates: [] } }, headers }))
   await page.route('**/sds-file?*', route => route.fulfill(denied ? { status: 403, body: 'Denied' } : { json: content, headers: { 'cache-control': 'private, no-store' } }))
   await gotoPhase2App(page, path, reader ? createJobDashboardFixture() : createJobsFixture())
+  if (path === '/company-library') await expect(page.getByRole('region', { name: 'Company Library widget', exact: true })).toHaveAttribute('aria-busy', 'false')
   if (path === '/reports') await expect(page.getByRole('region', { name: 'Forms workspace', exact: true })).toHaveAttribute('aria-busy', 'false')
   return actions
 }
@@ -43,7 +44,7 @@ for (const width of [390, 1280]) test('existing library reads supplied content a
   await page.setViewportSize({ width, height: 900 })
   const actions = await setup(page)
   await expect(page.getByRole('button', { name: 'Company intranet', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Root folder actions', exact: true })).toBeEnabled()
   const sdsCount = content.resources.filter(item => item.category === 'SDS').length
   expect(sdsCount).toBeGreaterThan(25)
   await expect(page.locator('.reference-row')).toHaveCount(0)
@@ -105,12 +106,13 @@ test('reader has no upload controls and sees private content errors', async ({ p
 test('Admin picker cancel and failed upload never save a document', async ({ page }) => {
   const actions = await setup(page)
   const chooser = page.waitForEvent('filechooser')
-  await page.getByRole('button', { name: 'Upload document', exact: true }).click()
+  await page.getByRole('button', { name: 'Root folder actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Upload document here', exact: true }).click()
   await (await chooser).setFiles([])
   expect(actions).not.toContain('saveSheet')
   await page.getByLabel('Add file', { exact: true }).setInputFiles({ name: 'synthetic-upload.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic transport error test') })
   await expect(page.getByRole('alert')).toContainText('Sign in before uploading a file.')
-  await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Root folder actions', exact: true })).toBeEnabled()
   expect(actions).not.toContain('saveSheet')
 })
 
@@ -230,7 +232,7 @@ test('missing private source leaves existing uploads usable and makes no complet
   const actions = await setup(page, false, false, '/company-library', false, true)
   await expect(page.getByText(/No supplied references have been uploaded/)).toHaveCount(0)
   await expect(page.getByText(/Documents omitted from the ZIP remain unavailable/)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Root folder actions', exact: true })).toBeEnabled()
   await expect(page.locator('.reference-row')).toHaveCount(0)
   expect(actions).not.toContain('saveSheet')
 })

@@ -30,7 +30,7 @@ import {
 import { getSdsViewState, rememberSdsViewState } from '@/features/sds/viewState'
 import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/explorerMenu'
 
-const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; initialFolderId?: string; references?: IntranetContent | null; referenceCategory?: LibraryCategory }>(), { title: 'Documents', initialFolderId: '' })
+const props = withDefaults(defineProps<{ expanded?: boolean; sidebarTools?: boolean; title?: string; initialFolderId?: string; references?: IntranetContent | null; referenceCategory?: LibraryCategory }>(), { title: 'Documents', initialFolderId: '' })
 const emit = defineEmits<{ loadingChange: [loading: boolean] }>()
 const auth = useAuthStore()
 const viewerSession = createViewerSession()
@@ -74,6 +74,7 @@ const showArchived = ref(false)
 const nextPage = ref('')
 const pageBusy = ref(false)
 const bulkOpen = ref(false)
+const bulkFolderId = ref('')
 const editor = ref<'' | 'folder' | 'sheet'>('')
 const progress = ref<number | null>(null)
 const { runMutation } = useLibraryMutation({ busy, error, progress })
@@ -327,9 +328,10 @@ function menuActions(target: ExplorerMenuTarget): ExplorerMenuAction[] {
         icon: 'pi-eye',
       })
       items.push(
-        { id: 'new-sheet', label: 'Add file here', icon: 'pi-file-pdf' },
+        { id: 'new-sheet', label: props.sidebarTools ? 'Upload document here' : 'Add file here', icon: 'pi-upload' },
         { id: 'new-folder', label: 'New folder', icon: 'pi-folder-plus' },
       )
+      if (props.sidebarTools) items.push({ id: 'bulk-import', label: bulkOpen.value ? 'Close bulk PDF import' : 'Bulk PDF import', icon: 'pi-file-pdf' })
       if (folder)
         items.push(
           { id: 'edit-folder', label: 'Rename / move folder', icon: 'pi-pencil' },
@@ -345,6 +347,7 @@ function menuActions(target: ExplorerMenuTarget): ExplorerMenuAction[] {
           },
         )
     }
+    if (props.sidebarTools && !jobId.value && nextPage.value) items.push({ id: 'more-files', label: pageBusy.value ? 'Loading files…' : 'Load more files', icon: 'pi-plus', disabled: pageBusy.value })
     if (jobId.value && folder && editing.value) {
       const children = sheets.value.filter((s) => inFolder(s, folder.id, library.value.folders))
       const all = children.length > 0 && children.every((s) => checkedIds.value.includes(s.id))
@@ -445,6 +448,11 @@ async function menuAction(action: string, target: ExplorerMenuTarget) {
     if (action === 'toggle-folder' && folder) {
       if (!editing.value) beginSelection()
       toggleFolder(folder)
+    }
+    if (action === 'more-files') return moreDocuments()
+    if (action === 'bulk-import') {
+      if (!bulkOpen.value) bulkFolderId.value = target.id
+      bulkOpen.value = !bulkOpen.value
     }
     if (action === 'archived-view') showArchived.value = !showArchived.value
     if (action === 'selection') beginSelection()
@@ -626,6 +634,8 @@ onBeforeUnmount(() => {
         v-model:folder-id="folderId"
         v-model:search="search"
         :title="title"
+        :sidebar-tools="sidebarTools"
+        :page-loading="sidebarTools && pageBusy"
         :folders="folders"
         :documents="sheets"
         :selected-id="selectedId"
@@ -664,7 +674,7 @@ onBeforeUnmount(() => {
             :disabled="busy"
             @click="moreDocuments"
           />
-          <details v-if="isAdmin && !jobId" class="sds-more"><summary>More</summary><Button label="Bulk PDF import" :disabled="busy" @click="bulkOpen = !bulkOpen" /></details>
+          <details v-if="isAdmin && !jobId" class="sds-more"><summary>More</summary><Button label="Bulk PDF import" :disabled="busy" @click="bulkFolderId = folderId; bulkOpen = !bulkOpen" /></details>
           <RouterLink
             v-if="!expanded"
             :to="expandedLocation"
@@ -787,7 +797,7 @@ onBeforeUnmount(() => {
     </fieldset>
     <SdsBulkImport
       v-if="bulkOpen && isAdmin && !jobId"
-      :folder-id="folderId"
+      :folder-id="bulkFolderId"
       @busy="busy = $event"
       @completed="refresh"
     />
