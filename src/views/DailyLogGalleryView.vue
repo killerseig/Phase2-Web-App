@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppPageLayout from '@/components/common/AppPageLayout.vue'
 import AppCard from '@/components/common/AppCard.vue'
-import AppIconButton from '@/components/common/AppIconButton.vue'
+import DailyLogPhotoViewer from '@/components/dailyLogs/DailyLogPhotoViewer.vue'
 import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import brandLogo from '@/assets/images/phase2-logo.png'
 import '@/components/common/button-family.css'
@@ -32,7 +32,6 @@ const loading = ref(true)
 const errorMessage = ref('')
 const activePhotoSectionKey = ref<GallerySectionKey | null>(null)
 const activePhotoIndex = ref<number | null>(null)
-const lightbox = ref<HTMLElement | null>(null)
 const currentYear = new Date().getFullYear()
 
 const gallerySections = computed<GallerySection[]>(() => {
@@ -112,13 +111,15 @@ async function loadGallery() {
 async function openPhoto(sectionKey: GallerySectionKey, index: number) {
   activePhotoSectionKey.value = sectionKey
   activePhotoIndex.value = index
-  await nextTick()
-  lightbox.value?.focus()
 }
 
-function closePhoto() {
+async function closePhoto() {
+  const target = activePhotoSectionKey.value && activePhotoIndex.value !== null
+    ? 'gallery-' + activePhotoSectionKey.value + '-' + (activePhotoIndex.value + 1) : ''
   activePhotoSectionKey.value = null
   activePhotoIndex.value = null
+  await nextTick()
+  if (target) document.getElementById(target)?.querySelector<HTMLButtonElement>('button')?.focus()
 }
 
 function movePhoto(offset: number) {
@@ -149,16 +150,8 @@ async function applyGalleryHash() {
   document.getElementById(`gallery-${sectionKey}`)?.scrollIntoView({ block: 'start' })
 }
 
-function handleKeydown(event: KeyboardEvent) {
-  if (!activePhoto.value) return
-  if (event.key === 'Escape') closePhoto()
-  if (event.key === 'ArrowLeft') movePhoto(-1)
-  if (event.key === 'ArrowRight') movePhoto(1)
-}
-
 onMounted(() => {
   void loadGallery()
-  window.addEventListener('keydown', handleKeydown)
 })
 
 watch(
@@ -168,9 +161,6 @@ watch(
   },
 )
 
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown)
-})
 </script>
 
 <template>
@@ -288,53 +278,7 @@ onBeforeUnmount(() => {
       &copy; {{ currentYear }} Phase 2. All rights reserved.
     </footer>
 
-    <div
-      v-if="activePhoto"
-      ref="lightbox"
-      class="daily-log-gallery__lightbox"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="`Photo viewer: ${activePhoto.name}`"
-      tabindex="-1"
-      @click.self="closePhoto"
-    >
-      <div class="daily-log-gallery__lightbox-bar">
-        <span>
-          {{ activePhotoSection?.title }}: {{ photoPosition }} of
-          {{ activePhotoSection?.photos.length ?? 0 }}
-        </span>
-        <AppIconButton label="Close photo viewer" @click="closePhoto">
-          <i class="pi pi-times" aria-hidden="true"></i>
-        </AppIconButton>
-      </div>
-
-      <div class="daily-log-gallery__lightbox-stage">
-        <AppIconButton
-          v-if="(activePhotoSection?.photos.length ?? 0) > 1"
-          class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--previous"
-          label="Previous photo"
-          @click="movePhoto(-1)"
-        >
-          <i class="pi pi-chevron-left" aria-hidden="true"></i>
-        </AppIconButton>
-
-        <img :src="activePhoto.url" :alt="activePhoto.name" />
-
-        <AppIconButton
-          v-if="(activePhotoSection?.photos.length ?? 0) > 1"
-          class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--next"
-          label="Next photo"
-          @click="movePhoto(1)"
-        >
-          <i class="pi pi-chevron-right" aria-hidden="true"></i>
-        </AppIconButton>
-      </div>
-
-      <div class="daily-log-gallery__lightbox-caption">
-        <strong>{{ activePhoto.name }}</strong>
-        <span v-if="activePhoto.description">{{ activePhoto.description }}</span>
-      </div>
-    </div>
+    <DailyLogPhotoViewer v-if="activePhoto" :photo="activePhoto" :section-title="activePhotoSection?.title || 'Photos'" :position="photoPosition" :total="activePhotoSection?.photos.length || 0" @close="closePhoto" @previous="movePhoto(-1)" @next="movePhoto(1)" />
   </div>
 </template>
 
@@ -476,14 +420,12 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
-.daily-log-gallery__section-nav a:hover,
-.daily-log-gallery__lightbox button:hover {
+.daily-log-gallery__section-nav a:hover {
   background: var(--field-hover);
 }
 
 .daily-log-gallery__section-nav a:focus-visible,
-.daily-log-gallery__photo-button:focus-visible,
-.daily-log-gallery__lightbox button:focus-visible {
+.daily-log-gallery__photo-button:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
@@ -559,8 +501,7 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
-.daily-log-gallery__photo figcaption strong,
-.daily-log-gallery__lightbox-caption strong {
+.daily-log-gallery__photo figcaption strong {
   font-weight: var(--font-weight-heading);
 }
 
@@ -578,88 +519,6 @@ onBeforeUnmount(() => {
   color: var(--text-soft);
   font-size: var(--font-size-xs);
   text-align: center;
-}
-
-.daily-log-gallery__lightbox {
-  position: fixed;
-  inset: 0;
-  height: 100dvh;
-  max-height: 100dvh;
-  overflow: hidden;
-  z-index: 2000;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0.75rem;
-  min-width: 0;
-  min-height: 0;
-  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
-    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
-  background: var(--bg-elevated);
-  outline: none;
-}
-
-.daily-log-gallery__lightbox-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--text-muted);
-  font-size: var(--font-size-help);
-}
-
-.daily-log-gallery__lightbox :deep(.app-icon-button) { --app-icon-button-size: 2.75rem; --app-icon-button-background: var(--surface-raised); }
-
-.daily-log-gallery__lightbox-stage {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.daily-log-gallery__lightbox-stage img {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-.daily-log-gallery__lightbox-nav {
-  position: absolute;
-  top: 50%;
-  z-index: 1;
-  transform: translateY(-50%);
-}
-
-.daily-log-gallery__lightbox-nav--previous {
-  left: 0.25rem;
-}
-
-.daily-log-gallery__lightbox-nav--next {
-  right: 0.25rem;
-}
-
-.daily-log-gallery__lightbox-caption {
-  display: grid;
-  gap: 0.2rem;
-  justify-items: center;
-  max-height: 20dvh;
-  overflow: auto;
-  color: var(--text);
-  text-align: center;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.daily-log-gallery__lightbox-caption span {
-  color: var(--text-muted);
-  font-size: var(--font-size-help);
 }
 
 @media (max-width: 700px) {

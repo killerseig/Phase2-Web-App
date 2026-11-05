@@ -2,16 +2,16 @@
 import AppButton from '@/components/common/AppButton.vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
 
-const props = withDefaults(defineProps<{ zoom: number; fitLabel?: string }>(), { fitLabel: 'Fit' })
+const props = withDefaults(defineProps<{ zoom: number; fitLabel?: string; minZoom?: number; groupLabel?: string }>(), { fitLabel: 'Fit', minZoom: 0.5, groupLabel: 'Document zoom' })
 const emit = defineEmits<{ change: [zoom: number] }>()
 function change(delta: number) {
-  emit('change', Math.max(0.5, Math.min(3, props.zoom + delta)))
+  emit('change', Math.max(props.minZoom, Math.min(3, props.zoom + delta)))
 }
 </script>
 
 <template>
-  <div class="document-zoom-controls" role="group" aria-label="Document zoom">
-    <AppIconButton label="Zoom out" :disabled="zoom <= 0.5" @click="change(-0.25)">-</AppIconButton>
+  <div class="document-zoom-controls" role="group" :aria-label="groupLabel">
+    <AppIconButton label="Zoom out" :disabled="zoom <= minZoom" @click="change(-0.25)">-</AppIconButton>
     <AppButton variant="ghost" :aria-label="fitLabel" @click="emit('change', 1)">Fit</AppButton>
     <AppIconButton label="Zoom in" :disabled="zoom >= 3" @click="change(0.25)">+</AppIconButton>
   </div>
