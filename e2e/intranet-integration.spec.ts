@@ -33,6 +33,7 @@ async function setup(page: Page, reader = false, denied = false, path = '/compan
   await page.route('**/formTemplates', route => route.fulfill({ json: { result: { templates: [] } }, headers }))
   await page.route('**/sds-file?*', route => route.fulfill(denied ? { status: 403, body: 'Denied' } : { json: content, headers: { 'cache-control': 'private, no-store' } }))
   await gotoPhase2App(page, path, reader ? createJobDashboardFixture() : createJobsFixture())
+  if (path === '/reports') await expect(page.getByRole('region', { name: 'Forms workspace', exact: true })).toHaveAttribute('aria-busy', 'false')
   return actions
 }
 async function openBuilderFormsPanel(page: Page, width: number) {
@@ -88,7 +89,7 @@ test('supplied forms stay read-only within existing Reports search', async ({ pa
     for (const paragraph of form.paragraphs) await expect(row.getByText(paragraph, { exact: true }).first()).toBeVisible()
     await expect(row.locator('input,textarea,iframe,script,img')).toHaveCount(0)
   }
-  await page.getByRole('searchbox', { name: 'Search reports' }).fill('nonexistent-qzx')
+  await page.getByRole('searchbox', { name: 'Search forms' }).fill('nonexistent-qzx')
   await expect(page.locator('details')).toHaveCount(0)
   expect(actions.filter(action => !['page', 'openSheet'].includes(action))).toEqual([])
 })

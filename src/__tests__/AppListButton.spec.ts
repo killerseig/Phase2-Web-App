@@ -1,3 +1,4 @@
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -96,4 +97,17 @@ describe('AppListButton', () => {
     await wrapper.get('button').trigger('click')
     expect(handleClick).toHaveBeenCalledTimes(1)
   })
+})
+
+
+it('uses the same directory row as a real link without changing native button defaults', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }] })
+  await router.push('/reports')
+  const view = mount(AppListButton, { props: { to: '/forms/synthetic' }, slots: { default: '<strong>Synthetic form</strong>' }, global: { plugins: [router] } })
+  expect(view.get('a').attributes('href')).toBe('/forms/synthetic')
+  expect(view.get('a').classes()).toContain('app-list-button')
+  expect(view.find('button').exists()).toBe(false)
+  await view.get('a').trigger('click')
+  await router.isReady()
+  view.unmount()
 })

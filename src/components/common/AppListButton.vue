@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RouterLink, type RouteLocationRaw } from 'vue-router'
 
 const props = withDefaults(defineProps<{
+  to?: RouteLocationRaw
   active?: boolean
   type?: 'button' | 'submit' | 'reset'
   variant?: 'default' | 'dashed'
@@ -19,7 +21,8 @@ const listButtonClasses = computed(() => [
 </script>
 
 <template>
-  <button v-bind="$attrs" :class="listButtonClasses" :type="type">
+  <RouterLink v-if="to" v-bind="$attrs" :to="to" :class="listButtonClasses"><slot /></RouterLink>
+  <button v-else v-bind="$attrs" :class="listButtonClasses" :type="type">
     <slot />
   </button>
 </template>
@@ -36,6 +39,7 @@ const listButtonClasses = computed(() => [
   background: var(--app-list-button-background, transparent);
   color: var(--app-list-button-color, var(--text));
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition:
     border-color 0.2s ease,

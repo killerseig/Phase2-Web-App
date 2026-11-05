@@ -39,7 +39,7 @@ for (const width of [390, 1440]) {
         })
         expect(center.x).toBeLessThanOrEqual(1); expect(center.y).toBeLessThanOrEqual(1)
         expect(center.height).toBeGreaterThan(300)
-        await expect(page.getByRole('heading', { name: 'Site Inspection Forms', exact: true })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Forms', exact: true })).toBeVisible()
         await expect(region.getByRole('status')).toHaveCount(1)
         await page.screenshot({ path: 'evidence/forms-loading-' + width + '.png' })
         pending[first].release()
