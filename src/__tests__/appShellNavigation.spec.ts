@@ -14,7 +14,7 @@ describe('app shell navigation policy', () => {
   })
 
   it.each(['admin', 'foreman', 'project-manager', 'shop-foreman'] as const)('opens Library and Forms without a selected job for %s', role => {
-    expect(getAppShellWorkspaceNavigationItems(role).map(item => item.to)).toEqual(['/jobs', '/company-library', '/reports'])
+    expect(getAppShellWorkspaceNavigationItems(role).map(item => item.to)).toEqual(['/jobs', '/jobs/my-timecard', '/company-library', '/reports'])
   })
 
   it('does not advertise the forbidden form list to Payroll', () => {

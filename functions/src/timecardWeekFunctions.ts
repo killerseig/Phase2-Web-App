@@ -38,6 +38,7 @@ import {
   isFunctionShopJob,
 } from './timecardWeekAccess'
 import { targetFunctionRoleCanViewSubmittedTimecards } from './targetTimecardAccess'
+import { handlePersonalTimecard } from './personalTimecardWorkspace'
 
 interface EnsureTimecardWeekInput {
   jobId: string
@@ -746,6 +747,15 @@ export async function sendSubmittedWeekEmail(
 export const ensureTimecardWeekRecord = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be signed in.')
+  }
+
+  if (request.data?.personalAction !== undefined) {
+    return handlePersonalTimecard(request, db, (employee, employeeId, weekStart) => sanitizeCardPayload({
+      sourceType: 'employee', employeeId, firstName: employee.firstName, lastName: employee.lastName,
+      employeeNumber: employee.employeeNumber, occupation: employee.occupation, isContractor: employee.isContractor,
+      wageRate: null, sortIndex: 1000000,
+      lines: Array.from({length:13},()=>({days:Array.from({length:7},()=>({hours:0,production:0}))})),
+    }, weekStart))
   }
 
   const input = request.data as EnsureTimecardWeekInput

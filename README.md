@@ -211,3 +211,9 @@ npm run lint:check
 # Apply fixes only when intended:
 npm run lint:fix
 ```
+
+### My Timecard rollout
+
+Personal entry uses the existing job-week/card payroll records. It never opens or submits a crew week or sends email. The job lead or payroll must open the week first. An Admin explicitly confirms a two-way account/employee link in Users; there is no name or email matching. A separate, initially absent `settings/myTimecard.enabledRoles` allowlist controls activation. Do not populate that policy or link real employees without owner approval of the exact roles/accounts. Submitted weeks remain locked, financial/identity fields stay payroll-owned, and existing crew/export paths are unchanged.
+
+Run `npm run test:personal-timecard` for synthetic local Firestore transaction/access/retry checks. It refuses non-emulator or non-demo execution and does not send mail or create export snapshots. Browser coverage is in `e2e/personal-timecard.spec.ts` using the existing isolated intranet review configuration. Deploy the existing `ensureTimecardWeekRecord` callable before the employee frontend; older backend code must not receive personal-action requests.

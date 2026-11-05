@@ -37,6 +37,8 @@ jobs:
           src/views/CompanyLibraryView.spec.ts src/views/FormBuilderPublishing.spec.ts
           src/views/FormBuilderSupplied.spec.ts src/views/FormBuilderView.spec.ts
           src/views/FormSubmissionView.spec.ts
+          src/features/timecards/personalTimecard.spec.ts src/views/MyTimecardView.spec.ts
+          src/components/users/PersonalTimecardLink.spec.ts src/__tests__/appShellNavigation.spec.ts
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Shop Orders predeploy gate (47 cases)
