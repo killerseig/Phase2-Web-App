@@ -14,7 +14,7 @@ describe('restricted employee timecard access', () => {
     expect(normalizeStoredRoleKey('Employee')).toBe('employee')
     expect(EDITABLE_USER_ROLE_OPTIONS).toContainEqual({ label: 'Employee', value: 'employee' })
     expect(buildCurrentFunctionUser('self', { role: 'employee', active: true }).role).toBe('none')
-    expect(getAppShellWorkspaceNavigationItems('employee')).toEqual([{ label: 'My Timecard', to: '/jobs/my-timecard' }])
+    expect(getAppShellWorkspaceNavigationItems('employee')).toEqual([])
     expect(getAppShellAdminNavigationItems('employee')).toEqual([])
     expect(Object.entries(getTargetRoleCapabilities('employee')).filter(([, value]) => value).map(([key]) => key)).toEqual(['accessWorkspace'])
   })
@@ -27,7 +27,7 @@ describe('restricted employee timecard access', () => {
     expect(currentRoleCanHaveAccountJobAssignments('payroll')).toBe(false)
     expect(getAppShellAdminNavigationItems('admin').some(item => item.to === '/users')).toBe(true)
     for (const role of ['admin', 'foreman', 'shop-foreman', 'project-manager'] as const) {
-      expect(getAppShellWorkspaceNavigationItems(role).some(item => item.to === '/jobs/my-timecard')).toBe(true)
+      expect(getAppShellWorkspaceNavigationItems(role).some(item => item.to === '/jobs/my-timecard')).toBe(false)
       expect(getAppShellWorkspaceNavigationItems(role).some(item => item.to === '/jobs')).toBe(true)
     }
   })

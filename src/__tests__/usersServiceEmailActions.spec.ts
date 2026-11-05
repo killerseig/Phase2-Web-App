@@ -25,13 +25,22 @@ vi.mock('@/testing/e2eRuntime', () => ({
   updateE2EUser: vi.fn(),
 }))
 
-import { resendUserInviteByAdmin, sendUserPasswordResetByAdmin } from '@/services/users'
+import { createUserByAdmin, resendUserInviteByAdmin, sendUserPasswordResetByAdmin } from '@/services/users'
 
 describe('admin user email services', () => {
   beforeEach(() => {
     mocks.callable.mockReset()
     mocks.httpsCallable.mockReset()
     mocks.httpsCallable.mockReturnValue(mocks.callable)
+  })
+
+  it('creates an account without automatic payroll matching while personal entry is paused', async () => {
+    const result = { success: true, uid: 'synthetic-new-account', message: 'Account created.' }
+    mocks.callable.mockResolvedValueOnce({ data: result })
+    await expect(createUserByAdmin({ email: 'synthetic@example.test', firstName: 'Synthetic', lastName: 'User', role: 'foreman', assignedJobIds: [], sendInvite: false })).resolves.toEqual(result)
+    expect(mocks.httpsCallable).toHaveBeenCalledTimes(1)
+    expect(mocks.httpsCallable).toHaveBeenCalledWith(mocks.functions, 'createUserByAdmin')
+    expect(mocks.callable).toHaveBeenCalledTimes(1)
   })
 
   it('calls the individual resend-invite function with only the selected user ID', async () => {

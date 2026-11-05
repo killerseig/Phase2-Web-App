@@ -285,10 +285,10 @@ describe('UserEditorPanel', () => {
     expect(wrapper.text()).toContain('No User Selected')
     expect(wrapper.text()).toContain('Select a user to edit, or click New User to create one.')
   })
-  it('allows admin personal job choices without changing other admin capabilities', () => {
+  it('hides paused personal job controls without changing stored admin assignments', () => {
     const wrapper = mountEditor({ detailForm: { firstName: 'Synthetic', lastName: 'Admin', role: 'admin', active: true, assignedJobIds: ['job-1'] } })
-    expect(wrapper.text()).toContain('Assigned Jobs')
-    expect(wrapper.text()).toContain('Admin access elsewhere is unchanged')
+    expect(wrapper.text()).not.toContain('Assigned Jobs')
+    expect(wrapper.text()).not.toContain('My Timecard')
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true)
     wrapper.unmount()
   })

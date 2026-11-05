@@ -14,6 +14,9 @@ import {
 
 import { personalTimecardIdentity } from './personalTimecardIdentity'
 
+// Paused pending the employee-period / multi-job workflow design. Retain all stored records.
+export const PERSONAL_TIMECARD_AVAILABLE = false
+
 const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
 const version = (value: { seconds: number; nanoseconds: number } | undefined) =>
   value ? `${value.seconds}:${value.nanoseconds}` : null
@@ -59,6 +62,8 @@ export async function handlePersonalTimecard(
   now = new Date(),
 ) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in.')
+  if (!PERSONAL_TIMECARD_AVAILABLE)
+    throw new HttpsError('failed-precondition', 'My Timecard is unavailable while its workflow is being redesigned. Use the existing job timecard process.')
   const uid = request.auth.uid,
     input = request.data || {},
     action = text(input.personalAction)

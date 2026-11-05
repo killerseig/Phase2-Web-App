@@ -147,9 +147,8 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
             />
           </div>
 
-          <p v-if="createForm.role === 'admin'" class="users-form__help">These jobs apply to My Timecard only. Admin access elsewhere is unchanged.</p>
           <UserAssignedJobsPanel
-            v-if="currentRoleCanHaveAccountJobAssignments(createForm.role)"
+            v-if="createForm.role !== 'admin' && currentRoleCanHaveAccountJobAssignments(createForm.role)"
             :assigned-job-ids="createForm.assignedJobIds"
             :empty-message="getAssignedJobsEmptyStateMessage(createJobSearchTerm)"
             :jobs="createJobs"
@@ -289,9 +288,8 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
             <span>Active User</span>
           </label>
 
-          <p v-if="detailForm.role === 'admin'" class="users-form__help">These jobs apply to My Timecard only. Admin access elsewhere is unchanged.</p>
           <UserAssignedJobsPanel
-            v-if="shouldShowUserDetailAssignedJobs(selectedUser, detailForm.role)"
+            v-if="detailForm.role !== 'admin' && shouldShowUserDetailAssignedJobs(selectedUser, detailForm.role)"
             :assigned-job-ids="detailForm.assignedJobIds"
             :disabled="saveLoading"
             :empty-message="getAssignedJobsEmptyStateMessage(detailJobSearchTerm)"
@@ -303,7 +301,6 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
           />
         </form>
 
-        <slot name="personal-timecard" />
         <AppStatusMessage v-if="editingSelf" tone="warning">
           You are editing the currently signed-in account. Role, active state, and delete are locked
           to avoid accidental lockout.
