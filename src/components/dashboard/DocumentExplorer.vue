@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="T extends ExplorerDocument">
 import { computed, ref, watch } from 'vue'
+import AppLoadingOverlay from '@/components/common/AppLoadingOverlay.vue'
 import ExplorerContextMenu from './ExplorerContextMenu.vue'
 import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/explorerMenu'
 import {
@@ -186,8 +187,9 @@ function folderState(folder: ExplorerFolder) {
       </label>
       <slot name="toolbar" />
     </header>
-    <div class="document-explorer__body">
+    <div class="document-explorer__body" :aria-busy="loading">
       <nav
+        :inert="loading"
         aria-label="Folders"
         class="document-explorer__folders"
         @contextmenu="showMenu($event, { kind: 'background', id: folderId })"
@@ -215,8 +217,7 @@ function folderState(folder: ExplorerFolder) {
             <i class="pi pi-ellipsis-h" aria-hidden="true" />
           </button>
         </div>
-        <p v-if="loading" role="status">Loading documents…</p>
-        <template v-else>
+        <template v-if="!loading">
           <div
             v-for="row in tree"
             :key="row.kind === 'folder' ? 'f-' + row.folder.id : 'd-' + row.document.id"
@@ -313,9 +314,10 @@ function folderState(folder: ExplorerFolder) {
         </template>
         <slot name="references" />
       </nav>
-      <section class="document-explorer__viewer" aria-label="File viewer">
+      <section class="document-explorer__viewer" aria-label="File viewer" :inert="loading">
         <slot name="viewer"><p class="viewer-empty">Select a file to preview it.</p></slot>
       </section>
+      <AppLoadingOverlay :loading="!!loading" label="Loading documents…" />
     </div>
     <ExplorerContextMenu
       v-if="menu && actions.length"
@@ -377,10 +379,12 @@ input[type='search'] {
   color: inherit;
 }
 .document-explorer__body {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(180px, 27%) minmax(0, 1fr);
   height: var(--explorer-height, 440px);
 }
+.document-explorer__body > [inert] { visibility: hidden; }
 .document-explorer__folders {
   padding: 0.35rem;
   border-right: 1px solid var(--border);

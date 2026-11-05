@@ -79,7 +79,7 @@ const settingsTab = ref<'form' | 'field' | 'output'>('field')
 const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
 const auth = useAuthStore()
 const uid = computed(() => auth.currentUser?.uid || '')
-const { content: suppliedContent, packages: sourcePackages, selectedPackage: sourcePackage, loading: sourcesLoading, error: sourcesError, notice: sourceNotice, selectSource, reload: reloadSources, cancel: cancelSource } = usePrivateReferences(() => auth.rawRole === 'admin')
+const { content: suppliedContent, packages: sourcePackages, selectedPackage: sourcePackage, loading: sourcesLoading, error: sourcesError, notice: sourceNotice, selectSource, reload: reloadSources } = usePrivateReferences(() => auth.rawRole === 'admin')
 const suppliedStarters = computed(() => suppliedContent.value?.forms.filter(form => !suppliedStarterDecision(form)) ?? [])
 const serverEnabled = isFormServerEnabled()
 const legacyImportId = ref(''), legacyError = ref('')
@@ -633,7 +633,7 @@ watch(
             ><span>{{ dirty ? 'Unsaved edits' : 'Saved draft' }}</span>
           </div>
           <details class="builder-library-tools">
-            <summary>Library tools<span v-if="sourcesError"> — references unavailable</span></summary><div class="builder-library-menu">          <PrivateReferenceStatus v-if="auth.rawRole === 'admin'" :loading="sourcesLoading" :error="sourcesError" :notice="sourceNotice" :packages="sourcePackages" :selected="sourcePackage" @select="selectSource" @retry="reloadSources" @cancel="cancelSource" />
+            <summary>Library tools<span v-if="sourcesError"> — references unavailable</span></summary><div class="builder-library-menu">          <PrivateReferenceStatus v-if="auth.rawRole === 'admin'" :loading="sourcesLoading" :error="sourcesError" :notice="sourceNotice" :packages="sourcePackages" :selected="sourcePackage" @select="selectSource" @retry="reloadSources" />
           <div class="library-tools-content">
             <p v-if="!serverEnabled && !library.templates.length">No saved forms yet. Choose a starter or New form.</p>
             <section v-if="serverEnabled" aria-label="Server form library">

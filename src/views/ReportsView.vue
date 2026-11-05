@@ -21,7 +21,7 @@ import { usePrivateReferences } from '@/features/intranet/usePrivateReferences'
 import { suppliedStarterDecision } from '@/features/forms/suppliedStarters'
 import { canListCompanyForms } from '@/features/forms/availableForms'
 import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
-const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload, cancel } = usePrivateReferences()
+const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences()
 const auth = useAuthStore(), templates = ref<ServerFormTemplate[]>([]), loading = ref(true), error = ref(''), search = ref('')
 const allowed = computed(() => !!auth.currentUser?.uid && auth.hasWorkspaceAccess && canListCompanyForms(auth.rawRole))
 const reports = computed(() => alphabetizeFormChoices(templates.value.filter(item => item.definition && item.latestVersion && !item.archived &&
@@ -52,7 +52,7 @@ onBeforeUnmount(() => { generation++ })
   <AppStatusMessage v-else-if="error" tone="error">{{ error }} <AppButton @click="load">Retry</AppButton></AppStatusMessage>
   <AppEmptyState v-else-if="!reports.length" panel message="No published reports match your search and access. Draft forms require administrator review and publication." />
   <ul v-else class="company-reports__list" aria-label="Available inspection forms"><li v-for="report in reports" :key="report.id"><AppLinkCard :to="'/forms/' + encodeURIComponent(report.id)"><strong>{{ report.label }}</strong></AppLinkCard></li></ul></div></AppPane>
-  <PrivateReferenceStatus :show-empty-state="false" :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" @cancel="cancel" />
+  <PrivateReferenceStatus :show-empty-state="false" :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" />
   <template v-if="content"><h2>Supplied form references</h2><p>Reference text from the supplied ZIP. These are not published submission workflows.</p>
     <p v-if="!references.length">No supplied form references match your search.</p>
     <details v-for="item in references" :key="item.id"><summary>{{ item.title }} - reference only</summary>

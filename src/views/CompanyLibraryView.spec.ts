@@ -6,11 +6,12 @@ import { ref } from 'vue'
 import { sampleContent } from '@/features/intranet/__tests__/fixtures'
 const load = vi.hoisted(() => vi.fn())
 const referenceError = ref('')
+const referenceLoading = ref(false)
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ rawRole: 'admin' }) }))
 vi.mock('@/services/sds', () => ({ loadSds: load, sdsErrorMessage: (error: Error) => error.message }))
-vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref(sampleContent()), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: referenceError, notice: ref(''), selectSource: vi.fn(), reload: vi.fn(), cancel: vi.fn() }) }))
-function render() { return mount(CompanyLibraryView, { global: { stubs: { AppShell: { template: '<div><slot /></div>' }, SdsExplorerModule: { props: ['title', 'initialFolderId', 'references', 'referenceCategory'], template: '<div data-explorer :data-folder="initialFolderId" :data-category="referenceCategory"><slot name="navigation" :disabled="false" />{{ title }}</div>' } } } }) }
-beforeEach(() => { load.mockReset(); referenceError.value = '' })
+vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref(sampleContent()), packages: ref([]), selectedPackage: ref(''), loading: referenceLoading, error: referenceError, notice: ref(''), selectSource: vi.fn(), reload: vi.fn(), cancel: vi.fn() }) }))
+function render() { return mount(CompanyLibraryView, { global: { stubs: { AppShell: { template: '<div><slot /></div>' }, SdsExplorerModule: { props: ['title', 'initialFolderId', 'references', 'referenceCategory'], emits: ['loadingChange'], mounted() { this.$emit('loadingChange', false) }, template: '<div data-explorer :data-folder="initialFolderId" :data-category="referenceCategory"><slot name="navigation" :disabled="false" />{{ title }}</div>' } } } }) }
+beforeEach(() => { load.mockReset(); referenceError.value = ''; referenceLoading.value = false })
 describe('Company Library master navigation', () => {
   it('uses the ordinary explorer without category shortcuts or a hidden category filter', async () => {
     const view = render(); await flushPromises()
@@ -22,6 +23,20 @@ describe('Company Library master navigation', () => {
     expect(view.find('[data-explorer]').attributes('data-folder')).toBeUndefined()
     expect(view.find('[data-explorer]').attributes('data-category')).toBeUndefined()
     expect(view.find('[data-explorer]').text()).toBe('Documents')
+  })
+  it('waits for both reference and document loading before revealing the workspace', async () => {
+    referenceLoading.value = true
+    const view = render()
+    await flushPromises()
+    const widget = view.get('[aria-label="Company Library widget"]')
+    expect(widget.attributes('aria-busy')).toBe('true')
+    expect(view.get('[role="status"]').text()).toContain('Loading Company Library')
+    expect(view.text()).not.toContain('Cancel loading')
+    referenceLoading.value = false
+    await flushPromises()
+    expect(widget.attributes('aria-busy')).toBe('false')
+    expect(view.find('.app-loading-overlay').exists()).toBe(false)
+    view.unmount()
   })
   it('keeps private reference errors visible without hiding the file explorer', async () => {
     referenceError.value = 'Access denied'

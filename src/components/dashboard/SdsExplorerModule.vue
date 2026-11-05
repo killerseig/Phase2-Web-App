@@ -30,6 +30,7 @@ import { getSdsViewState, rememberSdsViewState } from '@/features/sds/viewState'
 import type { ExplorerMenuAction, ExplorerMenuTarget } from '@/features/sds/explorerMenu'
 
 const props = withDefaults(defineProps<{ expanded?: boolean; title?: string; initialFolderId?: string; references?: IntranetContent | null; referenceCategory?: LibraryCategory }>(), { title: 'Documents', initialFolderId: '' })
+const emit = defineEmits<{ loadingChange: [loading: boolean] }>()
 const auth = useAuthStore()
 const viewerSession = createViewerSession()
 const documentOpener = createDocumentOpener()
@@ -60,6 +61,7 @@ const library = ref<SdsLibrary>({
   binder: { version: 0, selections: [] },
 })
 const loading = ref(true)
+watch(loading, value => emit('loadingChange', value), { immediate: true })
 const loadFailed = ref(false)
 const busy = ref(false)
 const error = ref('')
