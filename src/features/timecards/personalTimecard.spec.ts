@@ -87,7 +87,7 @@ describe('personal timecard boundary', () => {
     draft.lines[0]!.account = 'PAINT'
     draft.lines[0]!.hours[1] = 4
     expect(
-      mergePersonalTimecard(card, parsePersonalTimecard(draft)).lines[0].days[1].lineTotal,
+      mergePersonalTimecard(card, parsePersonalTimecard(draft)).lines[0]!.days[1]!.lineTotal,
     ).toBe(21)
   })
   it.each([NaN, Infinity, -1, 25])('rejects invalid daily hours %s', (hours) => {

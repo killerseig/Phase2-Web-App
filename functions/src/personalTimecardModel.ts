@@ -15,7 +15,7 @@ export interface PersonalPayrollDay {
   hours: number
   production: number
   unitCost: number
-  unitCostOverride: number | null
+  unitCostOverride?: number | null
   lineTotal: number
 }
 export interface PersonalPayrollLine {
@@ -111,11 +111,14 @@ export function mergePersonalTimecard<T extends PersonalPayrollCard>(
   let totalCost = 0
   result.lines = input.lines.map((line, index) => {
     const old = source.lines[index]
+    if (!old) throw new HttpsError('failed-precondition', 'Payroll must review this incomplete legacy card.')
     const days = line.hours.map((hours, dayIndex) => {
-      const day = { ...old.days[dayIndex], hours }
+      const previous = old.days[dayIndex]
+      if (!previous) throw new HttpsError('failed-precondition', 'Payroll must review this incomplete legacy card.')
+      const day: PersonalPayrollDay = { ...previous, hours }
       const production = Number(day.production) || 0
       const override = day.unitCostOverride
-      if (hours !== Number(old.days[dayIndex].hours)) {
+      if (hours !== Number(previous.hours)) {
         const legacy = [0, 0.294, 0.33].some((value) => Math.abs(value - burden) < 0.000001)
         const multiplier = legacy ? (index === 2 && dayIndex === 6 ? 1.5 : 1.294) : 1 + burden
         day.unitCost =
