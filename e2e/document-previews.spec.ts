@@ -248,6 +248,7 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await page.getByRole('button', { name: 'Long SDS book', exact: true }).click()
   const surface = page.getByRole('region', { name: 'PDF pages', exact: true }), number = page.getByRole('spinbutton', { name: 'PDF page', exact: true })
   await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
   await expect(page.locator('[data-pdf-page]')).toHaveCount(387)
   expect((await surface.boundingBox())!.height).toBeGreaterThan(337)
   expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
@@ -270,7 +271,7 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
   await expect.poll(async () => (await distant.boundingBox())?.width || 0).toBeGreaterThan(before)
   await expect(number).toHaveValue('200')
-  await page.getByRole('button', { name: 'Fit page width', exact: true }).click()
+  await page.getByRole('button', { name: 'Fit file width', exact: true }).click()
   await expect.poll(async () => (await distant.boundingBox())?.width || 0).toBeCloseTo(before, 0)
   await number.fill('387'); await number.press('Tab')
   await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toBeInViewport()
@@ -280,6 +281,7 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await expect(number).toHaveValue('1')
   await expect(page.locator('[data-pdf-page]')).toHaveCount(2)
   await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
   await surface.focus(); await page.keyboard.press('End')
   await expect(page.getByRole('img', { name: 'PDF page 2 of 2', exact: true })).toBeInViewport()
   await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toHaveCount(0)
@@ -287,6 +289,7 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   // explorer retains its worker. Leaving the library must terminate it.
   await page.getByRole('button', { name: 'Long SDS book', exact: true }).click()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
   const stats = () => page.evaluate(() => (window as unknown as { pdfWorkerStats: { started: number; terminated: number } }).pdfWorkerStats)
   expect(await stats()).toEqual({ started: 1, terminated: 0 })
   expect(authorizations).toEqual(['book', 'short', 'book'])
@@ -298,6 +301,7 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   await page.goBack()
   await page.getByRole('button', { name: 'Long SDS book', exact: true }).click()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
   expect(await stats()).toEqual({ started: 2, terminated: 1 })
   expect(downloads.book).toBe(2)
   await openMobileNavigation(page, width)
@@ -332,6 +336,7 @@ test('preloads PDF worker during authorization without requesting private bytes 
   await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toHaveCount(0)
   authorize()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
   expect(downloads).toBe(1)
 })
 
@@ -430,11 +435,13 @@ test('large PDFs use bounded authenticated ranges and retain full-download fallb
     await mockDashboard(page); await gotoPhase2App(page, '/company-library', createJobsFixture())
     await page.getByRole('button', { name: 'warmup', exact: true }).click()
     await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
     const timings: Record<string, number> = {}
     for (const id of ['full', 'partial']) {
       const start = performance.now()
       await page.getByRole('button', { name: id, exact: true }).click()
       await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
       timings[id] = Math.round(performance.now() - start)
     }
     expect(ranges.length).toBeGreaterThan(0)
@@ -487,6 +494,7 @@ for (const outcome of ['renew', 'denied', 'switch', 'logout', 'changed']) test(`
   await mockDashboard(page); await gotoPhase2App(page, '/company-library', createJobsFixture())
   await page.getByRole('button', { name: 'long', exact: true }).click()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 387', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
   expired = true
   const number = page.getByRole('spinbutton', { name: 'PDF page', exact: true }), surface = page.getByRole('region', { name: 'PDF pages', exact: true })
@@ -511,6 +519,7 @@ for (const outcome of ['renew', 'denied', 'switch', 'logout', 'changed']) test(`
     switch: async () => {
       await page.getByRole('button', { name: 'short', exact: true }).click()
       await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
       releaseRenewal()
       await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toHaveCount(0)
       expect(renewedDownloads).toBe(0)
@@ -552,6 +561,7 @@ test('real library folders and cross-category search remain reachable without ca
   expect((await tree.getByRole('button', { name: 'Root folder', exact: true }).boundingBox())!.y - (await tree.boundingBox())!.y).toBeLessThan(15)
   await tree.getByRole('button', { name: 'Safety document', exact: true }).click()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
   await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toBeEnabled()
   const search = page.getByRole('searchbox', { name: 'Search files', exact: true })
   await search.fill('AHA document')

@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SdsFileViewer from '@/components/dashboard/SdsFileViewer.vue'
 import { sdsCommand } from '@/services/sds'
 vi.mock('@/services/sds', () => ({ sdsCommand: vi.fn(), sdsErrorMessage: (e: Error) => e.message }))
-vi.mock('@/components/dashboard/PdfCanvasViewer.vue', () => ({
-  __esModule: true,
-  default: { props: ['url'], template: '<div data-testid="pdf-preview" :data-url="url"></div>' },
-}))
+vi.mock('@/features/documents/viewerSession', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/features/documents/viewerSession')>()
+  return { ...actual, loadPdfViewer: async () => ({ __esModule: true, default: { name: 'SyntheticPdfPreview', props: ['url'], emits: ['settled'], template: '<div data-testid="pdf-preview" :data-url="url"></div>' } }), createViewerSession: () => ({ ...actual.createViewerSession(), prepare: async () => {} }) }
+})
 const sheet = {
   id: 'a',
   name: 'Adhesive',
@@ -35,9 +35,11 @@ describe('SDS inline preview', () => {
     const wrapper = mount(SdsFileViewer, { props })
     await wrapper.setProps({ sheet: { ...sheet, id: 'b', name: 'Paint' } })
     await flushPromises()
+    await vi.waitFor(() => expect(wrapper.find('[data-testid=pdf-preview]').exists()).toBe(true))
     expect(wrapper.get('[data-testid=pdf-preview]').attributes('data-url')).toContain('second.pdf')
     finishFirst({ url: 'https://example.invalid/first.pdf' })
     await flushPromises()
+    await vi.waitFor(() => expect(wrapper.find('[data-testid=pdf-preview]').exists()).toBe(true))
     expect(wrapper.get('[data-testid=pdf-preview]').attributes('data-url')).toContain('second.pdf')
     wrapper.unmount()
   })
@@ -52,8 +54,9 @@ describe('SDS inline preview', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid=pdf-preview]').exists()).toBe(false)
     expect(wrapper.get('[role=alert]').text()).toContain('Job access denied.')
-    await wrapper.get('[role=alert] button').trigger('click')
+    await wrapper.get('.viewer-state button').trigger('click')
     await flushPromises()
+    await vi.waitFor(() => expect(wrapper.find('[data-testid=pdf-preview]').exists()).toBe(true))
     expect(sdsCommand).toHaveBeenLastCalledWith('openSheet', {
       id: 'a',
       jobId: 'job-b',
@@ -64,4 +67,22 @@ describe('SDS inline preview', () => {
     )
     wrapper.unmount()
   })
+})
+
+
+it('keeps the preview covered after authorization until the current renderer settles', async () => {
+  vi.mocked(sdsCommand).mockResolvedValue({ url: 'https://example.invalid/ready.pdf' })
+  const wrapper = mount(SdsFileViewer, { props })
+  await flushPromises()
+  const region = wrapper.getComponent({ name: 'AppLoadingRegion' })
+  expect(region.props('loading')).toBe(true)
+  await vi.waitFor(() => expect(wrapper.find('[data-testid=pdf-preview]').exists()).toBe(true))
+  const child = wrapper.getComponent({ name: 'SyntheticPdfPreview' })
+  child.vm.$emit('settled', 'https://example.invalid/old.pdf')
+  await flushPromises()
+  expect(region.props('loading')).toBe(true)
+  child.vm.$emit('settled', 'https://example.invalid/ready.pdf')
+  await flushPromises()
+  expect(region.props('loading')).toBe(false)
+  wrapper.unmount()
 })

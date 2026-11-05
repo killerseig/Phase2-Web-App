@@ -48,3 +48,14 @@ it('times out safely and ignores a late renderer result', async () => {
   expect(wrapper.get('[role=alert]').text()).toContain('timed out')
   wrapper.unmount()
 })
+
+
+it('does not signal readiness until the sandboxed pages frame has loaded', async () => {
+  vi.mocked(renderDocxPages).mockResolvedValueOnce(page)
+  const wrapper = mount(DocxDocumentViewer, { props: { bytes: new ArrayBuffer(2), name: 'Ready pages' } })
+  await flushPromises()
+  expect(wrapper.emitted('settled')).toBeUndefined()
+  await wrapper.get('iframe').trigger('load'); await flushPromises()
+  expect(wrapper.emitted('settled')).toHaveLength(1)
+  wrapper.unmount()
+})

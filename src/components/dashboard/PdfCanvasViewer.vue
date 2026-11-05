@@ -12,17 +12,20 @@ import PdfPageCanvas from './PdfPageCanvas.vue'
 const inheritedSession = inject(viewerSessionKey, undefined)
 const session = inheritedSession ?? createViewerSession()
 onBeforeUnmount(() => { if (!inheritedSession) session.dispose() })
-const props = defineProps<{ url: string; cacheKey?: string; renewTicket?: RenewDocumentTicket }>()
-const pdf = shallowRef<PDFDocumentProxy>(), pageNumber = ref(1), zoom = ref(1)
+const props = defineProps<{ url: string; cacheKey?: string; renewTicket?: RenewDocumentTicket; zoom?: number; hideZoomControls?: boolean }>()
+const emit = defineEmits<{ settled: [url: string]; 'update:zoom': [zoom: number] }>()
+function pageSettled(number: number) { if (number === 1) emit('settled', props.url) }
+const pdf = shallowRef<PDFDocumentProxy>(), pageNumber = ref(1), localZoom = ref(1)
 const loading = ref(true), error = ref(''), surface = ref<HTMLElement>()
 const renewing = ref(false)
+watch([loading, error], () => { if (!loading.value && error.value) emit('settled', props.url) })
 const width = ref(300), viewportHeight = ref(600), scrollTop = ref(0), firstRatio = ref(792 / 612)
 const ratios = ref<Record<number, number>>({})
 const maxCanvases = 6
 let observer: ResizeObserver | undefined
 const layouts = computed(() => {
   let top = 8
-  const pageWidth = Math.max(80, width.value) * zoom.value
+  const pageWidth = Math.max(80, width.value) * localZoom.value
   return Array.from({ length: pdf.value?.numPages || 0 }, (_, index) => {
     const number = index + 1, height = pageWidth * (ratios.value[number] || firstRatio.value)
     const row = { number, top, height, width: pageWidth }
@@ -61,7 +64,8 @@ function restore(position: ReturnType<typeof anchor>) {
     if (surface.value && row) { surface.value.scrollTop = row.top + position.fraction * (row.height + 12); readScroll() }
   })
 }
-function setZoom(value: number) { const position = anchor(); zoom.value = value; restore(position) }
+function setZoom(value: number) { const position = anchor(); localZoom.value = value; emit('update:zoom', value); restore(position) }
+watch(() => props.zoom, value => { if (value !== undefined && value !== localZoom.value) setZoom(value) })
 function jumpTo(value: number) {
   const number = Math.max(1, Math.min(pdf.value?.numPages || 1, Math.trunc(value) || 1)), row = layouts.value[number - 1]
   if (surface.value && row) { surface.value.scrollTop = row.top; pageNumber.value = number; readScroll() }
@@ -78,7 +82,7 @@ watch(() => props.url, async (url, _, cleanup) => {
   let active = true, task: PDFDocumentLoadingTask | undefined, runtime: PdfWorkerSession | undefined
   const controller = new AbortController()
   cleanup(() => { active = false; controller.abort(); if (task) void runtime?.release(task) })
-  pdf.value = undefined; loading.value = true; error.value = ''; pageNumber.value = 1; zoom.value = 1
+  pdf.value = undefined; loading.value = true; error.value = ''; pageNumber.value = 1; localZoom.value = 1
   ratios.value = {}; scrollTop.value = 0; if (surface.value) surface.value.scrollTop = 0
   try {
     runtime = await session.pdf()
@@ -132,7 +136,7 @@ onBeforeUnmount(() => observer?.disconnect())
       <input aria-label="PDF page" type="number" min="1" :max="pdf.numPages" :value="pageNumber" @change="changePage" />
       <span>/ {{ pdf.numPages }}</span>
       <AppIconButton label="Next page" :disabled="pageNumber >= pdf.numPages" @click="jumpTo(pageNumber + 1)">&gt;</AppIconButton>
-      <DocumentZoomControls :zoom="zoom" fit-label="Fit page width" @change="setZoom" />
+      <DocumentZoomControls v-if="!hideZoomControls" :zoom="localZoom" fit-label="Fit page width" @change="setZoom" />
     </div>
     <p v-if="loading" class="pdf-status" role="status">Loading PDF.</p>
     <span v-if="renewing" class="pdf-renewal" role="status">Renewing document access…</span>
@@ -140,7 +144,7 @@ onBeforeUnmount(() => observer?.disconnect())
     <div ref="surface" class="pdf-surface" role="region" aria-label="PDF pages" tabindex="0" :aria-busy="loading" @scroll.passive="readScroll">
       <div class="pdf-page-stack">
         <div v-for="row in layouts" :key="row.number" :data-pdf-page="row.number" class="pdf-page" :style="{ width: row.width + 'px', height: row.height + 'px' }">
-          <PdfPageCanvas v-if="pdf && renderPages.has(row.number)" :document="pdf" :number="row.number" :width="row.width" :pixel-budget="4000000" @measure="measure" />
+          <PdfPageCanvas v-if="pdf && renderPages.has(row.number)" :document="pdf" :number="row.number" :width="row.width" :pixel-budget="4000000" @measure="measure" @settled="pageSettled" />
           <span v-else class="pdf-placeholder" aria-hidden="true">Page {{ row.number }}</span>
         </div>
       </div>

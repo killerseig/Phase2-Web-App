@@ -74,8 +74,10 @@ export async function renderDocxPages(bytes: ArrayBuffer): Promise<DocxPages> {
   }
 }
 
-export function docxFrame(pages: DocxPages, width: number) {
-  const scale = Math.min(1, Math.max(.1, (width - 24) / pages.pageWidth))
+export function docxFrame(pages: DocxPages, width: number, zoom = 1) {
+  // Fit the complete wrapper, including its padding, inside the frame after
+  // reserving room for the vertical scrollbar. Zoom is relative to this fit.
+  const scale = Math.min(1, Math.max(.01, (width - 24) / (pages.pageWidth + 24))) * Math.max(.5, Math.min(3, zoom))
   const csp = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
   const document = new DOMParser().parseFromString('<!doctype html><html><head></head><body></body></html>', 'text/html')
   const meta = document.createElement('meta'); meta.httpEquiv = 'Content-Security-Policy'; meta.content = csp; document.head.append(meta)

@@ -5,14 +5,23 @@ import { createAuthorizedFetch, type RenewDocumentTicket } from '@/features/docu
 import DocumentZoomControls from './DocumentZoomControls.vue'
 import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import { loadDocxViewer, viewerSessionKey } from '@/features/documents/viewerSession'
-const props = defineProps<{ url: string; extension: string; name: string; cacheKey?: string; renewTicket?: RenewDocumentTicket }>()
+const props = defineProps<{ url: string; extension: string; name: string; cacheKey?: string; renewTicket?: RenewDocumentTicket; hideZoomControls?: boolean }>()
+const emit = defineEmits<{ settled: [url: string] }>()
+const imageReady = ref(false)
+const docxReady = ref(false)
+function imageLoaded(event: Event) {
+  if ((event.currentTarget as HTMLImageElement).getAttribute('src') === imageUrl.value) imageReady.value = true
+}
+function imageFailed(event: Event) {
+  if ((event.currentTarget as HTMLImageElement).getAttribute('src') === imageUrl.value) error.value = 'This image could not be displayed. Try downloading the original.'
+}
 const session = inject(viewerSessionKey, undefined)
 const imageUrl = ref('')
 const preview = ref<FilePreview>()
 const loading = ref(true)
 const error = ref('')
 const sheetIndex = ref(0)
-const zoom = ref(1)
+const zoom = defineModel<number>('zoom', { default: 1 })
 const docxBytes = shallowRef<ArrayBuffer>()
 const DocxDocumentViewer = defineAsyncComponent(loadDocxViewer)
 const table = computed(() =>
@@ -34,6 +43,7 @@ watch(
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     })
     loading.value = true
+    imageReady.value = false; docxReady.value = false
     imageUrl.value = ''
     preview.value = undefined
     docxBytes.value = undefined
@@ -106,23 +116,27 @@ watch(
   },
   { immediate: true },
 )
+watch([loading, error, imageReady, docxReady, preview], () => {
+  if (!loading.value && (error.value || imageReady.value || docxReady.value || preview.value)) emit('settled', props.url)
+}, { flush: 'post' })
 </script>
 <template>
   <div class="file-content">
     <p v-if="loading" role="status">Loading preview…</p>
     <AppStatusMessage v-if="error" :message="error" tone="error" />
     <template v-if="imageUrl && !error">
-      <DocumentZoomControls class="content-toolbar" :zoom="zoom" @change="zoom = $event" />
+      <DocumentZoomControls v-if="!hideZoomControls" class="content-toolbar" :zoom="zoom" @change="zoom = $event" />
       <div class="image-scroll">
         <img
           :src="imageUrl"
           :alt="name"
           :style="{ width: `${zoom * 100}%` }"
-          @error="error = 'This image could not be displayed. Try downloading the original.'"
+          @load="imageLoaded"
+          @error="imageFailed"
         />
       </div>
     </template>
-    <DocxDocumentViewer v-else-if="docxBytes && !error" :key="url" :bytes="docxBytes" :name="name" />
+    <DocxDocumentViewer v-else-if="docxBytes && !error" :key="url" :bytes="docxBytes" :name="name" v-model:zoom="zoom" :hide-zoom-controls="hideZoomControls" @settled="docxReady = true" />
     <template v-else-if="preview && 'text' in preview">
       <p v-if="preview.truncated" class="content-note">
         Showing the first 200,000 characters. Download for the full document.

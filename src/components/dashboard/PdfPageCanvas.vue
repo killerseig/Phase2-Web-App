@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
 const props = defineProps<{ document: PDFDocumentProxy; number: number; width: number; pixelBudget: number }>()
-const emit = defineEmits<{ measure: [number: number, ratio: number] }>()
+const emit = defineEmits<{ measure: [number: number, ratio: number]; settled: [number: number] }>()
 const host = ref<HTMLElement>(), loading = ref(true), error = ref(''), retry = ref(0)
 watch(() => [props.document, props.number, props.width, retry.value] as const, async ([document, number, width], _, cleanup) => {
   let active = true, page: PDFPageProxy | undefined, task: RenderTask | undefined, canvas: HTMLCanvasElement | undefined
@@ -31,7 +31,7 @@ watch(() => [props.document, props.number, props.width, retry.value] as const, a
     if (active) host.value?.replaceChildren(canvas)
   } catch {
     if (active) error.value = `PDF page ${number} could not be displayed. Retry or open the original PDF.`
-  } finally { if (active) loading.value = false }
+  } finally { if (active) { loading.value = false; emit('settled', number) } }
 }, { immediate: true })
 </script>
 <template>
