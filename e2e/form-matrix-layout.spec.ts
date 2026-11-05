@@ -81,3 +81,34 @@ for (const width of [1600, 390]) {
     expect(server.submitted).toBe(0); expect(server.actions.some(action => /issue|submit|formEmail/.test(action))).toBe(false)
   })
 }
+
+for (const width of [1600, 390]) {
+  test('mixed Near Miss fields share app control styling at ' + width, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 }); const server = await setup(page, false)
+    await page.getByRole('button', { name: 'Start draft', exact: true }).click()
+    const text = page.getByLabel('What Job are you on?', { exact: false })
+    const date = page.getByLabel('Date of Observation', { exact: true })
+    const comment = page.getByLabel('Additional Comments or Observations', { exact: true })
+    const multi = page.locator('.form-multiselect')
+    const style = (locator: Locator) => locator.evaluate(el => { const css = getComputedStyle(el); return { background: css.backgroundColor, border: css.borderTopColor, radius: css.borderRadius, font: css.fontSize, minHeight: parseFloat(css.minHeight) } })
+    const expected = await style(text)
+    for (const control of [date, comment, multi]) { const current = await style(control); expect(current.background).toBe(expected.background); expect(current.border).toBe(expected.border); expect(current.radius).toBe(expected.radius); expect(current.font).toBe(expected.font) }
+    expect(expected.minHeight).toBeGreaterThanOrEqual(44)
+    await expect(comment).toHaveCSS('resize', 'vertical')
+    await page.getByRole('radiogroup', { name: 'Type of Observation', exact: true }).getByRole('radio', { name: 'Safe Act', exact: true }).check()
+    const radio = page.getByRole('radio', { name: 'Safe Act', exact: true }); await expect(radio).toBeChecked(); await radio.focus(); await expect(radio).toBeFocused()
+    const combo = page.getByRole('combobox', { name: 'Actions Taken', exact: true }); await multi.click()
+    const overlay = page.locator('.form-choice-overlay'); await expect(overlay).toBeVisible()
+    await expect(overlay).toHaveCSS('background-color', await page.locator('.form-presentation__main').evaluate(el => getComputedStyle(el).backgroundColor))
+    const option = page.getByRole('option').first(); const selection = (await option.innerText()).trim(); await option.click(); await combo.press('Escape')
+    await text.fill('Synthetic mixed field review'); await comment.fill('Synthetic comment retained after styling')
+    await page.getByLabel('Please describe the safety observation or concern in detail.', { exact: false }).fill('Synthetic detail')
+    await page.getByRole('button', { name: 'Save progress', exact: true }).click()
+    await expect(page.getByRole('status').filter({ hasText: 'Progress saved' })).toBeVisible()
+    await page.reload(); await page.getByRole('button', { name: /Resume draft/ }).click()
+    await expect(comment).toHaveValue('Synthetic comment retained after styling'); await expect(radio).toBeChecked(); await expect(multi).toContainText(selection)
+    await text.scrollIntoViewIfNeeded(); await page.screenshot({ path: 'evidence/mixed-form-styling-' + width + '.png', fullPage: false })
+    expect(server.submitted).toBe(0); expect(server.actions.some(action => /issue|submit|formEmail/.test(action))).toBe(false)
+    expect(await page.locator('.form-presentation').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
+  })
+}

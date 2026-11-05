@@ -8,6 +8,7 @@ import FormPresentation from './FormPresentation.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import AppButton from '@/components/common/AppButton.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import AppListButton from '@/components/common/AppListButton.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -600,10 +601,10 @@ defineExpose({ prepareNavigation })
         </div>
       </template>
       <template #messages>
-        <p v-if="!enabled" role="alert">Configure Firebase to use durable drafts and submissions.</p>
-        <p v-if="error" id="form-validation-message" role="alert">{{ error }}</p>
-        <p v-if="message" role="status">{{ message }}</p>
-        <p v-if="loading" role="status">Opening form.</p>
+        <AppStatusMessage v-if="!enabled" tone="error" message="Configure Firebase to use durable drafts and submissions." />
+        <AppStatusMessage v-if="error" id="form-validation-message" tone="error" :message="error" />
+        <AppStatusMessage v-if="message" :message="message" />
+        <AppStatusMessage v-if="loading" message="Opening form." />
       </template>
           <section
       v-if="publicSession && selectedTemplate?.definition?.access?.identity === 'identified'"

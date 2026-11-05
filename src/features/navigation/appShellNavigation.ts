@@ -17,7 +17,7 @@ const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { label: 'Jobs', to: '/jobs' },
   { label: 'My Timecard', to: '/jobs/my-timecard' },
   { label: 'Company Library', to: '/company-library' },
-  { label: 'Site Inspection Forms', to: '/reports' },
+  { label: 'Forms', to: '/reports' },
   // Remove these visibility flags after review; route authorization is independent of navigation.
   { label: 'Role home', to: '/dashboards/role-home', hidden: true },
   { label: 'Job home', to: '/dashboards/job-home', hidden: true },

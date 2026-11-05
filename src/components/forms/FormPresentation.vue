@@ -27,8 +27,8 @@ withDefaults(defineProps<{ title: string; inline?: boolean; mainLabel?: string }
 .form-presentation :deep(.app-card) { box-shadow: none; }
 .form-presentation :deep(.form-fields) { margin: 0; }
 .form-presentation :deep(.form-field) { gap: var(--field-gap, .4rem); margin: 0 0 var(--form-gap, 1rem); }
-.form-presentation :deep(.form-field > label) { font: inherit; font-weight: 600; color: var(--text-muted); }
-.form-presentation :deep(input:not([type=checkbox]):not([type=radio])), .form-presentation :deep(textarea), .form-presentation :deep(select) { box-sizing: border-box; width: 100%; min-width: 0; padding: .65rem; font: inherit; border: 1px solid var(--border); border-radius: var(--radius-sm, .4rem); background: var(--control-background, var(--surface)); color: var(--text); }
+.form-presentation :deep(.form-field > label) { font: inherit; font-weight: 600; font-size: var(--font-size-label); color: var(--text-muted); }
+.form-presentation :deep(input:not([type=checkbox]):not([type=radio])), .form-presentation :deep(textarea), .form-presentation :deep(select) { box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--control-height-form); padding: .65rem var(--control-padding-x); font: inherit; border: 1px solid var(--control-border, var(--border)); border-radius: var(--control-radius); background: var(--control-background, var(--surface)); color: var(--text); color-scheme: dark; }
 .form-presentation :deep(button) { font-family: inherit; font-size: .95rem; }
 .form-presentation :deep(p) { margin: 0; overflow-wrap: anywhere; }
 .form-presentation :deep(.form-description) { color: var(--text-muted); white-space: pre-line; }

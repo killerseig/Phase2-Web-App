@@ -124,14 +124,15 @@ function attendeeSaved(field: FormField, instance: FormGroupInstance): boolean {
 }
 const multiStyle = {
   labelContainer: { style: { minWidth: 0, flex: '1' } },
-  label: { style: { whiteSpace: 'normal', overflowWrap: 'anywhere', padding: '0.65rem' } },
+  label: { style: { whiteSpace: 'normal', overflowWrap: 'anywhere', padding: '0.65rem var(--control-padding-x)' } },
   dropdown: { style: { display: 'flex', alignItems: 'center', padding: '0.65rem' } },
   overlay: {
+    class: 'app-shell--branded-content form-choice-overlay',
     style: {
       background: 'var(--surface)',
       color: 'var(--text)',
       border: '1px solid var(--border)',
-      borderRadius: '0.4rem',
+      borderRadius: 'var(--control-radius)',
       maxWidth: 'calc(100vw - 2rem)',
       boxShadow: '0 6px 20px #0005',
     },
@@ -438,7 +439,7 @@ const multiStyle = {
 <style scoped>
 .radio-options {
   display: grid;
-  gap: 0.5rem;
+  gap: 0;
 }
 .form-fields .radio-option {
   display: grid;
@@ -446,13 +447,15 @@ const multiStyle = {
   align-items: start;
   gap: 0.65rem;
   min-height: 44px;
-  padding-block: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   box-sizing: border-box;
   cursor: pointer;
   font-weight: 400;
 }
 .choice-option-label { min-width: 0; line-height: 1.5; overflow-wrap: anywhere; }
-.radio-option > input[type='radio'] { appearance: auto; flex: none; width: 1.25rem; height: 1.25rem; padding: 0; margin: .15rem 0 0; accent-color: var(--brand-sky, #58bae9); }
+.radio-option > input[type='radio'] { color-scheme: dark; appearance: auto; flex: none; width: 1.25rem; height: 1.25rem; padding: 0; margin: .15rem 0 0; accent-color: var(--accent-strong); }
 .radio-option > input[type='radio']:focus-visible { outline: 2px solid var(--brand-sky, #58bae9); outline-offset: 3px; }
 .matrix-rows { display: grid; gap: 1rem; min-width: 0; }
 .matrix-row { min-width: 0; margin: 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-sm, .4rem); }
@@ -482,9 +485,10 @@ const multiStyle = {
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
-  background: var(--surface);
+  border: 1px solid var(--control-border, var(--border));
+  border-radius: var(--control-radius);
+  min-height: var(--control-height-form);
+  background: var(--control-background);
   color: var(--text);
   cursor: pointer;
 }
@@ -504,11 +508,13 @@ const multiStyle = {
   border: 0;
   padding: 0;
   min-width: 0;
+  margin: 0;
+  color-scheme: dark;
 }
 .form-field {
   display: grid;
-  gap: 0.4rem;
-  margin: 1rem 0;
+  gap: var(--field-gap, .45rem);
+  margin: 0 0 var(--form-gap, .85rem);
 }
 label {
   font-weight: 600;
@@ -516,7 +522,8 @@ label {
 .hint {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: var(--font-size-help);
+  line-height: 1.5;
 }
 h3 {
   border-top: 1px solid var(--border);
@@ -525,12 +532,17 @@ h3 {
 input:not([type='checkbox']):not([type='radio']),
 textarea,
 select {
+  box-sizing: border-box;
   width: 100%;
-  padding: 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
-  background: var(--surface);
+  min-width: 0;
+  min-height: var(--control-height-form);
+  padding: .65rem var(--control-padding-x);
+  border: 1px solid var(--control-border, var(--border));
+  border-radius: var(--control-radius);
+  background: var(--control-background);
   color: var(--text);
+  color-scheme: dark;
+  font: inherit;
 }
 input[type='file'] {
   font: inherit;
@@ -568,4 +580,11 @@ img {
 button {
   margin: 0.5rem 0;
 }
+.form-field > label { color: var(--text-muted); font-size: var(--font-size-label); line-height: 1.4; }
+.form-field > label > span { color: var(--danger); }
+.radio-option:has(input:checked) { border-color: var(--border); background: var(--bg-accent); }
+.radio-option:has(input:not(:disabled)):hover { background: var(--field-hover); }
+.form-field > input:focus-visible, .form-field > textarea:focus-visible, .form-field > select:focus-visible { outline: none; border-color: var(--border-strong); box-shadow: var(--control-focus-shadow); }
+.form-field > input[aria-invalid='true'], .form-field > textarea[aria-invalid='true'], .form-field > select[aria-invalid='true'], .form-multiselect[data-p-invalid='true'] { border-color: var(--danger); }
+textarea { resize: vertical; }
 </style>
