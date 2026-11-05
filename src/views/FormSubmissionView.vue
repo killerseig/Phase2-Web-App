@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { formApi } from '@/services/forms'
@@ -38,9 +38,11 @@ async function load() {
   photo.value = ''
   dialog.value?.close()
   loading.value = true
+  busy.value = false
   error.value = ''
   try {
     await auth.init()
+    if (current !== generation) return
     const next = await formApi<typeof record.value>('formSubmissionViewer', {
       action: 'get',
       id: id.value,
@@ -48,6 +50,7 @@ async function load() {
     if (current === generation) {
       record.value = next
       await nextTick()
+      if (current !== generation) return
       if (route.hash.startsWith('#label-')) {
         try { document.getElementById(decodeURIComponent(route.hash.slice(1)))?.scrollIntoView() } catch { /* malformed links do not affect private entry loading */ }
       }
@@ -64,6 +67,7 @@ async function viewPhoto(
   fieldId = activeField.value,
   index = activeIndex.value,
 ) {
+  if (busy.value || !record.value) return
   const current = generation
   busy.value = true
   error.value = ''
@@ -80,9 +84,9 @@ async function viewPhoto(
     photoLabel.value = label
     dialog.value?.showModal()
   } catch (caught) {
-    error.value = (caught as Error).message
+    if (current === generation) error.value = (caught as Error).message
   } finally {
-    busy.value = false
+    if (current === generation) busy.value = false
   }
 }
 async function stepPhoto(delta: number) {
@@ -99,6 +103,8 @@ async function stepPhoto(delta: number) {
     )
 }
 async function downloadPdf(language?: 'en') {
+  if (busy.value || !record.value) return
+  const current = generation
   busy.value = true
   error.value = ''
   try {
@@ -106,6 +112,7 @@ async function downloadPdf(language?: 'en') {
       'formSubmissionViewer',
       { action: 'pdf', id: id.value, ...(language ? { language } : {}) },
     )
+    if (current !== generation) return
     const url = URL.createObjectURL(
       new Blob([Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0))], {
         type: result.contentType,
@@ -117,12 +124,23 @@ async function downloadPdf(language?: 'en') {
     link.click()
     URL.revokeObjectURL(url)
   } catch (caught) {
-    error.value = (caught as Error).message
+    if (current === generation) error.value = (caught as Error).message
   } finally {
-    busy.value = false
+    if (current === generation) busy.value = false
   }
 }
-watch(id, load, { immediate: true })
+watch([
+  id,
+  () => auth.currentUser?.uid,
+  () => auth.rawRole,
+  () => auth.hasWorkspaceAccess,
+  () => (auth.profile?.assignedJobIds || []).join('|'),
+], load, { immediate: true, flush: 'sync' })
+onBeforeUnmount(() => {
+  generation++
+  dialog.value?.close()
+  photo.value = ''
+})
 </script>
 <template>
   <main class="submission-view">
