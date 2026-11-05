@@ -2,6 +2,9 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { formApi } from '@/services/forms'
+import AppButton from '@/components/common/AppButton.vue'
+import AppCard from '@/components/common/AppCard.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 const props = defineProps<{ templateId: string }>()
 type Entry = {
   id: string
@@ -112,25 +115,25 @@ watch(
 onBeforeUnmount(() => { generation++ })
 </script>
 <template>
-  <section aria-label="View Entries">
+  <AppCard as="section" class="form-entries" aria-label="View Entries">
     <h2>View Entries</h2>
     <p>This view lists submitted records. Form preview shows questions only. Private completed entries retain their original questions and issued version.</p>
-    <button :disabled="busy" @click="load()">Refresh</button>
-    <button :disabled="busy || !loaded || !!error" @click="download('xlsx', true)">Export all entries to Excel</button>
-    <button :disabled="busy || !loaded || !!error" @click="download('csv', true)">Export all entries to CSV</button>
-    <button :disabled="busy || !loaded || !!error || !entries.length" @click="download('xlsx')">Download Excel (this page)</button>
-    <button :disabled="busy || !loaded || !!error || !entries.length" @click="download('csv')">Download CSV (this page)</button>
+    <div class="form-entries__actions"><AppButton :disabled="busy" @click="load()">Refresh</AppButton>
+    <AppButton :disabled="busy || !loaded || !!error" @click="download('xlsx', true)">Export all entries to Excel</AppButton>
+    <AppButton :disabled="busy || !loaded || !!error" @click="download('csv', true)">Export all entries to CSV</AppButton>
+    <AppButton :disabled="busy || !loaded || !!error || !entries.length" @click="download('xlsx')">Download Excel (this page)</AppButton>
+    <AppButton :disabled="busy || !loaded || !!error || !entries.length" @click="download('csv')">Download CSV (this page)</AppButton></div>
     <p>
       Page {{ priorCursors.length + 1 }}. Page downloads include all answers for this page only;
       Export all entries includes the complete snapshot or reports a limit error. Continue through
       every page to include the complete snapshot; entries submitted after Refresh are excluded.
     </p>
-    <button :disabled="busy || !priorCursors.length" @click="previousPage">Previous entries</button>
-    <button :disabled="busy || !nextCursor" @click="nextPage">Next entries</button>
+    <div class="form-entries__actions"><AppButton :disabled="busy || !priorCursors.length" @click="previousPage">Previous entries</AppButton>
+    <AppButton :disabled="busy || !nextCursor" @click="nextPage">Next entries</AppButton></div>
     <p v-if="!busy && !error">{{ nextCursor ? 'More entries remain.' : 'End of snapshot.' }}</p>
     <p v-if="busy" role="status">Loading entries…</p>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <table v-if="entries.length">
+    <AppStatusMessage v-if="error" tone="error" :message="error" />
+    <div v-if="entries.length" class="form-entries__table" role="region" aria-label="Completed entries" tabindex="0"><table>
       <thead>
         <tr>
           <th>Completed form</th>
@@ -151,27 +154,21 @@ onBeforeUnmount(() => { generation++ })
           <td>{{ entry.jobId || '—' }}</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <p v-else-if="!busy && !error">{{ nextCursor
       ? 'No accessible entries on this page. Continue if more entries remain.'
       : 'No accessible completed entries.' }}</p>
-  </section>
+  </AppCard>
 </template>
 <style scoped>
-section {
-  overflow-x: auto;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th,
-td {
-  text-align: left;
-  padding: 0.6rem;
-  border-bottom: 1px solid var(--border);
-}
-button {
-  margin: 0.3rem;
-}
+.form-entries { min-width: 0; }
+.form-entries h2, .form-entries p { margin: 0; }
+.form-entries__actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.form-entries__table { overflow: auto; max-height: 28rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+table { width: 100%; border-collapse: collapse; min-width: 36rem; }
+th, td { text-align: left; padding: .75rem; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+th { position: sticky; top: 0; background: var(--surface-raised); color: var(--text-muted); }
+td:first-child { min-width: 14rem; }
+td a { color: var(--accent); }
+td a:hover { text-decoration: underline; }
 </style>

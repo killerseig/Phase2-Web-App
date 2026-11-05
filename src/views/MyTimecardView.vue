@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import AppShell from '@/layouts/AppShell.vue'
+import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppField from '@/components/common/AppField.vue'
 import AppSelect from '@/components/common/AppSelect.vue'
@@ -162,13 +163,7 @@ onBeforeUnmount(() => {
 <template>
   <AppShell
     ><main class="my-timecard">
-      <header>
-        <h1>My Timecard</h1>
-        <p>
-          Enter your own time across job lines using the existing payroll workbook. Your
-          administrator must confirm your employee link and enable your role first.
-        </p>
-      </header>
+      <AppPaneHeader title="My Timecard" eyebrow="Workspace" description="Enter your own time across job lines using the existing payroll workbook. Your administrator must confirm your employee link and enable your role first." />
       <div class="my-timecard__toolbar">
         <AppField label="Payroll job"
           ><AppSelect

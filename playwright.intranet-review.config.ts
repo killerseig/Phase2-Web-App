@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
-  testDir: './e2e', testMatch: ['intranet-integration.spec.ts', 'safety-talk.spec.ts', 'personal-timecard.spec.ts'], workers: 2, retries: 0,
+  testDir: './e2e', testMatch: ['intranet-integration.spec.ts', 'safety-talk.spec.ts', 'personal-timecard.spec.ts', 'form-template-styling.spec.ts'], workers: 2, retries: 0,
   timeout: 30000, forbidOnly: true,
   reporter: [['line'], ['json', { outputFile: 'evidence/browser-results.json' }]],
   outputDir: 'evidence/browser-artifacts',

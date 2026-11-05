@@ -3,6 +3,7 @@ import { libraryCommand } from '@/features/sds/commands'
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink, useRoute } from 'vue-router'
 import Button from './DashboardButton.vue'
+import AppButton from '@/components/common/AppButton.vue'
 import DocumentExplorer from './DocumentExplorer.vue'
 import SdsFileViewer from './SdsFileViewer.vue'
 import SuppliedReferenceReader from '@/components/intranet/SuppliedReferenceReader.vue'
@@ -615,7 +616,7 @@ onBeforeUnmount(() => {
       />
     </div>
     <p v-if="loadFailed" role="status">
-      The documents have not loaded. <button type="button" @click="reload">Retry</button>
+      The documents have not loaded. <AppButton @click="reload">Retry</AppButton>
     </p>
     <fieldset v-if="!loadFailed" :disabled="busy" class="sds-fieldset">
       <DocumentExplorer
@@ -671,7 +672,7 @@ onBeforeUnmount(() => {
           <template v-if="referenceRows.length">
             <p class="reference-note">{{ referenceRows.length }} {{ search.trim() ? 'supplied references - original files omitted' : 'reading references' }}</p>
             <button v-for="item in referenceRows.slice(referencePage * 25, (referencePage + 1) * 25)" :key="item.id" type="button" class="reference-row" :aria-pressed="referenceId === item.id" @click="referenceId = item.id; selectedId = ''">{{ item.title }} <small>Reference only</small></button>
-            <div v-if="referenceRows.length > 25" class="reference-pages"><button type="button" :disabled="!referencePage" @click="referencePage--">Previous references</button><span>{{ referencePage + 1 }} / {{ Math.ceil(referenceRows.length / 25) }}</span><button type="button" :disabled="(referencePage + 1) * 25 >= referenceRows.length" @click="referencePage++">Next references</button></div>
+            <div v-if="referenceRows.length > 25" class="reference-pages"><AppButton :disabled="!referencePage" @click="referencePage--">Previous references</AppButton><span>{{ referencePage + 1 }} / {{ Math.ceil(referenceRows.length / 25) }}</span><AppButton :disabled="(referencePage + 1) * 25 >= referenceRows.length" @click="referencePage++">Next references</AppButton></div>
           </template>
         </template>
         <template #viewer>

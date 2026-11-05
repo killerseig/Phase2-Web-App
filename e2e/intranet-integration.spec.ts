@@ -227,8 +227,8 @@ for (const width of [390, 1280]) test('keyboard and native layout review at ' + 
 
 test('missing private source leaves existing uploads usable and makes no completion claims', async ({ page }) => {
   const actions = await setup(page, false, false, '/company-library', false, true)
-  await expect(page.getByText(/No supplied references have been uploaded/)).toBeVisible()
-  await expect(page.getByText(/Documents omitted from the ZIP remain unavailable/)).toBeVisible()
+  await expect(page.getByText(/No supplied references have been uploaded/)).toHaveCount(0)
+  await expect(page.getByText(/Documents omitted from the ZIP remain unavailable/)).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toBeEnabled()
   await expect(page.locator('.reference-row')).toHaveCount(0)
   expect(actions).not.toContain('saveSheet')

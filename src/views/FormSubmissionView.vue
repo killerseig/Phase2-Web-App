@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { formApi } from '@/services/forms'
+import AppShell from '@/layouts/AppShell.vue'
+import AppButton from '@/components/common/AppButton.vue'
+import AppButtonLink from '@/components/common/AppButtonLink.vue'
+import AppCard from '@/components/common/AppCard.vue'
+import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import FormPresentation from '@/components/forms/FormPresentation.vue'
+import { canListCompanyForms } from '@/features/forms/availableForms'
 import FormSignaturePad from '@/components/forms/FormSignaturePad.vue'
 import { completedAnswers } from '@/features/forms/completedAnswers'
 import { type FormAnswers, type FormVersion } from '../../functions/src/formModel'
@@ -150,91 +158,57 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <main class="submission-view">
-    <p v-if="loading" role="status">Loading completed form…</p>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <RouterLink
-      v-if="error && !auth.hasWorkspaceAccess"
-      :to="{ name: 'login', query: { redirect: route.fullPath } }"
-      >Sign in to view this entry</RouterLink
-    >
-    <article v-if="record">
-      <h1>{{ record.definition.title }}</h1>
-      <p>{{ record.definition.description }}</p>
-      <p>
-        Submitted version {{ record.templateVersion }} ·
-        {{ new Date(record.submittedAt).toLocaleString() }}
-      </p>
-      <button :disabled="busy" @click="downloadPdf()">Download original PDF with photos</button>
-      <section v-for="(row, index) in rows" :id="'label-' + row.key" :key="row.key">
-        <h2 v-if="row.group && rows[index - 1]?.group !== row.group">{{ row.group }}</h2>
-        <h3>{{ row.label }}</h3>
-        <FormSignaturePad v-if="row.signature" :model-value="row.signature" :label="row.label" readonly />
-        <p v-else class="answer">{{ row.value }}</p>
-        <button
-          v-for="(assetId, photoIndex) in row.photos"
-          :key="assetId"
-          :disabled="busy"
-          @click="viewPhoto(assetId, row.label + ' ' + (photoIndex + 1), row.key, photoIndex)"
-        >
-          View {{ row.label }} {{ photoIndex + 1 }}
-        </button>
-      </section>
-      <p>Entry and photo access is checked for every private view and download.</p>
-    </article>
-    <dialog
-      ref="dialog"
-      aria-label="Submission photo"
-      @keydown.left.prevent="stepPhoto(-1)"
-      @keydown.right.prevent="stepPhoto(1)"
-    >
-      <button @click="dialog?.close()">Close photo</button
-      ><button :disabled="busy || activeIndex <= 0" @click="stepPhoto(-1)">Previous photo</button
-      ><button :disabled="busy || activeIndex >= activePhotos.length - 1" @click="stepPhoto(1)">
-        Next photo</button
-      ><img v-if="photo" :src="photo" :alt="photoLabel" />
+  <AppShell><main class="submission-view">
+    <FormPresentation :title="record?.definition.title || 'Completed form'" main-label="Completed answers">
+      <template #header-actions><AppButtonLink v-if="auth.hasWorkspaceAccess && canListCompanyForms(auth.rawRole)" to="/reports">Back to forms</AppButtonLink></template>
+      <template #messages>
+        <AppStatusMessage v-if="loading" message="Loading completed form." />
+        <AppStatusMessage v-if="error" tone="error" :message="error" />
+        <AppButtonLink v-if="error && !auth.hasWorkspaceAccess" :to="{ name: 'login', query: { redirect: route.fullPath } }">Sign in to view this entry</AppButtonLink>
+      </template>
+      <article v-if="record" aria-label="Submitted answers">
+        <p v-if="record.definition.description" class="submission-view__description">{{ record.definition.description }}</p>
+        <section v-for="(row, index) in rows" :id="'label-' + row.key" :key="row.key" class="submission-view__answer">
+          <h2 v-if="row.group && rows[index - 1]?.group !== row.group">{{ row.group }}</h2>
+          <h3>{{ row.label }}</h3>
+          <FormSignaturePad v-if="row.signature" :model-value="row.signature" :label="row.label" readonly />
+          <p v-else class="answer">{{ row.value }}</p>
+          <div v-if="row.photos.length" class="submission-view__actions"><AppButton v-for="(assetId, photoIndex) in row.photos" :key="assetId" :disabled="busy" @click="viewPhoto(assetId, row.label + ' ' + (photoIndex + 1), row.key, photoIndex)">View {{ row.label }} {{ photoIndex + 1 }}</AppButton></div>
+        </section>
+      </article>
+      <template #sidebar>
+        <AppCard v-if="record" as="section" class="submission-view__information" aria-label="Completed record information">
+          <AppSectionHeader title="Completed record" title-tag="h2" />
+          <dl><dt>Submitted</dt><dd>{{ new Date(record.submittedAt).toLocaleString() }}</dd><dt>Issued version</dt><dd>{{ record.templateVersion }}</dd></dl>
+          <AppButton data-testid="entry-pdf-download" variant="primary" :disabled="busy" @click="downloadPdf()">Download original PDF with photos</AppButton>
+          <p class="submission-view__privacy">Entry and photo access is checked for every private view and download.</p>
+        </AppCard>
+      </template>
+    </FormPresentation>
+    <dialog ref="dialog" class="submission-view__photo-dialog" aria-label="Submission photo" @keydown.left.prevent="stepPhoto(-1)" @keydown.right.prevent="stepPhoto(1)">
+      <AppCard as="div" class="submission-view__photo-panel">
+        <AppSectionHeader title="Inspection photo" title-tag="h2"><template #actions><AppButton @click="dialog?.close()">Close photo</AppButton></template></AppSectionHeader>
+        <img v-if="photo" :src="photo" :alt="photoLabel" />
+        <div class="submission-view__actions"><AppButton :disabled="busy || activeIndex <= 0" @click="stepPhoto(-1)">Previous photo</AppButton><AppButton :disabled="busy || activeIndex >= activePhotos.length - 1" @click="stepPhoto(1)">Next photo</AppButton></div>
+      </AppCard>
     </dialog>
-  </main>
+  </main></AppShell>
 </template>
 <style scoped>
-.submission-view {
-  max-width: 60rem;
-  margin: 0 auto;
-  padding: clamp(1rem, 4vw, 3rem);
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-.submission-view section {
-  margin: 1rem 0;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
-}
-.answer,
-.submission-view p {
-  white-space: pre-wrap;
-}
-.submission-view button {
-  margin: 0.3rem;
-  padding: 0.5rem 0.8rem;
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 0.3rem;
-}
-.submission-view input {
-  width: 100%;
-  padding: 0.5rem;
-  box-sizing: border-box;
-}
-.submission-view dialog {
-  max-width: 90vw;
-  max-height: 90dvh;
-}
-.submission-view dialog img {
-  display: block;
-  max-width: 80vw;
-  max-height: 75dvh;
-  object-fit: contain;
-}
+.submission-view { width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.submission-view__answer { display: grid; gap: .5rem; padding: 1rem 0; border-bottom: 1px solid var(--border-soft); scroll-margin-top: 1rem; }
+.submission-view__answer:last-child { border-bottom: 0; padding-bottom: 0; }
+.submission-view__answer h2, .submission-view__answer h3 { margin: 0; }
+.submission-view__answer h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); }
+.answer, .submission-view__description { white-space: pre-wrap; }
+.submission-view__description, .submission-view__privacy { color: var(--text-muted); }
+.submission-view__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.submission-view__information dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5rem 1rem; margin: 0; }
+.submission-view__information dt { color: var(--text-muted); }
+.submission-view__information dd { margin: 0; }
+.submission-view__privacy { font-size: .875rem; }
+.submission-view__photo-dialog { padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); max-width: min(70rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); }
+.submission-view__photo-dialog::backdrop { background: rgb(0 0 0 / .72); }
+.submission-view__photo-panel img { display: block; width: 100%; min-width: 0; max-height: 68dvh; object-fit: contain; }
+.submission-view__photo-panel .submission-view__actions { justify-content: flex-end; }
 </style>

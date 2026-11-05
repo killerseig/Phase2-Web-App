@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import AppButton from '@/components/common/AppButton.vue'
+import AppButtonLink from '@/components/common/AppButtonLink.vue'
+import AppCard from '@/components/common/AppCard.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppField from '@/components/common/AppField.vue'
+import AppLinkCard from '@/components/common/AppLinkCard.vue'
+import AppPageLayout from '@/components/common/AppPageLayout.vue'
+import AppSearchInput from '@/components/common/AppSearchInput.vue'
+import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
 import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { formApi, type ServerFormTemplate } from '@/services/forms'
@@ -35,15 +44,14 @@ watch([() => auth.currentUser?.uid, () => auth.rawRole, () => auth.hasWorkspaceA
 onBeforeUnmount(() => { generation++ })
 </script>
 <template><AppShell><main class="company-reports">
-  <h1>Site Inspection Forms</h1><p>Open a published form without selecting a job. Enter the job and site details requested on the form.</p>
-  <RouterLink v-if="auth.rawRole === 'admin'" to="/admin/forms">Manage forms in Form Builder</RouterLink>
-  <label>Search reports <input v-model="search" type="search" /></label>
+  <AppPageLayout title="Site Inspection Forms" description="Open a published form without selecting a job. Enter the job and site details requested on the form."><template #actions><AppButtonLink v-if="auth.rawRole === 'admin'" to="/admin/forms">Manage forms in Form Builder</AppButtonLink></template><AppCard as="section" aria-label="Inspection form directory">
+  <AppField label="Search reports"><AppSearchInput v-model="search" aria-label="Search reports" placeholder="Find an inspection form" /></AppField>
   <p v-if="!allowed">Forms are not available for your current role.</p>
-  <p v-else-if="loading" role="status">Loading reports.</p>
-  <p v-else-if="error" role="alert">{{ error }} <button @click="load">Retry</button></p>
-  <p v-else-if="!reports.length">No published reports match your search and access. Draft forms require administrator review and publication.</p>
-  <ul v-else aria-label="Available inspection forms"><li v-for="report in reports" :key="report.id"><RouterLink :to="'/forms/' + encodeURIComponent(report.id)">{{ report.label }}</RouterLink></li></ul>
-  <PrivateReferenceStatus :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" @cancel="cancel" />
+  <AppStatusMessage v-else-if="loading" message="Loading reports." />
+  <AppStatusMessage v-else-if="error" tone="error">{{ error }} <AppButton @click="load">Retry</AppButton></AppStatusMessage>
+  <AppEmptyState v-else-if="!reports.length" panel message="No published reports match your search and access. Draft forms require administrator review and publication." />
+  <ul v-else class="company-reports__list" aria-label="Available inspection forms"><li v-for="report in reports" :key="report.id"><AppLinkCard :to="'/forms/' + encodeURIComponent(report.id)">{{ report.label }}</AppLinkCard></li></ul></AppCard>
+  <PrivateReferenceStatus :show-empty-state="false" :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" @cancel="cancel" />
   <template v-if="content"><h2>Supplied form references</h2><p>Reference text from the supplied ZIP. These are not published submission workflows.</p>
     <p v-if="!references.length">No supplied form references match your search.</p>
     <details v-for="item in references" :key="item.id"><summary>{{ item.title }} - reference only</summary>
@@ -51,5 +59,11 @@ onBeforeUnmount(() => { generation++ })
       <SuppliedReferenceReader :title="item.title" :form="item" />
     </details>
   </template>
-</main></AppShell></template>
-<style scoped>.company-reports { padding: 1rem; } label { display: block; margin: 1rem 0; } li { padding: .4rem 0; }</style>
+</AppPageLayout></main></AppShell></template>
+<style scoped>
+.company-reports { min-width: 0; }
+.company-reports__list { display: grid; gap: .5rem; max-height: 26rem; overflow: auto; list-style: none; margin: 0; padding: .2rem; }
+.company-reports__list :deep(.app-link-card) { --app-link-card-padding: .8rem 1rem; --app-link-card-shadow: none; }
+.company-reports details { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .8rem 1rem; background: var(--surface); }
+.company-reports summary { cursor: pointer; font-weight: 600; }
+</style>
