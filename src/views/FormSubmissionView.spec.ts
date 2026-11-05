@@ -59,6 +59,26 @@ describe('private completed gallery authorization', () => {
     expect(create).toHaveBeenCalledOnce(); expect(click).toHaveBeenCalledOnce(); expect(revoke).toHaveBeenCalledWith('blob:pdf')
     view.unmount()
   })
+  it.each(['functions/internal', 'functions/resource-exhausted', 'functions/deadline-exceeded'])(
+    'explains a PDF backend failure (%s) without losing saved answers or authorizing a send', async (code) => {
+      api.mockResolvedValueOnce(completed()).mockRejectedValueOnce(Object.assign(new Error('internal [500]'), { code }))
+      const view = mount(FormSubmissionView); await flushPromises()
+      await view.find('article > button').trigger('click'); await flushPromises()
+      expect(view.find('[role="alert"]').text()).toBe('The PDF could not be generated. Your saved report and photos are unchanged. Please try again.')
+      expect(view.find('#label-photos').exists()).toBe(true)
+      expect(view.find('article > button').attributes('disabled')).toBeUndefined()
+      expect(api).toHaveBeenLastCalledWith('formSubmissionViewer', { action: 'pdf', id: 'entry' })
+      expect(api).toHaveBeenCalledTimes(2)
+      view.unmount()
+    },
+  )
+  it('explains the exact internal [500] message even when no Firebase code is attached', async () => {
+    api.mockResolvedValueOnce(completed()).mockRejectedValueOnce(new Error('internal [500]'))
+    const view = mount(FormSubmissionView); await flushPromises()
+    await view.find('article > button').trigger('click'); await flushPromises()
+    expect(view.find('[role="alert"]').text()).toContain('Your saved report and photos are unchanged')
+    view.unmount()
+  })
   it('does not download a pending PDF after switching entries or duplicate its request', async () => {
     const pending = deferred<{ base64: string; contentType: string; filename: string }>(), create = vi.fn<() => string>()
     vi.stubGlobal('URL', { createObjectURL: create, revokeObjectURL: vi.fn<(url: string) => void>() })

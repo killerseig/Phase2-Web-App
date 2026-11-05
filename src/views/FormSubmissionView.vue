@@ -124,7 +124,14 @@ async function downloadPdf(language?: 'en') {
     link.click()
     URL.revokeObjectURL(url)
   } catch (caught) {
-    if (current === generation) error.value = (caught as Error).message
+    if (current === generation) {
+      const failure = caught as { code?: string; message?: string }
+      error.value =
+        ['functions/internal', 'functions/unavailable', 'functions/deadline-exceeded', 'functions/resource-exhausted'].includes(failure?.code || '') ||
+        /^internal(?: \[500\])?$/i.test(failure?.message || '')
+          ? 'The PDF could not be generated. Your saved report and photos are unchanged. Please try again.'
+          : failure?.message || 'The PDF could not be downloaded. Your saved report is unchanged.'
+    }
   } finally {
     if (current === generation) busy.value = false
   }

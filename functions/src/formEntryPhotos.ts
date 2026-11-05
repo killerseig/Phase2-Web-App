@@ -28,7 +28,13 @@ export async function readEntryPhoto(record: FormRecord, assetId: string): Promi
 export async function entryPdfPhotos(record: FormRecord): Promise<DailyLogInlinePhotoAttachment[]> {
   const photos: DailyLogInlinePhotoAttachment[] = []
   for (const assetId of photoAnswerIds(record.definition, record.answers)) {
-    const bytes = await sharp(await readEntryPhoto(record, assetId))
+    const bytes = await sharp(await readEntryPhoto(record, assetId), {
+      // Match the upload decoder's pixel bound and process each photo sequentially.
+      limitInputPixels: 16000000,
+      animated: false,
+      sequentialRead: true,
+      failOn: 'warning',
+    })
       .rotate()
       .resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 80 })

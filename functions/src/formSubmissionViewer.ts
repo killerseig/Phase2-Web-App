@@ -10,7 +10,9 @@ import { translationSource, currentFormTranslation, type FormTranslation } from 
 
 const denied = () =>
   new HttpsError('permission-denied', 'This submission is unavailable or you do not have access.')
-export const formSubmissionViewer = onCall({ timeoutSeconds: 120 }, async (request) => {
+// Photo decoding and PDF generation need dedicated memory; do not share it across concurrent exports.
+const FORM_ENTRY_VIEWER_OPTIONS = { memory: '512MiB', concurrency: 1, timeoutSeconds: 120 } as const
+export const formSubmissionViewer = onCall(FORM_ENTRY_VIEWER_OPTIONS, async (request) => {
   if (!request.auth?.uid) throw denied()
   const { id, action, assetId } = request.data || {}
   if (action === 'preview-pdf') {
