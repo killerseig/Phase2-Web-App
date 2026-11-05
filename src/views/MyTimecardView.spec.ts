@@ -37,15 +37,17 @@ const saved = () => ({
 const mountView = () =>
   mount(MyTimecardView, { global: { stubs: { AppShell: { template: '<div><slot/></div>' } } } })
 async function open(wrapper: ReturnType<typeof mountView>) {
-  await wrapper.get('select').setValue('job-a')
-  await wrapper.get('button').trigger('click')
   await flushPromises()
+  expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('job-a')
 }
 async function edit(wrapper: ReturnType<typeof mountView>) {
   await wrapper.get('input[aria-label="Line 1 job number"]').setValue('100')
   await wrapper.get('input[aria-label="Line 1 account"]').setValue('PAINT')
   await wrapper.get('input[aria-label="Line 1 MON hours"]').setValue('4')
 }
+const context = () => ({ state: 'context', jobs: [
+  { id: 'job-a', code: '100', name: 'First job' }, { id: 'job-b', code: '200', name: 'Second job' },
+], defaultJobId: 'job-a', currentWeekEndDate: '2026-11-07', card: null, version: null, readOnly: true })
 beforeEach(() => {
   state.auth = reactive({
     currentUser: { uid: 'me' },
@@ -60,7 +62,7 @@ beforeEach(() => {
     subscribeVisibleJobs: vi.fn(),
   })
   state.request.mockReset()
-  state.request.mockResolvedValue(saved())
+  state.request.mockImplementation(data => Promise.resolve(data.personalAction === 'context' ? context() : saved()))
 })
 describe('My Timecard local user flow', () => {
   it('opens only a selected job and saves a personal draft through the scoped action', async () => {
@@ -100,7 +102,7 @@ describe('My Timecard local user flow', () => {
     expect((w.get('input[aria-label="Line 1 MON hours"]').element as HTMLInputElement).value).toBe(
       '4',
     )
-    expect(w.text()).toContain('Unsaved changes')
+    expect(w.text()).toContain('Connection lost')
     await w.findAll('button').at(-1)!.trigger('click')
     await flushPromises()
     expect(state.request.mock.calls.at(-1)![0].requestId).toBe(first.requestId)
@@ -123,15 +125,9 @@ describe('My Timecard local user flow', () => {
   })
   it('clears private values on logout and ignores a stale response', async () => {
     let resolve!: (result: ReturnType<typeof saved>) => void
-    state.request.mockImplementation(
-      () =>
-        new Promise((done) => {
-          resolve = done
-        }),
-    )
+    state.request.mockImplementation(data => data.personalAction === 'context' ? Promise.resolve(context()) : new Promise(done => { resolve = done }))
     const w = mountView()
-    await w.get('select').setValue('job-a')
-    await w.get('button').trigger('click')
+    await flushPromises()
     state.auth.currentUser = null
     state.auth.hasWorkspaceAccess = false
     await flushPromises()
@@ -141,10 +137,10 @@ describe('My Timecard local user flow', () => {
     w.unmount()
   })
   it('keeps submitted weeks read-only', async () => {
-    state.request.mockResolvedValue({ ...saved(), readOnly: true })
+    state.request.mockImplementation(data => Promise.resolve(data.personalAction === 'context' ? context() : { ...saved(), readOnly: true }))
     const w = mountView()
     await open(w)
-    expect(w.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(w.get('input[aria-label="Line 1 MON hours"]').attributes('disabled')).toBeDefined()
     expect(w.text()).toContain('locked')
     w.unmount()
   })
