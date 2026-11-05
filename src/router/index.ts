@@ -263,7 +263,7 @@ router.beforeEach(async (to) => {
   await auth.init()
   const routeJobId = getRouteParamJobId(to.params.jobId)
 
-  if (routeJobId && auth.hasWorkspaceAccess && jobs.jobs.length === 0) {
+  if (auth.rawRole !== 'employee' && routeJobId && auth.hasWorkspaceAccess && jobs.jobs.length === 0) {
     // Do not block deep-link rendering on job list hydration. On refresh, a slow
     // callable/listener can otherwise leave the app shell blank before the route
     // component has a chance to load.
@@ -271,7 +271,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'login' && auth.hasWorkspaceAccess) {
-    return getWorkspaceRedirectTarget(to.query.redirect)
+    return auth.rawRole === 'employee' ? { name: 'my-timecard' } : getWorkspaceRedirectTarget(to.query.redirect)
   }
 
   const decision = getRouteAccessDecision({

@@ -1,7 +1,6 @@
 import { FieldValue, Filter, type DocumentData, type Firestore } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/v2/https'
-import { buildCurrentFunctionUser } from './roleAccess'
-import { isFunctionShopJob } from './jobIdentity'
+import { buildCurrentFunctionUser, normalizeStoredRole } from './roleAccess'
 import {
   PERSONAL_TIMECARD_ROLES,
   mergePersonalTimecard,
@@ -13,22 +12,23 @@ import {
   type PersonalPayrollDay,
 } from './personalTimecardModel'
 
+import { personalTimecardIdentity } from './personalTimecardIdentity'
+
 const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
 const version = (value: { seconds: number; nanoseconds: number } | undefined) =>
   value ? `${value.seconds}:${value.nanoseconds}` : null
-function allowedJob(
-  user: ReturnType<typeof buildCurrentFunctionUser>,
-  id: string,
-  job: DocumentData,
-) {
-  return (
-    job.active !== false &&
-    (user.role === 'admin' ||
-      user.assignedJobIds.includes(id) ||
-      (Array.isArray(job.assignedForemanIds) ? job.assignedForemanIds : []).includes(user.uid) ||
-      (user.role === 'shop-foreman' &&
-        isFunctionShopJob({ name: text(job.name), number: text(job.number || job.code) })))
-  )
+/** Payroll roster primary job plus explicit account assignments; no admin/shop bypass. */
+export function personalAssignedJobIds(employee: DocumentData, assigned: readonly string[]) {
+  return [...new Set([text(employee.jobId), ...assigned].filter(id => id && !id.includes('/')))]
+}
+export function personalCurrentWeekEnd(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Denver', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now)
+  const part = (type: string) => parts.find(p => p.type === type)!.value
+  const date = new Date(part('year') + '-' + part('month') + '-' + part('day') + 'T12:00:00Z')
+  date.setUTCDate(date.getUTCDate() + (6 - date.getUTCDay() + 7) % 7)
+  return date.toISOString().slice(0, 10)
 }
 function dto(card: PersonalPayrollCard | undefined) {
   if (!card) return null
@@ -40,6 +40,15 @@ function dto(card: PersonalPayrollCard | undefined) {
       hours: (line.days || []).map((day: PersonalPayrollDay) => Number(day.hours) || 0),
     })),
     notes: card.notes || '',
+    display: {
+      lines: (card.lines || []).map(line => ({
+        difH: text(line.difH), difP: text(line.difP), offHours: Number(line.offHours) || 0,
+        offProduction: Number(line.offProduction) || 0,
+        production: line.days.map(day => Number(day.production) || 0),
+      })),
+      regularHoursOverride: card.regularHoursOverride ?? null,
+      overtimeHoursOverride: card.overtimeHoursOverride ?? null,
+    },
   }
 }
 /** Opt-in personal branch of an existing callable; never opens/submits a crew week. */
@@ -47,24 +56,26 @@ export async function handlePersonalTimecard(
   request: { auth?: { uid: string } | null; data?: Record<string, unknown> },
   database: Firestore,
   makeCard: (employee: DocumentData, employeeId: string, weekStart: string) => PersonalPayrollCard,
+  now = new Date(),
 ) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in.')
   const uid = request.auth.uid,
     input = request.data || {},
     action = text(input.personalAction)
-  if (!['load', 'save'].includes(action))
+  if (['auto-link', 'link-status'].includes(action)) return personalTimecardIdentity(uid, input, database)
+  if (!['context', 'load', 'save'].includes(action))
     throw new HttpsError('invalid-argument', 'Unknown personal timecard action.')
   const jobId = text(input.jobId),
     weekEndDate = text(input.weekEndDate)
   const date = new Date(weekEndDate + 'T12:00:00Z')
-  if (
+  if (action !== 'context' && (
     !jobId ||
     jobId.includes('/') ||
     !/^\d{4}-\d{2}-\d{2}$/.test(weekEndDate) ||
     !Number.isFinite(date.getTime()) ||
     date.toISOString().slice(0, 10) !== weekEndDate ||
     date.getUTCDay() !== 6
-  )
+  ))
     throw new HttpsError('invalid-argument', 'Choose a job and a valid Saturday week ending.')
   const saved = action === 'save' ? parsePersonalTimecard(input.card) : null
   const requestId = text(input.requestId)
@@ -73,20 +84,19 @@ export async function handlePersonalTimecard(
   const result = await database.runTransaction(async (tx) => {
     const profileRef = database.doc('users/' + uid),
       policyRef = database.doc('settings/myTimecard')
-    const [profileSnap, policySnap, jobSnap] = await Promise.all([
+    const [profileSnap, policySnap] = await Promise.all([
       tx.get(profileRef),
       tx.get(policyRef),
-      tx.get(database.doc('jobs/' + jobId)),
     ])
     const profile = profileSnap.data() || {},
       policy = policySnap.data() || {},
-      user = buildCurrentFunctionUser(uid, profile)
+      user = { ...buildCurrentFunctionUser(uid, profile), role: normalizeStoredRole(profile.role) }
     if (
       !profileSnap.exists ||
       !user.active ||
       !(PERSONAL_TIMECARD_ROLES as readonly string[]).includes(user.role) ||
-      !Array.isArray(policy.enabledRoles) ||
-      !policy.enabledRoles.includes(user.role)
+      (user.role !== 'employee' && (!Array.isArray(policy.enabledRoles) ||
+      !policy.enabledRoles.includes(user.role)))
     )
       throw new HttpsError(
         'permission-denied',
@@ -102,7 +112,7 @@ export async function handlePersonalTimecard(
     )
       throw new HttpsError(
         'failed-precondition',
-        'An administrator must confirm your payroll employee link first.',
+        'Your account has not been matched to payroll. Ask an administrator to save your account with the payroll first and last name.',
       )
     const employeeSnap = await tx.get(database.doc('employees/' + employeeId)),
       employee = employeeSnap.data() || {}
@@ -111,8 +121,21 @@ export async function handlePersonalTimecard(
         'permission-denied',
         'Your payroll employee link is unavailable or has changed.',
       )
-    const job = jobSnap.data() || {}
-    if (!jobSnap.exists || !allowedJob(user, jobId, job))
+    const assignedIds = personalAssignedJobIds(employee, user.assignedJobIds)
+    const assignedSnaps = await Promise.all(assignedIds.map(id => tx.get(database.doc('jobs/' + id))))
+    const assignedJobs = assignedSnaps.filter(snap => snap.exists && snap.data()?.active !== false)
+      .map(snap => ({ id: snap.id, name: text(snap.data()?.name), code: text(snap.data()?.number || snap.data()?.code) }))
+      .sort((a, b) => (a.code + ' ' + a.name).localeCompare(b.code + ' ' + b.name))
+    const currentWeekEndDate = personalCurrentWeekEnd(now)
+    if (action === 'context') return {
+      state: 'context' as const, employeeName: [employee.firstName, employee.lastName].filter(Boolean).join(' '),
+      jobs: assignedJobs, defaultJobId: assignedJobs.some(job => job.id === employee.jobId)
+        ? employee.jobId as string : assignedJobs.length === 1 ? assignedJobs[0]!.id : '',
+      currentWeekEndDate, card: null, version: null, readOnly: true,
+    }
+    const jobSnap = assignedSnaps.find(snap => snap.id === jobId)
+    const job = jobSnap?.data() || {}
+    if (!jobSnap?.exists || job.active === false)
       throw new HttpsError('permission-denied', 'You are not assigned to this job.')
     const weeks = await tx.get(
       database
@@ -165,14 +188,19 @@ export async function handlePersonalTimecard(
         'failed-precondition',
         'This legacy card needs payroll review before personal entry.',
       )
+    if (!cardSnap) source.lines.forEach(line => { line.jobNumber = text(job.number || job.code) })
     const response = {
       state: 'ready' as const,
       employeeName:
         [source.firstName, source.lastName].filter(Boolean).join(' ') ||
         [employee.firstName, employee.lastName].filter(Boolean).join(' '),
       card: dto(source),
+      identity: {
+        firstName: text(source.firstName || employee.firstName), lastName: text(source.lastName || employee.lastName),
+        employeeNumber: text(employee.employeeNumber), occupation: text(employee.occupation),
+      },
       version: version(cardSnap?.updateTime),
-      readOnly: week.status !== 'draft',
+      readOnly: week.status !== 'draft' || weekEndDate !== currentWeekEndDate,
       weekId: weekSnap.id,
     }
     if (!saved) return response
@@ -206,7 +234,7 @@ export async function handlePersonalTimecard(
           .where(Filter.or(Filter.where('number', '==', code), Filter.where('code', '==', code)))
           .limit(2),
       )
-      if (jobs.size !== 1 || !allowedJob(user, jobs.docs[0]!.id, jobs.docs[0]!.data()))
+      if (jobs.size !== 1 || !assignedJobs.some(job => job.id === jobs.docs[0]!.id))
         throw new HttpsError(
           'permission-denied',
           'One of the entered job numbers is unavailable or not assigned to you.',

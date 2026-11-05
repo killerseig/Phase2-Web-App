@@ -17,6 +17,7 @@ type TimecardWorkbookFooterField =
 defineProps<{
   card: Pick<TimecardCardRecord, TimecardWorkbookFooterField>
   readOnly: boolean
+  payrollReadOnly?: boolean
   overtimeHours: number
   regularHours: number
 }>()
@@ -49,7 +50,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--job">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerJobOrGl"
         type="text"
         @input="emit('update-field', 'footerJobOrGl', readInputValue($event))"
@@ -58,7 +59,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--acct">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerAccount"
         type="text"
         @input="emit('update-field', 'footerAccount', readInputValue($event))"
@@ -67,7 +68,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--office">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerOffice"
         type="text"
         @input="emit('update-field', 'footerOffice', readInputValue($event))"
@@ -76,7 +77,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--amount">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerAmount"
         type="text"
         @input="emit('update-field', 'footerAmount', readInputValue($event))"
@@ -86,7 +87,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--job-second">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerSecondJobOrGl"
         type="text"
         @input="emit('update-field', 'footerSecondJobOrGl', readInputValue($event))"
@@ -95,7 +96,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--acct-second">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerSecondAccount"
         type="text"
         @input="emit('update-field', 'footerSecondAccount', readInputValue($event))"
@@ -104,7 +105,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--office-second">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerSecondOffice"
         type="text"
         @input="emit('update-field', 'footerSecondOffice', readInputValue($event))"
@@ -113,7 +114,7 @@ const emit = defineEmits<{
     <div class="timecard-card__footer-box timecard-card__footer-box--amount-second">
       <input
         class="timecard-card__footer-input"
-        :disabled="readOnly"
+        :disabled="readOnly || payrollReadOnly"
         :value="card.footerSecondAmount"
         type="text"
         @input="emit('update-field', 'footerSecondAmount', readInputValue($event))"

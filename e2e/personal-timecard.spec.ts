@@ -28,7 +28,13 @@ for (const screen of [
           return
         }
         const data = route.request().postDataJSON().data
-        expect(['load', 'save']).toContain(data.personalAction)
+        expect(['context', 'load', 'save']).toContain(data.personalAction)
+        if (data.personalAction === 'context') {
+          await route.fulfill({ headers, contentType: 'application/json', body: JSON.stringify({ result: {
+            state: 'context', jobs: [{ id: 'job-1', code: '1A', name: 'Assigned first job' }, { id: 'job-2', code: '2B', name: 'Assigned second job' }],
+            defaultJobId: 'job-1', currentWeekEndDate: '2026-11-07', card: null, version: null, readOnly: true,
+          } }) }); return
+        }
         if (data.personalAction === 'save') {
           saves.push(data)
           stored = structuredClone(data.card)
@@ -47,16 +53,22 @@ for (const screen of [
               employeeName: 'Synthetic Employee',
               card: stored,
               version: saves.length ? '2:0' : '1:0',
-              readOnly: false,
+              readOnly: data.weekEndDate !== '2026-11-07',
             },
           }),
         })
       })
-      await gotoPhase2App(page, '/jobs/my-timecard', createJobsFixture())
+      const fixture = createJobsFixture()
+      fixture.auth.profile.role = 'employee'
+      await gotoPhase2App(page, '/jobs/my-timecard', fixture)
       await expect(page.getByRole('heading', { name: 'My Timecard', exact: true })).toBeVisible()
-      await page.getByRole('combobox', { name: 'Payroll job', exact: true }).selectOption('job-1')
-      await page.getByRole('button', { name: 'Open my timecard', exact: true }).click()
-      await expect(page.getByRole('heading', { name: 'Synthetic Employee' })).toBeVisible()
+      await expect(page.getByRole('combobox', { name: 'Payroll job', exact: true })).toHaveValue('job-1')
+      await expect(page.getByLabel('Week ending (Saturday)')).toHaveValue('2026-11-07')
+      await expect(page.getByTestId('timecard-employee-name')).toContainText('Synthetic Employee')
+      await expect(page.getByRole('combobox', { name: 'Payroll job', exact: true }).locator('option')).toHaveCount(3)
+      await expect(page.locator('.app-shell__nav a')).toHaveText(['My Timecard'])
+      await expect(page.getByTestId('timecard-wage-input')).toHaveCount(0)
+      await expect(page.getByLabel('Line 1 MON production', { exact: true })).toBeDisabled()
       await page.getByLabel('Line 1 job number', { exact: true }).fill('1A')
       await page.getByLabel('Line 1 account', { exact: true }).fill('PAINT')
       await page.getByLabel('Line 1 account', { exact: true }).press('Tab')
@@ -67,7 +79,7 @@ for (const screen of [
       await page.getByLabel('Line 2 MON hours', { exact: true }).fill('4')
       await page.getByRole('button', { name: 'Save my timecard', exact: true }).click()
       await expect(page.getByRole('alert')).toBeVisible()
-      await expect(page.getByLabel('Line 1 MON hours', { exact: true })).toHaveValue('4')
+      await expect(page.getByLabel('Line 1 MON hours', { exact: true })).toHaveValue('4.00')
       await page.getByRole('button', { name: 'Save my timecard', exact: true }).press('Enter')
       await expect(page.getByText('Your timecard draft was saved.', { exact: false })).toBeVisible()
       expect(saves).toHaveLength(2)
@@ -84,6 +96,20 @@ for (const screen of [
       }))
       expect(overflow.page).toBe(false)
       expect(overflow.table).toBe(screen.name === 'phone')
+      await page.getByTestId('timecard-notes-input').fill('Unsaved note')
+      await page.getByRole('combobox', { name: 'Payroll job', exact: true }).selectOption('job-2')
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(page.getByRole('combobox', { name: 'Payroll job', exact: true })).toHaveValue('job-1')
+      await expect(page.getByTestId('timecard-notes-input')).toHaveValue('Unsaved note')
+      await page.getByLabel('Week ending (Saturday)').fill('2026-10-31')
+      await page.getByLabel('Week ending (Saturday)').press('Tab')
+      await page.getByRole('button', { name: 'Discard changes', exact: true }).click()
+      await expect(page.getByText('This timecard is locked and available to view only.')).toBeVisible()
+      await expect(page.getByLabel('Line 1 MON hours', { exact: true })).toBeDisabled()
+      await expect(page.getByTestId('timecard-notes-input')).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Save my timecard', exact: true })).toBeDisabled()
+      expect(saves).toHaveLength(2)
       await page.getByLabel('Line 1 job number', { exact: true }).scrollIntoViewIfNeeded()
       await page.getByRole('heading', { name: 'My Timecard', exact: true }).scrollIntoViewIfNeeded()
       await page.screenshot({

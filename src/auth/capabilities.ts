@@ -186,6 +186,7 @@ export function canUseFieldWorkflows(rawRole: RawRoleKey): boolean {
 }
 
 export function canAccessProfileAssignedJob(input: AssignedJobAccessInput): boolean {
+  if (input.rawRole === 'employee') return false
   if (canAccessAdminArea(input.rawRole)) return true
   return (input.assignedJobIds ?? []).includes(input.jobId)
 }

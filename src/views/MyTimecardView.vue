@@ -1,21 +1,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import AppShell from '@/layouts/AppShell.vue'
-import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
-import AppButton from '@/components/common/AppButton.vue'
-import AppField from '@/components/common/AppField.vue'
-import AppSelect from '@/components/common/AppSelect.vue'
-import AppTextInput from '@/components/common/AppTextInput.vue'
-import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import TimecardPageShell from '@/components/timecards/TimecardPageShell.vue'
+import TimecardWorkbookCard from '@/components/timecards/TimecardWorkbookCard.vue'
+import TimecardButton from '@/components/timecards/TimecardButton.vue'
+import type { TimecardCardRecord } from '@/types/domain'
+import TimecardPageMessage from '@/components/timecards/TimecardPageMessage.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useJobsStore } from '@/stores/jobs'
 import {
   getTodayIsoDate,
   snapToSaturday,
-  TIMECARD_VISIBLE_DAY_INDEXES,
-  TIMECARD_VISIBLE_DAY_LABELS,
+  buildEmployeeCard,
+  getWeekStartFromSaturday,
+  recalculateCardTotals,
 } from '@/features/timecards/workbook'
 import {
   personalTimecardRequest,
@@ -23,7 +21,6 @@ import {
   type PersonalTimecardResult,
 } from '@/services/personalTimecard'
 const auth = useAuthStore(),
-  jobs = useJobsStore(),
   jobId = ref(''),
   week = ref(snapToSaturday(getTodayIsoDate()))
 const jobChoice = ref(''),
@@ -36,12 +33,62 @@ const result = ref<PersonalTimecardResult | null>(null),
   busy = ref(false),
   confirmOpen = ref(false)
 const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== baseline.value)
-const dayIndexes = TIMECARD_VISIBLE_DAY_INDEXES,
-  dayLabels = TIMECARD_VISIBLE_DAY_LABELS
-const totalHours = computed(
-  () =>
-    draft.value?.lines.reduce((sum, line) => sum + line.hours.reduce((a, b) => a + b, 0), 0) || 0,
-)
+const assignedJobs = ref<Array<{ id: string; code: string; name: string }>>([])
+const currentPeriod = ref(week.value)
+const workbook = ref<TimecardCardRecord | null>(null)
+function acceptCard(next: PersonalTimecardResult) {
+  result.value = next
+  draft.value = next.card ? { lines: structuredClone(next.card.lines), notes: next.card.notes } : null
+  baseline.value = JSON.stringify(draft.value)
+  workbook.value = next.card ? {
+    id: 'personal', ...buildEmployeeCard({
+      employeeId: 'self', firstName: next.identity?.firstName ?? next.employeeName,
+      lastName: next.identity?.lastName ?? '', employeeNumber: next.identity?.employeeNumber ?? '',
+      occupation: next.identity?.occupation ?? '', wageRate: null, isContractor: false,
+    }, week.value, 0),
+  } : null
+  if (workbook.value && next.card) {
+    workbook.value.notes = next.card.notes
+    workbook.value.regularHoursOverride = next.card.display?.regularHoursOverride ?? null
+    workbook.value.overtimeHoursOverride = next.card.display?.overtimeHoursOverride ?? null
+    workbook.value.lines.forEach((line, index) => {
+      const saved = next.card!.lines[index]!
+      Object.assign(line, { jobNumber: saved.jobNumber, subsectionArea: saved.subsectionArea, account: saved.account })
+      const display = next.card!.display?.lines[index]
+      if (display) Object.assign(line, { difH: display.difH, difP: display.difP, offHours: display.offHours, offProduction: display.offProduction })
+      line.days.forEach((day, dayIndex) => {
+        day.hours = saved.hours[dayIndex] ?? 0
+        day.production = display?.production[dayIndex] ?? 0
+      })
+    })
+    recalculateCardTotals(workbook.value, getWeekStartFromSaturday(week.value))
+  }
+}
+function workbookChanged() {
+  if (!workbook.value || !draft.value) return
+  recalculateCardTotals(workbook.value, getWeekStartFromSaturday(week.value))
+  draft.value = { notes: workbook.value.notes, lines: workbook.value.lines.map(line => ({
+    jobNumber: line.jobNumber, subsectionArea: line.subsectionArea, account: line.account,
+    hours: line.days.map(day => day.hours),
+  })) }
+}
+async function initialize() {
+  clear()
+  assignedJobs.value = []
+  jobId.value = jobChoice.value = ''
+  const current = epoch
+  busy.value = true
+  try {
+    const context = await personalTimecardRequest({ personalAction: 'context' })
+    if (current !== epoch) return
+    assignedJobs.value = context.jobs ?? []
+    currentPeriod.value = week.value = weekChoice.value = context.currentWeekEndDate ?? snapToSaturday(getTodayIsoDate())
+    jobId.value = jobChoice.value = context.defaultJobId ?? ''
+  } catch (cause) {
+    if (current === epoch) error.value = (cause as Error).message
+  } finally { if (current === epoch) busy.value = false }
+  if (current === epoch && jobId.value) await load()
+}
 let epoch = 0,
   pendingDiscard: ((answer: boolean) => void) | null = null,
   retry: { signature: string; requestId: string } | null = null
@@ -62,6 +109,7 @@ function clear() {
   epoch++
   result.value = null
   draft.value = null
+  workbook.value = null
   baseline.value = ''
   error.value = ''
   info.value = ''
@@ -76,7 +124,8 @@ async function changeScope(kind: 'job' | 'week', value: string) {
   }
   clear()
   if (kind === 'job') jobId.value = value
-  else week.value = value
+  else week.value = weekChoice.value = snapToSaturday(value)
+  await load()
 }
 async function load() {
   if (busy.value || !jobId.value || !(await askDiscard())) return
@@ -91,9 +140,7 @@ async function load() {
       weekEndDate: week.value,
     })
     if (current !== epoch) return
-    result.value = next
-    draft.value = next.card ? structuredClone(next.card) : null
-    baseline.value = JSON.stringify(draft.value)
+    acceptCard(next)
     retry = null
   } catch (cause) {
     if (current === epoch) error.value = (cause as Error).message
@@ -122,9 +169,7 @@ async function save() {
     if (current !== epoch) return
     if (next.state !== 'ready' || !next.card)
       throw new Error('The payroll week is unavailable. Your unsaved edits are retained.')
-    result.value = next
-    draft.value = structuredClone(next.card)
-    baseline.value = JSON.stringify(draft.value)
+    acceptCard(next)
     retry = null
     info.value = 'Your timecard draft was saved. The job lead or payroll submits the full week.'
   } catch (cause) {
@@ -148,11 +193,12 @@ watch(
     jobChoice.value = ''
     weekChoice.value = week.value
     finishDiscard(false)
+    if (auth.hasWorkspaceAccess) void initialize()
   },
 )
 onMounted(() => {
   window.addEventListener('beforeunload', leave)
-  void jobs.subscribeVisibleJobs()
+  void initialize()
 })
 onBeforeUnmount(() => {
   epoch++
@@ -161,221 +207,40 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <AppShell
-    ><main class="my-timecard">
-      <AppPaneHeader title="My Timecard" eyebrow="Workspace" description="Enter your own time across job lines using the existing payroll workbook. Your administrator must confirm your employee link and enable your role first." />
-      <div class="my-timecard__toolbar">
-        <AppField label="Payroll job"
-          ><AppSelect
-            v-model="jobChoice"
-            :disabled="busy"
-            @update:model-value="changeScope('job', $event)"
-            ><option value="">Select a job</option>
-            <option v-for="job in jobs.activeJobs" :key="job.id" :value="job.id">
-              {{ job.code }} · {{ job.name }}
-            </option></AppSelect
-          ></AppField
-        >
-        <AppField label="Week ending (Saturday)"
-          ><AppTextInput
-            v-model="weekChoice"
-            type="date"
-            :disabled="busy"
-            @update:model-value="changeScope('week', $event)"
-        /></AppField>
-        <AppButton :disabled="busy || !jobId" @click="load">{{
-          busy ? 'Working…' : draft ? 'Reload saved card' : 'Open my timecard'
-        }}</AppButton>
+  <TimecardPageShell test-id="personal-timecard-workspace">
+    <template #workspace>
+      <header class="personal-heading"><h1>My Timecard</h1><p>Enter your hours on the shared job timecard.</p></header>
+      <div class="personal-toolbar">
+        <label>Payroll job<select v-model="jobChoice" :disabled="busy" @change="changeScope('job', jobChoice)">
+          <option value="">Select a job</option><option v-for="job in assignedJobs" :key="job.id" :value="job.id">{{ job.code }} — {{ job.name }}</option>
+        </select></label>
+        <label>Week ending (Saturday)<input v-model="weekChoice" type="date" :max="currentPeriod" :disabled="busy" @change="changeScope('week', weekChoice)" /></label>
+        <TimecardButton :disabled="busy || !jobId" @click="load">{{ busy ? 'Working…' : 'Reload saved card' }}</TimecardButton>
       </div>
-      <AppStatusMessage v-if="error" tone="error" :message="error" /><AppStatusMessage
-        v-if="info"
-        tone="success"
-        :message="info"
-      />
-      <AppStatusMessage
-        v-if="result?.state === 'week-not-open'"
-        message="The job lead or payroll must open this job’s week first. Personal entry does not copy the crew roster."
-      />
-      <template v-if="draft && result"
-        ><h2>{{ result.employeeName }}</h2>
-        <p v-if="result.readOnly">This week is locked. Contact payroll for a correction.</p>
-        <p v-else>
-          Split hours between job numbers below. Saving updates only your draft card; it does not
-          submit the crew’s week or send email.
-        </p>
-        <fieldset :disabled="busy || result.readOnly">
-          <legend class="my-timecard__legend">Personal job lines</legend>
-          <div
-            class="my-timecard__scroll"
-            tabindex="0"
-            aria-label="Timecard job lines, scroll horizontally for all days"
-          >
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Job #</th>
-                  <th scope="col">Area</th>
-                  <th scope="col">Account</th>
-                  <th v-for="day in dayLabels" :key="day" scope="col">{{ day }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(line, index) in draft.lines" :key="index">
-                  <td>
-                    <AppTextInput
-                      v-model="line.jobNumber"
-                      :aria-label="`Line ${index + 1} job number`"
-                      maxlength="120"
-                    />
-                  </td>
-                  <td>
-                    <AppTextInput
-                      v-model="line.subsectionArea"
-                      :aria-label="`Line ${index + 1} area`"
-                      maxlength="120"
-                    />
-                  </td>
-                  <td>
-                    <AppTextInput
-                      v-model="line.account"
-                      :aria-label="`Line ${index + 1} account`"
-                      maxlength="120"
-                    />
-                  </td>
-                  <td v-for="(day, position) in dayIndexes" :key="day">
-                    <AppTextInput
-                      :model-value="line.hours[day] || ''"
-                      type="number"
-                      min="0"
-                      max="24"
-                      step=".25"
-                      :aria-label="`Line ${index + 1} ${dayLabels[position]} hours`"
-                      @update:model-value="line.hours[day] = Number($event)"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <AppField label="Notes">
-            <textarea v-model="draft.notes" maxlength="4000" rows="3" />
-          </AppField>
-        </fieldset>
-        <footer>
-          <span>Total hours: {{ totalHours }} <span v-if="dirty">· Unsaved changes</span></span
-          ><AppButton
-            variant="primary"
-            :disabled="busy || result.readOnly || !dirty"
-            @click="save"
-            >{{ busy ? 'Saving…' : 'Save my timecard' }}</AppButton
-          >
-        </footer>
+      <TimecardPageMessage v-if="error" tone="error" :message="error" />
+      <TimecardPageMessage v-if="info" :message="info" />
+      <p v-if="!busy && !error && !assignedJobs.length">No active jobs are assigned to your linked employee account. Contact your administrator.</p>
+      <p v-if="result?.state === 'week-not-open'">No timecard is open for this period. The job lead or payroll opens the job's week.</p>
+      <template v-if="workbook && result">
+        <p v-if="result.readOnly" role="status">This timecard is locked and available to view only.</p>
+        <p v-else>Saving updates your card in the foreman's job timecard. Payroll fields remain protected.</p>
+        <div class="my-timecard__scroll" tabindex="0" aria-label="Timecard worksheet, scroll horizontally for all days">
+          <TimecardWorkbookCard :key="jobId + week + result.version" :card="workbook" :week-end-date="week"
+            :read-only="busy || result.readOnly" :show-employee-wage="false" :show-cost-values="false" personal-entry @changed="workbookChanged" />
+        </div>
+        <TimecardButton variant="primary" :disabled="busy || result.readOnly || !dirty" @click="save">Save my timecard</TimecardButton>
       </template>
-      <ConfirmDialog
-        :open="confirmOpen"
-        title="Discard unsaved time?"
-        message="Your unsaved edits will be discarded. Saved payroll entries are unchanged."
-        confirm-label="Discard edits"
-        @confirm="finishDiscard(true)"
-        @cancel="finishDiscard(false)"
-      /></main
-  ></AppShell>
+    </template>
+    <ConfirmDialog :open="confirmOpen" title="Discard unsaved timecard changes?" message="Your unsaved changes will be lost." confirm-label="Discard changes" @confirm="finishDiscard(true)" @cancel="finishDiscard(false)" />
+  </TimecardPageShell>
 </template>
 <style scoped>
-.my-timecard {
-  display: grid;
-  gap: 1rem;
-  padding: var(--page-padding, 1rem);
-  min-width: 0;
-}
-.my-timecard h1,
-.my-timecard h2,
-.my-timecard p {
-  margin: 0;
-}
-.my-timecard p {
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-.my-timecard__toolbar {
-  display: flex;
-  align-items: end;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-.my-timecard__toolbar .app-field {
-  flex: 1 1 14rem;
-}
-.my-timecard fieldset {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 8px);
-  background: var(--panel-background);
-  padding: 1rem;
-  min-width: 0;
-  display: grid;
-  gap: 1rem;
-}
-.my-timecard__legend {
-  padding: 0 0.5rem;
-}
-.my-timecard__scroll {
-  overflow: auto;
-  max-height: 32rem;
-}
-.my-timecard table {
-  border-collapse: collapse;
-  min-width: 55rem;
-  width: 100%;
-  color: var(--text);
-}
-.my-timecard th,
-.my-timecard td {
-  padding: 0.35rem;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-}
-.my-timecard th {
-  position: sticky;
-  top: 0;
-  background: var(--panel-background);
-  z-index: 1;
-}
-.my-timecard td:first-child {
-  min-width: 7rem;
-}
-.my-timecard td:nth-child(2) {
-  min-width: 9rem;
-}
-.my-timecard td:nth-child(3) {
-  min-width: 7rem;
-}
-.my-timecard footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-.my-timecard textarea {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  padding: 0.7rem;
-  background: var(--control-background);
-  color: var(--text);
-  font: inherit;
-  resize: vertical;
-}
-@media (max-width: 600px) {
-  .my-timecard__toolbar > * {
-    width: 100%;
-  }
-  .my-timecard footer .app-button {
-    width: 100%;
-  }
-  .my-timecard fieldset {
-    padding: 0.5rem;
-  }
-}
+.personal-heading h1 { margin: 0; font-size: 1.5rem; }
+.personal-heading p { margin: .35rem 0 0; }
+.personal-toolbar { display: flex; align-items: end; gap: .75rem; flex-wrap: wrap; }
+.personal-toolbar label { display: grid; gap: .3rem; font-weight: 700; min-width: 0; }
+.personal-toolbar input, .personal-toolbar select { color-scheme: light; min-height: var(--timecards-toolbar-control-height); border: 1px solid var(--timecards-toolbar-control-border); border-radius: var(--timecards-toolbar-control-radius); background: var(--timecards-toolbar-control-bg); color: var(--timecards-toolbar-control-text); padding: .4rem .6rem; max-width: 100%; font: inherit; }
+.personal-toolbar input:focus-visible, .personal-toolbar select:focus-visible { outline: none; box-shadow: var(--timecards-toolbar-focus-ring); }
+.my-timecard__scroll { max-width: 100%; min-width: 0; overflow: auto; padding: .5rem; background: rgba(255,255,255,.22); }
+@media(max-width: 600px) { .personal-toolbar { display: grid; } }
 </style>

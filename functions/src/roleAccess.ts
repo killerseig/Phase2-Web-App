@@ -1,6 +1,6 @@
 import { VALID_ROLES, type UserRole } from './constants'
 
-export type CurrentFunctionRole = UserRole
+export type CurrentFunctionRole = Exclude<UserRole, 'employee'>
 
 export interface FunctionUserRoleProfile {
   role?: unknown
@@ -45,7 +45,10 @@ function normalizeRoleAlias(value: string): string {
 }
 
 export function getCurrentFunctionRole(value: unknown): CurrentFunctionRole {
-  return normalizeStoredRole(value)
+  // Employee accounts have no general workforce access. The personal-timecard
+  // branch explicitly opts into its narrower, linked-employee authorization.
+  const role = normalizeStoredRole(value)
+  return role === 'employee' ? 'none' : role
 }
 
 export function getFunctionAssignedJobIds(user: FunctionUserRoleProfile): string[] {

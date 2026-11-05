@@ -7,7 +7,7 @@ import {
 } from '@/auth/capabilities'
 import type { RawRoleKey } from '@/types/domain'
 
-export type RouteAccessDecision = true | { name: 'jobs' | 'login' }
+export type RouteAccessDecision = true | { name: 'jobs' | 'login' | 'my-timecard' }
 
 export interface RouteAccessInput {
   assignedJobIds?: readonly string[] | null
@@ -34,6 +34,10 @@ function isPublicWorkspaceEntryRoute(routeName: RouteNameLike): boolean {
 }
 
 export function getRouteAccessDecision(input: RouteAccessInput): RouteAccessDecision {
+  if (input.rawRole === 'employee' && input.hasWorkspaceAccess &&
+      !['my-timecard', 'set-password', 'forgot-password'].includes(String(input.routeName))) {
+    return { name: 'my-timecard' }
+  }
   const requiresAuth = input.requiresAuth ?? true
 
   if (!requiresAuth) {

@@ -15,6 +15,7 @@ describe('target role capabilities', () => {
     expect(TARGET_BUILT_IN_ROLE_KEYS).toEqual([
       'admin',
       'payroll',
+      'employee',
       'shop-foreman',
       'project-manager',
       'foreman',
@@ -22,6 +23,7 @@ describe('target role capabilities', () => {
     expect(EDITABLE_USER_ROLE_OPTIONS).toEqual([
       { label: 'Admin', value: 'admin' },
       { label: 'Payroll', value: 'payroll' },
+      { label: 'Employee', value: 'employee' },
       { label: 'Shop Foreman', value: 'shop-foreman' },
       { label: 'Project Manager', value: 'project-manager' },
       { label: 'Foreman', value: 'foreman' },

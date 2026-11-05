@@ -1,3 +1,4 @@
+import { personalTimecardRequest } from '@/services/personalTimecard'
 import {
   collection,
   doc,
@@ -160,7 +161,7 @@ async function syncUserJobAssignments(uid: string, role: RawRoleKey, nextAssigne
     const currentAssignedForemanIds = normalizeAssignedJobIds(jobSnapshot.data().assignedForemanIds)
     const nextAssignedForemanIds = new Set(currentAssignedForemanIds)
 
-    if (effectiveAssignedJobIds.includes(jobId) && currentRoleCanBeAssignedJobs(role)) {
+    if (effectiveAssignedJobIds.includes(jobId) && role !== 'employee' && currentRoleCanBeAssignedJobs(role)) {
       nextAssignedForemanIds.add(uid)
     } else {
       nextAssignedForemanIds.delete(uid)
@@ -199,7 +200,7 @@ export function subscribeAssignableUsers(
 ): Unsubscribe {
   if (isE2EActive()) {
     return subscribeE2EUsers((users) => {
-      onUpdate(sortUsers(users.filter((user) => currentRoleCanBeAssignedJobs(user.role))))
+      onUpdate(sortUsers(users.filter((user) => user.role !== 'employee' && currentRoleCanBeAssignedJobs(user.role))))
     })
   }
 
@@ -266,6 +267,12 @@ export async function createUserByAdmin(
       }
     }
 
+    try {
+      await personalTimecardRequest({ personalAction: 'auto-link', accountUid: result.data.uid,
+        expectedFirstName: input.firstName.trim(), expectedLastName: input.lastName.trim() })
+    } catch {
+      return { ...result.data, message: (result.data.message || 'Account created.') + ' Automatic payroll matching could not finish. Open and save this account again; do not create another account.' }
+    }
     return result.data
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to create user.'))
@@ -300,6 +307,12 @@ export async function updateUser(uid: string, input: UpdateUserInput): Promise<v
     })
 
     await syncUserJobAssignments(uid, sanitizedRole, sanitizedAssignedJobIds)
+    try {
+      await personalTimecardRequest({ personalAction: 'auto-link', accountUid: uid,
+        expectedFirstName: input.firstName.trim(), expectedLastName: input.lastName.trim() })
+    } catch (cause) {
+      throw new Error('Account changes were saved, but automatic payroll matching could not finish. Save this account again to retry. ' + normalizeError(cause, 'Payroll matching unavailable.'))
+    }
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to update user.'))
   }

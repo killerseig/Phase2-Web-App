@@ -205,7 +205,7 @@ function normalizeAssignedJobIds(value: unknown): string[] {
 
 function normalizeAssignableUser(id: string, data: DocumentData) {
   const role = normalizeStoredRole(data.role)
-  if (!targetFunctionRoleCanBeAssignedJobs(role)) return null
+  if (role === 'employee' || !targetFunctionRoleCanBeAssignedJobs(role)) return null
 
   return {
     id,

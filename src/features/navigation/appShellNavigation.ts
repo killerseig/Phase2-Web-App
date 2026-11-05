@@ -33,6 +33,7 @@ const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
 ]
 
 export function getAppShellWorkspaceNavigationItems(rawRole: RawRoleKey = 'none'): AppShellNavigationItem[] {
+  if (rawRole === 'employee') return [{ label: 'My Timecard', to: '/jobs/my-timecard' }]
   return WORKSPACE_NAVIGATION_ITEMS.filter((item) => !item.hidden &&
     (item.to !== '/reports' || canListCompanyForms(rawRole)) &&
     (item.to !== '/jobs/my-timecard' || ['admin','foreman','shop-foreman','project-manager'].includes(rawRole)))

@@ -43,7 +43,7 @@
     "test:forms:browser": "node scripts/forms-local.mjs --smoke",
     "test:forms": "npm --prefix functions run build && firebase emulators:exec --project demo-phase2-security --only auth,firestore,storage \"node scripts/verify-forms.mjs\"",
     "test:safety-talk": "npm --prefix functions run build && firebase emulators:exec --project demo-phase2-security --only firestore \"node scripts/verify-safety-talk.mjs\"",
-    "test:personal-timecard": "npm --prefix functions run build && firebase emulators:exec --project demo-phase2-security --only firestore \"node scripts/verify-personal-timecard.mjs\""
+    "test:personal-timecard": "npm --prefix functions run build && firebase emulators:exec --project demo-phase2-security --only auth,firestore \"node scripts/verify-personal-timecard.mjs\""
   },
   "dependencies": {
     "@primeuix/themes": "^2.0.3",

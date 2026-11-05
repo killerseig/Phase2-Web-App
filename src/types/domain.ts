@@ -1,6 +1,7 @@
 export type RawRoleKey =
   | 'admin'
   | 'payroll'
+  | 'employee'
   | 'shop-foreman'
   | 'foreman'
   | 'project-manager'

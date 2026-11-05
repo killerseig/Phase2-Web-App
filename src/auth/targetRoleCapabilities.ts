@@ -1,6 +1,7 @@
 export type TargetRoleKey =
   | 'admin'
   | 'payroll'
+  | 'employee'
   | 'shop-foreman'
   | 'project-manager'
   | 'foreman'
@@ -34,6 +35,7 @@ export interface TargetRoleCapabilities {
 export const TARGET_BUILT_IN_ROLE_KEYS = [
   'admin',
   'payroll',
+  'employee',
   'shop-foreman',
   'project-manager',
   'foreman',
@@ -42,6 +44,7 @@ export const TARGET_BUILT_IN_ROLE_KEYS = [
 export const TARGET_ROLE_LABELS: Readonly<Record<TargetRoleKey, string>> = {
   admin: 'Admin',
   payroll: 'Payroll',
+  employee: 'Employee',
   'shop-foreman': 'Shop Foreman',
   'project-manager': 'Project Manager',
   foreman: 'Foreman',
@@ -169,6 +172,30 @@ export const TARGET_ROLE_CAPABILITIES: Readonly<Record<TargetRoleKey, TargetRole
     viewAllJobs: false,
     viewSubmittedAssignedTimecards: false,
   },
+  employee: {
+    accessWorkspace: true,
+    createJobs: false,
+    deleteOrArchiveJobs: false,
+    deleteDraftTimecardWeeks: false,
+    editAllJobs: false,
+    editAssignedFieldWorkflows: false,
+    editAssignedTimecards: false,
+    editAssignedJobs: false,
+    editShopJobFieldWorkflows: false,
+    editShopJobTimecards: false,
+    lockTimecards: false,
+    manageEmployees: false,
+    manageReferenceLists: false,
+    manageShopCatalog: false,
+    manageUsers: false,
+    receiveAssignedJobFieldEmails: false,
+    receiveShopJobFieldEmails: false,
+    useAssignedJobDashboards: false,
+    useShopJobDashboard: false,
+    useTimecardExport: false,
+    viewAllJobs: false,
+    viewSubmittedAssignedTimecards: false,
+  },
   none: {
     accessWorkspace: false,
     createJobs: false,
@@ -202,6 +229,7 @@ export function isTargetRoleKey(value: unknown): value is TargetRoleKey {
     || value === 'shop-foreman'
     || value === 'project-manager'
     || value === 'foreman'
+    || value === 'employee'
     || value === 'none'
   )
 }
@@ -229,5 +257,5 @@ export function getTargetRoleCapabilities(role: TargetRoleKey): TargetRoleCapabi
 }
 
 export function targetRoleCanBeAssignedJobs(role: TargetRoleKey): boolean {
-  return role === 'foreman' || role === 'project-manager' || role === 'shop-foreman'
+  return role === 'employee' || role === 'foreman' || role === 'project-manager' || role === 'shop-foreman'
 }

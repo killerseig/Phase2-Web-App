@@ -19,6 +19,10 @@ export interface PersonalPayrollDay {
   lineTotal: number
 }
 export interface PersonalPayrollLine {
+  difH?: string
+  difP?: string
+  offHours?: number
+  offProduction?: number
   jobNumber: string
   subsectionArea: string
   account: string
@@ -30,6 +34,8 @@ export interface PersonalPayrollCard {
   notes: string
   firstName?: string
   lastName?: string
+  regularHoursOverride?: number | null
+  overtimeHoursOverride?: number | null
   lastPersonalSave?: { uid: string; requestId: string; hash: string }
   totals: {
     hoursByDay: number[]
@@ -41,6 +47,7 @@ export interface PersonalPayrollCard {
 }
 export const PERSONAL_TIMECARD_ROLES = [
   'admin',
+  'employee',
   'foreman',
   'shop-foreman',
   'project-manager',

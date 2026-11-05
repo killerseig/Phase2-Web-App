@@ -7,7 +7,7 @@
 // Keep backend stored-role validation aligned with the frontend role catalog.
 // Payroll and Shop Foreman are recognized stored roles before their live
 // workflow permissions are enabled by the coordinated rules/functions rollout.
-export const VALID_ROLES = ['admin', 'payroll', 'shop-foreman', 'project-manager', 'foreman', 'none'] as const
+export const VALID_ROLES = ['admin', 'payroll', 'employee', 'shop-foreman', 'project-manager', 'foreman', 'none'] as const
 export type UserRole = typeof VALID_ROLES[number]
 
 // Firestore Collections

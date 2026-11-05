@@ -20,6 +20,7 @@ describe('auth role helpers', () => {
     expect(CURRENT_STORED_ROLE_KEYS).toEqual([
       'admin',
       'payroll',
+      'employee',
       'shop-foreman',
       'project-manager',
       'foreman',
@@ -28,6 +29,7 @@ describe('auth role helpers', () => {
     expect(CURRENT_EDITABLE_USER_ROLE_KEYS).toEqual([
       'admin',
       'payroll',
+      'employee',
       'shop-foreman',
       'project-manager',
       'foreman',
@@ -39,6 +41,7 @@ describe('auth role helpers', () => {
     expect(EDITABLE_USER_ROLE_OPTIONS).toEqual([
       { label: 'Admin', value: 'admin' },
       { label: 'Payroll', value: 'payroll' },
+      { label: 'Employee', value: 'employee' },
       { label: 'Shop Foreman', value: 'shop-foreman' },
       { label: 'Project Manager', value: 'project-manager' },
       { label: 'Foreman', value: 'foreman' },
@@ -49,6 +52,7 @@ describe('auth role helpers', () => {
     expect(CURRENT_ROLE_LABELS).toEqual({
       admin: 'Admin',
       payroll: 'Payroll',
+      employee: 'Employee',
       'shop-foreman': 'Shop Foreman',
       'project-manager': 'Project Manager',
       foreman: 'Foreman',

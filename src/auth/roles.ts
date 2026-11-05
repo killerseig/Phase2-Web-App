@@ -6,6 +6,7 @@ export type EditableUserRole = Exclude<RawRoleKey, 'none'>
 export const CURRENT_STORED_ROLE_KEYS = [
   'admin',
   'payroll',
+  'employee',
   'shop-foreman',
   'project-manager',
   'foreman',
@@ -15,6 +16,7 @@ export const CURRENT_STORED_ROLE_KEYS = [
 export const CURRENT_EDITABLE_USER_ROLE_KEYS = [
   'admin',
   'payroll',
+  'employee',
   'shop-foreman',
   'project-manager',
   'foreman',
@@ -25,6 +27,7 @@ export const CURRENT_DEFAULT_EDITABLE_USER_ROLE: EditableUserRole = 'foreman'
 export const CURRENT_ROLE_LABELS: Readonly<Record<RawRoleKey, string>> = {
   admin: 'Admin',
   payroll: 'Payroll',
+  employee: 'Employee',
   'shop-foreman': 'Shop Foreman',
   'project-manager': 'Project Manager',
   foreman: 'Foreman',

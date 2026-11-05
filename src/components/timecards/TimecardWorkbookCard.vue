@@ -42,12 +42,14 @@ const props = withDefaults(defineProps<{
   readOnly?: boolean
   showEmployeeWage?: boolean
   showCostValues?: boolean
+  personalEntry?: boolean
 }>(), {
   burden: undefined,
   compact: false,
   readOnly: false,
   showEmployeeWage: true,
   showCostValues: true,
+  personalEntry: false,
 })
 
 const emit = defineEmits<{
@@ -482,6 +484,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                     <input
                       class="timecard-grid__input"
                       :data-testid="`timecard-job-number-${lineIndex}`"
+                      :aria-label="personalEntry ? `Line ${lineIndex + 1} job number` : undefined"
                       :data-nav-row-start="lineRowStart(lineIndex)"
                       :data-nav-row-end="lineRowEnd(lineIndex)"
                       data-nav-col="0"
@@ -508,6 +511,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                     <input
                       class="timecard-grid__input"
                       :data-testid="`timecard-account-${lineIndex}`"
+                      :aria-label="personalEntry ? `Line ${lineIndex + 1} account` : undefined"
                       :data-nav-row-start="lineRowStart(lineIndex)"
                       :data-nav-row-end="lineRowEnd(lineIndex)"
                       data-nav-col="2"
@@ -523,7 +527,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       :data-nav-row-start="lineRowPosition(lineIndex, rowKindIndex)"
                       :data-nav-row-end="lineRowPosition(lineIndex, rowKindIndex)"
                       data-nav-col="3"
-                      :disabled="readOnly"
+                      :disabled="readOnly || personalEntry"
                       :value="lineDiffValue(lineIndex, rowKind.key)"
                       type="text"
                       @input="setLineField(lineIndex, rowKind.diffField, readInputValue($event))"
@@ -544,7 +548,8 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       :data-nav-row-start="lineRowPosition(lineIndex, rowKindIndex)"
                       :data-nav-row-end="lineRowPosition(lineIndex, rowKindIndex)"
                       :data-nav-col="4 + dayOffset"
-                      :disabled="readOnly"
+                      :aria-label="personalEntry ? `Line ${lineIndex + 1} ${dayLabels[dayOffset]} ${rowKind.key}` : undefined"
+                      :disabled="readOnly || (personalEntry && rowKind.key !== 'hours')"
                       :value="lineDayValue(lineIndex, rowKind.key, dayIndex)"
                       type="text"
                       inputmode="decimal"
@@ -579,7 +584,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
                       :data-nav-row-start="lineRowPosition(lineIndex, rowKindIndex)"
                       :data-nav-row-end="lineRowPosition(lineIndex, rowKindIndex)"
                       data-nav-col="11"
-                      :disabled="readOnly"
+                      :disabled="readOnly || personalEntry"
                       :value="lineOffValue(lineIndex, rowKind.key)"
                       type="text"
                       inputmode="decimal"
@@ -619,6 +624,7 @@ function handleSheetKeydown(event: KeyboardEvent) {
         <TimecardWorkbookFooter
           :card="card"
           :read-only="readOnly"
+          :payroll-read-only="personalEntry"
           :overtime-hours="hoursBreakdown.overtimeHours"
           :regular-hours="hoursBreakdown.regularHours"
           @update-field="setCardField"
