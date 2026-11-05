@@ -120,6 +120,8 @@ website. Backend compilation errors now fail this command before deployment. Use
 
 ### Deploy to Firebase
 
+GitHub Actions is disabled: pushes and pull requests do not run CI or deploy automatically. Run the appropriate local checks, promote reviewed source from `test` to `main`, and deploy manually using the existing commands below. Use `-- --only ... --project phase2-website` for a scoped release; preserve the public site when only the employee app is approved.
+
 ```sh
 npm run deploy
 ```
