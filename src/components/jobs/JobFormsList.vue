@@ -8,10 +8,11 @@ import { useAuthStore } from '@/stores/auth'
 import { formApi, type ServerFormTemplate } from '@/services/forms'
 import { canSubmitForm } from '../../../functions/src/formAccess'
 import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
+import { canListCompanyForms } from '@/features/forms/availableForms'
 const props = defineProps<{ jobId: string }>()
 const auth = useAuthStore(), router = useRouter()
 const templates = ref<ServerFormTemplate[]>([]), loading = ref(false), error = ref('')
-const allowed = computed(() => !!auth.currentUser?.uid && auth.hasWorkspaceAccess && ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole))
+const allowed = computed(() => !!auth.currentUser?.uid && auth.hasWorkspaceAccess && canListCompanyForms(auth.rawRole))
 const forms = computed(() => alphabetizeFormChoices(templates.value.filter(item => item.definition && item.latestVersion && !item.archived &&
   canSubmitForm(item.definition.access, { uid: auth.currentUser?.uid || '', role: auth.rawRole, active: auth.hasWorkspaceAccess }))
   .map(item => ({ id: item.id, label: item.definition!.title }))))

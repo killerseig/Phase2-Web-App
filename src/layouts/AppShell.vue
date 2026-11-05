@@ -23,7 +23,7 @@ const usesBrandContentTheme = computed(
   () => !['timecards', 'timecard-export-print'].includes(String(route.name)),
 )
 
-const workspaceNavigationItems = computed(() => getAppShellWorkspaceNavigationItems())
+const workspaceNavigationItems = computed(() => getAppShellWorkspaceNavigationItems(auth.rawRole))
 const adminNavigationItems = computed(() => getAppShellAdminNavigationItems(auth.rawRole))
 const roleLabel = computed(() => getAppShellRoleLabel(auth.rawRole))
 const jobDashboardRoute = computed(() => {

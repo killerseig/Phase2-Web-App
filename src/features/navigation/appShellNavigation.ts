@@ -4,6 +4,7 @@ import {
   type AppRouteCapability,
 } from '@/auth/capabilities'
 import type { RawRoleKey } from '@/types/domain'
+import { canListCompanyForms } from '@/features/forms/availableForms'
 
 export interface AppShellNavigationItem {
   capability?: AppRouteCapability
@@ -14,6 +15,8 @@ export interface AppShellNavigationItem {
 
 const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { label: 'Jobs', to: '/jobs' },
+  { label: 'Company Library', to: '/company-library' },
+  { label: 'Site Inspection Forms', to: '/reports' },
   // Remove these visibility flags after review; route authorization is independent of navigation.
   { label: 'Role home', to: '/dashboards/role-home', hidden: true },
   { label: 'Job home', to: '/dashboards/job-home', hidden: true },
@@ -28,8 +31,9 @@ const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { capability: 'manage-shop-catalog', label: 'Shop Catalog', to: '/settings/shop-catalog' },
 ]
 
-export function getAppShellWorkspaceNavigationItems(): AppShellNavigationItem[] {
-  return WORKSPACE_NAVIGATION_ITEMS.filter((item) => !item.hidden)
+export function getAppShellWorkspaceNavigationItems(rawRole: RawRoleKey = 'none'): AppShellNavigationItem[] {
+  return WORKSPACE_NAVIGATION_ITEMS.filter((item) => !item.hidden &&
+    (item.to !== '/reports' || canListCompanyForms(rawRole)))
 }
 
 export function getAppShellAdminNavigationItems(rawRole: RawRoleKey): AppShellNavigationItem[] {
