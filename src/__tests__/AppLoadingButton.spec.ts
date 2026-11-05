@@ -132,3 +132,24 @@ describe('AppLoadingButton', () => {
     expect(button.classes()).toContain('app-loading-button--loading')
   })
 })
+
+
+describe('opt-in element loading spinner', () => {
+  it('spins inside the busy button and restores its normal action on completion', async () => {
+    const view = mount(AppLoadingButton, { props: { label: 'Load more files', loadingLabel: 'Loading files', loading: true, showSpinner: true } })
+    expect(view.get('[role="status"]').classes()).toContain('app-loading-indicator--inline')
+    expect(view.get('button').attributes('aria-busy')).toBe('true')
+    expect(view.get('button').attributes('aria-label')).toBe('Loading files')
+    expect(view.get('button').attributes('disabled')).toBeDefined()
+    await view.setProps({ loading: false })
+    expect(view.find('[role="status"]').exists()).toBe(false)
+    expect(view.get('button').text()).toBe('Load more files')
+    expect(view.get('button').attributes('disabled')).toBeUndefined()
+    view.unmount()
+  })
+  it('leaves existing button appearances unchanged unless requested', () => {
+    const view = mount(AppLoadingButton, { props: { label: 'Save', loading: true } })
+    expect(view.find('.app-loading-indicator').exists()).toBe(false)
+    view.unmount()
+  })
+})

@@ -3,6 +3,7 @@ import { libraryCommand } from '@/features/sds/commands'
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink, useRoute } from 'vue-router'
 import Button from './DashboardButton.vue'
+import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import DocumentExplorer from './DocumentExplorer.vue'
 import SdsFileViewer from './SdsFileViewer.vue'
@@ -654,10 +655,13 @@ onBeforeUnmount(() => {
             :disabled="busy || loading"
             @click="menuAction('new-folder', { kind: 'background', id: folderId })"
           />
-          <Button
+          <AppLoadingButton
             v-if="!jobId && nextPage"
-            :label="pageBusy ? 'Loading…' : 'Load more files'"
-            :disabled="pageBusy || busy"
+            label="Load more files"
+            loading-label="Loading files…"
+            :loading="pageBusy"
+            show-spinner
+            :disabled="busy"
             @click="moreDocuments"
           />
           <details v-if="isAdmin && !jobId" class="sds-more"><summary>More</summary><Button label="Bulk PDF import" :disabled="busy" @click="bulkOpen = !bulkOpen" /></details>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import AppLoadingOverlay from '@/components/common/AppLoadingOverlay.vue'
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import SdsExplorerModule from './SdsExplorerModule.vue'
 import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus.vue'
@@ -14,22 +14,17 @@ const loading = computed(() => referencesLoading.value || !documentsReady.value)
 function documentLoadingChanged(value: boolean) { if (!value) documentsReady.value = true }
 </script>
 <template>
-  <section class="company-library-widget" aria-label="Company Library widget" :aria-busy="loading">
-    <div class="company-library-widget__content" :class="{ 'is-loading': loading }" :inert="loading">
+  <AppLoadingRegion class="company-library-widget" aria-label="Company Library widget" :loading="loading" label="Loading Company Library…">
     <AppPaneHeader v-if="showHeading" title="Company Library" title-tag="h1" />
     <PrivateReferenceStatus :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" :show-empty-state="false" :show-loading="false" @select="selectSource" @retry="reload" />
     <SdsExplorerModule expanded title="Documents" :references="content" @loading-change="documentLoadingChanged" />
     <div class="library-footer">
       <details class="library-help"><summary>Library help</summary><p v-if="auth.rawRole === 'admin'">Choose a folder, then Upload document. New folder organizes files; a file's menu lets you upload a new revision. Bulk PDF import is under More.</p><p v-else>Browse and search documents available to your account. An Admin manages uploads.</p></details>
     </div>
-    </div>
-    <AppLoadingOverlay :loading="loading" label="Loading Company Library…" />
-  </section>
+  </AppLoadingRegion>
 </template>
 <style scoped>
 .company-library-widget { position: relative; container-type: inline-size; display: flex; flex-direction: column; gap: .75rem; width: 100%; height: 100%; min-width: 0; min-height: 0; }
-.company-library-widget__content { display: flex; flex-direction: column; gap: .75rem; flex: 1; min-width: 0; min-height: 0; }
-.company-library-widget__content.is-loading { visibility: hidden; }
 .company-library-widget :deep(.sds-module) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .company-library-widget :deep(.sds-fieldset) { display: flex; flex: 1; min-height: 0; }
 .company-library-widget :deep(.document-explorer) { display: flex; flex-direction: column; width: 100%; min-height: 0; flex: 1; }

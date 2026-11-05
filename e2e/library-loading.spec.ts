@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './helpers/test'
+import { observeLoadingFade, expectSingleLoadingFade } from './helpers/loadingObservation'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture'
 
 function gate() {
@@ -56,14 +57,17 @@ for (const width of [390, 1440]) {
         await expect(root(page)).toHaveAttribute('aria-busy', 'true')
         await expect(overlay(page)).toBeVisible()
         await overlay(page).evaluate(element => {
-          const target = window as unknown as { loadingFade: string[] }
-          target.loadingFade = []
-          element.addEventListener('transitionrun', event => { target.loadingFade.push((event as TransitionEvent).propertyName) })
+          const target = window as unknown as { loadingFade: string[]; loadingFadeDuration: string[] }
+          target.loadingFade = []; target.loadingFadeDuration = []
+          element.addEventListener('transitionrun', event => { target.loadingFade.push((event as TransitionEvent).propertyName); target.loadingFadeDuration.push(getComputedStyle(element).transitionDuration) })
         })
+        await observeLoadingFade(page, '.company-library-widget')
         pending.references.release(); pending.documents.release()
         await expect(root(page)).toHaveAttribute('aria-busy', 'false')
         await expect(overlay(page)).toHaveCount(0)
+        await expectSingleLoadingFade(page)
         expect(await page.evaluate(() => (window as unknown as { loadingFade: string[] }).loadingFade)).toContain('opacity')
+        expect(await page.evaluate(() => (window as unknown as { loadingFadeDuration: string[] }).loadingFadeDuration)).toContain('0.4s')
         await expect(page.getByRole('searchbox', { name: 'Search files' })).toBeEnabled()
         await expect(page.getByText('Select a file to preview it.', { exact: true })).toBeVisible()
         await page.screenshot({ path: 'evidence/library-ready-' + width + '.png' })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppButtonLink from '@/components/common/AppButtonLink.vue'
 import AppPane from '@/components/common/AppPane.vue'
@@ -24,6 +25,7 @@ import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
 const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences()
 const auth = useAuthStore(), templates = ref<ServerFormTemplate[]>([]), loading = ref(true), error = ref(''), search = ref('')
 const allowed = computed(() => !!auth.currentUser?.uid && auth.hasWorkspaceAccess && canListCompanyForms(auth.rawRole))
+const pageLoading = computed(() => allowed.value && (loading.value || referencesLoading.value))
 const reports = computed(() => alphabetizeFormChoices(templates.value.filter(item => item.definition && item.latestVersion && !item.archived &&
   canSubmitForm(item.definition.access, { uid: auth.currentUser?.uid || '', role: auth.rawRole, active: auth.hasWorkspaceAccess }) &&
   item.definition.title.toLowerCase().includes(search.value.trim().toLowerCase())).map(item => ({ id: item.id, label: item.definition!.title }))))
@@ -45,14 +47,13 @@ watch([() => auth.currentUser?.uid, () => auth.rawRole, () => auth.hasWorkspaceA
 onBeforeUnmount(() => { generation++ })
 </script>
 <template><AppShell><main class="company-reports">
-  <AppPageLayout title="Site Inspection Forms" description="Open a published form without selecting a job. Enter the job and site details requested on the form."><template #actions><AppButtonLink v-if="auth.rawRole === 'admin'" to="/admin/forms">Manage forms in Form Builder</AppButtonLink></template><AppPane class="company-reports__directory" aria-label="Inspection form directory"><AppPaneHeader title="Form directory" title-tag="h2" /><div class="company-reports__body">
+  <AppPageLayout title="Site Inspection Forms" description="Open a published form without selecting a job. Enter the job and site details requested on the form."><template #actions><AppButtonLink v-if="auth.rawRole === 'admin'" to="/admin/forms">Manage forms in Form Builder</AppButtonLink></template><AppLoadingRegion class="company-reports__workspace" aria-label="Forms workspace" :loading="pageLoading" label="Loading forms…"><AppPane class="company-reports__directory" aria-label="Inspection form directory"><AppPaneHeader title="Form directory" title-tag="h2" /><div class="company-reports__body">
   <AppField label="Search reports"><AppSearchInput v-model="search" aria-label="Search reports" placeholder="Find an inspection form" /></AppField>
   <p v-if="!allowed">Forms are not available for your current role.</p>
-  <AppStatusMessage v-else-if="loading" message="Loading reports." />
   <AppStatusMessage v-else-if="error" tone="error">{{ error }} <AppButton @click="load">Retry</AppButton></AppStatusMessage>
   <AppEmptyState v-else-if="!reports.length" panel message="No published reports match your search and access. Draft forms require administrator review and publication." />
   <ul v-else class="company-reports__list" aria-label="Available inspection forms"><li v-for="report in reports" :key="report.id"><AppLinkCard :to="'/forms/' + encodeURIComponent(report.id)"><strong>{{ report.label }}</strong></AppLinkCard></li></ul></div></AppPane>
-  <PrivateReferenceStatus :show-empty-state="false" :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" />
+  <PrivateReferenceStatus :show-empty-state="false" :show-loading="false" :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" />
   <template v-if="content"><h2>Supplied form references</h2><p>Reference text from the supplied ZIP. These are not published submission workflows.</p>
     <p v-if="!references.length">No supplied form references match your search.</p>
     <details v-for="item in references" :key="item.id"><summary>{{ item.title }} - reference only</summary>
@@ -60,9 +61,10 @@ onBeforeUnmount(() => { generation++ })
       <SuppliedReferenceReader :title="item.title" :form="item" />
     </details>
   </template>
-</AppPageLayout></main></AppShell></template>
+</AppLoadingRegion></AppPageLayout></main></AppShell></template>
 <style scoped>
 .company-reports { min-width: 0; }
+.company-reports__workspace { --loading-region-min-height: min(60dvh, 36rem); --loading-region-gap: var(--page-gap, 1.25rem); }
 .company-reports__directory { --app-pane-height: auto; }
 .company-reports__body { display: grid; gap: 1rem; min-width: 0; min-height: 0; }
 .company-reports__list { display: grid; grid-auto-rows: max-content; gap: .15rem; max-height: 26rem; overflow: auto; list-style: none; margin: 0; padding: .2rem; }

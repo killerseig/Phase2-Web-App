@@ -21,7 +21,7 @@ const auth = useAuthStore()
 
 <style scoped>
 .reference-loading { min-height: 6rem; }
-.reference-loading-enter-active, .reference-loading-leave-active { transition: opacity 180ms ease-out; }
+.reference-loading-enter-active, .reference-loading-leave-active { transition: opacity var(--app-loading-fade-duration, 400ms) ease-out; }
 .reference-loading-enter-from, .reference-loading-leave-to { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .reference-loading-enter-active, .reference-loading-leave-active { transition: none; } }
 </style>

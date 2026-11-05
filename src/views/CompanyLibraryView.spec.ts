@@ -1,6 +1,7 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import CompanyLibraryView from './CompanyLibraryView.vue'
+import AppLoadingOverlay from '@/components/common/AppLoadingOverlay.vue'
 import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus.vue'
 import { ref } from 'vue'
 import { sampleContent } from '@/features/intranet/__tests__/fixtures'
@@ -33,6 +34,8 @@ describe('Company Library master navigation', () => {
     expect(view.get('[role="status"]').text()).toContain('Loading Company Library')
     expect(view.text()).not.toContain('Cancel loading')
     referenceLoading.value = false
+    await flushPromises()
+    view.getComponent(AppLoadingOverlay).vm.$emit('afterLeave')
     await flushPromises()
     expect(widget.attributes('aria-busy')).toBe('false')
     expect(view.find('.app-loading-overlay').exists()).toBe(false)

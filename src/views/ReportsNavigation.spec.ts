@@ -3,11 +3,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { reactive, ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ReportsView from './ReportsView.vue'
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+const referencesLoading = ref(false)
 
 const { api, profile } = vi.hoisted(() => ({ api: vi.fn<(...args: unknown[]) => Promise<unknown>>(), profile: { currentUser: { uid: 'test-reader' }, rawRole: 'foreman', hasWorkspaceAccess: true } }))
 vi.mock('@/services/forms', () => ({ formApi: api }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => reactive(profile) }))
-vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref(null), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: ref(''), notice: ref(''), selectSource: vi.fn<() => void>(), reload: vi.fn<() => void>(), cancel: vi.fn<() => void>() }) }))
+vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref(null), packages: ref([]), selectedPackage: ref(''), loading: referencesLoading, error: ref(''), notice: ref(''), selectSource: vi.fn<() => void>(), reload: vi.fn<() => void>(), cancel: vi.fn<() => void>() }) }))
 const template = (id: string, title: string, overrides = {}) => ({ id, latestVersion: 1, archived: false, definition: { title, access: { respondentRoles: ['foreman'] } }, ...overrides })
 const user = reactive(profile)
 async function render() {
@@ -17,7 +19,7 @@ async function render() {
   await flushPromises()
   return { view, router }
 }
-afterEach(() => { api.mockReset(); profile.rawRole = 'foreman'; profile.hasWorkspaceAccess = true; profile.currentUser.uid = 'test-reader' })
+afterEach(() => { referencesLoading.value = false; api.mockReset(); profile.rawRole = 'foreman'; profile.hasWorkspaceAccess = true; profile.currentUser.uid = 'test-reader' })
 describe('first-page inspection forms', () => {
   it('lists only permitted issued forms alphabetically and opens without inventing job context', async () => {
     api.mockResolvedValue({ templates: [template('z', 'Zulu'), template('a', 'alpha'), template('draft', 'Draft', { latestVersion: 0 }), template('old', 'Old', { archived: true }), template('private', 'Private', { definition: { title: 'Private', access: { respondentRoles: ['admin'] } } })] })
@@ -49,6 +51,25 @@ describe('first-page inspection forms', () => {
     user.currentUser.uid = ''; await flushPromises()
     finish({ templates: [template('a', 'Stale result')] }); await flushPromises()
     expect(view.text()).not.toContain('Stale result')
+    view.unmount()
+  })
+})
+
+
+describe('Forms body loading readiness', () => {
+  it('waits for form and reference requests together rather than placing a spinner below the directory', async () => {
+    let finish!: (value: { templates: unknown[] }) => void
+    referencesLoading.value = true
+    api.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const { view } = await render()
+    expect(view.getComponent(AppLoadingRegion).props('loading')).toBe(true)
+    finish({ templates: [template('test', 'Synthetic form')] })
+    await flushPromises()
+    expect(view.getComponent(AppLoadingRegion).props('loading')).toBe(true)
+    referencesLoading.value = false
+    await flushPromises()
+    expect(view.getComponent(AppLoadingRegion).props('loading')).toBe(false)
+    expect(view.text()).toContain('Synthetic form')
     view.unmount()
   })
 })
