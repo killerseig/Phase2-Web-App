@@ -19,6 +19,8 @@ import {
   type ServerFormTemplate,
 } from '@/services/forms'
 import type { FormAnswers, FormRecord } from '../../../functions/src/formModel'
+import { validateFormAnswers, type FormGroupInstance } from '../../../functions/src/formModel'
+import { validateAttendeeHandoff } from '../../../functions/src/formSignatures'
 import { answerFingerprint, hydrateDraftAnswers } from '@/features/forms/formDirtyState'
 const localPreview = isFormEmulatorEnabled()
 const props = withDefaults(
@@ -333,7 +335,7 @@ async function resume(id: string) {
     }
   }
 }
-async function save(): Promise<boolean> {
+async function save(handoff?: { groupId: string; instanceId: string }): Promise<boolean> {
   if (!record.value || readOnlyRecord.value || pendingSubmission.value) return false
   const generation = sequence,
     owner = uid.value,
@@ -352,6 +354,7 @@ async function save(): Promise<boolean> {
               id: crypto.randomUUID(),
             }).id,
       answers: answers.value,
+      ...(handoff ? { handoff } : {}),
     })
     if (uid.value !== owner || generation !== sequence) return false
     received(next)
@@ -386,6 +389,30 @@ async function saveClick() {
         document.getElementById('answer-' + invalidField.value)?.focus()
     }
   }
+}
+async function saveAttendee(groupId: string, instanceId: string) {
+  if (busy.value || !record.value || readOnlyRecord.value || pendingSubmission.value) return
+  const generation = sequence, owner = uid.value
+  try {
+    validateAttendeeHandoff(record.value.definition.fields, answers.value, { groupId, instanceId }, validateFormAnswers)
+  } catch (caught) { error.value = (caught as Error).message; return }
+  busy.value = true
+  try {
+    if (!(await save({ groupId, instanceId })) || generation !== sequence || owner !== uid.value) return
+    const group = record.value!.definition.fields.find(field => field.id === groupId)!
+    const instances = (answers.value[groupId] || []) as FormGroupInstance[]
+    if (instances.length >= (group.maxInstances ?? 20)) {
+      message.value = 'Attendee saved. The attendee limit has been reached; review and submit this event.'
+      return
+    }
+    const next = { instanceId: crypto.randomUUID(), answers: hydrateDraftAnswers(group.fields || [], {}) }
+    answers.value = { ...answers.value, [groupId]: [...instances, next] }
+    message.value = 'Attendee saved. Ready for the next attendee.'
+    busy.value = false
+    await nextTick()
+    const first = group.fields?.[0]
+    if (first && generation === sequence) document.getElementById('answer-' + groupId + '-' + next.instanceId + '-' + first.id)?.focus()
+  } finally { if (generation === sequence) busy.value = false }
 }
 async function submit() {
   if (!record.value || busy.value || readOnlyRecord.value) return
@@ -626,10 +653,12 @@ defineExpose({ prepareNavigation })
         :readonly="readOnlyRecord || !!pendingSubmission"
         :disabled="busy"
         photos-enabled
+        handoff-enabled
         :photo-previews="previews"
         @update:model-value="updateAnswers"
         @upload="upload"
         @view-photo="viewPhoto"
+        @save-attendee="saveAttendee"
       />
 
               <div class="response-actions">

@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { formApi } from '@/services/forms'
+import FormSignaturePad from '@/components/forms/FormSignaturePad.vue'
 import { completedAnswers } from '@/features/forms/completedAnswers'
 import { type FormAnswers, type FormVersion } from '../../functions/src/formModel'
 const route = useRoute(),
@@ -143,7 +144,8 @@ watch(id, load, { immediate: true })
       <section v-for="(row, index) in rows" :id="'label-' + row.key" :key="row.key">
         <h2 v-if="row.group && rows[index - 1]?.group !== row.group">{{ row.group }}</h2>
         <h3>{{ row.label }}</h3>
-        <p class="answer">{{ row.value }}</p>
+        <FormSignaturePad v-if="row.signature" :model-value="row.signature" :label="row.label" readonly />
+        <p v-else class="answer">{{ row.value }}</p>
         <button
           v-for="(assetId, photoIndex) in row.photos"
           :key="assetId"

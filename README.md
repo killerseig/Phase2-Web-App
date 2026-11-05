@@ -29,6 +29,16 @@ For credential-free production-mode compilation checks, run `npm run type-check`
 
 This follows the supported [Vite entry/assets model](https://vite.dev/guide/), [Vue TypeScript tooling](https://vuejs.org/guide/typescript/overview), [Firebase Functions TypeScript layout](https://firebase.google.com/docs/functions/typescript) and [Hosting configuration contracts](https://firebase.google.com/docs/hosting/full-config). Multiple entry points and separate server rendering are supported project requirements, not reasons to replace the framework.
 
+## Safety-talk pilot (local/test implementation)
+
+The Form Builder includes an unpublished **Safety Talk / Attendance** starter: one event with job/site details and up to 20 sequential attendees within the existing form/answer size limits. It starts Admin-only with no notification recipients or groups. It does not modify any issued form or restore the removed Committee closing fields. Review audience, private entry readers and exact delivery recipients before any publication.
+
+Signature fields store bounded numeric ink as private answer text, not executable markup or public files. The existing `formWorkspace` save assigns signing times on the server and retains them on a replay. **Save attendee & next** advances only after a successful save; completed attendees collapse, and completely blank next-attendee placeholders do not become attendees. Changing signed details requires clearing/redrawing the signature. These are drawn acknowledgments under the operator's login, not independently authenticated attendee identities.
+
+Saved-entry/PDF renderers display the ink and signing times. Coordinate compatible `formTemplates`, `formWorkspace`, `formSubmissionViewer` and email/PDF handler updates before deploying this frontend; older handlers do not understand signature fields. Automatic delivery-worker rollout, real recipient acceptance and real-iPad testing remain separate reviewed steps. Local preview submission/email remains disabled. No transport is activated by choosing the starter.
+
+Focused checks: `npx vitest run functions/src/formSignatures.spec.ts src/components/forms/FormSignaturePad.spec.ts src/features/forms/safetyTalk.spec.ts`; `npm run test:safety-talk` compiles Functions and verifies isolated Firestore/PDF/retry behavior with an in-memory mail adapter. `npx playwright test --config=playwright.intranet-review.config.ts safety-talk.spec.ts` checks desktop and emulated touch save/handoff/resume and a lost response, with synthetic callable fixtures and blocked external network. These checks do not establish production authentication or delivery.
+
 ## Optional analytics (not activated)
 
 Public marketing and employee feature usage have independent `VITE_PUBLIC_*` and `VITE_EMPLOYEE_*` analytics settings in `.env.example`. Both default off. Collection requires a production HTTPS build, exact approved hostname, valid measurement ID, per-scope enabled/approved flags and explicit consent for the current visit. Employee collection additionally requires existing workspace access; logout clears that visit's consent. There is no consent persistence, historical event backlog or identity lookup. Development, editor previews and SSR do not send analytics.

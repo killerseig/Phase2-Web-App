@@ -40,6 +40,7 @@ export const fieldKinds: FormFieldKind[] = [
   'repeat',
   'recipients',
   'matrix',
+  'signature',
 ]
 export const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 export const emptyLibrary = (): FormLibrary => ({ schema: 1, revision: 0, templates: [] })

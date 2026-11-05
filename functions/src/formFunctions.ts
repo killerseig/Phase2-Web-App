@@ -1,4 +1,5 @@
 import { formOutputIssues } from './formOutputTemplate'
+import { stampFormSignatures, validateAttendeeHandoff } from './formSignatures'
 import { canSubmitForm, validateFormAccess } from './formAccess'
 import { resolveFormSubmissionRecipients, publicRecipientConsentSnapshot } from './formRecipients'
 import { createHash, randomUUID } from 'node:crypto'
@@ -663,13 +664,20 @@ export const formWorkspace = onCall(
         return current
       }
       if (current.status !== 'draft') fail('failed-precondition', 'Submitted forms are immutable.')
-      const answers = validate(() =>
-        validateFormAnswers(
+      const now = Date.now()
+      const answers = validate(() => {
+        const normalized = validateFormAnswers(
           current.definition,
           data.action === 'save' ? data.answers : current.answers,
           data.action === 'submit',
-        ),
-      )
+        )
+        if (data.handoff !== undefined) {
+          if (data.action !== 'save') throw new Error('Save an attendee before handing off.')
+          validateAttendeeHandoff(current.definition.fields, normalized, data.handoff, validateFormAnswers)
+        }
+        return validateFormAnswers(current.definition,
+          stampFormSignatures(current.definition, normalized, validateFormAnswers(current.definition, current.answers, false), now), data.action === 'submit')
+      })
       const fingerprint = hash(JSON.stringify(answers))
       const previous = current as FormRecord & {
         saveRequestId?: string
@@ -697,7 +705,6 @@ export const formWorkspace = onCall(
         )
           fail('permission-denied', 'A photo belongs to another form record.')
       })
-      const now = Date.now()
       if (data.action === 'save') {
         const next = {
           ...current,

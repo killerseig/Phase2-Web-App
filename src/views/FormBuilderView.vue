@@ -51,7 +51,7 @@ const fieldGroups: { label: string; kinds: FormFieldKind[] }[] = [
     kinds: ['text', 'textarea', 'email', 'phone', 'time', 'date', 'number'],
   },
   { label: 'Choices', kinds: ['choice', 'checkbox', 'radio', 'multiselect', 'matrix'] },
-  { label: 'Photos', kinds: ['photo'] },
+  { label: 'Photos and signatures', kinds: ['photo', 'signature'] },
   { label: 'Groups and routing', kinds: ['repeat', 'recipients'] },
 ]
 const entriesMode = ref(false)
@@ -151,6 +151,7 @@ const formChoices = computed(() => {
   const starters: { starter: ReportingStarter; label: string }[] = [
     { starter: 'committee', label: 'Corrected Committee inspection' }, { starter: 'bbs', label: 'BBS Observation' },
     { starter: 'general-visit', label: 'General Site Visit' }, { starter: 'near-miss', label: 'Near Miss / Safety Observation' },
+    { starter: 'safety-talk', label: 'Safety Talk / Attendance' },
   ]
   const rows: FormChoice[] = starters.map(item => ({ ...item, key: 'starter:' + item.starter, kind: 'starter', meta: 'Starter', disabled: creationLocked.value }))
   if (auth.rawRole === 'admin') rows.push(...suppliedStarters.value.map(source => ({ key: 'source:' + source.id, label: source.title + ' draft', meta: 'Starter', disabled: creationLocked.value, kind: 'source' as const, source })))
@@ -831,6 +832,7 @@ watch(
                         radio: 'pi-circle',
                         multiselect: 'pi-check-circle',
                         photo: 'pi-image',
+                        signature: 'pi-pencil',
                         repeat: 'pi-clone',
                         matrix: 'pi-table',
                         recipients: 'pi-envelope',
@@ -957,6 +959,7 @@ watch(
                   <button type="button" @click="addMatrixRow(selectedField)">Add statement</button>
                 </section>
                 <section v-if="selectedField.kind === 'repeat'">
+                  <label v-if="selectedField.fields?.filter(field => field.kind === 'signature').length === 1"><input v-model="selectedField.sequential" type="checkbox" />Save each attendee before continuing</label>
                   <label
                     >Minimum groups<input
                       v-model.number="selectedField.minInstances"

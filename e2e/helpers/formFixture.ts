@@ -6,6 +6,7 @@ import type { FormDefinition, FormRecord, FormVersion } from '../../functions/sr
 const { validateFormAnswers, validateFormDefinition } = createRequire(import.meta.url)(
   '../../functions/lib/formModel.js',
 ) as typeof import('../../functions/src/formModel')
+const { stampFormSignatures, validateAttendeeHandoff } = createRequire(import.meta.url)('../../functions/lib/formSignatures.js') as typeof import('../../functions/src/formSignatures')
 import { createJobsFixture, gotoPhase2App } from './phase2AppFixture.js'
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 export async function setupFormServer(
@@ -177,9 +178,10 @@ export async function setupFormServer(
             result = output(record)
           } else if (data.action === 'save') {
             context.saveRequests.push(data.requestId)
-            const answers = validateFormAnswers(record.definition, data.answers, false),
+            const answers = stampFormSignatures(record.definition, validateFormAnswers(record.definition, data.answers, false), validateFormAnswers(record.definition, record.answers, false), Date.now()),
               fingerprint = JSON.stringify(answers),
               previous = saved.get(record.id)
+            if (data.handoff) validateAttendeeHandoff(record.definition.fields, answers, data.handoff, validateFormAnswers)
             if (previous?.requestId === data.requestId) {
               if (previous.fingerprint !== fingerprint) throw new Error('Changed save request.')
               result = output(record)

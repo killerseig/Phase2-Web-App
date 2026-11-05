@@ -1,4 +1,5 @@
 import { validateFormAccess, type FormAccessPolicy } from './formAccess'
+import { signatureCaption, validatedSignature } from './formSignatures'
 export type FormFieldKind =
   | 'text'
   | 'textarea'
@@ -15,6 +16,7 @@ export type FormFieldKind =
   | 'repeat'
   | 'recipients'
   | 'matrix'
+  | 'signature'
 export interface FormField {
   id: string
   kind: FormFieldKind
@@ -29,6 +31,7 @@ export interface FormField {
   fields?: FormField[]
   minInstances?: number
   maxInstances?: number
+  sequential?: boolean
   requiredWhen?: { fieldId: string; values: string[] }
 }
 export interface FormOutputSettings {
@@ -90,6 +93,7 @@ export const formFieldKinds: FormFieldKind[] = [
   'repeat',
   'recipients',
   'matrix',
+  'signature',
 ]
 export const optionFieldKinds: FormFieldKind[] = ['choice', 'radio', 'multiselect', 'matrix']
 export const formId = (value: unknown): value is string =>
@@ -189,6 +193,11 @@ export function validateFormDefinition(value: unknown): FormDefinition {
         throw new Error('Repeat groups need limits between 1 and 20.')
       result.minInstances = minimum
       result.maxInstances = maximum
+      if (field.sequential !== undefined) {
+        if (typeof field.sequential !== 'boolean' || (field.sequential && result.fields.filter(child => child.kind === 'signature').length !== 1))
+          throw new Error('Sequential attendees need exactly one signature field.')
+        result.sequential = field.sequential
+      }
     }
     if (field.section !== undefined) result.section = text(field.section, 160)
     if (field.hint !== undefined) result.hint = text(field.hint, 1000)
@@ -317,7 +326,16 @@ export function validateFormAnswers(
       continue
     }
     if (field.kind === 'repeat') {
-      const instances = value === undefined ? [] : value
+      if (Array.isArray(value) && value.length > (field.maxInstances ?? 20))
+        throw new Error(field.label + ': use the permitted number of groups.')
+      // A completely empty next-attendee placeholder is not a completed attendee.
+      const instances = field.sequential && Array.isArray(value)
+        ? value.filter(entry => {
+            const candidate = object(entry)
+            const values = object(candidate.answers)
+            return Object.values(values).some(answer => answer !== '' && answer !== false && answer !== undefined && !(Array.isArray(answer) && !answer.length))
+          })
+        : value === undefined ? [] : value
       if (
         !Array.isArray(instances) ||
         instances.length > (field.maxInstances ?? 20) ||
@@ -339,6 +357,11 @@ export function validateFormAnswers(
           ),
         }
       })
+      continue
+    }
+    if (field.kind === 'signature') {
+      try { answers[field.id] = validatedSignature(value) }
+      catch (error) { throw new Error(field.label + ': ' + (error as Error).message) }
       continue
     }
     if (field.kind === 'checkbox') {
@@ -461,6 +484,7 @@ export function formAnswerSummary(
       )
       .join('; ')
   if (field.kind === 'checkbox') return value === true ? 'Yes' : 'No'
+  if (field.kind === 'signature') return signatureCaption(value)
   if (field.kind === 'photo')
     return (
       String(Array.isArray(value) ? value.length : 0) +

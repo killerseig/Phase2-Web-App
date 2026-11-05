@@ -5,6 +5,8 @@ import RadioButton from 'primevue/radiobutton'
 import MultiSelect from 'primevue/multiselect'
 import AppButton from '@/components/common/AppButton.vue'
 import FormPhotoPicker from './FormPhotoPicker.vue'
+import FormSignaturePad from './FormSignaturePad.vue'
+import { parseFormSignature } from '../../../functions/src/formSignatures'
 import {
   isFieldRequired,
   type FormAnswers,
@@ -22,6 +24,7 @@ const props = withDefaults(
     photoPreviews?: Record<string, string>
     idPrefix?: string
     invalidField?: string
+    handoffEnabled?: boolean
   }>(),
   { readonly: false, disabled: false, photosEnabled: false, idPrefix: '' },
 )
@@ -29,6 +32,7 @@ const emit = defineEmits<{
   'update:modelValue': [answers: FormAnswers]
   upload: [fieldId: string, files: File[], groupId?: string, instanceId?: string]
   viewPhoto: [id: string]
+  saveAttendee: [groupId: string, instanceId: string]
 }>()
 function value(answers: FormAnswers, id: string): string {
   const answer = answers[id]
@@ -113,6 +117,11 @@ function removeInstance(field: FormField, instanceId: string) {
     [field.id]: instances(field).filter((instance) => instance.instanceId !== instanceId),
   })
 }
+function attendeeSaved(field: FormField, instance: FormGroupInstance): boolean {
+  const signature = field.fields?.find(child => child.kind === 'signature')
+  try { return !!(signature && parseFormSignature(String(instance.answers[signature.id] || ''))?.signedAt) }
+  catch { return false }
+}
 const multiStyle = {
   labelContainer: { style: { minWidth: 0, flex: '1' } },
   label: { style: { whiteSpace: 'normal', overflowWrap: 'anywhere', padding: '0.65rem' } },
@@ -187,8 +196,10 @@ const multiStyle = {
         </fieldset>
       </div>
       <section v-else-if="field.kind === 'repeat'" :aria-label="field.label">
-        <section v-for="(instance, instanceIndex) in instances(field)" :key="instance.instanceId">
-          <h4>{{ field.label }} {{ instanceIndex + 1 }}</h4>
+        <component :is="field.sequential && !readonly ? 'details' : 'section'" v-for="(instance, instanceIndex) in instances(field)" :key="instance.instanceId"
+          :open="field.sequential && !readonly ? !attendeeSaved(field, instance) : undefined">
+          <summary v-if="field.sequential && !readonly">{{ field.label }} {{ instanceIndex + 1 }}{{ attendeeSaved(field, instance) ? ' — saved' : '' }}</summary>
+          <h4 v-else>{{ field.label }} {{ instanceIndex + 1 }}</h4>
           <FormDefinitionFields
             :id-prefix="idPrefix + field.id + '-' + instance.instanceId + '-'"
             :definition="{ ...definition, fields: field.fields || [] }"
@@ -204,6 +215,12 @@ const multiStyle = {
             @view-photo="emit('viewPhoto', $event)"
           />
           <AppButton
+            v-if="field.sequential && !readonly"
+            type="button"
+            :disabled="disabled || !handoffEnabled"
+            @click="emit('saveAttendee', field.id, instance.instanceId)"
+          >Save attendee &amp; next</AppButton>
+          <AppButton
             v-if="!readonly"
             type="button"
             :disabled="disabled || instances(field).length <= (field.minInstances ?? 1)"
@@ -211,9 +228,9 @@ const multiStyle = {
           >
             Remove {{ field.label }}
           </AppButton>
-        </section>
+        </component>
         <AppButton
-          v-if="!readonly"
+          v-if="!readonly && !field.sequential"
           type="button"
           :disabled="disabled || instances(field).length >= (field.maxInstances ?? 20)"
           @click="addInstance(field)"
@@ -221,6 +238,15 @@ const multiStyle = {
           Add another {{ field.label }}
         </AppButton>
       </section>
+      <FormSignaturePad
+        v-else-if="field.kind === 'signature'"
+        :id="'answer-' + idPrefix + field.id"
+        :label="field.label"
+        :model-value="value(modelValue, field.id)"
+        :readonly="readonly"
+        :disabled="disabled"
+        @update:model-value="update(modelValue, field.id, $event)"
+      />
       <Checkbox
         v-else-if="field.kind === 'checkbox'"
         :input-id="'answer-' + idPrefix + field.id"

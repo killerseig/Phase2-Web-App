@@ -6,6 +6,7 @@ export interface CompletedAnswer {
   group: string
   value: string
   photos: string[]
+  signature?: string
 }
 export function completedAnswers(
   fields: FormField[],
@@ -39,6 +40,7 @@ export function completedAnswers(
         group,
         value: formAnswerSummary(field, answers[field.id]),
         photos: field.kind === 'photo' ? ((answers[field.id] || []) as string[]) : [],
+        ...(field.kind === 'signature' ? { signature: String(answers[field.id] || '') } : {}),
       },
     ]
   })

@@ -10,6 +10,7 @@ import {
 } from './formModel'
 import type { DailyLogInlinePhotoAttachment } from './dailyLogEmailPhotos'
 import { translatedFormProjection, type FormTranslation } from './formTranslation'
+import { parseFormSignature, signatureCaption } from './formSignatures'
 
 /** Printable complete form, independent of custom email omissions. No scripts or external fetches. */
 export function buildFormSubmissionPdf(
@@ -80,6 +81,22 @@ export function buildFormSubmissionPdf(
                 .fontSize(10)
                 .text(selections[index] || 'Not provided')
                 .moveDown(0.5)
+            }
+            doc.moveDown()
+          } else if (field.kind === 'signature') {
+            const value = String(answers[field.id] || ''), signature = parseFormSignature(value)
+            doc.text(signatureCaption(value)).moveDown(.3)
+            if (signature) {
+              if (doc.y + 140 > 710) doc.addPage()
+              const x = doc.x, y = doc.y, width = 440, height = 132
+              doc.save().rect(x, y, width, height).fill('#ffffff').restore()
+              doc.save().lineWidth(1.5).lineCap('round').lineJoin('round')
+              for (const stroke of signature.strokes) {
+                doc.moveTo(x + stroke[0]![0]! * width, y + stroke[0]![1]! * height)
+                for (const point of stroke.slice(1)) doc.lineTo(x + point[0]! * width, y + point[1]! * height)
+                doc.stroke('#122d3d')
+              }
+              doc.restore(); doc.y = y + height + 10
             }
             doc.moveDown()
           } else if (field.kind !== 'photo')
