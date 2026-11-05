@@ -64,6 +64,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
       const entries = page.getByRole('region', { name: 'View Entries', exact: true })
       await expect(entries.getByRole('link', { name: definition.title, exact: false })).toBeVisible()
       await expect(entries.getByRole('button', { name: 'Refresh', exact: true })).toHaveClass(/app-button/)
+      await expect(entries.getByRole('region', { name: 'Completed entry results', exact: true })).toHaveAttribute('aria-busy', 'false')
       const downloaded = page.waitForEvent('download'); await entries.getByRole('button', { name: 'Export all entries to CSV', exact: true }).click(); expect((await downloaded).suggestedFilename()).toBe('synthetic-entries.csv')
       const table = page.getByRole('region', { name: 'Completed entries', exact: true }); await expect(table).toBeVisible()
       await table.focus(); await expect(table).toBeFocused()

@@ -21,6 +21,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
       await page.getByRole('button', { name: 'View portrait.svg' }).click()
       const viewer = page.getByRole('dialog')
       await expect(viewer).toBeVisible()
+      await expect(viewer.getByRole('region', { name: 'Full-size photo', exact: true })).toHaveAttribute('aria-busy', 'false')
       await expect(viewer.getByRole('button', { name: 'Close photo viewer' })).toHaveClass(/app-icon-button/)
       for (const [name, width] of [['portrait.svg', 1600], ['landscape.svg', 3200]] as const) {
         const image = viewer.getByRole('img', { name, exact: true })
@@ -51,6 +52,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
       await gotoPhase2App(page, '/daily-log-gallery/zoom-gallery#gallery-qc-1', fixture)
       const viewer = page.getByRole('dialog'), scroll = viewer.locator('.daily-log-gallery__image-scroll')
       await expect(viewer).toBeVisible()
+      await expect(viewer.getByRole('region', { name: 'Full-size photo', exact: true })).toHaveAttribute('aria-busy', 'false')
       await expect(viewer.getByRole('img', { name: 'qc-original.svg', exact: true })).toHaveJSProperty('naturalWidth', 1600)
       await expect(page.locator('.daily-log-gallery__photo-button img').first()).toHaveJSProperty('naturalWidth', 120)
       await expect(viewer.getByRole('link', { name: 'Open original', exact: true })).toHaveAttribute('href', original)

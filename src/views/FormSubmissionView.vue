@@ -9,6 +9,7 @@ import AppButtonLink from '@/components/common/AppButtonLink.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
+import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
 import FormPresentation from '@/components/forms/FormPresentation.vue'
 import { canListCompanyForms } from '@/features/forms/availableForms'
 import FormSignaturePad from '@/components/forms/FormSignaturePad.vue'
@@ -159,10 +160,10 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <AppShell><main class="submission-view">
-    <FormPresentation :title="record?.definition.title || 'Completed form'" main-label="Completed answers">
+    <FormPresentation :loading="loading" loading-label="Loading completed form." :title="record?.definition.title || 'Completed form'" main-label="Completed answers">
       <template #header-actions><AppButtonLink v-if="auth.hasWorkspaceAccess && canListCompanyForms(auth.rawRole)" to="/reports">Back to forms</AppButtonLink></template>
       <template #messages>
-        <AppStatusMessage v-if="loading" message="Loading completed form." />
+        <AppLoadingIndicator v-if="busy" inline label="Preparing completed form file." />
         <AppStatusMessage v-if="error" tone="error" :message="error" />
         <AppButtonLink v-if="error && !auth.hasWorkspaceAccess" :to="{ name: 'login', query: { redirect: route.fullPath } }">Sign in to view this entry</AppButtonLink>
       </template>

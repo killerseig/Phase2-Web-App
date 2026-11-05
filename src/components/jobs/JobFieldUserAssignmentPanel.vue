@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
@@ -41,13 +43,8 @@ const emit = defineEmits<{
       />
     </div>
 
-    <AppEmptyState
-      v-if="loading"
-      panel
-      class="jobs-foremen-panel__empty"
-      message="Loading assignable users..."
-    />
-    <div v-else class="jobs-foremen-grid">
+    <AppLoadingRegion :loading="loading" label="Loading assignable users." aria-label="Assignable field users" style="--loading-region-min-height: 8rem">
+    <div v-if="!loading" class="jobs-foremen-grid">
       <label
         v-for="user in users"
         :key="user.id"
@@ -72,6 +69,7 @@ const emit = defineEmits<{
         message="No assignable users match your search."
       />
     </div>
+    </AppLoadingRegion>
   </section>
 </template>
 

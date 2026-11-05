@@ -4,6 +4,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vu
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import FormDefinitionFields from '@/components/forms/FormDefinitionFields.vue'
 import FormRecipientVerification from '@/components/forms/FormRecipientVerification.vue'
+import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
 import FormPresentation from './FormPresentation.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
@@ -591,7 +592,7 @@ defineExpose({ prepareNavigation })
 </script>
 <template>
   <section ref="root" class="response" :class="{ 'response-inline': inline }">
-    <FormPresentation :title="record?.definition.title || selectedTemplate?.definition?.title || selectedTemplate?.draft?.title || 'Complete a form'" :inline="inline" :main-label="record ? 'Current form record' : 'Start form'">
+    <FormPresentation :loading="loading" :title="record?.definition.title || selectedTemplate?.definition?.title || selectedTemplate?.draft?.title || 'Complete a form'" :inline="inline" :main-label="record ? 'Current form record' : 'Start form'">
       <template #header-actions>
         <div class="response-actions">
           <small v-if="localPreview" class="response-preview-status" title="Temporary local demo data. Submission and email delivery are disabled.">Local preview</small>
@@ -604,7 +605,7 @@ defineExpose({ prepareNavigation })
         <AppStatusMessage v-if="!enabled" tone="error" message="Configure Firebase to use durable drafts and submissions." />
         <AppStatusMessage v-if="error" id="form-validation-message" tone="error" :message="error" />
         <AppStatusMessage v-if="message" :message="message" />
-        <AppStatusMessage v-if="loading" message="Opening form." />
+        <AppLoadingIndicator v-if="busy && !loading" inline label="Updating form." />
       </template>
           <section
       v-if="publicSession && selectedTemplate?.definition?.access?.identity === 'identified'"

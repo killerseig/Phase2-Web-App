@@ -68,3 +68,19 @@ describe('completed entries UI flow with synthetic data', () => {
     wrapper.unmount()
   })
 })
+
+it('keeps completed rows usable during export and releases the spinner on export failure', async () => {
+  api.mockResolvedValueOnce(fixture)
+  const { wrapper } = await mountView()
+  let fail!: (error: Error) => void
+  api.mockImplementationOnce(() => new Promise((_, reject) => { fail = reject }))
+  await wrapper.findAll('button').find(button => button.text() === 'Export all entries to CSV')!.trigger('click')
+  expect(wrapper.get('table').text()).toContain('Synthetic completed report')
+  expect(wrapper.get('[role="status"]').text()).toContain('Preparing entry export')
+  expect(wrapper.get('a').attributes('href')).toBe('/form-submissions/synthetic-entry')
+  fail(Error('Synthetic export failed')); await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toContain('Synthetic export failed')
+  expect(wrapper.find('[role="status"]').exists()).toBe(false)
+  expect(wrapper.find('table').exists()).toBe(true)
+  wrapper.unmount()
+})

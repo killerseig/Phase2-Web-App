@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
@@ -69,17 +71,13 @@ function handleStatusFilterUpdate(value: string) {
         </AppSelect>
       </label>
 
+      <AppLoadingRegion :loading="employeesLoading" label="Loading employees." aria-label="Employee directory results" style="--loading-region-min-height: 8rem; min-height: 0; overflow: hidden">
       <div class="employees-browser__list">
-        <AppEmptyState
-          panel
-          v-if="employeesLoading"
-          class="employees-browser__empty"
-          message="Loading employees..."
-        />
 
+
+        <template v-if="!employeesLoading">
         <AppListButton
           v-for="employee in employees"
-          v-else
           :key="employee.id"
           class="employees-browser__row"
           :active="selectedEmployeeId === employee.id"
@@ -102,6 +100,7 @@ function handleStatusFilterUpdate(value: string) {
             </AppBadge>
           </div>
         </AppListButton>
+        </template>
 
         <AppEmptyState
           v-if="!employeesLoading && employees.length === 0"
@@ -110,6 +109,7 @@ function handleStatusFilterUpdate(value: string) {
           message="No employees match your search."
         />
       </div>
+      </AppLoadingRegion>
     </div>
   </AppPane>
 </template>

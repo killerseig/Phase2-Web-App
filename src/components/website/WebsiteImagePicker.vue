@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
+
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { uploadWebsiteImage, websiteCommand, websiteError } from '@/services/website'
 import type { WebsiteAsset } from '@/features/website/types'
@@ -109,7 +112,7 @@ function select(id: string) {
       }}<input type="file" accept=".jpg,.jpeg,.png,.webp" :disabled="busy" @change="upload"
     /></label>
     <small>JPG, PNG or WebP, up to 5 MB. New uploads are also saved in your image library.</small>
-    <p v-if="busy" role="status">Uploading image…</p>
+    <AppLoadingIndicator v-if="busy" inline label="Uploading image." />
     <p v-if="error" role="alert">{{ error }}</p>
     <label v-if="imageId"
       >{{ logo ? 'Logo description' : 'Image description'
@@ -152,6 +155,7 @@ function select(id: string) {
             {{ libraryError }}
             <button type="button" :disabled="loading" @click="loadImages">Try again</button>
           </p>
+          <AppLoadingRegion :loading="loading && !images.length" label="Loading images." aria-label="Image library results" style="--loading-region-min-height: 12rem">
           <div class="image-grid">
             <button
               v-for="asset in filtered"
@@ -169,14 +173,15 @@ function select(id: string) {
               <small v-if="asset.id === imageId">Current image</small>
             </button>
           </div>
-          <p v-if="loading" role="status">Loading images…</p>
-          <p v-else-if="!filtered.length && !libraryError">
+          <AppLoadingIndicator v-if="loading && images.length" inline label="Loading more images." />
+          <p v-if="!loading && !filtered.length && !libraryError">
             {{
               images.length
                 ? 'No matching loaded images.'
                 : 'No images yet. Close the library to upload your first image.'
             }}
           </p>
+          </AppLoadingRegion>
         </div>
         <footer>
           <span>{{ images.length }} images loaded</span

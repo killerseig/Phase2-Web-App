@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import AppButton from '@/components/common/AppButton.vue'
 import AppButtonLink from '@/components/common/AppButtonLink.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -611,7 +613,7 @@ onBeforeUnmount(() => {
       >
       <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
-      <p v-if="loading" role="status">Loading dashboard…</p>
+      <AppLoadingRegion :loading="loading" label="Loading dashboard." aria-label="Dashboard content" style="--loading-region-min-height: min(60dvh, 36rem)">
       <BuilderPanelSwitcher v-if="editing" v-model="activePane" class="builder-controls" outline-label="Widgets" outline-controls="shared-palette" canvas-controls="shared-canvas" inspector-controls="shared-inspector" :disabled="busy" />
       <div
         class="shared-dashboard-body"
@@ -919,6 +921,7 @@ onBeforeUnmount(() => {
       >
         {{ label }}
       </div>
+      </AppLoadingRegion>
       <BuilderConfirmDialog ref="confirm" />
     </section>
   </AppShell>

@@ -107,7 +107,7 @@ describe('EmployeeDirectoryPanel', () => {
       employeesLoading: false,
     })
 
-    expect(loadingWrapper.text()).toContain('Loading employees...')
+    expect(loadingWrapper.text()).toContain('Loading employees.')
     expect(loadingWrapper.find('[data-testid="employee-row-employee-1"]').exists()).toBe(false)
     expect(emptyWrapper.text()).toContain('No employees match your search.')
   })

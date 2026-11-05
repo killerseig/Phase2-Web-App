@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
 import AppPageLayout from '@/components/common/AppPageLayout.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppCard from '@/components/common/AppCard.vue'
-withDefaults(defineProps<{ title: string; inline?: boolean; mainLabel?: string }>(), { inline: false, mainLabel: 'Form details' })
+withDefaults(defineProps<{ title: string; inline?: boolean; mainLabel?: string; loading?: boolean; loadingLabel?: string }>(), { inline: false, mainLabel: 'Form details', loading: false, loadingLabel: 'Opening form.' })
 </script>
 <template>
   <section class="form-presentation" :class="{ 'form-presentation--inline': inline }">
@@ -11,10 +12,12 @@ withDefaults(defineProps<{ title: string; inline?: boolean; mainLabel?: string }
         <AppPaneHeader class="form-presentation__header" eyebrow="Field Workspace" :title="title" :title-tag="inline ? 'h2' : 'h1'"><template #actions><slot name="header-actions" /></template></AppPaneHeader>
       </template>
       <slot name="messages" />
+      <AppLoadingRegion :loading="loading" :label="loadingLabel" aria-label="Form content" style="--loading-region-min-height: min(60dvh, 32rem)">
       <div class="form-presentation__layout">
         <AppCard as="section" class="form-presentation__main" :aria-label="mainLabel"><slot /></AppCard>
         <aside class="form-presentation__sidebar" aria-label="Form information"><slot name="sidebar" /></aside>
       </div>
+      </AppLoadingRegion>
     </AppPageLayout>
   </section>
 </template>

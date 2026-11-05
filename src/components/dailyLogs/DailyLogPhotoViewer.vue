@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIconButton from '@/components/common/AppIconButton.vue'
 import AppStatusMessage from '@/components/common/AppStatusMessage.vue'
@@ -22,7 +24,11 @@ async function setZoom(value: number) {
 }
 function loaded(event: Event) {
   const image = event.currentTarget as HTMLImageElement
+  if (image.getAttribute('src') !== props.photo.url) return
   dimensions.value = { width: image.naturalWidth, height: image.naturalHeight }
+}
+function imageFailed(event: Event) {
+  if ((event.currentTarget as HTMLImageElement).getAttribute('src') === props.photo.url) failed.value = true
 }
 function toggleZoom() {
   if (dragged) { dragged = false; return }
@@ -88,11 +94,13 @@ onBeforeUnmount(() => {
     </div>
     <AppStatusMessage v-if="failed" tone="error" message="This photo could not be displayed. Try opening the original file." />
     <div class="daily-log-gallery__lightbox-stage">
+      <AppLoadingRegion class="daily-log-gallery__photo-loading" :loading="!dimensions && !failed" label="Loading full-size photo." aria-label="Full-size photo">
       <div ref="scroll" class="daily-log-gallery__image-scroll" tabindex="0" aria-label="Photo detail. Zoom in, then scroll or drag to inspect the image.">
         <button class="daily-log-gallery__image-canvas" :class="{ 'is-zoomed': zoom > 1 }" :style="{ width: zoom * 100 + '%', height: zoom * 100 + '%' }" type="button" :aria-label="zoom === 1 ? 'Zoom photo in' : 'Fit photo to screen'" @click="toggleZoom" @pointerdown="startDrag" @pointermove="moveDrag" @pointerup="endDrag" @pointercancel="cancelDrag">
-          <img :key="photo.url" :src="photo.url" :alt="photo.name" draggable="false" @load="loaded" @error="failed = true" />
+          <img :key="photo.url" :src="photo.url" :alt="photo.name" draggable="false" @load="loaded" @error="imageFailed" />
         </button>
       </div>
+      </AppLoadingRegion>
       <AppIconButton v-if="total > 1" class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--previous" label="Previous photo" @click="emit('previous')"><i class="pi pi-chevron-left" aria-hidden="true"></i></AppIconButton>
       <AppIconButton v-if="total > 1" class="daily-log-gallery__lightbox-nav daily-log-gallery__lightbox-nav--next" label="Next photo" @click="emit('next')"><i class="pi pi-chevron-right" aria-hidden="true"></i></AppIconButton>
     </div>
@@ -114,7 +122,8 @@ onBeforeUnmount(() => {
 .daily-log-gallery__image-canvas.is-zoomed { cursor: grab; }
 .daily-log-gallery__image-canvas.is-zoomed:active { cursor: grabbing; }
 .daily-log-gallery__image-canvas img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
-.daily-log-gallery__lightbox-nav { position: absolute; top: 50%; z-index: 1; transform: translateY(-50%); }
+.daily-log-gallery__photo-loading { position: absolute; inset: 0; }
+.daily-log-gallery__lightbox-nav { position: absolute; top: 50%; z-index: 5; transform: translateY(-50%); }
 .daily-log-gallery__lightbox-nav--previous { left: .25rem; }
 .daily-log-gallery__lightbox-nav--next { right: .25rem; }
 .daily-log-gallery__lightbox-caption { display: grid; gap: .2rem; justify-items: center; max-height: 20dvh; overflow: auto; color: var(--text); text-align: center; overflow-wrap: anywhere; white-space: pre-wrap; }

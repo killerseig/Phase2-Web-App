@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppBadge, { type AppBadgeTone } from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
@@ -98,17 +100,13 @@ function handleStatusFilterUpdate(value: string) {
         </AppSelect>
       </label>
 
+      <AppLoadingRegion :loading="usersLoading" label="Loading users." aria-label="User directory results" style="--loading-region-min-height: 8rem; min-height: 0; overflow: hidden">
       <div class="users-browser__list">
-        <AppEmptyState
-          panel
-          v-if="usersLoading"
-          class="users-browser__empty"
-          message="Loading users..."
-        />
 
+
+        <template v-if="!usersLoading">
         <AppListButton
           v-for="user in users"
-          v-else
           :key="user.id"
           class="users-browser__row"
           :active="selectedUserId === user.id"
@@ -132,6 +130,7 @@ function handleStatusFilterUpdate(value: string) {
             </AppBadge>
           </div>
         </AppListButton>
+        </template>
 
         <AppEmptyState
           v-if="!usersLoading && users.length === 0"
@@ -140,6 +139,7 @@ function handleStatusFilterUpdate(value: string) {
           message="No users match your search."
         />
       </div>
+      </AppLoadingRegion>
     </div>
   </AppPane>
 </template>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppListButton from '@/components/common/AppListButton.vue'
@@ -91,8 +93,9 @@ function handleStatusFilterUpdate(value: string) {
         </label>
       </div>
 
+      <AppLoadingRegion class="jobs-browser__loading-region" :loading="loading && !visibleJobs.length" label="Loading jobs." aria-label="Job directory results">
       <div class="jobs-browser__list">
-        <AppEmptyState panel v-if="loading" class="jobs-browser__empty" message="Loading jobs..." />
+        <AppLoadingIndicator v-if="loading && visibleJobs.length" inline label="Refreshing jobs." />
 
         <AppListButton
           v-if="showAllJobsEntry"
@@ -133,11 +136,13 @@ function handleStatusFilterUpdate(value: string) {
           message="No jobs match your search."
         />
       </div>
+      </AppLoadingRegion>
     </div>
   </AppPane>
 </template>
 
 <style scoped>
+.jobs-browser__loading-region { --loading-region-min-height: 8rem; min-height: 0; overflow: hidden; }
 .jobs-browser__body {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);

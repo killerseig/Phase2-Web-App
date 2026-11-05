@@ -121,7 +121,7 @@ describe('JobFieldUserAssignmentPanel', () => {
       searchTerm: 'missing',
     })
 
-    expect(loadingWrapper.text()).toContain('Loading assignable users...')
+    expect(loadingWrapper.text()).toContain('Loading assignable users.')
     expect(loadingWrapper.find('[data-testid="jobs-foreman-dan"]').exists()).toBe(false)
     expect(emptyWrapper.text()).toContain('0 selected')
     expect(emptyWrapper.text()).toContain('No assignable users match your search.')

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
+
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { formApi } from '@/services/forms'
@@ -131,7 +134,8 @@ onBeforeUnmount(() => { generation++ })
     <div class="form-entries__actions"><AppButton :disabled="busy || !priorCursors.length" @click="previousPage">Previous entries</AppButton>
     <AppButton :disabled="busy || !nextCursor" @click="nextPage">Next entries</AppButton></div>
     <p v-if="!busy && !error">{{ nextCursor ? 'More entries remain.' : 'End of snapshot.' }}</p>
-    <p v-if="busy" role="status">Loading entries…</p>
+    <AppLoadingIndicator v-if="busy && loaded" inline label="Preparing entry export." />
+    <AppLoadingRegion :loading="busy && !loaded" label="Loading entries." aria-label="Completed entry results" style="--loading-region-min-height: 12rem">
     <AppStatusMessage v-if="error" tone="error" :message="error" />
     <div v-if="entries.length" class="form-entries__table" role="region" aria-label="Completed entries" tabindex="0"><table>
       <thead>
@@ -158,6 +162,7 @@ onBeforeUnmount(() => { generation++ })
     <p v-else-if="!busy && !error">{{ nextCursor
       ? 'No accessible entries on this page. Continue if more entries remain.'
       : 'No accessible completed entries.' }}</p>
+    </AppLoadingRegion>
   </AppCard>
 </template>
 <style scoped>

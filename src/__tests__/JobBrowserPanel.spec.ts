@@ -128,7 +128,7 @@ describe('JobBrowserPanel', () => {
         visibleJobs: [],
         showAllJobsEntry: false,
       }).text(),
-    ).toContain('Loading jobs...')
+    ).toContain('Loading jobs.')
 
     const emptyWrapper = mountPanel({
       loading: false,

@@ -40,7 +40,7 @@ describe('DailyLogHistoryList', () => {
   it('renders loading and empty states without daily-log rows', () => {
     const loadingWrapper = mountHistoryList({ loading: true })
 
-    expect(loadingWrapper.text()).toContain('Loading daily logs...')
+    expect(loadingWrapper.text()).toContain('Loading daily logs.')
     expect(loadingWrapper.find('.daily-log-history-row').exists()).toBe(false)
 
     const emptyWrapper = mountHistoryList()

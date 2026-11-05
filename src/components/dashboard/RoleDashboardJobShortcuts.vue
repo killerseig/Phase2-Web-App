@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import { RouterLink } from 'vue-router'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppButtonLink from '@/components/common/AppButtonLink.vue'
@@ -22,6 +24,7 @@ defineProps<{
       </template>
     </AppSectionHeader>
 
+    <AppLoadingRegion :loading="!!loading && !error" label="Loading job shortcuts." aria-label="Job shortcuts" style="--loading-region-min-height: 8rem">
     <AppStatusMessage
       v-if="error"
       :message="error"
@@ -29,21 +32,15 @@ defineProps<{
       data-testid="role-dashboard-job-error"
     />
 
-    <AppEmptyState
-      v-else-if="loading"
-      panel
-      data-testid="role-dashboard-job-loading"
-      message="Loading job shortcuts..."
-    />
 
     <AppEmptyState
-      v-else-if="!shortcuts.length"
+      v-else-if="!loading && !shortcuts.length"
       panel
       data-testid="role-dashboard-job-empty"
       message="No job dashboards are available for this role yet."
     />
 
-    <div v-else class="role-dashboard-job-shortcuts__grid">
+    <div v-else-if="!loading" class="role-dashboard-job-shortcuts__grid">
       <article
         v-for="shortcut in shortcuts"
         :key="shortcut.id"
@@ -75,6 +72,7 @@ defineProps<{
         </div>
       </article>
     </div>
+    </AppLoadingRegion>
   </section>
 </template>
 

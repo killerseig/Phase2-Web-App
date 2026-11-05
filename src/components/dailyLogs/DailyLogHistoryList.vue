@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import AppCard from '@/components/common/AppCard.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
@@ -51,21 +53,16 @@ const emit = defineEmits<{
       </AppButton>
     </div>
 
-    <AppEmptyState
-      v-if="loading"
-      panel
-      class="daily-log-history-empty"
-      message="Loading daily logs..."
-    />
+    <AppLoadingRegion :loading="loading" label="Loading daily logs." aria-label="Daily log history" style="--loading-region-min-height: 8rem">
 
     <AppEmptyState
-      v-else-if="logs.length === 0"
+      v-if="!loading && logs.length === 0"
       panel
       class="daily-log-history-empty"
       message="No daily logs exist for this date yet."
     />
 
-    <div v-else class="app-history-list daily-log-history-list">
+    <div v-else-if="!loading" class="app-history-list daily-log-history-list">
       <AppListButton
         v-for="log in logs"
         :key="log.id"
@@ -87,6 +84,7 @@ const emit = defineEmits<{
         </AppBadge>
       </AppListButton>
     </div>
+    </AppLoadingRegion>
   </AppCard>
 </template>
 

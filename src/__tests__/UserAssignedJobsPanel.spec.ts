@@ -92,7 +92,7 @@ describe('UserAssignedJobsPanel', () => {
       emptyMessage: 'No jobs match your search.',
     })
 
-    expect(loadingWrapper.text()).toContain('Loading jobs...')
+    expect(loadingWrapper.text()).toContain('Loading assigned jobs.')
     expect(loadingWrapper.find('input[type="checkbox"]').exists()).toBe(false)
     expect(emptyWrapper.text()).toContain('0 selected')
     expect(emptyWrapper.text()).toContain('No jobs match your search.')

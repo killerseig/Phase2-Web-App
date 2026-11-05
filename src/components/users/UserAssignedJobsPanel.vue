@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import AppCheckbox from '@/components/common/AppCheckbox.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppSearchInput from '@/components/common/AppSearchInput.vue'
@@ -42,13 +44,8 @@ const emit = defineEmits<{
         @update:model-value="emit('update:searchTerm', $event)"
       />
     </div>
-    <AppEmptyState
-      v-if="props.jobsLoading"
-      panel
-      class="users-browser__empty"
-      message="Loading jobs..."
-    />
-    <div v-else-if="props.jobs.length" class="users-jobs-grid">
+    <AppLoadingRegion :loading="props.jobsLoading" label="Loading assigned jobs." aria-label="Assigned job results" style="--loading-region-min-height: 8rem">
+    <div v-if="!props.jobsLoading && props.jobs.length" class="users-jobs-grid">
       <label v-for="job in props.jobs" :key="job.id" class="users-job-toggle">
         <AppCheckbox
           :model-value="props.assignedJobIds.includes(job.id)"
@@ -62,11 +59,12 @@ const emit = defineEmits<{
       </label>
     </div>
     <AppEmptyState
-      v-else
+      v-else-if="!props.jobsLoading"
       panel
       class="users-browser__empty"
       :message="props.emptyMessage"
     />
+    </AppLoadingRegion>
   </section>
 </template>
 

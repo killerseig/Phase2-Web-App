@@ -119,7 +119,7 @@ describe('UserDirectoryPanel', () => {
       noInvitesWrapper.get('button:not(.app-button--primary)').attributes('disabled'),
     ).toBeDefined()
     expect(noInvitesWrapper.text()).toContain('0')
-    expect(loadingWrapper.text()).toContain('Loading users...')
+    expect(loadingWrapper.text()).toContain('Loading users.')
     expect(loadingWrapper.find('[data-testid="users-row-admin-user"]').exists()).toBe(false)
     expect(emptyWrapper.text()).toContain('No users match your search.')
   })

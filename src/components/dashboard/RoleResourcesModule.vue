@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
+
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from './DashboardButton.vue'
 import { RouterLink, onBeforeRouteLeave } from 'vue-router'
@@ -144,11 +147,11 @@ onBeforeUnmount(() => {
     <div v-if="error" role="alert">
       {{ error }} <Button label="Retry" severity="secondary" @click="load" />
     </div>
-    <p v-if="loading" role="status">Loading shared resources…</p>
-    <p v-else-if="!resources.length && !error">
+    <AppLoadingRegion :loading="loading" label="Loading shared resources." aria-label="Shared resources" style="--loading-region-min-height: 8rem">
+    <p v-if="!loading && !resources.length && !error">
       No shared resources have been added for this role yet. Admin can add links and guidance here.
     </p>
-    <ul v-else class="role-resources__list">
+    <ul v-else-if="!loading" class="role-resources__list">
       <li v-for="resource in resources" :key="resource.id">
         <h3>
           <RouterLink v-if="resource.url.startsWith('/')" :to="resource.url">{{
@@ -180,6 +183,8 @@ onBeforeUnmount(() => {
         </div>
       </li>
     </ul>
+    </AppLoadingRegion>
+    <AppLoadingIndicator v-if="busy" inline label="Updating shared resources." />
     <form v-if="editing" @submit.prevent="save">
       <fieldset :disabled="busy">
         <legend>{{ id ? 'Edit shared resource' : 'Add shared resource' }}</legend>

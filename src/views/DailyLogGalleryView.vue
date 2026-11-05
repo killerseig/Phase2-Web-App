@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
+
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppPageLayout from '@/components/common/AppPageLayout.vue'
@@ -174,9 +176,9 @@ watch(
     </header>
 
     <main class="daily-log-gallery__main">
-      <AppStatusMessage v-if="loading" class="daily-log-gallery__state" message="Loading photo gallery..." />
+      <AppLoadingRegion :loading="loading" label="Loading photo gallery." aria-label="Photo gallery content" style="--loading-region-min-height: min(60dvh, 36rem)">
 
-      <AppCard v-else-if="errorMessage" class="daily-log-gallery__state daily-log-gallery__state--error">
+      <AppCard v-if="errorMessage" class="daily-log-gallery__state daily-log-gallery__state--error">
         <h1>Gallery unavailable</h1>
         <AppStatusMessage tone="error" :message="errorMessage" />
       </AppCard>
@@ -272,6 +274,7 @@ watch(
           <p class="daily-log-gallery__empty">No photos are attached to this daily log.</p>
         </section>
       </AppPageLayout>
+      </AppLoadingRegion>
     </main>
 
     <footer class="daily-log-gallery__footer">
