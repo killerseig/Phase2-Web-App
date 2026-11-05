@@ -5,9 +5,7 @@ import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import SdsExplorerModule from './SdsExplorerModule.vue'
 import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus.vue'
 import { usePrivateReferences } from '@/features/intranet/usePrivateReferences'
-import { useAuthStore } from '@/stores/auth'
 withDefaults(defineProps<{ showHeading?: boolean }>(), { showHeading: true })
-const auth = useAuthStore()
 const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences()
 const documentsReady = ref(false)
 const loading = computed(() => referencesLoading.value || !documentsReady.value)
@@ -18,9 +16,6 @@ function documentLoadingChanged(value: boolean) { if (!value) documentsReady.val
     <AppPaneHeader v-if="showHeading" title="Company Library" title-tag="h1" />
     <PrivateReferenceStatus :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" :show-empty-state="false" :show-loading="false" @select="selectSource" @retry="reload" />
     <SdsExplorerModule expanded sidebar-tools title="Documents" :references="content" @loading-change="documentLoadingChanged" />
-    <div class="library-footer">
-      <details class="library-help"><summary>Library help</summary><p v-if="auth.rawRole === 'admin'">Choose a folder, then Upload document. New folder organizes files; a file's menu lets you upload a new revision. Bulk PDF import is under More.</p><p v-else>Browse and search documents available to your account. An Admin manages uploads.</p></details>
-    </div>
   </AppLoadingRegion>
 </template>
 <style scoped>
@@ -32,10 +27,6 @@ function documentLoadingChanged(value: boolean) { if (!value) documentsReady.val
 .company-library-widget :deep(.document-explorer__viewer > .supplied-reference) { overflow: auto; padding: 1rem; }
 .company-library-widget :deep(.document-explorer__viewer > button) { flex: none; align-self: start; margin: .5rem; }
 .company-library-widget :deep(.sds-editor) { flex: 1; min-height: 0; }
-.library-footer { flex: none; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: start; color: var(--text-muted); font-size: .85rem; }
-.library-help { margin-left: auto; }
-.library-help summary { cursor: pointer; }
-.library-help p { max-width: 65ch; line-height: 1.5; }
 @container (max-width: 600px) {
   .company-library-widget :deep(.document-explorer__header) { flex-wrap: wrap; }
   .company-library-widget :deep(.document-explorer__body) { grid-template-columns: minmax(120px, 38%) minmax(0, 1fr); }
