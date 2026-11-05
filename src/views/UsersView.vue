@@ -4,7 +4,6 @@ import DirectoryEditorWorkspaceShell from '@/components/common/DirectoryEditorWo
 import UserConfirmDialogs from '@/components/users/UserConfirmDialogs.vue'
 import UserDirectoryPanel from '@/components/users/UserDirectoryPanel.vue'
 import UserEditorPanel from '@/components/users/UserEditorPanel.vue'
-import PersonalTimecardLink from '@/components/users/PersonalTimecardLink.vue'
 import {
   buildDirectoryEditorMobilePanelTabs,
   useDirectoryEditorPanels,
@@ -263,15 +262,6 @@ useUserAdminViewSync({
         @toggle-detail-assigned-job="handleDetailAssignedJobToggle"
         @update-detail-job-search-term="detailJobSearchTerm = $event"
       >
-        <template #personal-timecard>
-          <PersonalTimecardLink
-            v-if="selectedUser && auth.rawRole === 'admin' && auth.currentUser"
-            :key="selectedUser.id"
-            :uid="selectedUser.id"
-            :actor-uid="auth.currentUser.uid"
-            :disabled="saveLoading || syncingDetailForm || deleteLoading || emailAction !== null || hasUnsavedDetailChanges(selectedUser)"
-          />
-        </template>
       </UserEditorPanel>
     </template>
 

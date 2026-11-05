@@ -301,7 +301,6 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
           />
         </form>
 
-        <slot name="personal-timecard" />
         <AppStatusMessage v-if="editingSelf" tone="warning">
           You are editing the currently signed-in account. Role, active state, and delete are locked
           to avoid accidental lockout.
