@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {
-  currentRoleCanBeAssignedJobs,
+  currentRoleCanHaveAccountJobAssignments,
   EDITABLE_USER_ROLE_OPTIONS,
   isEditableUserRole,
 } from '@/auth/roles'
@@ -147,8 +147,9 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
             />
           </div>
 
+          <p v-if="createForm.role === 'admin'" class="users-form__help">These jobs apply to My Timecard only. Admin access elsewhere is unchanged.</p>
           <UserAssignedJobsPanel
-            v-if="currentRoleCanBeAssignedJobs(createForm.role)"
+            v-if="currentRoleCanHaveAccountJobAssignments(createForm.role)"
             :assigned-job-ids="createForm.assignedJobIds"
             :empty-message="getAssignedJobsEmptyStateMessage(createJobSearchTerm)"
             :jobs="createJobs"
@@ -288,6 +289,7 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
             <span>Active User</span>
           </label>
 
+          <p v-if="detailForm.role === 'admin'" class="users-form__help">These jobs apply to My Timecard only. Admin access elsewhere is unchanged.</p>
           <UserAssignedJobsPanel
             v-if="shouldShowUserDetailAssignedJobs(selectedUser, detailForm.role)"
             :assigned-job-ids="detailForm.assignedJobIds"

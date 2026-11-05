@@ -1,5 +1,5 @@
 import {
-  currentRoleCanBeAssignedJobs,
+  currentRoleCanHaveAccountJobAssignments,
   getStoredRoleLabel,
   isEditableUserRole,
   normalizeEditableUserRole,
@@ -81,7 +81,7 @@ export function getUserDetailSnapshot(user: UserProfile | null): UserDetailSnaps
   if (!user) return null
 
   const role = normalizeEditableUserRole(user.role)
-  const canAssignJobs = isEditableUserRole(user.role) && currentRoleCanBeAssignedJobs(role)
+  const canAssignJobs = isEditableUserRole(user.role) && currentRoleCanHaveAccountJobAssignments(role)
   return {
     firstName: (user.firstName ?? '').trim(),
     lastName: (user.lastName ?? '').trim(),
@@ -98,7 +98,7 @@ export function getUserDetailFormSnapshot(form: UserDetailFormLike): UserDetailS
     lastName: form.lastName.trim(),
     role,
     active: form.active,
-    assignedJobIds: currentRoleCanBeAssignedJobs(role) ? normalizeAssignedJobIds(form.assignedJobIds) : [],
+    assignedJobIds: currentRoleCanHaveAccountJobAssignments(role) ? normalizeAssignedJobIds(form.assignedJobIds) : [],
   }
 }
 
@@ -129,5 +129,5 @@ export function shouldShowUserDetailAssignedJobs(
   user: UserProfile | null,
   formRole: EditableUserRole,
 ): boolean {
-  return (!user || isEditableUserRole(user.role)) && currentRoleCanBeAssignedJobs(formRole)
+  return (!user || isEditableUserRole(user.role)) && currentRoleCanHaveAccountJobAssignments(formRole)
 }

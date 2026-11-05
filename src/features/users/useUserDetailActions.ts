@@ -1,4 +1,4 @@
-import { currentRoleCanBeAssignedJobs } from '@/auth/roles'
+import { currentRoleCanHaveAccountJobAssignments } from '@/auth/roles'
 import { getUserDetailUpdateRole, type UserDetailFormState } from '@/features/users/userViewHelpers'
 import {
   deleteUserByAdmin,
@@ -83,7 +83,7 @@ export function useUserDetailActions({
         lastName: detailForm.lastName,
         role,
         active: detailForm.active,
-        assignedJobIds: currentRoleCanBeAssignedJobs(role) ? detailForm.assignedJobIds : [],
+        assignedJobIds: currentRoleCanHaveAccountJobAssignments(role) ? detailForm.assignedJobIds : [],
       })
 
       if (selectedUser.value?.id === user.id) {

@@ -1,7 +1,7 @@
 import { nextTick, reactive, ref, watch } from 'vue'
 import {
   CURRENT_DEFAULT_EDITABLE_USER_ROLE,
-  currentRoleCanBeAssignedJobs,
+  currentRoleCanHaveAccountJobAssignments,
   isEditableUserRole,
   normalizeEditableUserRole,
 } from '@/auth/roles'
@@ -130,7 +130,7 @@ export function useUserFormState({ resetCreateMessages }: UseUserFormStateOption
   watch(
     () => createForm.role,
     (role) => {
-      if (!currentRoleCanBeAssignedJobs(role)) {
+      if (!currentRoleCanHaveAccountJobAssignments(role)) {
         createForm.assignedJobIds = []
       }
     },
@@ -139,7 +139,7 @@ export function useUserFormState({ resetCreateMessages }: UseUserFormStateOption
   watch(
     () => detailForm.role,
     (role) => {
-      if (!currentRoleCanBeAssignedJobs(role)) {
+      if (!currentRoleCanHaveAccountJobAssignments(role)) {
         detailForm.assignedJobIds = []
       }
     },

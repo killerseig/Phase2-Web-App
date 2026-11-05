@@ -44,8 +44,11 @@ const call = (data = {}, actor = uid) =>
     data: { personalAction: 'load', jobId, weekEndDate: currentPeriod, ...data },
   })
 await assert.rejects(() => call({}, null), /signed in/)
-await assert.rejects(() => call(), /not been enabled/)
-await db.doc('settings/myTimecard').set({ enabledRoles: ['project-manager'] })
+for (const role of ['admin', 'foreman', 'shop-foreman', 'project-manager', 'employee']) {
+  await db.doc('users/' + uid).update({ role })
+  assert.equal((await call({ personalAction: 'context' })).state, 'context', role + ' uses own linked employee without an activation setting')
+}
+await db.doc('users/' + uid).set(profile)
 assert.equal((await call()).state, 'week-not-open')
 assert.equal(
   (await db.collection('timecardWeeks').get()).size,
@@ -119,7 +122,7 @@ await db.doc('employees/' + employeeId).update({ myTimecardUserId: 'different-us
 await assert.rejects(() => call(), /link.*changed/)
 await db.doc('employees/' + employeeId).update({ myTimecardUserId: uid })
 await db.doc('users/' + uid).update({ active: false })
-await assert.rejects(() => call(), /not been enabled/)
+await assert.rejects(() => call(), /cannot use personal timecards/)
 // Employee accounts use the same linked card but have no general workforce privileges.
 await db.doc('users/' + uid).set({ ...profile, role: 'employee', assignedJobIds: [] })
 await db.doc('employees/' + employeeId).update({ jobId })
@@ -190,6 +193,22 @@ assert.equal((await call({ personalAction: 'context' }, 'automatic-employee')).d
 await db.doc('users/automatic-employee').update({ firstName: 'Someone', lastName: 'Else' })
 assert.equal((await match('link-status')).status, 'linked', 'Later self-name changes do not move the established identity')
 assert.equal((await db.doc('users/automatic-employee').get()).data().myTimecard.employeeId, 'automatic-payroll')
+// Existing staff roles may read/save their own linked card, not arbitrary admin-visible jobs.
+for (const role of ['admin', 'foreman', 'shop-foreman', 'project-manager']) {
+  await db.doc('users/' + uid).set({ ...profile, role })
+  const own = await call({ employeeId: 'someone-else', uid: 'someone-else' })
+  assert.equal(own.card.notes, 'Employee saved detail')
+  assert.equal(own.readOnly, false)
+  await assert.rejects(() => call({ jobId: 'unassigned-job' }), /not assigned/)
+  const savedOwn = await call({ personalAction: 'save', card: own.card, expectedVersion: own.version, requestId: 'staff-own-' + role })
+  assert.equal(savedOwn.card.lines[0].hours[1], 5)
+  await db.doc('employees/' + employeeId).update({ myTimecardUserId: 'someone-else' })
+  await assert.rejects(() => call(), /link.*changed/)
+  await db.doc('employees/' + employeeId).update({ myTimecardUserId: uid })
+}
+await db.doc('users/' + uid).set({ ...profile, role: 'payroll' })
+await assert.rejects(() => call(), /cannot use personal timecards/)
+await db.doc('users/' + uid).set({ ...profile, role: 'employee', assignedJobIds: [] })
 // General app callables remain denied even when the Employee has job assignments.
 await assert.rejects(() => require('../functions/lib/sdsFunctions.js').sdsWorkspace.run({ auth: { uid }, data: { action: 'page' } }), cause => cause.code === 'permission-denied')
 await assert.rejects(() => require('../functions/lib/sharedDashboardFunctions.js').sharedDashboardWorkspace.run({ auth: { uid }, data: { action: 'load', scope: 'personal' } }), cause => cause.code === 'permission-denied')
@@ -236,7 +255,7 @@ console.log(
   JSON.stringify({
     passed: true,
     syntheticOnly: true,
-    checks: 59,
+    staffRoles: ['admin', 'foreman', 'shop-foreman', 'project-manager', 'employee'],
     realEmails: 0,
     crewCardUntouched: true,
     personalWeekCreation: false,

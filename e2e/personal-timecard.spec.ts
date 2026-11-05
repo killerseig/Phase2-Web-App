@@ -117,5 +117,35 @@ for (const screen of [
         fullPage: true,
       })
     })
+
+    for (const staff of [{ role: 'admin', userLinks: 1 }, { role: 'foreman', userLinks: 0 }] as const) {
+      test(staff.role + ' retains normal navigation and uses only their assigned personal card', async ({ page }) => {
+        const fixture = createJobsFixture(); fixture.auth.profile.role = staff.role
+        let card = { notes: '', lines: Array.from({ length: 13 }, () => ({ jobNumber: '1A', subsectionArea: '', account: 'PAINT', hours: Array(7).fill(0) })) }
+        const saves: Array<{ jobId: string }> = [], headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+        await page.route('**/ensureTimecardWeekRecord', async route => {
+          if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return }
+          const data = route.request().postDataJSON().data
+          if (data.personalAction === 'save') { saves.push(data); card = structuredClone(data.card) }
+          const result = data.personalAction === 'context' ? { state: 'context', jobs: [{ id: 'job-1', code: '1A', name: 'Assigned payroll job' }], defaultJobId: 'job-1', currentWeekEndDate: '2026-11-07', card: null, version: null, readOnly: true } : { state: 'ready', employeeName: 'Synthetic ' + staff.role, card, version: saves.length ? '2:0' : '1:0', readOnly: data.weekEndDate !== '2026-11-07' }
+          await route.fulfill({ headers, contentType: 'application/json', body: JSON.stringify({ result }) })
+        })
+        await gotoPhase2App(page, '/jobs/my-timecard', fixture)
+        await expect(page.getByRole('combobox', { name: 'Payroll job', exact: true })).toHaveValue('job-1')
+        await expect(page.getByRole('combobox', { name: 'Payroll job', exact: true }).locator('option')).toHaveCount(2)
+        await expect(page.locator('.app-shell__nav a[href="/jobs"]')).toHaveCount(1)
+        await expect(page.locator('.app-shell__nav a[href="/users"]')).toHaveCount(staff.userLinks)
+        await expect(page.getByTestId('timecard-employee-name')).toContainText('Synthetic ' + staff.role)
+        await page.getByLabel('Line 1 MON hours', { exact: true }).fill('6')
+        await page.getByRole('button', { name: 'Save my timecard', exact: true }).click()
+        await expect(page.getByText('Your timecard draft was saved.', { exact: false })).toBeVisible()
+        expect(saves).toHaveLength(1)
+        expect(saves[0]?.jobId).toBe('job-1')
+        await expect(page.getByLabel('Line 1 MON hours', { exact: true })).toHaveValue('6.00')
+        await page.getByLabel('Week ending (Saturday)').fill('2026-10-31')
+        await expect(page.getByText('This timecard is locked and available to view only.')).toBeVisible()
+        await expect(page.getByLabel('Line 1 MON hours', { exact: true })).toBeDisabled()
+      })
+    }
   })
 }

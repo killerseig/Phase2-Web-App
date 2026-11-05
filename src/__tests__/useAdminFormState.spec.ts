@@ -33,7 +33,7 @@ function makeEmployee(overrides: Partial<EmployeeRecord> = {}): EmployeeRecord {
 }
 
 describe('useUserFormState', () => {
-  it('owns create-form defaults, field updates, assignment toggles, admin cleanup, and reset messaging', async () => {
+  it('owns create-form defaults, field updates, assignment toggles, admin personal jobs, and reset messaging', async () => {
     const resetCreateMessages = vi.fn()
     const formState = useUserFormState({ resetCreateMessages })
 
@@ -57,7 +57,7 @@ describe('useUserFormState', () => {
     formState.updateCreateRole('admin')
     await nextTick()
 
-    expect(formState.createForm.assignedJobIds).toEqual([])
+    expect(formState.createForm.assignedJobIds).toEqual(['job-lucky'])
     expect(formState.createForm.role).toBe('admin')
 
     formState.resetCreateForm()
@@ -73,7 +73,7 @@ describe('useUserFormState', () => {
     expect(formState.createJobSearchTerm.value).toBe('')
   })
 
-  it('hydrates selected users, normalizes editable roles, tracks dirty detail changes, and clears admin assignments', async () => {
+  it('hydrates selected users, normalizes editable roles, tracks dirty detail changes, and preserves admin personal assignments', async () => {
     const formState = useUserFormState({ resetCreateMessages: vi.fn() })
     const projectManager = makeUser({
       assignedJobIds: ['job-b', 'job-a'],
@@ -116,10 +116,10 @@ describe('useUserFormState', () => {
     formState.updateDetailRole('admin')
     await nextTick()
 
-    expect(formState.detailForm.assignedJobIds).toEqual([])
+    expect(formState.detailForm.assignedJobIds).toEqual(['job-a', 'job-b'])
     expect(formState.getDetailFormSnapshot()).toEqual({
       active: true,
-      assignedJobIds: [],
+      assignedJobIds: ['job-a', 'job-b'],
       firstName: 'CJ',
       lastName: 'Blanchard',
       role: 'admin',

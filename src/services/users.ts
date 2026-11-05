@@ -25,6 +25,7 @@ import {
 } from '@/testing/e2eRuntime'
 import {
   currentRoleCanBeAssignedJobs,
+  currentRoleCanHaveAccountJobAssignments,
   normalizeEditableUserRole,
   normalizeStoredRoleKey,
   type EditableUserRole,
@@ -147,7 +148,7 @@ async function syncUserJobAssignments(uid: string, role: RawRoleKey, nextAssigne
   }
 
   const previousAssignedJobIds = normalizeAssignedJobIds(userSnapshot.data().assignedJobIds)
-  const effectiveAssignedJobIds = currentRoleCanBeAssignedJobs(role) ? nextAssignedJobIds : []
+  const effectiveAssignedJobIds = currentRoleCanHaveAccountJobAssignments(role) ? nextAssignedJobIds : []
   const changedJobIds = Array.from(new Set([...previousAssignedJobIds, ...effectiveAssignedJobIds]))
 
   const batch = writeBatch(db)
@@ -161,7 +162,7 @@ async function syncUserJobAssignments(uid: string, role: RawRoleKey, nextAssigne
     const currentAssignedForemanIds = normalizeAssignedJobIds(jobSnapshot.data().assignedForemanIds)
     const nextAssignedForemanIds = new Set(currentAssignedForemanIds)
 
-    if (effectiveAssignedJobIds.includes(jobId) && role !== 'employee' && currentRoleCanBeAssignedJobs(role)) {
+    if (effectiveAssignedJobIds.includes(jobId) && role !== 'employee' && role !== 'admin' && currentRoleCanBeAssignedJobs(role)) {
       nextAssignedForemanIds.add(uid)
     } else {
       nextAssignedForemanIds.delete(uid)
@@ -231,7 +232,7 @@ export async function createUserByAdmin(
       firstName: input.firstName,
       lastName: input.lastName,
       role: sanitizedRole,
-      assignedJobIds: currentRoleCanBeAssignedJobs(sanitizedRole)
+      assignedJobIds: currentRoleCanHaveAccountJobAssignments(sanitizedRole)
         ? normalizeAssignedJobIds(input.assignedJobIds)
         : [],
       sendInvite: input.sendInvite === true,
@@ -254,7 +255,7 @@ export async function createUserByAdmin(
       sendInvite: input.sendInvite === true,
     })
 
-    if (currentRoleCanBeAssignedJobs(sanitizedRole) && sanitizedAssignedJobIds.length) {
+    if (currentRoleCanHaveAccountJobAssignments(sanitizedRole) && sanitizedAssignedJobIds.length) {
       try {
         await syncUserJobAssignments(result.data.uid, sanitizedRole, sanitizedAssignedJobIds)
       } catch (error) {
@@ -287,7 +288,7 @@ export async function updateUser(uid: string, input: UpdateUserInput): Promise<v
       lastName: input.lastName,
       role: sanitizedRole,
       active: input.active,
-      assignedJobIds: currentRoleCanBeAssignedJobs(sanitizedRole)
+      assignedJobIds: currentRoleCanHaveAccountJobAssignments(sanitizedRole)
         ? normalizeAssignedJobIds(input.assignedJobIds)
         : [],
     })

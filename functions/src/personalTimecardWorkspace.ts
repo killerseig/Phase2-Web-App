@@ -82,25 +82,18 @@ export async function handlePersonalTimecard(
   if (saved && !/^[\w-]{8,100}$/.test(requestId))
     throw new HttpsError('invalid-argument', 'A save request identifier is required.')
   const result = await database.runTransaction(async (tx) => {
-    const profileRef = database.doc('users/' + uid),
-      policyRef = database.doc('settings/myTimecard')
-    const [profileSnap, policySnap] = await Promise.all([
-      tx.get(profileRef),
-      tx.get(policyRef),
-    ])
+    const profileRef = database.doc('users/' + uid)
+    const profileSnap = await tx.get(profileRef)
     const profile = profileSnap.data() || {},
-      policy = policySnap.data() || {},
       user = { ...buildCurrentFunctionUser(uid, profile), role: normalizeStoredRole(profile.role) }
     if (
       !profileSnap.exists ||
       !user.active ||
-      !(PERSONAL_TIMECARD_ROLES as readonly string[]).includes(user.role) ||
-      (user.role !== 'employee' && (!Array.isArray(policy.enabledRoles) ||
-      !policy.enabledRoles.includes(user.role)))
+      !(PERSONAL_TIMECARD_ROLES as readonly string[]).includes(user.role)
     )
       throw new HttpsError(
         'permission-denied',
-        'Personal timecard entry has not been enabled for your account role.',
+        'Your account cannot use personal timecards.',
       )
     const link = profile.myTimecard || {},
       employeeId = text(link.employeeId)

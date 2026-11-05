@@ -368,16 +368,20 @@ describe('admin user actions', () => {
     expect(createAction.value).toBeNull()
 
     createForm.role = 'admin'
-    createForm.assignedJobIds = ['job-should-not-send']
+    createForm.assignedJobIds = ['personal-admin-job']
 
     await actions.handleCreateUser(false)
 
     expect(createUserByAdminMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        assignedJobIds: [],
+        assignedJobIds: ['personal-admin-job'],
         sendInvite: false,
       }),
     )
+    createForm.role = 'payroll'
+    createForm.assignedJobIds = ['must-not-grant-field-access']
+    await actions.handleCreateUser(false)
+    expect(createUserByAdminMock).toHaveBeenLastCalledWith(expect.objectContaining({ role: 'payroll', assignedJobIds: [], sendInvite: false }))
   })
 
   it('sends pending invites and forwards invite failures', async () => {

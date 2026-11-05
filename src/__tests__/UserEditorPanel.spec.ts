@@ -235,7 +235,7 @@ describe('UserEditorPanel', () => {
       detailForm: {
         firstName: 'Alison',
         lastName: 'Larsen',
-        role: 'admin',
+        role: 'payroll',
         active: true,
         assignedJobIds: ['job-1'],
       },
@@ -285,4 +285,12 @@ describe('UserEditorPanel', () => {
     expect(wrapper.text()).toContain('No User Selected')
     expect(wrapper.text()).toContain('Select a user to edit, or click New User to create one.')
   })
+  it('allows admin personal job choices without changing other admin capabilities', () => {
+    const wrapper = mountEditor({ detailForm: { firstName: 'Synthetic', lastName: 'Admin', role: 'admin', active: true, assignedJobIds: ['job-1'] } })
+    expect(wrapper.text()).toContain('Assigned Jobs')
+    expect(wrapper.text()).toContain('Admin access elsewhere is unchanged')
+    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
 })

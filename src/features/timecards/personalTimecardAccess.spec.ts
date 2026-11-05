@@ -5,7 +5,7 @@ import { buildEmployeeCard } from './workbook'
 import { getRouteAccessDecision } from '@/router/routeAccess'
 import { getAppShellWorkspaceNavigationItems, getAppShellAdminNavigationItems } from '@/features/navigation/appShellNavigation'
 import { getTargetRoleCapabilities } from '@/auth/targetRoleCapabilities'
-import { normalizeStoredRoleKey, EDITABLE_USER_ROLE_OPTIONS } from '@/auth/roles'
+import { normalizeStoredRoleKey, EDITABLE_USER_ROLE_OPTIONS, currentRoleCanBeAssignedJobs, currentRoleCanHaveAccountJobAssignments } from '@/auth/roles'
 import { buildCurrentFunctionUser } from '../../../functions/src/roleAccess'
 import { personalAssignedJobIds, personalCurrentWeekEnd } from '../../../functions/src/personalTimecardWorkspace'
 
@@ -20,6 +20,16 @@ describe('restricted employee timecard access', () => {
   })
   it.each(['jobs', 'reports', 'company-library', 'form-builder', 'users', 'timecards', 'form-response', 'public-website', 'login'])('redirects employee away from %s', routeName => {
     expect(getRouteAccessDecision({ rawRole: 'employee', hasWorkspaceAccess: true, routeName, routeJobId: 'assigned', assignedJobIds: ['assigned'], requiresAuth: false })).toEqual({ name: 'my-timecard' })
+  })
+  it('preserves admin and field privileges while allowing personal assignment data', () => {
+    expect(currentRoleCanHaveAccountJobAssignments('admin')).toBe(true)
+    expect(currentRoleCanBeAssignedJobs('admin')).toBe(false)
+    expect(currentRoleCanHaveAccountJobAssignments('payroll')).toBe(false)
+    expect(getAppShellAdminNavigationItems('admin').some(item => item.to === '/users')).toBe(true)
+    for (const role of ['admin', 'foreman', 'shop-foreman', 'project-manager'] as const) {
+      expect(getAppShellWorkspaceNavigationItems(role).some(item => item.to === '/jobs/my-timecard')).toBe(true)
+      expect(getAppShellWorkspaceNavigationItems(role).some(item => item.to === '/jobs')).toBe(true)
+    }
   })
   it('allows only the personal workspace and still rejects inactive accounts', () => {
     expect(getRouteAccessDecision({ rawRole: 'employee', hasWorkspaceAccess: true, routeName: 'my-timecard', routeJobId: '' })).toBe(true)

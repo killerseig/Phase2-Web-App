@@ -1,4 +1,4 @@
-import { currentRoleCanBeAssignedJobs } from '@/auth/roles'
+import { currentRoleCanHaveAccountJobAssignments } from '@/auth/roles'
 import { createUserByAdmin, sendPendingInvitesByAdmin } from '@/services/users'
 import type { UserCreateFormState } from '@/features/users/userViewHelpers'
 import type { WritableRef } from '@/types/reactivity'
@@ -45,7 +45,7 @@ export function useUserCreateActions({
         firstName: createForm.firstName,
         lastName: createForm.lastName,
         role: createForm.role,
-        assignedJobIds: currentRoleCanBeAssignedJobs(createForm.role) ? createForm.assignedJobIds : [],
+        assignedJobIds: currentRoleCanHaveAccountJobAssignments(createForm.role) ? createForm.assignedJobIds : [],
         sendInvite,
       })
 

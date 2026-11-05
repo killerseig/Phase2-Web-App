@@ -79,3 +79,8 @@ export function normalizeEditableUserRole(role: RawRoleKey): EditableUserRole {
 export function currentRoleCanBeAssignedJobs(role: RawRoleKey): boolean {
   return targetRoleCanBeAssignedJobs(role)
 }
+
+/** Personal job choices are account data, not a grant of foreman permissions. */
+export function currentRoleCanHaveAccountJobAssignments(role: RawRoleKey): boolean {
+  return role === 'admin' || currentRoleCanBeAssignedJobs(role)
+}
