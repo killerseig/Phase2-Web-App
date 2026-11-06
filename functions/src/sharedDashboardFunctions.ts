@@ -1,7 +1,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db } from './runtime'
 import { announcementId, listDashboardAnnouncements, publishDashboardAnnouncement, listAnnouncementRecipients, validateAnnouncementRecipients } from './dashboardAnnouncements'
-import { buildCurrentFunctionUser, type CurrentFunctionUser } from './roleAccess'
+import { buildCurrentFunctionUser, normalizeStoredRole, type CurrentFunctionUser } from './roleAccess'
 import { VALID_ROLES, type UserRole } from './constants'
 import { targetFunctionRoleCanOpenJobDashboard } from './targetJobAccess'
 import { isFunctionShopJob } from './jobIdentity'
@@ -79,7 +79,17 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
   return db.runTransaction(async (tx) => {
     const profile = await tx.get(db.doc('users/' + request.auth!.uid))
     const user = buildCurrentFunctionUser(request.auth!.uid, profile.data() || {})
-    if (!profile.exists || !user.active || user.role === 'none') throw denied()
+    if (!profile.exists || !user.active) throw denied()
+    if (user.role === 'none') {
+      // Employee may read only their authenticated announcement feed. No workspace
+      // layouts, job details, source documents, authoring or timecards are enabled.
+      if (normalizeStoredRole(profile.data()?.role) === 'employee' && data.action === 'list-announcements' && scope === 'personal') {
+        if (Object.keys(data).some(key => !['scope', 'action'].includes(key)))
+          throw new HttpsError('invalid-argument', 'Use your own announcement feed.')
+        return listDashboardAnnouncements(tx, user)
+      }
+      throw denied()
+    }
     if (data.action === 'save-announcement-drafts' && user.role !== 'admin')
       throw denied('Only Admin can create announcement drafts.')
     const role = (data.role ?? user.role) as UserRole

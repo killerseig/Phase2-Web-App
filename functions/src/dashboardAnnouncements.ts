@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { FieldPath, type Transaction } from 'firebase-admin/firestore'
 import { db } from './runtime'
-import { buildCurrentFunctionUser, type CurrentFunctionUser } from './roleAccess'
+import { buildCurrentFunctionUser, normalizeStoredRole, type CurrentFunctionUser } from './roleAccess'
+import { isActiveAnnouncementProfile } from './announcementAccess'
 import { validAnnouncementRecipientId } from './sharedDashboardModel'
 import type { AnnouncementDraft, PublishedAnnouncement } from './sharedDashboardModel'
 
@@ -39,7 +40,7 @@ export async function publishDashboardAnnouncement(tx: Transaction, user: Curren
   return { id }
 }
 
-export async function listDashboardAnnouncements(tx: Transaction, user: CurrentFunctionUser, selectedJobId?: string) {
+export async function listDashboardAnnouncements(tx: Transaction, user: Pick<CurrentFunctionUser, 'uid' | 'assignedJobIds'>, selectedJobId?: string) {
   // Assignment is narrower than the ability to open a job (no Admin/Payroll/Shop bypass).
   const assignedOnJobs = await tx.get(db.collection('jobs').where('assignedForemanIds', 'array-contains', user.uid))
   const assignedIds = new Set(assignedOnJobs.docs.map(doc => doc.id))
@@ -69,8 +70,8 @@ export async function validateAnnouncementRecipients(tx: Transaction, ids: strin
   if (!ids.length || ids.length > 25 || ids.some(id => !validAnnouncementRecipientId(id)) || new Set(ids).size !== ids.length)
     throw new HttpsError('invalid-argument', 'Choose between one and 25 distinct people.')
   const profiles = await tx.getAll(...ids.map(id => db.doc('users/' + id)))
-  if (profiles.some(profile => !profile.exists || !buildCurrentFunctionUser(profile.id, profile.data()!).active || buildCurrentFunctionUser(profile.id, profile.data()!).role === 'none'))
-    throw new HttpsError('failed-precondition', 'Choose active users with dashboard access.')
+  if (profiles.some(profile => !profile.exists || !isActiveAnnouncementProfile(profile.data()!)))
+    throw new HttpsError('failed-precondition', 'Choose active users with announcement access.')
 }
 
 export async function listAnnouncementRecipients(tx: Transaction, user: CurrentFunctionUser, data: Record<string, unknown>) {
@@ -88,11 +89,12 @@ export async function listAnnouncementRecipients(tx: Transaction, user: CurrentF
   for (const profile of profiles.docs) {
     scanned++
     const current = buildCurrentFunctionUser(profile.id, profile.data())
-    if (!validAnnouncementRecipientId(profile.id) || !current.active || current.role === 'none') continue
+    if (!validAnnouncementRecipientId(profile.id) || !isActiveAnnouncementProfile(profile.data())) continue
+    const role = normalizeStoredRole(profile.data().role)
     const email = typeof profile.data().email === 'string' ? profile.data().email : ''
     const name = current.displayName || profile.id
-    if (!`${name} ${email} ${current.role}`.toLowerCase().includes(search)) continue
-    items.push({ uid: profile.id, name, email, role: current.role })
+    if (!`${name} ${email} ${role}`.toLowerCase().includes(search)) continue
+    items.push({ uid: profile.id, name, email, role })
     if (items.length === 50) break
   }
   return { items, nextCursor: scanned < profiles.size || profiles.size === 100 ? profiles.docs[scanned - 1]?.id || null : null }

@@ -14,12 +14,12 @@ describe('restricted employee timecard access', () => {
     expect(normalizeStoredRoleKey('Employee')).toBe('employee')
     expect(EDITABLE_USER_ROLE_OPTIONS).toContainEqual({ label: 'Employee', value: 'employee' })
     expect(buildCurrentFunctionUser('self', { role: 'employee', active: true }).role).toBe('none')
-    expect(getAppShellWorkspaceNavigationItems('employee')).toEqual([])
+    expect(getAppShellWorkspaceNavigationItems('employee')).toEqual([{label:'Announcements',to:'/dashboards/announcements'}])
     expect(getAppShellAdminNavigationItems('employee')).toEqual([])
     expect(Object.entries(getTargetRoleCapabilities('employee')).filter(([, value]) => value).map(([key]) => key)).toEqual(['accessWorkspace'])
   })
   it.each(['jobs', 'reports', 'company-library', 'form-builder', 'users', 'timecards', 'form-response', 'public-website', 'login'])('redirects employee away from %s', routeName => {
-    expect(getRouteAccessDecision({ rawRole: 'employee', hasWorkspaceAccess: true, routeName, routeJobId: 'assigned', assignedJobIds: ['assigned'], requiresAuth: false })).toEqual({ name: 'my-timecard' })
+    expect(getRouteAccessDecision({ rawRole: 'employee', hasWorkspaceAccess: true, routeName, routeJobId: 'assigned', assignedJobIds: ['assigned'], requiresAuth: false })).toEqual({ name: 'announcements' })
   })
   it('preserves admin and field privileges while allowing personal assignment data', () => {
     expect(currentRoleCanHaveAccountJobAssignments('admin')).toBe(true)

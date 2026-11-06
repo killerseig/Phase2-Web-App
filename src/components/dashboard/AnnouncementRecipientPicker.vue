@@ -52,7 +52,7 @@ onBeforeUnmount(() => { generation++ })
         <span>{{ person.name }} <small>{{ person.email }} · {{ person.role }}</small></span>
       </label>
     </div>
-    <p v-if="!loading && !people.length && !error">No matching active dashboard users on this page.</p>
+    <p v-if="!loading && !people.length && !error">No matching active users on this page.</p>
     <AppButton v-if="error" type="button" :disabled="loading" @click="load()">Retry people</AppButton>
     <AppButton v-if="cursor" type="button" :disabled="loading" @click="load(false)">Load more people</AppButton>
   </fieldset>

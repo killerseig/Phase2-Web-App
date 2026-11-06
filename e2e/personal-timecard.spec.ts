@@ -1,4 +1,5 @@
 import { expect, test } from './helpers/test'
+import { mockDashboard } from './helpers/dashboardFixture'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture'
 
 for (const screen of [
@@ -29,9 +30,10 @@ for (const screen of [
     test('employee cannot bypass the pause through Jobs', async ({ page }) => {
       const fixture = createJobsFixture()
       fixture.auth.profile.role = 'employee'
+      await mockDashboard(page,false)
       await gotoPhase2App(page, '/jobs', fixture)
-      await expect(page).toHaveURL(/\/jobs\/my-timecard$/)
-      await expect(page.getByText('My Timecard is temporarily unavailable', { exact: true })).toBeVisible()
+      await expect(page).toHaveURL(/\/dashboards\/announcements$/)
+      await expect(page.getByRole('heading', {name:'Announcements',exact:true})).toBeVisible()
     })
   })
 }

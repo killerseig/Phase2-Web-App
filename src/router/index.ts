@@ -31,6 +31,7 @@ function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/dashboards/announcements', name: 'announcements', component: () => import('@/views/AnnouncementsView.vue'), meta: { title: 'Announcements', requiresAuth: true } },
     { path: '/jobs/my-timecard', name: 'my-timecard', component: () => import('@/views/MyTimecardUnavailableView.vue'), meta: { title: 'My Timecard', requiresAuth: true } },
     { path: '/reports', name: 'reports', component: () => import('@/views/ReportsView.vue'), meta: { title: 'Reports', requiresAuth: true } },
     { path: '/company-library', name: 'company-library', component: () => import('@/views/CompanyLibraryView.vue'), meta: { title: 'Company Library', requiresAuth: true } },
@@ -277,7 +278,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'login' && auth.hasWorkspaceAccess) {
-    return auth.rawRole === 'employee' ? { name: 'my-timecard' } : getWorkspaceRedirectTarget(to.query.redirect)
+    return auth.rawRole === 'employee' ? { name: 'announcements' } : getWorkspaceRedirectTarget(to.query.redirect)
   }
 
   const decision = getRouteAccessDecision({

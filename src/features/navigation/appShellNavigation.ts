@@ -15,6 +15,7 @@ export interface AppShellNavigationItem {
 
 const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { label: 'Jobs', to: '/jobs' },
+  { label: 'Announcements', to: '/dashboards/announcements' },
   { label: 'Company Library', to: '/company-library' },
   { label: 'Forms', to: '/reports' },
   // Remove these visibility flags after review; route authorization is independent of navigation.
@@ -32,7 +33,7 @@ const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
 ]
 
 export function getAppShellWorkspaceNavigationItems(rawRole: RawRoleKey = 'none'): AppShellNavigationItem[] {
-  if (rawRole === 'employee') return []
+  if (rawRole === 'employee') return [{ label: 'Announcements', to: '/dashboards/announcements' }]
   return WORKSPACE_NAVIGATION_ITEMS.filter((item) => !item.hidden &&
     (item.to !== '/reports' || canListCompanyForms(rawRole)))
 }

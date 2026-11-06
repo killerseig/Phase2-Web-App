@@ -9,16 +9,17 @@ describe('app shell navigation policy', () => {
   it('keeps unannounced dashboards out of workspace navigation for every role', () => {
     expect(getAppShellWorkspaceNavigationItems()).toEqual([
       { label: 'Jobs', to: '/jobs' },
+      { label: 'Announcements', to: '/dashboards/announcements' },
       { label: 'Company Library', to: '/company-library' },
     ])
   })
 
   it.each(['admin', 'foreman', 'project-manager', 'shop-foreman'] as const)('opens Library and Forms without a selected job for %s', role => {
-    expect(getAppShellWorkspaceNavigationItems(role).map(item => item.to)).toEqual(['/jobs', '/company-library', '/reports'])
+    expect(getAppShellWorkspaceNavigationItems(role).map(item => item.to)).toEqual(['/jobs', '/dashboards/announcements', '/company-library', '/reports'])
   })
 
   it('does not advertise the forbidden form list to Payroll', () => {
-    expect(getAppShellWorkspaceNavigationItems('payroll').map(item => item.to)).toEqual(['/jobs', '/company-library'])
+    expect(getAppShellWorkspaceNavigationItems('payroll').map(item => item.to)).toEqual(['/jobs', '/dashboards/announcements', '/company-library'])
   })
 
   it('shows the current admin navigation only when the role can use each route capability', () => {

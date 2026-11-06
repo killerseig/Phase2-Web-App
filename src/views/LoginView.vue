@@ -50,7 +50,7 @@ async function routeIntoWorkspaceIfAllowed() {
   await redirectToWorkspaceIfAllowed({
     hasWorkspaceAccess: auth.hasWorkspaceAccess,
     replace: (target) => router.replace(target),
-    workspaceTarget: workspaceTarget.value,
+    workspaceTarget: auth.rawRole === 'employee' ? '/dashboards/announcements' : workspaceTarget.value,
   })
 }
 

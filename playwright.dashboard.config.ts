@@ -7,7 +7,7 @@ export default defineConfig({
   ...gate,
   // The opt-in HMR check temporarily edits/restores source. Keep it isolated
   // from other journeys and never run it against an operator's preview server.
-  testMatch: verifyHmr ? ['vite-hmr.spec.ts'] : ['jobs-pending-edits.spec.ts', 'jobs.spec.ts', 'dashboard-form-picker.spec.ts', 'shared-dashboards.spec.ts', 'dashboard-widgets.spec.ts', 'dashboard-jobs.spec.ts', 'dashboard-workflows.spec.ts', 'form-dashboard-presentations.spec.ts', 'document-previews.spec.ts', 'sds-workspace.spec.ts', 'usage-analytics.spec.ts'],
+  testMatch: verifyHmr ? ['vite-hmr.spec.ts'] : ['employee-announcements.spec.ts', 'personal-timecard.spec.ts', 'jobs-pending-edits.spec.ts', 'jobs.spec.ts', 'dashboard-form-picker.spec.ts', 'shared-dashboards.spec.ts', 'dashboard-widgets.spec.ts', 'dashboard-jobs.spec.ts', 'dashboard-workflows.spec.ts', 'form-dashboard-presentations.spec.ts', 'document-previews.spec.ts', 'sds-workspace.spec.ts', 'usage-analytics.spec.ts'],
   reporter: [['line'], ['json', { outputFile: 'test-results/dashboard-results.json' }]],
   outputDir: 'test-results/dashboard-artifacts',
   use: {
