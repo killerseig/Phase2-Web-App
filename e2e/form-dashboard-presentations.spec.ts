@@ -251,3 +251,25 @@ test('an explicitly pinned full-page link rejects a record from another template
   expect(server.created).toBe(1)
   expect([...server.records.values()][0]!.answers.job).toBe('Version one answers')
 })
+
+for (const presentation of ['full-page', 'inline'] as const) test(`sign-out preserves ${presentation} form answers after a failed save and reuses the retry identity`, async ({ page }) => {
+  const dashboard = await mockDashboard(page)
+  seed(dashboard)
+  const server = await setupFormServer(page, {
+    definition: smallForm,
+    initialPath: presentation === 'inline' ? '/dashboards/personal' : '/forms/audit-e2e',
+    lostSave: true,
+  })
+  await page.getByRole('button', { name: 'Start draft', exact: true }).click()
+  await page.getByLabel('Job name', { exact: false }).fill('Retain my answer before sign out')
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByLabel('Job name', { exact: false })).toHaveValue('Retain my answer before sign out')
+  await expect(page.getByRole('button', { name: 'Sign Out', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  expect(server.created).toBe(1)
+  expect(server.submitted).toBe(0)
+  expect(server.saveRequests[0]).toBe(server.saveRequests[1])
+  expect([...server.records.values()][0]?.answers.job).toBe('Retain my answer before sign out')
+})

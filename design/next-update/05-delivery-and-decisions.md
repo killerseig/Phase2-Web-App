@@ -2,6 +2,12 @@
 
 Draft for discussion. All requirements remain in the next-phase scope. Stages describe sequencing, not separate exclusions, approved deadlines, or pricing commitments.
 
+## November 6 readiness update
+
+Personal/Role/parallel Job dashboards now share the editable widget host, with optional authorized Job information, Calendar, Notes, Documents, Role resources and Forms. The dashboard job list exposes the maintained administration controls at the additive `/dashboards/jobs/manage` route and returns to its originating scope. The existing Jobs page remains available. Pending edits and sign-out preparation are covered in the [current workspace readiness record](03-workspace-design.md#november-6-dashboard-testing-readiness).
+
+The later owner-requested readiness work includes preserving drafts and connecting existing administration workflows. Historical initial-stage boundary rows below remain context for the original milestone; no page retirement or production release is authorized by this update. Independent implementation does not resolve new ownership, publishing, due-work, provider or metric rules by assumption. D12/D13/D17 and D23–D25 are the remaining functional decisions for module expansion; pilot-user selection, acceptance and release remain operational gates.
+
 ## Proposed sequence
 
 | Stage | Outcome | Main dependencies / completion evidence |
@@ -46,6 +52,9 @@ Suggested decision participants are planning recommendations, not assigned commi
 | D20 | Historical bug semantics | Carry-forward rules and Job # overwrite boundaries; submitted-versus-new-record selection | Foremen, payroll | Reliable regression fixtures |
 | D21 | Explorer module and initial dashboards | Confirmed: add Personal/Role pages; all existing Jobs pages/dashboards untouched. Proposed: master/job-context explorer on new surfaces with an authorized job selector. First placement and role modules/layout ownership remain open | User, field users | SDS module presentation |
 | D22 | Existing Jobs boundary and later migration | Confirmed: no changes to existing Jobs list, dashboards, pages, routes, or workflows now; no SDS insertion. Job-dashboard integration and jobs-list replacement are deferred until this boundary is revisited | User, field users, job administrators | Initial navigation protection and later migration |
+| D23 | Tasks and checklists | Should the first version contain private personal items or shared job tasks? Shared tasks need assignees, completion/history and editing ownership defined | User, operations, intended users | Task/checklist widget |
+| D24 | Dashboard analytics | Which business measure, time window and source records should each chart/statistic represent? Spreadsheet mode remains under D17 | User, PMs, payroll, metric owners | Charts and PM analytics |
+| D25 | Daily Logs-to-Forms replacement | Agree the form definition, recipients and history/export treatment; preserve historical logs and approve the replacement rollout separately | User, field users, report recipients | Daily Log retirement |
 
 ## Review agenda
 

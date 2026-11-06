@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { RouteLocationRaw } from 'vue-router'
+import AppButtonLink from '@/components/common/AppButtonLink.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppPageLayout from '@/components/common/AppPageLayout.vue'
 import AppSplitWorkspace from '@/components/common/AppSplitWorkspace.vue'
@@ -9,8 +11,11 @@ defineOptions({
 })
 
 defineProps<{
+  title?: string
   canUseJobSetupEditor: boolean
   editMode: boolean
+  beforeSignOut?: () => boolean | Promise<boolean>
+  dashboardReturn?: RouteLocationRaw | null
 }>()
 
 const emit = defineEmits<{
@@ -19,14 +24,16 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <AppShell class="jobs-workspace">
+  <AppShell class="jobs-workspace" :before-sign-out="beforeSignOut">
     <AppPageLayout
-      title="Jobs"
+      :title="title || 'Jobs'"
       description="Find a job to open its timecards, daily logs, and shop orders."
       fill
     >
-      <template v-if="canUseJobSetupEditor" #actions>
+      <template v-if="canUseJobSetupEditor || dashboardReturn" #actions>
+        <AppButtonLink v-if="dashboardReturn" :to="dashboardReturn">Return to dashboard</AppButtonLink>
         <AppButton
+          v-if="canUseJobSetupEditor"
           class="jobs-edit-mode-button"
           :class="{ 'jobs-edit-mode-button--active': editMode }"
           variant="ghost"

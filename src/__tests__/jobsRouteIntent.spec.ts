@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveJobsRouteIntent } from '@/features/jobs/jobsRouteIntent'
+import { jobsManagementRoute, resolveJobsDashboardReturn, resolveJobsRouteIntent } from '@/features/jobs/jobsRouteIntent'
 import type { JobRecord } from '@/types/domain'
 const job = { id: 'allowed', active: true } as JobRecord
 const access = { canCreate: true, canManage: true, canUseEditor: true, jobs: [job], canEdit: (entry: JobRecord) => entry.id === 'allowed' }
@@ -23,4 +23,16 @@ describe('dashboard Jobs setup entry points', () => {
     for (const jobAction of ['defaults', 'archived', 'edit']) expect(resolveJobsRouteIntent({ jobAction, jobId: 'allowed' }, payroll)).toEqual({ kind: 'denied' })
     expect(resolveJobsRouteIntent({ jobAction: 'create' }, { ...access, canCreate: false })).toEqual({ kind: 'denied' })
   })
+})
+
+it('returns only to known dashboard routes and preserves the originating job independently of the edited job', () => {
+  expect(resolveJobsDashboardReturn({ fromDashboard: 'personal' })).toEqual({ name: 'personal-workspace' })
+  expect(resolveJobsDashboardReturn({ fromDashboard: 'role' })).toEqual({ name: 'role-workspace' })
+  const route = jobsManagementRoute('edit', 'job', 'origin-job', 'edited-job')
+  expect(route.name).toBe('dashboard-jobs-management')
+  expect(route.query.jobId).toBe('edited-job')
+  expect(resolveJobsDashboardReturn(route.query)).toEqual({ name: 'shared-job-home', params: { jobId: 'origin-job' } })
+  expect(resolveJobsDashboardReturn({ fromDashboard: 'job' })).toEqual({ name: 'shared-job-home' })
+  for (const query of [{}, { fromDashboard: 'https://example.com' }, { fromDashboard: ['personal'] }, { fromDashboard: 'job', dashboardJob: '../secret' }, { fromDashboard: 'job', dashboardJob: ['job-1'] }]) expect(resolveJobsDashboardReturn(query)).toBeNull()
+  expect(jobsManagementRoute('create')).toEqual({ name: 'jobs', query: { jobAction: 'create' } })
 })

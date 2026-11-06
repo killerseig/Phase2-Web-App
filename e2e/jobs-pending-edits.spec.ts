@@ -1,3 +1,4 @@
+import { mockDashboard } from './helpers/dashboardFixture.js'
 import { expect, test } from './helpers/test.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
 
@@ -97,4 +98,45 @@ test('reverting a field while a different snapshot saves still persists the reve
   await expect(page.getByText('All changes saved.', { exact: true })).toBeVisible()
   expect(await page.evaluate(() => window.__PHASE2_E2E_STATE__?.jobs?.find(job => job.id === 'job-1')?.name)).toBe(fixture.jobs[0]!.name)
   await expect(name).toHaveValue(fixture.jobs[0]!.name)
+})
+
+test('signing out saves pending job edits before clearing the session', async ({ page }) => {
+  const fixture = createJobsFixture()
+  fixture.delays = { jobUpdateMs: 500 }
+  await gotoPhase2App(page, '/jobs?jobAction=edit&jobId=job-1', fixture)
+  await page.getByLabel('Job Name', { exact: true }).fill('Saved before sign out')
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  expect(await page.evaluate(() => window.__PHASE2_E2E_STATE__?.jobs?.find(job => job.id === 'job-1')?.name)).toBe('Saved before sign out')
+})
+
+test('cancelled sign-out retains an invalid job draft and the active session', async ({ page }) => {
+  const fixture = createJobsFixture()
+  await gotoPhase2App(page, '/jobs?jobAction=edit&jobId=job-1', fixture)
+  await page.getByLabel('Job Number', { exact: true }).fill('')
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Keep editing', exact: true }).click()
+  await expect(page).toHaveURL(/\/jobs\?/)
+  await expect(page.getByLabel('Job Number', { exact: true })).toHaveValue('')
+  await expect(page.getByRole('button', { name: 'Sign Out', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  expect(await page.evaluate(() => window.__PHASE2_E2E_STATE__?.jobs?.find(job => job.id === 'job-1')?.code)).toBe(fixture.jobs[0]!.code)
+})
+
+test('personal layout sign-out respects cancel and explicit discard before ending the session', async ({ page }) => {
+  const api = await mockDashboard(page)
+  api.layouts.set('personal', { version: 1, widgets: [{ id: 'message', type: 'text', title: 'Message', text: 'Saved', span: 12 }] })
+  await gotoPhase2App(page, '/dashboards/personal', createJobsFixture())
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await page.getByLabel('Text content', { exact: true }).fill('Keep this layout draft')
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page.getByLabel('Text content', { exact: true })).toHaveValue('Keep this layout draft')
+  await expect(page.getByRole('button', { name: 'Sign Out', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  expect(api.requests.filter(request => request.action === 'save-template')).toHaveLength(0)
 })

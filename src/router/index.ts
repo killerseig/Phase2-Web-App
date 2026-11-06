@@ -140,6 +140,12 @@ const router = createRouter({
       },
     },
     {
+      path: '/dashboards/jobs/manage',
+      name: 'dashboard-jobs-management',
+      component: () => import('@/views/DashboardJobsManagementView.vue'),
+      meta: { title: 'Job administration', requiresAuth: true },
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('@/views/RoleDashboardView.vue'),

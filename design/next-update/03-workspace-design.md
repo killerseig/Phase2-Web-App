@@ -68,6 +68,18 @@ The complete gate also exposed a document-library race: an explicit refresh left
 
 Verification after reconnect: 2,124/2,124 source unit tests and the complete 93/93 synthetic dashboard/Jobs browser gate pass with no skipped or flaky cases. The final dialog styling check also passes at 1280px and 390px, with screenshots reviewed. The complete gate report is retained locally at `test-results/dashboard-aggregate-results.json`; the final unit report is `test-results/final-pending-edit-source-units.json`. Changed-file ESLint has zero errors and two conditional-test warnings; `git diff --check` passes. Build and offline Functions-package verification complete the checkpoint. No production writes, deployment, page retirement or denied push retry is included.
 
+### Sign-out and management round trips
+
+Sign Out now awaits an optional page preparation callback before clearing authentication. Jobs uses its pending-edit preparation; unified Personal/Role/Job dashboards use their existing nested editor preparation; full-page respondent forms and the Company Library/SDS pages forward their existing save/discard methods. Cancelled preparation keeps the session intact, and repeated sign-out clicks cannot start overlapping exits. Full-page and inline form tests verify that a failed draft save retains answers and retries with the same request identity; no form is submitted or emailed by sign-out.
+
+Dashboard management actions now open `/dashboards/jobs/manage`, an authenticated view that reuses the maintained Jobs workspace. Its creation, assignments, recipients, archive/restore/delete and autosave policies remain the existing ones. The original `/jobs` page remains available. This additive host prepares a future directory replacement without retiring or redirecting that page.
+
+A Return to dashboard link preserves Personal, Role or the original selected Job context. Destinations are resolved from known named routes; external/malformed return values are ignored. An originating job remains separate from the job being edited. Pending edits flush through the existing route guard before returning. Desktop/phone round trips and anonymous access to the management route are covered.
+
+The reviewed core now supports local user testing of editing, jobs administration, form/library navigation and leaving/signing out. Remaining module work requires the decisions in [D12, D13, D17 and D23–D25](05-delivery-and-decisions.md#decision-register). No new task audience, announcement publisher, alert deadline or analytics metric was guessed. Production rollout, navigation promotion and page retirement remain separate approvals.
+
+Final verification for this follow-up: 2,128/2,128 source unit tests and 103/103 synthetic dashboard/Jobs browser cases pass. Build, type checking, offline Functions packaging and whitespace checks pass. Changed-file ESLint has zero errors and five conditional-test style warnings. The browser gate includes legacy Jobs creation, assignment restrictions, recipients, archive/restore/delete, new management authentication, pending-edit round trips and sign-out failure/cancel paths. No production acceptance, actual email delivery or release is implied.
+
 ### Pilot review and release boundary
 
 Use `/dashboards/personal`, `/dashboards/role` and `/dashboards/job-home/:jobId` in the local review app. The normal Work-Computer preview uses port 5173. The local app can be configured against live data: viewing is safe, but saving a dashboard, note, file or form would be a production write. Automated verification uses synthetic browser fixtures or the demo Firestore emulator only.

@@ -4,7 +4,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import '@/styles/builder-ui.css'
 import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import { canEditJobSetup } from '@/auth/capabilities'
-import { resolveJobsRouteIntent } from '@/features/jobs/jobsRouteIntent'
+import { resolveJobsDashboardReturn, resolveJobsRouteIntent } from '@/features/jobs/jobsRouteIntent'
 import JobAdminDetailPane from '@/components/jobs/JobAdminDetailPane.vue'
 import JobBrowserPanel from '@/components/jobs/JobBrowserPanel.vue'
 import JobConfirmDialogs from '@/components/jobs/JobConfirmDialogs.vue'
@@ -43,10 +43,13 @@ import type {
 } from '@/types/domain'
 import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
 
+withDefaults(defineProps<{ administration?: boolean }>(), { administration: false })
+
 const auth = useAuthStore()
 const jobsStore = useJobsStore()
 const router = useRouter()
 const initialRouteQuery = { ...useRoute().query }
+const dashboardReturn = resolveJobsDashboardReturn(initialRouteQuery)
 const toast = useAppToast()
 
 const searchTerm = ref('')
@@ -368,6 +371,9 @@ onMounted(() => {
 
 <template>
   <JobsWorkspaceShell
+    :title="administration ? 'Job administration' : 'Jobs'"
+    :before-sign-out="prepareNavigation"
+    :dashboard-return="dashboardReturn"
     :can-use-job-setup-editor="canUseJobSetupEditor"
     :edit-mode="editDrawerOpen"
     @toggle-edit-mode="toggleEditorSafely"

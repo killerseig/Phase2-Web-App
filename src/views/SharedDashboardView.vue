@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { jobsManagementRoute } from '@/features/jobs/jobsRouteIntent'
 import { canEditJobSetup } from '@/auth/capabilities'
 import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
 
@@ -592,7 +593,7 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <AppShell :contained="editing" :compact="editing">
+  <AppShell :contained="editing" :compact="editing" :before-sign-out="prepare">
     <section
       ref="root"
       class="shared-dashboard"
@@ -635,7 +636,7 @@ onBeforeUnmount(() => {
           <AppButton v-else-if="canEdit" variant="primary" type="button" :disabled="contentLoading || busy" @click="beginEdit">
             Edit</AppButton
           ><AppButton type="button" :disabled="loading || busy" @click="reload">Refresh</AppButton>
-          <AppButtonLink v-if="scope === 'job' && editableJobIds.includes(jobId)" :to="{ name: 'jobs', query: { jobAction: 'edit', jobId } }">Manage job</AppButtonLink>
+          <AppButtonLink v-if="scope === 'job' && editableJobIds.includes(jobId)" :to="jobsManagementRoute('edit', 'job', jobId, jobId)">Manage job</AppButtonLink>
           <AppButtonLink :to="scope === 'job' && jobId ? `/jobs/${jobId}` : '/jobs'">{{
             scope === 'job' && jobId ? 'Existing job page' : 'Jobs'
           }}</AppButtonLink>

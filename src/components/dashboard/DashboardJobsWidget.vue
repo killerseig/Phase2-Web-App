@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
+import { jobsManagementRoute } from '@/features/jobs/jobsRouteIntent'
 import { RouterLink } from 'vue-router'
 import AppButton from '@/components/common/AppButton.vue'
 import AppButtonLink from '@/components/common/AppButtonLink.vue'
@@ -15,6 +16,8 @@ const props = defineProps<{
   canCreateJobs?: boolean
   canManageJobs?: boolean
   editableJobIds?: string[]
+  scope?: 'personal' | 'role' | 'job'
+  jobId?: string
 }>()
 const id = useId()
 const query = ref('')
@@ -41,9 +44,9 @@ function clearSearch() {
     label="Loading jobs."
   >
     <nav v-if="canCreateJobs || canManageJobs" class="dashboard-jobs__management" aria-label="Job management">
-      <AppButtonLink v-if="canCreateJobs" :to="{ name: 'jobs', query: { jobAction: 'create' } }">New job</AppButtonLink>
-      <AppButtonLink v-if="canManageJobs" :to="{ name: 'jobs', query: { jobAction: 'archived' } }">Archived jobs</AppButtonLink>
-      <AppButtonLink v-if="canManageJobs" :to="{ name: 'jobs', query: { jobAction: 'defaults' } }">Notification defaults</AppButtonLink>
+      <AppButtonLink v-if="canCreateJobs" :to="jobsManagementRoute('create', scope, jobId)">New job</AppButtonLink>
+      <AppButtonLink v-if="canManageJobs" :to="jobsManagementRoute('archived', scope, jobId)">Archived jobs</AppButtonLink>
+      <AppButtonLink v-if="canManageJobs" :to="jobsManagementRoute('defaults', scope, jobId)">Notification defaults</AppButtonLink>
     </nav>
     <p v-if="jobsError" class="dashboard-jobs__error" role="alert">
       Jobs could not be loaded. {{ jobsError }} Use Refresh to try again.
@@ -90,7 +93,7 @@ function clearSearch() {
             {{ entry.code || 'No Job #' }} · {{ entry.name }}
           </RouterLink>
           <nav :aria-label="`${entry.name} tools`">
-            <AppButtonLink v-if="editableJobIds?.includes(entry.id)" :aria-label="'Manage job ' + entry.name" :to="{ name: 'jobs', query: { jobAction: 'edit', jobId: entry.id } }">Manage job</AppButtonLink>
+            <AppButtonLink v-if="editableJobIds?.includes(entry.id)" :aria-label="'Manage job ' + entry.name" :to="jobsManagementRoute('edit', scope, jobId, entry.id)">Manage job</AppButtonLink>
             <AppButtonLink :to="`/jobs/${entry.id}/timecards`">Timecards</AppButtonLink>
             <AppButtonLink :to="`/jobs/${entry.id}/daily-logs`">Daily Logs</AppButtonLink>
             <AppButtonLink :to="`/jobs/${entry.id}/shop-orders`">Shop Orders</AppButtonLink>

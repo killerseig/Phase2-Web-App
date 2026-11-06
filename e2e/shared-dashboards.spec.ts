@@ -256,8 +256,8 @@ test('Text renders HTML literally and clearly reports unavailable or unsupported
   )
 })
 
-test('anonymous visits to either new dashboard require authentication', async ({ page }) => {
-  for (const path of ['/dashboards/role-home', '/dashboards/job-home/job-1']) {
+test('anonymous dashboard and management routes require authentication', async ({ page }) => {
+  for (const path of ['/dashboards/role-home', '/dashboards/job-home/job-1', '/dashboards/jobs/manage']) {
     await page.goto(path)
     await expect(page).toHaveURL(/\/login/)
   }
@@ -386,4 +386,14 @@ test('job Forms keep context through launcher, return and inline presentation wi
   await page.getByLabel('Choose job',{exact:true}).selectOption('')
   await expect(page.getByText('Choose a job to use forms.',{exact:true})).toBeVisible()
   await expect(page.getByRole('link',{name:'Open full-page form',exact:true})).toHaveCount(0)
+})
+
+test('job dashboard management returns to its original selected job', async ({ page }) => {
+  await mockShared(page)
+  await gotoPhase2App(page, '/dashboards/job-home/job-1', createJobsFixture())
+  await page.getByRole('link', { name: 'Manage job', exact: true }).click()
+  await expect(page.getByRole('link', { name: 'Return to dashboard', exact: true })).toHaveAttribute('href', '/dashboards/job-home/job-1')
+  await page.getByRole('link', { name: 'Return to dashboard', exact: true }).click()
+  await expect(page).toHaveURL(/\/dashboards\/job-home\/job-1(?:\?|$)/)
+  await expect(page.locator('.shared-variable-text')).toContainText('Acoustical Remodel')
 })

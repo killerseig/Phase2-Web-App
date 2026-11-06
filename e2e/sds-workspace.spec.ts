@@ -356,3 +356,19 @@ test('keyboard and background menus dismiss cleanly and job actions remain expli
     selections: [],
   })
 })
+
+for (const path of ['/safety/sds', '/company-library']) test(`sign-out preserves a document draft until discard is approved on ${path}`, async ({ page }) => {
+  const api = await mockSds(page)
+  await gotoPhase2App(page, path, createJobsFixture())
+  await page.getByRole('button', { name: 'Root folder', exact: true }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'New folder', exact: true }).click()
+  await page.getByLabel('Folder name', { exact: true }).fill('Retain this folder draft')
+  page.once('dialog', dialog => dialog.dismiss())
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await expect(page.getByLabel('Folder name', { exact: true })).toHaveValue('Retain this folder draft')
+  await expect(page.getByRole('button', { name: 'Sign Out', exact: true })).toBeEnabled()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  expect(api.actions).not.toContain('saveFolder')
+})

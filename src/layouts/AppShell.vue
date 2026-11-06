@@ -11,12 +11,13 @@ import { useAuthStore } from '@/stores/auth'
 import brandLogo from '@/assets/images/phase2-logo.png'
 import '@/styles/brand-workspace.css'
 
-defineProps<{ contained?: boolean; compact?: boolean }>()
+const props = defineProps<{ contained?: boolean; compact?: boolean; beforeSignOut?: () => boolean | Promise<boolean> }>()
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const mobileNavOpen = ref(false)
+const signOutBusy = ref(false)
 
 // The main worksheet and print view retain their original content theme.
 const usesBrandContentTheme = computed(
@@ -47,9 +48,14 @@ function closeMobileNav() {
 }
 
 async function handleSignOut() {
-  closeMobileNav()
-  await auth.signOut()
-  await router.push('/login')
+  if (signOutBusy.value) return
+  signOutBusy.value = true
+  try {
+    if (props.beforeSignOut && !(await props.beforeSignOut())) return
+    closeMobileNav()
+    await auth.signOut()
+    await router.push('/login')
+  } finally { signOutBusy.value = false }
 }
 
 watch(
@@ -145,6 +151,7 @@ watch(
           <button
             class="app-shell__nav-link app-shell__sidebar-signout-button"
             type="button"
+            :disabled="signOutBusy"
             @click="handleSignOut"
           >
             Sign Out
