@@ -14,6 +14,7 @@ import {
   type SharedCalendarEntry,
 } from '@/features/dashboard/sharedDashboards'
 import { resolveDashboardText, type DashboardTextContext } from '@/features/dashboard/sharedText'
+import type { WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import type { JobRecord, RawRoleKey } from '@/types/domain'
 const SharedDashboardForm = defineAsyncComponent(() => import('./SharedDashboardForm.vue'))
 const props = defineProps<{
@@ -30,6 +31,7 @@ const props = defineProps<{
   resourceRole?: RawRoleKey
   textContext: DashboardTextContext
   editing: boolean
+  dropTarget?: WidgetDrop
   selected: string
   canEditNotes: boolean
   busy: boolean
@@ -113,15 +115,20 @@ function textStyle(widget: SharedDashboardWidget) {
 <template>
   <div
     class="shared-dashboard-grid"
-    :class="{ 'phone-preview': phone }"
+    :class="{ 'phone-preview': phone, 'is-empty-editor': editing && !widgets.length, 'is-drop-target': editing && dropTarget?.surface === 'shared-dashboard' }"
     data-widget-surface="shared-dashboard"
   >
+    <div v-if="editing && !widgets.length" class="shared-empty-canvas">
+      <h2>Start your dashboard</h2>
+      <p>Drag a widget here, or choose one from the widget library.</p>
+    </div>
     <article
       v-for="widget in widgets"
       :key="widget.id"
       :data-widget-id="widget.id"
       class="shared-dashboard-widget"
       :class="{ 'is-selected': editing && selected === widget.id }"
+      :data-drop-edge="editing && dropTarget?.surface === 'shared-dashboard' && dropTarget.overId === widget.id ? dropTarget.edge : undefined"
       :style="{ '--widget-span': widget.span }"
       @click="editing && emit('select', widget.id)"
     >

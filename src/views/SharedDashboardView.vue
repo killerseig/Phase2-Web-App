@@ -117,6 +117,10 @@ const paletteGroups = computed(() => [
   palette.value.includes(type as SharedDashboardWidget['type']) &&
   `${sharedWidgetLabels[type as SharedDashboardWidget['type']]} ${widgetDescriptions[type as SharedDashboardWidget['type']]}`
     .toLowerCase().includes(widgetSearch.value.trim().toLowerCase())) })).filter(group => group.types.length))
+const editorAnnouncement = ref('')
+function announcePosition(widget: SharedDashboardWidget, action: string) {
+  editorAnnouncement.value = action + ' ' + (widget.title || sharedWidgetLabels[widget.type]) + '. Position ' + (widgets.value.findIndex(entry => entry.id === widget.id) + 1) + ' of ' + widgets.value.length + '.'
+}
 const selectedIndex = computed(() => widgets.value.findIndex(widget => widget.id === selected.value))
 const repeatable = (type: SharedDashboardWidget['type']) => ['notes', 'text', 'form'].includes(type)
 const settingsHeading = ref<HTMLElement>()
@@ -131,6 +135,11 @@ function editWidget(id: string) {
 }
 function navigateWidgets(event: KeyboardEvent) {
   if (busy.value) return
+  if (event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+    event.preventDefault()
+    move(event.key === 'ArrowUp' ? -1 : 1, true)
+    return
+  }
   const rows = [...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')]
   const from = rows.indexOf(event.target as HTMLButtonElement)
   if (from < 0) return
@@ -235,7 +244,7 @@ const drag = useWidgetDrag<Payload>({
   disabled: () => !editing.value || busy.value || !canEdit.value,
   drop,
 })
-const { dragging, point, label } = drag
+const { dragging, point, label, target: dropTarget } = drag
 function canAdd(type: SharedDashboardWidget['type']) {
   return (
     widgets.value.length < 12 &&
@@ -255,6 +264,7 @@ function drop(payload: Payload, destination: WidgetDrop) {
     widget.title = sharedWidgetLabels[payload.type]
     widgets.value.splice(at, 0, widget)
     selected.value = widget.id
+    announcePosition(widget, 'Added')
     activePane.value = 'inspector'
     focusSettings()
   } else {
@@ -265,6 +275,7 @@ function drop(payload: Payload, destination: WidgetDrop) {
     reordered.splice(at > from ? at - 1 : at, 0, w!)
     widgets.value = reordered
     selected.value = w!.id
+    announcePosition(w!, 'Moved')
   }
 }
 function add(type: SharedDashboardWidget['type']) {
@@ -273,7 +284,7 @@ function add(type: SharedDashboardWidget['type']) {
     { beforeId: null, overId: null, edge: 'after', surface: 'shared-dashboard' },
   )
 }
-function move(direction: number) {
+function move(direction: number, focusList = false) {
   if (!editing.value || busy.value || !canEdit.value) return
   const from = widgets.value.findIndex((w) => w.id === selected.value),
     to = from + direction
@@ -282,6 +293,8 @@ function move(direction: number) {
   const [w] = reordered.splice(from, 1)
   reordered.splice(to, 0, w!)
   widgets.value = reordered
+  announcePosition(w!, 'Moved')
+  if (focusList) void nextTick(() => root.value?.querySelector<HTMLButtonElement>('.shared-widget-list button[aria-pressed="true"]')?.focus())
 }
 function duplicateWidget() {
   const widget = selectedWidget.value
@@ -711,7 +724,8 @@ onBeforeUnmount(() => {
           </section>
           <p v-if="!paletteGroups.length" role="status">No widgets match your search.</p>
           <h2 id="shared-widget-list-title">On this dashboard</h2>
-          <div class="shared-widget-list" role="group" aria-labelledby="shared-widget-list-title" @keydown="navigateWidgets">
+          <small id="shared-widget-reorder-help">Use Up and Down to select. Use Alt + Up or Down to reorder.</small>
+          <div class="shared-widget-list" role="group" aria-labelledby="shared-widget-list-title" aria-describedby="shared-widget-reorder-help" @keydown="navigateWidgets">
             <AppButton
               v-for="widget in widgets"
               :key="widget.id"
@@ -795,6 +809,7 @@ onBeforeUnmount(() => {
                   :role="auth.rawRole"
                   :resource-role="role"
                   :editing="editing"
+                  :drop-target="dragging ? dropTarget : undefined"
                   :selected="selected"
                   :can-edit-notes="canEditContent"
                   :busy="busy"
@@ -962,6 +977,7 @@ onBeforeUnmount(() => {
           <p v-else>Select a widget on the canvas or from the list to edit it.</p>
         </aside>
       </div>
+      <p class="shared-editor-announcement" role="status" aria-live="polite" aria-atomic="true">{{ editorAnnouncement }}</p>
       <div
         v-if="dragging"
         class="shared-drag-ghost builder-floating"

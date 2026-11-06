@@ -24,6 +24,16 @@ The November 6 source unit run passes all 2,107 tests. The final focused dashboa
 
 `npm run build` and `npm run verify:functions-build` pass; packaging verifies 56 handlers and makes no cloud calls. Changed-file ESLint has zero errors and 12 browser-test style warnings; the previously reported repository-wide Oxlint baseline is not a clean gate. `git diff --check` passes. Phone job-list and dashboard screenshots were reviewed. These checks verify local source and synthetic fixtures, not production acceptance or email delivery.
 
+### Personal editor follow-up
+
+The existing GitHub Desktop checkout was verified clean at `2d1d9dd` before this follow-up. Empty Personal layouts now retain an actual canvas drop area with an instruction, and drag targets show whether a widget will be inserted before or after an existing card. Escape removes the placement marker without changing the layout. The widget list supports Alt + Up/Down reordering, retains keyboard focus and announces the resulting position. These operations use the existing undo/redo and save/version behavior.
+
+Move handles suppress touch panning during a drag; library buttons permit vertical touch scrolling and still support tap-to-add. Desktop and 390px keyboard flows cover boundary moves, undo/redo, save and refresh. The synthetic drag flow covers first-widget insertion, cancellation, actual reordering and saved order. No new widget storage, roles, data migration or legacy-page changes are included.
+
+Verification: the complete synthetic dashboard suite passed 69/69. After the final library touch-scrolling refinement, the three relevant browser cases passed again, including completed drag reordering and computed touch-action checks. Nine focused source unit checks, type checking, changed-file ESLint, production build and offline Functions packaging pass. Empty/drop and reordered canvas screenshots were reviewed. The 69-case report is retained locally at `test-results/dashboard-aggregate-results.json`; generated evidence remains untracked.
+
+Push remains blocked by the earlier automatic approval rejection; this follow-up does not retry it. Chat resume/visibility remains an app issue and is not claimed fixed. Production deployment and the remaining widget/migration decisions below remain separate.
+
 ### Pilot review and release boundary
 
 Use `/dashboards/personal`, `/dashboards/role` and `/dashboards/job-home/:jobId` in the local review app. The normal Work-Computer preview uses port 5173. The local app can be configured against live data: viewing is safe, but saving a dashboard, note, file or form would be a production write. Automated verification uses synthetic browser fixtures or the demo Firestore emulator only.
