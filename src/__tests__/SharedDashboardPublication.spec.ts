@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SharedDashboardView from '@/views/SharedDashboardView.vue'
 import { useAuthStore } from '@/stores/auth'
 const fake = vi.hoisted(() => ({
-  command: vi.fn(), ask: vi.fn(),
+  command: vi.fn(), ask: vi.fn(), discard: vi.fn(), prepare:vi.fn(), notesDirty:false,
   auth: {currentUser:{uid:'a'},rawRole:'admin',hasWorkspaceAccess:true,assignedJobIds:[] as string[],displayName:'Admin'},
 }))
 vi.mock('@/stores/auth', async()=>{const {reactive}=await import('vue');const auth=reactive(fake.auth);return {useAuthStore:()=>auth}})
@@ -14,10 +14,10 @@ vi.mock('@/services/sharedDashboards',()=>({sharedDashboardCommand:fake.command}
 vi.mock('@/services/forms',()=>({formApi:vi.fn().mockResolvedValue({templates:[]})}))
 const auth=useAuthStore() as unknown as typeof fake.auth
 const canvas=defineComponent({
-  props:['announcementDrafts','publishedDraftIds'],
+  props:['announcementDrafts','publishedDraftIds','widgets'],
   emits:['publish-announcement'],
-  setup(_, {expose}) {expose({prepareForms:()=>true,notesDirty:false})},
-  template:'<div><button v-if="announcementDrafts?.length" @click="$emit(\'publish-announcement\',announcementDrafts[0].id)">Publish test</button><p data-publications>{{ publishedDraftIds?.join(\',\') }}</p></div>',
+  setup(_, {expose}) {expose({prepareForms:fake.prepare,get notesDirty(){return fake.notesDirty},discardNotes:fake.discard})},
+  template: "<div><p data-widgets>{{ widgets?.map(widget => widget.id).join(',') }}</p><button v-if=\"announcementDrafts?.length\" @click=\"$emit('publish-announcement',announcementDrafts[0].id)\">Publish test</button><p data-publications>{{ publishedDraftIds?.join(',') }}</p></div>",
 })
 const cleanup: (() => void)[] = []
 afterEach(() => { cleanup.splice(0).forEach(dispose => dispose()); vi.unstubAllGlobals() })
@@ -44,9 +44,11 @@ function layout() { const uid=auth.currentUser.uid; return {
   notes:{},events:[],notesVersion:0,publishedDraftIds:[],
   announcementDrafts:[{id:'draft-'+uid,title:'Draft '+uid,body:'Message',audience:'everyone'}],
 }}
-describe('announcement publication context isolation',()=>{
+describe('dashboard confirmation and publication context isolation',()=>{
   beforeEach(()=>{
     fake.command.mockReset();fake.ask.mockReset().mockResolvedValue(true)
+    fake.prepare.mockReset().mockResolvedValue(true)
+    fake.notesDirty=false;fake.discard.mockReset().mockImplementation(()=>{fake.notesDirty=false})
     auth.currentUser.uid='a';auth.rawRole='admin';auth.hasWorkspaceAccess=true
     vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}})
     fake.command.mockImplementation(async action=>action==='load'?layout():{})
@@ -100,4 +102,80 @@ describe('announcement publication context isolation',()=>{
     expect(wrapper.text()).not.toContain('Announcement published.')
     expect(wrapper.text()).not.toContain('Old account publication failed')
   })
+  it('does not remove a widget from a new account after accepting an old confirmation',async()=>{
+    const wrapper=await open()
+    await wrapper.findAll('button').find(button=>button.text()==='Edit')!.trigger('click')
+    await flushPromises()
+    let accept!: (value:boolean)=>void
+    fake.ask.mockReturnValue(new Promise(resolve=>{accept=resolve}))
+    await wrapper.findAll('button').find(button=>button.text()==='Remove widget')!.trigger('click')
+    await flushPromises()
+    auth.currentUser.uid='b'
+    await flushPromises()
+    accept(true)
+    await flushPromises()
+    expect(wrapper.find('[data-widgets]').text()).toBe('drafts')
+  })
+  it('does not refresh or discard the new account after an old discard confirmation',async()=>{
+    const wrapper=await open()
+    await wrapper.findAll('button').find(button=>button.text()==='Edit')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('input[maxlength="100"]').setValue('Unsaved title')
+    let accept!: (value:boolean)=>void
+    fake.ask.mockReturnValue(new Promise(resolve=>{accept=resolve}))
+    await wrapper.findAll('button').find(button=>button.text()==='Refresh')!.trigger('click')
+    await flushPromises()
+    auth.currentUser.uid='b'
+    await flushPromises()
+    accept(true)
+    await flushPromises()
+    expect(fake.command.mock.calls.filter(([action])=>action==='load')).toHaveLength(2)
+    expect(fake.discard).not.toHaveBeenCalled()
+  })
+  it('does not enter the new account editor after an old content-discard confirmation',async()=>{
+    const wrapper=await open()
+    fake.notesDirty=true
+    let accept!: (value:boolean)=>void
+    fake.ask.mockReturnValue(new Promise(resolve=>{accept=resolve}))
+    await wrapper.findAll('button').find(button=>button.text()==='Edit')!.trigger('click')
+    await flushPromises()
+    auth.currentUser.uid='b'
+    fake.notesDirty=false
+    await flushPromises()
+    accept(true)
+    await flushPromises()
+    expect(wrapper.findAll('button').some(button=>button.text()==='Cancel edits')).toBe(false)
+    expect(fake.discard).not.toHaveBeenCalled()
+  })
+
+  it('blocks refresh if a save begins during nested navigation preparation',async()=>{
+    const wrapper=await open()
+    await wrapper.findAll('button').find(button=>button.text()==='Edit')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('input[maxlength="100"]').setValue('Unsaved title')
+    let prepared!: (value:boolean)=>void, saved!: (value:unknown)=>void
+    fake.prepare.mockReturnValue(new Promise(resolve=>{prepared=resolve}))
+    fake.command.mockImplementation(action=>action==='load'?Promise.resolve(layout()):new Promise(resolve=>{saved=resolve}))
+    await wrapper.findAll('button').find(button=>button.text()==='Refresh')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find(button=>button.text()==='Save template')!.trigger('click')
+    await flushPromises()
+    prepared(true)
+    await flushPromises()
+    expect(fake.command.mock.calls.filter(([action])=>action==='load')).toHaveLength(1)
+    expect(fake.discard).not.toHaveBeenCalled()
+    expect(wrapper.findAll('button').find(button=>button.text()==='Refresh')!.attributes('disabled')).toBeDefined()
+    saved({...layout(),version:1,widgets:[{...layout().widgets[0],title:'Unsaved title'}]})
+    await flushPromises()
+    expect(wrapper.text()).toContain('Your layout was saved.')
+  })
+  it('allows the router to leave after an access revocation has settled',async()=>{
+    const wrapper=await open()
+    auth.hasWorkspaceAccess=false
+    await flushPromises()
+    await wrapper.vm.$router.push('/jobs')
+    await flushPromises()
+    expect(wrapper.vm.$router.currentRoute.value.name).toBe('jobs')
+  })
+
 })

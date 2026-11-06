@@ -314,10 +314,17 @@ function duplicateWidget() {
   widgets.value.splice(selectedIndex.value + 1, 0, copy)
   editWidget(copy.id)
 }
+function captureDashboardContext() {
+  const request = generation, owner = auth.currentUser?.uid, rawRole = auth.rawRole,
+    access = auth.hasWorkspaceAccess, currentScope = scope.value, currentJob = jobId.value
+  return () => request === generation && owner === auth.currentUser?.uid && rawRole === auth.rawRole &&
+    access === auth.hasWorkspaceAccess && currentScope === scope.value && currentJob === jobId.value
+}
 async function remove() {
   if (!editing.value || busy.value || !canEdit.value) return
   const widget = selectedWidget.value
   if (!widget || widget.type === requiredType.value) return
+  const current = captureDashboardContext()
   if (
     await confirm.value?.ask({
       title: 'Remove widget?',
@@ -325,9 +332,9 @@ async function remove() {
         'This removes the widget from this layout. Saved announcements, notes, tasks, calendar dates, documents and form submissions are retained.',
       confirmLabel: 'Remove',
       destructive: true,
-    })
+    }) && current() && editing.value && !busy.value && canEdit.value && widgets.value.includes(widget)
   ) {
-    const index = selectedIndex.value
+    const index = widgets.value.findIndex(entry => entry.id === widget.id)
     widgets.value = widgets.value.filter((w) => w.id !== widget.id)
     selected.value = widgets.value[Math.min(index, widgets.value.length - 1)]?.id || ''
     focusSettings()
@@ -335,8 +342,9 @@ async function remove() {
 }
 async function prepare() {
   if (busy.value) return false
-  if (!((await canvas.value?.prepareForms()) ?? true)) return false
-  if (dirty.value || canvas.value?.notesDirty) {
+  const current = captureDashboardContext(), participant = canvas.value
+  if (!((await participant?.prepareForms()) ?? true) || !current() || busy.value) return false
+  if (dirty.value || participant?.notesDirty) {
     if (
       !(await confirm.value?.ask({
         title: 'Discard unsaved changes?',
@@ -344,12 +352,12 @@ async function prepare() {
           'Your unsaved layout, notes, calendar, task or announcement draft edits will be discarded. Saved records remain.',
         confirmLabel: 'Discard changes',
         destructive: true,
-      }))
+      })) || !current() || busy.value
     )
       return false
-    canvas.value?.discardNotes()
+    participant?.discardNotes()
   }
-  return true
+  return current() && !busy.value
 }
 function context() {
   return {

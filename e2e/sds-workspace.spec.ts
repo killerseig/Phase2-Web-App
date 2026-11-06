@@ -6,7 +6,7 @@ import {
   gotoPhase2App,
 } from './helpers/phase2AppFixture.js'
 
-async function mockSds(page: Page, fail = false, ready: Promise<void> = Promise.resolve()) {
+async function mockSds(page: Page, fail = false, ready: Promise<void> = Promise.resolve(), jobReady: Promise<void> = Promise.resolve()) {
   await mockDashboard(page)
   await page.route('**/sds-file?*', (route) =>
     route.fulfill({
@@ -28,7 +28,7 @@ async function mockSds(page: Page, fail = false, ready: Promise<void> = Promise.
       return
     }
     const data = route.request().postDataJSON().data
-    if (data.action === 'load') await ready
+    if (data.action === 'load') { await ready; if (data.jobId) await jobReady }
     actions.push(data.action)
     requests.push(data)
     let result: unknown = { ok: true }
@@ -312,7 +312,9 @@ test('keyboard and background menus dismiss cleanly and job actions remain expli
 }) => {
   let releaseLoad!: () => void
   const ready = new Promise<void>(resolve => { releaseLoad = resolve })
-  const api = await mockSds(page, false, ready)
+  let releaseJobLoad!: () => void
+  const jobReady = new Promise<void>(resolve => { releaseJobLoad = resolve })
+  const api = await mockSds(page, false, ready, jobReady)
   await gotoPhase2App(page, '/safety/sds', createJobDashboardFixture())
   const root = page
     .getByRole('navigation', { name: 'Folders', exact: true })
@@ -342,7 +344,10 @@ test('keyboard and background menus dismiss cleanly and job actions remain expli
   await page.getByRole('searchbox').click()
   await expect(page.getByRole('menu')).toHaveCount(0)
   await page.goto('/safety/sds?sdsJob=job-e2e')
+  await expect(page.getByRole('status').filter({hasText:'Loading documents'})).toBeVisible()
   await page.getByRole('searchbox').fill('Adhesive')
+  releaseJobLoad()
+  await expect(page.getByRole('status').filter({hasText:'Loading documents'})).toHaveCount(0)
   await page.getByRole('button', { name: 'Adhesive A', exact: true }).click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: 'Archive file' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: 'Rename / move / edit file' })).toHaveCount(0)

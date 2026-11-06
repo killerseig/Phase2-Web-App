@@ -22,7 +22,8 @@ export function useLibraryQuery(options: {
   const context = () => ({ jobId: options.jobId.value, search: options.search.value, showArchived: options.showArchived.value })
   const current = (request: number, scope: ReturnType<typeof context>) =>
     !disposed && request === generation && scope.jobId === options.jobId.value &&
-    scope.search === options.search.value && scope.showArchived === options.showArchived.value
+    // Job books are loaded once and filtered locally; only company pages use query filters.
+    (!!scope.jobId || (scope.search === options.search.value && scope.showArchived === options.showArchived.value))
   async function refresh() {
     if (disposed) return
     // An explicit refresh already uses the latest search; consume its queued debounce.

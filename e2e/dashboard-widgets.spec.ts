@@ -669,6 +669,7 @@ for (const width of [1280, 390]) test(`Admin targets specific people without not
   await expect(page.getByText('2 of 25 people selected',{exact:true})).toBeVisible()
   await page.screenshot({path:test.info().outputPath(`announcement-people-${width}.png`)})
   await page.getByRole('button',{name:'Save announcement drafts',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Edit announcement drafts',exact:true})).toBeVisible()
   const save = api.requests.filter(item=>item.action==='save-announcement-drafts').at(-1)!
   expect((save.announcementDrafts as {recipientIds:string[]}[])[0]!.recipientIds).toEqual(['admin-e2e','foreman-e2e'])
   await page.getByRole('button',{name:'Publish Selected team members',exact:true}).click()
@@ -684,6 +685,7 @@ for (const width of [1280, 390]) test(`Admin targets specific people without not
   await expect(page.getByText('1 of 25 people selected',{exact:true})).toBeVisible()
   await page.getByRole('combobox',{name:'Audience 1',exact:true}).selectOption('everyone')
   await page.getByRole('button',{name:'Save announcement drafts',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Edit announcement drafts',exact:true})).toBeVisible()
   const updated = api.requests.filter(item=>item.action==='save-announcement-drafts').at(-1)!
   expect((updated.announcementDrafts as Record<string,unknown>[])[0]).not.toHaveProperty('recipientIds')
 })

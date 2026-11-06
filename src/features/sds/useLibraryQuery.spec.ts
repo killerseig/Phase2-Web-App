@@ -167,4 +167,54 @@ describe('bounded Library queries', () => {
     expect(state.nextPage.value).toBe('cursor')
     expect(state.pageBusy.value).toBe(false)
   })
+  it.each(['search','archived'] as const)('finishes a pending job load when the local %s filter changes', async filter => {
+    const state=fixture('job-1')
+    let finish!: (value:SdsLibrary)=>void
+    fake.load.mockReturnValueOnce(new Promise(resolve=>{finish=resolve}))
+    const pending=state.refresh()
+    if(filter==='search')state.search.value='Adhesive'
+    else state.showArchived.value=true
+    await nextTick()
+    finish({...library(),version:7})
+    await pending
+    try {
+      expect(state.loading.value).toBe(false)
+      expect(state.library.value.version).toBe(7)
+      expect(state.onLoaded).toHaveBeenCalledOnce()
+      expect(fake.load).toHaveBeenCalledOnce()
+      expect(fake.page).not.toHaveBeenCalled()
+    } finally {state.dispose()}
+  })
+  it('reports a job load failure even if its local filter changed while waiting',async()=>{
+    const state=fixture('job-1')
+    let reject!: (reason:unknown)=>void
+    fake.load.mockReturnValueOnce(new Promise((_resolve,fail)=>{reject=fail}))
+    const pending=state.refresh()
+    state.search.value='Adhesive'
+    await nextTick()
+    reject(Error('Unavailable'))
+    await pending
+    try {
+      expect(state.loading.value).toBe(false)
+      expect(state.loadFailed.value).toBe(true)
+      expect(state.error.value).toBe('Unavailable')
+    } finally {state.dispose()}
+  })
+  it('still ignores the old job response when local filters and job both change',async()=>{
+    const state=fixture('job-1')
+    let finish!: (value:SdsLibrary)=>void
+    fake.load.mockReturnValueOnce(new Promise(resolve=>{finish=resolve}))
+    const pending=state.refresh()
+    state.jobId.value='job-2'
+    state.search.value='Adhesive'
+    await state.refresh()
+    finish({...library(),version:1})
+    await pending
+    try {
+      expect(state.library.value.version).toBe(3)
+      expect(state.onLoaded).toHaveBeenCalledOnce()
+      expect(state.loading.value).toBe(false)
+    } finally {state.dispose()}
+  })
+
 })
