@@ -27,6 +27,9 @@ const props = defineProps<{
   initialToolJobId?: string
   jobsLoading?: boolean
   jobsError?: string | null
+  canCreateJobs?: boolean
+  canManageJobs?: boolean
+  editableJobIds?: string[]
   notes: Record<string, string>
   events: SharedCalendarEntry[]
   role: RawRoleKey
@@ -180,7 +183,7 @@ function textStyle(widget: SharedDashboardWidget) {
         <p v-else-if="!jobsLoading && !jobsError && (scope === 'job' || jobs.length || editing)">Choose a job to open Timecards, Daily Logs, Shop Orders, Company Library and available forms.</p>
       </template>
       <DashboardJobInformation v-else-if="widget.type === 'job-info'" :job="job" :jobs="jobs" :loading="jobsLoading" :error="jobsError" :editing="editing" :job-scope="scope === 'job'" />
-      <DashboardJobsWidget v-else-if="widget.type === 'jobs'" :jobs="jobs" :editing="editing" :jobs-loading="jobsLoading" :jobs-error="jobsError" />
+      <DashboardJobsWidget v-else-if="widget.type === 'jobs'" :can-create-jobs="canCreateJobs" :can-manage-jobs="canManageJobs" :editable-job-ids="editableJobIds" :jobs="jobs" :editing="editing" :jobs-loading="jobsLoading" :jobs-error="jobsError" />
       <div v-else-if="widget.type === 'dates'" class="shared-widget-tools">
         <p v-if="editing">
           Calendar entries stay separate for each

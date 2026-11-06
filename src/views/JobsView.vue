@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { canEditJobSetup } from '@/auth/capabilities'
+import { resolveJobsRouteIntent } from '@/features/jobs/jobsRouteIntent'
 import JobAdminDetailPane from '@/components/jobs/JobAdminDetailPane.vue'
 import JobBrowserPanel from '@/components/jobs/JobBrowserPanel.vue'
 import JobConfirmDialogs from '@/components/jobs/JobConfirmDialogs.vue'
@@ -42,6 +44,7 @@ import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
 const auth = useAuthStore()
 const jobsStore = useJobsStore()
 const router = useRouter()
+const initialRouteQuery = { ...useRoute().query }
 const toast = useAppToast()
 
 const searchTerm = ref('')
@@ -258,6 +261,40 @@ useJobsLifecycle({
   startJobsSubscription: () => jobsStore.subscribeVisibleJobs(),
   stopAdminSubscriptions,
   stopJobsSubscription: () => jobsStore.stopJobsSubscription(),
+})
+// Dashboard management links are an opt-in initial selection, never a write.
+// Wait for the authorized job subscription before resolving a requested job.
+onMounted(() => {
+  if (!initialRouteQuery.jobAction) return
+  let handled = false
+  watch(() => [jobsStore.loading, jobsStore.jobs, auth.rawRole], () => {
+    if (handled || jobsStore.loading) return
+    handled = true
+    const intent = resolveJobsRouteIntent(initialRouteQuery, {
+      canCreate: canCreateJobs.value,
+      canManage: auth.canManageJobs,
+      canUseEditor: canUseJobSetupEditor.value,
+      jobs: jobsStore.jobs,
+      canEdit: job => canEditJobSetup({
+        rawRole: auth.rawRole,
+        jobId: job.id,
+        assignedJobIds: [...auth.assignedJobIds, ...(job.assignedForemanIds?.includes(auth.currentUser?.uid || '') ? [job.id] : [])],
+      }),
+    })
+    if (!intent) return
+    if (intent.kind === 'denied') {
+      toast.error('The requested job setup is not available for your account.', 'Jobs')
+      return
+    }
+    if (intent.kind === 'create') openCreateMode()
+    else if (intent.kind === 'edit') {
+      jobStatusFilter.value = intent.job.active === false ? 'inactive' : 'active'
+      openEditDrawer(intent.job.id)
+    } else {
+      if (intent.kind === 'archived') jobStatusFilter.value = 'inactive'
+      openEditDrawer()
+    }
+  }, { immediate: true })
 })
 </script>
 

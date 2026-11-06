@@ -46,6 +46,16 @@ Validation: 2,113/2,113 source unit tests, 71/71 complete synthetic dashboard br
 
 Remaining decisions are substantive: task ownership/assignees/completion history; announcement authors, audiences and expiry; missing-work due/applicability rules; map provider/contact visibility; analytics questions/source metrics; spreadsheet interaction; and private-personal-file sharing. A question about private personal versus shared assigned tasks is pending. These modules are not claimed implemented. Existing Jobs administrative parity and the Daily Logs-to-Forms migration remain required before retiring pages.
 
+### Jobs administration handoff from dashboards
+
+The Assigned jobs widget now offers capability-filtered New job, Archived jobs and Notification defaults links, plus Manage job on jobs the viewer may edit. The parallel Job dashboard also offers Manage job for an authorized selected job. These links open the maintained Jobs editor, preserving its assignment, recipient, archive/restore/delete and job-creation workflows.
+
+The additive `/jobs?jobAction=create|edit|archived|defaults` initial intent waits for the authorized jobs subscription, resolves the requested job against that inventory, and rechecks the existing setup/create/manage capabilities. Unknown intents leave ordinary navigation untouched. A missing or unauthorized job yields generic feedback without opening its editor. Opening a management destination performs no record mutation; the existing controls still govern deliberate changes. Payroll retains create-only access, PMs edit assigned jobs, and Foremen do not gain setup controls.
+
+Verification: 2,117/2,117 source unit tests and the expanded 83/83 dashboard browser gate pass, including all eight existing Jobs regressions. Four new browser cases cover desktop/phone management links, a real archived fixture, unchanged job state on opening setup, Payroll/Foreman restrictions and assigned/unassigned PM boundaries. Existing synthetic creation, delayed autosave text retention, recipient editing, archive/restore/delete and global defaults cases pass. Full build, changed-file lint, offline Functions packaging and whitespace checks pass.
+
+This supplies dashboard entry points into the existing editor. The directory remains its maintained host; retirement still requires an approved route/page migration and user acceptance. Its existing autosave behavior is reused; a dedicated audit of leaving/switching jobs with pending edits and of unsaved new-job drafts remains appropriate before retirement. No production writes, deployment, permission changes or page retirement occurred.
+
 ### Pilot review and release boundary
 
 Use `/dashboards/personal`, `/dashboards/role` and `/dashboards/job-home/:jobId` in the local review app. The normal Work-Computer preview uses port 5173. The local app can be configured against live data: viewing is safe, but saving a dashboard, note, file or form would be a production write. Automated verification uses synthetic browser fixtures or the demo Firestore emulator only.
@@ -59,7 +69,7 @@ Before inviting a pilot group to a deployed app:
 
 ### Remaining replacement work and decisions
 
-- The new Jobs widget is a work launcher, not the full administrative Jobs editor. Active/archive browsing, create/edit job setup, assignment management, recipient configuration, archive/delete and their permission-specific behavior still live on the existing Jobs page. Preserve those capabilities before retiring it.
+- The Jobs widget now launches authorized create/setup/archive/defaults workflows directly in the existing Jobs editor. Assignment management, recipients and archive/restore/delete remain in that maintained editor. Retiring the directory requires a reviewed host-route migration and acceptance of those workflows.
 - Replacing Daily Logs with Forms needs an agreed form definition, recipients, history/export behavior and treatment of existing records. This work does not convert records or change the current reporting workflow.
 - The broader requirements still include missing-work alerts, announcements, to-dos/checklists, maps/contacts, business charts/PM analytics and spreadsheet behavior. Their due/applicability rules, publishing/audiences, ownership/history, provider/visibility or source metrics remain open in the module design below. No defaults were invented for them.
 - Company Library documents and role resources are available widgets. They are not a newly implemented private-personal-file store; the storage/sharing model for that part of FILE-01 still needs to be resolved.

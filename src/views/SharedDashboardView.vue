@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { canEditJobSetup } from '@/auth/capabilities'
 import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
 
 import AppButton from '@/components/common/AppButton.vue'
@@ -95,6 +96,9 @@ const visibleJobs = computed(() => {
     jobs: jobsStore.jobs,
   }).map(shortcut => byId.get(shortcut.id)!)
 })
+const editableJobIds = computed(() => visibleJobs.value.filter(job => canEditJobSetup({
+  rawRole: auth.rawRole, assignedJobIds: assigned.value, jobId: job.id,
+})).map(job => job.id))
 const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => type !== 'form' ||
   (['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole) &&
    ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value))))
@@ -631,6 +635,7 @@ onBeforeUnmount(() => {
           <AppButton v-else-if="canEdit" variant="primary" type="button" :disabled="contentLoading || busy" @click="beginEdit">
             Edit</AppButton
           ><AppButton type="button" :disabled="loading || busy" @click="reload">Refresh</AppButton>
+          <AppButtonLink v-if="scope === 'job' && editableJobIds.includes(jobId)" :to="{ name: 'jobs', query: { jobAction: 'edit', jobId } }">Manage job</AppButtonLink>
           <AppButtonLink :to="scope === 'job' && jobId ? `/jobs/${jobId}` : '/jobs'">{{
             scope === 'job' && jobId ? 'Existing job page' : 'Jobs'
           }}</AppButtonLink>
@@ -801,6 +806,9 @@ onBeforeUnmount(() => {
                   :widgets="widgets"
                   :job="layout.job"
                   :jobs="visibleJobs"
+                  :can-create-jobs="auth.canCreateJobs"
+                  :can-manage-jobs="auth.canManageJobs"
+                  :editable-job-ids="editableJobIds"
                   :initial-tool-job-id="typeof route.query.dashboardJob === 'string' ? route.query.dashboardJob : ''"
                   :jobs-loading="jobsStore.loading"
                   :jobs-error="jobsStore.error"

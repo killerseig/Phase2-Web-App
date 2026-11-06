@@ -12,6 +12,9 @@ const props = defineProps<{
   editing: boolean
   jobsLoading?: boolean
   jobsError?: string | null
+  canCreateJobs?: boolean
+  canManageJobs?: boolean
+  editableJobIds?: string[]
 }>()
 const id = useId()
 const query = ref('')
@@ -37,6 +40,11 @@ function clearSearch() {
     :loading="!!jobsLoading"
     label="Loading jobs."
   >
+    <nav v-if="canCreateJobs || canManageJobs" class="dashboard-jobs__management" aria-label="Job management">
+      <AppButtonLink v-if="canCreateJobs" :to="{ name: 'jobs', query: { jobAction: 'create' } }">New job</AppButtonLink>
+      <AppButtonLink v-if="canManageJobs" :to="{ name: 'jobs', query: { jobAction: 'archived' } }">Archived jobs</AppButtonLink>
+      <AppButtonLink v-if="canManageJobs" :to="{ name: 'jobs', query: { jobAction: 'defaults' } }">Notification defaults</AppButtonLink>
+    </nav>
     <p v-if="jobsError" class="dashboard-jobs__error" role="alert">
       Jobs could not be loaded. {{ jobsError }} Use Refresh to try again.
     </p>
@@ -82,6 +90,7 @@ function clearSearch() {
             {{ entry.code || 'No Job #' }} · {{ entry.name }}
           </RouterLink>
           <nav :aria-label="`${entry.name} tools`">
+            <AppButtonLink v-if="editableJobIds?.includes(entry.id)" :aria-label="'Manage job ' + entry.name" :to="{ name: 'jobs', query: { jobAction: 'edit', jobId: entry.id } }">Manage job</AppButtonLink>
             <AppButtonLink :to="`/jobs/${entry.id}/timecards`">Timecards</AppButtonLink>
             <AppButtonLink :to="`/jobs/${entry.id}/daily-logs`">Daily Logs</AppButtonLink>
             <AppButtonLink :to="`/jobs/${entry.id}/shop-orders`">Shop Orders</AppButtonLink>
@@ -96,6 +105,8 @@ function clearSearch() {
 </template>
 
 <style scoped>
+.dashboard-jobs__management { display: flex; flex-wrap: wrap; gap: .5rem; }
+.dashboard-jobs { --loading-region-min-height: 0; }
 .dashboard-jobs--loading {
   --loading-region-min-height: 12rem;
 }
