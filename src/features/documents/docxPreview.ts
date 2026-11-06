@@ -74,20 +74,23 @@ export async function renderDocxPages(bytes: ArrayBuffer): Promise<DocxPages> {
   }
 }
 
-export function docxFrame(pages: DocxPages, width: number, zoom = 1, scrollbarWidth?: number) {
+export function docxFrame(pages: DocxPages, width: number, zoom = 1) {
   // Fit the complete wrapper, including its padding, inside the frame after
   // reserving room for the vertical scrollbar. Zoom is relative to this fit.
-  const compact = width <= 900 && scrollbarWidth !== undefined
-  const padding = compact ? 0 : 12
-  const gutter = compact ? Math.max(0, Math.min(40, scrollbarWidth)) : 24
-  const wrapperWidth = pages.pageWidth + padding * 2
-  const scale = Math.min(1, Math.max(.01, (width - gutter) / wrapperWidth)) * Math.max(.5, Math.min(3, zoom))
+  const padding = 12, wrapperWidth = pages.pageWidth + padding * 2
+  const magnification = Math.max(.5, Math.min(3, zoom))
+  const scale = Math.min(1, Math.max(.01, (width - 24) / wrapperWidth)) * magnification
   const csp = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
   const document = new DOMParser().parseFromString('<!doctype html><html><head></head><body></body></html>', 'text/html')
   const meta = document.createElement('meta'); meta.httpEquiv = 'Content-Security-Policy'; meta.content = csp; document.head.append(meta)
   const title = document.createElement('title'); title.textContent = 'Word document pages'; document.head.append(title)
   const style = document.createElement('style')
   style.textContent = `${pages.styles.replace(/<\/style/gi, '<\\/style')}\nhtml,body{margin:0;background:#525659;color:#111} .docx-wrapper{padding:${padding}px!important;width:${wrapperWidth}px;box-sizing:border-box;zoom:${scale}} section.docx{margin:0 auto 16px!important;box-shadow:0 1px 6px #0006} img{max-width:100%} a{color:inherit;cursor:text}`
+  // The scriptless frame fits against its own content container, which excludes
+  // its actual scrollbar. Measuring a scrollbar in the parent document is not
+  // reliable when the parent and iframe use different scrollbar presentation.
+  // Older engines retain the conservative numeric fit above.
+  style.textContent += '\n@supports (container-type:inline-size) and (zoom:calc(100cqw / 1px)){@media(max-width:900px){body{container-type:inline-size}.docx-wrapper{padding:0!important;width:' + pages.pageWidth + 'px;zoom:calc(min(1, max(.01, 100cqw / ' + pages.pageWidth + 'px)) * ' + magnification + ')}}}'
   // Native mobile scrollbars may overlay content or ignore custom dimensions.
   // Keep both scrolling axes usable, with a narrow desktop-engine fallback.
   style.textContent += '\n@media(max-width:900px){html{scrollbar-width:thin;scrollbar-color:#adb5bd #525659}html::-webkit-scrollbar{width:6px;height:6px}html::-webkit-scrollbar-thumb{background:#adb5bd;border-radius:6px}html::-webkit-scrollbar-track{background:#525659}}@media(forced-colors:active){html{scrollbar-color:auto}}'

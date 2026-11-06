@@ -132,7 +132,28 @@ test('native mobile browser pinch works over PDF, image and scriptless Word prev
   await openLibraryFiles(page)
   await page.getByRole('button', { name: 'Close files', exact: true }).click()
   expect(await word.evaluate(el => el.scrollTop)).toBe(position)
+  await expect(page.locator('.document-explorer__sidebar')).toBeHidden()
   await page.screenshot({ path: 'evidence/library-mobile-word.png' })
   await cdp.detach()
 })
 
+
+test('Word fits the frame content when the host width includes extra gutter space', async ({ page }) => {
+  await page.route('**/document-width-fixture', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><div style="width:298px"><iframe title="Synthetic width fixture" sandbox="" style="display:block;border:0;width:281px;height:200px"></iframe></div></body></html>' }))
+  await page.goto('/document-width-fixture')
+  const srcdoc = await page.evaluate(async modulePath => {
+    const { docxFrame } = await import(modulePath)
+    return docxFrame({ markup: '<div class="docx-wrapper"><section class="docx" style="width:816px;height:1200px"><p>Synthetic full-width page</p></section></div>', styles: '', pageCount: 1, pageWidth: 816, empty: false, omittedExternalContent: false }, 298, 1)
+  }, '/src/features/documents/docxPreview.ts')
+  await page.locator('iframe').evaluate((element, html) => { (element as HTMLIFrameElement).srcdoc = html }, srcdoc)
+  const word = page.frameLocator('iframe').locator('html')
+  await expect(page.frameLocator('iframe').getByText('Synthetic full-width page')).toBeVisible()
+  const size = await word.evaluate(el => ({ usable: el.clientWidth, overflow: el.scrollWidth, page: el.querySelector('section.docx')!.getBoundingClientRect(), height: el.scrollHeight, viewport: el.clientHeight }))
+  expect(size.usable).toBeLessThan(298)
+  expect(Math.abs(size.page.width - size.usable)).toBeLessThanOrEqual(1)
+  expect(size.page.x).toBeGreaterThanOrEqual(-1)
+  expect(size.page.right).toBeLessThanOrEqual(size.usable + 1)
+  expect(size.overflow).toBeLessThanOrEqual(size.usable + 1)
+  expect(size.height).toBeGreaterThan(size.viewport)
+  await expect(page.locator('iframe')).toHaveAttribute('sandbox', '')
+})
