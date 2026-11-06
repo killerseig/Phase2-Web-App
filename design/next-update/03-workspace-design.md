@@ -668,6 +668,10 @@ The [Phase 2 coding process](../engineering/coding-process.md), [architecture fa
 
 This follow-up on `bba6b1c` completes the four remaining grid/viewport controls in the same Personal, Role and Job editor. It was compared with the adjacent Networking application's viewport model, controls, grid presentation and canvas controller; that checkout was not edited.
 
+Subsequent visual correction: the grid used to be a background, so a full-width opaque widget could cover every visible dot even with **Show grid** enabled. The editor now draws a brighter, pointer-transparent dot overlay above content. Minor dots and major accents track the actual snap spacing; container interiors use their own local grid. The overlay disappears outside edit mode or when Show grid is off. Saved layouts and snapping behavior are unchanged.
+
+Visibility verification: the running local Personal dashboard was inspected with its existing full-width form preserved. Four composited-pixel browser cases verify dots above opaque widgets across Personal/Role/Job, independent nested grids, click-through, snapping and runtime hiding. All four passed, as did the sixteen existing editor browser cases, 54 targeted units and frontend type checking. Changed-source lint has no errors; the browser fixtures retain conditional-test warnings. No push or deployment was performed.
+
 - **Link spacing** copies X to Y when enabled; changing either linked axis updates both. Fine/Standard/Coarse and custom spacing never reposition existing widgets.
 - **Major every** adds stronger grid dots at the chosen integer interval, anchored to the same origin as minor dots. The reference uses dots rather than continuous lines. Show grid and Snap to grid remain independent.
 - **Starting X/Y** stores signed offsets in logical columns/rows alongside starting zoom. X uses the actual canvas width divided by 24; Y uses 32px rows. These settings load with the template and Reset view returns to them. Ordinary pan/zoom does not dirty, save or publish the layout.

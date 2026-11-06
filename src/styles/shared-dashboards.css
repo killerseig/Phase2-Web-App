@@ -558,17 +558,6 @@
 .shared-dashboard-grid.is-positioned > .shared-dashboard-widget {
   min-width: 0;
 }
-.shared-dashboard-grid.is-placement-editor.is-grid-visible {
-  background-image:
-    radial-gradient(circle at 2px 2px, var(--text-muted) 1.5px, transparent 1.5px),
-    radial-gradient(circle at 2px 2px, var(--border) 1px, transparent 1px);
-  background-size:
-    var(--grid-major-x, calc(100% / 6)) var(--grid-major-y, 128px),
-    var(--grid-x, calc(100% / 24)) var(--grid-y, 32px);
-  /* Pixel offsets keep both layers on the origin even with percentage tile widths. */
-  background-position: -2px -2px;
-}
-
 [data-widget-placement-preview] {
   position: absolute;
   pointer-events: none;

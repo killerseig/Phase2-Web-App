@@ -10,6 +10,7 @@ import DashboardCalendarAgenda from './DashboardCalendarAgenda.vue'
 import DashboardWorkflowsWidget from './DashboardWorkflowsWidget.vue'
 import CompanyLibraryWidget from './CompanyLibraryWidget.vue'
 import DashboardJobsWidget from './DashboardJobsWidget.vue'
+import DashboardSnapGrid from './DashboardSnapGrid.vue'
 import RoleResourcesModule from './RoleResourcesModule.vue'
 import {
   sharedWidgetLabels,
@@ -90,14 +91,6 @@ const positions = computed(() =>
   ),
 )
 const canvasStyle = computed(() => {
-  const x =
-    Number.isFinite(props.gridSpacing?.x) && props.gridSpacing!.x > 0 ? props.gridSpacing!.x : 1
-  const y =
-    Number.isFinite(props.gridSpacing?.y) && props.gridSpacing!.y > 0 ? props.gridSpacing!.y : 1
-  const major =
-    Number.isInteger(props.gridSpacing?.majorEvery) && props.gridSpacing!.majorEvery! > 0
-      ? props.gridSpacing!.majorEvery!
-      : 4
   return {
     minHeight: positioned.value
       ? Math.max(
@@ -105,10 +98,6 @@ const canvasStyle = computed(() => {
           ...positions.value.map((p) => (p.y + p.h) * 32 + 64),
         ) + 'px'
       : undefined,
-    '--grid-x': (x / 24) * 100 + '%',
-    '--grid-y': y * 32 + 'px',
-    '--grid-major-x': ((x * major) / 24) * 100 + '%',
-    '--grid-major-y': y * major * 32 + 'px',
   }
 })
 function startWidgetMove(event: PointerEvent, id: string) {
@@ -336,6 +325,11 @@ function textStyle(widget: SharedDashboardWidget) {
     :role="tabLabelId ? 'tabpanel' : undefined"
     :aria-labelledby="tabLabelId"
   >
+    <DashboardSnapGrid
+      v-if="editing && gridVisible"
+      :spacing="gridSpacing"
+      :layout="positions"
+    />
     <div
       v-if="editing && placementPreview && dropTarget?.surface === (parentId || 'shared-dashboard')"
       data-widget-placement-preview

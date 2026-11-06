@@ -11,6 +11,7 @@ export default defineConfig({
     ? ['vite-hmr.spec.ts']
     : [
         'dashboard-editor-parity.spec.ts',
+        'dashboard-grid-visibility.spec.ts',
         'employee-announcements.spec.ts',
         'personal-timecard.spec.ts',
         'jobs-pending-edits.spec.ts',

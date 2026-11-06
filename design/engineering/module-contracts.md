@@ -70,3 +70,7 @@ const layout = await sharedDashboardCommand('load', { scope: 'personal' })
 **Invariants and effects:** geometry locks constrain editing but never confer permission. Opposite resize edges stay anchored; group movement preserves offsets within bounds. Clipboard remaps IDs/parents and clears legacy note text. Responsive edits affect the chosen widget/device rather than freezing all other devices. Escape/blur cancels uncommitted pointer work; handlers/listeners are removed on disposal. Pure geometry functions do not access Firestore. DOM measurement belongs to the view/canvas.
 
 [Geometry](../../src/features/dashboard/editorGeometry.ts) · [Pointer helper](../../src/features/dashboard/useWidgetDrag.ts) · [Units](../../src/__tests__/dashboardEditorParity.spec.ts) · [Browser behavior](../../e2e/dashboard-editor-parity.spec.ts)
+
+**Edit-grid rendering:** `DashboardSnapGrid` receives spacing and the current rendered layout. It draws minor/major dots at the same 24-column/32px-row intersections used by snapping, above opaque widgets so full-width tools cannot hide the guide. The SVG is decorative and never receives pointer events. Each canvas masks direct containers out of its grid; nested canvases draw their own local intersections. DOM bounds/resize observation stay inside the component and are disposed with it. Show grid and edit mode control mounting; rendering never saves or changes placement.
+
+[Grid overlay](../../src/components/dashboard/DashboardSnapGrid.vue)

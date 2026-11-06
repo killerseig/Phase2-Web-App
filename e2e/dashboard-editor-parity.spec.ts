@@ -82,10 +82,8 @@ for (const scope of [
     await expect(y).toHaveValue('1.25')
     await page.getByLabel('Major grid interval', { exact: true }).fill('8')
     const grid = page.locator('[data-widget-surface="shared-dashboard"]')
-    await expect
-      .poll(() => grid.evaluate((el) => getComputedStyle(el).getPropertyValue('--grid-major-y')))
-      .toBe('320px')
-    await expect(grid).toHaveCSS('background-position', '-2px -2px, -2px -2px')
+    await expect(grid.locator(':scope > .dashboard-snap-grid pattern').nth(1))
+      .toHaveAttribute('height', '320')
     await page.locator('.dashboard-view-settings summary').click()
     await page.getByLabel('Runtime layout', { exact: true }).selectOption('fixed')
     await page.getByLabel('Runtime panning', { exact: true }).selectOption('free')
