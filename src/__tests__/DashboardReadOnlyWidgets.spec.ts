@@ -1,10 +1,15 @@
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import DashboardJobInformation from '@/components/dashboard/DashboardJobInformation.vue'
 import DashboardCalendarAgenda from '@/components/dashboard/DashboardCalendarAgenda.vue'
 import type { JobRecord } from '@/types/domain'
 const job: JobRecord = { id: 'allowed', name: 'Allowed job', code: '12', gc: 'Builder', type: 'acoustics', active: true, assignedForemanIds: [], jobAddress: '123 Main St\nSuite 2', startDate: '2026-11-01' }
-afterEach(() => vi.useRealTimers())
+const clipboardDescriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard')
+afterEach(() => {
+  vi.useRealTimers()
+  if(clipboardDescriptor)Object.defineProperty(navigator,'clipboard',clipboardDescriptor)
+  else Reflect.deleteProperty(navigator,'clipboard')
+})
 describe('read-only dashboard widgets', () => {
   it('only displays a currently authorized selected job and drops revoked data', async () => {
     const wrapper = mount(DashboardJobInformation, { props: { job: null, jobs: [job], editing: false, jobScope: false } })
@@ -33,6 +38,45 @@ describe('read-only dashboard widgets', () => {
     expect(wrapper.find('select,input,a,iframe').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('copies only the currently selected address and clears status when access is revoked', async () => {
+    const writeText=vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText}})
+    const wrapper=mount(DashboardJobInformation,{props:{job:null,jobs:[job],editing:false,jobScope:false}})
+    expect(wrapper.find('button').exists()).toBe(false)
+    await wrapper.get('select').setValue('allowed')
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('123 Main St\nSuite 2')
+    expect(wrapper.get('[role=status]').text()).toBe('Address copied.')
+    await wrapper.setProps({jobs:[]})
+    expect(wrapper.text()).not.toContain('Address copied.')
+    expect(wrapper.find('button').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('offers manual copying when clipboard access fails', async () => {
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:vi.fn().mockRejectedValue(Error('Denied'))}})
+    const wrapper=mount(DashboardJobInformation,{props:{job:{...job,code:'12',gc:'Builder',jobAddress:'123 Main St\nSuite 2',startDate:'2026-11-01',finishDate:''},jobs:[],editing:false,jobScope:true}})
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role=status]').text()).toContain('Select and copy the address above')
+    expect(wrapper.get('button').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('ignores a late clipboard result after the selected job is revoked', async () => {
+    let resolve!: ()=>void
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise<void>(done=>{resolve=done})}})
+    const wrapper=mount(DashboardJobInformation,{props:{job:null,jobs:[job],editing:false,jobScope:false}})
+    await wrapper.get('select').setValue('allowed')
+    await wrapper.get('button').trigger('click')
+    await wrapper.setProps({jobs:[]})
+    resolve()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Address copied.')
+    expect(wrapper.text()).not.toContain('123 Main St')
+    wrapper.unmount()
+  })
+
   it('filters a date-only agenda without mutating events and restores past dates', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 10, 6, 12))

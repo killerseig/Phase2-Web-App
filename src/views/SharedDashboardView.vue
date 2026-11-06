@@ -505,19 +505,25 @@ function saveCalendar(events: SharedCalendarEntry[]) {
   void saveContent('save-calendar', { events })
 }
 async function publishAnnouncement(draftId: string) {
-  if (!isAdmin.value || busy.value || scope.value !== 'personal' || !layout.value || !(await prepare())) return
-  const draft = layout.value.announcementDrafts?.find(item => item.id === draftId)
+  if (!isAdmin.value || busy.value || scope.value !== 'personal' || !layout.value) return
+  const request = generation, owner = auth.currentUser?.uid, targetLayout = layout.value
+  const current = () => request === generation && owner === auth.currentUser?.uid &&
+    auth.hasWorkspaceAccess && isAdmin.value && scope.value === 'personal' && layout.value === targetLayout
+  if (!(await prepare()) || !current()) return
+  const draft = targetLayout.announcementDrafts?.find(item => item.id === draftId)
   if (!draft?.audience) return
+  const version = targetLayout.notesVersion
   const audience = draft.audience === 'everyone' ? 'everyone with current dashboard access' : draft.audience === 'people' ? `${draft.recipientIds?.length || 0} selected people` : 'people currently assigned to ' + (visibleJobs.value.find(job => job.id === draft.jobId)?.name || 'the selected job')
-  if (!(await confirm.value?.ask({ title: 'Publish announcement?', message: `Publish “${draft.title}” to ${audience}? This publishes a snapshot; no notifications are sent.`, confirmLabel: 'Publish' }))) return
+  if (!(await confirm.value?.ask({ title: 'Publish announcement?', message: `Publish “${draft.title}” to ${audience}? This publishes a snapshot; no notifications are sent.`, confirmLabel: 'Publish' })) || !current() || busy.value) return
   busy.value = true
   error.value = ''
   try {
-    await sharedDashboardCommand('publish-announcement', { scope: 'personal', version: layout.value.notesVersion, draftId })
-    layout.value.publishedDraftIds = [...new Set([...(layout.value.publishedDraftIds || []), draftId])]
+    await sharedDashboardCommand('publish-announcement', { scope: 'personal', version, draftId })
+    if (!current()) return
+    targetLayout.publishedDraftIds = [...new Set([...(targetLayout.publishedDraftIds || []), draftId])]
     message.value = 'Announcement published. Refresh the Announcements widget to see eligible updates.'
-  } catch (reason) { error.value = dashboardError(reason) }
-  finally { busy.value = false }
+  } catch (reason) { if (current()) error.value = dashboardError(reason) }
+  finally { if (current()) busy.value = false }
 }
 async function changeRole(event: Event) {
   const select = event.target as HTMLSelectElement

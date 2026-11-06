@@ -4,13 +4,40 @@ Draft proposals supporting the [requirements register](01-requirements.md). SDS 
 
 ## November 6 dashboard testing readiness
 
-The owner requested pushing the existing updates, then making Personal, Role and Job dashboards work well enough for user testing and eventual page replacement. Daily Logs may eventually become Forms, and the current Jobs page may eventually become the jobs dashboard. This checkpoint does not remove pages, change the default landing page, expand permissions, migrate records, or deploy anything.
+Atlas wants polished Personal, Role and Job dashboards for user testing, followed by design/workflow review and cohesive reuse, performance and security cleanup. Existing Jobs and Daily Logs remain available. The later Employee announcement decision adds a narrow read-only Employee landing/delivery exception; general workforce/source permissions and the general Jobs landing remain unchanged. No pages have been retired, records migrated or deployment performed.
+
+### Dashboard recovery and pilot workflows — latest November 6 checkpoint
+
+A new regression reproduced three announcement publication races: accepting a confirmation after an account change could send the old draft ID under the new session, and delayed success/error responses could alter the new dashboard's marker or notice. Publication now captures its authenticated owner, layout generation/reference and saved content version before confirmation. It rechecks the context after every wait and applies notices, published markers and busy-state cleanup only to the initiating context. The six regression cases cover account/role/access changes, late success/failure and an older request settling while the new account's publication remains busy. Backend ownership checks and publication behavior are unchanged.
+
+Job Information now offers **Copy job address** for an already-authorized visible address. Clipboard failure gives manual-copy guidance; missing/revoked job data removes the action and a stale clipboard completion cannot restore its status. No external map/provider, new data field or persistent write was added. Desktop/390px browser journeys verify the copied address and the loading-region minimum-height regression; the latter checks unwanted minimum blank space rather than imposing a fixed height on legitimate widget content.
+
+Validation passes: all 2,178 source units; all nine affected announcement/job-information browser journeys; full build; Functions packaging (56 handlers, no cloud calls); changed-file ESLint with zero errors and three existing conditional-test warnings; diff whitespace checks. The 14 focused recovery/widget units pass after the strict fixture-shape correction. No backend authorization, storage schema or deployment changed in this checkpoint.
+
+#### Pilot walkthrough of implemented workflows
+
+Use the canonical checkout's synthetic/local fixtures for these scenarios. Production acceptance and rollout remain separate from this local evidence.
+
+| Reviewer / surface | Workflow | Acceptance focus |
+| --- | --- | --- |
+| Owner / Personal | Add widgets, drag or keyboard reorder, undo/redo, save and refresh | Layout belongs to that account; empty layouts and phone editing work; duplicate widgets copy configuration without copying saved private content |
+| Owner / Tasks, Notes, Calendar | Add/edit items, explicitly save/cancel, attempt refresh/navigation/sign-out with a draft | Drafts survive cancelled departure and failed saves; saved items remain after removing a widget; private tasks do not become job tasks |
+| Authorized job viewer | Find an accessible job, read metadata, copy its address, use existing Job Tools and issued forms | Source access stays enforced; copying has a usable fallback; forms return to their original dashboard/context; unavailable jobs and failures remain explicit |
+| Admin / shared templates and Jobs administration | Configure a Role/Job layout, use existing authorized job management, return to the dashboard | Existing pages/actions and permission checks remain; authorized role delegation is limited to that role; pending job edits are saved or retained before leaving |
+| Admin / Announcement drafts | Choose Everyone, assigned Job or Specific people; save; confirm Publish; retry a failure | Drafts stay author-private; current recipients are validated; published snapshots stay unchanged by later draft edits; no emails or notifications are sent |
+| Active recipient / Announcements | Refresh a feed after assignment or access changes | Latest eligible messages only; direct recipient lists are private; general Admin/job access does not bypass audience membership |
+| Employee / Announcements | Sign in, read Everyone/own-job/direct updates, attempt protected routes and the old My Timecard URL | Read-only inbox is the landing; unrelated pages and source records stay blocked; the timecard workflow remains paused |
+| Mixed accounts / asynchronous recovery | Delay publication confirmation/results, switch account or revoke permission, start another operation | Old confirmations cannot publish in the new context; old responses cannot alter or unlock the new context |
+
+After dashboard acceptance, the requested cleanup review should trace these workflows through the current service/backend boundaries, split the large view's layout/form/publication responsibilities where evidence supports it, unify repeated content-editor navigation contracts, strengthen action/payload typing, and measure bounded queries/rendering before changing behavior. The regression coverage above supplies the behavior baseline; no broad refactor has begun.
+
+Remaining module definitions are recorded in D12/D13/D17/D23–D26: broader file/storage sharing, due-work and communication rules, map/spreadsheet providers, shared tasks, analytics measures, Daily Log migration parity and non-job group membership. Those decisions should be resolved per module rather than guessed or treated as a reason to change current source permissions.
 
 ### Windows editor keyboard follow-up
 
 The shared dashboard editor also supports Ctrl+Y for redo, alongside Ctrl+Shift+Z and Command+Shift+Z. Undo/redo buttons expose their shortcuts to assistive technology. Text inputs retain browser-native undo/redo, and Alt-modified combinations do not invoke layout history. The two desktop/390px recovery journeys first reproduced the missing shortcut, then passed with native single-character undo/redo and unchanged widget ordering. The other 15 widget browser cases passed in the same validation cycle; the full build, changed-file ESLint and diff whitespace checks pass. No backend, data, permissions, legacy routes or deployment changed. Dashboard module decisions D12/D13/D17/D23–D25 and representative user acceptance remain separate from the later requested architecture/performance/security cleanup.
 
-### Employee announcement delivery — latest November 6 checkpoint
+### Employee announcement delivery — earlier November 6 checkpoint
 
 Atlas confirmed Employee/timecard-only accounts must receive announcements because updates may target the person or their group. The supported authenticated Employee identity already exists, while My Timecard was paused in eba42d8. A new **read-only Announcements** page at `/dashboards/announcements` is now the Employee sign-in landing and sole active workspace navigation destination. General roles also receive an Announcements link, with their existing Jobs landing preserved. The old My Timecard URL still renders its unavailable notice; its backend availability flag, disabled workflow, records and removed controls are untouched. The new URL uses existing app hosting routing and does not reserve a new public website root.
 

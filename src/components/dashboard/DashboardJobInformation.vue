@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
+import AppButton from '@/components/common/AppButton.vue'
 import AppLoadingRegion from '@/components/common/AppLoadingRegion.vue'
 import type { JobRecord } from '@/types/domain'
 import type { SharedDashboardJob } from '@/features/dashboard/sharedDashboards'
@@ -14,6 +15,28 @@ const props = defineProps<{
 const id = useId()
 const selected = ref('')
 const current = computed(() => props.job || props.jobs.find(job => job.id === selected.value))
+const copying = ref(false), copyMessage = ref('')
+let copyGeneration = 0
+watch(() => [current.value?.id, current.value?.jobAddress, props.editing, props.loading, props.error], () => {
+  copyGeneration++
+  copying.value = false
+  copyMessage.value = ''
+})
+onBeforeUnmount(() => { copyGeneration++ })
+async function copyAddress() {
+  const address = current.value?.jobAddress?.trim()
+  if (!address || copying.value || props.editing || (!props.jobScope && (props.loading || props.error))) return
+  const request = copyGeneration
+  copying.value = true
+  copyMessage.value = ''
+  try {
+    if (!navigator.clipboard?.writeText) throw Error('Clipboard unavailable')
+    await navigator.clipboard.writeText(address)
+    if (request === copyGeneration) copyMessage.value = 'Address copied.'
+  } catch {
+    if (request === copyGeneration) copyMessage.value = 'Could not copy. Select and copy the address above.'
+  } finally { if (request === copyGeneration) copying.value = false }
+}
 </script>
 
 <template>
@@ -35,6 +58,8 @@ const current = computed(() => props.job || props.jobs.find(job => job.id === se
           <div><dt>Finish date</dt><dd><time v-if="current.finishDate" :datetime="current.finishDate">{{ current.finishDate }}</time><span v-else>Not provided</span></dd></div>
         </dl>
         <p v-else>{{ jobScope || jobs.length ? 'Choose a job to see its information.' : 'No jobs are available for your account.' }}</p>
+        <AppButton v-if="current?.jobAddress?.trim()" class="copy-job-address" type="button" :disabled="copying || editing" @click="copyAddress">Copy job address</AppButton>
+        <p v-if="copyMessage && current" role="status">{{ copyMessage }}</p>
       </template>
     </AppLoadingRegion>
   </div>
@@ -45,5 +70,6 @@ const current = computed(() => props.job || props.jobs.find(job => job.id === se
 .dashboard-job-information.is-loading { --loading-region-min-height: 8rem; }
 .dashboard-job-information label { display: grid; gap: .5rem; }
 .dashboard-job-information dl { margin-bottom: 0; }
+.copy-job-address { margin-top: .75rem; }
 .dashboard-job-address { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>
