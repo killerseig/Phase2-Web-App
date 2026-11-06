@@ -6,6 +6,10 @@ Draft proposals supporting the [requirements register](01-requirements.md). SDS 
 
 The owner requested pushing the existing updates, then making Personal, Role and Job dashboards work well enough for user testing and eventual page replacement. Daily Logs may eventually become Forms, and the current Jobs page may eventually become the jobs dashboard. This checkpoint does not remove pages, change the default landing page, expand permissions, migrate records, or deploy anything.
 
+### Windows editor keyboard follow-up
+
+The shared dashboard editor also supports Ctrl+Y for redo, alongside Ctrl+Shift+Z and Command+Shift+Z. Undo/redo buttons expose their shortcuts to assistive technology. Text inputs retain browser-native undo/redo, and Alt-modified combinations do not invoke layout history. The two desktop/390px recovery journeys first reproduced the missing shortcut, then passed with native single-character undo/redo and unchanged widget ordering. The other 15 widget browser cases passed in the same validation cycle; the full build, changed-file ESLint and diff whitespace checks pass. No backend, data, permissions, legacy routes or deployment changed. Dashboard module decisions D12/D13/D17/D23–D25 and representative user acceptance remain separate from the later requested architecture/performance/security cleanup.
+
 ### Current core and polish
 
 - Personal, Role and Job surfaces reuse the same widget editor. Personal layouts belong to the signed-in person; shared template ownership and role delegation remain as already implemented. Scope links and an empty-personal-layout starting point make these surfaces easier to navigate.

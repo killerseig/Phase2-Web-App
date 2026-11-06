@@ -537,12 +537,16 @@ function keydown(event: KeyboardEvent) {
   if (
     !editing.value ||
     busy.value ||
+    event.altKey ||
     (event.target as HTMLElement).closest('input,select,textarea,[contenteditable]')
   )
     return
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
     event.preventDefault()
     event.shiftKey ? redoChange() : undoChange()
+  } else if (event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'y') {
+    event.preventDefault()
+    redoChange()
   }
 }
 function beforeUnload(event: BeforeUnloadEvent) {
@@ -620,6 +624,7 @@ onBeforeUnmount(() => {
               type="button"
               :disabled="busy || !undo.length"
               aria-label="Undo template edit"
+              aria-keyshortcuts="Control+Z Meta+Z"
               @click="undoChange"
             >
               Undo</AppButton
@@ -627,6 +632,7 @@ onBeforeUnmount(() => {
               type="button"
               :disabled="busy || !redo.length"
               aria-label="Redo template edit"
+              aria-keyshortcuts="Control+Y Control+Shift+Z Meta+Shift+Z"
               @click="redoChange"
             >
               Redo</AppButton
