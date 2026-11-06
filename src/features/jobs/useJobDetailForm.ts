@@ -1,4 +1,4 @@
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useAutosaveQueue } from '@/composables/useAutosaveQueue'
 import {
   applyJobRecordToFormState,
@@ -41,6 +41,10 @@ export function useJobDetailForm({
   const hydratingDetailForm = ref(false)
   const lastHydratedJobId = ref<string | null>(null)
   const lastSavedDetailSignature = ref('')
+  let activeDetailSave: Promise<boolean> | undefined
+  const detailDirty = computed(() => !!getSelectedJob() && !getIsCreateMode()
+    && lastHydratedJobId.value === getSelectedJob()?.id
+    && serializeJobForm(detailForm) !== lastSavedDetailSignature.value)
   const detailAutosaveQueue = useAutosaveQueue({
     debounceMs: 450,
     canSave: () => (
@@ -50,7 +54,7 @@ export function useJobDetailForm({
       && !!getSelectedJob()
       && !hydratingDetailForm.value
     ),
-    save: () => saveDetailForm('All changes saved.', 'Saving...'),
+    save: () => detailDirty.value ? saveDetailForm('All changes saved.', 'Saving...') : true,
   })
 
   function applySelectedJobToForm(job: JobRecord | null) {
@@ -83,9 +87,20 @@ export function useJobDetailForm({
     detailAutosaveQueue.clearQueuedSave()
   }
 
-  async function saveDetailForm(successMessage: string, savingMessage = '') {
+  async function saveDetailForm(successMessage: string, savingMessage = ''): Promise<boolean> {
+    while (activeDetailSave) {
+      if (!(await activeDetailSave)) return false
+      if (!detailDirty.value) return true
+    }
+    const pending = performDetailSave(successMessage, savingMessage)
+    activeDetailSave = pending
+    try { return await pending }
+    finally { if (activeDetailSave === pending) activeDetailSave = undefined }
+  }
+
+  async function performDetailSave(successMessage: string, savingMessage = ''): Promise<boolean> {
     const job = getSelectedJob()
-    if (!job) return
+    if (!job || lastHydratedJobId.value !== job.id) return false
 
     clearDetailAutosaveTimer()
     setDetailError('')
@@ -94,21 +109,25 @@ export function useJobDetailForm({
     if (!getCanEditSelectedJob()) {
       setDetailError('You do not have permission to edit this job.')
       setDetailInfo('')
-      return
+      return false
     }
 
     const validationMessage = validateJobForm(detailForm)
     if (validationMessage) {
       setDetailError(validationMessage)
       setDetailInfo('')
-      return
+      return false
     }
 
-    const saved = await persistJobDetail(job, detailForm)
-    if (!saved) return
-
-    lastSavedDetailSignature.value = serializeJobForm(detailForm)
-    setDetailInfo(successMessage)
+    const snapshot = { ...detailForm, assignedForemanIds: [...detailForm.assignedForemanIds] }
+    const signature = serializeJobForm(snapshot)
+    const saved = await persistJobDetail(job, snapshot)
+    if (!saved) { setDetailInfo(''); return false }
+    if (lastHydratedJobId.value === job.id) {
+      lastSavedDetailSignature.value = signature
+      setDetailInfo(detailDirty.value ? '' : successMessage)
+    }
+    return true
   }
 
   function queueDetailAutosave() {
@@ -123,7 +142,7 @@ export function useJobDetailForm({
     }
 
     const nextSignature = serializeJobForm(detailForm)
-    if (nextSignature === lastSavedDetailSignature.value) return
+    if (nextSignature === lastSavedDetailSignature.value && !activeDetailSave) return
 
     detailAutosaveQueue.queueAutosave()
   }
@@ -141,6 +160,13 @@ export function useJobDetailForm({
     })
   }
 
+  async function prepareDetailNavigation() {
+    clearDetailAutosaveTimer()
+    if (activeDetailSave && !(await activeDetailSave)) return false
+    if (!detailDirty.value) return true
+    return await saveDetailForm('All changes saved.', 'Saving...') && !detailDirty.value
+  }
+
   function handleSaveJob() {
     return saveDetailForm('Job updated.')
   }
@@ -149,6 +175,8 @@ export function useJobDetailForm({
     applySelectedJobToForm,
     clearDetailAutosaveTimer,
     detailForm,
+    detailDirty,
+    prepareDetailNavigation,
     handleSaveJob,
     queueDetailAutosave,
     shouldHydrateSelectedJob,

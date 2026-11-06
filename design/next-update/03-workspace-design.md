@@ -54,7 +54,19 @@ The additive `/jobs?jobAction=create|edit|archived|defaults` initial intent wait
 
 Verification: 2,117/2,117 source unit tests and the expanded 83/83 dashboard browser gate pass, including all eight existing Jobs regressions. Four new browser cases cover desktop/phone management links, a real archived fixture, unchanged job state on opening setup, Payroll/Foreman restrictions and assigned/unassigned PM boundaries. Existing synthetic creation, delayed autosave text retention, recipient editing, archive/restore/delete and global defaults cases pass. Full build, changed-file lint, offline Functions packaging and whitespace checks pass.
 
-This supplies dashboard entry points into the existing editor. The directory remains its maintained host; retirement still requires an approved route/page migration and user acceptance. Its existing autosave behavior is reused; a dedicated audit of leaving/switching jobs with pending edits and of unsaved new-job drafts remains appropriate before retirement. No production writes, deployment, permission changes or page retirement occurred.
+This supplies dashboard entry points into the existing editor. The directory remains its maintained host; retirement still requires an approved route/page migration and user acceptance. The pending-edit review below now covers leaving/switching jobs, dirty new-job drafts and slow-save snapshots; route migration and user acceptance remain required before retirement. No production writes, deployment, permission changes or page retirement occurred.
+
+### Pending-edit navigation review
+
+Synthetic browser tests reproduced three losses in the existing Jobs editor: switching jobs, closing Edit Mode, or leaving the route within the 450ms autosave debounce discarded the latest field changes. Those transitions now flush pending details and await in-flight work before changing context. Starting another job draft, selecting global defaults, and opening archive/delete confirmation use the same preparation. Directory filtering retains an existing dirty selection instead of clearing its form.
+
+Each save uses an immutable field/assignment snapshot and records only that snapshot as saved. Newer typed values remain dirty. Waiting save requests are serialized; a field reverted to its previous value during an in-flight save still queues the required follow-up. A hydrated form cannot be written to a different selected job. Job inputs become inert while navigation is waiting for its save.
+
+Failed or invalid saves retain the form. Unsaved new-job forms and unadded recipient addresses require an explicit Discard changes choice; Keep editing preserves them. The discard dialog is tested at desktop and 390px. Browser reload/close requests the native unsaved-change warning while edits or writes remain; process termination cannot await an asynchronous save, and no new offline draft store is introduced.
+
+The complete gate also exposed a document-library race: an explicit refresh left a pending search debounce queued, causing an extra reload that could close a just-opened context menu. Explicit refresh now consumes that timer while later searches continue to debounce normally. The duplicate request was reproduced in a focused unit test; after the fix, the affected SDS context-menu case passed five consecutive runs. Temporary diagnostics were removed.
+
+Verification after reconnect: 2,124/2,124 source unit tests and the complete 93/93 synthetic dashboard/Jobs browser gate pass with no skipped or flaky cases. The final dialog styling check also passes at 1280px and 390px, with screenshots reviewed. The complete gate report is retained locally at `test-results/dashboard-aggregate-results.json`; the final unit report is `test-results/final-pending-edit-source-units.json`. Changed-file ESLint has zero errors and two conditional-test warnings; `git diff --check` passes. Build and offline Functions-package verification complete the checkpoint. No production writes, deployment, page retirement or denied push retry is included.
 
 ### Pilot review and release boundary
 

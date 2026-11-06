@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import '@/styles/builder-ui.css'
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import { canEditJobSetup } from '@/auth/capabilities'
 import { resolveJobsRouteIntent } from '@/features/jobs/jobsRouteIntent'
 import JobAdminDetailPane from '@/components/jobs/JobAdminDetailPane.vue'
@@ -185,6 +187,8 @@ const {
   applySelectedJobToForm,
   clearDetailAutosaveTimer,
   detailForm,
+  detailDirty,
+  prepareDetailNavigation,
   handleSaveJob,
   queueDetailAutosave,
   shouldHydrateSelectedJob,
@@ -225,6 +229,7 @@ const { closeEditDrawer, handleJobPrimaryAction, openCreateMode, openEditDrawer 
     selectedJobId,
   })
 useJobsSelectionSync({
+  preservePendingSelection: () => detailDirty.value || saveLoading.value,
   applySelectedJobToForm,
   clearDetailAutosaveTimer,
   editDrawerOpen,
@@ -262,6 +267,69 @@ useJobsLifecycle({
   stopAdminSubscriptions,
   stopJobsSubscription: () => jobsStore.stopJobsSubscription(),
 })
+const navigationConfirm = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const navigationBusy = ref(false)
+const createSnapshot = () => JSON.stringify({ form: createForm, recipients: createNotificationRecipients, inputs: createRecipientInputs })
+const emptyCreateSnapshot = createSnapshot()
+const createDirty = computed(() => isCreateMode.value && createSnapshot() !== emptyCreateSnapshot)
+const recipientDraft = computed(() => Object.values(isAllJobsMode.value ? globalRecipientInputs : detailRecipientInputs).some(value => value.trim()))
+async function prepareNavigation() {
+  if (navigationBusy.value) return false
+  if (createLoading.value || archiveLoading.value || deleteLoading.value || recipientSaving.value) {
+    toast.error('Wait for the job change to finish before leaving.', 'Jobs')
+    return false
+  }
+  navigationBusy.value = true
+  try {
+    const detailSaved = await prepareDetailNavigation()
+    if (!createDirty.value && !recipientDraft.value && detailSaved) return true
+    const accepted = await navigationConfirm.value?.ask({
+      title: 'Keep unsaved job changes?',
+      message: detailSaved
+        ? 'This new job or recipient draft has not been saved. Discard it to continue?'
+        : 'Job changes could not finish saving. Keep editing to retry, or discard the unsaved changes.',
+      confirmLabel: 'Discard changes',
+      cancelLabel: 'Keep editing',
+      destructive: true,
+    })
+    if (!accepted) return false
+    clearDetailAutosaveTimer()
+    if (isCreateMode.value) resetCreateForm()
+    else applySelectedJobToForm(selectedJob.value)
+    for (const key of Object.keys(globalRecipientInputs) as GlobalNotificationModuleKey[]) globalRecipientInputs[key] = ''
+    return true
+  } finally { navigationBusy.value = false }
+}
+async function selectJobSafely(job: import('@/types/domain').JobRecord) {
+  if (editDrawerOpen.value && selectedJobId.value === job.id) return
+  if (await prepareNavigation()) handleJobPrimaryAction(job)
+}
+async function createJobSafely() {
+  if (await prepareNavigation()) openCreateMode()
+}
+async function selectAllJobsSafely() {
+  if (selectedJobId.value !== ALL_JOBS_ID && await prepareNavigation()) selectedJobId.value = ALL_JOBS_ID
+}
+async function archiveJobSafely() {
+  if (await prepareNavigation()) requestToggleArchive()
+}
+async function deleteJobSafely() {
+  if (await prepareNavigation()) requestDeleteJob()
+}
+async function toggleEditorSafely() {
+  if (!editDrawerOpen.value) openEditDrawer()
+  else if (await prepareNavigation()) closeEditDrawer()
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (detailDirty.value || createDirty.value || recipientDraft.value || saveLoading.value || createLoading.value || archiveLoading.value || deleteLoading.value || recipientSaving.value) {
+    event.preventDefault()
+    event.returnValue = ''
+  }
+}
+onBeforeRouteLeave(prepareNavigation)
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+
 // Dashboard management links are an opt-in initial selection, never a write.
 // Wait for the authorized job subscription before resolving a requested job.
 onMounted(() => {
@@ -302,7 +370,7 @@ onMounted(() => {
   <JobsWorkspaceShell
     :can-use-job-setup-editor="canUseJobSetupEditor"
     :edit-mode="editDrawerOpen"
-    @toggle-edit-mode="editDrawerOpen ? closeEditDrawer() : openEditDrawer()"
+    @toggle-edit-mode="toggleEditorSafely"
   >
     <template #primary>
       <JobBrowserPanel
@@ -322,15 +390,16 @@ onMounted(() => {
         :all-jobs-id="ALL_JOBS_ID"
         @update-search-term="searchTerm = $event"
         @update-status-filter="jobStatusFilter = $event"
-        @create-job="openCreateMode"
-        @select-all-jobs="selectedJobId = ALL_JOBS_ID"
-        @select-job="handleJobPrimaryAction"
+        @create-job="createJobSafely"
+        @select-all-jobs="selectAllJobsSafely"
+        @select-job="selectJobSafely"
       />
     </template>
 
     <template #secondary>
       <JobAdminDetailPane
         v-if="canUseJobSetupEditor && editDrawerOpen"
+        :inert="navigationBusy || undefined"
         class="app-split-workspace__secondary-pane"
         :archive-loading="archiveLoading"
         :can-delete-or-archive-jobs="canDeleteOrArchiveJobs"
@@ -361,7 +430,7 @@ onMounted(() => {
         @add-detail-recipient="addRecipientToTarget('job', $event)"
         @add-global-recipient="addRecipientToTarget('all', $event)"
         @create-job="handleCreateJob"
-        @delete-job="requestDeleteJob"
+        @delete-job="deleteJobSafely"
         @remove-create-recipient="
           (moduleKey, email) => removeRecipientFromTarget('create', moduleKey, email)
         "
@@ -371,7 +440,7 @@ onMounted(() => {
         @remove-global-recipient="
           (moduleKey, email) => removeRecipientFromTarget('all', moduleKey, email)
         "
-        @request-toggle-archive="requestToggleArchive"
+        @request-toggle-archive="archiveJobSafely"
         @save-job="handleSaveJob"
         @toggle-create-foreman="toggleAssignedForeman(createForm.assignedForemanIds, $event)"
         @toggle-detail-foreman="toggleAssignedForeman(detailForm.assignedForemanIds, $event)"
@@ -394,6 +463,7 @@ onMounted(() => {
       <option v-for="gc in gcSuggestions" :key="gc" :value="gc" />
     </datalist>
 
+    <BuilderConfirmDialog ref="navigationConfirm" />
     <JobConfirmDialogs
       :archive-busy="archiveLoading"
       :archive-confirm-label="archiveJobConfirmLabel"

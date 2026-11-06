@@ -25,6 +25,8 @@ export function useLibraryQuery(options: {
     scope.search === options.search.value && scope.showArchived === options.showArchived.value
   async function refresh() {
     if (disposed) return
+    // An explicit refresh already uses the latest search; consume its queued debounce.
+    if (searchTimer) { clearTimeout(searchTimer); searchTimer = undefined }
     const request = ++generation
     const scope = context()
     loading.value = true

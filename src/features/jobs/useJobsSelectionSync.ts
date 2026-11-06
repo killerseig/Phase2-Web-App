@@ -16,6 +16,7 @@ interface UseJobsSelectionSyncOptions {
   selectedJobId: WritableRef<string | 'new' | typeof ALL_JOBS_ID | null>
   shouldHydrateSelectedJob: (job: JobRecord, previousJob: JobRecord | null) => boolean
   visibleJobs: ReadonlyRef<JobRecord[]>
+  preservePendingSelection?: () => boolean
 }
 
 export function useJobsSelectionSync({
@@ -28,6 +29,7 @@ export function useJobsSelectionSync({
   selectedJobId,
   shouldHydrateSelectedJob,
   visibleJobs,
+  preservePendingSelection = () => false,
 }: UseJobsSelectionSyncOptions) {
   watch(
     () => selectedJob.value,
@@ -56,7 +58,7 @@ export function useJobsSelectionSync({
         nextJobs,
         editDrawerOpen: editDrawerOpen.value,
       })
-      if (nextSelection !== undefined) selectedJobId.value = nextSelection
+      if (nextSelection !== undefined && !(selectedJob.value && preservePendingSelection())) selectedJobId.value = nextSelection
     },
     { immediate: true },
   )

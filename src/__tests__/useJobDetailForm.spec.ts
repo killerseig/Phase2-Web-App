@@ -141,7 +141,8 @@ describe('useJobDetailForm', () => {
   it('persists valid explicit saves and records success copy', async () => {
     const { detailInfos, form, persistJobDetail, selectedJob } = mountDetailForm()
 
-    form.applySelectedJobToForm(makeJob({ id: 'job-alpha' }))
+    selectedJob.value = makeJob({ id: 'job-alpha' })
+    form.applySelectedJobToForm(selectedJob.value)
     form.updateDetailFormField('name', 'Saved Job')
     await form.handleSaveJob()
 
@@ -202,4 +203,99 @@ describe('useJobDetailForm', () => {
       ),
     ).toBe(true)
   })
+  it('flushes a scheduled edit before navigation without a second debounce save', async () => {
+    const { form, selectedJob, persistJobDetail } = mountDetailForm()
+    form.applySelectedJobToForm(selectedJob.value)
+    form.updateDetailFormField('name', 'Immediate edit')
+    form.queueDetailAutosave()
+    expect(await form.prepareDetailNavigation()).toBe(true)
+    expect(persistJobDetail).toHaveBeenCalledTimes(1)
+    expect(form.detailDirty.value).toBe(false)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(persistJobDetail).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains failed changes and allows an explicit retry', async () => {
+    const { form, selectedJob, persistJobDetail } = mountDetailForm()
+    form.applySelectedJobToForm(selectedJob.value)
+    form.updateDetailFormField('name', 'Keep failed edit')
+    persistJobDetail.mockResolvedValueOnce(false)
+    expect(await form.prepareDetailNavigation()).toBe(false)
+    expect(form.detailDirty.value).toBe(true)
+    expect(form.detailForm.name).toBe('Keep failed edit')
+    expect(await form.prepareDetailNavigation()).toBe(true)
+    expect(form.detailDirty.value).toBe(false)
+  })
+
+  it('captures immutable save snapshots and flushes edits made during an in-flight save', async () => {
+    const { form, selectedJob, persistJobDetail } = mountDetailForm()
+    form.applySelectedJobToForm(selectedJob.value)
+    let release!: (value: boolean) => void
+    persistJobDetail.mockImplementationOnce(() => new Promise<boolean>(resolve => { release = resolve }))
+    form.updateDetailFormField('name', 'First snapshot')
+    const first = form.handleSaveJob()
+    form.updateDetailFormField('name', 'Latest snapshot')
+    form.detailForm.assignedForemanIds.push('another-foreman')
+    const navigation = form.prepareDetailNavigation()
+    expect(persistJobDetail).toHaveBeenCalledTimes(1)
+    expect(persistJobDetail.mock.calls[0]?.[1].name).toBe('First snapshot')
+    expect(persistJobDetail.mock.calls[0]?.[1].assignedForemanIds).toEqual(['foreman-1'])
+    release(true)
+    await first
+    expect(await navigation).toBe(true)
+    expect(persistJobDetail).toHaveBeenCalledTimes(2)
+    expect(persistJobDetail.mock.calls[1]?.[1].name).toBe('Latest snapshot')
+    expect(form.detailDirty.value).toBe(false)
+  })
+
+  it('does not save a form whose hydrated job no longer matches the selection', async () => {
+    const { form, selectedJob, persistJobDetail } = mountDetailForm()
+    form.applySelectedJobToForm(selectedJob.value)
+    form.updateDetailFormField('name', 'Old job edit')
+    selectedJob.value = makeJob({ id: 'another-job' })
+    expect(await form.handleSaveJob()).toBe(false)
+    expect(persistJobDetail).not.toHaveBeenCalled()
+  })
+
+  it('queues a user revert to the prior baseline while a different snapshot is saving', async () => {
+    const { form, selectedJob, persistJobDetail } = mountDetailForm()
+    form.applySelectedJobToForm(selectedJob.value)
+    let release!: (value: boolean) => void
+    persistJobDetail.mockImplementationOnce(() => new Promise<boolean>(resolve => { release = resolve }))
+    form.updateDetailFormField('name', 'Temporary change')
+    const pending = form.handleSaveJob()
+    form.updateDetailFormField('name', 'Alpha Job')
+    form.queueDetailAutosave()
+    release(true)
+    await pending
+    await vi.advanceTimersByTimeAsync(450)
+    expect(persistJobDetail).toHaveBeenCalledTimes(2)
+    expect(persistJobDetail.mock.calls[1]?.[1].name).toBe('Alpha Job')
+    expect(form.detailDirty.value).toBe(false)
+  })
+
+  it('serializes multiple save requests waiting behind the same in-flight snapshot', async () => {
+    const { form, selectedJob, persistJobDetail } = mountDetailForm()
+    form.applySelectedJobToForm(selectedJob.value)
+    let releaseFirst!: (value: boolean) => void
+    let releaseSecond!: (value: boolean) => void
+    persistJobDetail
+      .mockImplementationOnce(() => new Promise<boolean>(resolve => { releaseFirst = resolve }))
+      .mockImplementationOnce(() => new Promise<boolean>(resolve => { releaseSecond = resolve }))
+      .mockResolvedValue(true)
+    form.updateDetailFormField('name', 'First snapshot')
+    const first = form.handleSaveJob()
+    form.updateDetailFormField('name', 'Latest snapshot')
+    const second = form.handleSaveJob()
+    const third = form.handleSaveJob()
+    releaseFirst(true)
+    for (let index = 0; index < 8; index++) await Promise.resolve()
+    const savesWhileWaiting = persistJobDetail.mock.calls.length
+    releaseSecond(true)
+    await Promise.all([first, second, third])
+    expect(savesWhileWaiting).toBe(2)
+    expect(persistJobDetail).toHaveBeenCalledTimes(2)
+    expect(form.detailDirty.value).toBe(false)
+  })
+
 })
