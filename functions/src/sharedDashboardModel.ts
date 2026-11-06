@@ -2,6 +2,7 @@ import type { UserRole } from './constants'
 
 export type SharedDashboardScope = 'personal' | 'job' | 'role'
 export type SharedDashboardWidgetType =
+  | 'announcements'
   | 'announcement-drafts'
   | 'tasks'
   | 'job-info'
@@ -29,6 +30,7 @@ export interface SharedDashboardWidget {
   form?: { templateId: string; version: number; presentation: 'inline' | 'launcher' }
 }
 export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
+  announcements: 'Announcements',
   'announcement-drafts': 'Announcement drafts',
   tasks: 'My tasks',
   'job-info': 'Job information',
@@ -42,7 +44,7 @@ export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
   form: 'Forms',
 }
 export function sharedWidgetTypes(scope: SharedDashboardScope): SharedDashboardWidgetType[] {
-  return [...(scope === 'personal' ? ['tasks' as const, 'announcement-drafts' as const] : []), 'workflows', 'job-info', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form']
+  return [...(scope === 'personal' ? ['tasks' as const, 'announcement-drafts' as const] : []), 'workflows', 'job-info', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form', 'announcements']
 }
 export function defaultSharedWidgets(scope: SharedDashboardScope): SharedDashboardWidget[] {
   const types: SharedDashboardWidgetType[] =
@@ -231,6 +233,16 @@ export interface AnnouncementDraft {
   id: string
   title: string
   body: string
+  audience?: 'everyone' | 'job'
+  jobId?: string
+}
+export interface PublishedAnnouncement {
+  id: string
+  title: string
+  body: string
+  audience: 'everyone' | 'job'
+  jobId?: string
+  publishedAt: number
 }
 export function validateAnnouncementDrafts(value: unknown): AnnouncementDraft[] {
   if (!Array.isArray(value) || value.length > 25) throw Error('Use at most 25 announcement drafts.')
@@ -240,9 +252,13 @@ export function validateAnnouncementDrafts(value: unknown): AnnouncementDraft[] 
       typeof entry.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) || ids.has(entry.id) ||
       typeof entry.title !== 'string' || !entry.title.trim() || entry.title.trim().length > 200 ||
       typeof entry.body !== 'string' || !entry.body.trim() || entry.body.length > 8000 ||
-      Object.keys(entry).some(key => !['id', 'title', 'body'].includes(key)))
+      Object.keys(entry).some(key => !['id', 'title', 'body', 'audience', 'jobId'].includes(key)))
       throw Error('Use a title and message for each announcement draft.')
+    if ((entry.audience !== undefined && !['everyone', 'job'].includes(entry.audience)) ||
+      (entry.audience === 'job' ? typeof entry.jobId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(entry.jobId) : entry.jobId !== undefined))
+      throw Error('Choose Everyone or an assigned-job audience.')
     ids.add(entry.id)
-    return { id: entry.id, title: entry.title.trim(), body: entry.body.trim() }
+    return { id: entry.id, title: entry.title.trim(), body: entry.body.trim(),
+      ...(entry.audience ? { audience: entry.audience } : {}), ...(entry.audience === 'job' ? { jobId: entry.jobId } : {}) }
   })
 }

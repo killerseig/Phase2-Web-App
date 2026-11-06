@@ -2,6 +2,7 @@
 import AppButton from '@/components/common/AppButton.vue'
 import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import DashboardAnnouncements from './DashboardAnnouncements.vue'
 import DashboardAnnouncementDrafts from './DashboardAnnouncementDrafts.vue'
 import DashboardPersonalTasks from './DashboardPersonalTasks.vue'
 import DashboardJobInformation from './DashboardJobInformation.vue'
@@ -32,6 +33,7 @@ const props = defineProps<{
   canCreateJobs?: boolean
   canManageJobs?: boolean
   editableJobIds?: string[]
+  publishedDraftIds?: string[]
   announcementDrafts?: import('@/features/dashboard/sharedDashboards').AnnouncementDraft[]
   tasks?: import('@/features/dashboard/sharedDashboards').PersonalTask[]
   notes: Record<string, string>
@@ -51,6 +53,7 @@ const emit = defineEmits<{
   edit: [id: string]
   move: [event: PointerEvent, id: string]
   'save-note': [id: string, text: string]
+  'publish-announcement': [draftId: string]
   'save-announcement-drafts': [items: import('@/features/dashboard/sharedDashboards').AnnouncementDraft[]]
   'save-tasks': [tasks: import('@/features/dashboard/sharedDashboards').PersonalTask[]]
   'save-calendar': [events: SharedCalendarEntry[]]
@@ -242,7 +245,8 @@ function textStyle(widget: SharedDashboardWidget) {
           </AppButton></template
         >
       </div>
-      <DashboardAnnouncementDrafts v-else-if="widget.type === 'announcement-drafts' && scope === 'personal' && role === 'admin'" ref="announcementEditors" :items="announcementDrafts || []" :busy="busy || !!noteId || calendarEditing || tasksEditing" :layout-editing="editing" @save="emit('save-announcement-drafts', $event)" />
+      <DashboardAnnouncements v-else-if="widget.type === 'announcements'" :scope="scope" :job-id="job?.id" :jobs="jobs" :layout-editing="editing" />
+      <DashboardAnnouncementDrafts v-else-if="widget.type === 'announcement-drafts' && scope === 'personal' && role === 'admin'" ref="announcementEditors" :items="announcementDrafts || []" :jobs="jobs" :published-draft-ids="publishedDraftIds || []" @publish="emit('publish-announcement', $event)" :busy="busy || !!noteId || calendarEditing || tasksEditing" :layout-editing="editing" @save="emit('save-announcement-drafts', $event)" />
       <DashboardPersonalTasks v-else-if="widget.type === 'tasks' && scope === 'personal'" ref="taskEditors" :items="tasks || []" :busy="busy || !!noteId || calendarEditing || announcementsEditing" :layout-editing="editing" @save="emit('save-tasks', $event)" />
       <div v-else-if="widget.type === 'notes'" class="shared-widget-tools">
         <p v-if="editing">

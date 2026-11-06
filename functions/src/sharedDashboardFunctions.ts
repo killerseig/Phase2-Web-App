@@ -1,5 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db } from './runtime'
+import { announcementId, listDashboardAnnouncements, publishDashboardAnnouncement } from './dashboardAnnouncements'
 import { buildCurrentFunctionUser, type CurrentFunctionUser } from './roleAccess'
 import { VALID_ROLES, type UserRole } from './constants'
 import { targetFunctionRoleCanOpenJobDashboard } from './targetJobAccess'
@@ -59,7 +60,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use dashboards.')
   const data = request.data || {}
   if (
-    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks', 'save-announcement-drafts'].includes(data.action) ||
+    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks', 'save-announcement-drafts', 'publish-announcement', 'list-announcements'].includes(data.action) ||
     !['personal', 'job', 'role'].includes(data.scope) ||
     data.uid !== undefined ||
     data.ownerId !== undefined
@@ -119,6 +120,12 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       (user.role !== 'admin' || ['save-notes', 'save-calendar'].includes(data.action))
     )
       throw denied('Choose a job you can access.')
+    if (data.action === 'publish-announcement') return publishDashboardAnnouncement(tx, user, data)
+    if (data.action === 'list-announcements') {
+      if (Object.keys(data).some(key => !['scope', 'action', 'jobId', 'role'].includes(key)))
+        throw new HttpsError('invalid-argument', 'Announcement audiences are determined by your current access.')
+      return listDashboardAnnouncements(tx, user, scope === 'job' ? jobId : undefined)
+    }
     const templateRef = db.doc(scope === 'personal'
       ? 'sharedDashboardPersonal/' + user.uid
       : 'sharedDashboardTemplates/' + sharedDashboardKey(scope, role))
@@ -148,6 +155,11 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
     const content = notes?.data() || {}
     const tasks = scope === 'personal' ? content.tasks || [] : []
     const announcementDrafts = scope === 'personal' && user.role === 'admin' ? content.announcementDrafts || [] : []
+    const publishedDraftIds: string[] = []
+    if (announcementDrafts.length) {
+      const publications = await tx.getAll(...announcementDrafts.map((draft: { id: string }) => db.doc('dashboardAnnouncements/' + announcementId(user.uid, draft.id))))
+      publications.forEach((publication, index) => { if (publication.exists) publishedDraftIds.push(announcementDrafts[index].id) })
+    }
     const contentKey = scope === 'personal' ? 'personal' : role
     const prefix = scope !== 'job' ? contentKey + ':' : ''
     const visibleNotes = Object.fromEntries(
@@ -226,6 +238,10 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       let entries
       try { entries = validateAnnouncementDrafts(data.announcementDrafts) }
       catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid announcement drafts.') }
+      for (const entry of entries) if (entry.audience === 'job') {
+        const job = await tx.get(db.doc('jobs/' + entry.jobId))
+        if (!job.exists) throw new HttpsError('invalid-argument', 'Choose an available job.')
+      }
       tx.set(notesRef!, { ...content, announcementDrafts: entries, version: Number(content.version || 0) + 1, updatedBy: user.uid, updatedAt: Date.now() })
       return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks, announcementDrafts: entries }
     }
@@ -274,6 +290,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       notes: visibleNotes,
       tasks,
       announcementDrafts,
+      publishedDraftIds,
       events,
       notesVersion: Number(content.version || 0),
     }

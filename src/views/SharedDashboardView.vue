@@ -105,7 +105,8 @@ const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => (ty
    ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value)))))
 const widgetSearch = ref('')
 const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
-  'announcement-drafts': 'Prepare private drafts. Admin only; publishing is not enabled.',
+  announcements: 'Read updates for everyone and your assigned jobs.',
+  'announcement-drafts': 'Prepare and publish updates. Admin only.',
   tasks: 'Keep a private personal task list.',
   workflows: 'Open the tools for a job.',
   'job-info': 'View a job address, contractor and project dates.',
@@ -120,7 +121,7 @@ const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
 const paletteGroups = computed(() => [
   { title: 'Work tools', types: ['workflows', 'job-info', 'jobs', 'form'] },
   { title: 'Files & resources', types: ['documents', 'resources'] },
-  { title: 'Content & planning', types: ['text', 'notes', 'dates', 'tasks', 'announcement-drafts'] },
+  { title: 'Content & planning', types: ['text', 'notes', 'dates', 'tasks', 'announcement-drafts', 'announcements'] },
 ].map(group => ({ ...group, types: group.types.filter((type): type is SharedDashboardWidget['type'] =>
   palette.value.includes(type as SharedDashboardWidget['type']) &&
   `${sharedWidgetLabels[type as SharedDashboardWidget['type']]} ${widgetDescriptions[type as SharedDashboardWidget['type']]}`
@@ -321,7 +322,7 @@ async function remove() {
     await confirm.value?.ask({
       title: 'Remove widget?',
       message:
-        'This removes the widget from this layout. Saved notes, tasks, calendar dates, documents and form submissions are retained.',
+        'This removes the widget from this layout. Saved announcements, notes, tasks, calendar dates, documents and form submissions are retained.',
       confirmLabel: 'Remove',
       destructive: true,
     })
@@ -502,6 +503,21 @@ function saveNote(id: string, text: string) {
 }
 function saveCalendar(events: SharedCalendarEntry[]) {
   void saveContent('save-calendar', { events })
+}
+async function publishAnnouncement(draftId: string) {
+  if (!isAdmin.value || busy.value || scope.value !== 'personal' || !layout.value || !(await prepare())) return
+  const draft = layout.value.announcementDrafts?.find(item => item.id === draftId)
+  if (!draft?.audience) return
+  const audience = draft.audience === 'everyone' ? 'everyone with current dashboard access' : 'people currently assigned to ' + (visibleJobs.value.find(job => job.id === draft.jobId)?.name || 'the selected job')
+  if (!(await confirm.value?.ask({ title: 'Publish announcement?', message: `Publish “${draft.title}” to ${audience}? This publishes a snapshot; no notifications are sent.`, confirmLabel: 'Publish' }))) return
+  busy.value = true
+  error.value = ''
+  try {
+    await sharedDashboardCommand('publish-announcement', { scope: 'personal', version: layout.value.notesVersion, draftId })
+    layout.value.publishedDraftIds = [...new Set([...(layout.value.publishedDraftIds || []), draftId])]
+    message.value = 'Announcement published. Refresh the Announcements widget to see eligible updates.'
+  } catch (reason) { error.value = dashboardError(reason) }
+  finally { busy.value = false }
 }
 async function changeRole(event: Event) {
   const select = event.target as HTMLSelectElement
@@ -844,6 +860,8 @@ onBeforeUnmount(() => {
                         sharedWidgetLabels[widgets.find((w) => w.id === id)!.type],
                       )
                   "
+                  :published-draft-ids="layout?.publishedDraftIds || []"
+                  @publish-announcement="publishAnnouncement"
                   :announcement-drafts="layout?.announcementDrafts || []"
                   @save-announcement-drafts="announcementDrafts => saveContent('save-announcement-drafts', { announcementDrafts })"
                   :tasks="layout?.tasks || []"

@@ -6,6 +6,7 @@ import type {
   SharedCalendarEntry,
   PersonalTask,
   AnnouncementDraft,
+  PublishedAnnouncement,
   SharedDashboardScope,
   SharedDashboardWidget,
 } from '@/features/dashboard/sharedDashboards'
@@ -22,6 +23,8 @@ interface DashboardRequests {
     allowRoleEditing?: boolean
   }
   'save-notes': DashboardContext & { version: number; widgetId: string; text: string }
+  'publish-announcement': DashboardContext & { version: number; draftId: string }
+  'list-announcements': DashboardContext
   'save-announcement-drafts': DashboardContext & { version: number; announcementDrafts: AnnouncementDraft[] }
   'save-tasks': DashboardContext & { version: number; tasks: PersonalTask[] }
   'save-calendar': DashboardContext & { version: number; events: SharedCalendarEntry[] }
@@ -37,6 +40,8 @@ interface DashboardResponses {
   load: SharedDashboardLayout
   'save-template': SharedDashboardLayout
   'save-notes': DashboardContent
+  'publish-announcement': { id: string }
+  'list-announcements': { items: PublishedAnnouncement[]; limit: number }
   'save-announcement-drafts': DashboardContent
   'save-tasks': DashboardContent
   'save-calendar': DashboardContent

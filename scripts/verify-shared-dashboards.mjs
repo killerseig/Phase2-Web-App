@@ -22,6 +22,7 @@ connectFirestoreEmulator(clientDb, '127.0.0.1', 8280, { mockUserToken: { sub: 'd
 const { sharedDashboardWorkspace } = require('../functions/lib/sharedDashboardFunctions.js')
 const { formTemplates, formWorkspace } = require('../functions/lib/formFunctions.js')
 const { formSubmissionViewer } = require('../functions/lib/formSubmissionViewer.js')
+const { announcementId } = require('../functions/lib/dashboardAnnouncements.js')
 const { defaultSharedWidgets } = require('../functions/lib/sharedDashboardModel.js')
 const call = (uid, scope, action = 'load', data = {}) =>
   sharedDashboardWorkspace.run({
@@ -139,7 +140,7 @@ try {
   const nonAdminLayout = await call('dash-a', 'personal')
   await denied(() => call('dash-a', 'personal', 'save-template', { version: nonAdminLayout.version, widgets: [...nonAdminLayout.widgets, draftWidget] }))
   const draftVersion = (await call('dash-admin', 'personal')).notesVersion
-  for (const fields of [{ recipients: ['dash-a'] }, { published: true }, { audience: 'everyone' }])
+  for (const fields of [{ recipients: ['dash-a'] }, { published: true }, { audience: 'unknown' }])
     await denied(() => call('dash-admin', 'personal', 'save-announcement-drafts', { version: draftVersion, announcementDrafts: [{ ...draft, ...fields }] }), 'invalid-argument')
   await denied(() => call('dash-admin', 'personal', 'save-announcement-drafts', { version: adminData.notesVersion, announcementDrafts: [] }), 'aborted')
   await denied(() => call('dash-admin', 'personal', 'publish-announcement', { announcementDrafts: [draft] }), 'invalid-argument')
@@ -149,6 +150,54 @@ try {
   await denied(() => call('dash-admin', 'personal', 'save-announcement-drafts', { version: draftVersion, announcementDrafts: [] }))
   await db.doc('users/dash-admin').update({ role: 'admin' })
   equal((await call('dash-admin', 'personal')).announcementDrafts, [draft])
+
+
+  // Both published audiences use current server identity and assignment.
+  await db.doc('users/dash-pm').set({ role: 'project-manager', active: true, assignedJobIds: ['dash-job-a'] })
+  await db.doc('users/dash-employee').set({ role: 'employee', active: true })
+  const audienceDrafts = [
+    { ...draft, id: 'everyone-update', audience: 'everyone' },
+    { ...draft, id: 'job-update', title: 'Job A only', audience: 'job', jobId: 'dash-job-a' },
+    { ...draft, id: 'uid-update', title: 'UID assignment', audience: 'job', jobId: 'dash-job-uid' },
+  ]
+  const audienceVersion = (await call('dash-admin', 'personal')).notesVersion
+  await call('dash-admin', 'personal', 'save-announcement-drafts', { version: audienceVersion, announcementDrafts: audienceDrafts })
+  const publishVersion = (await call('dash-admin', 'personal')).notesVersion
+  for (const item of audienceDrafts) await call('dash-admin', 'personal', 'publish-announcement', { version: publishVersion, draftId: item.id })
+  const feed = async (uid, scope = 'personal', more = {}) => (await call(uid, scope, 'list-announcements', more)).items
+  const titles = items => items.map(item => item.title).sort()
+  equal(titles(await feed('dash-a')), ['Job A only', 'Private draft', 'UID assignment'])
+  for (const uid of ['dash-b', 'dash-shop', 'dash-payroll', 'dash-admin', 'dash-admin-2'])
+    equal(titles(await feed(uid)), ['Private draft'])
+  equal(titles(await feed('dash-pm')), ['Job A only', 'Private draft'])
+  equal(titles(await feed('dash-a', 'role')), ['Job A only', 'Private draft', 'UID assignment'])
+  equal(titles(await feed('dash-a', 'job', {jobId: 'dash-job-a'})), ['Job A only', 'Private draft'])
+  for (const uid of ['dash-inactive', 'dash-none', 'dash-employee']) await denied(() => feed(uid))
+  await denied(() => feed(undefined), 'unauthenticated')
+  await denied(() => feed('dash-b', 'job', {jobId: 'dash-job-a'}))
+  await denied(() => feed('dash-b', 'personal', {assignedJobIds: ['dash-job-a']}), 'invalid-argument')
+  await denied(() => feed('dash-a', 'role', {role: 'admin'}))
+  for (const uid of ['dash-a', 'dash-b', 'dash-shop', 'dash-payroll', 'dash-pm'])
+    await denied(() => call(uid, 'personal', 'publish-announcement', {version: publishVersion, draftId: 'everyone-update'}))
+  await denied(() => call('dash-admin', 'personal', 'publish-announcement', {version: publishVersion, draftId: 'everyone-update', audience: 'everyone'}), 'invalid-argument')
+  await denied(() => call('dash-admin', 'personal', 'publish-announcement', {version: 0, draftId: 'missing'}), 'aborted')
+  equal(announcementId('a_b', 'c') === announcementId('a', 'b_c'), false)
+  const firstPublication = await db.doc('dashboardAnnouncements/' + announcementId('dash-admin', 'everyone-update')).get()
+  await call('dash-admin', 'personal', 'publish-announcement', {version: 0, draftId: 'everyone-update'})
+  equal((await db.doc('dashboardAnnouncements/' + announcementId('dash-admin', 'everyone-update')).get()).data(), firstPublication.data())
+  await denied(() => getDoc(doc(clientDb, 'dashboardAnnouncements', announcementId('dash-admin', 'everyone-update'))))
+  await denied(() => setDoc(doc(clientDb, 'dashboardAnnouncements', 'injected'), { title: 'Unauthorized' }))
+  await db.doc('users/dash-a').update({assignedJobIds: []})
+  equal(titles(await feed('dash-a')), ['Private draft', 'UID assignment'])
+  await db.doc('jobs/dash-job-uid').update({assignedForemanIds: []})
+  equal(titles(await feed('dash-a')), ['Private draft'])
+  await db.doc('users/dash-a').update({assignedJobIds: ['dash-job-a']})
+  await db.doc('jobs/dash-job-uid').update({assignedForemanIds: ['dash-a']})
+  // Hidden newer records cannot crowd out an authorized audience before the bound.
+  const batch = db.batch()
+  for (let i = 0; i < 60; i++) batch.set(db.doc('dashboardAnnouncements/hidden-' + i), {title: 'Hidden B', body:'Other job', audience:'job', jobId:'dash-job-b', publishedAt: Date.now() + i + 1})
+  await batch.commit()
+  equal(titles(await feed('dash-a')), ['Job A only', 'Private draft', 'UID assignment'])
 
   await denied(() => call(undefined, 'role'), 'unauthenticated')
   await denied(() => call('dash-a', 'job', 'load', { jobId: 'dash-job-b' }))

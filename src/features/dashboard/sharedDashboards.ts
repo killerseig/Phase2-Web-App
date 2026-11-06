@@ -10,6 +10,7 @@ export type {
   SharedCalendarEntry,
   PersonalTask,
   AnnouncementDraft,
+  PublishedAnnouncement,
 } from '../../../functions/src/sharedDashboardModel'
 import type { SharedDashboardWidget } from '../../../functions/src/sharedDashboardModel'
 export interface SharedDashboardJob {
@@ -30,6 +31,7 @@ export interface SharedDashboardLayout {
   allowRoleEditing: boolean
   job: SharedDashboardJob | null
   notes: Record<string, string>
+  publishedDraftIds?: string[]
   announcementDrafts?: import('../../../functions/src/sharedDashboardModel').AnnouncementDraft[]
   tasks?: import('../../../functions/src/sharedDashboardModel').PersonalTask[]
   notesVersion: number

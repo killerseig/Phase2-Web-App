@@ -17,6 +17,8 @@ const componentIntegrationImportPattern = /from\s+['"](@\/(?:services|stores)\/[
 // Feature containers coordinate existing service boundaries. Shared presentation
 // components remain disconnected; adding a dependency requires explicit review.
 const connectedContainers: Record<string, string[]> = {
+  // The announcement container owns its independent callable/retry lifecycle and viewer revocation.
+  'dashboard/DashboardAnnouncements.vue': ['@/services/sharedDashboards', '@/services/dashboard', '@/stores/auth'],
   'dashboard/DashboardWorkflowsWidget.vue': ['@/stores/auth'],
   'dashboard/CompanyLibraryWidget.vue': ['@/stores/auth', '@/services/sds'],
   'intranet/PrivateReferenceStatus.vue': ['@/stores/auth'],

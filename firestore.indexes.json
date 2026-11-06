@@ -101,7 +101,9 @@
           "order": "ASCENDING"
         }
       ]
-    }
+    },
+    {"collectionGroup":"dashboardAnnouncements","queryScope":"COLLECTION","fields":[{"fieldPath":"audience","order":"ASCENDING"},{"fieldPath":"publishedAt","order":"DESCENDING"}]},
+    {"collectionGroup":"dashboardAnnouncements","queryScope":"COLLECTION","fields":[{"fieldPath":"jobId","order":"ASCENDING"},{"fieldPath":"publishedAt","order":"DESCENDING"}]}
   ],
   "fieldOverrides": [
     {
