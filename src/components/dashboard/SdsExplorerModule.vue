@@ -570,11 +570,23 @@ function beforeUnload(event: BeforeUnloadEvent) {
     event.returnValue = ''
   }
 }
-onBeforeRouteLeave(
-  () =>
-    !(hasDraft.value || busy.value) ||
-    window.confirm('Leave this page and discard unsaved changes?'),
-)
+function prepareNavigation() {
+  if (busy.value || bulkOpen.value) {
+    error.value = bulkOpen.value
+      ? 'Finish or close the document import before leaving.'
+      : 'Wait for the document change to finish before leaving.'
+    return false
+  }
+  if (hasDraft.value && !window.confirm('Leave this page and discard unsaved changes?')) return false
+  // Reset only after approval, so parent preparation and route guards can share this check.
+  editing.value = false
+  editor.value = ''
+  selection.value = library.value.binder.selections.map(entry => ({ ...entry }))
+  file.value = null
+  return true
+}
+defineExpose({ prepareNavigation })
+onBeforeRouteLeave(prepareNavigation)
 watch(
   () => auth.profile,
   () => {

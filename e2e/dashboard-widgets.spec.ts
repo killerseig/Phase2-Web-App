@@ -3,6 +3,7 @@ import {
   createJobsFixture,
   createJobDashboardFixture,
   gotoPhase2App,
+  openLibraryFiles,
 } from './helpers/phase2AppFixture.js'
 import { mockDashboard } from './helpers/dashboardFixture.js'
 
@@ -133,6 +134,9 @@ test('widget limits and removal use the existing undo and discard baseline', asy
   await gotoPhase2App(page, '/dashboards/role', createJobsFixture())
   await page.getByRole('button', { name: 'Edit', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Add Text', exact: true })).toBeDisabled()
+  const editorBounds = await page.locator('.shared-dashboard-body').boundingBox()
+  expect(editorBounds!.height).toBeGreaterThan(300)
+  expect(editorBounds!.y + editorBounds!.height).toBeLessThanOrEqual(901)
   const list = page.getByRole('group', { name: 'On this dashboard', exact: true })
   await list.getByRole('button', { name: 'Jobs', exact: true }).focus()
   await page.keyboard.press('End')
@@ -149,6 +153,64 @@ test('widget limits and removal use the existing undo and discard baseline', asy
   await expect(page.getByRole('button', { name: 'Save template', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Cancel edits', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('selected role resources and nested drafts remain scoped through dashboard editing', async ({ page }) => {
+  const api = await mockDashboard(page)
+  await emptyDocuments(page)
+  const requests: Record<string, unknown>[] = []
+  await page.route('**/sdsWorkspace', async route => {
+    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
+    if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return }
+    const request = route.request().postDataJSON().data
+    requests.push(request)
+    await route.fulfill({ headers, json: { result: { resources: [] } } })
+  })
+  api.layouts.set('role-foreman', { version: 1, widgets: [
+    { id: 'resources', type: 'resources', title: 'Field resources', text: '', span: 12 },
+  ] })
+  await gotoPhase2App(page, '/dashboards/role', createJobsFixture())
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await page.getByLabel('Shared layout for', { exact: true }).selectOption('foreman')
+  await page.getByRole('button', { name: 'Cancel edits', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Foreman resources', exact: true })).toBeVisible()
+  await expect.poll(() => requests.filter(request => request.action === 'listResources').at(-1)?.role).toBe('foreman')
+  await page.getByRole('button', { name: 'Add resource', exact: true }).click()
+  await page.getByLabel('Title', { exact: true }).fill('Unsaved field guide')
+  page.once('dialog', dialog => dialog.dismiss())
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Unsaved field guide')
+  await expect(page.getByRole('button', { name: 'Cancel edits', exact: true })).toHaveCount(0)
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Cancel edits', exact: true })).toBeVisible()
+  expect(requests.every(request => request.action === 'listResources' || request.action === 'page' || request.action === 'load')).toBe(true)
+})
+
+test('empty personal dashboards explain the next step and scope navigation protects unsaved notes', async ({ page }) => {
+  const api = await mockDashboard(page)
+  await emptyDocuments(page)
+  api.layouts.set('personal', { version: 1, widgets: [] })
+  await gotoPhase2App(page, '/dashboards/personal', createJobsFixture())
+  await expect(page.getByRole('heading', { name: 'Make this dashboard yours', exact: true })).toBeVisible()
+  const scopes = page.getByRole('navigation', { name: 'Dashboard scopes', exact: true })
+  await expect(scopes.getByRole('link', { name: 'Personal', exact: true })).toHaveAttribute('aria-current', 'page')
+  await page.getByRole('button', { name: 'Add widgets', exact: true }).click()
+  await page.getByRole('button', { name: 'Add Notes', exact: true }).click()
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit notes', exact: true }).click()
+  await page.getByLabel('Your notes', { exact: true }).fill('Keep this draft')
+  await scopes.getByRole('link', { name: 'Role', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page).toHaveURL(/\/dashboards\/personal$/)
+  await expect(page.getByLabel('Your notes', { exact: true })).toHaveValue('Keep this draft')
+  await scopes.getByRole('link', { name: 'Role', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click()
+  await expect(page).toHaveURL(/\/dashboards\/role$/)
+  await expect(scopes.getByRole('link', { name: 'Role', exact: true })).toHaveAttribute('aria-current', 'page')
+  await page.goBack()
+  await expect(page).toHaveURL(/\/dashboards\/personal$/)
+  await expect(page.locator('.shared-note-text')).toHaveText('No notes yet.')
 })
 
 test('duplicating a personal note copies layout settings without copying saved private content', async ({ page }) => {
@@ -190,11 +252,15 @@ for (const scheme of ['dark', 'light'] as const) for (const width of [1280, 390]
     const sample = document.createElement('span')
     sample.style.cssText = 'background:var(--panel-background);color:var(--text);border:1px solid var(--border)'
     element.append(sample)
-    const style = getComputedStyle(sample), result = { background: style.backgroundColor, color: style.color }
+    const style = getComputedStyle(sample), result = { background: style.backgroundColor, color: style.color, field: '' }
+    sample.style.backgroundColor = 'var(--field)'
+    result.field = getComputedStyle(sample).backgroundColor
     sample.remove(); return result
   })
   await expect(jobs).toHaveCSS('background-color', expected.background)
   await expect(jobs).toHaveCSS('color', expected.color)
+  await expect(jobs.getByRole('searchbox', { name: 'Find a job' })).toHaveCSS('background-color', expected.field)
+  await expect(jobs.getByRole('searchbox', { name: 'Find a job' })).toHaveCSS('color', expected.color)
   await page.getByRole('button', { name: 'Edit notes', exact: true }).click()
   const save = page.getByRole('button', { name: 'Save notes', exact: true })
   await expect(save).toHaveClass(/app-button--primary/)
@@ -206,9 +272,12 @@ for (const scheme of ['dark', 'light'] as const) for (const width of [1280, 390]
   await page.getByRole('button', { name: 'Add date', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Save calendar', exact: true })).toHaveClass(/app-button--primary/)
   await page.getByRole('button', { name: 'Cancel calendar', exact: true }).click()
-  const embeddedUpload = page.getByRole('button', { name: 'Upload document', exact: true })
-  const background = await embeddedUpload.evaluate(element => getComputedStyle(element).backgroundColor)
-  await expect(embeddedUpload).toHaveClass(/app-button--primary/)
+  await openLibraryFiles(page)
+  await page.getByRole('button', { name: 'Root folder actions', exact: true }).click()
+  const embeddedUpload = page.getByRole('menuitem', { name: 'Upload document here', exact: true })
+  const background = await page.getByRole('menu', { name: 'Root folder', exact: true }).evaluate(element => getComputedStyle(element).backgroundColor)
+  await expect(embeddedUpload).toBeEnabled()
+  await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Edit', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Save template', exact: true })).toBeDisabled()
   await showWidgetPalette(page)
@@ -220,9 +289,11 @@ for (const scheme of ['dark', 'light'] as const) for (const width of [1280, 390]
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click()
   await page.goto('/company-library')
-  await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toHaveCSS('background-color', background)
-  await page.getByText('More', { exact: true }).click()
-  await page.getByRole('button', { name: 'Bulk PDF import', exact: true }).click()
+  await openLibraryFiles(page)
+  await page.getByRole('button', { name: 'Root folder actions', exact: true }).click()
+  await expect(page.getByRole('menu', { name: 'Root folder', exact: true })).toHaveCSS('background-color', background)
+  await expect(page.getByRole('menuitem', { name: 'Upload document here', exact: true })).toBeEnabled()
+  await page.getByRole('menuitem', { name: 'Bulk PDF import', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Validate and preview', exact: true })).toHaveClass(/app-button/)
   await page.locator('.company-library-widget').screenshot({ path: test.info().outputPath(`library-${scheme}-${width}.png`) })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

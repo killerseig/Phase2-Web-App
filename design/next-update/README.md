@@ -4,7 +4,11 @@ Design and implementation record · September 14, 2026
 
 The next phase includes **all requests collected from the stakeholder emails and planning conversation**. General and job-specific SDS access is the first feature priority. The user subsequently authorized first-phase implementation. These documents do not establish delivery dates or remove later work from scope; see the implementation record for what is built versus still proposed.
 
-## Start here: October 3 additive dashboards (local review)
+## Start here: November 6 dashboard testing readiness
+
+The current Personal, Role and Job dashboard work is recorded in the [November 6 checkpoint](03-workspace-design.md#november-6-dashboard-testing-readiness). The owner wants these polished for user testing before gradually replacing older pages. The current work preserves the Jobs pages, Daily Logs, Timecards, Shop Orders, existing permissions and production records. It is a source checkpoint on `test`, not a deployment or permission to retire pages. The older dated entries below remain history rather than the current feature inventory.
+
+## October 3 additive dashboards (historical local review)
 
 Review the current parallel shared dashboards in [workspace design](03-workspace-design.md#parallel-shared-dashboards---current-local-implementation-3-october-2026) and [widget layouts](08-widget-layouts.md#parallel-shared-dashboards---current-local-implementation-3-october-2026). One job template serves every job; one template serves each existing role, with data tied to the signed-in person. Admin owns both templates, with default-OFF per-role editing delegation. Both surfaces share the core catalog and safe styled Text variables. Existing pages/builders stay in place and sidebar links remain hidden. Weather, personal desktops and wider refactors are future work. Start the normal local demo profile; deployment and IAM changes are not authorized. The existing production dashboard transport repair is explicitly denied and remains unresolved. The October 2 release below is history, not permission to repair or release these dashboards.
 

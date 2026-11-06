@@ -6,6 +6,7 @@ const props = withDefaults(defineProps<{ loading: boolean; label?: string }>(), 
 const covered = ref(props.loading)
 watch(() => props.loading, loading => { if (loading) covered.value = true }, { flush: 'sync' })
 function reveal() { if (!props.loading) covered.value = false }
+defineExpose({ covered })
 </script>
 
 <template>

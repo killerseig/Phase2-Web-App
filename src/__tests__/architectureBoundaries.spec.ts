@@ -17,8 +17,10 @@ const componentIntegrationImportPattern = /from\s+['"](@\/(?:services|stores)\/[
 // Feature containers coordinate existing service boundaries. Shared presentation
 // components remain disconnected; adding a dependency requires explicit review.
 const connectedContainers: Record<string, string[]> = {
+  'dashboard/DashboardWorkflowsWidget.vue': ['@/stores/auth'],
   'dashboard/CompanyLibraryWidget.vue': ['@/stores/auth', '@/services/sds'],
   'intranet/PrivateReferenceStatus.vue': ['@/stores/auth'],
+  'users/PersonalTimecardLink.vue': ['@/services/personalTimecard'],
   'jobs/JobFormsList.vue': ['@/stores/auth', '@/services/forms'],
   'auth/LocalFormsSignIn.vue': ['@/stores/auth'],
   'dashboard/RoleResourcesModule.vue': ['@/stores/auth', '@/services/sds'],

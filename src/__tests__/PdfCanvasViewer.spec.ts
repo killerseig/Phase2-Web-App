@@ -88,6 +88,35 @@ describe('PDF preview lifecycle', () => {
     expect(wrapper.get('canvas').attributes('aria-label')).toBe('PDF page 1 of 1')
     wrapper.unmount()
   })
+  it('preserves an uncommitted page number while a resize rerenders the viewer', async () => {
+    let resize!: ResizeObserverCallback
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { resize = callback }
+      observe() {} disconnect() {}
+    })
+    const page = {
+      getViewport: ({ scale }: { scale: number }) => ({ width: 612 * scale, height: 792 * scale }),
+      render: () => ({ promise: Promise.resolve(), cancel: vi.fn<() => void>() }), cleanup: vi.fn<() => void>(),
+    }
+    vi.mocked(getDocument).mockReturnValueOnce({ promise: Promise.resolve({ getDownloadInfo: () => new Promise(() => {}), numPages: 387, getPage: vi.fn<() => Promise<typeof page>>().mockResolvedValue(page) }), destroy: vi.fn<() => Promise<void>>().mockResolvedValue(undefined) } as unknown as ReturnType<typeof getDocument>)
+    const wrapper = mount(PdfCanvasViewer, { props: { url: link } })
+    await flushPromises()
+    const input = wrapper.get<HTMLInputElement>('input[aria-label="PDF page"]')
+    await input.setValue('200')
+    await flushPromises()
+    await input.trigger('focus')
+    input.element.value = '387'
+    await input.trigger('input')
+    resize([{ contentRect: { width: 700 } } as ResizeObserverEntry], {} as ResizeObserver)
+    await flushPromises()
+    expect(input.element.value).toBe('387')
+    await input.trigger('change')
+    await input.trigger('blur')
+    await flushPromises()
+    expect(input.element.value).toBe('387')
+    expect(wrapper.find('canvas[data-page="387"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })
 
 

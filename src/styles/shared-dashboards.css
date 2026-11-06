@@ -32,6 +32,12 @@
   align-items: center;
   flex-wrap: wrap;
 }
+.shared-dashboard-scopes { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.shared-dashboard-scopes [aria-current='page'] { color: var(--text); background: var(--field); border-color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
+.shared-dashboard-scopes > span { padding: .5rem .75rem; border: 1px solid var(--accent); border-radius: var(--radius-sm); }
+.shared-dashboard-empty { padding: 2rem; text-align: center; background: var(--panel-background); border: 1px dashed var(--border); border-radius: var(--radius-sm); }
+.shared-dashboard-empty h2 { margin: 0 0 .5rem; }
+.shared-dashboard-empty p { color: var(--text-muted); }
 .shared-header-actions .app-button,
 .shared-job-picker select {
   min-height: 38px;
@@ -402,6 +408,12 @@
 .shared-dashboard.is-editing .shared-dashboard-body {
   flex: 1;
   min-height: 0;
+}
+.shared-dashboard-loading { --loading-region-min-height: min(60dvh, 36rem); }
+.shared-dashboard.is-editing .shared-dashboard-loading {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .shared-dashboard .shared-dashboard-widget > .shared-library-widget {
   height: clamp(25rem, 65dvh, 40rem);

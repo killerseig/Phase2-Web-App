@@ -20,6 +20,7 @@ defineExpose({
     :template-id="widget.form.templateId"
     :template-version="widget.form.version"
     inline
+    ignore-route-context
     :dashboard-scope="scope === 'personal' ? 'personal' : 'role'"
     :dashboard-job-id="jobId"
     :dashboard-return="scope === 'personal' ? undefined : jobId ? 'shared-job' : 'shared-role'"

@@ -7,6 +7,8 @@ import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus
 import { usePrivateReferences } from '@/features/intranet/usePrivateReferences'
 withDefaults(defineProps<{ showHeading?: boolean }>(), { showHeading: true })
 const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences()
+const explorer = ref<InstanceType<typeof SdsExplorerModule>>()
+defineExpose({ prepareNavigation: () => explorer.value?.prepareNavigation() ?? true })
 const documentsReady = ref(false)
 const loading = computed(() => referencesLoading.value || !documentsReady.value)
 function documentLoadingChanged(value: boolean) { if (!value) documentsReady.value = true }
@@ -15,7 +17,7 @@ function documentLoadingChanged(value: boolean) { if (!value) documentsReady.val
   <AppLoadingRegion class="company-library-widget" aria-label="Company Library widget" :loading="loading" label="Loading Company Library…">
     <AppPaneHeader v-if="showHeading" title="Company Library" title-tag="h1" />
     <PrivateReferenceStatus :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" :show-empty-state="false" :show-loading="false" @select="selectSource" @retry="reload" />
-    <SdsExplorerModule expanded sidebar-tools title="Documents" :references="content" @loading-change="documentLoadingChanged" />
+    <SdsExplorerModule ref="explorer" expanded sidebar-tools title="Documents" :references="content" @loading-change="documentLoadingChanged" />
   </AppLoadingRegion>
 </template>
 <style scoped>

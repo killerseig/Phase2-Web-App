@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import AppButton from '@/components/common/AppButton.vue'
-import AppButtonLink from '@/components/common/AppButtonLink.vue'
-import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import { computed, defineAsyncComponent, ref } from 'vue'
-import { RouterLink } from 'vue-router'
-import ModuleLauncherGrid from '@/components/jobs/ModuleLauncherGrid.vue'
-import { getJobDashboardModules } from '@/features/jobs/jobDashboardModules'
+import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import DashboardWorkflowsWidget from './DashboardWorkflowsWidget.vue'
 import CompanyLibraryWidget from './CompanyLibraryWidget.vue'
+import DashboardJobsWidget from './DashboardJobsWidget.vue'
 import RoleResourcesModule from './RoleResourcesModule.vue'
 import {
   sharedWidgetLabels,
@@ -23,9 +21,13 @@ const props = defineProps<{
   widgets: SharedDashboardWidget[]
   job: SharedDashboardJob | null
   jobs: JobRecord[]
+  initialToolJobId?: string
+  jobsLoading?: boolean
+  jobsError?: string | null
   notes: Record<string, string>
   events: SharedCalendarEntry[]
   role: RawRoleKey
+  resourceRole?: RawRoleKey
   textContext: DashboardTextContext
   editing: boolean
   selected: string
@@ -40,12 +42,16 @@ const emit = defineEmits<{
   'save-note': [id: string, text: string]
   'save-calendar': [events: SharedCalendarEntry[]]
 }>()
-const forms = ref<{ prepareNavigation: () => Promise<boolean> }[]>([])
+type NavigationParticipant = { prepareNavigation: () => boolean | Promise<boolean> }
+const forms = ref<NavigationParticipant[]>([])
+const libraries = ref<NavigationParticipant[]>([])
+const resources = ref<NavigationParticipant[]>([])
 const noteId = ref(''),
   noteText = ref(''),
   calendarEditing = ref(false),
   calendarDraft = ref<SharedCalendarEntry[]>([]),
-  toolJobId = ref('')
+  toolJobId = ref(props.initialToolJobId || '')
+watch(() => props.initialToolJobId, id => { toolJobId.value = id || '' })
 const notesDirty = computed(
   () =>
     (!!noteId.value && noteText.value !== (props.notes[noteId.value] || '')) ||
@@ -75,7 +81,8 @@ defineExpose({
   discardNotes: cancelNote,
   finishNote: cancelNote,
   prepareForms: async () => {
-    for (const form of forms.value) if (!(await form.prepareNavigation())) return false
+    for (const child of [...forms.value, ...libraries.value, ...resources.value])
+      if (!(await child.prepareNavigation())) return false
     return true
   },
 })
@@ -143,7 +150,10 @@ function textStyle(widget: SharedDashboardWidget) {
         {{ resolveDashboardText(widget.text, textContext).text }}
       </div>
       <template v-else-if="widget.type === 'workflows'">
-        <label v-if="scope !== 'job' && !editing" class="shared-widget-tools"
+        <AppLoadingIndicator v-if="scope !== 'job' && !editing && jobsLoading" inline label="Loading jobs for tools." />
+        <p v-else-if="scope !== 'job' && !editing && jobsError" role="alert">Jobs could not be loaded. {{ jobsError }} Use Refresh to try again.</p>
+        <p v-else-if="scope !== 'job' && !editing && !jobs.length">No jobs are available for your account.</p>
+        <label v-else-if="scope !== 'job' && !editing" class="shared-widget-tools"
           >Choose job for tools<select v-model="toolJobId">
             <option value="">Choose a job</option>
             <option v-for="entry in jobs" :key="entry.id" :value="entry.id">
@@ -151,28 +161,16 @@ function textStyle(widget: SharedDashboardWidget) {
             </option>
           </select></label
         >
-        <ModuleLauncherGrid
-          v-if="toolJob"
+        <DashboardWorkflowsWidget
+          v-if="toolJob && (scope === 'job' || (!jobsLoading && !jobsError))"
           :job-id="toolJob.id"
-          :modules="getJobDashboardModules()"
-          :inert="editing"
+          :scope="scope"
+
+          :editing="editing"
         />
-        <p v-else>Choose a job to open Timecards, Daily Logs and Shop Orders.</p>
+        <p v-else-if="!jobsLoading && !jobsError && (scope === 'job' || jobs.length || editing)">Choose a job to open Timecards, Daily Logs, Shop Orders, Company Library and available forms.</p>
       </template>
-      <div v-else-if="widget.type === 'jobs'" class="shared-job-links" :inert="editing">
-        <AppEmptyState v-if="!jobs.length" message="No jobs are available for your account." />
-        <p v-if="!jobs.length">No jobs are available for your account.</p>
-        <article v-for="entry in jobs" :key="entry.id">
-          <RouterLink :to="{ name: 'shared-job-home', params: { jobId: entry.id } }"
-            >{{ entry.code || 'No Job #' }} · {{ entry.name }}</RouterLink
-          >
-          <nav :aria-label="`${entry.name} tools`">
-            <AppButtonLink :to="`/jobs/${entry.id}/timecards`">Timecards</AppButtonLink
-            ><AppButtonLink :to="`/jobs/${entry.id}/daily-logs`">Daily Logs</AppButtonLink
-            ><AppButtonLink :to="`/jobs/${entry.id}/shop-orders`">Shop Orders</AppButtonLink>
-          </nav>
-        </article>
-      </div>
+      <DashboardJobsWidget v-else-if="widget.type === 'jobs'" :jobs="jobs" :editing="editing" :jobs-loading="jobsLoading" :jobs-error="jobsError" />
       <div v-else-if="widget.type === 'dates'" class="shared-widget-tools">
         <p v-if="editing">
           Calendar entries stay separate for each
@@ -261,12 +259,13 @@ function textStyle(widget: SharedDashboardWidget) {
       >
       <p v-else-if="scope==='job'&&!job&&(widget.type==='form'||widget.type==='documents')">Choose a job to use {{sharedWidgetLabels[widget.type].toLowerCase()}}.</p>
       <CompanyLibraryWidget
+        ref="libraries"
         v-else-if="widget.type === 'documents'"
         :key="scope === 'job' ? job?.id : 'role-documents'"
         class="shared-library-widget"
         :show-heading="false"
       />
-      <RoleResourcesModule v-else-if="widget.type === 'resources'" :key="role" :fixed-role="role" />
+      <RoleResourcesModule ref="resources" v-else-if="widget.type === 'resources'" :key="resourceRole || role" :fixed-role="resourceRole || role" />
       <SharedDashboardForm
         v-else-if="widget.type === 'form'"
         ref="forms"

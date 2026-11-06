@@ -2,6 +2,48 @@
 
 Draft proposals supporting the [requirements register](01-requirements.md). SDS delivery can begin before the broader workspace redesign is complete.
 
+## November 6 dashboard testing readiness
+
+The owner requested pushing the existing updates, then making Personal, Role and Job dashboards work well enough for user testing and eventual page replacement. Daily Logs may eventually become Forms, and the current Jobs page may eventually become the jobs dashboard. This checkpoint does not remove pages, change the default landing page, expand permissions, migrate records, or deploy anything.
+
+### Current core and polish
+
+- Personal, Role and Job surfaces reuse the same widget editor. Personal layouts belong to the signed-in person; shared template ownership and role delegation remain as already implemented. Scope links and an empty-personal-layout starting point make these surfaces easier to navigate.
+- The editor now keeps its library, canvas and settings inside the available screen height. Edit waits until the loading overlay releases the content. Role changes retain the selected destination through asynchronous draft checks.
+- Jobs retain the existing authorized, active-job scope. The list is searchable by number/name, bounded rather than page-length, keyboard-scrollable and responsive, with natural number/name ordering, matching counts, themed inputs and existing workflow destinations. Loading, failed and empty states remain distinguishable even when Job Tools is the only job-consuming widget.
+- Job Tools reuses the existing authorized issued-form catalog and Company Library link, in addition to Timecards, Daily Logs and Shop Orders. It does not introduce new form audiences or submit existing records automatically.
+- Issued forms return to their originating Personal, Role or Job dashboard. A selected workflow job is restored only if still authorized. Independent inline forms ignore that workflow-return query and retain their explicit personal/role/job context. The old job-page form return behavior stays unchanged.
+- The form picker clears prior-role choices while loading, provides retry/empty states, and ignores late responses after a role change. An unavailable current selection remains identified without becoming a usable new choice.
+- Embedded documents and role resources participate in navigation checks. Unsaved drafts require confirmation, active writes block departure, and document imports must finish or close. Resources use the selected dashboard role rather than accidentally showing the editor's own role.
+- Form history is filtered by owner, selected job and template before bounded server pagination. The workspace retrieves scoped pages, preserves newest-first display, and ignores responses from stale navigation. The regression includes records that the prior first-100 query missed.
+- The PDF viewer retains an unfinished page-number entry during resize or scroll-driven rendering. The long-book browser regression checks 387-page navigation, bounded lazy canvases, zoom, fit and file switching.
+
+### Final local verification
+
+The November 6 source unit run passes all 2,107 tests. The final focused dashboard/navigation/PDF/history suite passes 47 tests, including corrected architecture-container coverage and an explicit check that Employee remains excluded from general workforce backend capabilities. No runtime permission was changed for those test corrections. The completed synthetic dashboard browser report passes 66/66 with no skipped or flaky cases; the previous worker also reported the Shop Orders gate passing 47/47 and the 346-record demo-emulator history regression passing.
+
+`npm run build` and `npm run verify:functions-build` pass; packaging verifies 56 handlers and makes no cloud calls. Changed-file ESLint has zero errors and 12 browser-test style warnings; the previously reported repository-wide Oxlint baseline is not a clean gate. `git diff --check` passes. Phone job-list and dashboard screenshots were reviewed. These checks verify local source and synthetic fixtures, not production acceptance or email delivery.
+
+### Pilot review and release boundary
+
+Use `/dashboards/personal`, `/dashboards/role` and `/dashboards/job-home/:jobId` in the local review app. The normal Work-Computer preview uses port 5173. The local app can be configured against live data: viewing is safe, but saving a dashboard, note, file or form would be a production write. Automated verification uses synthetic browser fixtures or the demo Firestore emulator only.
+
+Before inviting a pilot group to a deployed app:
+
+1. Review the pushed `test` source and choose the pilot users and dashboard entry points. Sidebar/default-route changes are not included in this checkpoint.
+2. Approve promotion and the exact release targets separately. Deploy the compatible `formWorkspace` pagination backend before the frontend that uses it. No IAM, rules or public-site changes are required by this checkpoint.
+3. Use authorized test accounts to confirm Personal isolation, Role resources, assigned-job access, mobile layout, existing tool links, form return navigation and denied-role behavior. Do not use production test submissions or emails without approval.
+4. Keep the old pages as fallback until their replacement workflows have passed user acceptance. Source tests do not replace that acceptance decision.
+
+### Remaining replacement work and decisions
+
+- The new Jobs widget is a work launcher, not the full administrative Jobs editor. Active/archive browsing, create/edit job setup, assignment management, recipient configuration, archive/delete and their permission-specific behavior still live on the existing Jobs page. Preserve those capabilities before retiring it.
+- Replacing Daily Logs with Forms needs an agreed form definition, recipients, history/export behavior and treatment of existing records. This work does not convert records or change the current reporting workflow.
+- The broader requirements still include missing-work alerts, announcements, to-dos/checklists, maps/contacts, business charts/PM analytics and spreadsheet behavior. Their due/applicability rules, publishing/audiences, ownership/history, provider/visibility or source metrics remain open in the module design below. No defaults were invented for them.
+- Company Library documents and role resources are available widgets. They are not a newly implemented private-personal-file store; the storage/sharing model for that part of FILE-01 still needs to be resolved.
+
+The original requirements remain in [DASH-01 through DASH-07, FILE-01 and WIDGET-01 through WIDGET-04](01-requirements.md). The current core can be reviewed independently from these remaining product decisions; it is not a claim that every requested module or migration is finished.
+
 ## Information architecture
 
 ```mermaid

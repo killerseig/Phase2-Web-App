@@ -67,8 +67,12 @@ const root = ref<HTMLElement>(),
   contentHeight = ref(700)
 const confirm = ref<InstanceType<typeof BuilderConfirmDialog>>(),
   canvas = ref<InstanceType<typeof SharedDashboardCanvas>>()
+const loadingRegion = ref<InstanceType<typeof AppLoadingRegion>>()
+const contentLoading = computed(() => loading.value || loadingRegion.value?.covered === true)
 const forms = ref<ServerFormTemplate[]>([]),
-  formsError = ref('')
+  formsError = ref(''),
+  formsLoading = ref(false)
+let formsGeneration = 0
 const activePane = ref<'outline' | 'preview' | 'inspector'>('preview')
 const isAdmin = computed(() => auth.rawRole === 'admin'),
   canEdit = computed(() => auth.hasWorkspaceAccess && !!layout.value?.canEdit)
@@ -84,14 +88,12 @@ const assigned = computed(() => [
     .map((job) => job.id),
 ])
 const visibleJobs = computed(() => {
-  const ids = new Set(
-    getRoleDashboardJobShortcuts({
-      rawRole: auth.rawRole,
-      assignedJobIds: assigned.value,
-      jobs: jobsStore.jobs,
-    }).map((job) => job.id),
-  )
-  return jobsStore.jobs.filter((job) => ids.has(job.id))
+  const byId = new Map(jobsStore.jobs.map(job => [job.id, job]))
+  return getRoleDashboardJobShortcuts({
+    rawRole: auth.rawRole,
+    assignedJobIds: assigned.value,
+    jobs: jobsStore.jobs,
+  }).map(shortcut => byId.get(shortcut.id)!)
 })
 const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => type !== 'form' ||
   (['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole) &&
@@ -334,6 +336,7 @@ function context() {
   }
 }
 async function load() {
+  resetForms()
   const request = ++generation
   drag.cancel()
   loading.value = true
@@ -360,7 +363,9 @@ async function load() {
   }
 }
 async function reload() {
-  if (await prepare()) await load()
+  if (!(await prepare())) return
+  if (jobsStore.error) void jobsStore.subscribeVisibleJobs()
+  await load()
 }
 async function beginEdit() {
   if (!canEdit.value || loading.value || !(await prepare())) return
@@ -370,22 +375,36 @@ async function beginEdit() {
   message.value = ''
   undo.value = []
   redo.value = []
+  await loadForms()
+}
+function resetForms() {
+  formsGeneration++
+  forms.value = []
   formsError.value = ''
-  if (
-    palette.value.includes('form') &&
-    ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole)
-  ) {
-    const request = generation
-    try {
-      const response = await formApi<{ templates: ServerFormTemplate[] }>('formTemplates', {
-        action: 'list',
-      })
-      if (request === generation)
-        forms.value = response.templates.filter((form) => form.latestVersion && !form.archived && form.definition &&
-          canSubmitForm(form.definition.access, { uid: auth.currentUser!.uid, role: role.value, active: auth.hasWorkspaceAccess }))
-    } catch (reason) {
-      if (request === generation) formsError.value = dashboardError(reason)
-    }
+  formsLoading.value = false
+}
+async function loadForms() {
+  resetForms()
+  if (!editing.value || !palette.value.includes('form')) return
+  const request = formsGeneration,
+    dashboardRequest = generation,
+    selectedRole = role.value,
+    uid = auth.currentUser?.uid
+  if (!uid) return
+  const current = () => request === formsGeneration && dashboardRequest === generation &&
+    editing.value && selectedRole === role.value && uid === auth.currentUser?.uid
+  formsLoading.value = true
+  try {
+    const response = await formApi<{ templates: ServerFormTemplate[] }>('formTemplates', {
+      action: 'list',
+    })
+    if (current())
+      forms.value = response.templates.filter(form => form.latestVersion && !form.archived && form.definition &&
+        canSubmitForm(form.definition.access, { uid, role: selectedRole, active: auth.hasWorkspaceAccess }))
+  } catch (reason) {
+    if (current()) formsError.value = dashboardError(reason)
+  } finally {
+    if (current()) formsLoading.value = false
   }
 }
 async function cancel() {
@@ -393,6 +412,7 @@ async function cancel() {
   drag.cancel()
   restore(saved.value)
   editing.value = false
+  resetForms()
   error.value = ''
   undo.value = []
   redo.value = []
@@ -418,6 +438,7 @@ async function save() {
     allowRoleEditing.value = result.allowRoleEditing
     saved.value = snapshot()
     editing.value = false
+    resetForms()
     message.value =
       scope.value === 'personal' ? 'Your layout was saved.' : scope.value === 'job'
         ? 'Template saved for all jobs.'
@@ -461,11 +482,12 @@ function saveCalendar(events: SharedCalendarEntry[]) {
 }
 async function changeRole(event: Event) {
   const select = event.target as HTMLSelectElement
+  const nextRole = select.value as RawRoleKey
   if (!(await prepare())) {
     select.value = role.value
     return
   }
-  role.value = select.value as RawRoleKey
+  role.value = nextRole
   await load()
   if (canEdit.value) await beginEdit()
 }
@@ -478,6 +500,7 @@ async function changeJob(event: Event) {
   select.value = jobId.value
 }
 function selectForm(event: Event) {
+  if (formsLoading.value || formsError.value) return
   const widget = selectedWidget.value,
     form = forms.value.find((f) => f.id === (event.target as HTMLSelectElement).value)
   if (!widget || !form) return
@@ -544,6 +567,7 @@ onMounted(async () => {
   window.addEventListener('beforeunload', beforeUnload)
 })
 onBeforeUnmount(() => {
+  resetForms()
   generation++
   observer?.disconnect()
   window.removeEventListener('beforeunload', beforeUnload)
@@ -590,7 +614,7 @@ onBeforeUnmount(() => {
             ><AppButton variant="primary" type="button" :disabled="busy || !dirty" @click="save">Save template</AppButton
             ><AppButton type="button" :disabled="busy" @click="cancel">Cancel edits</AppButton></template
           >
-          <AppButton v-else-if="canEdit" variant="primary" type="button" :disabled="loading || busy" @click="beginEdit">
+          <AppButton v-else-if="canEdit" variant="primary" type="button" :disabled="contentLoading || busy" @click="beginEdit">
             Edit</AppButton
           ><AppButton type="button" :disabled="loading || busy" @click="reload">Refresh</AppButton>
           <AppButtonLink :to="scope === 'job' && jobId ? `/jobs/${jobId}` : '/jobs'">{{
@@ -598,6 +622,11 @@ onBeforeUnmount(() => {
           }}</AppButtonLink>
         </nav>
       </header>
+      <nav v-if="!editing" class="shared-dashboard-scopes" aria-label="Dashboard scopes">
+        <AppButtonLink :to="{ name: 'personal-workspace' }" :aria-current="scope === 'personal' ? 'page' : undefined">Personal</AppButtonLink>
+        <AppButtonLink :to="{ name: 'role-workspace' }" :aria-current="scope === 'role' ? 'page' : undefined">Role</AppButtonLink>
+        <span v-if="scope === 'job'" aria-current="page">Job dashboard</span>
+      </nav>
       <label v-if="scope === 'job'" class="shared-job-picker"
         >Choose job<select
           aria-label="Choose job"
@@ -613,7 +642,12 @@ onBeforeUnmount(() => {
       >
       <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="message" role="status">{{ message }}</p>
-      <AppLoadingRegion :loading="loading" label="Loading dashboard." aria-label="Dashboard content" style="--loading-region-min-height: min(60dvh, 36rem)">
+      <AppLoadingRegion ref="loadingRegion" class="shared-dashboard-loading" :loading="loading" label="Loading dashboard." aria-label="Dashboard content">
+      <div v-if="layout && !widgets.length && !editing" class="shared-dashboard-empty">
+        <h2>Make this dashboard yours</h2>
+        <p>Add the jobs, notes, documents and forms you use most.</p>
+        <AppButton v-if="canEdit" variant="primary" :disabled="contentLoading || busy" @click="beginEdit">Add widgets</AppButton>
+      </div>
       <BuilderPanelSwitcher v-if="editing" v-model="activePane" class="builder-controls" outline-label="Widgets" outline-controls="shared-palette" canvas-controls="shared-canvas" inspector-controls="shared-inspector" :disabled="busy" />
       <div
         class="shared-dashboard-body"
@@ -752,10 +786,14 @@ onBeforeUnmount(() => {
                   :widgets="widgets"
                   :job="layout.job"
                   :jobs="visibleJobs"
+                  :initial-tool-job-id="typeof route.query.dashboardJob === 'string' ? route.query.dashboardJob : ''"
+                  :jobs-loading="jobsStore.loading"
+                  :jobs-error="jobsStore.error"
                   :notes="layout.notes"
                   :events="layout.events"
                   :text-context="textContext"
                   :role="auth.rawRole"
+                  :resource-role="role"
                   :editing="editing"
                   :selected="selected"
                   :can-edit-notes="canEditContent"
@@ -892,10 +930,13 @@ onBeforeUnmount(() => {
             ><label v-if="selectedWidget.type === 'form'"
               >Employee form<select
                 aria-label="Employee form"
+                :disabled="formsLoading || !!formsError || !forms.length"
+                aria-describedby="dashboard-form-picker-status"
                 :value="selectedWidget.form?.templateId || ''"
                 @change="selectForm"
               >
                 <option value="">Choose an issued form</option>
+                <option v-if="selectedWidget.form && !forms.some(form => form.id === selectedWidget?.form?.templateId)" :value="selectedWidget.form.templateId" disabled>Current form (not in available choices)</option>
                 <option v-for="form in forms" :key="form.id" :value="form.id">
                   {{ form.definition?.title || form.draft.title }} · v{{ form.latestVersion }}
                 </option>
@@ -909,7 +950,14 @@ onBeforeUnmount(() => {
                 <option value="inline">Inline (up to eight fields)</option>
               </select></label
             >
-            <p v-if="formsError && selectedWidget.type === 'form'" role="alert">{{ formsError }}</p>
+            <div v-if="selectedWidget.type === 'form'" id="dashboard-form-picker-status">
+              <p v-if="formsLoading" role="status">Loading available forms.</p>
+              <template v-else-if="formsError">
+                <p role="alert">{{ formsError }}</p>
+                <AppButton type="button" :disabled="busy" @click="loadForms">Retry forms</AppButton>
+              </template>
+              <p v-else-if="!forms.length" role="status">No issued forms are available for this dashboard role.</p>
+            </div>
           </fieldset>
           <p v-else>Select a widget on the canvas or from the list to edit it.</p>
         </aside>

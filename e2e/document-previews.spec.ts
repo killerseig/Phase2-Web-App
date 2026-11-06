@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './helpers/test.js'
-import { createJobsFixture, gotoPhase2App, selectLibraryFile } from './helpers/phase2AppFixture.js'
+import { createJobsFixture, gotoPhase2App, openLibraryFiles, selectLibraryFile } from './helpers/phase2AppFixture.js'
 import { mockDashboard } from './helpers/dashboardFixture.js'
 import { sampleContent } from '../src/features/intranet/__tests__/fixtures.js'
 import { createRequire } from 'node:module'
@@ -104,7 +104,7 @@ test('previews PDF, images, text, CSV, Word and Excel locally and explicitly exc
   await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeDisabled()
   expect(await photo.evaluate(image => image.getBoundingClientRect().width)).toBeLessThan(originalWidth)
-  const fit = page.getByRole('button', { name: 'Fit', exact: true })
+  const fit = page.getByRole('button', { name: 'Fit file width', exact: true })
   await fit.focus()
   await page.keyboard.press('Enter')
   await expect.poll(() => photo.evaluate(image => image.getBoundingClientRect().width)).toBe(originalWidth)
@@ -136,11 +136,11 @@ test('previews PDF, images, text, CSV, Word and Excel locally and explicitly exc
   await page
     .getByTestId('sds-module')
     .screenshot({ path: '.security-work/document-workbook-preview.png' })
-  await page.getByRole('button', { name: 'Current folder actions' }).click()
+  await page.getByRole('button', { name: 'Root folder actions' }).click()
   page.once('dialog', (dialog) => dialog.dismiss())
   await page.getByRole('menuitem', { name: 'Make PDF / print book' }).click()
   expect(exports).toHaveLength(0)
-  await page.getByRole('button', { name: 'Current folder actions' }).click()
+  await page.getByRole('button', { name: 'Root folder actions' }).click()
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('menuitem', { name: 'Make PDF / print book' }).click()
   await expect(page.getByRole('button', { name: 'Download PDF', exact: true })).toBeVisible()
@@ -269,16 +269,24 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   const distant = page.getByRole('img', { name: 'PDF page 200 of 387', exact: true })
   await expect(distant).toBeInViewport()
   await page.setViewportSize({ width: 1440, height: 844 })
-  await expect.poll(async () => (await distant.boundingBox())?.width || 0).toBeGreaterThan(600)
-  const before = (await distant.boundingBox())!.width
+  const fittedWidth = await surface.evaluate(element => {
+    const style = getComputedStyle(element)
+    return element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  })
+  await expect.poll(async () => Math.abs(((await distant.boundingBox())?.width || 0) - fittedWidth)).toBeLessThan(1)
+  let before = 0
+  await expect.poll(async () => before = (await distant.boundingBox())?.width || 0).toBeGreaterThan(600)
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
   await expect.poll(async () => (await distant.boundingBox())?.width || 0).toBeGreaterThan(before)
   await expect(number).toHaveValue('200')
   await page.getByRole('button', { name: 'Fit file width', exact: true }).click()
   await expect.poll(async () => (await distant.boundingBox())?.width || 0).toBeCloseTo(before, 0)
+  // A resize must preserve a page destination that has not been committed yet.
+  await number.fill('387')
   await page.setViewportSize({ width, height: 844 })
-  await expect(number).toHaveValue('200')
-  await number.fill('387'); await number.press('Tab')
+  await expect.poll(async () => (await distant.boundingBox())?.width || before).toBeLessThan(before)
+  await expect(number).toHaveValue('387')
+  await number.press('Tab')
   await expect(page.getByRole('img', { name: 'PDF page 387 of 387', exact: true })).toBeInViewport()
   expect(await page.locator('.pdf-surface canvas').count()).toBeLessThanOrEqual(6)
   await surface.screenshot({ path: test.info().outputPath(`pdf-continuous-${width}.png`) })
@@ -567,7 +575,10 @@ test('real library folders and cross-category search remain reachable without ca
   await tree.getByRole('button', { name: 'Safety document', exact: true }).click()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Document preview', exact: true })).toHaveAttribute('aria-busy', 'false')
-  await expect(page.getByRole('button', { name: 'Upload document', exact: true })).toBeEnabled()
+  await openLibraryFiles(page)
+  await page.getByRole('button', { name: 'Root folder actions', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Upload document here', exact: true })).toBeEnabled()
+  await page.keyboard.press('Escape')
   const search = page.getByRole('searchbox', { name: 'Search files', exact: true })
   await search.fill('AHA document')
   await expect(tree.getByRole('button', { name: 'AHA document', exact: true })).toBeVisible()

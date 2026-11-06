@@ -4,6 +4,7 @@ import { canSubmitForm, validateFormAccess } from './formAccess'
 import { resolveFormSubmissionRecipients, publicRecipientConsentSnapshot } from './formRecipients'
 import { createHash, randomUUID } from 'node:crypto'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
+import { FieldPath } from 'firebase-admin/firestore'
 import sharp from 'sharp'
 import { db, storageBucket } from './runtime'
 import { buildCurrentFunctionUser } from './roleAccess'
@@ -359,12 +360,21 @@ export const formWorkspace = onCall(
     } else profile = await user(request.auth?.uid)
     const dashboardJobId = await authorizedFormJob(profile, data.dashboardJobId)
     if (data.action === 'list') {
-      const docs = await records.where('ownerUid', '==', profile.uid).limit(100).get()
+      let query = records.where('ownerUid', '==', profile.uid)
+      if (dashboardJobId !== undefined) query = query.where('jobId', '==', dashboardJobId)
+      if (data.templateId !== undefined)
+        query = query.where('templateId', '==', validId(data.templateId))
+      // Equality filters use Firestore index merging. Document-ID pagination keeps
+      // each request bounded without requiring new timestamp composite indexes.
+      query = query.orderBy(FieldPath.documentId())
+      if (data.cursor !== undefined) query = query.startAfter(validId(data.cursor))
+      const docs = await query.limit(101).get()
+      const page = docs.docs.slice(0, 100)
       return {
+        nextCursor: docs.size > 100 ? page[page.length - 1].id : null,
         records: (
           await Promise.all(
-            docs.docs
-              .filter((doc) => dashboardJobId === undefined || doc.data().jobId === dashboardJobId)
+            page
               .map(async (doc) => {
                 const record = doc.data() as FormRecord
                 if (record.jobId) {

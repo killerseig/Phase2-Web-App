@@ -9,7 +9,7 @@ import { formApi, type ServerFormTemplate } from '@/services/forms'
 import { canSubmitForm } from '../../../functions/src/formAccess'
 import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
 import { canListCompanyForms } from '@/features/forms/availableForms'
-const props = defineProps<{ jobId: string }>()
+const props = defineProps<{ jobId: string; dashboardScope?: 'personal' | 'role'; dashboardReturn?: 'shared-job' | 'shared-role' }>()
 const auth = useAuthStore(), router = useRouter()
 const templates = ref<ServerFormTemplate[]>([]), loading = ref(false), error = ref('')
 const allowed = computed(() => !!auth.currentUser?.uid && auth.hasWorkspaceAccess && canListCompanyForms(auth.rawRole))
@@ -29,7 +29,7 @@ async function load() {
   finally { if (active === generation) loading.value = false }
 }
 function open(id: string) {
-  if (allowed.value && forms.value.some(form => form.id === id)) void router.push({ path: '/forms/' + encodeURIComponent(id), query: { dashboardJob: props.jobId } })
+  if (allowed.value && forms.value.some(form => form.id === id)) void router.push({ path: '/forms/' + encodeURIComponent(id), query: { dashboardJob: props.jobId, ...(props.dashboardScope ? { dashboard: props.dashboardScope } : {}), ...(props.dashboardReturn ? { dashboardReturn: props.dashboardReturn } : {}) } })
 }
 watch([() => auth.currentUser?.uid, () => auth.rawRole, () => auth.hasWorkspaceAccess, () => props.jobId], () => { void load() }, { immediate: true })
 onBeforeUnmount(() => { generation++ })

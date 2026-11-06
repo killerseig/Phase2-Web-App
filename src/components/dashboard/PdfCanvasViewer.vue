@@ -16,6 +16,8 @@ const props = defineProps<{ url: string; cacheKey?: string; renewTicket?: RenewD
 const emit = defineEmits<{ settled: [url: string]; 'update:zoom': [zoom: number] }>()
 function pageSettled(number: number) { if (number === 1) emit('settled', props.url) }
 const pdf = shallowRef<PDFDocumentProxy>(), pageNumber = ref(1), localZoom = ref(1)
+// Layout and scroll updates must not replace a destination the user is typing.
+const editingPage = ref(false), pageDraft = ref('1')
 const loading = ref(true), error = ref(''), surface = ref<HTMLElement>()
 const renewing = ref(false)
 watch([loading, error], () => { if (!loading.value && error.value) emit('settled', props.url) })
@@ -83,6 +85,7 @@ watch(() => props.url, async (url, _, cleanup) => {
   const controller = new AbortController()
   cleanup(() => { active = false; controller.abort(); if (task) void runtime?.release(task) })
   pdf.value = undefined; loading.value = true; error.value = ''; pageNumber.value = 1; localZoom.value = 1
+  editingPage.value = false; pageDraft.value = '1'
   ratios.value = {}; scrollTop.value = 0; if (surface.value) surface.value.scrollTop = 0
   try {
     runtime = await session.pdf()
@@ -117,7 +120,11 @@ watch(() => props.url, async (url, _, cleanup) => {
   } catch (failure) { if (active && !error.value) error.value = failure instanceof Error ? failure.message : 'The PDF could not be loaded. Reload the preview to try again.' }
   finally { if (active) loading.value = false }
 }, { immediate: true })
-function changePage(event: Event) { const input = event.target as HTMLInputElement; jumpTo(Number(input.value)); input.value = String(pageNumber.value) }
+function editPage(event: Event) { editingPage.value = true; pageDraft.value = (event.target as HTMLInputElement).value }
+function changePage(event: Event) {
+  const input = event.target as HTMLInputElement
+  jumpTo(Number(input.value)); pageDraft.value = String(pageNumber.value); input.value = pageDraft.value
+}
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
     if (!entry) return
@@ -133,7 +140,7 @@ onBeforeUnmount(() => observer?.disconnect())
   <div class="pdf-canvas-viewer">
     <div v-if="pdf" class="pdf-controls">
       <AppIconButton label="Previous page" :disabled="pageNumber <= 1" @click="jumpTo(pageNumber - 1)">&lt;</AppIconButton>
-      <input aria-label="PDF page" type="number" min="1" :max="pdf.numPages" :value="pageNumber" @change="changePage" />
+      <input aria-label="PDF page" type="number" min="1" :max="pdf.numPages" :value="editingPage ? pageDraft : pageNumber" @focus="editPage" @input="editPage" @blur="editingPage = false" @change="changePage" />
       <span>/ {{ pdf.numPages }}</span>
       <AppIconButton label="Next page" :disabled="pageNumber >= pdf.numPages" @click="jumpTo(pageNumber + 1)">&gt;</AppIconButton>
       <DocumentZoomControls v-if="!hideZoomControls" :zoom="localZoom" fit-label="Fit page width" @change="setZoom" />

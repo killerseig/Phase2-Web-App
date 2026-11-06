@@ -73,9 +73,12 @@ test('palette saves both presentations; switching retains the same pinned record
   await expect(
     page.getByRole('heading', { name: 'Quick safety check', exact: true }),
   ).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Form content', exact: true })).toHaveAttribute('aria-busy', 'false')
   await page.getByLabel('Job name', { exact: false }).fill('Inline revision')
+  await expect(page.getByText('Unsaved answers', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Open full-page form', exact: true }).click()
   await expect(page).toHaveURL(/record=/)
+  expect([...server.records.values()][0]!.answers.job).toBe('Inline revision')
   await expect(page.getByLabel('Job name', { exact: false })).toHaveValue('Inline revision')
   await page.getByRole('button', { name: 'Start draft', exact: true }).dblclick()
   expect(server.created).toBe(1)

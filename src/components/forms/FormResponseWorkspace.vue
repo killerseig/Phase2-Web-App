@@ -24,6 +24,7 @@ import type { FormAnswers, FormRecord } from '../../../functions/src/formModel'
 import { validateFormAnswers, type FormGroupInstance } from '../../../functions/src/formModel'
 import { validateAttendeeHandoff } from '../../../functions/src/formSignatures'
 import { answerFingerprint, hydrateDraftAnswers } from '@/features/forms/formDirtyState'
+import { loadFormHistory, type FormHistoryPage } from '@/features/forms/formHistory'
 const localPreview = isFormEmulatorEnabled()
 const props = withDefaults(
   defineProps<{
@@ -190,11 +191,19 @@ async function load() {
     }
     const [forms, saved] = await Promise.all([
       formApi<{ templates: ServerFormTemplate[] }>('formTemplates', { action: 'list' }),
-      formApi<{ records: FormRecord[] }>('formWorkspace', { action: 'list', ...contextRequest() }),
+      loadFormHistory(
+        (cursor) => formApi<FormHistoryPage>('formWorkspace', {
+          action: 'list',
+          templateId: templateId.value,
+          ...contextRequest(),
+          ...(cursor ? { cursor } : {}),
+        }),
+        () => current === sequence && uid.value === owner,
+      ),
     ])
     if (current !== sequence || uid.value !== owner) return
     templates.value = forms.templates
-    records.value = saved.records.filter(
+    records.value = saved.filter(
       (item) =>
         item.templateId === templateId.value &&
         (!reuseDraft.value || (item.jobId || '') === dashboardJobId.value),
@@ -574,12 +583,24 @@ function beforeUnload(event: BeforeUnloadEvent) {
     event.returnValue = ''
   }
 }
+const hasDashboardReturn = computed(() =>
+  route.query.dashboard === 'personal' || route.query.dashboard === 'role' ||
+  route.query.dashboardReturn === 'shared-job' || route.query.dashboardReturn === 'shared-role',
+)
 function returnDashboard() {
   if (route.query.dashboardReturn === 'shared-job' && dashboardJobId.value)
     return router.push({ name: 'shared-job-home', params: { jobId: dashboardJobId.value } })
+  const query = dashboardJobId.value ? { dashboardJob: dashboardJobId.value } : {}
   if (route.query.dashboardReturn === 'shared-role')
-    return router.push({ name: 'shared-role-home' })
-  return router.push('/dashboards/' + route.query.dashboard)
+    return router.push({ name: 'shared-role-home', query })
+  if (route.query.dashboard === 'role')
+    return router.push({ name: 'role-workspace', query })
+  return router.push({ name: 'personal-workspace', query })
+}
+function returnJob() {
+  return hasDashboardReturn.value
+    ? returnDashboard()
+    : router.push('/jobs/' + encodeURIComponent(dashboardJobId.value))
 }
 window.addEventListener('beforeunload', beforeUnload)
 onBeforeUnmount(() => {
@@ -596,9 +617,9 @@ defineExpose({ prepareNavigation })
       <template #header-actions>
         <div class="response-actions">
           <small v-if="localPreview" class="response-preview-status" title="Temporary local demo data. Submission and email delivery are disabled.">Local preview</small>
-          <AppButton v-if="jobWorkflow" @click="router.push('/jobs/' + encodeURIComponent(dashboardJobId))">Back to job</AppButton>
+          <AppButton v-if="jobWorkflow" :disabled="busy" @click="returnJob">{{ hasDashboardReturn ? 'Return to dashboard' : 'Back to job' }}</AppButton>
           <AppButton v-if="inline && !allowFullInline" :disabled="busy" @click="openFullPage">Open full-page form</AppButton>
-          <AppButton v-else-if="route.query.dashboard === 'personal' || route.query.dashboard === 'role'" :disabled="busy" @click="returnDashboard">Return to dashboard</AppButton>
+          <AppButton v-else-if="!jobWorkflow && hasDashboardReturn" :disabled="busy" @click="returnDashboard">Return to dashboard</AppButton>
         </div>
       </template>
       <template #messages>

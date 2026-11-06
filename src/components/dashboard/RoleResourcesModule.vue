@@ -32,11 +32,18 @@ function beforeUnload(event: BeforeUnloadEvent) {
     event.returnValue = ''
   }
 }
-onBeforeRouteLeave(
-  () =>
-    !(editing.value || busy.value) ||
-    window.confirm('Discard this shared resource draft and leave?'),
-)
+function prepareNavigation() {
+  if (busy.value) {
+    error.value = 'Wait for the resource change to finish before leaving.'
+    return false
+  }
+  if (editing.value && !window.confirm('Discard this shared resource draft and leave?')) return false
+  // Clearing an approved draft also avoids a second prompt from the route guard.
+  editing.value = false
+  return true
+}
+defineExpose({ prepareNavigation })
+onBeforeRouteLeave(prepareNavigation)
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 async function load() {

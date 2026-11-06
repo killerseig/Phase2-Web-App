@@ -25,8 +25,16 @@ const targetRoles = [
 ] as const satisfies readonly TargetRoleKey[]
 
 describe('Cloud Functions target role capabilities', () => {
-  it('matches the frontend target built-in role order', () => {
-    expect(TARGET_FUNCTION_BUILT_IN_ROLE_KEYS).toEqual(TARGET_BUILT_IN_ROLE_KEYS)
+  it('matches workforce role order while keeping Employee in the personal-timecard boundary', () => {
+    expect(TARGET_FUNCTION_BUILT_IN_ROLE_KEYS).toEqual(
+      TARGET_BUILT_IN_ROLE_KEYS.filter((role) => role !== 'employee'),
+    )
+    expect(normalizeTargetFunctionRoleKey('employee')).toBe('none')
+    expect(targetFunctionRoleCanBeAssignedJobs(normalizeTargetFunctionRoleKey('employee'))).toBe(false)
+    expect(
+      Object.values(getTargetFunctionRoleCapabilities(normalizeTargetFunctionRoleKey('employee')))
+        .every((value) => value === false),
+    ).toBe(true)
   })
 
   it('normalizes target function roles the same way as the frontend target role helper', () => {
