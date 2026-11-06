@@ -2,7 +2,7 @@
 
 Phase 2 uses Vue 3 and Vite for the browser app and a separate TypeScript package for Firebase Functions. See [GIT-WORKFLOW.md](GIT-WORKFLOW.md) for the canonical checkout, `test`/`main` workflow and reviewed release process.
 
-Start coding with the [project process](design/engineering/coding-process.md), [current product designs](design/next-update/README.md) and [module contracts](design/engineering/module-contracts.md). [Phase 2 architecture facts](design/engineering/phase2-adoption.md) record this application’s specific choices. Reusable standards are being prepared in ChatGPT Space; verified links are pending.
+Start coding with the [project process](design/engineering/coding-process.md), [current product designs](design/next-update/README.md) and [module contracts](design/engineering/module-contracts.md). [Phase 2 architecture facts](design/engineering/phase2-adoption.md) record this application’s specific choices. The process guide links the [reusable standards in Atlas’s private ChatGPT Space](design/engineering/coding-process.md#reusable-standards), which requires authorized ChatGPT access.
 
 ## Project structure and build contracts
 

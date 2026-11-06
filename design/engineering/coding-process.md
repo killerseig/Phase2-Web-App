@@ -2,6 +2,12 @@
 
 Use the original GitHub repository and keep the current design decisions visible throughout the work. A reliable process depends on verified code, tests and preserved state; this guide cannot repair an application or a broken chat by itself.
 
+## Reusable standards
+
+Use Atlas’s private [Vue/Firebase engineering foundation in ChatGPT Space](https://chatgpt.com/space/page_18e06df51d288191ad9e897e29af574b) for the reusable Vue, Firebase, modular contracts/AI context and optional modules guides. Opening the Space requires Atlas’s authorized ChatGPT access. Keep those universal guides in the Space; do not copy them into this repository, publish their contents or change their sharing as part of project maintenance.
+
+Apply the relevant foundation guidance alongside this repository’s actual versions, product designs and module contracts. The checkout, branch, permission, validation and handoff instructions below are specific to Phase 2.
+
 ## Start each coding session
 
 1. Confirm the checkout is `C:\Users\atlas\OneDrive\Documents\GitHub\Phase2-Web-App`, its remote is `https://github.com/killerseig/Phase2-Web-App.git`, and inspect `git status` and the current branch. Preserve existing changes and identify who owns them before editing.
@@ -25,7 +31,7 @@ The technical design includes older proposals alongside newer implementation not
 
 ## Keep Vue and Firebase boundaries intact
 
-Browser views and components render interactions; feature composables own focused state and lifetimes; stores own shared client state; services provide typed transport. Pure models can be shared with the browser. Firebase Admin clients, secrets, privileged data access and provider delivery stay in `functions/src/`. See [current Phase 2 architecture facts](phase2-adoption.md). Reusable standards live separately in ChatGPT; verified links will be added when available.
+Browser views and components render interactions; feature composables own focused state and lifetimes; stores own shared client state; services provide typed transport. Pure models can be shared with the browser. Firebase Admin clients, secrets, privileged data access and provider delivery stay in `functions/src/`. See [current Phase 2 architecture facts](phase2-adoption.md) and the external [reusable standards](#reusable-standards).
 
 Edit backend TypeScript in `functions/src/`, then compile to ignored `functions/lib/`. Never repair a generated handler beside `functions/package.json` or under `lib/`: the next build replaces it. Preserve named handler exports and runtime assets. The employee app, public website and SSR builds have different entry points and release artifacts; the [README build contracts](../../README.md#project-structure-and-build-contracts) describe them.
 

@@ -1,6 +1,6 @@
 # Phase 2 architecture facts
 
-These facts apply specifically to this repository, checked November 6, 2026. Reusable engineering standards are being prepared separately in ChatGPT Space; verified links are pending. These project choices are not defaults for every future product.
+These facts apply specifically to this repository, checked November 6, 2026. The external [reusable engineering standards](coding-process.md#reusable-standards) live in Atlas’s private ChatGPT Space and require authorized ChatGPT access. These project choices are not defaults for every future product.
 
 | Area | Current Phase 2 choice |
 | --- | --- |

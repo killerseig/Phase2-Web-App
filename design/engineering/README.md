@@ -4,7 +4,7 @@ Reviewed against the repository and official framework documentation on November
 
 Start with [the coding process](coding-process.md), then read the relevant current module contract. These documents describe Phase 2 specifically. They do not authorize a release or replace the owner’s latest instructions.
 
-Reusable Vue/Firebase/architecture standards are being prepared separately in Atlas’s ChatGPT Space. Verified Space links are pending; this repository does not publish a duplicate foundation.
+Reusable Vue/Firebase/architecture standards live in Atlas’s private ChatGPT Space, linked from [the process guide](coding-process.md#reusable-standards). Access requires Atlas’s authorized ChatGPT account; this repository does not publish a duplicate foundation.
 
 | Guide | Use it for |
 | --- | --- |

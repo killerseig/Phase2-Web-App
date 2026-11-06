@@ -22,7 +22,7 @@ The normal checkout remains the development source at http://127.0.0.1:5173/logi
 
 ## Reading order
 
-Before implementation, use the [coding process](../engineering/coding-process.md) and [Phase 2 module contracts](../engineering/module-contracts.md). Reusable standards are being prepared separately in ChatGPT Space; this design set remains the authority for Phase 2 product requirements and decisions.
+Before implementation, use the [coding process](../engineering/coding-process.md) and [Phase 2 module contracts](../engineering/module-contracts.md). The process guide links the [private ChatGPT Space foundation](../engineering/coding-process.md#reusable-standards); this design set remains the authority for Phase 2 product requirements and decisions.
 
 | Document | Purpose |
 | --- | --- |
