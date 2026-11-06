@@ -34,6 +34,18 @@ Verification: the complete synthetic dashboard suite passed 69/69. After the fin
 
 Push remains blocked by the earlier automatic approval rejection; this follow-up does not retry it. Chat resume/visibility remains an app issue and is not claimed fixed. Production deployment and the remaining widget/migration decisions below remain separate.
 
+### Job information and calendar readiness
+
+The palette now includes one optional **Job information** widget in each scope. Personal and Role dashboards offer a picker from the viewer's existing authorized active jobs; Job dashboards use their existing server-authorized selected job. The widget displays only the already available name/number, general contractor, job address and start/finish dates. Unprovided fields are identified. It does not load contacts, invoke a map provider, expose new job fields, or change default layouts. Loading/failure/empty states remain distinct, and revoked list access removes selected metadata.
+
+The Calendar widget now has an All dates / Today and upcoming agenda filter, visible Today/Past markers and a bounded keyboard-scrollable date list. Dates retain their existing date-only storage and editing rules. Local today refreshes after midnight or returning to the window; filters do not alter saved events. Tests cover midnight, empty upcoming results, source-array preservation and timer cleanup.
+
+The expanded catalog requires the compatible `sharedDashboardWorkspace` backend model before its frontend when a release is later authorized; the earlier `formWorkspace` pagination dependency still applies. No deployment, rule changes, provider integration, records migration or legacy-page replacement is included.
+
+Validation: 2,113/2,113 source unit tests, 71/71 complete synthetic dashboard browser cases, changed-file ESLint, full production build and offline Functions packaging pass. The separate demo-only shared-dashboard Firestore verifier passes 37 assertions and 33 denial cases, including the new widget's persistence, personal-owner isolation and duplicate rejection. The browser cases cover the new personal widgets at 1280px and 390px, calendar editing/filtering/refresh and the existing inert editor boundary. After visual review removed inherited loader whitespace, both focused browser cases passed again with a loaded-height assertion; desktop and phone screenshots were reviewed.
+
+Remaining decisions are substantive: task ownership/assignees/completion history; announcement authors, audiences and expiry; missing-work due/applicability rules; map provider/contact visibility; analytics questions/source metrics; spreadsheet interaction; and private-personal-file sharing. A question about private personal versus shared assigned tasks is pending. These modules are not claimed implemented. Existing Jobs administrative parity and the Daily Logs-to-Forms migration remain required before retiring pages.
+
 ### Pilot review and release boundary
 
 Use `/dashboards/personal`, `/dashboards/role` and `/dashboards/job-home/:jobId` in the local review app. The normal Work-Computer preview uses port 5173. The local app can be configured against live data: viewing is safe, but saving a dashboard, note, file or form would be a production write. Automated verification uses synthetic browser fixtures or the demo Firestore emulator only.
@@ -41,7 +53,7 @@ Use `/dashboards/personal`, `/dashboards/role` and `/dashboards/job-home/:jobId`
 Before inviting a pilot group to a deployed app:
 
 1. Review the pushed `test` source and choose the pilot users and dashboard entry points. Sidebar/default-route changes are not included in this checkpoint.
-2. Approve promotion and the exact release targets separately. Deploy the compatible `formWorkspace` pagination backend before the frontend that uses it. No IAM, rules or public-site changes are required by this checkpoint.
+2. Approve promotion and the exact release targets separately. Deploy the compatible `formWorkspace` pagination backend and `sharedDashboardWorkspace` widget-model update before the frontend that uses them. No IAM, rules or public-site changes are required by this checkpoint.
 3. Use authorized test accounts to confirm Personal isolation, Role resources, assigned-job access, mobile layout, existing tool links, form return navigation and denied-role behavior. Do not use production test submissions or emails without approval.
 4. Keep the old pages as fallback until their replacement workflows have passed user acceptance. Source tests do not replace that acceptance decision.
 

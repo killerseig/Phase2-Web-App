@@ -46,6 +46,12 @@ The builder also supports appearance overrides, center rotation, standalone imag
 
 This milestone matches the networking editor's basic coordinate, snap, move, resize, selection, arrangement, clipboard, layer and viewport interactions. Negative-coordinate workspace expansion, free-position nested canvases, frame editing, locks and breakpoint-specific geometry remain outside this implementation.
 
+## Current dashboard editing and widgets — November 6
+
+Personal, Role and parallel Job dashboards now use the unified editor. See [current testing readiness and release dependencies](03-workspace-design.md#november-6-dashboard-testing-readiness). The current optional catalog includes Job tools, Job information, Assigned jobs, Text, Calendar, Notes, Documents, Role resources and Forms. Personal layouts can be empty; drag the first widget into the empty canvas or choose it from the library. Placement markers preview drops; Alt + Up/Down reorders the selected widget in the library with position feedback. Undo/redo and explicit saving preserve layout control.
+
+Job information displays existing authorized job address/contractor/project dates; it does not provide maps or contact sharing. Calendar supports All dates and Today and upcoming filters without changing saved dates. Notes and calendar content are stored independently of layout geometry, so removing a current widget does not delete saved records. Remaining task/announcement/analytics decisions are documented in the linked readiness section. The sections below retain historical implementation checkpoints and their original release boundaries.
+
 ## Personal and role dashboards
 
 Use Edit layout to add, move, resize through the width selector, or remove widgets. Save layout persists the whole layout; Cancel discards its local changes. Unsaved changes prompt before leaving or reloading. Removing a widget does not delete stored documents or shared resource records. Notes are part of the layout, so removing a Notes widget removes those notes when saved.

@@ -60,6 +60,11 @@ describe('parallel shared dashboard contracts', () => {
     }
     expect(validateSharedWidgets(styled, 'job')[0]?.textStyle).toEqual(styled[0]?.textStyle)
   })
+  it('accepts one read-only job information widget per layout', () => {
+    const widget = { id: 'info', type: 'job-info', span: 6, title: 'Job information', text: '' }
+    expect(validateSharedWidgets([widget], 'personal')[0]?.type).toBe('job-info')
+    expect(() => validateSharedWidgets([widget, { ...widget, id: 'duplicate' }], 'personal')).toThrow('Add each tool only once')
+  })
   it('validates dates, strips surrounding title spaces and sorts them', () => {
     expect(
       validateSharedCalendar([

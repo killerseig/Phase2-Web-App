@@ -101,6 +101,7 @@ const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => typ
 const widgetSearch = ref('')
 const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
   workflows: 'Open the tools for a job.',
+  'job-info': 'View a job address, contractor and project dates.',
   jobs: 'Find the jobs you can access.',
   form: 'Launch or fill an issued employee form.',
   documents: 'Browse authorized folders and documents.',
@@ -110,7 +111,7 @@ const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
   dates: 'Show job dates and calendar entries.',
 }
 const paletteGroups = computed(() => [
-  { title: 'Work tools', types: ['workflows', 'jobs', 'form'] },
+  { title: 'Work tools', types: ['workflows', 'job-info', 'jobs', 'form'] },
   { title: 'Files & resources', types: ['documents', 'resources'] },
   { title: 'Content & planning', types: ['text', 'notes', 'dates'] },
 ].map(group => ({ ...group, types: group.types.filter((type): type is SharedDashboardWidget['type'] =>

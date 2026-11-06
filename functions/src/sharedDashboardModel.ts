@@ -2,6 +2,7 @@ import type { UserRole } from './constants'
 
 export type SharedDashboardScope = 'personal' | 'job' | 'role'
 export type SharedDashboardWidgetType =
+  | 'job-info'
   | 'workflows'
   | 'text'
   | 'jobs'
@@ -26,6 +27,7 @@ export interface SharedDashboardWidget {
   form?: { templateId: string; version: number; presentation: 'inline' | 'launcher' }
 }
 export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
+  'job-info': 'Job information',
   workflows: 'Job tools',
   text: 'Text',
   jobs: 'Assigned jobs',
@@ -37,7 +39,7 @@ export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
 }
 export function sharedWidgetTypes(scope: SharedDashboardScope): SharedDashboardWidgetType[] {
   void scope
-  return ['workflows', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form']
+  return ['workflows', 'job-info', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form']
 }
 export function defaultSharedWidgets(scope: SharedDashboardScope): SharedDashboardWidget[] {
   const types: SharedDashboardWidgetType[] =

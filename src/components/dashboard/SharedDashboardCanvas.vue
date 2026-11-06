@@ -2,6 +2,8 @@
 import AppButton from '@/components/common/AppButton.vue'
 import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import DashboardJobInformation from './DashboardJobInformation.vue'
+import DashboardCalendarAgenda from './DashboardCalendarAgenda.vue'
 import DashboardWorkflowsWidget from './DashboardWorkflowsWidget.vue'
 import CompanyLibraryWidget from './CompanyLibraryWidget.vue'
 import DashboardJobsWidget from './DashboardJobsWidget.vue'
@@ -177,6 +179,7 @@ function textStyle(widget: SharedDashboardWidget) {
         />
         <p v-else-if="!jobsLoading && !jobsError && (scope === 'job' || jobs.length || editing)">Choose a job to open Timecards, Daily Logs, Shop Orders, Company Library and available forms.</p>
       </template>
+      <DashboardJobInformation v-else-if="widget.type === 'job-info'" :job="job" :jobs="jobs" :loading="jobsLoading" :error="jobsError" :editing="editing" :job-scope="scope === 'job'" />
       <DashboardJobsWidget v-else-if="widget.type === 'jobs'" :jobs="jobs" :editing="editing" :jobs-loading="jobsLoading" :jobs-error="jobsError" />
       <div v-else-if="widget.type === 'dates'" class="shared-widget-tools">
         <p v-if="editing">
@@ -211,13 +214,7 @@ function textStyle(widget: SharedDashboardWidget) {
           ><AppButton type="button" :disabled="busy" @click="cancelNote">Cancel calendar</AppButton>
         </form>
         <template v-else
-          ><p v-if="!dates.length">No calendar dates yet.</p>
-          <ul v-else class="shared-dates">
-            <li v-for="date in dates" :key="date.id">
-              <time :datetime="date.date">{{ date.date }}</time
-              ><span>{{ date.title }}</span>
-            </li>
-          </ul>
+          ><DashboardCalendarAgenda :events="dates" />
           <AppButton
             v-if="canEditNotes"
             type="button"
