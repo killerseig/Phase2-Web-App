@@ -85,7 +85,8 @@ export async function mockDashboard(page: Page, admin = true) {
       await route.fulfill({ headers, json: { result: { items: announcements, limit: 50 } } })
       return
     }
-    const key = data.scope === 'role' ? `role-${data.role}` : 'personal'
+    const key =
+      data.scope === 'role' ? `role-${data.role}` : data.scope === 'job' ? 'all-jobs' : 'personal'
     const state = layouts.get(key) || {
       version: 0,
       widgets: [

@@ -31,7 +31,10 @@ import {
   type SharedDashboardScope,
 } from '@/features/dashboard/sharedDashboards'
 import { placeWidget, fallbackPlacements } from '@/features/dashboard/widgetPlacement'
-import { validateSharedWidgets } from '../../functions/src/sharedDashboardModel'
+import {
+  validateSharedWidgets,
+  validateDashboardViewport,
+} from '../../functions/src/sharedDashboardModel'
 import {
   resizeEdges,
   translate,
@@ -45,6 +48,7 @@ import {
   type Arrangement,
 } from '@/features/dashboard/editorGeometry'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
+import { startCamera, panCamera, alignmentOffset } from '@/features/dashboard/viewportGeometry'
 import type { RawRoleKey } from '@/types/domain'
 import { dashboardTextVariables, resolveDashboardText } from '@/features/dashboard/sharedText'
 import type { SharedCalendarEntry } from '@/features/dashboard/sharedDashboards'
@@ -239,6 +243,7 @@ function editWidget(id: string) {
 async function revealWidget(id: string) {
   selectWidget(id)
   activePane.value = 'preview'
+  editorCamera.value = { x: 0, y: 0 }
   await nextTick()
   const element = [...(root.value?.querySelectorAll<HTMLElement>('[data-widget-id]') || [])].find(
     (el) => el.dataset.widgetId === id,
@@ -372,11 +377,16 @@ watch(
 )
 function restore(value: string) {
   restoring = true
-  const state = JSON.parse(value)
-  widgets.value = state.widgets
-  allowRoleEditing.value = state.allowRoleEditing
-  viewportSettings.value = state.viewport || defaultDashboardViewport()
-  restoring = false
+  try {
+    const state = JSON.parse(value)
+    widgets.value = state.widgets
+    allowRoleEditing.value = state.allowRoleEditing
+    // History includes in-progress number fields. Validate when saving, not when
+    // restoring a draft (a temporarily empty input must remain undoable).
+    viewportSettings.value = state.viewport || defaultDashboardViewport()
+  } finally {
+    restoring = false
+  }
   selected.value = widgets.value.some((w) => w.id === selected.value)
     ? selected.value
     : widgets.value[0]?.id || ''
@@ -482,6 +492,23 @@ function setGridPreset(event: Event) {
   const value = Number((event.target as HTMLSelectElement).value)
   if (value) viewportSettings.value.grid = { ...viewportSettings.value.grid, x: value, y: value }
 }
+function setGridSpacing(axis: 'x' | 'y', event: Event) {
+  const value = (event.target as HTMLInputElement).valueAsNumber
+  if (!Number.isFinite(value) || value < 0.125 || value > 8) return
+  const grid = viewportSettings.value.grid
+  viewportSettings.value.grid = {
+    ...grid,
+    [axis]: value,
+    ...(grid.linked ? { x: value, y: value } : {}),
+  }
+}
+const gridLinked = computed({
+  get: () => viewportSettings.value.grid.linked,
+  set: (value: boolean) => {
+    const grid = viewportSettings.value.grid
+    viewportSettings.value.grid = { ...grid, linked: value, y: value ? grid.x : grid.y }
+  },
+})
 function surfaceFor(parent = '', region = '0') {
   return [...(root.value?.querySelectorAll<HTMLElement>('[data-widget-surface]') || [])].find(
     (el) =>
@@ -1089,7 +1116,9 @@ async function load() {
     if (request !== generation) return
     layout.value = result
     widgets.value = JSON.parse(JSON.stringify(result.widgets))
-    viewportSettings.value = result.viewport || defaultDashboardViewport()
+    viewportSettings.value = result.viewport
+      ? validateDashboardViewport(result.viewport)
+      : defaultDashboardViewport()
     runtimeZoom.value = viewportSettings.value.zoom
     allowRoleEditing.value = result.allowRoleEditing
     saved.value = snapshot()
@@ -1179,7 +1208,7 @@ async function save() {
       ...context(),
       version: layout.value.version,
       widgets: JSON.parse(JSON.stringify(widgets.value)),
-      viewport: JSON.parse(JSON.stringify(viewportSettings.value)),
+      viewport: validateDashboardViewport(viewportSettings.value),
       ...(scope.value === 'role' && isAdmin.value
         ? { allowRoleEditing: allowRoleEditing.value }
         : {}),
@@ -1187,7 +1216,9 @@ async function save() {
     if (request !== generation) return
     layout.value = result
     widgets.value = JSON.parse(JSON.stringify(result.widgets))
-    viewportSettings.value = result.viewport || defaultDashboardViewport()
+    viewportSettings.value = result.viewport
+      ? validateDashboardViewport(result.viewport)
+      : defaultDashboardViewport()
     runtimeZoom.value = viewportSettings.value.zoom
     allowRoleEditing.value = result.allowRoleEditing
     saved.value = snapshot()
@@ -1331,6 +1362,18 @@ function manualZoom(delta: number) {
 }
 const handTool = ref(false)
 const runtimeZoom = ref(1)
+const runtimeCamera = ref({ x: 0, y: 0 })
+const editorCamera = ref({ x: 0, y: 0 })
+function scrollViewport(x: number, y: number) {
+  if (!viewport.value) return
+  viewport.value.scrollLeft = x
+  viewport.value.scrollTop = y
+}
+function fitEditor() {
+  fit.value = true
+  editorCamera.value = { x: 0, y: 0 }
+  scrollViewport(0, 0)
+}
 const marquee = ref<{ x: number; y: number; w: number; h: number }>()
 let stopBackground: (() => void) | undefined
 function backgroundPointer(event: PointerEvent) {
@@ -1346,7 +1389,10 @@ function backgroundPointer(event: PointerEvent) {
   const panning =
     event.button === 1 ||
     handTool.value ||
-    (!editing.value && viewportSettings.value.pan === 'free' && !widget)
+    (!widget &&
+      (!editing.value
+        ? viewportSettings.value.pan === 'free'
+        : !(event.shiftKey || event.ctrlKey || event.metaKey)))
   if (!editing.value && !panning) return
   if (!panning && (!surface || (widget && surface.contains(widget)))) return
   if (panning && target.closest('button,input,textarea,select,a,[contenteditable]')) return
@@ -1360,6 +1406,7 @@ function backgroundPointer(event: PointerEvent) {
       y: event.clientY,
       left: scroller.scrollLeft,
       top: scroller.scrollTop,
+      camera: { ...(editing.value ? editorCamera.value : runtimeCamera.value) },
     },
     initialSelection = selectedIds.value.slice()
   event.preventDefault()
@@ -1371,6 +1418,17 @@ function backgroundPointer(event: PointerEvent) {
       return
     }
     if (!selecting) {
+      if (editing.value || runtimeFree.value) {
+        const value = panCamera(
+          initial.camera,
+          e.clientX - initial.x,
+          e.clientY - initial.y,
+          editing.value ? previewScale.value : runtimeScale.value,
+        )
+        if (editing.value) editorCamera.value = value
+        else runtimeCamera.value = value
+        return
+      }
       scroller!.scrollLeft = initial.left + initial.x - e.clientX
       scroller!.scrollTop = initial.top + initial.y - e.clientY
       return
@@ -1392,6 +1450,10 @@ function backgroundPointer(event: PointerEvent) {
   }
   function cancel(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      if (editing.value) editorCamera.value = { ...initial.camera }
+      else runtimeCamera.value = { ...initial.camera }
+      scroller!.scrollLeft = initial.left
+      scroller!.scrollTop = initial.top
       selection.value = initialSelection
       selected.value = initialSelection.at(-1) || ''
       stopBackground?.()
@@ -1416,27 +1478,133 @@ function backgroundPointer(event: PointerEvent) {
   window.addEventListener('keydown', cancel)
 }
 onBeforeUnmount(() => stopBackground?.())
+const runtimeFixed = computed(() => viewportSettings.value.mode !== 'responsive')
+const runtimeCanvasWidth = computed(() =>
+  runtimeFixed.value ? viewportSettings.value.width : viewportWidth.value,
+)
 const runtimeScale = computed(() =>
   viewportSettings.value.mode === 'scale'
     ? Math.min(
         1,
         viewportWidth.value / viewportSettings.value.width,
-        viewportSettings.value.fit === 'contain' && viewportSettings.value.frame === 'custom'
-          ? viewportHeight.value / viewportSettings.value.height
+        viewportSettings.value.fit === 'contain'
+          ? viewportHeight.value /
+              (viewportSettings.value.frame === 'custom'
+                ? viewportSettings.value.height
+                : contentHeight.value)
           : 1,
       ) * runtimeZoom.value
     : runtimeZoom.value,
 )
-const runtimeFramed = computed(() => viewportSettings.value.mode !== 'responsive')
-const runtimeOffsetY = computed(
+const runtimeFramed = computed(
   () =>
-    Math.max(0, viewportHeight.value - contentHeight.value * runtimeScale.value) *
-    (viewportSettings.value.verticalAlign === 'center'
-      ? 0.5
-      : viewportSettings.value.verticalAlign === 'end'
-        ? 1
-        : 0),
+    runtimeFixed.value ||
+    viewportSettings.value.pan !== 'overflow' ||
+    viewportSettings.value.start.x !== 0 ||
+    viewportSettings.value.start.y !== 0 ||
+    runtimeZoom.value !== 1,
 )
+const runtimeFree = computed(
+  () => !editing.value && runtimeFramed.value && viewportSettings.value.pan === 'free',
+)
+const runtimeCameraMode = computed(
+  () => !editing.value && runtimeFramed.value && viewportSettings.value.pan !== 'overflow',
+)
+const runtimeOffsetX = computed(() =>
+  alignmentOffset(
+    viewportWidth.value,
+    runtimeCanvasWidth.value * runtimeScale.value,
+    viewportSettings.value.align,
+  ),
+)
+const runtimeOffsetY = computed(() =>
+  alignmentOffset(
+    viewportHeight.value,
+    contentHeight.value * runtimeScale.value,
+    viewportSettings.value.verticalAlign,
+  ),
+)
+function resetRuntimeView() {
+  runtimeZoom.value = viewportSettings.value.zoom
+  runtimeCamera.value = startCamera(viewportSettings.value.start, runtimeCanvasWidth.value)
+  void nextTick(() => {
+    if (editing.value) return
+    const start = startCamera(viewportSettings.value.start, runtimeCanvasWidth.value)
+    scrollViewport(
+      runtimeCameraMode.value ? 0 : start.x * runtimeScale.value,
+      runtimeCameraMode.value ? 0 : start.y * runtimeScale.value,
+    )
+  })
+}
+watch(
+  [editing, layout, () => viewportSettings.value],
+  () => {
+    stopBackground?.()
+    handTool.value = false
+    editorCamera.value = { x: 0, y: 0 }
+    if (!editing.value) resetRuntimeView()
+  },
+  { flush: 'post' },
+)
+watch([runtimeScale, runtimeCanvasWidth], ([, width], [, previousWidth]) => {
+  if (!editing.value && runtimeCameraMode.value && width !== previousWidth)
+    runtimeCamera.value = startCamera(viewportSettings.value.start, width)
+  if (!editing.value && !runtimeCameraMode.value) {
+    const start = startCamera(viewportSettings.value.start, runtimeCanvasWidth.value)
+    void nextTick(() => scrollViewport(start.x * runtimeScale.value, start.y * runtimeScale.value))
+  }
+})
+function cameraWheel(event: WheelEvent) {
+  if (!runtimeFree.value || event.ctrlKey || event.metaKey) return
+  // Nested document viewers and form controls retain their own scrolling.
+  let target = event.target instanceof HTMLElement ? event.target : null
+  while (target && target !== viewport.value) {
+    const style = getComputedStyle(target)
+    if (
+      (/(auto|scroll)/.test(style.overflowY) && target.scrollHeight > target.clientHeight + 1) ||
+      (/(auto|scroll)/.test(style.overflowX) && target.scrollWidth > target.clientWidth + 1)
+    )
+      return
+    target = target.parentElement
+  }
+  event.preventDefault()
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewportHeight.value : 1
+  runtimeCamera.value = panCamera(
+    runtimeCamera.value,
+    -(event.shiftKey ? event.deltaY : event.deltaX) * unit,
+    -(event.shiftKey ? 0 : event.deltaY) * unit,
+    runtimeScale.value,
+  )
+}
+function cameraKey(event: KeyboardEvent) {
+  if (editing.value || !runtimeFramed.value || event.target !== viewport.value) return
+  if (
+    !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home'].includes(
+      event.key,
+    )
+  )
+    return
+  if (viewportSettings.value.pan === 'locked') {
+    event.preventDefault()
+    return
+  }
+  if (event.key === 'Home') {
+    event.preventDefault()
+    resetRuntimeView()
+    return
+  }
+  if (!runtimeFree.value) return
+  event.preventDefault()
+  const delta = event.key.startsWith('Page') ? viewportHeight.value * 0.8 : 40
+  const x = event.key === 'ArrowLeft' ? delta : event.key === 'ArrowRight' ? -delta : 0
+  const y =
+    event.key === 'ArrowUp' || event.key === 'PageUp'
+      ? delta
+      : event.key === 'ArrowDown' || event.key === 'PageDown'
+        ? -delta
+        : 0
+  runtimeCamera.value = panCamera(runtimeCamera.value, x, y, runtimeScale.value)
+}
 const runtimeDevice = computed(() =>
   viewportWidth.value < 600 ? 'phone' : viewportWidth.value < 1024 ? 'tablet' : 'desktop',
 )
@@ -1837,7 +2005,7 @@ onBeforeUnmount(() => {
                 {{
                   item === 'desktop' ? 'Desktop' : item === 'tablet' ? 'Tablet' : 'Phone'
                 }}</AppButton
-              ><AppButton type="button" :aria-pressed="fit" @click="fit = true">Fit</AppButton
+              ><AppButton type="button" :aria-pressed="fit" @click="fitEditor">Fit</AppButton
               ><AppButton type="button" aria-label="Zoom out" @click="manualZoom(-0.1)">−</AppButton
               ><span>{{ Math.round(previewScale * 100) }}%</span
               ><AppButton type="button" aria-label="Zoom in" @click="manualZoom(0.1)">+</AppButton>
@@ -1858,7 +2026,8 @@ onBeforeUnmount(() => {
                   min="0.125"
                   max="8"
                   step="0.125"
-                  v-model.number="viewportSettings.grid.x"
+                  :value="viewportSettings.grid.x"
+                  @change="setGridSpacing('x', $event)"
               /></label>
               <label
                 >Y<input
@@ -1867,7 +2036,18 @@ onBeforeUnmount(() => {
                   min="0.125"
                   max="8"
                   step="0.125"
-                  v-model.number="viewportSettings.grid.y"
+                  :value="viewportSettings.grid.y"
+                  @change="setGridSpacing('y', $event)"
+              /></label>
+              <label><input v-model="gridLinked" type="checkbox" />Link spacing</label>
+              <label
+                >Major every<input
+                  aria-label="Major grid interval"
+                  type="number"
+                  min="1"
+                  max="32"
+                  step="1"
+                  v-model.number="viewportSettings.grid.majorEvery"
               /></label>
               <AppButton :aria-pressed="handTool" @click="handTool = !handTool">Pan</AppButton>
             </div>
@@ -1876,6 +2056,7 @@ onBeforeUnmount(() => {
               class="shared-runtime-controls"
               aria-label="Dashboard view controls"
             >
+              <AppButton @click="resetRuntimeView">Reset view</AppButton>
               <AppButton
                 @click="runtimeZoom = Math.max(0.25, runtimeZoom - 0.1)"
                 aria-label="Zoom dashboard out"
@@ -1898,6 +2079,11 @@ onBeforeUnmount(() => {
               ref="viewport"
               class="shared-dashboard-viewport"
               data-widget-scroll
+              :class="{ 'is-camera-view': runtimeCameraMode, 'is-panning': handTool }"
+              tabindex="0"
+              aria-label="Dashboard canvas"
+              @wheel="cameraWheel"
+              @keydown="cameraKey"
               @pointerdown.capture="backgroundPointer"
               :style="
                 !editing && runtimeFramed
@@ -1906,7 +2092,7 @@ onBeforeUnmount(() => {
                         viewportSettings.frame === 'custom'
                           ? `min(70dvh, ${viewportSettings.height}px)`
                           : '70dvh',
-                      overflow: viewportSettings.pan === 'locked' ? 'hidden' : 'auto',
+                      overflow: runtimeCameraMode ? 'hidden' : 'auto',
                     }
                   : undefined
               "
@@ -1917,14 +2103,24 @@ onBeforeUnmount(() => {
                     ? {
                         width: previewWidth * previewScale + 'px',
                         minHeight: contentHeight * previewScale + 'px',
+                        transform: `translate(${-editorCamera.x * previewScale}px, ${-editorCamera.y * previewScale}px)`,
                       }
                     : runtimeFramed
                       ? {
-                          width: viewportSettings.width * runtimeScale + 'px',
+                          width: runtimeCanvasWidth * runtimeScale + 'px',
                           height: contentHeight * runtimeScale + 'px',
-                          paddingTop: runtimeOffsetY + 'px',
-                          marginLeft: viewportSettings.align === 'start' ? '0' : 'auto',
-                          marginRight: viewportSettings.align === 'end' ? '0' : 'auto',
+                          paddingTop: runtimeCameraMode ? '0px' : runtimeOffsetY + 'px',
+                          marginLeft:
+                            runtimeCameraMode || viewportSettings.align === 'start' ? '0' : 'auto',
+                          marginRight:
+                            runtimeCameraMode || viewportSettings.align === 'end' ? '0' : 'auto',
+                          ...(runtimeCameraMode
+                            ? {
+                                position: 'absolute',
+                                left: runtimeOffsetX - runtimeCamera.x * runtimeScale + 'px',
+                                top: runtimeOffsetY - runtimeCamera.y * runtimeScale + 'px',
+                              }
+                            : {}),
                         }
                       : {}
                 "
@@ -1941,7 +2137,7 @@ onBeforeUnmount(() => {
                         }
                       : runtimeFramed
                         ? {
-                            width: viewportSettings.width + 'px',
+                            width: runtimeCanvasWidth + 'px',
                             transform: `scale(${runtimeScale})`,
                             transformOrigin: 'top left',
                           }
@@ -1977,8 +2173,8 @@ onBeforeUnmount(() => {
                     :grid-visible="gridVisible"
                     :selected="selected"
                     :selected-ids="selectedIds"
-                    :device="editing ? device : runtimeFramed ? 'desktop' : runtimeDevice"
-                    :fixed-frame="!editing && runtimeFramed"
+                    :device="editing ? device : runtimeFixed ? 'desktop' : runtimeDevice"
+                    :fixed-frame="!editing && runtimeFixed"
                     :can-edit-notes="canEditContent"
                     :busy="busy"
                     :phone="editing && device === 'phone'"
@@ -2091,6 +2287,28 @@ onBeforeUnmount(() => {
                   step="0.05"
                   v-model.number="viewportSettings.zoom"
               /></label>
+              <label
+                >Starting X (columns)<input
+                  aria-label="Starting X (columns)"
+                  type="number"
+                  min="-10000"
+                  max="10000"
+                  step="0.25"
+                  v-model.number="viewportSettings.start.x"
+              /></label>
+              <label
+                >Starting Y (rows)<input
+                  aria-label="Starting Y (rows)"
+                  type="number"
+                  min="-10000"
+                  max="10000"
+                  step="0.25"
+                  v-model.number="viewportSettings.start.y"
+              /></label>
+              <p class="shared-muted">
+                Starting offsets are relative to the canvas origin. Free allows panning beyond the
+                content; Overflow stays within it; Locked holds the starting view.
+              </p>
             </details>
             <div class="shared-widget-actions" role="group" aria-label="Selection actions">
               <AppButton :disabled="!selectedIds.length || busy" @click="copySelection"

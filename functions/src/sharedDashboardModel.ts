@@ -31,7 +31,15 @@ export interface DashboardViewport {
   verticalAlign: 'start' | 'center' | 'end'
   pan: 'overflow' | 'free' | 'locked'
   zoom: number
-  grid: { x: number; y: number; visible: boolean; snap: boolean }
+  start: { x: number; y: number }
+  grid: {
+    x: number
+    y: number
+    visible: boolean
+    snap: boolean
+    linked: boolean
+    majorEvery: number
+  }
 }
 export function defaultDashboardViewport(): DashboardViewport {
   return {
@@ -44,7 +52,8 @@ export function defaultDashboardViewport(): DashboardViewport {
     verticalAlign: 'start',
     pan: 'overflow',
     zoom: 1,
-    grid: { x: 1, y: 1, visible: true, snap: true },
+    start: { x: 0, y: 0 },
+    grid: { x: 1, y: 1, visible: true, snap: true, linked: false, majorEvery: 4 },
   }
 }
 export function validateDashboardViewport(value: unknown): DashboardViewport {
@@ -65,6 +74,7 @@ export function validateDashboardViewport(value: unknown): DashboardViewport {
           'verticalAlign',
           'pan',
           'zoom',
+          'start',
           'grid',
         ].includes(k),
     ) ||
@@ -86,13 +96,34 @@ export function validateDashboardViewport(value: unknown): DashboardViewport {
     !v.grid ||
     typeof v.grid !== 'object' ||
     Array.isArray(v.grid) ||
-    Object.keys(v.grid).some((k) => !['x', 'y', 'visible', 'snap'].includes(k)) ||
+    Object.keys(v.grid).some(
+      (k) => !['x', 'y', 'visible', 'snap', 'linked', 'majorEvery'].includes(k),
+    ) ||
     ![v.grid.x, v.grid.y].every((n) => Number.isFinite(n) && n >= 0.125 && n <= 8) ||
     typeof v.grid.visible !== 'boolean' ||
-    typeof v.grid.snap !== 'boolean'
+    typeof v.grid.snap !== 'boolean' ||
+    (v.grid.linked !== undefined && typeof v.grid.linked !== 'boolean') ||
+    (v.grid.majorEvery !== undefined &&
+      (!Number.isInteger(v.grid.majorEvery) || v.grid.majorEvery < 1 || v.grid.majorEvery > 32)) ||
+    (v.start !== undefined &&
+      (!v.start ||
+        typeof v.start !== 'object' ||
+        Array.isArray(v.start) ||
+        Object.keys(v.start).length !== 2 ||
+        Object.keys(v.start).some((k) => !['x', 'y'].includes(k)) ||
+        ![v.start.x, v.start.y].every((n) => Number.isFinite(n) && Math.abs(n) <= 10000)))
   )
     throw Error('Invalid dashboard viewport settings.')
-  return { ...v, grid: { ...v.grid } }
+  return {
+    ...v,
+    start: v.start ? { ...v.start } : { x: 0, y: 0 },
+    grid: {
+      ...v.grid,
+      y: v.grid.linked ? v.grid.x : v.grid.y,
+      linked: v.grid.linked ?? false,
+      majorEvery: v.grid.majorEvery ?? 4,
+    },
+  }
 }
 function validatePlacement(value: unknown): DashboardPlacement {
   const p = value as DashboardPlacement

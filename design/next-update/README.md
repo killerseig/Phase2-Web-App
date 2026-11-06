@@ -8,7 +8,7 @@ The next phase includes **all requests collected from the stakeholder emails and
 
 The current Personal, Role and Job dashboard work is recorded in the [November 6 checkpoint](03-workspace-design.md#november-6-dashboard-testing-readiness). The owner wants these polished for user testing before gradually replacing older pages. The current work preserves the Jobs pages, Daily Logs, Timecards, Shop Orders, existing permissions and production records. It is a source checkpoint on `test`, not a deployment or permission to retire pages. The older dated entries below remain history rather than the current feature inventory.
 
-The latest [Networking editor follow-up](03-workspace-design.md#networking-editor-follow-up--november-6-2026) adds multiple selection, containers, locks, eight resize handles, device overrides and saved runtime display settings, with explicit remaining reference differences and verification limits.
+The [Networking editor follow-up](03-workspace-design.md#networking-editor-follow-up--november-6-2026) adds multiple selection, containers, locks, eight resize handles and device overrides. The latest [grid and camera completion](03-workspace-design.md#networking-grid-and-camera-completion--november-6-2026) finishes linked spacing, major grid accents, saved starting positions and free panning across Personal, Role and Job, with the local preview and verification details.
 
 ## October 3 additive dashboards (historical local review)
 

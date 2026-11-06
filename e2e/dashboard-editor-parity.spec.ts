@@ -1,7 +1,11 @@
 import { expect, test, type Page } from './helpers/test.js'
 import { mockDashboard } from './helpers/dashboardFixture.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
+import { createRequire } from 'node:module'
 import type { SharedDashboardWidget } from '../functions/src/sharedDashboardModel.js'
+const { defaultDashboardViewport } = createRequire(import.meta.url)(
+  '../functions/lib/sharedDashboardModel.js',
+) as typeof import('../functions/src/sharedDashboardModel')
 const widgets: SharedDashboardWidget[] = [
   {
     id: 'a',
@@ -38,6 +42,148 @@ async function setup(page: Page, entries = widgets, edit = true) {
 }
 const outline = (page: Page) => page.getByRole('group', { name: 'On this dashboard', exact: true })
 
+for (const scope of [
+  { name: 'personal', key: 'personal', url: '/dashboards/personal' },
+  { name: 'role', key: 'role-admin', url: '/dashboards/role-home' },
+  { name: 'job', key: 'all-jobs', url: '/dashboards/job-home/job-1' },
+]) {
+  test(`${scope.name} saves linked grid, major accents and starting view with free camera panning`, async ({
+    page,
+  }) => {
+    const api = await mockDashboard(page)
+    const entries = structuredClone(widgets)
+    if (scope.name !== 'personal')
+      entries.push({
+        id: 'required',
+        type: scope.name === 'job' ? 'workflows' : 'jobs',
+        title: 'Required tools',
+        text: '',
+        span: 12,
+        placement: { x: 0, y: 30, w: 24, h: 8 },
+      })
+    api.layouts.set(scope.key, { version: 1, widgets: entries })
+    await page.setViewportSize({ width: 1600, height: 1000 })
+    await gotoPhase2App(page, scope.url, createJobsFixture())
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    const x = page.getByLabel('Horizontal grid spacing', { exact: true })
+    const y = page.getByLabel('Vertical grid spacing', { exact: true })
+    await page.getByLabel('Link spacing', { exact: true }).check()
+    await y.fill('0.5')
+    await y.press('Tab')
+    await expect(x).toHaveValue('0.5')
+    await x.fill('1.25')
+    await x.press('Tab')
+    await expect(y).toHaveValue('1.25')
+    await page.getByLabel('Link spacing', { exact: true }).uncheck()
+    await y.fill('0.5')
+    await y.press('Tab')
+    await expect(x).toHaveValue('1.25')
+    await page.getByLabel('Link spacing', { exact: true }).check()
+    await expect(y).toHaveValue('1.25')
+    await page.getByLabel('Major grid interval', { exact: true }).fill('8')
+    const grid = page.locator('[data-widget-surface="shared-dashboard"]')
+    await expect
+      .poll(() => grid.evaluate((el) => getComputedStyle(el).getPropertyValue('--grid-major-y')))
+      .toBe('320px')
+    await expect(grid).toHaveCSS('background-position', '-2px -2px, -2px -2px')
+    await page.locator('.dashboard-view-settings summary').click()
+    await page.getByLabel('Runtime layout', { exact: true }).selectOption('fixed')
+    await page.getByLabel('Runtime panning', { exact: true }).selectOption('free')
+    await page.getByLabel('Canvas width', { exact: true }).fill('800')
+    await page.getByLabel('Frame bounds', { exact: true }).selectOption('custom')
+    await page.getByLabel('Frame height', { exact: true }).fill('500')
+    await page.getByLabel('Starting zoom', { exact: true }).fill('0.75')
+    await page.getByLabel('Starting X (columns)', { exact: true }).fill('-2')
+    await page.getByLabel('Starting Y (rows)', { exact: true }).fill('3.25')
+    await page.getByRole('button', { name: 'Save template', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
+    expect(api.layouts.get(scope.key)!.widgets).toEqual(entries)
+    expect(api.layouts.get(scope.key)!.viewport).toMatchObject({
+      start: { x: -2, y: 3.25 },
+      grid: { x: 1.25, y: 1.25, linked: true, majorEvery: 8 },
+    })
+    const viewport = page.getByLabel('Dashboard canvas', { exact: true })
+    const frame = page.locator('.shared-preview-frame')
+    const start = (await frame.boundingBox())!
+    await expect(frame).toHaveCSS('top', '-78px')
+    await viewport.focus()
+    await page.keyboard.press('ArrowLeft')
+    await expect.poll(async () => (await frame.boundingBox())!.x - start.x).toBeCloseTo(40, 1)
+    const screen = (await viewport.boundingBox())!
+    // Empty background remains pannable far beyond the content, without a scroll-bound wall.
+    await page.getByRole('button', { name: 'Pan', exact: true }).click()
+    for (let i = 0; i < 4; i++) {
+      await page.mouse.move(screen.x + 100, screen.y + screen.height - 30)
+      await page.mouse.down()
+      await page.mouse.move(screen.x + 450, screen.y + screen.height - 30, { steps: 5 })
+      await page.mouse.up()
+    }
+    await expect.poll(async () => (await frame.boundingBox())!.x - start.x).toBeGreaterThan(1300)
+    await page.mouse.move(screen.x + 200, screen.y + 100)
+    await page.mouse.wheel(0, 200)
+    await expect.poll(async () => (await frame.boundingBox())!.y).toBeLessThan(start.y - 100)
+    await page.getByRole('button', { name: 'Reset view', exact: true }).click()
+    await expect.poll(async () => (await frame.boundingBox())!.x).toBeCloseTo(start.x, 1)
+    await expect(frame).toHaveCSS('top', '-78px')
+    expect(api.requests.filter((r) => r.action === 'save-template')).toHaveLength(1)
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    await expect(page.getByLabel('Link spacing', { exact: true })).toBeChecked()
+    await expect(page.getByLabel('Major grid interval', { exact: true })).toHaveValue('8')
+  })
+}
+
+test('locked and overflow views preserve distinct pan policies and editor panning is reversible', async ({
+  page,
+}) => {
+  const api = await mockDashboard(page)
+  const config = {
+    ...defaultDashboardViewport(),
+    mode: 'fixed' as const,
+    width: 1600,
+    height: 500,
+    frame: 'custom' as const,
+    pan: 'locked' as const,
+    start: { x: -2, y: 4 },
+  }
+  api.layouts.set('personal', { version: 1, widgets: structuredClone(widgets), viewport: config })
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await gotoPhase2App(page, '/dashboards/personal', createJobsFixture())
+  const frame = page.locator('.shared-preview-frame'),
+    viewport = page.getByLabel('Dashboard canvas', { exact: true })
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
+  await expect(frame).toHaveCSS('top', '-128px')
+  const initial = await frame.boundingBox()
+  await viewport.focus()
+  await page.keyboard.press('PageDown')
+  const screen = (await viewport.boundingBox())!
+  await page.mouse.move(screen.x + 80, screen.y + 60)
+  await page.mouse.wheel(0, 400)
+  await expect.poll(() => frame.boundingBox()).toEqual(initial)
+  await expect(page.getByRole('button', { name: 'Pan', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await page.getByRole('button', { name: 'Pan', exact: true }).click()
+  const editorInitial = (await frame.boundingBox())!,
+    area = (await viewport.boundingBox())!
+  await page.mouse.move(area.x + 100, area.y + 80)
+  await page.mouse.down()
+  await page.mouse.move(area.x + 300, area.y + 180, { steps: 5 })
+  await expect
+    .poll(async () => (await frame.boundingBox())!.x)
+    .toBeGreaterThan(editorInitial.x + 190)
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect.poll(async () => (await frame.boundingBox())!.x).toBeCloseTo(editorInitial.x, 1)
+  await page.locator('.dashboard-view-settings summary').click()
+  await page.getByLabel('Runtime panning', { exact: true }).selectOption('overflow')
+  await page.getByLabel('Starting X (columns)', { exact: true }).fill('2')
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
+  await expect.poll(() => viewport.evaluate((el) => el.scrollLeft)).toBeCloseTo(1600 / 12, 0)
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBe(128)
+})
+
 test('grid presets, eight handles and independent locks apply to pointer and keyboard edits', async ({
   page,
 }) => {
@@ -69,6 +215,41 @@ test('grid presets, eight handles and independent locks apply to pointer and key
     placement: { x: 4 },
   })
   expect(api.layouts.get('personal')!.viewport?.grid).toMatchObject({ x: 2, y: 2 })
+})
+
+test('unfinished numeric drafts stay undoable and outline reveal recovers a panned-away widget', async ({
+  page,
+}) => {
+  const api = await setup(page)
+  const major = page.getByLabel('Major grid interval', { exact: true })
+  await major.fill('')
+  await major.fill('8')
+  await page.getByRole('button', { name: 'Undo template edit', exact: true }).click()
+  await expect(major).toHaveValue('')
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await expect(
+    page.getByText('Invalid dashboard viewport settings.', { exact: true }),
+  ).toBeVisible()
+  expect(api.requests.filter((r) => r.action === 'save-template')).toHaveLength(0)
+  await page.getByRole('button', { name: 'Redo template edit', exact: true }).click()
+  await expect(major).toHaveValue('8')
+  await major.fill('6')
+  await page.getByRole('button', { name: 'Undo template edit', exact: true }).click()
+  await expect(major).toHaveValue('8')
+  await page.getByRole('button', { name: 'Pan', exact: true }).click()
+  const view = (await page.getByLabel('Dashboard canvas', { exact: true }).boundingBox())!
+  for (let i = 0; i < 4; i++) {
+    await page.mouse.move(view.x + 400, view.y + 60)
+    await page.mouse.down()
+    await page.mouse.move(view.x + 50, view.y + 60, { steps: 5 })
+    await page.mouse.up()
+  }
+  await outline(page).getByRole('button', { name: 'Alpha', exact: true }).dblclick()
+  const alpha = (await page.locator('[data-widget-id="a"]').boundingBox())!
+  expect(alpha.x + alpha.width).toBeGreaterThan(view.x)
+  expect(alpha.x).toBeLessThan(view.x + view.width)
+  expect(alpha.y + alpha.height).toBeGreaterThan(view.y)
+  expect(alpha.y).toBeLessThan(view.y + view.height)
 })
 
 test('multi-selection aligns, groups, copies configuration, and preserves nested notes drafts', async ({
@@ -318,20 +499,24 @@ test('marquee selection moves and resizes widgets together without moving the su
 for (const width of [1600, 820, 390])
   test(`container editor and runtime remain reachable at ${width}px`, async ({ page }) => {
     await setup(page, [
-      { ...panel('team-resources', 'tabs'), title: 'Team resources', placement:{x:0,y:0,w:24,h:16} },
+      {
+        ...panel('team-resources', 'tabs'),
+        title: 'Team resources',
+        placement: { x: 0, y: 0, w: 24, h: 16 },
+      },
       {
         ...widgets[0]!,
         title: 'Welcome',
         parentId: 'team-resources',
         region: '0',
-        placement:{x:0,y:1,w:24,h:8},
+        placement: { x: 0, y: 1, w: 24, h: 8 },
         devices: { phone: { x: 0, y: 1, w: 24, h: 8 } },
       },
       {
         ...widgets[2]!,
         parentId: 'team-resources',
         region: '1',
-        placement:{x:0,y:1,w:24,h:8},
+        placement: { x: 0, y: 1, w: 24, h: 8 },
         devices: { phone: { x: 0, y: 1, w: 24, h: 8 } },
       },
     ])
@@ -342,10 +527,16 @@ for (const width of [1600, 820, 390])
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     )
     expect(overflow).toBe(false)
-    await page.screenshot({ path: `.security-work/dashboard-parity-editor-${width}.png`, animations:'disabled' })
+    await page.screenshot({
+      path: `.security-work/dashboard-parity-editor-${width}.png`,
+      animations: 'disabled',
+    })
     await page.getByRole('button', { name: 'Cancel edits', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
     await page.getByRole('tab', { name: 'Second', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Edit notes', exact: true })).toBeVisible()
-    await page.screenshot({ path: `.security-work/dashboard-parity-runtime-${width}.png`, animations:'disabled' })
+    await page.screenshot({
+      path: `.security-work/dashboard-parity-runtime-${width}.png`,
+      animations: 'disabled',
+    })
   })

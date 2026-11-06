@@ -76,20 +76,18 @@ try {
   for (const uid of ['dash-none', 'dash-inactive']) await denied(() => call(uid, 'personal'))
   await denied(() => call('dash-a', 'personal', 'load', { ownerId: 'dash-b' }), 'invalid-argument')
   await denied(() => call('dash-a', 'personal', 'load', { role: 'admin' }), 'invalid-argument')
-  await db
-    .doc('dashboardPersonal/dash-a')
-    .set({
-      version: 7,
-      widgets: [
-        {
-          id: 'old-note',
-          type: 'notes',
-          span: 6,
-          title: 'My notes',
-          text: 'Original private note',
-        },
-      ],
-    })
+  await db.doc('dashboardPersonal/dash-a').set({
+    version: 7,
+    widgets: [
+      {
+        id: 'old-note',
+        type: 'notes',
+        span: 6,
+        title: 'My notes',
+        text: 'Original private note',
+      },
+    ],
+  })
   const personal = await call('dash-a', 'personal')
   equal(personal.canEdit, true)
   equal(personal.notes['old-note'], 'Original private note')
@@ -877,7 +875,16 @@ try {
     mode: 'scale',
     frame: 'custom',
     zoom: 0.75,
-    grid: { x: 0.25, y: 2, visible: true, snap: true },
+    start: { x: -2.25, y: 5.5 },
+    pan: 'free',
+    grid: {
+      ...defaultDashboardViewport().grid,
+      x: 0.25,
+      y: 2,
+      visible: true,
+      snap: true,
+      majorEvery: 8,
+    },
   }
   let parity = await call('dash-parity', 'personal', 'save-template', {
     version: 0,
@@ -896,6 +903,10 @@ try {
   for (const extra of [
     { viewport: { ...display, width: 0 } },
     { viewport: { ...display, companyId: 'forged' } },
+    { viewport: { ...display, start: { x: '3', y: 0 } } },
+    { viewport: { ...display, start: { x: 0, y: -10001 } } },
+    { viewport: { ...display, grid: { ...display.grid, majorEvery: 0 } } },
+    { viewport: { ...display, grid: { ...display.grid, linked: 'true' } } },
     { widgets: [nested[0], { ...nested[1], parentId: 'missing' }] },
     { widgets: [{ ...nested[0], parentId: 'panel' }, nested[1]] },
     { widgets: [nested[0], { ...nested[1], region: '3' }] },
@@ -944,12 +955,28 @@ try {
   )
   for (const patch of [
     { viewport: { mode: 'fixed' } },
+    { viewport: { ...display, start: null } },
+    { viewport: { ...display, grid: { ...display.grid, majorEvery: 1.5 } } },
     { widgets: [{ ...nested[0], parentId: 'panel' }] },
   ]) {
     await ref.set({ ...original, ...patch })
     await denied(() => call('dash-parity', 'personal'), 'failed-precondition')
     equal((await ref.get()).data(), { ...original, ...patch })
   }
+  await ref.set(original)
+  // A pre-parity viewport reads with defaults but is never rewritten by a load.
+  const legacy = structuredClone(display)
+  delete legacy.start
+  delete legacy.grid.linked
+  delete legacy.grid.majorEvery
+  const legacyRecord = { ...original, viewport: legacy }
+  await ref.set(legacyRecord)
+  equal((await call('dash-parity', 'personal')).viewport, {
+    ...legacy,
+    start: { x: 0, y: 0 },
+    grid: { ...legacy.grid, linked: false, majorEvery: 4 },
+  })
+  equal((await ref.get()).data(), legacyRecord)
   await ref.set(original)
   let delegated = await call('dash-admin', 'role', 'load', { role: 'foreman' })
   delegated = await call('dash-admin', 'role', 'save-template', {
@@ -966,6 +993,8 @@ try {
     viewport: { ...display, zoom: 1 },
   })
   equal(delegated.viewport.zoom, 1)
+  equal(delegated.viewport.start, display.start)
+  equal(delegated.viewport.grid.majorEvery, 8)
   await call('dash-admin', 'role', 'save-template', {
     role: 'foreman',
     version: delegated.version,

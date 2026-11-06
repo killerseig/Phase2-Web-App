@@ -61,7 +61,7 @@ const props = defineProps<{
   region?: string
   tabLabelId?: string
   selectedIds?: string[]
-  gridSpacing?: { x: number; y: number }
+  gridSpacing?: { x: number; y: number; majorEvery?: number }
   placementPreviews?: Record<string, NonNullable<SharedDashboardWidget['placement']>>
 }>()
 const visibleWidgets = computed(() =>
@@ -89,19 +89,28 @@ const positions = computed(() =>
     })),
   ),
 )
-const canvasStyle = computed(() =>
-  positioned.value
-    ? {
-        minHeight:
-          Math.max(
-            props.editing ? (props.parentId ? 200 : 960) : 0,
-            ...positions.value.map((p) => (p.y + p.h) * 32 + 64),
-          ) + 'px',
-        '--grid-x': ((props.gridSpacing?.x || 1) / 24) * 100 + '%',
-        '--grid-y': (props.gridSpacing?.y || 1) * 32 + 'px',
-      }
-    : undefined,
-)
+const canvasStyle = computed(() => {
+  const x =
+    Number.isFinite(props.gridSpacing?.x) && props.gridSpacing!.x > 0 ? props.gridSpacing!.x : 1
+  const y =
+    Number.isFinite(props.gridSpacing?.y) && props.gridSpacing!.y > 0 ? props.gridSpacing!.y : 1
+  const major =
+    Number.isInteger(props.gridSpacing?.majorEvery) && props.gridSpacing!.majorEvery! > 0
+      ? props.gridSpacing!.majorEvery!
+      : 4
+  return {
+    minHeight: positioned.value
+      ? Math.max(
+          props.editing ? (props.parentId ? 200 : 960) : 0,
+          ...positions.value.map((p) => (p.y + p.h) * 32 + 64),
+        ) + 'px'
+      : undefined,
+    '--grid-x': (x / 24) * 100 + '%',
+    '--grid-y': y * 32 + 'px',
+    '--grid-major-x': ((x * major) / 24) * 100 + '%',
+    '--grid-major-y': y * major * 32 + 'px',
+  }
+})
 function startWidgetMove(event: PointerEvent, id: string) {
   if (
     !props.editing ||

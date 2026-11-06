@@ -15,6 +15,7 @@ import {
   translate,
   type Direction,
 } from '@/features/dashboard/editorGeometry'
+import { startCamera, panCamera, alignmentOffset } from '@/features/dashboard/viewportGeometry'
 const text = (id: string, extra: Partial<Widget> = {}): Widget => ({
   id,
   type: 'text',
@@ -144,7 +145,7 @@ describe('Networking dashboard editor contracts', () => {
   })
   it('round trips only supported viewport settings and rejects forged settings', () => {
     const config = defaultDashboardViewport()
-    config.grid = { x: 0.25, y: 2, snap: false, visible: true }
+    config.grid = { ...config.grid, x: 0.25, y: 2, snap: false, visible: true }
     expect(validateDashboardViewport(config)).toEqual(config)
     expect(() => validateDashboardViewport({ ...config, tenantId: 'someone-else' })).toThrow(
       'Invalid dashboard viewport settings.',
@@ -155,5 +156,52 @@ describe('Networking dashboard editor contracts', () => {
     expect(() => validateDashboardViewport({ ...config, width: Infinity })).toThrow(
       'Invalid dashboard viewport settings.',
     )
+  })
+  it('reads legacy viewport settings without mutating their record or independent spacing', () => {
+    const { start: _start, ...legacy } = defaultDashboardViewport()
+    const value = { ...legacy, grid: { x: 0.25, y: 2, visible: true, snap: false } }
+    const original = JSON.stringify(value)
+    expect(validateDashboardViewport(value)).toMatchObject({
+      start: { x: 0, y: 0 },
+      grid: { x: 0.25, y: 2, linked: false, majorEvery: 4 },
+    })
+    expect(JSON.stringify(value)).toBe(original)
+  })
+  it('canonicalizes linked axes and preserves signed fractional starting positions', () => {
+    const value = defaultDashboardViewport()
+    value.grid = { ...value.grid, x: 0.5, y: 2, linked: true, majorEvery: 8 }
+    value.start = { x: -3.25, y: 5.5 }
+    expect(validateDashboardViewport(value)).toMatchObject({
+      start: { x: -3.25, y: 5.5 },
+      grid: { x: 0.5, y: 0.5, linked: true, majorEvery: 8 },
+    })
+    expect(value.grid.y).toBe(2)
+  })
+  it.each([
+    { start: null },
+    { start: [] },
+    { start: { x: 1 } },
+    { start: { x: '1', y: 0 } },
+    { start: { x: Infinity, y: 0 } },
+    { start: { x: 0, y: -10001 } },
+    { start: { x: 0, y: 0, owner: 'forged' } },
+    { grid: { ...defaultDashboardViewport().grid, linked: 'true' } },
+    ...[0, -1, 1.5, 33, null, Infinity].map((majorEvery) => ({
+      grid: { ...defaultDashboardViewport().grid, majorEvery },
+    })),
+  ])('rejects malformed extended viewport settings %#', (patch) => {
+    expect(() => validateDashboardViewport({ ...defaultDashboardViewport(), ...patch })).toThrow(
+      'Invalid dashboard viewport settings.',
+    )
+  })
+  it('pans beyond every content edge without changing zoom or widget coordinates', () => {
+    const start = startCamera({ x: -2, y: 3.5 }, 1080)
+    expect(start).toEqual({ x: -90, y: 112 })
+    expect(panCamera(start, 1000, -2000, 0.5)).toEqual({ x: -2090, y: 4112 })
+    expect(panCamera(start, 1000, -2000, 2)).toEqual({ x: -590, y: 1112 })
+    expect(panCamera(start, Infinity, 0, 1)).toEqual(start)
+    expect(start).toEqual({ x: -90, y: 112 })
+    expect(alignmentOffset(1100, 500, 'center')).toBe(300)
+    expect(alignmentOffset(500, 1100, 'end')).toBe(0)
   })
 })
