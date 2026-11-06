@@ -5,6 +5,7 @@ import { onBeforeRouteLeave, RouterLink, useRoute } from 'vue-router'
 import Button from './DashboardButton.vue'
 import AppLoadingButton from '@/components/common/AppLoadingButton.vue'
 import AppButton from '@/components/common/AppButton.vue'
+import AppIconButton from '@/components/common/AppIconButton.vue'
 import DocumentExplorer from './DocumentExplorer.vue'
 import SdsFileViewer from './SdsFileViewer.vue'
 import SuppliedReferenceReader from '@/components/intranet/SuppliedReferenceReader.vue'
@@ -684,14 +685,15 @@ onBeforeUnmount(() => {
             ><i class="pi pi-expand" aria-hidden="true"
           /></RouterLink>
         </template>
-        <template #references>
+        <template #references="{ closeFiles }">
           <template v-if="referenceRows.length">
             <p class="reference-note">{{ referenceRows.length }} {{ search.trim() ? 'supplied references - original files omitted' : 'reading references' }}</p>
-            <button v-for="item in referenceRows.slice(referencePage * 25, (referencePage + 1) * 25)" :key="item.id" type="button" class="reference-row" :aria-pressed="referenceId === item.id" @click="referenceId = item.id; selectedId = ''">{{ item.title }} <small>Reference only</small></button>
+            <button v-for="item in referenceRows.slice(referencePage * 25, (referencePage + 1) * 25)" :key="item.id" type="button" class="reference-row" :aria-pressed="referenceId === item.id" @click="referenceId = item.id; selectedId = ''; closeFiles()">{{ item.title }} <small>Reference only</small></button>
             <div v-if="referenceRows.length > 25" class="reference-pages"><AppButton :disabled="!referencePage" @click="referencePage--">Previous references</AppButton><span>{{ referencePage + 1 }} / {{ Math.ceil(referenceRows.length / 25) }}</span><AppButton :disabled="(referencePage + 1) * 25 >= referenceRows.length" @click="referencePage++">Next references</AppButton></div>
           </template>
         </template>
-        <template #viewer>
+        <template #viewer="{ mobile, openFiles, filesOpen, sidebarId }">
+          <div v-if="mobile && (selectedReference || editor)" class="document-explorer__mobile-toolbar"><AppIconButton data-library-files-toggle class="document-explorer__files-button" label="Open files" :aria-controls="sidebarId" :aria-expanded="filesOpen" @click="openFiles"><i class="pi pi-bars" aria-hidden="true" /></AppIconButton></div>
           <template v-if="selectedReference && !editor">
             <SuppliedReferenceReader :title="selectedReference.title" :resource="selectedReference.resource" :paragraphs="selectedReference.paragraphs" />
             <Button v-if="isAdmin && !jobId && !editing && selectedReference.resource" data-reference-upload label="Upload file for this reference" :disabled="busy || loading" @click="prepareReferenceUpload(selectedReference.resource)" />
@@ -703,7 +705,7 @@ onBeforeUnmount(() => {
             :version="library.version + ':' + library.binder.version + ':' + viewerContext"
             :earlier-revision="!!selected && revisionChanged(selected)"
             @open="openSheet"
-          />
+          ><template v-if="mobile" #header-leading><AppIconButton data-library-files-toggle class="document-explorer__files-button" label="Open files" :aria-controls="sidebarId" :aria-expanded="filesOpen" @click="openFiles"><i class="pi pi-bars" aria-hidden="true" /></AppIconButton></template></SdsFileViewer>
           <!-- Record editor stays inside the viewer pane. -->
           <form v-if="editor" ref="editorElement" class="sds-editor" @submit.prevent="saveRecord">
             <h3>{{ form.id ? 'Edit' : 'Add' }} {{ editor === 'folder' ? 'folder' : 'file' }}</h3>

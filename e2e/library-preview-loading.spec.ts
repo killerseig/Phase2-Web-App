@@ -1,9 +1,12 @@
 import { expect, test } from './helpers/test'
-import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture'
+import { createJobsFixture, gotoPhase2App, selectLibraryFile } from './helpers/phase2AppFixture'
 import { observeLoadingFade, expectSingleLoadingFade } from './helpers/loadingObservation'
 const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
 function gate() { let release!: () => void; const ready = new Promise<void>(resolve => { release = resolve }); return { ready, release } }
 for (const width of [390, 1440]) {
+  const navigationRole = width <= 900 ? 'button' : 'searchbox'
+  const navigationName = width <= 900 ? 'Open files' : 'Search files'
+
   test.describe(width + 'px', () => {
     test.use({ viewport: { width, height: 900 } })
 
@@ -38,13 +41,14 @@ for (const width of [390, 1440]) {
       })
       await gotoPhase2App(page, '/company-library', createJobsFixture())
       await expect(page.getByRole('region', { name: 'Company Library widget', exact: true })).toHaveAttribute('aria-busy', 'false')
-      await page.getByRole('button', { name: 'Synthetic PDF', exact: true }).click()
+      await selectLibraryFile(page, 'Synthetic PDF')
       const preview = page.getByRole('region', { name: 'Document preview', exact: true })
       await expect(preview).toHaveAttribute('aria-busy', 'true')
       await expect(preview.locator('.app-loading-indicator__wheel:visible')).toHaveCount(1)
       const center = await preview.evaluate(element => { const box = element.getBoundingClientRect(), wheel = element.querySelector('.app-loading-indicator')!.getBoundingClientRect(); return { x: Math.abs(box.x + box.width / 2 - wheel.x - wheel.width / 2), y: Math.abs(box.y + box.height / 2 - wheel.y - wheel.height / 2), height: box.height } })
       expect(center.height).toBeGreaterThan(180); expect(center.x).toBeLessThanOrEqual(1); expect(center.y).toBeLessThanOrEqual(1)
-      await expect(page.getByRole('searchbox', { name: 'Search files', exact: true })).toBeEnabled()
+      const availableNavigation = page.getByRole(navigationRole, { name: navigationName, exact: true })
+      await expect(availableNavigation).toBeEnabled()
       authorize.release(); await downloadStarted.ready
       await expect(preview).toHaveAttribute('aria-busy', 'true')
       await expect(preview.locator('.app-loading-indicator__wheel:visible')).toHaveCount(1)
@@ -54,7 +58,7 @@ for (const width of [390, 1440]) {
       await expect(preview).toHaveAttribute('aria-busy', 'false')
       await expect(preview.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
       await expectSingleLoadingFade(page)
-      await page.getByRole('button', { name: 'Synthetic Word', exact: true }).click()
+      await selectLibraryFile(page, 'Synthetic Word')
       await expect(preview).toHaveAttribute('aria-busy', 'false')
       const iframe = page.locator('iframe.docx-pages'), word = page.frameLocator('iframe.docx-pages')
       await expect(iframe).toBeVisible()
@@ -62,6 +66,7 @@ for (const width of [390, 1440]) {
       const fitted = () => word.locator('html').evaluate(el => ({ width: el.clientWidth, scroll: el.scrollWidth, height: el.scrollHeight, viewport: el.clientHeight }))
       await expect.poll(async () => { const size = await fitted(); return size.scroll - size.width }).toBeLessThanOrEqual(1)
       await expect(word.getByRole('region', { name: 'Document page 2 of 2', exact: true })).toHaveCount(1)
+      await page.setViewportSize({ width: 1440, height: 900 })
       const zoom = page.getByRole('group', { name: 'Word document zoom', exact: true })
       const operations = page.getByRole('group', { name: 'File actions', exact: true })
       const viewBox = await zoom.boundingBox(), actionsBox = await operations.boundingBox()
@@ -78,17 +83,17 @@ for (const width of [390, 1440]) {
       await zoom.getByRole('button', { name: 'Fit file width', exact: true }).click()
       await expect.poll(async () => { const size = await fitted(); return size.scroll - size.width }).toBeLessThanOrEqual(1)
       await page.screenshot({ path: 'evidence/library-word-fit-' + width + '.png' })
-      await page.getByRole('button', { name: 'Slow previous file', exact: true }).click()
+      await selectLibraryFile(page, 'Slow previous file')
       await expect(preview).toHaveAttribute('aria-busy', 'true')
-      await page.getByRole('button', { name: 'Synthetic image', exact: true }).click()
+      await selectLibraryFile(page, 'Synthetic image')
       await expect(preview).toHaveAttribute('aria-busy', 'false')
       await expect(preview.getByRole('img', { name: 'Synthetic image', exact: true })).toHaveJSProperty('naturalWidth', 400)
       old.release()
       await expect(preview.getByRole('img', { name: 'Synthetic image', exact: true })).toBeVisible()
-      await page.getByRole('button', { name: 'Synthetic text', exact: true }).click()
+      await selectLibraryFile(page, 'Synthetic text')
       await expect(preview).toHaveAttribute('aria-busy', 'false')
       await expect(preview.locator('pre')).toContainText('Review delivery schedule.')
-      await page.getByRole('button', { name: 'Broken Word', exact: true }).click()
+      await selectLibraryFile(page, 'Broken Word')
       await expect(preview).toHaveAttribute('aria-busy', 'false')
       await expect(preview.getByRole('alert')).toContainText('could not be previewed')
       await expect(preview.locator('.app-loading-overlay')).toHaveCount(0)

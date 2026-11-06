@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './helpers/test.js'
-import { createJobsFixture, createJobDashboardFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
+import { createJobsFixture, createJobDashboardFixture, gotoPhase2App, openLibraryFiles } from './helpers/phase2AppFixture.js'
 import { sampleContent } from '../src/features/intranet/__tests__/fixtures.js'
 import { readFileSync } from 'node:fs'
 import type { IntranetContent } from '../src/features/intranet/content.js'
@@ -35,6 +35,7 @@ async function setup(page: Page, reader = false, denied = false, path = '/compan
   await gotoPhase2App(page, path, reader ? createJobDashboardFixture() : createJobsFixture())
   if (path === '/company-library') await expect(page.getByRole('region', { name: 'Company Library widget', exact: true })).toHaveAttribute('aria-busy', 'false')
   if (path === '/reports') await expect(page.getByRole('region', { name: 'Forms workspace', exact: true })).toHaveAttribute('aria-busy', 'false')
+  if (path === '/company-library') await openLibraryFiles(page)
   return actions
 }
 async function openBuilderFormsPanel(page: Page, width: number) {
@@ -62,6 +63,7 @@ for (const width of [390, 1280]) test('existing library reads supplied content a
   await page.locator('.reference-row').filter({ hasText: resource.title }).first().click()
   await expect(page.getByText(/source file was omitted from the ZIP/)).toBeVisible()
   for (const inspection of content.inspections) {
+    await openLibraryFiles(page)
     await page.getByRole('searchbox', { name: 'Search files' }).fill(inspection.title)
     await page.locator('.reference-row').filter({ hasText: inspection.title }).first().click()
     await page.getByLabel('Reading language').selectOption('bi')
@@ -70,10 +72,12 @@ for (const width of [390, 1280]) test('existing library reads supplied content a
     await expect(page.locator('.supplied-reference [lang=en]')).toHaveText(inspection.paragraphs.map(row => row.en))
     await expect(page.locator('.supplied-reference [lang=es]')).toHaveText(inspection.paragraphs.filter(row => row.es).map(row => row.es!))
   }
+  await openLibraryFiles(page)
   await page.getByRole('searchbox', { name: 'Search files' }).fill('New-to-job orientation')
   await page.locator('.reference-row').filter({ hasText: 'New-to-job orientation' }).click()
   await expect(page.locator('.supplied-reference ol > li')).toHaveCount(content.orientation.length)
   await expect(page.locator('.supplied-reference [lang=en]')).toHaveText(content.orientation.map(row => row.en))
+  await openLibraryFiles(page)
   await page.getByRole('searchbox', { name: 'Search files' }).fill('nonexistent-qzx')
   await expect(page.locator('.reference-row')).toHaveCount(0)
   expect(actions.filter(action => !['load', 'page', 'openSheet'].includes(action))).toEqual([])

@@ -96,6 +96,7 @@ watch(
 <template>
   <template v-if="sheet">
     <div class="viewer-toolbar">
+      <slot name="header-leading" />
       <span
         class="viewer-name"
         :title="
@@ -161,13 +162,14 @@ watch(
     />
     </AppLoadingRegion>
   </template>
-  <div v-else class="viewer-state viewer-placeholder">
-    <i class="pi pi-file" aria-hidden="true" />
-    <p>Select a file to preview it.</p>
+  <div v-else class="viewer-empty-container">
+    <div v-if="$slots['header-leading']" class="viewer-toolbar"><slot name="header-leading" /></div>
+    <div class="viewer-state viewer-placeholder"><i class="pi pi-file" aria-hidden="true" /><p>Select a file to preview it.</p></div>
   </div>
 </template>
 
 <style scoped>
+.viewer-empty-container { display:flex;flex-direction:column;flex:1;min-height:0; }
 .viewer-loading-region { flex: 1; --loading-region-min-height: 12rem; --loading-region-gap: 0; overflow: hidden; }
 .viewer-toolbar {
   display: flex;

@@ -74,16 +74,23 @@ export async function renderDocxPages(bytes: ArrayBuffer): Promise<DocxPages> {
   }
 }
 
-export function docxFrame(pages: DocxPages, width: number, zoom = 1) {
+export function docxFrame(pages: DocxPages, width: number, zoom = 1, scrollbarWidth?: number) {
   // Fit the complete wrapper, including its padding, inside the frame after
   // reserving room for the vertical scrollbar. Zoom is relative to this fit.
-  const scale = Math.min(1, Math.max(.01, (width - 24) / (pages.pageWidth + 24))) * Math.max(.5, Math.min(3, zoom))
+  const compact = width <= 900 && scrollbarWidth !== undefined
+  const padding = compact ? 0 : 12
+  const gutter = compact ? Math.max(0, Math.min(40, scrollbarWidth)) : 24
+  const wrapperWidth = pages.pageWidth + padding * 2
+  const scale = Math.min(1, Math.max(.01, (width - gutter) / wrapperWidth)) * Math.max(.5, Math.min(3, zoom))
   const csp = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
   const document = new DOMParser().parseFromString('<!doctype html><html><head></head><body></body></html>', 'text/html')
   const meta = document.createElement('meta'); meta.httpEquiv = 'Content-Security-Policy'; meta.content = csp; document.head.append(meta)
   const title = document.createElement('title'); title.textContent = 'Word document pages'; document.head.append(title)
   const style = document.createElement('style')
-  style.textContent = `${pages.styles.replace(/<\/style/gi, '<\\/style')}\nhtml,body{margin:0;background:#525659;color:#111} .docx-wrapper{padding:12px!important;width:${pages.pageWidth + 24}px;box-sizing:border-box;zoom:${scale}} section.docx{margin:0 auto 16px!important;box-shadow:0 1px 6px #0006} img{max-width:100%} a{color:inherit;cursor:text}`
+  style.textContent = `${pages.styles.replace(/<\/style/gi, '<\\/style')}\nhtml,body{margin:0;background:#525659;color:#111} .docx-wrapper{padding:${padding}px!important;width:${wrapperWidth}px;box-sizing:border-box;zoom:${scale}} section.docx{margin:0 auto 16px!important;box-shadow:0 1px 6px #0006} img{max-width:100%} a{color:inherit;cursor:text}`
+  // Native mobile scrollbars may overlay content or ignore custom dimensions.
+  // Keep both scrolling axes usable, with a narrow desktop-engine fallback.
+  style.textContent += '\n@media(max-width:900px){html{scrollbar-width:thin;scrollbar-color:#adb5bd #525659}html::-webkit-scrollbar{width:6px;height:6px}html::-webkit-scrollbar-thumb{background:#adb5bd;border-radius:6px}html::-webkit-scrollbar-track{background:#525659}}@media(forced-colors:active){html{scrollbar-color:auto}}'
   document.head.append(style)
   document.body.innerHTML = pages.markup
   return '<!doctype html>' + document.documentElement.outerHTML

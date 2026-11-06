@@ -8,13 +8,15 @@ const frameReady = ref(false)
 function frameLoaded(event: Event) {
   if (event.currentTarget === previewFrame.value && previewFrame.value?.getAttribute('srcdoc') === frame.value) frameReady.value = true
 }
-const previewFrame = ref<HTMLIFrameElement>()
+const previewFrame = ref<HTMLIFrameElement>(), scrollbarProbe = ref<HTMLElement>(), scrollbarWidth = ref(0)
 const host = ref<HTMLElement>(), pages = shallowRef<DocxPages>(), loading = ref(true), error = ref(''), width = ref(816)
 const zoom = defineModel<number>('zoom', { default: 1 })
-const frame = computed(() => pages.value ? docxFrame(pages.value, width.value, zoom.value) : '')
+const frame = computed(() => pages.value ? docxFrame(pages.value, width.value, zoom.value, scrollbarWidth.value) : '')
 let observer: ResizeObserver | undefined
+function measureScrollbar() { if (scrollbarProbe.value) scrollbarWidth.value = scrollbarProbe.value.offsetWidth - scrollbarProbe.value.clientWidth }
 onMounted(() => {
-  observer = new ResizeObserver(entries => { const next = entries[0]?.contentRect.width; if (next && Math.abs(next - width.value) > 1) width.value = next })
+  observer = new ResizeObserver(entries => { const next = entries[0]?.contentRect.width; if (next && Math.abs(next - width.value) > 1) width.value = next; measureScrollbar() })
+  measureScrollbar()
   if (host.value) { width.value = host.value.clientWidth || 816; observer.observe(host.value) }
 })
 onBeforeUnmount(() => observer?.disconnect())
@@ -34,6 +36,7 @@ watch([loading, error, frameReady], () => {
 </script>
 <template>
   <div ref="host" class="docx-viewer">
+    <div ref="scrollbarProbe" class="docx-scrollbar-probe" aria-hidden="true"><span /></div>
     <p v-if="loading" role="status">Preparing document pages.</p>
     <p v-else-if="error" role="alert">{{ error }}</p>
     <p v-else-if="pages?.empty" role="status">This document has no displayable text or images. It may be empty or contain unsupported Word objects. Open the original in Word.</p>
@@ -45,9 +48,12 @@ watch([loading, error, frameReady], () => {
   </div>
 </template>
 <style scoped>
-.docx-viewer { display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden;background:#525659; }
+.docx-viewer { position:relative;display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden;background:#525659; }
 .docx-viewer > p { margin:0;padding:.5rem;font-size:.8rem; }
 .docx-toolbar { display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.5rem;flex:none;padding:.25rem;background:var(--panel-background);color:var(--text-muted);font-size:.8rem; }
 .docx-note { background:var(--panel-background);color:var(--text-muted);flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25; }
+.docx-scrollbar-probe { position:absolute;left:0;top:0;width:100px;height:100px;overflow-y:scroll;visibility:hidden;pointer-events:none;scrollbar-width:thin; }
+.docx-scrollbar-probe span { display:block;height:200px; }
+.docx-scrollbar-probe::-webkit-scrollbar { width:6px; }
 .docx-pages { display:block;width:100%;flex:1;min-height:0;border:0;background:#525659; }
 </style>

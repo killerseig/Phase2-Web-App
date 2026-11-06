@@ -627,3 +627,15 @@ export async function gotoPhase2App(page: Page, route: string, fixture: Record<s
 }
 
 export { JOB_ID, WEEK_END_DATE }
+
+// Company Library is document-first on small screens; legacy explorers keep their sidebar.
+export async function openLibraryFiles(page: Page) {
+  await page.locator('.document-explorer').first().waitFor({ state: 'visible' })
+  if (await page.locator('.company-library-widget').count()) await page.locator('.company-library-widget[aria-busy="false"]').waitFor({ state: 'visible' })
+  const button = page.getByRole('button', { name: 'Open files', exact: true })
+  if (await button.isVisible() && await button.getAttribute('aria-expanded') !== 'true') await button.click()
+}
+export async function selectLibraryFile(page: Page, name: string) {
+  await openLibraryFiles(page)
+  await page.getByRole('button', { name, exact: true }).click()
+}

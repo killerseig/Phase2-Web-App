@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './helpers/test'
-import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture'
+import { createJobsFixture, gotoPhase2App, openLibraryFiles } from './helpers/phase2AppFixture'
 const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
 async function setup(page: Page, role: 'admin' | 'foreman') {
   const writes: string[] = []
@@ -18,6 +18,7 @@ async function setup(page: Page, role: 'admin' | 'foreman') {
   const fixture = createJobsFixture(); fixture.auth.profile.role = role
   await gotoPhase2App(page, '/company-library', fixture)
   await expect(page.getByRole('region', { name: 'Company Library widget', exact: true })).toHaveAttribute('aria-busy', 'false')
+  await openLibraryFiles(page)
   return writes
 }
 for (const width of [390, 1440]) {
@@ -50,6 +51,7 @@ for (const width of [390, 1440]) {
       const chooser = await waiting
       await chooser.setFiles([])
       expect(await chooser.element().evaluate(input => (input as HTMLInputElement).files!.length)).toBe(0)
+      await openLibraryFiles(page)
       await page.getByRole('button', { name: 'Actions for Synthetic safety plan', exact: true }).click()
       await expect(page.getByRole('menuitem', { name: 'Upload new version', exact: true })).toBeVisible()
       await expect(page.getByRole('menuitem', { name: 'Download file', exact: true })).toBeVisible()

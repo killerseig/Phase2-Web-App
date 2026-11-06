@@ -1,5 +1,5 @@
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import DocumentExplorer from '@/components/dashboard/DocumentExplorer.vue'
 import { visibleFolders } from '@/features/sds/types'
 
@@ -65,4 +65,24 @@ it('places its search above Root in the opt-in sidebar and leaves the legacy too
   expect(view.find('.document-explorer__header input[type=search]').exists()).toBe(true)
   expect(view.text()).toContain('Legacy toolbar action')
   view.unmount()
+})
+
+const mediaRemovals = vi.fn()
+afterEach(() => { vi.unstubAllGlobals(); mediaRemovals.mockClear() })
+it('opens an opt-in phone drawer, focuses search, selects a file and restores its trigger', async () => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: mediaRemovals })))
+  const view = mount(DocumentExplorer, { attachTo: document.body, props: { title: 'Documents', folders, documents, folderId: '', search: '', selectedId: '', sidebarTools: true } })
+  await flushPromises()
+  const trigger = view.get('[aria-label="Open files"]')
+  expect(trigger.attributes('aria-expanded')).toBe('false')
+  expect(view.get('.document-explorer__sidebar').attributes('inert')).toBeDefined()
+  await trigger.trigger('click'); await flushPromises()
+  expect(trigger.attributes('aria-expanded')).toBe('true')
+  expect(document.activeElement).toBe(view.get('input[type=search]').element)
+  await view.findAll('.tree-file').find(button => button.text() === 'Glue')!.trigger('click'); await flushPromises()
+  expect(view.emitted('select')).toEqual([[documents[0]]])
+  expect(trigger.attributes('aria-expanded')).toBe('false')
+  expect(document.activeElement).toBe(trigger.element)
+  view.unmount()
+  expect(mediaRemovals).toHaveBeenCalledOnce()
 })

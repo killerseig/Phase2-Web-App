@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './helpers/test'
 import { observeLoadingFade, expectSingleLoadingFade } from './helpers/loadingObservation'
-import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture'
+import { createJobsFixture, gotoPhase2App, openLibraryFiles } from './helpers/phase2AppFixture'
 const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
 function gate() {
   let release!: () => void
@@ -70,6 +70,7 @@ for (const width of [390, 1440]) {
       const region = page.getByRole('region', { name: 'Company Library widget', exact: true })
       await expect(region).toHaveAttribute('aria-busy', 'false')
       await expect(region.locator(':scope > .app-loading-overlay')).toHaveCount(0)
+      await openLibraryFiles(page)
       await page.getByRole('button', { name: 'Root folder actions', exact: true }).click()
       await page.getByRole('menuitem', { name: 'Load more files', exact: true }).click()
       const local = page.locator('.document-explorer__folder-content')

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './helpers/test'
 import { observeLoadingFade, expectSingleLoadingFade } from './helpers/loadingObservation'
-import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture'
+import { createJobsFixture, gotoPhase2App, openLibraryFiles } from './helpers/phase2AppFixture'
 
 function gate() {
   let release!: () => void
@@ -68,6 +68,8 @@ for (const width of [390, 1440]) {
         await expectSingleLoadingFade(page)
         expect(await page.evaluate(() => (window as unknown as { loadingFade: string[] }).loadingFade)).toContain('opacity')
         expect(await page.evaluate(() => (window as unknown as { loadingFadeDuration: string[] }).loadingFadeDuration)).toContain('0.4s')
+        await openLibraryFiles(page)
+
         await expect(page.getByRole('searchbox', { name: 'Search files' })).toBeEnabled()
         await expect(page.getByText('Select a file to preview it.', { exact: true })).toBeVisible()
         await page.screenshot({ path: 'evidence/library-ready-' + width + '.png' })
@@ -87,6 +89,8 @@ for (const failure of ['references', 'documents'] as const) {
     await expect(page.getByRole('alert')).toHaveCount(0)
     await expect(root(page)).toHaveAttribute('aria-busy', 'false')
     await expect(overlay(page)).toHaveCount(0)
+    await openLibraryFiles(page)
+
     await expect(page.getByRole('searchbox', { name: 'Search files' })).toBeEnabled()
   })
 }
@@ -96,6 +100,7 @@ test('a later search keeps its input focused while only the document area loads'
   pending.references.release(); pending.documents.release()
   await expect(root(page)).toHaveAttribute('aria-busy', 'false')
   await expect(overlay(page)).toHaveCount(0)
+  await openLibraryFiles(page)
   const search = page.getByRole('searchbox', { name: 'Search files' })
   await search.fill('new')
   await expect(search).toBeFocused()

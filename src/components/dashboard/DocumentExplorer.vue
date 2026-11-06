@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="T extends ExplorerDocument">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import AppIconButton from '@/components/common/AppIconButton.vue'
 import DocumentExplorerSearch from './DocumentExplorerSearch.vue'
 import AppLoadingOverlay from '@/components/common/AppLoadingOverlay.vue'
 import ExplorerContextMenu from './ExplorerContextMenu.vue'
@@ -43,6 +44,44 @@ const menu = ref<{
   source: HTMLElement
   key: number
 }>()
+const filesOpen = ref(false), phone = ref(false)
+const drawerEnabled = computed(() => !!props.sidebarTools && phone.value)
+const sidebarId = useId()
+const sidebar = ref<HTMLElement>(), viewer = ref<HTMLElement>()
+function focusFilesButton() { viewer.value?.querySelector<HTMLButtonElement>('button[data-library-files-toggle]')?.focus({ preventScroll: true }) }
+let media: MediaQueryList | undefined
+function closeFiles(restoreFocus = true) {
+  filesOpen.value = false
+  if (restoreFocus && drawerEnabled.value) void nextTick(focusFilesButton)
+}
+async function openFiles() {
+  if (!drawerEnabled.value) return
+  filesOpen.value = true
+  await nextTick()
+  sidebar.value?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true })
+}
+function selectDocument(document: T) { emit('select', document); if (drawerEnabled.value) closeFiles() }
+function syncPhone() {
+  const hadSidebarFocus = sidebar.value?.contains(document.activeElement)
+  phone.value = media?.matches ?? false
+  filesOpen.value = false
+  closeMenu()
+  if (drawerEnabled.value && hadSidebarFocus) void nextTick(focusFilesButton)
+}
+function escapeDrawer(event: KeyboardEvent) {
+  if (event.key === 'Escape' && !event.defaultPrevented && drawerEnabled.value && filesOpen.value) {
+    event.preventDefault(); closeFiles()
+  }
+}
+onMounted(() => {
+  if (typeof window.matchMedia === 'function') {
+    media = window.matchMedia('(max-width: 900px)'); syncPhone()
+    media.addEventListener('change', syncPhone)
+  }
+  window.addEventListener('keydown', escapeDrawer)
+})
+onBeforeUnmount(() => { media?.removeEventListener('change', syncPhone); window.removeEventListener('keydown', escapeDrawer) })
+watch(() => props.sidebarTools, () => { filesOpen.value = false; closeMenu() })
 let menuKey = 0
 const actions = computed(() => (menu.value ? (props.menuActions?.(menu.value.target) ?? []) : []))
 const menuLabel = computed(() => {
@@ -90,6 +129,7 @@ function runAction(id: string) {
   closeMenu(true)
   if (id === 'open-folder') collapsed.value.delete(target.id)
   emit('action', id, target)
+  if (drawerEnabled.value && !['open-folder', 'more-files', 'refresh'].includes(id)) closeFiles()
 }
 watch(
   () => [
@@ -174,7 +214,7 @@ function folderState(folder: ExplorerFolder) {
 </script>
 
 <template>
-  <section class="document-explorer" :aria-label="title">
+  <section class="document-explorer" :class="{ 'document-explorer--drawer': sidebarTools, 'is-files-open': filesOpen }" :aria-label="title">
     <header v-if="!sidebarTools" class="document-explorer__header">
       <h2>{{ title }}</h2>
       <slot name="context" />
@@ -182,9 +222,10 @@ function folderState(folder: ExplorerFolder) {
       <slot name="toolbar" />
     </header>
     <div class="document-explorer__body" :aria-busy="loading">
-      <section class="document-explorer__sidebar" aria-label="Library sidebar">
+      <button v-if="drawerEnabled && filesOpen" class="document-explorer__backdrop" type="button" tabindex="-1" aria-hidden="true" @click="closeFiles()" />
+      <section :id="sidebarId" ref="sidebar" class="document-explorer__sidebar" aria-label="Library sidebar" :aria-hidden="drawerEnabled && !filesOpen || undefined" :inert="drawerEnabled && !filesOpen || undefined">
         <div v-if="sidebarTools" class="document-explorer__sidebar-tools">
-          <h2>{{ title }}</h2>
+          <div class="document-explorer__sidebar-heading"><h2>{{ title }}</h2><AppIconButton v-if="drawerEnabled" label="Close files" @click="closeFiles()"><i class="pi pi-times" aria-hidden="true" /></AppIconButton></div>
           <DocumentExplorerSearch sidebar :model-value="search" @update:model-value="emit('update:search', $event)" />
         </div>
         <div class="document-explorer__folder-content" :aria-busy="!!(loading || pageLoading)">
@@ -291,7 +332,7 @@ function folderState(folder: ExplorerFolder) {
                 class="tree-name tree-file"
                 :title="row.document.name"
                 :aria-pressed="row.document.id === selectedId"
-                @click="emit('select', row.document)"
+                @click="selectDocument(row.document)"
                 @dblclick="emit('open', row.document)"
               >
                 <i class="pi pi-file" aria-hidden="true" /><span>{{ row.document.name }}</span>
@@ -312,13 +353,16 @@ function folderState(folder: ExplorerFolder) {
             {{ search ? 'No matching files. Try another search.' : 'No files in this collection.' }}
           </p>
         </template>
-        <slot name="references" />
+        <slot name="references" :close-files="closeFiles" />
       </nav>
           <AppLoadingOverlay :loading="sidebarTools ? !!(loading || pageLoading) : !!pageLoading" :label="loading ? 'Loading documents…' : 'Loading more files…'" />
         </div>
       </section>
-      <section class="document-explorer__viewer" aria-label="File viewer" :inert="(!sidebarTools && loading) || undefined">
-        <slot name="viewer"><p class="viewer-empty">Select a file to preview it.</p></slot>
+      <section ref="viewer" class="document-explorer__viewer" aria-label="File viewer" :inert="(!sidebarTools && loading) || (drawerEnabled && filesOpen) || undefined">
+        <slot name="viewer" :mobile="drawerEnabled" :open-files="openFiles" :files-open="filesOpen" :sidebar-id="sidebarId">
+          <div v-if="drawerEnabled" class="document-explorer__mobile-toolbar"><button data-library-files-toggle type="button" class="document-explorer__files-button" aria-label="Open files" :aria-controls="sidebarId" :aria-expanded="filesOpen" @click="openFiles"><i class="pi pi-bars" aria-hidden="true" /></button></div>
+          <p class="viewer-empty">Select a file to preview it.</p>
+        </slot>
       </section>
       <AppLoadingOverlay :loading="!sidebarTools && !!loading" label="Loading documents…" />
     </div>
@@ -362,7 +406,10 @@ h2 {
   grid-template-columns: minmax(180px, 27%) minmax(0, 1fr);
   height: var(--explorer-height, 440px);
 }
-.document-explorer__body > [inert] { visibility: hidden; }
+.document-explorer__body > .document-explorer__viewer[inert] { visibility: hidden; }
+.document-explorer__sidebar-heading { display:flex;align-items:center;justify-content:space-between;gap:.5rem; }
+.document-explorer__sidebar-heading :deep(.app-icon-button) { --app-icon-button-size: 2.75rem; }
+.document-explorer__files-button, .document-explorer__backdrop { display:none; }
 .document-explorer__sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
 .document-explorer__sidebar-tools { display: grid; gap: .6rem; padding: .65rem .5rem .5rem; flex: none; }
 .document-explorer__folder-content { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
@@ -442,6 +489,7 @@ input[type='checkbox'] {
   flex-shrink: 0;
 }
 .document-explorer__viewer {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -491,4 +539,31 @@ p {
     min-height: 36px;
   }
 }
+@media (max-width: 900px) {
+  .document-explorer--drawer .document-explorer__body { display:flex; }
+  .document-explorer--drawer .document-explorer__viewer { flex:1; }
+  .document-explorer--drawer .document-explorer__viewer[inert] { visibility:visible; }
+  .document-explorer--drawer .document-explorer__sidebar {
+    position:absolute;inset:0 auto 0 0;width:min(88%, 24rem);z-index:20;background:var(--panel-background);box-shadow:6px 0 20px #0004;
+    transform:translateX(-102%);visibility:hidden;transition:transform 180ms ease, visibility 0s linear 180ms;
+  }
+  .document-explorer--drawer.is-files-open .document-explorer__sidebar { transform:translateX(0);visibility:visible;transition-delay:0s; }
+  .document-explorer--drawer .document-explorer__backdrop { display:block;position:absolute;inset:0;z-index:10;background:#0007; }
+  .document-explorer--drawer .document-explorer__viewer :deep(.document-explorer__files-button) {
+    display:inline-grid;place-items:center;position:static;width:2.75rem;height:2.75rem;flex:none;border:0;background:transparent;
+  }
+  .document-explorer--drawer :deep(.document-explorer__mobile-toolbar) { display:flex;align-items:center;gap:.35rem;min-height:2.75rem;flex:none;border-bottom:1px solid var(--border);padding-inline:.25rem; }
+  .document-explorer--drawer :deep(.document-explorer__files-button:hover) { background:var(--field-hover); }
+  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-toolbar) { padding:.0rem .35rem .0rem .15rem;min-height:2.75rem;box-sizing:border-box;flex-wrap:nowrap; }
+  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-zoom) { display:none; }
+  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-operations) { margin-inline-start:.35rem; }
+  .document-explorer--drawer :is(.document-explorer__folders),
+  .document-explorer--drawer .document-explorer__viewer :deep(:is(.pdf-surface, .image-scroll, .table-scroll, pre)) { scrollbar-width:thin;scrollbar-color:var(--text-muted) transparent; }
+  .document-explorer--drawer .document-explorer__folders::-webkit-scrollbar,
+  .document-explorer--drawer .document-explorer__viewer :deep(:is(.pdf-surface, .image-scroll, .table-scroll, pre)::-webkit-scrollbar) { width:6px;height:6px; }
+  .document-explorer--drawer .document-explorer__folders::-webkit-scrollbar-thumb,
+  .document-explorer--drawer .document-explorer__viewer :deep(:is(.pdf-surface, .image-scroll, .table-scroll, pre)::-webkit-scrollbar-thumb) { background:var(--text-muted);border-radius:6px; }
+  .document-explorer--drawer .document-explorer__viewer :deep(.docx-note) { position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
+}
+@media (prefers-reduced-motion: reduce) { .document-explorer--drawer .document-explorer__sidebar { transition:none; } }
 </style>
