@@ -2,6 +2,7 @@ import type { UserRole } from './constants'
 
 export type SharedDashboardScope = 'personal' | 'job' | 'role'
 export type SharedDashboardWidgetType =
+  | 'tasks'
   | 'job-info'
   | 'workflows'
   | 'text'
@@ -27,6 +28,7 @@ export interface SharedDashboardWidget {
   form?: { templateId: string; version: number; presentation: 'inline' | 'launcher' }
 }
 export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
+  tasks: 'My tasks',
   'job-info': 'Job information',
   workflows: 'Job tools',
   text: 'Text',
@@ -38,8 +40,7 @@ export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
   form: 'Forms',
 }
 export function sharedWidgetTypes(scope: SharedDashboardScope): SharedDashboardWidgetType[] {
-  void scope
-  return ['workflows', 'job-info', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form']
+  return [...(scope === 'personal' ? ['tasks' as const] : []), 'workflows', 'job-info', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form']
 }
 export function defaultSharedWidgets(scope: SharedDashboardScope): SharedDashboardWidget[] {
   const types: SharedDashboardWidgetType[] =
@@ -202,4 +203,24 @@ export function validateSharedCalendar(value: unknown): SharedCalendarEntry[] {
       return { id: entry.id, title: entry.title.trim(), date: entry.date }
     })
     .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export interface PersonalTask {
+  id: string
+  title: string
+  done: boolean
+}
+export function validatePersonalTasks(value: unknown): PersonalTask[] {
+  if (!Array.isArray(value) || value.length > 100) throw Error('Use at most 100 personal tasks.')
+  const ids = new Set<string>()
+  return value.map(entry => {
+    if (!entry || typeof entry !== 'object' ||
+      typeof entry.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) || ids.has(entry.id) ||
+      typeof entry.title !== 'string' || !entry.title.trim() || entry.title.trim().length > 200 ||
+      typeof entry.done !== 'boolean' ||
+      Object.keys(entry).some(key => !['id', 'title', 'done'].includes(key)))
+      throw Error('Use a task title and a valid completion state.')
+    ids.add(entry.id)
+    return { id: entry.id, title: entry.title.trim(), done: entry.done }
+  })
 }

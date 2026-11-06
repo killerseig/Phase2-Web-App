@@ -9,6 +9,7 @@ import {
   sharedDashboardKey,
   validateSharedWidgets,
   validateSharedCalendar,
+  validatePersonalTasks,
   upgradeDashboardWidgets,
   type SharedDashboardScope,
 } from './sharedDashboardModel'
@@ -57,7 +58,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use dashboards.')
   const data = request.data || {}
   if (
-    !['load', 'save-template', 'save-notes', 'save-calendar'].includes(data.action) ||
+    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks'].includes(data.action) ||
     !['personal', 'job', 'role'].includes(data.scope) ||
     data.uid !== undefined ||
     data.ownerId !== undefined
@@ -69,6 +70,8 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       'invalid-argument',
       'This dashboard uses the signed-in person, not a supplied job context.',
     )
+  if (data.action === 'save-tasks' && scope !== 'personal')
+    throw denied('Personal tasks belong only to the signed-in person.')
   return db.runTransaction(async (tx) => {
     const profile = await tx.get(db.doc('users/' + request.auth!.uid))
     const user = buildCurrentFunctionUser(request.auth!.uid, profile.data() || {})
@@ -138,6 +141,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
           : undefined
     const notes = notesRef ? await tx.get(notesRef) : undefined
     const content = notes?.data() || {}
+    const tasks = scope === 'personal' ? content.tasks || [] : []
     const contentKey = scope === 'personal' ? 'personal' : role
     const prefix = scope !== 'job' ? contentKey + ':' : ''
     const visibleNotes = Object.fromEntries(
@@ -203,7 +207,18 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         version: Number(content.version || 0) + 1,
         notes: { ...visibleNotes, [widget.id]: data.text },
         events,
+        tasks,
       }
+    }
+    if (data.action === 'save-tasks') {
+      checkVersion(data.version, Number(content.version || 0))
+      if (!widgets.some((w: { type: string }) => w.type === 'tasks'))
+        throw new HttpsError('failed-precondition', 'Add My tasks first.')
+      let entries
+      try { entries = validatePersonalTasks(data.tasks) }
+      catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid tasks.') }
+      tx.set(notesRef!, { ...content, tasks: entries, version: Number(content.version || 0) + 1, updatedBy: user.uid, updatedAt: Date.now() })
+      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks: entries }
     }
     if (data.action === 'save-calendar') {
       checkVersion(data.version, Number(content.version || 0))
@@ -227,7 +242,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         updatedBy: user.uid,
         updatedAt: Date.now(),
       })
-      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events: entries }
+      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events: entries, tasks }
     }
     return {
       scope,
@@ -238,6 +253,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       allowRoleEditing: scope === 'role' ? (data.allowRoleEditing ?? allowRoleEditing) : false,
       job: job ? jobData(jobId, job) : null,
       notes: visibleNotes,
+      tasks,
       events,
       notesVersion: Number(content.version || 0),
     }

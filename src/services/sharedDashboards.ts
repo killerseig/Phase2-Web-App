@@ -4,6 +4,7 @@ import { isWorkspaceServerEnabled } from '@/services/workspaceServer'
 import type { SharedDashboardLayout } from '@/features/dashboard/sharedDashboards'
 import type {
   SharedCalendarEntry,
+  PersonalTask,
   SharedDashboardScope,
   SharedDashboardWidget,
 } from '@/features/dashboard/sharedDashboards'
@@ -20,10 +21,12 @@ interface DashboardRequests {
     allowRoleEditing?: boolean
   }
   'save-notes': DashboardContext & { version: number; widgetId: string; text: string }
+  'save-tasks': DashboardContext & { version: number; tasks: PersonalTask[] }
   'save-calendar': DashboardContext & { version: number; events: SharedCalendarEntry[] }
 }
 type DashboardContent = {
   version: number
+  tasks?: PersonalTask[]
   notes: Record<string, string>
   events: SharedCalendarEntry[]
 }
@@ -31,6 +34,7 @@ interface DashboardResponses {
   load: SharedDashboardLayout
   'save-template': SharedDashboardLayout
   'save-notes': DashboardContent
+  'save-tasks': DashboardContent
   'save-calendar': DashboardContent
 }
 export async function sharedDashboardCommand<A extends keyof DashboardRequests>(

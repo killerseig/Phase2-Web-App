@@ -90,6 +90,32 @@ try {
     await denied(() => setDoc(doc(clientDb, collection, 'dash-a'), { widgets: [] }))
   }
   await denied(() => call('dash-a', 'personal', 'save-template', { version: 0, widgets: personal.widgets }), 'aborted')
+
+  const taskWidget = { id: 'private-tasks', type: 'tasks', span: 6, title: 'My tasks', text: '' }
+  const aLayout = await call('dash-a', 'personal')
+  await call('dash-a', 'personal', 'save-template', { version: aLayout.version, widgets: [...aLayout.widgets, taskWidget] })
+  const taskState = await call('dash-a', 'personal')
+  const tasks = [{ id: 'one', title: 'Private reminder', done: false }]
+  await call('dash-a', 'personal', 'save-tasks', { version: taskState.notesVersion, tasks })
+  equal((await call('dash-a', 'personal')).tasks, tasks)
+  for (const uid of ['dash-b', 'dash-admin']) equal((await call(uid, 'personal')).tasks, [])
+  equal((await call('dash-a', 'role')).tasks, [])
+  equal((await call('dash-a', 'job', 'load', { jobId: 'dash-job-a' })).tasks, [])
+  for (const uid of ['dash-none', 'dash-inactive']) await denied(() => call(uid, 'personal', 'save-tasks', { version: 0, tasks }))
+  await denied(() => call(undefined, 'personal', 'save-tasks', { version: 0, tasks }), 'unauthenticated')
+  await denied(() => call('dash-b', 'personal', 'save-tasks', { ownerId: 'dash-a', version: 0, tasks }), 'invalid-argument')
+  await denied(() => call('dash-admin', 'personal', 'save-tasks', { uid: 'dash-a', version: 0, tasks }), 'invalid-argument')
+  for (const scope of ['role', 'job']) await denied(() => call('dash-admin', scope, 'save-tasks', { version: 0, tasks }))
+  await denied(() => call('dash-b', 'personal', 'save-tasks', { version: 0, tasks }), 'failed-precondition')
+  await denied(() => call('dash-a', 'personal', 'save-tasks', { version: taskState.notesVersion, tasks: [] }), 'aborted')
+  const latest = await call('dash-a', 'personal')
+  await denied(() => call('dash-a', 'personal', 'save-tasks', { version: latest.notesVersion, tasks: [{...tasks[0], assignee: 'dash-b'}] }), 'invalid-argument')
+  await call('dash-a', 'personal', 'save-tasks', { version: latest.notesVersion, tasks: [{ ...tasks[0], done: true }] })
+  equal((await call('dash-a', 'personal')).tasks[0].done, true)
+  const beforeRemoval = await call('dash-a', 'personal')
+  await call('dash-a', 'personal', 'save-template', { version: beforeRemoval.version, widgets: beforeRemoval.widgets.filter(w => w.type !== 'tasks') })
+  equal((await call('dash-a', 'personal')).tasks[0].done, true)
+
   await denied(() => call(undefined, 'role'), 'unauthenticated')
   await denied(() => call('dash-a', 'job', 'load', { jobId: 'dash-job-b' }))
   equal((await call('dash-a', 'job', 'load', { jobId: 'dash-job-uid' })).job.id, 'dash-job-uid')

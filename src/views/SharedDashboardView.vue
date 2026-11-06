@@ -105,6 +105,7 @@ const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => typ
    ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value))))
 const widgetSearch = ref('')
 const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
+  tasks: 'Keep a private personal task list.',
   workflows: 'Open the tools for a job.',
   'job-info': 'View a job address, contractor and project dates.',
   jobs: 'Find the jobs you can access.',
@@ -118,7 +119,7 @@ const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
 const paletteGroups = computed(() => [
   { title: 'Work tools', types: ['workflows', 'job-info', 'jobs', 'form'] },
   { title: 'Files & resources', types: ['documents', 'resources'] },
-  { title: 'Content & planning', types: ['text', 'notes', 'dates'] },
+  { title: 'Content & planning', types: ['text', 'notes', 'dates', 'tasks'] },
 ].map(group => ({ ...group, types: group.types.filter((type): type is SharedDashboardWidget['type'] =>
   palette.value.includes(type as SharedDashboardWidget['type']) &&
   `${sharedWidgetLabels[type as SharedDashboardWidget['type']]} ${widgetDescriptions[type as SharedDashboardWidget['type']]}`
@@ -319,7 +320,7 @@ async function remove() {
     await confirm.value?.ask({
       title: 'Remove widget?',
       message:
-        'This removes the widget from this layout. Saved notes, documents and form submissions are retained.',
+        'This removes the widget from this layout. Saved notes, tasks, calendar dates, documents and form submissions are retained.',
       confirmLabel: 'Remove',
       destructive: true,
     })
@@ -338,7 +339,7 @@ async function prepare() {
       !(await confirm.value?.ask({
         title: 'Discard unsaved changes?',
         message:
-          'Your unsaved layout, notes or calendar edits will be discarded. Saved records remain.',
+          'Your unsaved layout, notes, calendar or task edits will be discarded. Saved records remain.',
         confirmLabel: 'Discard changes',
         destructive: true,
       }))
@@ -472,8 +473,8 @@ const canEditContent = computed(() =>
   scope.value === 'job' ? isAdmin.value && !!layout.value?.job : role.value === auth.rawRole,
 )
 async function saveContent(
-  action: 'save-notes' | 'save-calendar',
-  payload: { widgetId: string; text: string } | { events: SharedCalendarEntry[] },
+  action: 'save-notes' | 'save-calendar' | 'save-tasks',
+  payload: { widgetId: string; text: string } | { events: SharedCalendarEntry[] } | { tasks: import('@/features/dashboard/sharedDashboards').PersonalTask[] },
 ) {
   if (!canEditContent.value || busy.value || !layout.value) return
   busy.value = true
@@ -482,6 +483,7 @@ async function saveContent(
   try {
     const result = await sharedDashboardCommand(action, { ...context(), version: layout.value.notesVersion, ...payload })
     if (request !== generation) return
+    layout.value.tasks = result.tasks || []
     layout.value.notes = result.notes
     layout.value.events = result.events
     layout.value.notesVersion = result.version
@@ -840,6 +842,8 @@ onBeforeUnmount(() => {
                         sharedWidgetLabels[widgets.find((w) => w.id === id)!.type],
                       )
                   "
+                  :tasks="layout?.tasks || []"
+                  @save-tasks="tasks => saveContent('save-tasks', { tasks })"
                   @save-note="saveNote"
                   @save-calendar="saveCalendar"
                 />
