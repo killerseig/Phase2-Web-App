@@ -15,7 +15,13 @@ describe('unpublished announcement draft validation', () => {
     expect(validateAnnouncementDrafts([{...entry,audience:'job',jobId:'job-a'}])[0]?.jobId).toBe('job-a')
     expect(validateAnnouncementDrafts([entry])[0]?.audience).toBeUndefined()
   })
-  it.each([null, {}, [entry, entry], [{...entry, recipients: ['coworker']}], [{...entry, published: true}], [{...entry, audience: 'unknown'}], [{...entry, audience: 'job'}], [{...entry, audience: 'everyone', jobId: 'job-a'}], [{...entry, title: ' '}], [{...entry, body: ' '}], [{...entry, title: 'x'.repeat(201)}], [{...entry, body: 'x'.repeat(8001)}], [{...entry, id: '../other'}], Array.from({length: 26}, (_,i) => ({...entry,id:String(i)}))])('rejects invalid or publishing fields %#', value => {
+  it('accepts distinct people without mutating the selected identities', () => {
+    const recipientIds = ['person-a', 'person_b']
+    const result = validateAnnouncementDrafts([{...entry,audience:'people',recipientIds}])
+    expect(result[0]?.recipientIds).toEqual(recipientIds)
+    expect(result[0]?.recipientIds).not.toBe(recipientIds)
+  })
+  it.each([null, {}, [entry, entry], [{...entry, recipients: ['coworker']}], [{...entry, published: true}], [{...entry, audience: 'unknown'}], [{...entry, audience: 'people'}], [{...entry,audience:'people',recipientIds:[]}], [{...entry,audience:'people',recipientIds:['same','same']}], [{...entry,audience:'people',recipientIds:['../other']}], [{...entry,audience:'people',recipientIds:Array.from({length:26},(_,i)=>String(i))}], [{...entry,audience:'everyone',recipientIds:['a']}], [{...entry, audience: 'job'}], [{...entry, audience: 'everyone', jobId: 'job-a'}], [{...entry, title: ' '}], [{...entry, body: ' '}], [{...entry, title: 'x'.repeat(201)}], [{...entry, body: 'x'.repeat(8001)}], [{...entry, id: '../other'}], Array.from({length: 26}, (_,i) => ({...entry,id:String(i)}))])('rejects invalid or publishing fields %#', value => {
     expect(() => validateAnnouncementDrafts(value)).toThrow()
   })
 })

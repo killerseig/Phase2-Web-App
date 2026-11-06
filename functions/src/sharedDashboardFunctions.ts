@@ -1,6 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db } from './runtime'
-import { announcementId, listDashboardAnnouncements, publishDashboardAnnouncement } from './dashboardAnnouncements'
+import { announcementId, listDashboardAnnouncements, publishDashboardAnnouncement, listAnnouncementRecipients, validateAnnouncementRecipients } from './dashboardAnnouncements'
 import { buildCurrentFunctionUser, type CurrentFunctionUser } from './roleAccess'
 import { VALID_ROLES, type UserRole } from './constants'
 import { targetFunctionRoleCanOpenJobDashboard } from './targetJobAccess'
@@ -60,7 +60,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use dashboards.')
   const data = request.data || {}
   if (
-    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks', 'save-announcement-drafts', 'publish-announcement', 'list-announcements'].includes(data.action) ||
+    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks', 'save-announcement-drafts', 'publish-announcement', 'list-announcements', 'list-announcement-recipients'].includes(data.action) ||
     !['personal', 'job', 'role'].includes(data.scope) ||
     data.uid !== undefined ||
     data.ownerId !== undefined
@@ -120,6 +120,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       (user.role !== 'admin' || ['save-notes', 'save-calendar'].includes(data.action))
     )
       throw denied('Choose a job you can access.')
+    if (data.action === 'list-announcement-recipients') return listAnnouncementRecipients(tx, user, data)
     if (data.action === 'publish-announcement') return publishDashboardAnnouncement(tx, user, data)
     if (data.action === 'list-announcements') {
       if (Object.keys(data).some(key => !['scope', 'action', 'jobId', 'role'].includes(key)))
@@ -242,6 +243,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         const job = await tx.get(db.doc('jobs/' + entry.jobId))
         if (!job.exists) throw new HttpsError('invalid-argument', 'Choose an available job.')
       }
+      for (const entry of entries) if (entry.audience === 'people') await validateAnnouncementRecipients(tx, entry.recipientIds || [])
       tx.set(notesRef!, { ...content, announcementDrafts: entries, version: Number(content.version || 0) + 1, updatedBy: user.uid, updatedAt: Date.now() })
       return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks, announcementDrafts: entries }
     }

@@ -233,14 +233,15 @@ export interface AnnouncementDraft {
   id: string
   title: string
   body: string
-  audience?: 'everyone' | 'job'
+  audience?: 'everyone' | 'job' | 'people'
   jobId?: string
+  recipientIds?: string[]
 }
 export interface PublishedAnnouncement {
   id: string
   title: string
   body: string
-  audience: 'everyone' | 'job'
+  audience: 'everyone' | 'job' | 'people'
   jobId?: string
   publishedAt: number
 }
@@ -252,13 +253,19 @@ export function validateAnnouncementDrafts(value: unknown): AnnouncementDraft[] 
       typeof entry.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) || ids.has(entry.id) ||
       typeof entry.title !== 'string' || !entry.title.trim() || entry.title.trim().length > 200 ||
       typeof entry.body !== 'string' || !entry.body.trim() || entry.body.length > 8000 ||
-      Object.keys(entry).some(key => !['id', 'title', 'body', 'audience', 'jobId'].includes(key)))
+      Object.keys(entry).some(key => !['id', 'title', 'body', 'audience', 'jobId', 'recipientIds'].includes(key)))
       throw Error('Use a title and message for each announcement draft.')
-    if ((entry.audience !== undefined && !['everyone', 'job'].includes(entry.audience)) ||
+    if ((entry.audience !== undefined && !['everyone', 'job', 'people'].includes(entry.audience)) ||
       (entry.audience === 'job' ? typeof entry.jobId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(entry.jobId) : entry.jobId !== undefined))
-      throw Error('Choose Everyone or an assigned-job audience.')
+      throw Error('Choose Everyone, an assigned job or specific people.')
+    if (entry.audience === 'people' ? !Array.isArray(entry.recipientIds) || !entry.recipientIds.length || entry.recipientIds.length > 25 || entry.recipientIds.some((id: unknown) => !validAnnouncementRecipientId(id)) || new Set(entry.recipientIds).size !== entry.recipientIds.length : entry.recipientIds !== undefined)
+      throw Error('Choose between one and 25 distinct people.')
     ids.add(entry.id)
     return { id: entry.id, title: entry.title.trim(), body: entry.body.trim(),
-      ...(entry.audience ? { audience: entry.audience } : {}), ...(entry.audience === 'job' ? { jobId: entry.jobId } : {}) }
+      ...(entry.audience ? { audience: entry.audience } : {}), ...(entry.audience === 'job' ? { jobId: entry.jobId } : {}), ...(entry.audience === 'people' ? { recipientIds: [...entry.recipientIds] } : {}) }
   })
+}
+
+export function validAnnouncementRecipientId(value: unknown): value is string {
+  return typeof value === 'string' && /^[^\u0000-\u001f/]{1,128}$/.test(value) && value !== '.' && value !== '..'
 }

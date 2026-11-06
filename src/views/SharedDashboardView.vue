@@ -508,7 +508,7 @@ async function publishAnnouncement(draftId: string) {
   if (!isAdmin.value || busy.value || scope.value !== 'personal' || !layout.value || !(await prepare())) return
   const draft = layout.value.announcementDrafts?.find(item => item.id === draftId)
   if (!draft?.audience) return
-  const audience = draft.audience === 'everyone' ? 'everyone with current dashboard access' : 'people currently assigned to ' + (visibleJobs.value.find(job => job.id === draft.jobId)?.name || 'the selected job')
+  const audience = draft.audience === 'everyone' ? 'everyone with current dashboard access' : draft.audience === 'people' ? `${draft.recipientIds?.length || 0} selected people` : 'people currently assigned to ' + (visibleJobs.value.find(job => job.id === draft.jobId)?.name || 'the selected job')
   if (!(await confirm.value?.ask({ title: 'Publish announcement?', message: `Publish “${draft.title}” to ${audience}? This publishes a snapshot; no notifications are sent.`, confirmLabel: 'Publish' }))) return
   busy.value = true
   error.value = ''

@@ -199,6 +199,47 @@ try {
   await batch.commit()
   equal(titles(await feed('dash-a')), ['Job A only', 'Private draft', 'UID assignment'])
 
+
+  // Specific people: the audience is not a role, a job, an email list or an Admin bypass.
+  await db.doc('users/dash-a').update({firstName:'Pat',lastName:'Foreman',email:'pat@example.invalid'})
+  const peopleDraft = {...draft,id:'people-update',title:'Selected people only',audience:'people',recipientIds:['dash-a','dash-pm']}
+  const previous = await call('dash-admin','personal')
+  await call('dash-admin','personal','save-announcement-drafts',{version:previous.notesVersion,announcementDrafts:[...audienceDrafts,peopleDraft]})
+  const selectedVersion = (await call('dash-admin','personal')).notesVersion
+  await db.doc('users/dash-pm').update({active:false,assignedJobIds:[]})
+  await denied(()=>call('dash-admin','personal','publish-announcement',{version:selectedVersion,draftId:peopleDraft.id}),'failed-precondition')
+  await db.doc('users/dash-pm').update({active:true})
+  await call('dash-admin','personal','publish-announcement',{version:selectedVersion,draftId:peopleDraft.id})
+  for (const uid of ['dash-a','dash-pm']) {
+    const message=(await feed(uid)).find(item=>item.title==='Selected people only')
+    equal(!!message,true)
+    equal('recipientIds' in message,false)
+    equal('createdBy' in message,false)
+  }
+  await denied(()=>call('dash-pm','job','load',{jobId:'dash-job-a'}))
+  await db.doc('users/dash-pm').update({assignedJobIds:['dash-job-a']})
+  for (const uid of ['dash-b','dash-payroll','dash-shop','dash-admin','dash-admin-2'])
+    equal((await feed(uid)).some(item=>item.title==='Selected people only'),false)
+  await denied(()=>feed('dash-b','personal',{recipientIds:['dash-a']}),'invalid-argument')
+  const beforeInvalid = await call('dash-admin','personal')
+  for (const recipientIds of [['missing-user'],['dash-inactive'],['dash-employee'],['dash-none']])
+    await denied(()=>call('dash-admin','personal','save-announcement-drafts',{version:beforeInvalid.notesVersion,announcementDrafts:[{...peopleDraft,recipientIds}]}),'failed-precondition')
+  for (const uid of ['dash-a','dash-b','dash-payroll','dash-shop','dash-pm'])
+    await denied(()=>call(uid,'personal','list-announcement-recipients'))
+  await denied(()=>call('dash-admin','personal','list-announcement-recipients',{ownerId:'dash-a'}),'invalid-argument')
+  const directory = await call('dash-admin','personal','list-announcement-recipients',{search:'Pat Foreman'})
+  equal(directory.items.map(person=>person.uid),['dash-a'])
+  const allPeople = await call('dash-admin','personal','list-announcement-recipients')
+  equal(allPeople.items.some(person=>['dash-inactive','dash-employee','dash-none'].includes(person.uid)),false)
+  const emptyPageBatch=db.batch()
+  for(let i=0;i<100;i++)emptyPageBatch.set(db.doc('users/aaa-hidden-'+String(i).padStart(3,'0')),{role:'foreman',active:false})
+  await emptyPageBatch.commit()
+  const emptyPage=await call('dash-admin','personal','list-announcement-recipients',{search:'Pat Foreman'})
+  equal(emptyPage.items,[])
+  equal(typeof emptyPage.nextCursor,'string')
+  const continued=await call('dash-admin','personal','list-announcement-recipients',{search:'Pat Foreman',cursor:emptyPage.nextCursor})
+  equal(continued.items.map(person=>person.uid),['dash-a'])
+
   await denied(() => call(undefined, 'role'), 'unauthenticated')
   await denied(() => call('dash-a', 'job', 'load', { jobId: 'dash-job-b' }))
   equal((await call('dash-a', 'job', 'load', { jobId: 'dash-job-uid' })).job.id, 'dash-job-uid')

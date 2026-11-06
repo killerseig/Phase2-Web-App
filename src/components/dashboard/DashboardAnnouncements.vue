@@ -42,7 +42,7 @@ onBeforeUnmount(() => { generation++ })
       <div v-else class="announcement-feed" tabindex="0" aria-label="Published announcements">
         <article v-for="item in items" :key="item.id">
           <h3>{{ item.title }}</h3>
-          <small>{{ item.audience === 'everyone' ? 'Everyone' : jobs?.find(job => job.id === item.jobId)?.name || 'Assigned job' }} · {{ new Date(item.publishedAt).toLocaleString() }}</small>
+          <small>{{ item.audience === 'everyone' ? 'Everyone' : item.audience === 'people' ? 'Specific people' : jobs?.find(job => job.id === item.jobId)?.name || 'Assigned job' }} · {{ new Date(item.publishedAt).toLocaleString() }}</small>
           <p>{{ item.body }}</p>
         </article>
       </div>

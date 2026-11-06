@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import AnnouncementRecipientPicker from './AnnouncementRecipientPicker.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import type { JobRecord } from '@/types/domain'
 import type { AnnouncementDraft } from '@/features/dashboard/sharedDashboards'
@@ -13,6 +14,8 @@ function edit() {
   draft.value = props.items.map(item => ({ ...item }))
   editing.value = true
 }
+function changeAudience(item: AnnouncementDraft) { delete item.jobId; delete item.recipientIds }
+const recipientsMissing = computed(() => draft.value.some(item => item.audience === 'people' && !item.recipientIds?.length))
 function addDraft() { draft.value.push({ id: crypto.randomUUID(), title: '', body: '' }) }
 function discard() { editing.value = false; draft.value = [] }
 defineExpose({ dirty, editing, discard })
@@ -27,13 +30,14 @@ defineExpose({ dirty, editing, discard })
         <section v-for="(item, index) in draft" :key="item.id" class="announcement-draft">
           <label>Draft title {{ index + 1 }}<input v-model="item.title" required maxlength="200" /></label>
           <label>Draft message {{ index + 1 }}<textarea v-model="item.body" required maxlength="8000" /></label>
-          <label>Audience {{ index + 1 }}<select v-model="item.audience" required @change="delete item.jobId"><option disabled :value="undefined">Choose audience</option><option value="everyone">Everyone</option><option value="job">People assigned to a job</option></select></label>
+          <label>Audience {{ index + 1 }}<select v-model="item.audience" required @change="changeAudience(item)"><option disabled :value="undefined">Choose audience</option><option value="everyone">Everyone</option><option value="job">People assigned to a job</option><option value="people">Specific people</option></select></label>
           <label v-if="item.audience === 'job'">Announcement job {{ index + 1 }}<select v-model="item.jobId" required><option disabled :value="undefined">Choose job</option><option v-for="job in jobs" :key="job.id" :value="job.id">{{ job.code }} · {{ job.name }}</option></select></label>
+          <AnnouncementRecipientPicker v-if="item.audience === 'people'" :model-value="item.recipientIds || []" :disabled="busy" @update:model-value="item.recipientIds = $event" />
           <AppButton type="button" :aria-label="'Remove announcement draft ' + (index + 1)" @click="draft.splice(index, 1)">Remove draft</AppButton>
         </section>
         <div class="announcement-draft-actions">
           <AppButton type="button" :disabled="draft.length >= 25" @click="addDraft">Add announcement draft</AppButton>
-          <AppButton type="submit" variant="primary" :disabled="!dirty">Save announcement drafts</AppButton>
+          <AppButton type="submit" variant="primary" :disabled="!dirty || recipientsMissing">Save announcement drafts</AppButton>
           <AppButton type="button" @click="discard">Cancel announcement drafts</AppButton>
         </div>
       </fieldset>
@@ -42,7 +46,7 @@ defineExpose({ dirty, editing, discard })
       <p v-if="!items.length">No announcement drafts yet.</p>
       <section v-for="item in items" :key="item.id" class="announcement-draft">
         <h3>{{ item.title }}</h3><p class="announcement-draft-body">{{ item.body }}</p>
-        <p>Audience: {{ item.audience === 'everyone' ? 'Everyone' : item.audience === 'job' ? 'Assigned job — ' + (jobs.find(job => job.id === item.jobId)?.name || item.jobId) : 'Choose an audience before publishing' }}</p>
+        <p>Audience: {{ item.audience === 'everyone' ? 'Everyone' : item.audience === 'job' ? 'Assigned job — ' + (jobs.find(job => job.id === item.jobId)?.name || item.jobId) : item.audience === 'people' ? `${item.recipientIds?.length || 0} selected people` : 'Choose an audience before publishing' }}</p>
         <p v-if="publishedDraftIds.includes(item.id)">Published snapshot. Editing this draft does not change the published announcement.</p>
         <AppButton v-else type="button" :disabled="busy || !item.audience" :aria-label="'Publish ' + item.title" @click="emit('publish', item.id)">Publish</AppButton>
       </section>

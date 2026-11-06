@@ -18,6 +18,7 @@ const componentIntegrationImportPattern = /from\s+['"](@\/(?:services|stores)\/[
 // components remain disconnected; adding a dependency requires explicit review.
 const connectedContainers: Record<string, string[]> = {
   // The announcement container owns its independent callable/retry lifecycle and viewer revocation.
+  'dashboard/AnnouncementRecipientPicker.vue': ['@/services/sharedDashboards', '@/services/dashboard'],
   'dashboard/DashboardAnnouncements.vue': ['@/services/sharedDashboards', '@/services/dashboard', '@/stores/auth'],
   'dashboard/DashboardWorkflowsWidget.vue': ['@/stores/auth'],
   'dashboard/CompanyLibraryWidget.vue': ['@/stores/auth', '@/services/sds'],

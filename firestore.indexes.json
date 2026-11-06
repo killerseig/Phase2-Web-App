@@ -103,7 +103,8 @@
       ]
     },
     {"collectionGroup":"dashboardAnnouncements","queryScope":"COLLECTION","fields":[{"fieldPath":"audience","order":"ASCENDING"},{"fieldPath":"publishedAt","order":"DESCENDING"}]},
-    {"collectionGroup":"dashboardAnnouncements","queryScope":"COLLECTION","fields":[{"fieldPath":"jobId","order":"ASCENDING"},{"fieldPath":"publishedAt","order":"DESCENDING"}]}
+    {"collectionGroup":"dashboardAnnouncements","queryScope":"COLLECTION","fields":[{"fieldPath":"jobId","order":"ASCENDING"},{"fieldPath":"publishedAt","order":"DESCENDING"}]},
+    {"collectionGroup":"dashboardAnnouncements","queryScope":"COLLECTION","fields":[{"fieldPath":"recipientIds","arrayConfig":"CONTAINS"},{"fieldPath":"publishedAt","order":"DESCENDING"}]}
   ],
   "fieldOverrides": [
     {

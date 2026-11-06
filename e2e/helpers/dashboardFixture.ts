@@ -25,6 +25,14 @@ export async function mockDashboard(page: Page, admin = true) {
     }
     const data = route.request().postDataJSON().data
     requests.push(data)
+    if (data.action === 'list-announcement-recipients') {
+      await route.fulfill({ headers, json: { result: { items: [
+        {uid:'admin-e2e', name:'Admin User', email:'admin@example.invalid', role:'admin'},
+        {uid:'foreman-e2e', name:'Pat Foreman', email:'pat@example.invalid', role:'foreman'},
+        {uid:'other-e2e', name:'Other Coworker', email:'other@example.invalid', role:'project-manager'},
+      ].filter(person => (person.name + ' ' + person.email).toLowerCase().includes(String(data.search || '').toLowerCase())), nextCursor:null } } })
+      return
+    }
     if (data.action === 'list-announcements') {
       await route.fulfill({ headers, json: { result: { items: announcements, limit: 50 } } })
       return
@@ -75,7 +83,7 @@ export async function mockDashboard(page: Page, admin = true) {
     }
     const content = contents.get(key) || { notes: {}, events: [], version: 0 }
     if (data.action === 'publish-announcement') {
-      const draft = contents.get('personal')?.announcementDrafts?.find(item => (item as { id: string }).id === data.draftId) as { id: string; title: string; body: string; audience: 'everyone' | 'job'; jobId?: string }
+      const draft = contents.get('personal')?.announcementDrafts?.find(item => (item as { id: string }).id === data.draftId) as { id: string; title: string; body: string; audience: 'everyone' | 'job' | 'people'; jobId?: string }
       if (!publishedDraftIds.includes(draft.id)) { announcements.push({ ...draft, publishedAt: Date.now() }); publishedDraftIds.push(draft.id) }
       await route.fulfill({ headers, json: { result: { id: draft.id } } })
       return

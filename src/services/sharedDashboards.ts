@@ -24,6 +24,7 @@ interface DashboardRequests {
   }
   'save-notes': DashboardContext & { version: number; widgetId: string; text: string }
   'publish-announcement': DashboardContext & { version: number; draftId: string }
+  'list-announcement-recipients': DashboardContext & { search?: string; cursor?: string }
   'list-announcements': DashboardContext
   'save-announcement-drafts': DashboardContext & { version: number; announcementDrafts: AnnouncementDraft[] }
   'save-tasks': DashboardContext & { version: number; tasks: PersonalTask[] }
@@ -41,6 +42,7 @@ interface DashboardResponses {
   'save-template': SharedDashboardLayout
   'save-notes': DashboardContent
   'publish-announcement': { id: string }
+  'list-announcement-recipients': { items: { uid: string; name: string; email: string; role: string }[]; nextCursor: string | null }
   'list-announcements': { items: PublishedAnnouncement[]; limit: number }
   'save-announcement-drafts': DashboardContent
   'save-tasks': DashboardContent
