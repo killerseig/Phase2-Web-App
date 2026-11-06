@@ -738,7 +738,9 @@ for (const zoomed of [false, true]) test(`free canvas placement preserves gaps, 
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(canvas).toHaveClass(/is-positioned/)
   await page.getByRole('button', { name: 'Edit', exact: true }).click()
-  await first.getByRole('button', { name: 'Edit First', exact: true }).click()
+  // The saved overlap keeps its real layer order; select the covered widget from the outline.
+  await page.getByRole('group', { name: 'On this dashboard', exact: true })
+    .getByRole('button', { name: 'First', exact: true }).click()
   await page.getByLabel('Left column', { exact: true }).fill('8')
   await page.getByLabel('Left column', { exact: true }).press('Tab')
   await page.getByLabel('Top row', { exact: true }).fill('0')

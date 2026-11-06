@@ -44,6 +44,64 @@ export function bounds(placements: Placement[]) {
     h: Math.max(...placements.map((p) => p.y + p.h)) - y,
   }
 }
+/** Resize a selection proportionally without independently clamping its children. */
+export function resizeGroup(
+  placements: readonly Placement[],
+  dx: number,
+  dy: number,
+  direction: Direction,
+  grid: Grid,
+): Placement[] {
+  const unchanged = () => placements.map((placement) => ({ ...placement }))
+  if (
+    !placements.length ||
+    ![dx, dy].every(Number.isFinite) ||
+    placements.some((p) => ![p.x, p.y, p.w, p.h].every(Number.isFinite) || p.w <= 0 || p.h <= 0)
+  )
+    return unchanged()
+  const box = bounds([...placements])
+  const requested = resizeEdges(box, dx, dy, direction, grid, false, 1000)
+  const west = direction.includes('w'),
+    north = direction.includes('n')
+  const minimumX = Math.max(...placements.map((p) => 2 / p.w))
+  const minimumY = Math.max(...placements.map((p) => 3 / p.h))
+  const maximumX = Math.min(
+    ...placements.map((p) => 24 / p.w),
+    (west ? box.x + box.w : 24 - box.x) / box.w,
+  )
+  const maximumY = Math.min(
+    ...placements.map((p) => 100 / p.h),
+    (north ? box.y + box.h : 1000 - box.y) / box.h,
+  )
+  const horizontal = west || direction.includes('e'),
+    vertical = north || direction.includes('s')
+  if ((horizontal && maximumX < minimumX) || (vertical && maximumY < minimumY)) return unchanged()
+  const scaleX = horizontal ? Math.max(minimumX, Math.min(maximumX, requested.w / box.w)) : 1
+  const scaleY = vertical ? Math.max(minimumY, Math.min(maximumY, requested.h / box.h)) : 1
+  const left = west ? box.x + box.w - box.w * scaleX : box.x
+  const top = north ? box.y + box.h - box.h * scaleY : box.y
+  const round = (value: number) => +value.toFixed(3)
+  return placements.map((p) => {
+    // Scale limits have already protected every child's size. These bounds only
+    // remove rounding error at the three-decimal persistence/workspace edges.
+    const w = scaleX === 1 ? p.w : Math.max(2, Math.min(24, round(p.w * scaleX)))
+    const h = scaleY === 1 ? p.h : Math.max(3, Math.min(100, round(p.h * scaleY)))
+    const x =
+      west && Math.abs(p.x + p.w - box.x - box.w) < 0.000001
+        ? box.x + box.w - w
+        : left + (p.x - box.x) * scaleX
+    const y =
+      north && Math.abs(p.y + p.h - box.y - box.h) < 0.000001
+        ? box.y + box.h - h
+        : top + (p.y - box.y) * scaleY
+    return {
+      x: scaleX === 1 ? p.x : Math.max(0, Math.min(24 - w, round(x))),
+      y: scaleY === 1 ? p.y : Math.max(0, Math.min(1000 - h, round(y))),
+      w,
+      h,
+    }
+  })
+}
 export function translate(placements: Placement[], dx: number, dy: number, grid: Grid) {
   const b = bounds(placements)
   dx = Math.max(-b.x, Math.min(24 - b.x - b.w, snap(b.x + dx, grid.snap ? grid.x : 1 / 45) - b.x))

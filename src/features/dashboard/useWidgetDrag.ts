@@ -165,20 +165,32 @@ export function useWidgetDrag<T>(options: {
       cancel()
     }
   }
-  function start(event: PointerEvent, value: T, text: string) {
+  function start(
+    event: PointerEvent,
+    value: T,
+    text: string,
+    anchor?: { surface: HTMLElement; origin: { x: number; y: number } },
+  ) {
     if (options.disabled() || event.button !== 0 || !event.isPrimary) return
     stop()
     suppressClick = false
     payload.value = value
     label.value = text
     const widget = (event.currentTarget as HTMLElement)?.closest<HTMLElement>('[data-widget-id]')
-    const surface = widget?.closest<HTMLElement>('[data-widget-surface]')
+    const surface = anchor?.surface || widget?.closest<HTMLElement>('[data-widget-surface]')
     originSurface = surface || undefined
     const rect = widget?.getBoundingClientRect()
     const scale = surface ? surface.getBoundingClientRect().width / surface.offsetWidth : 1
-    grab = rect
-      ? { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
-      : { x: 0, y: 0 }
+    const surfaceRect = surface?.getBoundingClientRect()
+    grab =
+      anchor && surfaceRect
+        ? {
+            x: (event.clientX - surfaceRect.left) / scale - anchor.origin.x,
+            y: (event.clientY - surfaceRect.top) / scale - anchor.origin.y,
+          }
+        : rect
+          ? { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
+          : { x: 0, y: 0 }
     pointerId = event.pointerId
     startPoint = point.value = { x: event.clientX, y: event.clientY }
     window.addEventListener('pointermove', move, { passive: false })

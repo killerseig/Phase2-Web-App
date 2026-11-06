@@ -561,7 +561,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 11;
+  z-index: 25;
   width: 1px;
   height: 1px;
   pointer-events: none;
@@ -618,10 +618,6 @@
     width: auto !important;
     height: auto !important;
   }
-}
-
-.shared-dashboard-grid.is-positioned.is-placement-editor > .shared-dashboard-widget.is-selected {
-  z-index: 2;
 }
 
 .shared-dashboard-grid.is-placement-editor > .shared-dashboard-widget {

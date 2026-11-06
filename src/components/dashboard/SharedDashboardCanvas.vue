@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppButton from '@/components/common/AppButton.vue'
 import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
-import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import DashboardAnnouncements from './DashboardAnnouncements.vue'
 import DashboardAnnouncementDrafts from './DashboardAnnouncementDrafts.vue'
 import DashboardPersonalTasks from './DashboardPersonalTasks.vue'
@@ -11,6 +11,7 @@ import DashboardWorkflowsWidget from './DashboardWorkflowsWidget.vue'
 import CompanyLibraryWidget from './CompanyLibraryWidget.vue'
 import DashboardJobsWidget from './DashboardJobsWidget.vue'
 import DashboardSnapGrid from './DashboardSnapGrid.vue'
+import DashboardSelectionFrame from './DashboardSelectionFrame.vue'
 import RoleResourcesModule from './RoleResourcesModule.vue'
 import {
   sharedWidgetLabels,
@@ -23,6 +24,8 @@ import { resolveDashboardText, type DashboardTextContext } from '@/features/dash
 import { fallbackPlacements } from '@/features/dashboard/widgetPlacement'
 import {
   resizeDirections,
+  bounds as geometryBounds,
+  rootSelection,
   locked as geometryLocked,
   type Direction,
 } from '@/features/dashboard/editorGeometry'
@@ -100,6 +103,129 @@ const canvasStyle = computed(() => {
       : undefined,
   }
 })
+const canvasElement = ref<HTMLElement>()
+type SelectionGeometry = NonNullable<SharedDashboardWidget['placement']>
+const measuredSelection = ref<SelectionGeometry>()
+const selectionWidgets = computed(() => {
+  if (!props.editing) return []
+  const roots = rootSelection(props.widgets, props.selectedIds || [props.selected])
+  return roots.length > 1 &&
+    roots.every(
+      (widget) =>
+        (widget.parentId || '') === (props.parentId || '') &&
+        (widget.region || '0') === (props.region || '0'),
+    )
+    ? roots
+    : []
+})
+const selectionPrimary = computed(
+  () =>
+    selectionWidgets.value.find((widget) => widget.id === props.selected)?.id ||
+    selectionWidgets.value[0]?.id ||
+    '',
+)
+const selectionGeometry = computed(() => {
+  if (selectionWidgets.value.length < 2) return undefined
+  if (!positioned.value) return measuredSelection.value
+  const ids = new Set(selectionWidgets.value.map((widget) => widget.id))
+  return geometryBounds(
+    positions.value.filter((_, index) => ids.has(visibleWidgets.value[index]!.id)),
+  )
+})
+const selectionMoveDisabled = computed(
+  () =>
+    props.busy ||
+    selectionWidgets.value.some((widget) =>
+      geometryLocked(props.widgets, widget, 'positionLocked'),
+    ),
+)
+const selectionResizeDisabled = computed(
+  () =>
+    selectionMoveDisabled.value ||
+    selectionWidgets.value.some((widget) => geometryLocked(props.widgets, widget, 'sizeLocked')),
+)
+let selectionObserver: ResizeObserver | undefined
+let selectionFrame = 0
+const observedWidgets = new Set<HTMLElement>()
+function updateMeasuredSelection(next?: SelectionGeometry) {
+  const previous = measuredSelection.value
+  if (
+    (!previous && !next) ||
+    (previous &&
+      next &&
+      (['x', 'y', 'w', 'h'] as const).every((key) => Math.abs(previous[key] - next[key]) < 0.0001))
+  )
+    return
+  measuredSelection.value = next
+}
+function measureSelection() {
+  selectionFrame = 0
+  const host = canvasElement.value
+  if (!host) return
+  const measuring = !positioned.value && selectionWidgets.value.length > 1
+  const children = measuring
+    ? [...host.querySelectorAll<HTMLElement>(':scope > [data-widget-id]')]
+    : []
+  for (const child of observedWidgets) {
+    if (!children.includes(child)) {
+      selectionObserver?.unobserve(child)
+      observedWidgets.delete(child)
+    }
+  }
+  for (const child of children) {
+    if (!observedWidgets.has(child)) {
+      selectionObserver?.observe(child)
+      observedWidgets.add(child)
+    }
+  }
+  const hostRect = host.getBoundingClientRect()
+  if (!measuring || !hostRect.width || !host.offsetWidth) {
+    updateMeasuredSelection()
+    return
+  }
+  const scale = hostRect.width / host.offsetWidth
+  const ids = new Set(selectionWidgets.value.map((widget) => widget.id))
+  const rectangles = children
+    .filter((child) => ids.has(child.dataset.widgetId!))
+    .map((child) => {
+      const rect = child.getBoundingClientRect()
+      return {
+        x: ((rect.left - hostRect.left) / hostRect.width) * 24,
+        y: (rect.top - hostRect.top) / scale / 32,
+        w: (rect.width / hostRect.width) * 24,
+        h: rect.height / scale / 32,
+      }
+    })
+  updateMeasuredSelection(rectangles.length === ids.size ? geometryBounds(rectangles) : undefined)
+}
+function scheduleSelectionMeasurement() {
+  if (props.editing && !selectionFrame && typeof requestAnimationFrame !== 'undefined')
+    selectionFrame = requestAnimationFrame(measureSelection)
+}
+onMounted(() => {
+  if (typeof ResizeObserver === 'undefined') return
+  selectionObserver = new ResizeObserver(scheduleSelectionMeasurement)
+  if (canvasElement.value) selectionObserver.observe(canvasElement.value)
+  scheduleSelectionMeasurement()
+})
+watch([selectionWidgets, positions, positioned], scheduleSelectionMeasurement, {
+  deep: true,
+  flush: 'post',
+})
+onBeforeUnmount(() => {
+  selectionObserver?.disconnect()
+  observedWidgets.clear()
+  if (selectionFrame) cancelAnimationFrame(selectionFrame)
+})
+function requestMenu(event: MouseEvent | KeyboardEvent, id: string) {
+  if (!props.editing) return
+  event.preventDefault()
+  event.stopPropagation()
+  emit('request-menu', event, id)
+}
+function widgetKey(event: KeyboardEvent, id: string) {
+  if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) requestMenu(event, id)
+}
 function startWidgetMove(event: PointerEvent, id: string) {
   if (
     !props.editing ||
@@ -123,6 +249,7 @@ function widgetStyle(widget: SharedDashboardWidget, index: number) {
         width: (p.w / 24) * 100 + '%',
         height: p.h * 32 + 'px',
         boxSizing: 'border-box' as const,
+        zIndex: index,
       }
     : { '--widget-span': widget.span }
 }
@@ -131,6 +258,15 @@ const emit = defineEmits<{
   edit: [id: string]
   resize: [event: PointerEvent, id: string, direction?: Direction]
   move: [event: PointerEvent, id: string]
+  'selection-move': [event: PointerEvent, id: string]
+  'selection-resize': [event: PointerEvent, id: string, direction: Direction]
+  'selection-key': [
+    event: KeyboardEvent,
+    id: string,
+    action: 'move' | 'resize',
+    direction?: Direction,
+  ]
+  'request-menu': [event: MouseEvent | KeyboardEvent, id: string]
   'save-note': [id: string, text: string]
   'publish-announcement': [draftId: string]
   'save-announcement-drafts': [
@@ -308,6 +444,7 @@ function textStyle(widget: SharedDashboardWidget) {
 </script>
 <template>
   <div
+    ref="canvasElement"
     class="shared-dashboard-grid"
     :style="canvasStyle"
     :class="{
@@ -325,14 +462,27 @@ function textStyle(widget: SharedDashboardWidget) {
     :role="tabLabelId ? 'tabpanel' : undefined"
     :aria-labelledby="tabLabelId"
   >
-    <DashboardSnapGrid
-      v-if="editing && gridVisible"
-      :spacing="gridSpacing"
-      :layout="positions"
-    />
-    <span v-if="editing && !parentId" class="shared-dashboard-origin" data-dashboard-origin aria-hidden="true">
+    <DashboardSnapGrid v-if="editing && gridVisible" :spacing="gridSpacing" :layout="positions" />
+    <span
+      v-if="editing && !parentId"
+      class="shared-dashboard-origin"
+      data-dashboard-origin
+      aria-hidden="true"
+    >
       <span>0,0</span>
     </span>
+    <DashboardSelectionFrame
+      v-if="selectionGeometry"
+      :geometry="selectionGeometry"
+      :disable-move="selectionMoveDisabled"
+      :disable-resize="selectionResizeDisabled"
+      @move="emit('selection-move', $event, selectionPrimary)"
+      @resize="(event, direction) => emit('selection-resize', event, selectionPrimary, direction)"
+      @key="
+        (event, action, direction) =>
+          emit('selection-key', event, selectionPrimary, action, direction)
+      "
+    />
     <div
       v-if="editing && placementPreview && dropTarget?.surface === (parentId || 'shared-dashboard')"
       data-widget-placement-preview
@@ -357,8 +507,10 @@ function textStyle(widget: SharedDashboardWidget) {
       :aria-label="
         editing ? 'Widget ' + (widget.title || sharedWidgetLabels[widget.type]) : undefined
       "
-      :aria-keyshortcuts="editing ? 'ArrowLeft ArrowRight ArrowUp ArrowDown' : undefined"
+      :aria-keyshortcuts="editing ? 'ArrowLeft ArrowRight ArrowUp ArrowDown Shift+F10' : undefined"
       @pointerdown.stop="startWidgetMove($event, widget.id)"
+      @contextmenu="requestMenu($event, widget.id)"
+      @keydown="widgetKey($event, widget.id)"
       :class="{
         'is-selected': editing && (selectedIds || [selected]).includes(widget.id),
         'is-container': widget.type === 'container',
@@ -376,6 +528,27 @@ function textStyle(widget: SharedDashboardWidget) {
     >
       <header class="shared-widget-heading">
         <h2>{{ widget.title || sharedWidgetLabels[widget.type] }}</h2>
+        <span
+          v-if="
+            editing &&
+            (geometryLocked(widgets, widget, 'positionLocked') ||
+              geometryLocked(widgets, widget, 'sizeLocked'))
+          "
+          class="shared-widget-locks"
+        >
+          <span
+            v-if="geometryLocked(widgets, widget, 'positionLocked')"
+            class="shared-widget-lock-badge"
+            :title="widget.positionLocked ? 'Position locked' : 'Position locked by a parent'"
+            ><span aria-hidden="true">🔒</span>Position locked</span
+          >
+          <span
+            v-if="geometryLocked(widgets, widget, 'sizeLocked')"
+            class="shared-widget-lock-badge"
+            :title="widget.sizeLocked ? 'Size locked' : 'Size locked by a parent'"
+            ><span aria-hidden="true">🔒</span>Size locked</span
+          >
+        </span>
         <AppButton
           v-if="editing"
           class="shared-widget-edit builder-floating"
@@ -458,6 +631,14 @@ function textStyle(widget: SharedDashboardWidget) {
             @edit="emit('edit', $event)"
             @resize="(event, id, direction) => emit('resize', event, id, direction)"
             @move="(event, id) => emit('move', event, id)"
+            @selection-move="(event, id) => emit('selection-move', event, id)"
+            @selection-resize="
+              (event, id, direction) => emit('selection-resize', event, id, direction)
+            "
+            @selection-key="
+              (event, id, action, direction) => emit('selection-key', event, id, action, direction)
+            "
+            @request-menu="(event, id) => emit('request-menu', event, id)"
             @save-note="(id, text) => emit('save-note', id, text)"
             @save-calendar="emit('save-calendar', $event)"
             @save-tasks="emit('save-tasks', $event)"
@@ -693,3 +874,24 @@ function textStyle(widget: SharedDashboardWidget) {
     </article>
   </div>
 </template>
+
+<style scoped>
+.shared-widget-locks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.shared-widget-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  border: 1px solid #46c4ff80;
+  border-radius: 5px;
+  background: #111925;
+  color: #bef5ff;
+  font-size: 10px;
+  line-height: 1.3;
+}
+</style>

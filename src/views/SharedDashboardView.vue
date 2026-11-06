@@ -13,6 +13,8 @@ import BuilderPanelResize from '@/components/builder/BuilderPanelResize.vue'
 import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
 import { canSubmitForm } from '../../functions/src/formAccess'
 import SharedDashboardCanvas from '@/components/dashboard/SharedDashboardCanvas.vue'
+import DashboardWidgetMenu from '@/components/dashboard/DashboardWidgetMenu.vue'
+import { canReorderWidgetLayers, reorderWidgetLayers, type LayerAction } from '@/features/dashboard/widgetLayers'
 import { useDashboardWorkspaceGrid } from '@/features/dashboard/useDashboardWorkspaceGrid'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
@@ -38,6 +40,7 @@ import {
 } from '../../functions/src/sharedDashboardModel'
 import {
   resizeEdges,
+  resizeGroup,
   translate,
   arrange,
   bounds,
@@ -221,6 +224,15 @@ const selectedIndex = computed(() =>
 )
 const repeatable = (type: SharedDashboardWidget['type']) =>
   ['notes', 'text', 'form', 'container'].includes(type)
+const canDuplicateSelected = computed(() => {
+  const widget = selectedWidget.value
+  if (!widget || !editing.value || busy.value || !canEdit.value) return false
+  const copies = descendants(widgets.value, [widget.id])
+  return widgets.value.length + copies.length <= 12 &&
+    copies.every((entry) => repeatable(entry.type) && palette.value.includes(entry.type))
+})
+const requiredSelection = computed(() => !!selectedWidget.value &&
+  descendants(widgets.value, [selectedWidget.value.id]).some((entry) => entry.type === requiredType.value))
 function selectWidget(id: string, event?: MouseEvent | PointerEvent) {
   if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
     const current = selectedIds.value
@@ -418,7 +430,9 @@ function startTransform(
   id: string,
   kind: 'move' | 'resize',
   direction: Direction = 'se',
+  selectionControl = false,
 ) {
+  if (!editing.value || busy.value || !canEdit.value) return
   const widget = widgets.value.find((w) => w.id === id)
   if (
     !widget ||
@@ -443,10 +457,18 @@ function startTransform(
         !geometryLocked(widgets.value, w, kind === 'move' ? 'positionLocked' : 'sizeLocked'),
     )
     .map((w) => w.id)
+  const surface = surfaceFor(dragParent, dragRegion)
+  const primary = dragOrigins[widgets.value.indexOf(widget)]!
+  if (selectionControl && selectedRoots.value.some((entry) =>
+    geometryLocked(widgets.value, entry, 'positionLocked') ||
+    (kind === 'resize' && geometryLocked(widgets.value, entry, 'sizeLocked')))) return
   drag.start(
     event,
     { kind, id, direction },
     kind === 'move' ? 'Move selection' : 'Resize selection',
+    selectionControl && surface
+      ? { surface, origin: { x: primary.x / 24 * surface.offsetWidth, y: primary.y * 32 } }
+      : undefined,
   )
 }
 const drag = useWidgetDrag<Payload>({
@@ -517,6 +539,36 @@ function surfaceFor(parent = '', region = '0') {
       (el.dataset.region || '0') === region,
   )
 }
+function resizeSelection(
+  original: NonNullable<SharedDashboardWidget['placement']>[],
+  dx: number,
+  dy: number,
+  direction: Direction,
+) {
+  return resizeGroup(original, dx, dy, direction, interactionGrid.value)
+}
+function selectionKey(event: KeyboardEvent, id: string, action: 'move' | 'resize', direction: Direction = 'se') {
+  if (!editing.value || busy.value || !canEdit.value || event.altKey || event.ctrlKey || event.metaKey ||
+    !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+  const widget = widgets.value.find((entry) => entry.id === id)
+  const entries = selectedRoots.value
+  if (!widget || entries.length < 2 || entries.some((entry) =>
+    (entry.parentId || '') !== (widget.parentId || '') || (entry.region || '0') !== (widget.region || '0') ||
+    geometryLocked(widgets.value, entry, 'positionLocked') ||
+    (action === 'resize' && geometryLocked(widgets.value, entry, 'sizeLocked')))) return
+  event.preventDefault()
+  const grid = interactionGrid.value
+  const amount = event.shiftKey ? 10 : 1
+  const dx = (event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0) * (grid.snap ? grid.x : 1 / 45)
+  const dy = (event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0) * (grid.snap ? grid.y : 1 / 32)
+  const positions = measuredPlacements()
+  const original = entries.map((entry) => positions[widgets.value.indexOf(entry)]!)
+  const changes = action === 'move' ? translate(original, dx, dy, grid) : resizeSelection(original, dx, dy, direction)
+  widgets.value = widgets.value.map((entry, index) =>
+    device.value === 'desktop' || entries.includes(entry)
+      ? withPlacement(entry, entries.includes(entry) ? changes[entries.indexOf(entry)]! : positions[index]!)
+      : entry)
+}
 function readPlacement(widget: SharedDashboardWidget) {
   return device.value === 'desktop'
     ? widget.placement
@@ -572,26 +624,11 @@ function transformPreview(payload: Payload, destination: WidgetDrop) {
       !!widgets.value.find((w) => w.id === payload.id)?.positionLocked,
     )
   else {
-    const box = bounds(original),
-      changed = resizeEdges(
-        box,
-        x - primary.x,
-        y - primary.y,
-        payload.direction || 'se',
-        grid,
-        false,
-        1000,
-      )
-    original.forEach((p, i) => {
+    const changes = resizeSelection(original, x - primary.x, y - primary.y, payload.direction || 'se')
+    changes.forEach((p, i) => {
       const widget = widgets.value.find((w) => w.id === ids[i])!
       if (geometryLocked(widgets.value, widget, 'positionLocked')) return
-      result[widget.id] = placeWidget(
-        changed.x + ((p.x - box.x) * changed.w) / box.w,
-        changed.y + ((p.y - box.y) * changed.h) / box.h,
-        (p.w * changed.w) / box.w,
-        (p.h * changed.h) / box.h,
-        false,
-      )
+      result[widget.id] = p
     })
   }
   return result
@@ -608,7 +645,7 @@ const placementPreview = computed(
       ? placementPreviews.value[drag.payload.value.id]
       : undefined),
 )
-function measuredPlacements() {
+function measuredPlacements(exactHeight = false) {
   const fallback = fallbackPlacements(widgets.value)
   return widgets.value.map((widget, index) => {
     const placement = readPlacement(widget)
@@ -627,7 +664,7 @@ function measuredPlacements() {
           ((rect.left - bounds.left) / bounds.width) * 24,
           (rect.top - bounds.top) / scale / 32,
           (rect.width / bounds.width) * 24,
-          Math.ceil(rect.height / scale / 32),
+          exactHeight ? rect.height / scale / 32 : Math.ceil(rect.height / scale / 32),
           false,
         )
       : fallback[index]!
@@ -745,19 +782,16 @@ function move(direction: number, focusList = false) {
 }
 function duplicateWidget() {
   const widget = selectedWidget.value
-  if (
-    !editing.value ||
-    busy.value ||
-    !canEdit.value ||
-    !widget ||
-    !repeatable(widget.type) ||
-    !palette.value.includes(widget.type) ||
-    !canAdd(widget.type)
-  )
-    return
+  if (!widget || !canDuplicateSelected.value) return
   if (widget.container) {
     const copies = copyConfiguration(widgets.value, [widget.id])
-    if (applyLayout([...widgets.value, ...copies])) editWidget(copies.find((w) => !w.parentId)!.id)
+    const copy = copies.find((entry) => !entry.parentId)!
+    if (widget.parentId) {
+      copy.parentId = widget.parentId
+      copy.region = widget.region || '0'
+    }
+    copy.title = `${widget.title || sharedWidgetLabels[widget.type]} copy`.slice(0, 100)
+    if (applyLayout([...widgets.value, ...copies])) editWidget(copy.id)
     return
   }
   const copy: SharedDashboardWidget = JSON.parse(JSON.stringify(widget))
@@ -771,6 +805,99 @@ function duplicateWidget() {
   widgets.value.splice(selectedIndex.value + 1, 0, copy)
   editWidget(copy.id)
 }
+const widgetMenu = ref<{ id: string; x: number; y: number; trigger?: HTMLElement }>()
+function focusWidget(id: string) {
+  void nextTick(() => root.value?.querySelector<HTMLElement>(
+    `[data-widget-id="${CSS.escape(id)}"]`,
+  )?.focus({ preventScroll: true }))
+}
+function closeWidgetMenu(restoreFocus = false) {
+  const menu = widgetMenu.value
+  widgetMenu.value = undefined
+  if (restoreFocus && menu) restoreMenuFocus(menu)
+}
+function restoreMenuFocus(menu: NonNullable<typeof widgetMenu.value>) {
+  if (menu.trigger?.isConnected) void nextTick(() => menu.trigger?.focus({ preventScroll: true }))
+  else focusWidget(menu.id)
+}
+function outlineMenuKey(event: KeyboardEvent, id: string) {
+  if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openWidgetMenu(event, id)
+}
+function openWidgetMenu(event: MouseEvent | KeyboardEvent, id: string) {
+  if (!editing.value || busy.value || !canEdit.value) return
+  const element = root.value?.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(id)}"]`)
+  if (!element) return
+  event.preventDefault()
+  event.stopPropagation()
+  selectWidget(id)
+  const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : element
+  const rect = trigger.getBoundingClientRect()
+  widgetMenu.value = {
+    id,
+    x: 'clientX' in event ? event.clientX : rect.left + 20,
+    y: 'clientY' in event ? event.clientY : rect.top + 20,
+    trigger,
+  }
+}
+function canLayer(action: LayerAction) {
+  const widget = selectedWidget.value
+  if (!widget || !canEdit.value || busy.value) return false
+  // A phone/tablet cannot measure an unsized desktop flow. Materialize that
+  // legacy layout on desktop first, so a layer edit cannot silently reflow it.
+  const siblings = widgets.value.filter((entry) =>
+    (entry.parentId || '') === (widget.parentId || '') &&
+    (entry.region || '0') === (widget.region || '0'))
+  return (device.value === 'desktop' || siblings.every((entry) => entry.placement)) &&
+    canReorderWidgetLayers(widgets.value, [widget.id], action)
+}
+function reorderLayer(action: LayerAction) {
+  const widget = selectedWidget.value
+  if (!editing.value || !widget || !canLayer(action)) return
+  const positions = measuredPlacements(true)
+  const next = widgets.value.map((entry, index) =>
+    (entry.parentId || '') === (widget.parentId || '') &&
+    (entry.region || '0') === (widget.region || '0')
+      ? withPlacement(entry, positions[index]!) : entry)
+  if (applyLayout(reorderWidgetLayers(next, [widget.id], action)))
+    editorAnnouncement.value = 'Widget layer updated.'
+}
+function ancestorLock(key: 'positionLocked' | 'sizeLocked') {
+  const parent = widgets.value.find((entry) => entry.id === selectedWidget.value?.parentId)
+  return !!parent && geometryLocked(widgets.value, parent, key)
+}
+const widgetMenuActions = computed(() => [
+  { id: 'edit', label: 'Edit widget' },
+  { id: 'duplicate', label: 'Duplicate widget', disabled: !canDuplicateSelected.value },
+  { id: 'copy', label: 'Copy widget' },
+  { id: 'front', label: 'Bring to front', disabled: !canLayer('front'), separatorBefore: true },
+  { id: 'forward', label: 'Bring forward', disabled: !canLayer('forward') },
+  { id: 'backward', label: 'Send backward', disabled: !canLayer('backward') },
+  { id: 'back', label: 'Send to back', disabled: !canLayer('back') },
+  { id: 'positionLocked', label: ancestorLock('positionLocked') ? 'Position locked by container' :
+    selectedWidget.value?.positionLocked ? 'Unlock position' : 'Lock position',
+    disabled: ancestorLock('positionLocked'), separatorBefore: true },
+  { id: 'sizeLocked', label: ancestorLock('sizeLocked') ? 'Size locked by container' :
+    selectedWidget.value?.sizeLocked ? 'Unlock size' : 'Lock size', disabled: ancestorLock('sizeLocked') },
+  { id: 'remove', label: 'Remove widget', disabled: requiredSelection.value, separatorBefore: true },
+])
+function widgetMenuAction(action: string) {
+  const menu = widgetMenu.value
+  if (!menu || !editing.value || busy.value || !canEdit.value ||
+    !widgets.value.some((entry) => entry.id === menu.id)) return closeWidgetMenu()
+  if (widgetMenuActions.value.find((entry) => entry.id === action)?.disabled) return
+  closeWidgetMenu()
+  if (action === 'edit') return editWidget(menu.id)
+  if (action === 'duplicate') return duplicateWidget()
+  if (action === 'remove') { void remove(); return }
+  if (action === 'copy') copySelection()
+  else if (['front', 'forward', 'backward', 'back'].includes(action)) reorderLayer(action as LayerAction)
+  else if (action === 'positionLocked' || action === 'sizeLocked') {
+    const widget = selectedWidget.value
+    if (widget && !ancestorLock(action)) widget[action] = !widget[action]
+  }
+  restoreMenuFocus(menu)
+}
+watch([editing, busy, canEdit, device, () => auth.currentUser?.uid, scope, role, jobId], () => closeWidgetMenu())
 function captureDashboardContext() {
   const request = generation,
     owner = auth.currentUser?.uid,
@@ -1041,7 +1168,7 @@ function changeContainerKind(event: Event) {
 async function remove() {
   if (!editing.value || busy.value || !canEdit.value) return
   const widget = selectedWidget.value
-  if (!widget || widget.type === requiredType.value) return
+  if (!widget || requiredSelection.value) return
   const current = captureDashboardContext()
   if (
     (await confirm.value?.ask({
@@ -1399,6 +1526,7 @@ function backgroundPointer(event: PointerEvent) {
   )
     return
   const target = event.target as HTMLElement
+  if (target.closest('[data-selection-control]')) return
   const surface = target.closest<HTMLElement>('[data-widget-surface]')
   const widget = target.closest<HTMLElement>('[data-widget-id]')
   const panning =
@@ -1983,6 +2111,9 @@ onBeforeUnmount(() => {
                 :disabled="busy"
                 :aria-pressed="selectedIds.includes(widget.id)"
                 :tabindex="selected === widget.id ? 0 : -1"
+                aria-keyshortcuts="Shift+F10"
+                @contextmenu="openWidgetMenu($event, widget.id)"
+                @keydown="outlineMenuKey($event, widget.id)"
                 @click="
                   $event.shiftKey || $event.ctrlKey || $event.metaKey
                     ? selectWidget(widget.id, $event)
@@ -2211,6 +2342,10 @@ onBeforeUnmount(() => {
                     @select="selectWidget"
                     @edit="editWidget"
                     @move="(event, id) => startTransform(event, id, 'move')"
+                    @selection-move="(event, id) => startTransform(event, id, 'move', 'se', true)"
+                    @selection-resize="(event, id, direction) => startTransform(event, id, 'resize', direction, true)"
+                    @selection-key="selectionKey"
+                    @request-menu="openWidgetMenu"
                     :published-draft-ids="layout?.publishedDraftIds || []"
                     @publish-announcement="publishAnnouncement"
                     :announcement-drafts="layout?.announcementDrafts || []"
@@ -2410,22 +2545,18 @@ onBeforeUnmount(() => {
                 >
                 <AppButton
                   type="button"
-                  :disabled="
-                    !repeatable(selectedWidget.type) ||
-                    !palette.includes(selectedWidget.type) ||
-                    !canAdd(selectedWidget.type)
-                  "
+                  :disabled="!canDuplicateSelected"
                   @click="duplicateWidget"
                   >Duplicate widget</AppButton
                 >
                 <AppButton
                   type="button"
-                  :disabled="selectedWidget.type === requiredType"
+                  :disabled="requiredSelection"
                   @click="remove"
                   >Remove widget</AppButton
                 >
               </div>
-              <small v-if="selectedWidget.type === requiredType">Required for this layout.</small>
+              <small v-if="requiredSelection">Contains a required tool for this layout.</small>
               <small v-if="!repeatable(selectedWidget.type)"
                 >This tool can appear once per dashboard.</small
               >
@@ -2698,6 +2829,16 @@ onBeforeUnmount(() => {
         </div>
       </AppLoadingRegion>
       <BuilderConfirmDialog ref="confirm" />
+      <DashboardWidgetMenu
+        v-if="widgetMenu && editing && canEdit && !busy"
+        :key="widgetMenu.id"
+        :x="widgetMenu.x"
+        :y="widgetMenu.y"
+        :anchor="widgetMenu.trigger"
+        :actions="widgetMenuActions"
+        @action="widgetMenuAction"
+        @close="closeWidgetMenu"
+      />
       <Teleport to="body"
         ><div
           v-if="marquee"
