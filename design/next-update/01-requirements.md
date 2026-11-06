@@ -25,6 +25,7 @@ These identifiers refer to material provided in the conversation, not separately
 | S15 | User specifies Personal, Role, and Job dashboards; add Personal/Role pages or tabs, leave current Jobs page untouched, retain job-list navigation to the existing three-option Job dashboard; move jobs list into a module and retire Jobs page later |
 | S16 | User emphasizes that all existing Jobs dashboards/pages must remain untouched because the whole company uses them; supersedes proposed initial additions to the Job dashboard |
 | S17 | Admin adds SDS information and manages master; anyone with job access can select/deselect sheets and export its book; Role dashboards provide consistent shared resources and role-specific tools |
+| S18 | November 6 user decisions: personal items are private to that person; content follows dashboard audience without enlarging source permissions; announcement creation is Admin-only for now |
 
 ## Priority and existing work
 
@@ -71,7 +72,7 @@ These identifiers refer to material provided in the conversation, not separately
 | DASH-06 | Keep all existing Jobs pages and dashboards untouched initially; defer additions, redesign, and eventual jobs-list migration | S15, S16 | Confirmed boundary includes layouts, routes, workflow options, and behavior; new Personal/Role pages are additive |
 | DASH-07 | Role dashboards provide consistent shared resources and tools suited to each role, distinct from personal information | S17 | Confirmed purpose; shared role-specific starting layouts; resource/layout editing ownership and multi-role behavior remain open |
 | FILE-01 | Job and personal file storage as a central document location | S08 | Confirmed; group sharing proposed to align with DASH-02 |
-| WIDGET-01 | Alerts, announcements, calendars, notes, and to-do/checklists | S08 | Confirmed; announcement audiences include job and everyone |
+| WIDGET-01 | Alerts, announcements, calendars, notes, and to-do/checklists | S08, S18 | Confirmed; personal items are owner-private; announcement creation is Admin-only. Job/everyone announcements remain requested, with exact audience and publishing semantics pending |
 | WIDGET-02 | Document tree, pinned documents, photo/PDF viewers and galleries | S08, S14 | Confirmed; explorer module begins with SDS; other document collections/media follow |
 | WIDGET-03 | Job map and contacts | S08 | Confirmed |
 | WIDGET-04 | Pie/bar/line charts and PM analytics; investigate spreadsheet integration | S08 | Confirmed planning scope; spreadsheet behavior open |

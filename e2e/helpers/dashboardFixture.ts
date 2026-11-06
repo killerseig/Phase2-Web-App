@@ -5,8 +5,9 @@ export async function mockDashboard(page: Page, admin = true) {
   const layouts = new Map<string, { version: number; widgets: DashboardWidget[] }>()
   let failSave = false
   let failTasks = false
+  let failAnnouncements = false
   const requests: Record<string, unknown>[] = []
-  const contents = new Map<string, { notes: Record<string,string>; events: unknown[]; tasks?: unknown[]; version: number }>()
+  const contents = new Map<string, { notes: Record<string,string>; events: unknown[]; tasks?: unknown[]; announcementDrafts?: unknown[]; version: number }>()
   await page.addInitScript(() => { window.__PHASE2_FORM_SERVER__ = true })
   await page.route('**/formTemplates', async route => {
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
@@ -60,19 +61,26 @@ export async function mockDashboard(page: Page, admin = true) {
       await route.fulfill({ status: 409, headers, json: { error: { status: 'ABORTED', message: 'This dashboard changed elsewhere. Reload and review before saving.' } } })
       return
     }
+    if (data.action === 'save-announcement-drafts' && failAnnouncements) {
+      failAnnouncements = false
+      await route.fulfill({ status: 409, headers, json: { error: { status: 'ABORTED', message: 'This dashboard changed elsewhere. Reload and review before saving.' } } })
+      return
+    }
     const content = contents.get(key) || { notes: {}, events: [], version: 0 }
     if (data.action === 'save-notes') { content.notes[data.widgetId] = data.text; content.version++; contents.set(key, content) }
+    if (data.action === 'save-announcement-drafts') { content.announcementDrafts = structuredClone(data.announcementDrafts); content.version++; contents.set(key, content) }
     if (data.action === 'save-tasks') { content.tasks = structuredClone(data.tasks); content.version++; contents.set(key, content) }
     if (data.action === 'save-calendar') { content.events = data.events; content.version++; contents.set(key, content) }
     await route.fulfill({ headers, json: { result: {
       ...state, canEdit, role: data.role || (admin ? 'admin' : 'foreman'), allowRoleEditing: false, job: null,
-      tasks: content.tasks || [], notes: content.notes, events: content.events, notesVersion: content.version,
-      ...(['save-notes','save-calendar','save-tasks'].includes(data.action) ? { version: content.version } : {}),
+      announcementDrafts: content.announcementDrafts || [], tasks: content.tasks || [], notes: content.notes, events: content.events, notesVersion: content.version,
+      ...(['save-notes','save-calendar','save-tasks','save-announcement-drafts'].includes(data.action) ? { version: content.version } : {}),
     } } })
   })
   return {
     layouts,
     requests,
+    failAnnouncementSave: () => { failAnnouncements = true },
     failTaskSave: () => { failTasks = true },
     failSave: () => {
       failSave = true

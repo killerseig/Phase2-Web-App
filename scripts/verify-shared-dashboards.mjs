@@ -116,6 +116,40 @@ try {
   await call('dash-a', 'personal', 'save-template', { version: beforeRemoval.version, widgets: beforeRemoval.widgets.filter(w => w.type !== 'tasks') })
   equal((await call('dash-a', 'personal')).tasks[0].done, true)
 
+
+  // Announcements remain unpublished author-private drafts until audience/publishing decisions.
+  await db.doc('users/dash-admin-2').set({ role: 'admin', active: true })
+  const draftWidget = { id: 'announcement-drafts', type: 'announcement-drafts', span: 12, title: 'Announcement drafts', text: '' }
+  const adminPersonal = await call('dash-admin', 'personal')
+  await call('dash-admin', 'personal', 'save-template', { version: adminPersonal.version, widgets: [...adminPersonal.widgets, draftWidget] })
+  const draft = { id: 'first', title: 'Private draft', body: 'Unpublished message' }
+  const adminData = await call('dash-admin', 'personal')
+  await call('dash-admin', 'personal', 'save-announcement-drafts', { version: adminData.notesVersion, announcementDrafts: [draft] })
+  equal((await call('dash-admin', 'personal')).announcementDrafts, [draft])
+  equal((await call('dash-admin-2', 'personal')).announcementDrafts, [])
+  equal((await call('dash-admin', 'role')).announcementDrafts, [])
+  equal((await call('dash-admin', 'job', 'load', { jobId: 'dash-job-a' })).announcementDrafts, [])
+  for (const uid of ['dash-a', 'dash-b', 'dash-shop', 'dash-payroll', 'dash-none', 'dash-inactive'])
+    await denied(() => call(uid, 'personal', 'save-announcement-drafts', { version: 0, announcementDrafts: [draft] }))
+  await denied(() => call(undefined, 'personal', 'save-announcement-drafts', { version: 0, announcementDrafts: [draft] }), 'unauthenticated')
+  for (const scope of ['role', 'job'])
+    await denied(() => call('dash-admin', scope, 'save-announcement-drafts', { version: 0, announcementDrafts: [draft] }))
+  await denied(() => call('dash-admin-2', 'personal', 'load', { ownerId: 'dash-admin' }), 'invalid-argument')
+  await denied(() => call('dash-admin-2', 'personal', 'save-announcement-drafts', { uid: 'dash-admin', version: 0, announcementDrafts: [draft] }), 'invalid-argument')
+  const nonAdminLayout = await call('dash-a', 'personal')
+  await denied(() => call('dash-a', 'personal', 'save-template', { version: nonAdminLayout.version, widgets: [...nonAdminLayout.widgets, draftWidget] }))
+  const draftVersion = (await call('dash-admin', 'personal')).notesVersion
+  for (const fields of [{ recipients: ['dash-a'] }, { published: true }, { audience: 'everyone' }])
+    await denied(() => call('dash-admin', 'personal', 'save-announcement-drafts', { version: draftVersion, announcementDrafts: [{ ...draft, ...fields }] }), 'invalid-argument')
+  await denied(() => call('dash-admin', 'personal', 'save-announcement-drafts', { version: adminData.notesVersion, announcementDrafts: [] }), 'aborted')
+  await denied(() => call('dash-admin', 'personal', 'publish-announcement', { announcementDrafts: [draft] }), 'invalid-argument')
+  await denied(() => getDoc(doc(clientDb, 'sharedDashboardPersonalData', 'dash-admin')))
+  await db.doc('users/dash-admin').update({ role: 'foreman' })
+  equal((await call('dash-admin', 'personal')).announcementDrafts, [])
+  await denied(() => call('dash-admin', 'personal', 'save-announcement-drafts', { version: draftVersion, announcementDrafts: [] }))
+  await db.doc('users/dash-admin').update({ role: 'admin' })
+  equal((await call('dash-admin', 'personal')).announcementDrafts, [draft])
+
   await denied(() => call(undefined, 'role'), 'unauthenticated')
   await denied(() => call('dash-a', 'job', 'load', { jobId: 'dash-job-b' }))
   equal((await call('dash-a', 'job', 'load', { jobId: 'dash-job-uid' })).job.id, 'dash-job-uid')

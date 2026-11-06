@@ -2,6 +2,7 @@
 import AppButton from '@/components/common/AppButton.vue'
 import AppLoadingIndicator from '@/components/common/AppLoadingIndicator.vue'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import DashboardAnnouncementDrafts from './DashboardAnnouncementDrafts.vue'
 import DashboardPersonalTasks from './DashboardPersonalTasks.vue'
 import DashboardJobInformation from './DashboardJobInformation.vue'
 import DashboardCalendarAgenda from './DashboardCalendarAgenda.vue'
@@ -31,6 +32,7 @@ const props = defineProps<{
   canCreateJobs?: boolean
   canManageJobs?: boolean
   editableJobIds?: string[]
+  announcementDrafts?: import('@/features/dashboard/sharedDashboards').AnnouncementDraft[]
   tasks?: import('@/features/dashboard/sharedDashboards').PersonalTask[]
   notes: Record<string, string>
   events: SharedCalendarEntry[]
@@ -49,6 +51,7 @@ const emit = defineEmits<{
   edit: [id: string]
   move: [event: PointerEvent, id: string]
   'save-note': [id: string, text: string]
+  'save-announcement-drafts': [items: import('@/features/dashboard/sharedDashboards').AnnouncementDraft[]]
   'save-tasks': [tasks: import('@/features/dashboard/sharedDashboards').PersonalTask[]]
   'save-calendar': [events: SharedCalendarEntry[]]
 }>()
@@ -56,6 +59,8 @@ type NavigationParticipant = { prepareNavigation: () => boolean | Promise<boolea
 const forms = ref<NavigationParticipant[]>([])
 const libraries = ref<NavigationParticipant[]>([])
 const resources = ref<NavigationParticipant[]>([])
+const announcementEditors = ref<InstanceType<typeof DashboardAnnouncementDrafts>[]>([])
+const announcementsEditing = computed(() => announcementEditors.value.some(editor => editor.editing))
 const taskEditors = ref<InstanceType<typeof DashboardPersonalTasks>[]>([])
 const tasksEditing = computed(() => taskEditors.value.some(editor => editor.editing))
 const noteId = ref(''),
@@ -66,17 +71,19 @@ const noteId = ref(''),
 watch(() => props.initialToolJobId, id => { toolJobId.value = id || '' })
 const notesDirty = computed(
   () =>
+    announcementEditors.value.some(editor => editor.dirty) ||
     taskEditors.value.some(editor => editor.dirty) ||
     (!!noteId.value && noteText.value !== (props.notes[noteId.value] || '')) ||
     (calendarEditing.value && JSON.stringify(calendarDraft.value) !== JSON.stringify(props.events)),
 )
 const toolJob = computed(() => props.job || props.jobs.find((job) => job.id === toolJobId.value))
 function beginNote(id: string) {
-  if (!props.canEditNotes || props.busy || noteId.value || calendarEditing.value || tasksEditing.value) return
+  if (!props.canEditNotes || props.busy || noteId.value || calendarEditing.value || tasksEditing.value || announcementsEditing.value) return
   noteId.value = id
   noteText.value = props.notes[id] || ''
 }
 function cancelNote() {
+  announcementEditors.value.forEach(editor => editor.discard())
   taskEditors.value.forEach(editor => editor.discard())
   noteId.value = ''
   noteText.value = ''
@@ -228,14 +235,15 @@ function textStyle(widget: SharedDashboardWidget) {
           <AppButton
             v-if="canEditNotes"
             type="button"
-            :disabled="busy || !!noteId || tasksEditing"
+            :disabled="busy || !!noteId || tasksEditing || announcementsEditing"
             @click="editCalendar"
           >
             Edit calendar
           </AppButton></template
         >
       </div>
-      <DashboardPersonalTasks v-else-if="widget.type === 'tasks' && scope === 'personal'" ref="taskEditors" :items="tasks || []" :busy="busy || !!noteId || calendarEditing" :layout-editing="editing" @save="emit('save-tasks', $event)" />
+      <DashboardAnnouncementDrafts v-else-if="widget.type === 'announcement-drafts' && scope === 'personal' && role === 'admin'" ref="announcementEditors" :items="announcementDrafts || []" :busy="busy || !!noteId || calendarEditing || tasksEditing" :layout-editing="editing" @save="emit('save-announcement-drafts', $event)" />
+      <DashboardPersonalTasks v-else-if="widget.type === 'tasks' && scope === 'personal'" ref="taskEditors" :items="tasks || []" :busy="busy || !!noteId || calendarEditing || announcementsEditing" :layout-editing="editing" @save="emit('save-tasks', $event)" />
       <div v-else-if="widget.type === 'notes'" class="shared-widget-tools">
         <p v-if="editing">
           Notes stay separate for each {{ scope === 'job' ? 'job' : 'signed-in person' }}.
@@ -260,7 +268,7 @@ function textStyle(widget: SharedDashboardWidget) {
           <AppButton
             v-if="canEditNotes"
             type="button"
-            :disabled="busy || !!noteId || calendarEditing || tasksEditing"
+            :disabled="busy || !!noteId || calendarEditing || tasksEditing || announcementsEditing"
             @click="beginNote(widget.id)"
           >
             Edit notes

@@ -2,6 +2,7 @@ import type { UserRole } from './constants'
 
 export type SharedDashboardScope = 'personal' | 'job' | 'role'
 export type SharedDashboardWidgetType =
+  | 'announcement-drafts'
   | 'tasks'
   | 'job-info'
   | 'workflows'
@@ -28,6 +29,7 @@ export interface SharedDashboardWidget {
   form?: { templateId: string; version: number; presentation: 'inline' | 'launcher' }
 }
 export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
+  'announcement-drafts': 'Announcement drafts',
   tasks: 'My tasks',
   'job-info': 'Job information',
   workflows: 'Job tools',
@@ -40,7 +42,7 @@ export const sharedWidgetLabels: Record<SharedDashboardWidgetType, string> = {
   form: 'Forms',
 }
 export function sharedWidgetTypes(scope: SharedDashboardScope): SharedDashboardWidgetType[] {
-  return [...(scope === 'personal' ? ['tasks' as const] : []), 'workflows', 'job-info', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form']
+  return [...(scope === 'personal' ? ['tasks' as const, 'announcement-drafts' as const] : []), 'workflows', 'job-info', 'jobs', 'text', 'dates', 'notes', 'documents', 'resources', 'form']
 }
 export function defaultSharedWidgets(scope: SharedDashboardScope): SharedDashboardWidget[] {
   const types: SharedDashboardWidgetType[] =
@@ -222,5 +224,25 @@ export function validatePersonalTasks(value: unknown): PersonalTask[] {
       throw Error('Use a task title and a valid completion state.')
     ids.add(entry.id)
     return { id: entry.id, title: entry.title.trim(), done: entry.done }
+  })
+}
+
+export interface AnnouncementDraft {
+  id: string
+  title: string
+  body: string
+}
+export function validateAnnouncementDrafts(value: unknown): AnnouncementDraft[] {
+  if (!Array.isArray(value) || value.length > 25) throw Error('Use at most 25 announcement drafts.')
+  const ids = new Set<string>()
+  return value.map(entry => {
+    if (!entry || typeof entry !== 'object' ||
+      typeof entry.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) || ids.has(entry.id) ||
+      typeof entry.title !== 'string' || !entry.title.trim() || entry.title.trim().length > 200 ||
+      typeof entry.body !== 'string' || !entry.body.trim() || entry.body.length > 8000 ||
+      Object.keys(entry).some(key => !['id', 'title', 'body'].includes(key)))
+      throw Error('Use a title and message for each announcement draft.')
+    ids.add(entry.id)
+    return { id: entry.id, title: entry.title.trim(), body: entry.body.trim() }
   })
 }

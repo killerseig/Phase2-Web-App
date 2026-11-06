@@ -64,6 +64,7 @@ describe('typed workspace command boundaries retain their wire protocols', () =>
     })
     expectTypeOf(result).toEqualTypeOf<{
       version: number
+      announcementDrafts?: import('@/features/dashboard/sharedDashboards').AnnouncementDraft[]
       tasks?: import('@/features/dashboard/sharedDashboards').PersonalTask[]
       notes: Record<string, string>
       events: import('@/features/dashboard/sharedDashboards').SharedCalendarEntry[]

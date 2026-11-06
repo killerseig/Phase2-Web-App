@@ -100,11 +100,12 @@ const visibleJobs = computed(() => {
 const editableJobIds = computed(() => visibleJobs.value.filter(job => canEditJobSetup({
   rawRole: auth.rawRole, assignedJobIds: assigned.value, jobId: job.id,
 })).map(job => job.id))
-const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => type !== 'form' ||
+const palette = computed(() => sharedWidgetTypes(scope.value).filter(type => (type !== 'announcement-drafts' || isAdmin.value) && (type !== 'form' ||
   (['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(auth.rawRole) &&
-   ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value))))
+   ['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role.value)))))
 const widgetSearch = ref('')
 const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
+  'announcement-drafts': 'Prepare private drafts. Admin only; publishing is not enabled.',
   tasks: 'Keep a private personal task list.',
   workflows: 'Open the tools for a job.',
   'job-info': 'View a job address, contractor and project dates.',
@@ -119,7 +120,7 @@ const widgetDescriptions: Record<SharedDashboardWidget['type'], string> = {
 const paletteGroups = computed(() => [
   { title: 'Work tools', types: ['workflows', 'job-info', 'jobs', 'form'] },
   { title: 'Files & resources', types: ['documents', 'resources'] },
-  { title: 'Content & planning', types: ['text', 'notes', 'dates', 'tasks'] },
+  { title: 'Content & planning', types: ['text', 'notes', 'dates', 'tasks', 'announcement-drafts'] },
 ].map(group => ({ ...group, types: group.types.filter((type): type is SharedDashboardWidget['type'] =>
   palette.value.includes(type as SharedDashboardWidget['type']) &&
   `${sharedWidgetLabels[type as SharedDashboardWidget['type']]} ${widgetDescriptions[type as SharedDashboardWidget['type']]}`
@@ -339,7 +340,7 @@ async function prepare() {
       !(await confirm.value?.ask({
         title: 'Discard unsaved changes?',
         message:
-          'Your unsaved layout, notes, calendar or task edits will be discarded. Saved records remain.',
+          'Your unsaved layout, notes, calendar, task or announcement draft edits will be discarded. Saved records remain.',
         confirmLabel: 'Discard changes',
         destructive: true,
       }))
@@ -473,8 +474,8 @@ const canEditContent = computed(() =>
   scope.value === 'job' ? isAdmin.value && !!layout.value?.job : role.value === auth.rawRole,
 )
 async function saveContent(
-  action: 'save-notes' | 'save-calendar' | 'save-tasks',
-  payload: { widgetId: string; text: string } | { events: SharedCalendarEntry[] } | { tasks: import('@/features/dashboard/sharedDashboards').PersonalTask[] },
+  action: 'save-notes' | 'save-calendar' | 'save-tasks' | 'save-announcement-drafts',
+  payload: { widgetId: string; text: string } | { events: SharedCalendarEntry[] } | { tasks: import('@/features/dashboard/sharedDashboards').PersonalTask[] } | { announcementDrafts: import('@/features/dashboard/sharedDashboards').AnnouncementDraft[] },
 ) {
   if (!canEditContent.value || busy.value || !layout.value) return
   busy.value = true
@@ -483,6 +484,7 @@ async function saveContent(
   try {
     const result = await sharedDashboardCommand(action, { ...context(), version: layout.value.notesVersion, ...payload })
     if (request !== generation) return
+    layout.value.announcementDrafts = result.announcementDrafts || []
     layout.value.tasks = result.tasks || []
     layout.value.notes = result.notes
     layout.value.events = result.events
@@ -842,6 +844,8 @@ onBeforeUnmount(() => {
                         sharedWidgetLabels[widgets.find((w) => w.id === id)!.type],
                       )
                   "
+                  :announcement-drafts="layout?.announcementDrafts || []"
+                  @save-announcement-drafts="announcementDrafts => saveContent('save-announcement-drafts', { announcementDrafts })"
                   :tasks="layout?.tasks || []"
                   @save-tasks="tasks => saveContent('save-tasks', { tasks })"
                   @save-note="saveNote"

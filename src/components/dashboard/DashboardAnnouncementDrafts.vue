@@ -1,0 +1,53 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import AppButton from '@/components/common/AppButton.vue'
+import type { AnnouncementDraft } from '@/features/dashboard/sharedDashboards'
+const props = defineProps<{ items: AnnouncementDraft[]; busy: boolean; layoutEditing: boolean }>()
+const emit = defineEmits<{ save: [items: AnnouncementDraft[]] }>()
+const editing = ref(false)
+const draft = ref<AnnouncementDraft[]>([])
+const dirty = computed(() => editing.value && JSON.stringify(draft.value) !== JSON.stringify(props.items))
+function edit() {
+  if (props.busy || props.layoutEditing) return
+  draft.value = props.items.map(item => ({ ...item }))
+  editing.value = true
+}
+function addDraft() { draft.value.push({ id: crypto.randomUUID(), title: '', body: '' }) }
+function discard() { editing.value = false; draft.value = [] }
+defineExpose({ dirty, editing, discard })
+</script>
+<template>
+  <div class="shared-widget-tools dashboard-announcement-drafts">
+    <p>Private drafts for you. Publishing and notifications are not enabled.</p>
+    <p v-if="layoutEditing">Save your layout to edit announcement drafts.</p>
+    <form v-else-if="editing" @submit.prevent="emit('save', draft.map(item => ({ ...item })))">
+      <fieldset :disabled="busy">
+        <legend>Edit announcement drafts</legend>
+        <section v-for="(item, index) in draft" :key="item.id" class="announcement-draft">
+          <label>Draft title {{ index + 1 }}<input v-model="item.title" required maxlength="200" /></label>
+          <label>Draft message {{ index + 1 }}<textarea v-model="item.body" required maxlength="8000" /></label>
+          <AppButton type="button" :aria-label="'Remove announcement draft ' + (index + 1)" @click="draft.splice(index, 1)">Remove draft</AppButton>
+        </section>
+        <div class="announcement-draft-actions">
+          <AppButton type="button" :disabled="draft.length >= 25" @click="addDraft">Add announcement draft</AppButton>
+          <AppButton type="submit" variant="primary" :disabled="!dirty">Save announcement drafts</AppButton>
+          <AppButton type="button" @click="discard">Cancel announcement drafts</AppButton>
+        </div>
+      </fieldset>
+    </form>
+    <template v-else>
+      <p v-if="!items.length">No announcement drafts yet.</p>
+      <section v-for="item in items" :key="item.id" class="announcement-draft">
+        <h3>{{ item.title }}</h3><p class="announcement-draft-body">{{ item.body }}</p>
+      </section>
+      <AppButton type="button" :disabled="busy" @click="edit">Edit announcement drafts</AppButton>
+    </template>
+  </div>
+</template>
+<style scoped>
+fieldset { min-width: 0; border: 0; padding: 0; }
+legend { margin-bottom: .75rem; }
+.announcement-draft { display: grid; gap: .75rem; margin-bottom: 1rem; overflow-wrap: anywhere; }
+.announcement-draft-body { white-space: pre-wrap; }
+.announcement-draft-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+</style>

@@ -10,6 +10,7 @@ import {
   validateSharedWidgets,
   validateSharedCalendar,
   validatePersonalTasks,
+  validateAnnouncementDrafts,
   upgradeDashboardWidgets,
   type SharedDashboardScope,
 } from './sharedDashboardModel'
@@ -58,7 +59,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use dashboards.')
   const data = request.data || {}
   if (
-    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks'].includes(data.action) ||
+    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks', 'save-announcement-drafts'].includes(data.action) ||
     !['personal', 'job', 'role'].includes(data.scope) ||
     data.uid !== undefined ||
     data.ownerId !== undefined
@@ -70,12 +71,16 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       'invalid-argument',
       'This dashboard uses the signed-in person, not a supplied job context.',
     )
+  if (data.action === 'save-announcement-drafts' && scope !== 'personal')
+    throw denied('Announcement drafts are private to their author.')
   if (data.action === 'save-tasks' && scope !== 'personal')
     throw denied('Personal tasks belong only to the signed-in person.')
   return db.runTransaction(async (tx) => {
     const profile = await tx.get(db.doc('users/' + request.auth!.uid))
     const user = buildCurrentFunctionUser(request.auth!.uid, profile.data() || {})
     if (!profile.exists || !user.active || user.role === 'none') throw denied()
+    if (data.action === 'save-announcement-drafts' && user.role !== 'admin')
+      throw denied('Only Admin can create announcement drafts.')
     const role = (data.role ?? user.role) as UserRole
     if (
       scope === 'role' &&
@@ -142,6 +147,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
     const notes = notesRef ? await tx.get(notesRef) : undefined
     const content = notes?.data() || {}
     const tasks = scope === 'personal' ? content.tasks || [] : []
+    const announcementDrafts = scope === 'personal' && user.role === 'admin' ? content.announcementDrafts || [] : []
     const contentKey = scope === 'personal' ? 'personal' : role
     const prefix = scope !== 'job' ? contentKey + ':' : ''
     const visibleNotes = Object.fromEntries(
@@ -162,6 +168,8 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
           error instanceof Error ? error.message : 'Invalid template.',
         )
       }
+      if (user.role !== 'admin' && widgets.some((w: { type: string }) => w.type === 'announcement-drafts'))
+        throw denied('Only Admin can add announcement drafts.')
       for (const widget of widgets.filter((w: { type: string }) => w.type === 'form')) {
         if (!['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role))
           throw denied('Employee forms are available only to authorized respondent roles.')
@@ -208,7 +216,18 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         notes: { ...visibleNotes, [widget.id]: data.text },
         events,
         tasks,
+        announcementDrafts,
       }
+    }
+    if (data.action === 'save-announcement-drafts') {
+      checkVersion(data.version, Number(content.version || 0))
+      if (!widgets.some((w: { type: string }) => w.type === 'announcement-drafts'))
+        throw new HttpsError('failed-precondition', 'Add Announcement drafts first.')
+      let entries
+      try { entries = validateAnnouncementDrafts(data.announcementDrafts) }
+      catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid announcement drafts.') }
+      tx.set(notesRef!, { ...content, announcementDrafts: entries, version: Number(content.version || 0) + 1, updatedBy: user.uid, updatedAt: Date.now() })
+      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks, announcementDrafts: entries }
     }
     if (data.action === 'save-tasks') {
       checkVersion(data.version, Number(content.version || 0))
@@ -218,7 +237,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       try { entries = validatePersonalTasks(data.tasks) }
       catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid tasks.') }
       tx.set(notesRef!, { ...content, tasks: entries, version: Number(content.version || 0) + 1, updatedBy: user.uid, updatedAt: Date.now() })
-      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks: entries }
+      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks: entries, announcementDrafts }
     }
     if (data.action === 'save-calendar') {
       checkVersion(data.version, Number(content.version || 0))
@@ -242,7 +261,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         updatedBy: user.uid,
         updatedAt: Date.now(),
       })
-      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events: entries, tasks }
+      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events: entries, tasks, announcementDrafts }
     }
     return {
       scope,
@@ -254,6 +273,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       job: job ? jobData(jobId, job) : null,
       notes: visibleNotes,
       tasks,
+      announcementDrafts,
       events,
       notesVersion: Number(content.version || 0),
     }
