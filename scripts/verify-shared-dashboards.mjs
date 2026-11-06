@@ -74,9 +74,11 @@ try {
   equal(personal.notes['old-note'], 'Original private note')
   equal((await db.doc('sharedDashboardPersonal/dash-a').get()).exists, false)
   equal((await call('dash-b', 'personal')).notes['old-note'], undefined)
-  const infoWidget = { id: 'job-info', type: 'job-info', span: 6, title: 'Job information', text: '' }
+  const infoWidget = { id: 'job-info', type: 'job-info', span: 6, title: 'Job information', text: '', placement: { x: 5.25, y: 16.5, w: 8, h: 9 } }
   await call('dash-a', 'personal', 'save-template', { version: 0, widgets: [...personal.widgets, infoWidget] })
   equal((await call('dash-a', 'personal')).widgets.some(widget => widget.type === 'job-info'), true)
+  equal((await call('dash-a', 'personal')).widgets.find(widget => widget.id === 'job-info').placement, infoWidget.placement)
+  await denied(() => call('dash-a', 'personal', 'save-template', { version: 1, widgets: [{ ...infoWidget, placement: { x: 22, y: 0, w: 8, h: 9 } }] }), 'invalid-argument')
   equal((await call('dash-b', 'personal')).widgets.some(widget => widget.type === 'job-info'), false)
   await denied(() => call('dash-a', 'personal', 'save-template', { version: 1, widgets: [infoWidget, { ...infoWidget, id: 'duplicate-info' }] }), 'invalid-argument')
   equal((await db.doc('dashboardPersonal/dash-a').get()).data().version, 7)

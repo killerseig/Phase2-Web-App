@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import type { PersonalTask } from '@/features/dashboard/sharedDashboards'
 const props = defineProps<{ items: PersonalTask[]; busy: boolean; layoutEditing: boolean }>()
 const emit = defineEmits<{ save: [items: PersonalTask[]] }>()
+const root = ref<HTMLElement>()
+function focus(selector: string) { void nextTick(() => root.value?.querySelectorAll<HTMLElement>(selector).item(draft.value.length - 1)?.focus()) }
 const editing = ref(false)
 const draft = ref<PersonalTask[]>([])
 const dirty = computed(() => editing.value && JSON.stringify(draft.value) !== JSON.stringify(props.items))
@@ -12,13 +14,14 @@ function edit() {
   if (props.busy || props.layoutEditing) return
   draft.value = props.items.map(item => ({ ...item }))
   editing.value = true
+  void nextTick(() => root.value?.querySelector<HTMLElement>('[data-add-item]')?.focus())
 }
-function addTask() { draft.value.push({ id: crypto.randomUUID(), title: '', done: false }) }
+function addTask() { draft.value.push({ id: crypto.randomUUID(), title: '', done: false }); focus('.personal-task-row label input') }
 function discard() { editing.value = false; draft.value = [] }
 defineExpose({ dirty, editing, discard })
 </script>
 <template>
-  <div class="shared-widget-tools dashboard-personal-tasks">
+  <div ref="root" class="shared-widget-tools dashboard-personal-tasks">
     <p>Private to you.</p>
     <p v-if="layoutEditing">Save your layout to manage your tasks.</p>
     <form v-else-if="editing" @submit.prevent="emit('save', draft.map(item => ({ ...item })))">
@@ -30,7 +33,7 @@ defineExpose({ dirty, editing, discard })
           <AppButton type="button" :aria-label="'Remove task ' + (index + 1)" @click="draft.splice(index, 1)">Remove</AppButton>
         </div>
         <div class="personal-task-actions">
-        <AppButton type="button" :disabled="draft.length >= 100" @click="addTask">Add task</AppButton>
+        <AppButton data-add-item type="button" :disabled="draft.length >= 100" @click="addTask">Add task</AppButton>
         <AppButton type="submit" variant="primary" :disabled="!dirty">Save tasks</AppButton>
         <AppButton type="button" @click="discard">Cancel tasks</AppButton>
         </div>

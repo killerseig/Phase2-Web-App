@@ -33,6 +33,7 @@ import {
   type SharedDashboardLayout,
   type SharedDashboardScope,
 } from '@/features/dashboard/sharedDashboards'
+import { placeWidget, resizeWidget, fallbackPlacements } from '@/features/dashboard/widgetPlacement'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import type { RawRoleKey } from '@/types/domain'
 import { dashboardTextVariables, resolveDashboardText } from '@/features/dashboard/sharedText'
@@ -247,9 +248,10 @@ function redoChange() {
     restore(value)
   }
 }
-type Payload = { kind: 'new'; type: SharedDashboardWidget['type'] } | { kind: 'move'; id: string }
+type Payload = { kind: 'new'; type: SharedDashboardWidget['type'] } | { kind: 'move' | 'resize'; id: string }
 const drag = useWidgetDrag<Payload>({
   root,
+  freePosition: true,
   disabled: () => !editing.value || busy.value || !canEdit.value,
   drop,
 })
@@ -260,8 +262,73 @@ function canAdd(type: SharedDashboardWidget['type']) {
     (repeatable(type) || !widgets.value.some((w) => w.type === type))
   )
 }
+const snapToGrid = ref(true), gridVisible = ref(true)
+const placementPreview = computed(() => {
+  const destination = dropTarget.value
+  const payload = drag.payload.value
+  const surface = root.value?.querySelector<HTMLElement>('[data-widget-surface="shared-dashboard"]')
+  if (!dragging.value || !destination?.position || !payload || !surface) return undefined
+  const p = payload.kind !== 'new'
+    ? measuredPlacements()[widgets.value.findIndex(w => w.id === payload.id)]
+    : { w: 12, h: 10 }
+  if (!p) return undefined
+  if (payload.kind === 'resize' && 'x' in p && 'y' in p)
+    return resizeWidget(p, destination.position.x / surface.offsetWidth * 24 - p.x,
+      destination.position.y / 32 - p.y, snapToGrid.value)
+  return placeWidget(destination.position.x / surface.offsetWidth * 24 - (payload.kind === 'new' ? p.w / 2 : 0), destination.position.y / 32 - (payload.kind === 'new' ? p.h / 2 : 0),
+    p.w, p.h, snapToGrid.value)
+})
+function measuredPlacements() {
+  const surface = root.value?.querySelector<HTMLElement>('[data-widget-surface="shared-dashboard"]')
+  const bounds = surface?.getBoundingClientRect()
+  const scale = surface && bounds ? bounds.width / surface.offsetWidth : 1
+  const fallback = fallbackPlacements(widgets.value)
+  return widgets.value.map((widget, index) => {
+    if (widget.placement) return { ...widget.placement }
+    const element = surface && [...surface.querySelectorAll<HTMLElement>('[data-widget-id]')].find(el => el.dataset.widgetId === widget.id)
+    const rect = element?.getBoundingClientRect()
+    return rect && bounds ? placeWidget(
+      (rect.left - bounds.left) / bounds.width * 24,
+      (rect.top - bounds.top) / scale / 32,
+      rect.width / bounds.width * 24,
+      Math.ceil(rect.height / scale / 32), false,
+    ) : fallback[index]!
+  })
+}
+function updatePlacement(key: 'x' | 'y' | 'w' | 'h', event: Event, requested?: number) {
+  const value = requested ?? (event.target as HTMLInputElement).valueAsNumber
+  if (!Number.isFinite(value) || !selectedWidget.value || busy.value || !canEdit.value) return
+  const positions = measuredPlacements()
+  widgets.value = widgets.value.map((widget, index) => {
+    const p = { ...positions[index]! }
+    if (widget.id === selected.value) p[key] = value
+    return { ...widget, placement: placeWidget(p.x, p.y, p.w, p.h, false) }
+  })
+}
 function drop(payload: Payload, destination: WidgetDrop) {
   if (!editing.value || busy.value || !canEdit.value) return
+  if (destination.position) {
+    const positions = measuredPlacements()
+    const next = widgets.value.map((widget, index) => ({ ...widget, placement: positions[index]! }))
+    let widget = payload.kind !== 'new' ? next.find(w => w.id === payload.id) : undefined
+    if (payload.kind === 'new') {
+      if (!canAdd(payload.type)) return
+      widget = { ...newSharedWidget(payload.type), placement: { x: 0, y: 0, w: 12, h: 10 } }
+      next.push(widget)
+    }
+    const surface = root.value?.querySelector<HTMLElement>('[data-widget-surface="shared-dashboard"]')
+    if (!widget || !surface) return
+    const p = widget.placement
+    widget.placement = payload.kind === 'resize'
+      ? resizeWidget(p, destination.position.x / surface.offsetWidth * 24 - p.x, destination.position.y / 32 - p.y, snapToGrid.value)
+      : placeWidget(destination.position.x / surface.offsetWidth * 24 - (payload.kind === 'new' ? p.w / 2 : 0),
+      destination.position.y / 32 - (payload.kind === 'new' ? p.h / 2 : 0), p.w, p.h, snapToGrid.value)
+    widgets.value = next
+    selected.value = widget.id
+    announcePosition(widget, payload.kind === 'new' ? 'Added' : payload.kind === 'resize' ? 'Resized' : 'Moved')
+    if (payload.kind === 'new') { activePane.value = 'inspector'; focusSettings() }
+    return
+  }
   const at =
     destination.beforeId === null
       ? widgets.value.length
@@ -271,6 +338,10 @@ function drop(payload: Payload, destination: WidgetDrop) {
     if (!canAdd(payload.type)) return
     const widget = newSharedWidget(payload.type)
     widget.title = sharedWidgetLabels[payload.type]
+    if (widgets.value.some(w => w.placement)) {
+      const bottom = Math.max(0, ...measuredPlacements().map(p => p.y + p.h))
+      widget.placement = placeWidget(0, bottom + 1, widget.span * 2, 10)
+    }
     widgets.value.splice(at, 0, widget)
     selected.value = widget.id
     announcePosition(widget, 'Added')
@@ -310,6 +381,10 @@ function duplicateWidget() {
   if (!editing.value || busy.value || !canEdit.value || !widget || !repeatable(widget.type) || !palette.value.includes(widget.type) || !canAdd(widget.type)) return
   const copy: SharedDashboardWidget = JSON.parse(JSON.stringify(widget))
   copy.id = crypto.randomUUID()
+  if (copy.placement) {
+    const p = copy.placement
+    copy.placement = placeWidget(p.x + 1, p.y + 1, p.w, p.h, false)
+  }
   copy.title = `${widget.title || sharedWidgetLabels[widget.type]} copy`.slice(0, 100)
   widgets.value.splice(selectedIndex.value + 1, 0, copy)
   editWidget(copy.id)
@@ -575,7 +650,23 @@ function keydown(event: KeyboardEvent) {
     (event.target as HTMLElement).closest('input,select,textarea,[contenteditable]')
   )
     return
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+  const targetWidget = (event.target as HTMLElement).closest<HTMLElement>('[data-widget-id]')
+  if (targetWidget && !event.ctrlKey && !event.metaKey &&
+    ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && canEdit.value) {
+    event.preventDefault()
+    const id = targetWidget.dataset.widgetId
+    const positions = measuredPlacements()
+    const distance = event.shiftKey ? 10 : 1
+    widgets.value = widgets.value.map((widget, index) => {
+      const p = positions[index]!
+      if (widget.id !== id) return { ...widget, placement: p }
+      selected.value = widget.id
+      const dx = event.key === 'ArrowLeft' ? -distance : event.key === 'ArrowRight' ? distance : 0
+      const dy = event.key === 'ArrowUp' ? -distance : event.key === 'ArrowDown' ? distance : 0
+      return { ...widget, placement: placeWidget(p.x + dx * (snapToGrid.value ? 1 : 1 / 45),
+        p.y + dy * (snapToGrid.value ? 1 : 1 / 32), p.w, p.h, snapToGrid.value) }
+    })
+  } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
     event.preventDefault()
     event.shiftKey ? redoChange() : undoChange()
   } else if (event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'y') {
@@ -814,6 +905,8 @@ onBeforeUnmount(() => {
             ><AppButton type="button" aria-label="Zoom out" @click="manualZoom(-0.1)">−</AppButton
             ><span>{{ Math.round(previewScale * 100) }}%</span
             ><AppButton type="button" aria-label="Zoom in" @click="manualZoom(0.1)">+</AppButton>
+            <label><input v-model="gridVisible" type="checkbox" />Show grid</label>
+            <label><input v-model="snapToGrid" type="checkbox" />Snap to grid</label>
           </div>
           <div ref="viewport" class="shared-dashboard-viewport" data-widget-scroll>
             <div
@@ -860,10 +953,13 @@ onBeforeUnmount(() => {
                   :resource-role="role"
                   :editing="editing"
                   :drop-target="dragging ? dropTarget : undefined"
+                  :placement-preview="placementPreview"
+                  :grid-visible="gridVisible"
                   :selected="selected"
                   :can-edit-notes="canEditContent"
                   :busy="busy"
                   :phone="editing && device === 'phone'"
+                  @resize="(event, id) => drag.start(event, { kind: 'resize', id }, 'Resize widget')"
                   @select="selected = $event"
                   @edit="editWidget"
                   @move="
@@ -916,14 +1012,23 @@ onBeforeUnmount(() => {
             <small v-if="!repeatable(selectedWidget.type)">This tool can appear once per dashboard.</small>
             <small v-else>Duplicate copies settings, not saved notes or form entries.</small>
             <label>Title<input v-model="selectedWidget.title" maxlength="100" /></label
-            ><label
-              >Width<select aria-label="Width" v-model.number="selectedWidget.span">
+            ><label v-if="!selectedWidget.placement"
+              >Width<select aria-label="Width" v-model.number="selectedWidget.span" @change="selectedWidget.placement && updatePlacement('w', $event, selectedWidget.span * 2)">
                 <option :value="12">Full width</option>
                 <option :value="6">Half width</option>
                 <option :value="4">One third</option>
                 <option :value="8">Two thirds</option>
               </select></label
-            ><template v-if="selectedWidget.type === 'text'"
+            >
+
+            <p>Drag a widget to place it freely. Use its corner to resize, or arrow keys to move it (Shift for larger steps). Widgets may overlap.</p>
+            <template v-for="field in (['x', 'y', 'w', 'h'] as const)" :key="field">
+              <label>{{ { x: 'Left column', y: 'Top row', w: 'Width in columns', h: 'Height in rows' }[field] }}
+                <input type="number" step="any" :value="selectedWidget.placement?.[field] ?? measuredPlacements()[selectedIndex]?.[field]" :disabled="busy"
+                  @change="updatePlacement(field, $event)" />
+              </label>
+            </template>
+            <template v-if="selectedWidget.type === 'text'"
               ><label
                 >Text content<textarea
                   ref="textInput"

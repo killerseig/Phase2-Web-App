@@ -5,12 +5,14 @@ export interface WidgetDrop {
   overId: string | null
   edge: 'before' | 'after'
   surface: string
+  position?: { x: number; y: number }
 }
 
 // Geometry and pointer handling are shared; each editor owns its data and persistence.
 export function useWidgetDrag<T>(options: {
   root: Ref<HTMLElement | undefined>
   disabled: () => boolean
+  freePosition?: boolean
   drop: (payload: T, target: WidgetDrop) => void
 }) {
   const payload = shallowRef<T>()
@@ -19,6 +21,7 @@ export function useWidgetDrag<T>(options: {
   const point = ref({ x: 0, y: 0 })
   const label = ref('')
   let startPoint = { x: 0, y: 0 }
+  let grab = { x: 0, y: 0 }
   let pointerId: number | undefined
   let frame = 0
   let suppressClick = false
@@ -39,6 +42,11 @@ export function useWidgetDrag<T>(options: {
       (element) => element.getBoundingClientRect().height > 0,
     )
     const bounds = surface.getBoundingClientRect()
+    const scale = bounds.width / surface.offsetWidth || 1
+    const position = options.freePosition ? {
+      x: (point.value.x - bounds.left) / scale - grab.x,
+      y: (point.value.y - bounds.top) / scale - grab.y,
+    } : undefined
     const nearest = entries.reduce<HTMLElement | undefined>((best, element) => {
       function distance(entry: HTMLElement) {
         const rect = entry.getBoundingClientRect()
@@ -51,6 +59,7 @@ export function useWidgetDrag<T>(options: {
     }, undefined)
     if (!nearest) {
       target.value = {
+        position,
         beforeId: null,
         overId: null,
         edge: 'after',
@@ -66,6 +75,7 @@ export function useWidgetDrag<T>(options: {
         : y < 0.5
     const next = entries[entries.indexOf(nearest) + 1]
     target.value = {
+      position,
       beforeId: before ? nearest.dataset.widgetId! : next?.dataset.widgetId || null,
       overId: nearest.dataset.widgetId!,
       edge: before ? 'before' : 'after',
@@ -150,6 +160,11 @@ export function useWidgetDrag<T>(options: {
     suppressClick = false
     payload.value = value
     label.value = text
+    const widget = (event.currentTarget as HTMLElement)?.closest<HTMLElement>('[data-widget-id]')
+    const surface = widget?.closest<HTMLElement>('[data-widget-surface]')
+    const rect = widget?.getBoundingClientRect()
+    const scale = surface ? surface.getBoundingClientRect().width / surface.offsetWidth : 1
+    grab = rect ? { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale } : { x: 0, y: 0 }
     pointerId = event.pointerId
     startPoint = point.value = { x: event.clientX, y: event.clientY }
     window.addEventListener('pointermove', move, { passive: false })

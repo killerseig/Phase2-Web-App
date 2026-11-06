@@ -18,6 +18,7 @@ export interface SharedDashboardWidget {
   id: string
   type: SharedDashboardWidgetType
   span: 4 | 6 | 8 | 12
+  placement?: { x: number; y: number; w: number; h: number }
   title: string
   text: string
   textStyle?: {
@@ -92,7 +93,7 @@ export function validateSharedWidgets(
       typeof entry.text !== 'string' ||
       entry.text.length > 8000 ||
       Object.keys(entry).some(
-        (key) => !['id', 'type', 'span', 'title', 'text', 'form', 'textStyle'].includes(key),
+        (key) => !['id', 'type', 'span', 'title', 'text', 'form', 'textStyle', 'placement'].includes(key),
       )
     )
       throw Error('Invalid dashboard widget.')
@@ -106,6 +107,16 @@ export function validateSharedWidgets(
       span: entry.span,
       title: entry.title.trim(),
       text: entry.text,
+    }
+    if (entry.placement !== undefined) {
+      const p = entry.placement
+      if (!p || typeof p !== 'object' || Array.isArray(p) ||
+        Object.keys(p).length !== 4 || Object.keys(p).some(key => !['x', 'y', 'w', 'h'].includes(key)) ||
+        ![p.x, p.y, p.w, p.h].every(Number.isFinite) ||
+        p.x < 0 || p.y < 0 || p.w < 2 || p.w > 24 || p.h < 3 || p.h > 100 ||
+        p.x + p.w > 24.001 || p.y + p.h > 1000)
+        throw Error('Invalid widget placement.')
+      widget.placement = { x: p.x, y: p.y, w: p.w, h: p.h }
     }
     if (entry.textStyle !== undefined) {
       const style = entry.textStyle

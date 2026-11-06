@@ -19,6 +19,7 @@ import {
   type SharedCalendarEntry,
 } from '@/features/dashboard/sharedDashboards'
 import { resolveDashboardText, type DashboardTextContext } from '@/features/dashboard/sharedText'
+import { fallbackPlacements } from '@/features/dashboard/widgetPlacement'
 import type { WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import type { JobRecord, RawRoleKey } from '@/types/domain'
 const SharedDashboardForm = defineAsyncComponent(() => import('./SharedDashboardForm.vue'))
@@ -42,15 +43,36 @@ const props = defineProps<{
   resourceRole?: RawRoleKey
   textContext: DashboardTextContext
   editing: boolean
+  gridVisible?: boolean
+  placementPreview?: SharedDashboardWidget['placement']
   dropTarget?: WidgetDrop
   selected: string
   canEditNotes: boolean
   busy: boolean
   phone?: boolean
 }>()
+const positioned = computed(() => props.widgets.some(widget => widget.placement))
+const positions = computed(() => fallbackPlacements(props.widgets))
+const canvasStyle = computed(() => positioned.value ? {
+  minHeight: Math.max(props.editing ? 960 : 0, ...positions.value.map(p => (p.y + p.h) * 32 + 64)) + 'px',
+} : undefined)
+function startWidgetMove(event: PointerEvent, id: string) {
+  if (!props.editing || props.busy || event.button !== 0 ||
+    (event.target as HTMLElement).closest('button,input,select,textarea,a,[contenteditable]')) return
+  emit('select', id)
+  emit('move', event, id)
+}
+function widgetStyle(widget: SharedDashboardWidget, index: number) {
+  const p = positions.value[index]!
+  return positioned.value ? {
+    position: 'absolute' as const, left: p.x / 24 * 100 + '%', top: p.y * 32 + 'px',
+    width: p.w / 24 * 100 + '%', height: p.h * 32 + 'px', boxSizing: 'border-box' as const,
+  } : { '--widget-span': widget.span }
+}
 const emit = defineEmits<{
   select: [id: string]
   edit: [id: string]
+  resize: [event: PointerEvent, id: string]
   move: [event: PointerEvent, id: string]
   'save-note': [id: string, text: string]
   'publish-announcement': [draftId: string]
@@ -137,21 +159,28 @@ function textStyle(widget: SharedDashboardWidget) {
 <template>
   <div
     class="shared-dashboard-grid"
-    :class="{ 'phone-preview': phone, 'is-empty-editor': editing && !widgets.length, 'is-drop-target': editing && dropTarget?.surface === 'shared-dashboard' }"
+    :style="canvasStyle"
+    :class="{ 'is-grid-visible': gridVisible, 'is-positioned': positioned, 'is-placement-editor': editing, 'phone-preview': phone, 'is-empty-editor': editing && !widgets.length, 'is-drop-target': editing && dropTarget?.surface === 'shared-dashboard' }"
     data-widget-surface="shared-dashboard"
   >
+    <div v-if="editing && placementPreview" data-widget-placement-preview aria-hidden="true"
+      :style="{ left: placementPreview.x / 24 * 100 + '%', top: placementPreview.y * 32 + 'px', width: placementPreview.w / 24 * 100 + '%', height: placementPreview.h * 32 + 'px' }" />
     <div v-if="editing && !widgets.length" class="shared-empty-canvas">
       <h2>Start your dashboard</h2>
       <p>Drag a widget here, or choose one from the widget library.</p>
     </div>
     <article
-      v-for="widget in widgets"
+      v-for="(widget, widgetIndex) in widgets"
       :key="widget.id"
       :data-widget-id="widget.id"
       class="shared-dashboard-widget"
+      :tabindex="editing ? 0 : undefined"
+      :aria-label="editing ? 'Widget ' + (widget.title || sharedWidgetLabels[widget.type]) : undefined"
+      :aria-keyshortcuts="editing ? 'ArrowLeft ArrowRight ArrowUp ArrowDown' : undefined"
+      @pointerdown="startWidgetMove($event, widget.id)"
       :class="{ 'is-selected': editing && selected === widget.id }"
-      :data-drop-edge="editing && dropTarget?.surface === 'shared-dashboard' && dropTarget.overId === widget.id ? dropTarget.edge : undefined"
-      :style="{ '--widget-span': widget.span }"
+      :data-drop-edge="editing && !placementPreview && dropTarget?.surface === 'shared-dashboard' && dropTarget.overId === widget.id ? dropTarget.edge : undefined"
+      :style="widgetStyle(widget, widgetIndex)"
       @click="editing && emit('select', widget.id)"
     >
       <header class="shared-widget-heading">
@@ -301,6 +330,10 @@ function textStyle(widget: SharedDashboardWidget) {
         :can-respond="['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role)"
         :job-id="scope === 'job' ? job?.id : undefined"
       />
+      <button v-if="editing" type="button" class="shared-widget-resize"
+        :aria-label="'Resize ' + (widget.title || sharedWidgetLabels[widget.type])" :disabled="busy"
+        @pointerdown.stop="emit('resize', $event, widget.id)" @dragstart.prevent
+        @click.stop="emit('edit', widget.id)">↘</button>
     </article>
   </div>
 </template>

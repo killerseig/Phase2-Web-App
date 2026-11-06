@@ -397,3 +397,57 @@ test('job dashboard management returns to its original selected job', async ({ p
   await expect(page).toHaveURL(/\/dashboards\/job-home\/job-1(?:\?|$)/)
   await expect(page.locator('.shared-variable-text')).toContainText('Acoustical Remodel')
 })
+
+for (const scope of ['role', 'job'] as const) test(`${scope} editor saves free placement and resize without changing scope`, async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1100 })
+  const api = await mockShared(page)
+  const key = scope === 'job' ? 'all-jobs' : 'role-admin'
+  api.templates.set(key, { version: 1, allowRoleEditing: false, widgets: [
+    { id: 'text', type: 'text', title: 'Positioned text', text: 'Test', span: 4 },
+    { id: 'required', type: scope === 'job' ? 'workflows' : 'jobs', title: 'Required tool', text: '', span: 4 },
+  ] })
+  await gotoPhase2App(page, scope === 'job' ? '/dashboards/job-home/job-1' : '/dashboards/role', createJobsFixture())
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  const canvas = page.locator('[data-widget-surface="shared-dashboard"]')
+  const widget = page.locator('[data-widget-id="text"]')
+  const bounds = (await canvas.boundingBox())!
+  const scale = bounds.width / await canvas.evaluate(el => (el as HTMLElement).offsetWidth)
+  const move = widget.getByRole('heading', { name: 'Positioned text', exact: true })
+  const start = (await move.boundingBox())!, origin = (await widget.boundingBox())!
+  const cx = start.x + start.width / 2, cy = start.y + start.height / 2
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(bounds.x + bounds.width * 4 / 24 + cx - origin.x, bounds.y + 6 * 32 * scale + cy - origin.y, { steps: 10 })
+  await page.mouse.up()
+  const first = (await widget.boundingBox())!
+  const resize = widget.getByRole('button', { name: 'Resize Positioned text', exact: true })
+  const grip = (await resize.boundingBox())!
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + grip.width / 2 + bounds.width * 2 / 24, grip.y + grip.height / 2 + 64 * scale, { steps: 10 })
+  await page.mouse.up()
+  await page.screenshot({ path: test.info().outputPath(scope + '-free-canvas.png') })
+  const resized = (await widget.boundingBox())!
+  expect(resized.width).toBeGreaterThan(first.width + bounds.width / 24)
+  expect(resized.height).toBeGreaterThan(first.height + 32 * scale)
+  expect(Math.abs(resized.x - first.x)).toBeLessThan(2)
+  expect(Math.abs(resized.y - first.y)).toBeLessThan(2)
+  // A cancelled drag must not change this geometry.
+  const again = (await move.boundingBox())!
+  await page.mouse.move(again.x + 8, again.y + 8)
+  await page.mouse.down()
+  await page.mouse.move(again.x + 50, again.y + 80, { steps: 8 })
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  expect(await widget.boundingBox()).toEqual(resized)
+  await widget.focus()
+  await page.keyboard.press('ArrowRight')
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
+  const placement = api.templates.get(key)!.widgets[0]!.placement!
+  expect(placement).toMatchObject({ x: 5, y: 6 })
+  expect(placement.w).toBeGreaterThan(9)
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  expect(api.templates.get(key)!.widgets[0]!.placement).toEqual(placement)
+  expect(api.requests.filter(request => request.action === 'save-template').every(request => request.scope === scope)).toBe(true)
+})

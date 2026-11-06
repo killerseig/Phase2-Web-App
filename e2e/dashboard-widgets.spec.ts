@@ -403,7 +403,7 @@ test('empty personal canvas accepts a drag and shows placement before saving', a
   await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2)
   await page.mouse.down()
   await page.mouse.move(destination!.x + 5, destination!.y + 5, { steps: 12 })
-  await expect(first).toHaveAttribute('data-drop-edge', 'before')
+  await expect(surface.locator('[data-widget-placement-preview]')).toBeVisible()
   await page.keyboard.press('Escape')
   await page.mouse.up()
   await expect(surface.locator('[data-drop-edge]')).toHaveCount(0)
@@ -414,13 +414,14 @@ test('empty personal canvas accepts a drag and shows placement before saving', a
   await page.mouse.down()
   await page.mouse.move(destination!.x + 5, destination!.y + 5, { steps: 12 })
   await page.mouse.up()
-  await expect(surface.locator('[data-widget-id]').first()).toContainText('Notes')
-  await expect(page.locator('.shared-editor-announcement')).toHaveText('Moved Notes. Position 1 of 2.')
+  await expect(surface.locator('[data-widget-id]').first()).toContainText('First widget')
+  await expect(page.locator('.shared-editor-announcement')).toHaveText('Moved Notes. Position 2 of 2.')
   await surface.screenshot({ path: test.info().outputPath('personal-reordered.png') })
   await page.getByRole('button', { name: 'Save template', exact: true }).click()
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(surface.locator('[data-widget-id]')).toHaveCount(2)
-  expect(api.layouts.get('personal')!.widgets.map(widget => widget.title)).toEqual(['Notes', 'First widget'])
+  expect(api.layouts.get('personal')!.widgets.map(widget => widget.title)).toEqual(['First widget', 'Notes'])
+  expect(api.layouts.get('personal')!.widgets[1]!.placement).toMatchObject({ x: 0, y: 0 })
 })
 
 for (const width of [1280, 390]) test(`personal widget keyboard ordering survives undo, save and reload at ${width}px`, async ({ page }) => {
@@ -514,7 +515,9 @@ for (const width of [1280, 390]) test(`personal tasks stay editable through fail
   await page.getByRole('button', { name: 'Save template', exact: true }).click()
   await expect(page.getByText('Private to you.', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Edit tasks', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Add task', exact: true })).toBeFocused()
   await page.getByRole('button', { name: 'Add task', exact: true }).click()
+  await expect(page.getByLabel('Task 1', { exact: true })).toBeFocused()
   await page.getByLabel('Task 1', { exact: true }).fill('Review my plans')
   if (width === 390) await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
   await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
@@ -566,7 +569,9 @@ for (const width of [1280, 390]) test(`Admin prepares unpublished announcement d
   await page.getByRole('button', { name: 'Save template', exact: true }).click()
   await expect(page.getByText('Drafts stay private until you choose Publish. No notifications are sent.', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Edit announcement drafts', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Add announcement draft', exact: true })).toBeFocused()
   await page.getByRole('button', { name: 'Add announcement draft', exact: true }).click()
+  await expect(page.getByLabel('Draft title 1', { exact: true })).toBeFocused()
   await page.getByLabel('Draft title 1', { exact: true }).fill('Site update draft')
   await page.getByLabel('Draft message 1', { exact: true }).fill('<img src=x onerror=alert(1)>\nPrepare for review')
   await page.getByRole('combobox', { name: 'Audience 1', exact: true }).selectOption('everyone')
@@ -688,4 +693,57 @@ for (const width of [1280, 390]) test(`Admin targets specific people without not
   await expect(page.getByRole('button',{name:'Edit announcement drafts',exact:true})).toBeVisible()
   const updated = api.requests.filter(item=>item.action==='save-announcement-drafts').at(-1)!
   expect((updated.announcementDrafts as Record<string,unknown>[])[0]).not.toHaveProperty('recipientIds')
+})
+
+for (const zoomed of [false, true]) test(`free canvas placement preserves gaps, overlap and reload at ${zoomed ? 'manual zoom' : 'fit zoom'}`, async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1100 })
+  const api = await mockDashboard(page)
+  await emptyDocuments(page)
+  api.layouts.set('personal', { version: 1, widgets: [
+    { id: 'first', type: 'text', title: 'First', text: 'A', span: 4 },
+    { id: 'second', type: 'text', title: 'Second', text: 'B', span: 4 },
+  ] })
+  await gotoPhase2App(page, '/dashboards/personal', createJobsFixture())
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  if (zoomed) await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+  const canvas = page.locator('[data-widget-surface="shared-dashboard"]')
+  const first = page.locator('[data-widget-id="first"]')
+  const secondBefore = await page.locator('[data-widget-id="second"]').boundingBox()
+  const box = (await canvas.boundingBox())!
+  const logicalWidth = await canvas.evaluate(el => (el as HTMLElement).offsetWidth)
+  const scale = box.width / logicalWidth
+  const handle = first.getByRole('button', { name: /Move/ })
+  const start = (await handle.boundingBox())!
+  const original = (await first.boundingBox())!
+  const grabX = start.x + start.width / 2 - original.x
+  const grabY = start.y + start.height / 2 - original.y
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
+  await page.mouse.down()
+  // Intentional gap: column 10, row 8, no neighboring widget at this point.
+  await page.mouse.move(box.x + box.width * 10 / 24 + grabX, box.y + 8 * 32 * scale + grabY, { steps: 15 })
+  await expect(page.locator('[data-widget-placement-preview]')).toBeVisible()
+  await page.mouse.up()
+  const moved = (await first.boundingBox())!
+  expect(Math.abs(moved.x - (box.x + box.width * 10 / 24))).toBeLessThan(2)
+  expect(Math.abs(moved.y - (box.y + 8 * 32 * scale))).toBeLessThan(2)
+  const secondAfter = (await page.locator('[data-widget-id="second"]').boundingBox())!
+  expect(Math.abs(secondAfter.x - secondBefore!.x)).toBeLessThan(2)
+  expect(Math.abs(secondAfter.y - secondBefore!.y)).toBeLessThan(2)
+  await page.getByRole('button', { name: 'Undo template edit', exact: true }).click()
+  await expect(canvas).not.toHaveClass(/is-positioned/)
+  await page.getByRole('button', { name: 'Redo template edit', exact: true }).click()
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
+  expect(api.layouts.get('personal')!.widgets[0]!.placement).toMatchObject({ x: 10, y: 8 })
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(canvas).toHaveClass(/is-positioned/)
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await first.getByRole('button', { name: 'Edit First', exact: true }).click()
+  await page.getByLabel('Left column', { exact: true }).fill('8')
+  await page.getByLabel('Left column', { exact: true }).press('Tab')
+  await page.getByLabel('Top row', { exact: true }).fill('0')
+  await page.getByLabel('Top row', { exact: true }).press('Tab')
+  await page.getByRole('button', { name: 'Save template', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
+  expect(api.layouts.get('personal')!.widgets[0]!.placement).toMatchObject({ x: 8, y: 0 })
 })

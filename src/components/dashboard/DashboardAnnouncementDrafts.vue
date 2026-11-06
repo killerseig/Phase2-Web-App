@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import AnnouncementRecipientPicker from './AnnouncementRecipientPicker.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import type { JobRecord } from '@/types/domain'
 import type { AnnouncementDraft } from '@/features/dashboard/sharedDashboards'
 const props = defineProps<{ items: AnnouncementDraft[]; busy: boolean; layoutEditing: boolean; jobs: JobRecord[]; publishedDraftIds: string[] }>()
 const emit = defineEmits<{ save: [items: AnnouncementDraft[]]; publish: [draftId: string] }>()
+const root = ref<HTMLElement>()
+function focus(selector: string) { void nextTick(() => root.value?.querySelector<HTMLElement>(selector)?.focus()) }
 const editing = ref(false)
 const draft = ref<AnnouncementDraft[]>([])
 const dirty = computed(() => editing.value && JSON.stringify(draft.value) !== JSON.stringify(props.items))
@@ -13,15 +15,16 @@ function edit() {
   if (props.busy || props.layoutEditing) return
   draft.value = props.items.map(item => ({ ...item }))
   editing.value = true
+  focus('[data-add-item]')
 }
 function changeAudience(item: AnnouncementDraft) { delete item.jobId; delete item.recipientIds }
 const recipientsMissing = computed(() => draft.value.some(item => item.audience === 'people' && !item.recipientIds?.length))
-function addDraft() { draft.value.push({ id: crypto.randomUUID(), title: '', body: '' }) }
+function addDraft() { draft.value.push({ id: crypto.randomUUID(), title: '', body: '' }); focus('.announcement-draft:last-of-type input') }
 function discard() { editing.value = false; draft.value = [] }
 defineExpose({ dirty, editing, discard })
 </script>
 <template>
-  <div class="shared-widget-tools dashboard-announcement-drafts">
+  <div ref="root" class="shared-widget-tools dashboard-announcement-drafts">
     <p>Drafts stay private until you choose Publish. No notifications are sent.</p>
     <p v-if="layoutEditing">Save your layout to edit announcement drafts.</p>
     <form v-else-if="editing" @submit.prevent="emit('save', draft.map(item => ({ ...item })))">
@@ -36,7 +39,7 @@ defineExpose({ dirty, editing, discard })
           <AppButton type="button" :aria-label="'Remove announcement draft ' + (index + 1)" @click="draft.splice(index, 1)">Remove draft</AppButton>
         </section>
         <div class="announcement-draft-actions">
-          <AppButton type="button" :disabled="draft.length >= 25" @click="addDraft">Add announcement draft</AppButton>
+          <AppButton data-add-item type="button" :disabled="draft.length >= 25" @click="addDraft">Add announcement draft</AppButton>
           <AppButton type="submit" variant="primary" :disabled="!dirty || recipientsMissing">Save announcement drafts</AppButton>
           <AppButton type="button" @click="discard">Cancel announcement drafts</AppButton>
         </div>
