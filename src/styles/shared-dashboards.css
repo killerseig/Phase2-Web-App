@@ -554,6 +554,44 @@
 .shared-dashboard-grid.is-placement-editor {
   position: relative;
   min-height: 960px;
+  /* The canvas owns its overlay; workspace dots must not show through twice. */
+  background-color: var(--bg-elevated, #102532);
+}
+.shared-dashboard-origin {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 11;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  color: #ffda94;
+}
+.shared-dashboard-origin::before,
+.shared-dashboard-origin::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+}
+.shared-dashboard-origin::before {
+  width: 17px;
+  height: 1px;
+  left: -8px;
+}
+.shared-dashboard-origin::after {
+  width: 1px;
+  height: 17px;
+  top: -8px;
+}
+.shared-dashboard-origin > span {
+  position: absolute;
+  left: 5px;
+  top: 3px;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: #102532;
+  font: 10px/14px monospace;
+  white-space: nowrap;
 }
 .shared-dashboard-grid.is-positioned > .shared-dashboard-widget {
   min-width: 0;

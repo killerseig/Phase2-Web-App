@@ -74,3 +74,9 @@ const layout = await sharedDashboardCommand('load', { scope: 'personal' })
 **Edit-grid rendering:** `DashboardSnapGrid` receives spacing and the current rendered layout. It draws minor/major dots at the same 24-column/32px-row intersections used by snapping, above opaque widgets so full-width tools cannot hide the guide. The SVG is decorative and never receives pointer events. Each canvas masks direct containers out of its grid; nested canvases draw their own local intersections. DOM bounds/resize observation stay inside the component and are disposed with it. Show grid and edit mode control mounting; rendering never saves or changes placement.
 
 [Grid overlay](../../src/components/dashboard/DashboardSnapGrid.vue)
+
+**Workspace grid and camera:** `useDashboardWorkspaceGrid({viewport,content,active,spacing,dependency})` measures the root canvas relative to the viewport and paints only the viewport's seven background properties. It follows native scrolling, resize, camera translation and scale through one scheduled animation frame, without re-rendering the editor or changing a draft. This protects uncommitted number-input text from measurement updates. It removes its styles/listeners/observers on replacement or disposal; inactive mode removes the background. The opaque edit canvas draws its own grid, preventing doubled dots.
+
+`viewportGeometry.ts` owns pure camera conversion: saved starting offsets use 24-column/32px-row units; pointer deltas convert from screen pixels through the current scale. Non-finite pan input preserves the original camera. Origin and actual-size controls change local view state only; they do not alter the saved starting view or widget positions.
+
+[Workspace grid](../../src/features/dashboard/useDashboardWorkspaceGrid.ts) · [Camera geometry](../../src/features/dashboard/viewportGeometry.ts) · [Grid browser checks](../../e2e/dashboard-grid-visibility.spec.ts)

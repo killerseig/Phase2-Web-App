@@ -242,3 +242,93 @@ test('a nested canvas paints its own snap points without parent grid dots', asyn
     'Parent grid is masked throughout the container',
   ).toBeLessThan(5)
 })
+
+test('workspace grid follows pan, zoom and native scroll without editing the layout', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  const api = await mockDashboard(page)
+  const widgets = [{ ...legacyText, placement: { x: 0, y: 0, w: 24, h: 10 } }]
+  api.layouts.set('personal', { version: 1, widgets: structuredClone(widgets) })
+  await gotoPhase2App(page, '/dashboards/personal', createJobsFixture())
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  const viewport = page.getByLabel('Dashboard canvas', { exact: true })
+  const actualSize = page.getByRole('button', { name: 'Actual size', exact: true })
+  const save = page.getByRole('button', { name: 'Save template', exact: true })
+  const showGrid = page.getByLabel('Show grid', { exact: true })
+  await actualSize.click()
+  await expect(actualSize).toHaveText('100%')
+  await expect(page.getByRole('button', { name: 'Fit', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  )
+  await expect(page.locator('[data-dashboard-origin]')).toBeVisible()
+  const initial = await surface(page)
+  const view = (await viewport.boundingBox())!
+  await expect(save).toBeDisabled()
+  await page.getByRole('button', { name: 'Pan', exact: true }).click()
+  for (let i = 0; i < 2; i++) {
+    await page.mouse.move(view.x + 80, view.y + 100)
+    await page.mouse.down()
+    await page.mouse.move(view.x + view.width - 80, view.y + 170, { steps: 5 })
+    await page.mouse.up()
+  }
+  await expect.poll(async () => (await surface(page)).x).toBeGreaterThan(view.x + view.width + 50)
+  await expect(save).toBeDisabled()
+
+  async function checkWorkspacePixels() {
+    const grid = await surface(page)
+    const column = 4 * Math.round((view.x + view.width * 0.35 - grid.x) / (grid.width / 6))
+    const row = 4 * Math.round((view.y + view.height * 0.45 - grid.y) / (128 * grid.scale))
+    const points = {
+      snap: snapPoint(grid, column, row),
+      between: snapPoint(grid, column + 0.5, row + 0.5),
+    }
+    expect(points.snap.x, 'Sample is in the workspace outside the moved canvas').toBeLessThan(
+      grid.x - 10,
+    )
+    const shown = await pixels(page, points)
+    await showGrid.uncheck()
+    await expect(page.locator('.dashboard-snap-grid')).toHaveCount(0)
+    const hidden = await pixels(page, points)
+    expect(
+      difference(shown.snap!, hidden.snap!),
+      'Workspace dot follows the actual canvas origin',
+    ).toBeGreaterThan(30)
+    expect(
+      difference(shown.between!, hidden.between!),
+      'Workspace has no off-grid dot',
+    ).toBeLessThan(5)
+    await showGrid.check()
+    await expect(save).toBeDisabled()
+  }
+  await checkWorkspacePixels()
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  await expect(actualSize).toHaveText('110%')
+  await expect(save).toBeDisabled()
+  await checkWorkspacePixels()
+  const beforeScroll = await surface(page)
+  await viewport.evaluate((el) => el.scrollTo(73, 89))
+  await expect
+    .poll(() => viewport.evaluate((el) => [el.scrollLeft, el.scrollTop]))
+    .toEqual([73, 89])
+  await expect.poll(async () => (await surface(page)).x).toBeCloseTo(beforeScroll.x - 73, 1)
+  await expect.poll(async () => (await surface(page)).y).toBeCloseTo(beforeScroll.y - 89, 1)
+  await checkWorkspacePixels()
+  await actualSize.click()
+  await page.getByRole('button', { name: 'Return to canvas origin', exact: true }).click()
+  await expect(actualSize).toHaveText('100%')
+  await expect(page.getByRole('button', { name: 'Fit', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  )
+  await expect.poll(() => viewport.evaluate((el) => [el.scrollLeft, el.scrollTop])).toEqual([0, 0])
+  await expect.poll(async () => (await surface(page)).x).toBeCloseTo(initial.x, 1)
+  await expect.poll(async () => (await surface(page)).y).toBeCloseTo(initial.y, 1)
+  await expect(page.locator('[data-dashboard-origin]')).toBeVisible()
+  await expect(save).toBeDisabled()
+  expect(api.layouts.get('personal')!.widgets).toEqual(widgets)
+  expect(api.requests.filter((request) => String(request.action).startsWith('save'))).toHaveLength(
+    0,
+  )
+})

@@ -330,6 +330,9 @@ function textStyle(widget: SharedDashboardWidget) {
       :spacing="gridSpacing"
       :layout="positions"
     />
+    <span v-if="editing && !parentId" class="shared-dashboard-origin" data-dashboard-origin aria-hidden="true">
+      <span>0,0</span>
+    </span>
     <div
       v-if="editing && placementPreview && dropTarget?.surface === (parentId || 'shared-dashboard')"
       data-widget-placement-preview

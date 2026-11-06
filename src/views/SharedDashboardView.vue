@@ -13,6 +13,7 @@ import BuilderPanelResize from '@/components/builder/BuilderPanelResize.vue'
 import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
 import { canSubmitForm } from '../../functions/src/formAccess'
 import SharedDashboardCanvas from '@/components/dashboard/SharedDashboardCanvas.vue'
+import { useDashboardWorkspaceGrid } from '@/features/dashboard/useDashboardWorkspaceGrid'
 import { useAuthStore } from '@/stores/auth'
 import { useJobsStore } from '@/stores/jobs'
 import { sharedDashboardCommand } from '@/services/sharedDashboards'
@@ -1360,10 +1361,21 @@ function manualZoom(delta: number) {
   zoom.value = Math.max(0.25, Math.min(2, previewScale.value + delta))
   fit.value = false
 }
+function actualSize() {
+  zoom.value = 1
+  fit.value = false
+}
 const handTool = ref(false)
 const runtimeZoom = ref(1)
 const runtimeCamera = ref({ x: 0, y: 0 })
 const editorCamera = ref({ x: 0, y: 0 })
+useDashboardWorkspaceGrid({
+  viewport,
+  content,
+  active: () => editing.value && gridVisible.value,
+  spacing: () => viewportSettings.value.grid,
+  dependency: () => [editorCamera.value, previewScale.value, device.value, widgets.value],
+})
 function scrollViewport(x: number, y: number) {
   if (!viewport.value) return
   viewport.value.scrollLeft = x
@@ -1371,6 +1383,9 @@ function scrollViewport(x: number, y: number) {
 }
 function fitEditor() {
   fit.value = true
+  returnToOrigin()
+}
+function returnToOrigin() {
   editorCamera.value = { x: 0, y: 0 }
   scrollViewport(0, 0)
 }
@@ -2007,7 +2022,13 @@ onBeforeUnmount(() => {
                 }}</AppButton
               ><AppButton type="button" :aria-pressed="fit" @click="fitEditor">Fit</AppButton
               ><AppButton type="button" aria-label="Zoom out" @click="manualZoom(-0.1)">−</AppButton
-              ><span>{{ Math.round(previewScale * 100) }}%</span
+              ><AppButton
+                type="button"
+                aria-label="Actual size"
+                title="Show at 100% zoom"
+                :aria-pressed="!fit && previewScale === 1"
+                @click="actualSize"
+                >{{ Math.round(previewScale * 100) }}%</AppButton
               ><AppButton type="button" aria-label="Zoom in" @click="manualZoom(0.1)">+</AppButton>
               <label><input v-model="gridVisible" type="checkbox" />Show grid</label>
               <label><input v-model="snapToGrid" type="checkbox" />Snap to grid</label>
@@ -2050,6 +2071,12 @@ onBeforeUnmount(() => {
                   v-model.number="viewportSettings.grid.majorEvery"
               /></label>
               <AppButton :aria-pressed="handTool" @click="handTool = !handTool">Pan</AppButton>
+              <AppButton
+                aria-label="Return to canvas origin"
+                title="Return to 0,0 without changing zoom"
+                @click="returnToOrigin"
+                >Origin</AppButton
+              >
             </div>
             <div
               v-if="!editing && runtimeFramed"
