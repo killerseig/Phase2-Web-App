@@ -2,6 +2,8 @@
 
 Phase 2 uses Vue 3 and Vite for the browser app and a separate TypeScript package for Firebase Functions. See [GIT-WORKFLOW.md](GIT-WORKFLOW.md) for the canonical checkout, `test`/`main` workflow and reviewed release process.
 
+Start coding with the [project process](design/engineering/coding-process.md), [current product designs](design/next-update/README.md) and [module contracts](design/engineering/module-contracts.md). [Phase 2 architecture facts](design/engineering/phase2-adoption.md) record this application’s specific choices. Reusable standards are being prepared in ChatGPT Space; verified links are pending.
+
 ## Project structure and build contracts
 
 - Root HTML files are Vite entry points. `src/` contains the browser app: views, components, features, services, stores and the router. These folder names are project conventions, not a Firebase/Vite requirement.
@@ -74,7 +76,7 @@ See [Vite Configuration Reference](https://vite.dev/config/).
 
 ## Project Setup
 
-Use Node.js 22 (with npm) to match the Firebase Functions runtime. Install both
+Use Node.js 24 (with npm) for local tooling, as specified in GIT-WORKFLOW.md. The deployed Firebase Functions runtime remains Node.js 22. Install both
 the frontend and backend dependencies from their lockfiles:
 
 ```sh

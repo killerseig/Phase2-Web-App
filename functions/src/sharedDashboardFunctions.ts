@@ -1,7 +1,17 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db } from './runtime'
-import { announcementId, listDashboardAnnouncements, publishDashboardAnnouncement, listAnnouncementRecipients, validateAnnouncementRecipients } from './dashboardAnnouncements'
-import { buildCurrentFunctionUser, normalizeStoredRole, type CurrentFunctionUser } from './roleAccess'
+import {
+  announcementId,
+  listDashboardAnnouncements,
+  publishDashboardAnnouncement,
+  listAnnouncementRecipients,
+  validateAnnouncementRecipients,
+} from './dashboardAnnouncements'
+import {
+  buildCurrentFunctionUser,
+  normalizeStoredRole,
+  type CurrentFunctionUser,
+} from './roleAccess'
 import { VALID_ROLES, type UserRole } from './constants'
 import { targetFunctionRoleCanOpenJobDashboard } from './targetJobAccess'
 import { isFunctionShopJob } from './jobIdentity'
@@ -9,6 +19,7 @@ import {
   defaultSharedWidgets,
   sharedDashboardKey,
   validateSharedWidgets,
+  validateDashboardViewport,
   validateSharedCalendar,
   validatePersonalTasks,
   validateAnnouncementDrafts,
@@ -60,7 +71,17 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use dashboards.')
   const data = request.data || {}
   if (
-    !['load', 'save-template', 'save-notes', 'save-calendar', 'save-tasks', 'save-announcement-drafts', 'publish-announcement', 'list-announcements', 'list-announcement-recipients'].includes(data.action) ||
+    ![
+      'load',
+      'save-template',
+      'save-notes',
+      'save-calendar',
+      'save-tasks',
+      'save-announcement-drafts',
+      'publish-announcement',
+      'list-announcements',
+      'list-announcement-recipients',
+    ].includes(data.action) ||
     !['personal', 'job', 'role'].includes(data.scope) ||
     data.uid !== undefined ||
     data.ownerId !== undefined
@@ -83,8 +104,12 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
     if (user.role === 'none') {
       // Employee may read only their authenticated announcement feed. No workspace
       // layouts, job details, source documents, authoring or timecards are enabled.
-      if (normalizeStoredRole(profile.data()?.role) === 'employee' && data.action === 'list-announcements' && scope === 'personal') {
-        if (Object.keys(data).some(key => !['scope', 'action'].includes(key)))
+      if (
+        normalizeStoredRole(profile.data()?.role) === 'employee' &&
+        data.action === 'list-announcements' &&
+        scope === 'personal'
+      ) {
+        if (Object.keys(data).some((key) => !['scope', 'action'].includes(key)))
           throw new HttpsError('invalid-argument', 'Use your own announcement feed.')
         return listDashboardAnnouncements(tx, user)
       }
@@ -130,46 +155,89 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       (user.role !== 'admin' || ['save-notes', 'save-calendar'].includes(data.action))
     )
       throw denied('Choose a job you can access.')
-    if (data.action === 'list-announcement-recipients') return listAnnouncementRecipients(tx, user, data)
+    if (data.action === 'list-announcement-recipients')
+      return listAnnouncementRecipients(tx, user, data)
     if (data.action === 'publish-announcement') return publishDashboardAnnouncement(tx, user, data)
     if (data.action === 'list-announcements') {
-      if (Object.keys(data).some(key => !['scope', 'action', 'jobId', 'role'].includes(key)))
-        throw new HttpsError('invalid-argument', 'Announcement audiences are determined by your current access.')
+      if (Object.keys(data).some((key) => !['scope', 'action', 'jobId', 'role'].includes(key)))
+        throw new HttpsError(
+          'invalid-argument',
+          'Announcement audiences are determined by your current access.',
+        )
       return listDashboardAnnouncements(tx, user, scope === 'job' ? jobId : undefined)
     }
-    const templateRef = db.doc(scope === 'personal'
-      ? 'sharedDashboardPersonal/' + user.uid
-      : 'sharedDashboardTemplates/' + sharedDashboardKey(scope, role))
+    const templateRef = db.doc(
+      scope === 'personal'
+        ? 'sharedDashboardPersonal/' + user.uid
+        : 'sharedDashboardTemplates/' + sharedDashboardKey(scope, role),
+    )
     const template = await tx.get(templateRef),
       version = Number(template.data()?.version || 0)
     const allowRoleEditing = template.data()?.allowRoleEditing === true
     const canEdit =
-      scope === 'personal' || user.role === 'admin' || (scope === 'role' && role === user.role && allowRoleEditing)
+      scope === 'personal' ||
+      user.role === 'admin' ||
+      (scope === 'role' && role === user.role && allowRoleEditing)
     if (data.action === 'save-template' && !canEdit)
       throw denied('This role cannot edit its shared dashboard.')
     let widgets = template.data()?.widgets || defaultSharedWidgets(scope)
-    if (!template.exists && scope !== 'job') {
-      const legacy = await tx.get(db.doc(scope === 'personal' ? 'dashboardPersonal/' + user.uid : 'dashboardRoles/' + role))
-      if (legacy.exists) {
-        try { widgets = upgradeDashboardWidgets(legacy.data()?.widgets, scope) }
-        catch { throw new HttpsError('failed-precondition', 'The previous layout needs review. Its original record has been preserved.') }
+    let viewport = template.data()?.viewport
+    if (viewport !== undefined) {
+      try {
+        viewport = validateDashboardViewport(viewport)
+      } catch {
+        throw new HttpsError(
+          'failed-precondition',
+          'The saved dashboard display settings need review. Its original record has been preserved.',
+        )
       }
+    }
+    if (!template.exists && scope !== 'job') {
+      const legacy = await tx.get(
+        db.doc(scope === 'personal' ? 'dashboardPersonal/' + user.uid : 'dashboardRoles/' + role),
+      )
+      if (legacy.exists) {
+        try {
+          widgets = upgradeDashboardWidgets(legacy.data()?.widgets, scope)
+        } catch {
+          throw new HttpsError(
+            'failed-precondition',
+            'The previous layout needs review. Its original record has been preserved.',
+          )
+        }
+      }
+    }
+    try {
+      widgets = validateSharedWidgets(widgets, scope)
+    } catch {
+      throw new HttpsError(
+        'failed-precondition',
+        'The saved dashboard layout needs review. Its original record has been preserved.',
+      )
     }
     const notesRef =
       scope === 'personal'
         ? db.doc('sharedDashboardPersonalData/' + user.uid)
-        : scope === 'role' ? db.doc('sharedDashboardUserData/' + user.uid)
-        : jobId
-          ? db.doc('sharedDashboardJobData/' + jobId)
-          : undefined
+        : scope === 'role'
+          ? db.doc('sharedDashboardUserData/' + user.uid)
+          : jobId
+            ? db.doc('sharedDashboardJobData/' + jobId)
+            : undefined
     const notes = notesRef ? await tx.get(notesRef) : undefined
     const content = notes?.data() || {}
     const tasks = scope === 'personal' ? content.tasks || [] : []
-    const announcementDrafts = scope === 'personal' && user.role === 'admin' ? content.announcementDrafts || [] : []
+    const announcementDrafts =
+      scope === 'personal' && user.role === 'admin' ? content.announcementDrafts || [] : []
     const publishedDraftIds: string[] = []
     if (announcementDrafts.length) {
-      const publications = await tx.getAll(...announcementDrafts.map((draft: { id: string }) => db.doc('dashboardAnnouncements/' + announcementId(user.uid, draft.id))))
-      publications.forEach((publication, index) => { if (publication.exists) publishedDraftIds.push(announcementDrafts[index].id) })
+      const publications = await tx.getAll(
+        ...announcementDrafts.map((draft: { id: string }) =>
+          db.doc('dashboardAnnouncements/' + announcementId(user.uid, draft.id)),
+        ),
+      )
+      publications.forEach((publication, index) => {
+        if (publication.exists) publishedDraftIds.push(announcementDrafts[index].id)
+      })
     }
     const contentKey = scope === 'personal' ? 'personal' : role
     const prefix = scope !== 'job' ? contentKey + ':' : ''
@@ -185,13 +253,17 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       checkVersion(data.version, version)
       try {
         widgets = validateSharedWidgets(data.widgets, scope)
+        if (data.viewport !== undefined) viewport = validateDashboardViewport(data.viewport)
       } catch (error) {
         throw new HttpsError(
           'invalid-argument',
           error instanceof Error ? error.message : 'Invalid template.',
         )
       }
-      if (user.role !== 'admin' && widgets.some((w: { type: string }) => w.type === 'announcement-drafts'))
+      if (
+        user.role !== 'admin' &&
+        widgets.some((w: { type: string }) => w.type === 'announcement-drafts')
+      )
         throw denied('Only Admin can add announcement drafts.')
       for (const widget of widgets.filter((w: { type: string }) => w.type === 'form')) {
         if (!['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role))
@@ -211,6 +283,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       tx.set(templateRef, {
         version: version + 1,
         widgets,
+        ...(viewport ? { viewport } : {}),
         allowRoleEditing: scope === 'role' ? (data.allowRoleEditing ?? allowRoleEditing) : false,
         updatedBy: user.uid,
         updatedAt: Date.now(),
@@ -247,25 +320,64 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       if (!widgets.some((w: { type: string }) => w.type === 'announcement-drafts'))
         throw new HttpsError('failed-precondition', 'Add Announcement drafts first.')
       let entries
-      try { entries = validateAnnouncementDrafts(data.announcementDrafts) }
-      catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid announcement drafts.') }
-      for (const entry of entries) if (entry.audience === 'job') {
-        const job = await tx.get(db.doc('jobs/' + entry.jobId))
-        if (!job.exists) throw new HttpsError('invalid-argument', 'Choose an available job.')
+      try {
+        entries = validateAnnouncementDrafts(data.announcementDrafts)
+      } catch (error) {
+        throw new HttpsError(
+          'invalid-argument',
+          error instanceof Error ? error.message : 'Invalid announcement drafts.',
+        )
       }
-      for (const entry of entries) if (entry.audience === 'people') await validateAnnouncementRecipients(tx, entry.recipientIds || [])
-      tx.set(notesRef!, { ...content, announcementDrafts: entries, version: Number(content.version || 0) + 1, updatedBy: user.uid, updatedAt: Date.now() })
-      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks, announcementDrafts: entries }
+      for (const entry of entries)
+        if (entry.audience === 'job') {
+          const job = await tx.get(db.doc('jobs/' + entry.jobId))
+          if (!job.exists) throw new HttpsError('invalid-argument', 'Choose an available job.')
+        }
+      for (const entry of entries)
+        if (entry.audience === 'people')
+          await validateAnnouncementRecipients(tx, entry.recipientIds || [])
+      tx.set(notesRef!, {
+        ...content,
+        announcementDrafts: entries,
+        version: Number(content.version || 0) + 1,
+        updatedBy: user.uid,
+        updatedAt: Date.now(),
+      })
+      return {
+        version: Number(content.version || 0) + 1,
+        notes: visibleNotes,
+        events,
+        tasks,
+        announcementDrafts: entries,
+      }
     }
     if (data.action === 'save-tasks') {
       checkVersion(data.version, Number(content.version || 0))
       if (!widgets.some((w: { type: string }) => w.type === 'tasks'))
         throw new HttpsError('failed-precondition', 'Add My tasks first.')
       let entries
-      try { entries = validatePersonalTasks(data.tasks) }
-      catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid tasks.') }
-      tx.set(notesRef!, { ...content, tasks: entries, version: Number(content.version || 0) + 1, updatedBy: user.uid, updatedAt: Date.now() })
-      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events, tasks: entries, announcementDrafts }
+      try {
+        entries = validatePersonalTasks(data.tasks)
+      } catch (error) {
+        throw new HttpsError(
+          'invalid-argument',
+          error instanceof Error ? error.message : 'Invalid tasks.',
+        )
+      }
+      tx.set(notesRef!, {
+        ...content,
+        tasks: entries,
+        version: Number(content.version || 0) + 1,
+        updatedBy: user.uid,
+        updatedAt: Date.now(),
+      })
+      return {
+        version: Number(content.version || 0) + 1,
+        notes: visibleNotes,
+        events,
+        tasks: entries,
+        announcementDrafts,
+      }
     }
     if (data.action === 'save-calendar') {
       checkVersion(data.version, Number(content.version || 0))
@@ -289,12 +401,19 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         updatedBy: user.uid,
         updatedAt: Date.now(),
       })
-      return { version: Number(content.version || 0) + 1, notes: visibleNotes, events: entries, tasks, announcementDrafts }
+      return {
+        version: Number(content.version || 0) + 1,
+        notes: visibleNotes,
+        events: entries,
+        tasks,
+        announcementDrafts,
+      }
     }
     return {
       scope,
       role: scope === 'role' ? role : user.role,
       widgets,
+      ...(viewport ? { viewport } : {}),
       version: version + (data.action === 'save-template' ? 1 : 0),
       canEdit,
       allowRoleEditing: scope === 'role' ? (data.allowRoleEditing ?? allowRoleEditing) : false,

@@ -2,6 +2,7 @@ export {
   defaultSharedWidgets,
   sharedWidgetLabels,
   sharedWidgetTypes,
+  defaultDashboardViewport,
 } from '../../../functions/src/sharedDashboardModel'
 export type {
   SharedDashboardWidget,
@@ -11,6 +12,7 @@ export type {
   PersonalTask,
   AnnouncementDraft,
   PublishedAnnouncement,
+  DashboardViewport,
 } from '../../../functions/src/sharedDashboardModel'
 import type { SharedDashboardWidget } from '../../../functions/src/sharedDashboardModel'
 export interface SharedDashboardJob {
@@ -24,6 +26,7 @@ export interface SharedDashboardJob {
   active: boolean
 }
 export interface SharedDashboardLayout {
+  viewport?: import('../../../functions/src/sharedDashboardModel').DashboardViewport
   widgets: SharedDashboardWidget[]
   version: number
   canEdit: boolean
@@ -38,5 +41,22 @@ export interface SharedDashboardLayout {
   events: import('../../../functions/src/sharedDashboardModel').SharedCalendarEntry[]
 }
 export function newSharedWidget(type: SharedDashboardWidget['type']): SharedDashboardWidget {
-  return { id: crypto.randomUUID(), type, span: 6, title: '', text: '' }
+  return {
+    id: crypto.randomUUID(),
+    type,
+    span: 6,
+    title: '',
+    text: '',
+    ...(type === 'container'
+      ? {
+          container: {
+            kind: 'panel' as const,
+            labels: ['Section 1', 'Section 2'],
+            direction: 'row' as const,
+            ratio: 50,
+            collapsed: false,
+          },
+        }
+      : {}),
+  }
 }

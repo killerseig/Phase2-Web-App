@@ -8,6 +8,8 @@ The next phase includes **all requests collected from the stakeholder emails and
 
 The current Personal, Role and Job dashboard work is recorded in the [November 6 checkpoint](03-workspace-design.md#november-6-dashboard-testing-readiness). The owner wants these polished for user testing before gradually replacing older pages. The current work preserves the Jobs pages, Daily Logs, Timecards, Shop Orders, existing permissions and production records. It is a source checkpoint on `test`, not a deployment or permission to retire pages. The older dated entries below remain history rather than the current feature inventory.
 
+The latest [Networking editor follow-up](03-workspace-design.md#networking-editor-follow-up--november-6-2026) adds multiple selection, containers, locks, eight resize handles, device overrides and saved runtime display settings, with explicit remaining reference differences and verification limits.
+
 ## October 3 additive dashboards (historical local review)
 
 Review the current parallel shared dashboards in [workspace design](03-workspace-design.md#parallel-shared-dashboards---current-local-implementation-3-october-2026) and [widget layouts](08-widget-layouts.md#parallel-shared-dashboards---current-local-implementation-3-october-2026). One job template serves every job; one template serves each existing role, with data tied to the signed-in person. Admin owns both templates, with default-OFF per-role editing delegation. Both surfaces share the core catalog and safe styled Text variables. Existing pages/builders stay in place and sidebar links remain hidden. Weather, personal desktops and wider refactors are future work. Start the normal local demo profile; deployment and IAM changes are not authorized. The existing production dashboard transport repair is explicitly denied and remains unresolved. The October 2 release below is history, not permission to repair or release these dashboards.
@@ -19,6 +21,8 @@ Read the latest employee-only Forms release checkpoint in [workspace design](03-
 The normal checkout remains the development source at http://127.0.0.1:5173/login with local demo Admin access. Read workspace design for startup, saved demo state and known hard-stop persistence limits. Website Fit/inline editing and nine-page responsive checks pass; the Website Builder remains the visual reference. Read [Website Builder milestone](07-website-builder.md) for its prior verified code release and the separate owner content Review/Save/Publish boundary. Existing Daily Logs, Shop Orders, Timecards and user management remain regression gates. Legacy anonymous Daily Logs email-photo galleries are an explicitly reported exception outside this Forms release. Earlier dated local checkpoints below remain implementation history; the latest checkpoint controls current access and release state. No live test email or production test record is created by verification.
 
 ## Reading order
+
+Before implementation, use the [coding process](../engineering/coding-process.md) and [Phase 2 module contracts](../engineering/module-contracts.md). Reusable standards are being prepared separately in ChatGPT Space; this design set remains the authority for Phase 2 product requirements and decisions.
 
 | Document | Purpose |
 | --- | --- |

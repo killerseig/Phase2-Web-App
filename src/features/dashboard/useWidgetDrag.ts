@@ -5,6 +5,7 @@ export interface WidgetDrop {
   overId: string | null
   edge: 'before' | 'after'
   surface: string
+  region?: string
   position?: { x: number; y: number }
 }
 
@@ -13,6 +14,7 @@ export function useWidgetDrag<T>(options: {
   root: Ref<HTMLElement | undefined>
   disabled: () => boolean
   freePosition?: boolean
+  lockToOriginSurface?: boolean
   drop: (payload: T, target: WidgetDrop) => void
 }) {
   const payload = shallowRef<T>()
@@ -26,8 +28,10 @@ export function useWidgetDrag<T>(options: {
   let frame = 0
   let suppressClick = false
   let clickTimer: ReturnType<typeof setTimeout> | undefined
+  let originSurface: HTMLElement | undefined
 
   function findSurface() {
+    if (options.lockToOriginSurface && originSurface?.isConnected) return originSurface
     const element = document.elementFromPoint(point.value.x, point.value.y)
     const surface = element?.closest<HTMLElement>('[data-widget-surface]')
     return surface && options.root.value?.contains(surface) ? surface : undefined
@@ -39,14 +43,18 @@ export function useWidgetDrag<T>(options: {
       return
     }
     const entries = [...surface.querySelectorAll<HTMLElement>('[data-widget-id]')].filter(
-      (element) => element.getBoundingClientRect().height > 0,
+      (element) =>
+        element.getBoundingClientRect().height > 0 &&
+        element.closest('[data-widget-surface]') === surface,
     )
     const bounds = surface.getBoundingClientRect()
     const scale = bounds.width / surface.offsetWidth || 1
-    const position = options.freePosition ? {
-      x: (point.value.x - bounds.left) / scale - grab.x,
-      y: (point.value.y - bounds.top) / scale - grab.y,
-    } : undefined
+    const position = options.freePosition
+      ? {
+          x: (point.value.x - bounds.left) / scale - grab.x,
+          y: (point.value.y - bounds.top) / scale - grab.y,
+        }
+      : undefined
     const nearest = entries.reduce<HTMLElement | undefined>((best, element) => {
       function distance(entry: HTMLElement) {
         const rect = entry.getBoundingClientRect()
@@ -64,6 +72,7 @@ export function useWidgetDrag<T>(options: {
         overId: null,
         edge: 'after',
         surface: surface.dataset.widgetSurface!,
+        region: surface.dataset.region,
       }
       return
     }
@@ -80,6 +89,7 @@ export function useWidgetDrag<T>(options: {
       overId: nearest.dataset.widgetId!,
       edge: before ? 'before' : 'after',
       surface: surface.dataset.widgetSurface!,
+      region: surface.dataset.region,
     }
   }
   function tick() {
@@ -125,6 +135,7 @@ export function useWidgetDrag<T>(options: {
     payload.value = undefined
     dragging.value = false
     target.value = undefined
+    originSurface = undefined
   }
   function blockClick() {
     suppressClick = true
@@ -162,9 +173,12 @@ export function useWidgetDrag<T>(options: {
     label.value = text
     const widget = (event.currentTarget as HTMLElement)?.closest<HTMLElement>('[data-widget-id]')
     const surface = widget?.closest<HTMLElement>('[data-widget-surface]')
+    originSurface = surface || undefined
     const rect = widget?.getBoundingClientRect()
     const scale = surface ? surface.getBoundingClientRect().width / surface.offsetWidth : 1
-    grab = rect ? { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale } : { x: 0, y: 0 }
+    grab = rect
+      ? { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
+      : { x: 0, y: 0 }
     pointerId = event.pointerId
     startPoint = point.value = { x: event.clientX, y: event.clientY }
     window.addEventListener('pointermove', move, { passive: false })
