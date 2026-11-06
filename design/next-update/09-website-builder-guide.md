@@ -10,6 +10,14 @@ Open **Website Builder** from the admin navigation. Changes stay in the draft un
 
 Switching modes keeps the same draft. It does not publish changes.
 
+## Preview device screens
+
+The device buttons show bounded screens: **Phone 390 × 844**, **Tablet 820 × 1180**, and **Desktop 1080 × 720** by default. These are representative CSS-pixel viewports; desktop width can grow with an oversized free-grid canvas. Scroll inside the screen to view the rest of the page. **Fit** scales the entire screen to the available workspace; manual zoom changes magnification without changing the device dimensions.
+
+Changing the page or device starts at the top, including in **Run code preview**. In Design mode, dragging toward a visible screen edge scrolls the page inside it. Browser chrome and device-specific safe areas are not simulated.
+
+## Edit content
+
 Content mode keeps the selected widget's editable content in the right-hand inspector, including fields exposed by custom widgets. Image and button controls are grouped; optional empty groups start collapsed. Expand a group to add content. Image labels used only by the editor, decorative layout fields and the page-layout selector stay in Design mode.
 
 The inspector identifies shared-layout edits because they affect every page using that layout. Editing the exposed content of a linked custom widget changes that placement's values while retaining the shared design. The header shows Unsaved changes, Saving draft, or Draft saved; a failed save retains your edits and displays the error.

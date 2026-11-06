@@ -5,6 +5,73 @@ import { defaultGrid } from './grid'
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('device screen scrolling', () => {
+  it.each([1, 0.5])('uses the clipped Design edge at scale %s', (scale) => {
+    let tick: FrameRequestCallback | undefined
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      tick = callback
+      return 1
+    })
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    const workspace = document.createElement('div')
+    workspace.getBoundingClientRect = () => new DOMRect(0, 0, 1600, 1000)
+    const clip = document.createElement('div')
+    clip.getBoundingClientRect = () => new DOMRect(100, 100, 1080 * scale, 720 * scale)
+    const viewport = document.createElement('div')
+    Object.defineProperty(viewport, 'offsetWidth', { value: 1160 })
+    viewport.getBoundingClientRect = () =>
+      new DOMRect(100 - 40 * scale, 100 - 40 * scale, 1160 * scale, 800 * scale)
+    const surface = document.createElement('div')
+    Object.defineProperty(surface, 'offsetWidth', { value: 1080 })
+    surface.getBoundingClientRect = () =>
+      new DOMRect(100, 100 - viewport.scrollTop * scale, 1080 * scale, 2000 * scale)
+    const commit = vi.fn<Parameters<typeof useWebsiteGrid>[0]['commit']>()
+    const scope = effectScope()
+    const grid = scope.run(() =>
+      useWebsiteGrid({
+        surface: () => surface,
+        scroller: ref(workspace),
+        viewport: ref(viewport),
+        clip: ref(clip),
+        disabled: () => false,
+        settings: () => ({ ...defaultGrid(), snap: false }),
+        commit,
+      }),
+    )!
+    const pointer = (type: string, y: number) =>
+      new PointerEvent(type, {
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        clientX: 200,
+        clientY: y,
+      })
+    surface.addEventListener('pointerdown', (event) =>
+      grid.start(event, 'moving', { x: 0, y: 0, w: 4, h: 4, z: 1 }),
+    )
+    try {
+      surface.dispatchEvent(pointer('pointerdown', 200))
+      const bottom = clip.getBoundingClientRect().bottom
+      window.dispatchEvent(pointer('pointermove', bottom - 5))
+      const before = viewport.scrollTop
+      tick?.(0)
+      expect(viewport.scrollTop - before).toBeCloseTo(10 / scale)
+      expect(workspace.scrollTop).toBe(0)
+      expect(grid.draft.value).toBeDefined()
+      // The padded area outside the visible device cannot accept a drop.
+      window.dispatchEvent(pointer('pointermove', bottom + 5))
+      const after = viewport.scrollTop
+      tick?.(0)
+      expect(viewport.scrollTop).toBe(after)
+      expect(grid.draft.value).toBeUndefined()
+      window.dispatchEvent(pointer('pointerup', bottom + 5))
+      expect(commit).not.toHaveBeenCalled()
+    } finally {
+      scope.stop()
+    }
+  })
+})
+
 describe('live widget alignment', () => {
   it.each([1, 0.5])(
     'aligns before release at scale %s, bypasses with Alt, and commits the preview',
@@ -14,7 +81,7 @@ describe('live widget alignment', () => {
       const surface = document.createElement('div')
       Object.defineProperty(surface, 'offsetWidth', { value: 1000 })
       surface.getBoundingClientRect = () => new DOMRect(0, 0, 1000 * scale, 1000 * scale)
-      const commit = vi.fn()
+      const commit = vi.fn<Parameters<typeof useWebsiteGrid>[0]['commit']>()
       const origin = { x: 100 / 45, y: 100 / 32, w: 40 / 45, h: 40 / 32, z: 1 }
       const scope = effectScope()
       const grid = scope.run(() =>

@@ -1005,6 +1005,7 @@ provide(navigationEditingKey, (sectionId, linkId) => {
 const builderRoot = ref<HTMLElement>()
 const previewScroller = ref<HTMLElement>()
 const previewViewport = ref<HTMLElement>()
+const previewFrame = ref<HTMLElement>()
 const websiteCanvas = ref<InstanceType<typeof WebsiteCanvas>>()
 const zoom = ref(1)
 const autoFit = ref(true)
@@ -1012,6 +1013,7 @@ const widgetDrag = useWebsiteGrid({
   surface: () => websiteCanvas.value?.getSurface(editingLayout.value),
   scroller: previewScroller,
   viewport: previewViewport,
+  clip: previewFrame,
   disabled: () => locked.value || Boolean(inlineTarget.value),
   settings: () => page.value?.grid || defaultGrid(),
   commit: commitGeometry,
@@ -1053,7 +1055,6 @@ const canvasWidth = computed(
     ]).width,
 )
 const previewWidth = computed(() => (mobile.value ? deviceWidth[device.value] : canvasWidth.value))
-const previewFrame = ref<HTMLElement>()
 const previewHeight = computed(() => deviceHeight[device.value])
 watch([selectedPage, device], async () => {
   await nextTick()
@@ -2847,7 +2848,7 @@ onBeforeRouteLeave(() => {
             :key="section.id"
             :id="section.id"
             :scroller="previewScroller"
-            :viewport="previewViewport"
+            :viewport="previewFrame"
             :disabled="locked"
             :fixed="sectionFixed"
             :own-lock="!!section.locked"
@@ -2908,7 +2909,7 @@ onBeforeRouteLeave(() => {
                   >
                     <WebsiteScriptFrame
                       v-if="runningCode && codePreviewSite"
-                      :key="selectedPage"
+                      :key="`${selectedPage}:${device}`"
                       :site="codePreviewSite"
                       :page-id="selectedPage"
                       :viewport-height="previewHeight"

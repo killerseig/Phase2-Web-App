@@ -183,7 +183,7 @@ test('Fit starts active and follows device, mode, edit and container changes', a
   await fitted()
   for (const mode of ['Content', 'Design', 'Code']) {
     await page.getByRole('button', { name: mode, exact: true }).click()
-    for (const device of ['Desktop', 'Tablet', 'Mobile']) {
+    for (const device of ['Desktop', 'Tablet', 'Phone']) {
       await controls.getByRole('button', { name: device, exact: true }).click()
       await fitted()
     }
@@ -449,7 +449,7 @@ test('manual zoom preserves magnification until Fit is requested', async ({ page
   const devices = [
     { label: 'Desktop', key: 'desktop', width: 1080, fitted: 'false' },
     { label: 'Tablet', key: 'tablet', width: 820, fitted: 'false' },
-    { label: 'Mobile', key: 'mobile', width: 390, fitted: 'false' },
+    { label: 'Phone', key: 'mobile', width: 390, fitted: 'false' },
   ]
   await controls.getByRole('button', { name: 'Desktop', exact: true }).click()
   await fit.click()
@@ -538,7 +538,7 @@ test('device screens have fixed heights, scroll internally and restart at the to
   for (const device of [
     { label: 'Desktop', width: 1080, height: 720 },
     { label: 'Tablet', width: 820, height: 1180 },
-    { label: 'Mobile', width: 390, height: 844 },
+    { label: 'Phone', width: 390, height: 844 },
   ]) {
     await page.getByRole('button', { name: device.label, exact: true }).click()
     await page.getByRole('button', { name: 'Fit', exact: true }).click()
@@ -588,6 +588,11 @@ test('device screens have fixed heights, scroll internally and restart at the to
     .toEqual([390, 844])
   await runtime.locator('body').evaluate(() => window.scrollTo(0, 400))
   await expect.poll(() => runtime.locator('body').evaluate(() => scrollY)).toBeGreaterThan(0)
+  await page.getByRole('button', { name: 'Tablet', exact: true }).click()
+  await expect(runtime.locator('.section-hero')).toBeVisible()
+  await expect
+    .poll(() => runtime.locator('body').evaluate(() => [innerWidth, innerHeight, scrollY]))
+    .toEqual([820, 1180, 0])
   expect(mutations).toEqual([])
 })
 

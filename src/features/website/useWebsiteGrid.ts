@@ -16,6 +16,7 @@ export function useWebsiteGrid(options: {
   surface: () => HTMLElement | undefined
   scroller: Ref<HTMLElement | undefined>
   viewport?: Ref<HTMLElement | undefined>
+  clip?: Ref<HTMLElement | undefined>
   disabled: () => boolean
   settings: () => GridSettings
   commit: (
@@ -77,11 +78,14 @@ export function useWebsiteGrid(options: {
     const workspace = options.scroller.value?.getBoundingClientRect()
     if (!workspace) return undefined
     const viewport = options.viewport?.value?.getBoundingClientRect() || workspace
+    // Design handles have a padded scroll surface outside the device screen.
+    // Only the visible screen can accept a drop or trigger edge scrolling.
+    const clip = options.clip?.value?.getBoundingClientRect() || viewport
     return {
-      left: Math.max(workspace.left, viewport.left),
-      right: Math.min(workspace.right, viewport.right),
-      top: Math.max(workspace.top, viewport.top),
-      bottom: Math.min(workspace.bottom, viewport.bottom),
+      left: Math.max(workspace.left, viewport.left, clip.left),
+      right: Math.min(workspace.right, viewport.right, clip.right),
+      top: Math.max(workspace.top, viewport.top, clip.top),
+      bottom: Math.min(workspace.bottom, viewport.bottom, clip.bottom),
     }
   }
   function overCanvas() {
