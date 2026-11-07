@@ -102,7 +102,9 @@ test('legacy nested selection follows scrolling and respects the container clip'
   await expect(peg).not.toHaveAttribute('inert')
   await peg.focus()
   await expect(peg).toBeFocused()
-  await source.evaluate((element) => { element.scrollTop = 70 })
+  await source.evaluate((element) => {
+    element.scrollTop = 70
+  })
   await expect(page.getByLabel('Dashboard canvas', { exact: true })).toBeFocused()
 })
 
@@ -129,11 +131,7 @@ for (const zoom of ['fit', 'half'] as const)
       text('Front', { placement: { x: 0, y: 0, w: 22, h: 14 } }),
     ])
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
-    if (zoom === 'half') {
-      await page.getByRole('button', { name: 'Actual size', exact: true }).click()
-      for (let i = 0; i < 5; i++)
-        await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
-    }
+    await applyZoom(page, zoom)
     await outline(page).getByRole('button', { name: 'Alpha', exact: true }).click()
     const frame = page.getByRole('group', { name: 'Selected widget frame', exact: true })
     const pegs = frame.getByRole('button', { name: /^Resize Alpha/ })
@@ -169,10 +167,9 @@ for (const zoom of ['fit', 'half'] as const)
     expect(await widget(page, 'Front').boundingBox()).toEqual(frontBefore)
     await page.getByRole('button', { name: 'Undo template edit', exact: true }).click()
     await selectPair(page, 'Alpha', 'Beta')
-    const group = page.getByRole('group', { name: 'Selected widgets frame', exact: true })
     await drag(
       page,
-      group.getByRole('button', { name: 'Move selected widgets', exact: true }),
+      page.getByRole('button', { name: 'Move selected widgets', exact: true }),
       (sourceBox.width / 24) * 2,
       scale * 32 * 2,
       true,
@@ -180,7 +177,7 @@ for (const zoom of ['fit', 'half'] as const)
     expect(await widget(page, 'Alpha').boundingBox()).toEqual(before)
     await drag(
       page,
-      group.getByRole('button', { name: 'Move selected widgets', exact: true }),
+      page.getByRole('button', { name: 'Move selected widgets', exact: true }),
       (sourceBox.width / 24) * 2,
       scale * 32 * 2,
     )
@@ -188,12 +185,17 @@ for (const zoom of ['fit', 'half'] as const)
       (sourceBox.width / 24) * 2,
       0,
     )
+    expect(
+      await widget(page, 'Alpha').evaluate(
+        (element) => element.parentElement?.dataset.widgetSurface,
+      ),
+    ).toBe('panel')
     await page.getByRole('button', { name: 'Undo template edit', exact: true }).click()
     await outline(page).getByRole('button', { name: 'Panel', exact: true }).click()
     await page.getByLabel('Lock position', { exact: true }).check()
     await outline(page).getByRole('button', { name: 'Alpha', exact: true }).click()
     await expect(
-      frame.getByRole('button', { name: 'Move selected widget', exact: true }),
+      page.getByRole('button', { name: 'Move selected widget', exact: true }),
     ).toBeDisabled()
     await expect(
       frame.getByRole('button', { name: 'Resize Alpha from nw', exact: true }),
@@ -424,7 +426,7 @@ test('selection frame moves and resizes the entire group with keyboard and cance
   const frame = page.getByRole('group', { name: 'Selected widgets frame', exact: true })
   await expect(frame).toBeVisible()
   await expect(frame.getByRole('button', { name: /^Resize selected widgets from / })).toHaveCount(8)
-  const move = frame.getByRole('button', { name: 'Move selected widgets', exact: true })
+  const move = page.getByRole('button', { name: 'Move selected widgets', exact: true })
   const metrics = await rootMetrics(page)
   const before = [
     (await widget(page, 'Alpha').boundingBox())!,
@@ -502,7 +504,7 @@ test('context and selection controls honor locks and protect required role tools
   await selectPair(page, 'Alpha', 'Required jobs')
   const frame = page.getByRole('group', { name: 'Selected widgets frame', exact: true })
   await expect(
-    frame.getByRole('button', { name: 'Move selected widgets', exact: true }),
+    page.getByRole('button', { name: 'Move selected widgets', exact: true }),
   ).toBeDisabled()
   for (const handle of await frame
     .getByRole('button', { name: /^Resize selected widgets from / })
@@ -631,20 +633,16 @@ for (const zoom of ['fit', 'half'] as const) {
       text('Front', { placement: { x: 0, y: 0, w: 8, h: 6 } }),
     ])
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
-    if (zoom === 'half') {
-      await page.getByRole('button', { name: 'Actual size', exact: true }).click()
-      for (let i = 0; i < 5; i++)
-        await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
-    }
+    await applyZoom(page, zoom)
     await outline(page).getByRole('button', { name: 'Behind', exact: true }).click()
     const frame = page.getByRole('group', { name: 'Selected widget frame', exact: true })
     const pegs = frame.getByRole('button', { name: /^Resize Behind/ })
     await expect(pegs).toHaveCount(8)
     const viewBounds = (await page.getByLabel('Dashboard canvas', { exact: true }).boundingBox())!
-    const moveBounds = (await frame
+    const moveBounds = (await page
       .getByRole('button', { name: 'Move selected widget', exact: true })
       .boundingBox())!
-    expect(moveBounds.y).toBeGreaterThanOrEqual(viewBounds.y)
+    expect(moveBounds.y + moveBounds.height).toBeLessThanOrEqual(viewBounds.y)
     expect(moveBounds.x).toBeGreaterThanOrEqual(viewBounds.x)
     for (const peg of await pegs.all()) {
       const box = (await peg.boundingBox())!
@@ -689,7 +687,7 @@ for (const zoom of ['fit', 'half'] as const) {
     expect((await behind.boundingBox())!.width - before.width).toBeCloseTo(units.column, 0)
     await page.getByLabel('Lock position', { exact: true }).check()
     await expect(
-      frame.getByRole('button', { name: 'Move selected widget', exact: true }),
+      page.getByRole('button', { name: 'Move selected widget', exact: true }),
     ).toBeDisabled()
     await expect(
       frame.getByRole('button', { name: 'Resize Behind from nw', exact: true }),
@@ -700,4 +698,11 @@ for (const zoom of ['fit', 'half'] as const) {
     expect((await behind.boundingBox())!.width - before.width).toBeCloseTo(units.column * 2, 0)
     await page.screenshot({ path: test.info().outputPath(`single-pegs-${zoom}.png`) })
   })
+}
+
+async function applyZoom(page: Page, zoom: 'fit' | 'half') {
+  if (zoom !== 'half') return
+  await page.getByRole('button', { name: 'Actual size', exact: true }).click()
+  for (let index = 0; index < 5; index++)
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
 }

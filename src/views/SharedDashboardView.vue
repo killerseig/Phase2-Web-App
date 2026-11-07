@@ -140,6 +140,8 @@ watch([() => auth.currentUser?.uid, () => auth.rawRole, () => auth.hasWorkspaceA
   selection.value = []
 })
 const root = ref<HTMLElement>(),
+  selectionToolbar = ref<HTMLElement>(),
+  selectionMoveBoundary = ref<HTMLElement>(),
   viewport = ref<HTMLElement>(),
   content = ref<HTMLElement>(),
   viewportWidth = ref(1100),
@@ -534,11 +536,17 @@ function startTransform(
       : undefined,
   )
 }
+const selectionMoveRoot = computed(() =>
+  selectedRoots.value.find(widget => widget.id === selected.value) || selectedRoots.value[0])
+const selectionMoveDisabled = computed(() => !selectionMoveRoot.value || busy.value || !canEdit.value ||
+  removalPending.value || !transformableSelection(selectionMoveRoot.value, 'move', 'se').length)
+const selectionMoveLabel = computed(() => selectedRoots.value.length === 1 ? 'Move selected widget' : 'Move selected widgets')
 const drag: ReturnType<typeof useWidgetDrag<Payload>> = useWidgetDrag<Payload>({
   root,
   freePosition: true,
   lockToOriginSurface: payload => payload.kind === 'resize',
   boundary: viewport,
+  sourceControls: { area: selectionToolbar, boundary: selectionMoveBoundary },
   retainOriginUnderOverlay: true,
   ignoreTarget: element => !!element.closest('[data-selection-control],.shared-drag-ghost') ||
     (drag.payload.value?.kind !== 'new' && !!dragTransaction?.ignored.has(element.closest<HTMLElement>('[data-widget-id]')?.dataset.widgetId || '')),
@@ -2473,7 +2481,7 @@ onBeforeUnmount(() => {
             :max="340"
             :disabled="busy"
           />
-          <main id="shared-canvas" class="shared-dashboard-stage" aria-label="Dashboard page">
+          <main ref="selectionMoveBoundary" id="shared-canvas" class="shared-dashboard-stage" aria-label="Dashboard page">
             <div
               v-if="editing"
               class="shared-preview-controls builder-controls"
@@ -2550,6 +2558,18 @@ onBeforeUnmount(() => {
                 @click="returnToOrigin"
                 >Origin</AppButton
               >
+              <div ref="selectionToolbar" class="shared-selection-actions" role="group"
+                aria-label="Selection actions" data-selection-control @pointerdown.capture="backgroundPointer">
+                <span :title="selectedRoots.length === 1 ? selectionMoveRoot?.title : undefined">
+                  {{ selectedRoots.length === 1 ? selectionMoveRoot?.title : selectedRoots.length ? `${selectedRoots.length} widgets selected` : 'Select a widget' }}
+                </span>
+                <AppButton class="shared-selection-move" :aria-label="selectionMoveLabel"
+                  :disabled="selectionMoveDisabled" data-selection-control="move"
+                  title="Drag to adjust position within this container, or use arrow keys. Drag the widget itself to change containers."
+                  @pointerdown.stop="selectionMoveRoot && startTransform($event, selectionMoveRoot.id, 'move', 'se', true)"
+                  @keydown="selectionMoveRoot && selectionKey($event, selectionMoveRoot.id, 'move')"
+                  @click.stop><i class="pi pi-arrows-alt" aria-hidden="true" />Move</AppButton>
+              </div>
             </div>
             <div
               v-if="!editing && runtimeFramed"

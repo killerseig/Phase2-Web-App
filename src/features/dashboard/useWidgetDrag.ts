@@ -17,6 +17,7 @@ export function useWidgetDrag<T>(options: {
   freePosition?: boolean
   lockToOriginSurface?: boolean | ((payload: T) => boolean)
   boundary?: Ref<HTMLElement | undefined>
+  sourceControls?: { area: Ref<HTMLElement | undefined>; boundary: Ref<HTMLElement | undefined> }
   ignoreTarget?: (element: Element) => boolean
   acceptTarget?: (element: Element, surface: HTMLElement) => boolean
   retainOriginUnderOverlay?: boolean
@@ -35,16 +36,22 @@ export function useWidgetDrag<T>(options: {
   let clickTimer: ReturnType<typeof setTimeout> | undefined
   let originSurface: HTMLElement | undefined
   let originScale = 1
+  let fromSourceControls = false
 
   function originLocked() {
+    if (fromSourceControls) return true
     return typeof options.lockToOriginSurface === 'function'
       ? payload.value !== undefined && options.lockToOriginSurface(payload.value)
       : options.lockToOriginSurface
   }
 
   function findSurface() {
-    const boundary = options.boundary?.value
-    if (options.boundary) {
+    // Toolbar drags adjust the selection relative to its own surface. Their
+    // remote pointer must not accidentally choose a different parent. Direct
+    // widget drags keep normal canvas hit-testing and container reassignment.
+    const boundaryRef = fromSourceControls ? options.sourceControls?.boundary : options.boundary
+    const boundary = boundaryRef?.value
+    if (boundaryRef) {
       const rect = boundary?.getBoundingClientRect()
       if (
         !rect ||
@@ -315,6 +322,7 @@ export function useWidgetDrag<T>(options: {
     const widget = (event.currentTarget as HTMLElement)?.closest<HTMLElement>('[data-widget-id]')
     const surface = anchor?.surface || widget?.closest<HTMLElement>('[data-widget-surface]')
     originSurface = surface || undefined
+    fromSourceControls = !!options.sourceControls?.area.value?.contains(event.currentTarget as Node)
     const rect = widget?.getBoundingClientRect()
     const geometry = surface && options.boundary ? surfaceGeometry(surface) : undefined
     const scale =

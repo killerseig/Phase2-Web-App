@@ -137,7 +137,7 @@ test('a selected group moves atomically and keeps relative spacing', async ({ pa
   await select(page, ['Alpha', 'Beta'])
   const beforeA = (await widget(page, 'a').boundingBox())!,
     beforeB = (await widget(page, 'b').boundingBox())!
-  const handle = page.getByRole('button', { name: 'Move selected widgets', exact: true })
+  const handle = widget(page, 'a').getByRole('button', { name: 'Move Alpha', exact: true })
   await expect
     .poll(() =>
       handle.evaluate((el) => {

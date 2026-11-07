@@ -601,6 +601,7 @@ function textStyle(widget: SharedDashboardWidget) {
         :style="{ clipPath: parentId ? selectionClip : undefined }"
       >
         <DashboardSelectionFrame
+          hide-move
           :geometry="displayedSelection"
           :disable-move="selectionMoveDisabled"
           :disable-resize="selectionResizeDisabled"

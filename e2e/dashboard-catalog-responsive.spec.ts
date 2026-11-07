@@ -498,3 +498,188 @@ test('narrow resources keep loading, failure, retry and populated content contai
   ).toBeVisible()
   expect(await widget.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
 })
+
+async function expectTitleUncovered(page: Page, id: string) {
+  const title = page.locator(`[data-widget-id="${id}"] > header h2`)
+  await expect
+    .poll(() =>
+      title.evaluate((element) => {
+        const viewport = element.closest('[data-widget-scroll]')!.getBoundingClientRect()
+        const range = document.createRange()
+        range.selectNodeContents(element)
+        const points = [...range.getClientRects()]
+          .flatMap((rect) =>
+            [0.1, 0.5, 0.9].map((fraction) => ({
+              x: rect.left + rect.width * fraction,
+              y: rect.top + rect.height / 2,
+            })),
+          )
+          .filter(
+            (point) =>
+              point.x > viewport.left &&
+              point.x < viewport.right &&
+              point.y > viewport.top &&
+              point.y < viewport.bottom,
+          )
+        return (
+          points.length > 0 &&
+          points.every((point) => element.contains(document.elementFromPoint(point.x, point.y)))
+        )
+      }),
+    )
+    .toBe(true)
+}
+async function auditUncoveredSelection(page: Page, browserWidth: number, nested: boolean) {
+  const entries = [
+    card('text', 240, {
+      title: 'Common choice control smoke',
+      placement: { x: 0, y: 0, w: nested ? 22 : 6, h: 6 },
+      devices: { phone: { x: 0, y: 0, w: 22, h: 6 } },
+      ...(nested ? { parentId: 'panel', region: '0' } : {}),
+    }),
+  ]
+  if (nested)
+    entries.unshift(
+      card('container', 400, {
+        id: 'panel',
+        title: 'Coordination',
+        placement: { x: 0, y: 0, w: 14, h: 20 },
+        devices: { phone: { x: 0, y: 0, w: 24, h: 20 } },
+        container: {
+          kind: 'panel',
+          labels: ['Content'],
+          direction: 'row',
+          ratio: 50,
+          collapsed: false,
+        },
+      }),
+    )
+  if (nested)
+    entries.push(
+      card('text', 240, {
+        id: 'second',
+        title: 'Second widget',
+        parentId: 'panel',
+        region: '0',
+        placement: { x: 0, y: 7, w: 22, h: 4 },
+      }),
+    )
+  const api = await setup(page, entries, { browserWidth })
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  if (browserWidth === 390) await page.getByRole('button', { name: 'Phone', exact: true }).click()
+  else {
+    await page.getByRole('button', { name: 'Actual size', exact: true }).click()
+    for (let index = 0; index < 5; index++)
+      await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+  }
+  const first = page.locator('[data-widget-id="text"]')
+  await first.focus()
+  await page.keyboard.press('Enter')
+  await expectTitleUncovered(page, 'text')
+  if (nested) {
+    await page.locator('[data-widget-id="second"]').focus()
+    await page.keyboard.press('Control+Enter')
+    await page
+      .getByLabel('Dashboard canvas', { exact: true })
+      .evaluate((element) => (element.scrollTop = 0))
+    await page
+      .locator('[data-widget-surface="panel"]')
+      .evaluate((element) => (element.scrollTop = 0))
+  }
+  const dock = page.getByRole('group', { name: 'Selection actions', exact: true })
+  const move = dock.getByRole('button', { name: /^Move selected widgets?$/ })
+  await expect(move).toBeEnabled()
+  await expectTitleUncovered(page, 'text')
+  const viewBox = (await page.getByLabel('Dashboard canvas', { exact: true }).boundingBox())!
+  const moveBox = (await move.boundingBox())!
+  expect(moveBox.y + moveBox.height).toBeLessThanOrEqual(viewBox.y)
+  expect(
+    await move.evaluate((element) => {
+      const box = element.getBoundingClientRect()
+      return element.contains(
+        document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+      )
+    }),
+  ).toBe(true)
+  await expect(page.locator('.dashboard-selection-frame__resize')).toHaveCount(8)
+  for (const peg of await page.locator('.dashboard-selection-frame__resize').all())
+    expect((await peg.boundingBox())!.width).toBeCloseTo(24, 0)
+  await page.screenshot({ path: test.info().outputPath('uncovered-selection.png') })
+  const before = (await first.boundingBox())!
+  await move.focus()
+  await page.keyboard.press('Shift+ArrowRight')
+  expect((await first.boundingBox())!.x - before.x).toBeCloseTo(1, 0)
+  await page.getByRole('button', { name: 'Undo template edit', exact: true }).click()
+  await expectTitleUncovered(page, 'text')
+  await page
+    .getByLabel('Dashboard canvas', { exact: true })
+    .evaluate((element) => (element.scrollTop = 100))
+  expect((await move.boundingBox())!.y).toBeCloseTo(moveBox.y, 0)
+  await expect(move).toBeEnabled()
+  return api
+}
+for (const browserWidth of [1600, 390])
+  for (const nested of [false, true])
+    test(`selection controls leave actual title text uncovered at ${browserWidth}px ${nested ? 'nested group' : 'root'}`, async ({
+      page,
+    }) => {
+      const api = await auditUncoveredSelection(page, browserWidth, nested)
+      expect(
+        api.requests.filter((request) => String(request.action).startsWith('save')),
+      ).toHaveLength(0)
+    })
+
+test('toolbar moves preserve small selections and reject outside drops while Pan keeps precedence', async ({
+  page,
+}) => {
+  const api = await setup(page, [
+    card('text', 120, { title: 'Short title', placement: { x: 1, y: 1, w: 3, h: 4 } }),
+  ])
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  const widget = page.locator('[data-widget-id="text"]')
+  await widget.focus()
+  await page.keyboard.press('Enter')
+  const move = page
+    .getByRole('group', { name: 'Selection actions', exact: true })
+    .getByRole('button', { name: 'Move selected widget', exact: true })
+  const undo = page.getByRole('button', { name: 'Undo template edit', exact: true })
+  const start = async () => {
+    const box = (await move.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  }
+  const before = (await widget.boundingBox())!
+  let origin = await start()
+  await page.mouse.move(origin.x + 60, origin.y, { steps: 6 })
+  await expect(page.locator('.shared-drag-ghost')).toBeVisible()
+  await page.mouse.up()
+  expect((await widget.boundingBox())!.x).toBeGreaterThan(before.x + 20)
+  await undo.click()
+  await expect(undo).toBeDisabled()
+  origin = await start()
+  const stage = (await page
+    .getByRole('main', { name: 'Dashboard page', exact: true })
+    .boundingBox())!
+  await page.mouse.move(stage.x - 8, origin.y + 25, { steps: 6 })
+  await page.mouse.up()
+  await expect(undo).toBeDisabled()
+  expect((await widget.boundingBox())!.x).toBeCloseTo(before.x, 0)
+  origin = await start()
+  await page.mouse.move(origin.x + 60, origin.y, { steps: 6 })
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+  await page.mouse.up()
+  await expect(undo).toBeDisabled()
+  const style = await widget.getAttribute('style')
+  await page.getByRole('button', { name: 'Pan', exact: true }).click()
+  origin = await start()
+  await page.mouse.move(origin.x + 50, origin.y + 25, { steps: 6 })
+  await page.mouse.up()
+  await expect(widget).toHaveAttribute('style', style!)
+  expect(Math.abs((await widget.boundingBox())!.x - before.x)).toBeGreaterThan(20)
+  await expect(undo).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Save template', exact: true })).toBeDisabled()
+  expect(api.requests.filter((request) => String(request.action).startsWith('save'))).toHaveLength(
+    0,
+  )
+})

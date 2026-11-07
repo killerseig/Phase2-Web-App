@@ -85,7 +85,7 @@ for (const scope of scopes) {
       await shiftRight(page)
       await shiftRight(
         page,
-        selectedFrame(page).getByRole('button', { name: 'Move selected widget', exact: true }),
+        page.getByRole('button', { name: 'Move selected widget', exact: true }),
       )
     }
     await page.getByRole('button', { name: 'Desktop', exact: true }).click()
@@ -128,7 +128,7 @@ test('a locked group cannot move through the focused widget instead of its disab
     .getByRole('button', { name: 'Beta', exact: true })
     .click({ modifiers: ['Control'] })
   await expect(
-    selectedFrame(page).getByRole('button', { name: 'Move selected widgets', exact: true }),
+    page.getByRole('button', { name: 'Move selected widgets', exact: true }),
   ).toBeDisabled()
   const before = (await article(page).boundingBox())!
   await article(page).focus()
@@ -180,7 +180,7 @@ test('nested selection uses its own column width for precise move, resize and gr
     .getByRole('button', { name: 'Beta', exact: true })
     .click({ modifiers: ['Control'] })
   const beta = (await article(page, 'b').boundingBox())!
-  await selectedFrame(page)
+  await page
     .getByRole('button', { name: 'Move selected widgets', exact: true })
     .focus()
   await page.keyboard.press('Shift+ArrowRight')
@@ -254,7 +254,7 @@ test('Escape respects menus, text controls and active move cancellation before d
   await page.keyboard.press('Shift+ArrowRight')
   await expect(selectedFrame(page)).toBeVisible()
   await expect(save(page)).toBeDisabled()
-  const move = selectedFrame(page).getByRole('button', {
+  const move = page.getByRole('button', {
     name: 'Move selected widget',
     exact: true,
   })

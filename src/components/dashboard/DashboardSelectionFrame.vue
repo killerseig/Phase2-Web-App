@@ -9,6 +9,7 @@ const props = defineProps<{
   positionLocked?: boolean
   widgetTitle?: string
   controlLabel?: string
+  hideMove?: boolean
   scale?: number
   clipBounds?: { left: number; top: number; right: number; bottom: number }
 }>()
@@ -106,6 +107,7 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
     :aria-label="controlLabel || (widgetTitle ? 'Selected widget frame' : 'Selected widgets frame')"
   >
     <button
+      v-if="!hideMove"
       type="button"
       class="dashboard-selection-frame__move"
       data-selection-control="move"
