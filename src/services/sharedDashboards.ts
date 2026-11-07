@@ -16,6 +16,7 @@ export interface DashboardContext {
   role?: string
 }
 interface DashboardRequests {
+  'load-announcement-drafts': { scope: 'personal' }
   load: DashboardContext
   'save-template': DashboardContext & {
     version: number
@@ -42,6 +43,11 @@ type DashboardContent = {
   events: SharedCalendarEntry[]
 }
 interface DashboardResponses {
+  'load-announcement-drafts': {
+    version: number
+    announcementDrafts: AnnouncementDraft[]
+    publishedDraftIds: string[]
+  }
   load: SharedDashboardLayout
   'save-template': SharedDashboardLayout
   'save-notes': DashboardContent

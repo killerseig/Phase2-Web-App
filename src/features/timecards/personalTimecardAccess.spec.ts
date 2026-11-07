@@ -14,7 +14,7 @@ describe('restricted employee timecard access', () => {
     expect(normalizeStoredRoleKey('Employee')).toBe('employee')
     expect(EDITABLE_USER_ROLE_OPTIONS).toContainEqual({ label: 'Employee', value: 'employee' })
     expect(buildCurrentFunctionUser('self', { role: 'employee', active: true }).role).toBe('none')
-    expect(getAppShellWorkspaceNavigationItems('employee')).toEqual([{label:'Announcements',to:'/dashboards/announcements'}])
+    expect(getAppShellWorkspaceNavigationItems('employee')).toEqual([{label:'Updates',to:'/dashboards/announcements'}])
     expect(getAppShellAdminNavigationItems('employee')).toEqual([])
     expect(Object.entries(getTargetRoleCapabilities('employee')).filter(([, value]) => value).map(([key]) => key)).toEqual(['accessWorkspace'])
   })

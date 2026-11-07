@@ -6,6 +6,7 @@ import { createUsageAnalytics, type UsageEvent, type UsageAnalytics, type Consen
 const fake = vi.hoisted(() => ({ auth: { hasWorkspaceAccess: false }, analytics: {} as Record<string, { controller: UsageAnalytics; choice: { value: Consent }; setConsent: (value: Consent) => void }> }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => fake.auth }))
 vi.mock('@/composables/useIdleSessionTimeout', () => ({ useIdleSessionTimeout: () => {} }))
+vi.mock('@/components/dashboard/AnnouncementDelivery.vue', () => ({ default: { template: '<span />' } }))
 vi.mock('./useUsageAnalytics', () => ({ publicUsageKey: Symbol('test-public-usage'), useUsageAnalytics: (scope: string) => fake.analytics[scope] }))
 vi.mock('@/components/website/WebsiteCanvas.vue', () => ({ default: { template: '<p>Published page</p>' } }))
 vi.mock('@/services/publicWebsite', () => ({ initialPublicSnapshot: () => ({ site: { name: 'Synthetic website', pages: [{ id: 'public-home', slug: 'home', title: 'Home', sections: [] }, { id: 'public-services', slug: 'services', title: 'Services', sections: [] }] }, version: 'public-1' }), loadPublicSnapshot: () => { throw new Error('No live reads in this fixture') } }))

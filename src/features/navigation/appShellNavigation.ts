@@ -15,7 +15,6 @@ export interface AppShellNavigationItem {
 
 const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { label: 'Jobs', to: '/jobs' },
-  { label: 'Announcements', to: '/dashboards/announcements' },
   { label: 'Company Library', to: '/company-library' },
   { label: 'Forms', to: '/reports' },
   // Remove these visibility flags after review; route authorization is independent of navigation.
@@ -24,6 +23,7 @@ const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
 ]
 
 const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
+  { capability: 'manage-announcements', label: 'Announcements', to: '/admin/announcements' },
   { capability: 'manage-website', label: 'Form Builder', to: '/admin/forms' },
   { capability: 'manage-website', label: 'Website Builder', to: '/admin/website' },
   { capability: 'manage-users', label: 'Users', to: '/users' },
@@ -32,10 +32,13 @@ const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { capability: 'manage-shop-catalog', label: 'Shop Catalog', to: '/settings/shop-catalog' },
 ]
 
-export function getAppShellWorkspaceNavigationItems(rawRole: RawRoleKey = 'none'): AppShellNavigationItem[] {
-  if (rawRole === 'employee') return [{ label: 'Announcements', to: '/dashboards/announcements' }]
-  return WORKSPACE_NAVIGATION_ITEMS.filter((item) => !item.hidden &&
-    (item.to !== '/reports' || canListCompanyForms(rawRole)))
+export function getAppShellWorkspaceNavigationItems(
+  rawRole: RawRoleKey = 'none',
+): AppShellNavigationItem[] {
+  if (rawRole === 'employee') return [{ label: 'Updates', to: '/dashboards/announcements' }]
+  return WORKSPACE_NAVIGATION_ITEMS.filter(
+    (item) => !item.hidden && (item.to !== '/reports' || canListCompanyForms(rawRole)),
+  )
 }
 
 export function getAppShellAdminNavigationItems(rawRole: RawRoleKey): AppShellNavigationItem[] {

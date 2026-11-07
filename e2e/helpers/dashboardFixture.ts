@@ -150,6 +150,19 @@ export async function mockDashboard(page: Page, admin = true) {
       return
     }
     const content = contents.get(key) || { notes: {}, events: [], version: 0 }
+    if (data.action === 'load-announcement-drafts') {
+      await route.fulfill({
+        headers,
+        json: {
+          result: {
+            version: content.version,
+            announcementDrafts: content.announcementDrafts || [],
+            publishedDraftIds,
+          },
+        },
+      })
+      return
+    }
     if (data.action === 'publish-announcement') {
       const draft = contents
         .get('personal')

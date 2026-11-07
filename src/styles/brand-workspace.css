@@ -10,6 +10,8 @@
 .app-shell__topbar,
 .app-shell__statusbar,
 body:has(.app-shell--branded) > .confirm-dialog,
+body:has(.app-shell--branded) > .announcement-delivery,
+body:has(.app-shell--branded) > .announcement-delivery-error,
 body:has(.app-shell--branded) > #app-toast-root {
   --font-sans: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
   --font-body: var(--font-sans);

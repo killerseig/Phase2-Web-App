@@ -225,6 +225,51 @@ try {
     text: '',
   }
   const adminPersonal = await call('dash-admin', 'personal')
+  // Admin management works without a widget, even if a saved layout needs repair.
+  const originalAdminTemplate = (await db.doc('sharedDashboardPersonal/dash-admin').get()).data()
+  await db
+    .doc('sharedDashboardPersonal/dash-admin')
+    .set({ version: 99, widgets: [{ type: 'invalid' }] })
+  const independentDraft = {
+    id: 'standalone',
+    title: 'Independent draft',
+    body: 'No widget needed',
+  }
+  const independentBefore = await call('dash-admin', 'personal', 'load-announcement-drafts')
+  await call('dash-admin', 'personal', 'save-announcement-drafts', {
+    version: independentBefore.version,
+    announcementDrafts: [independentDraft],
+  })
+  equal((await call('dash-admin', 'personal', 'load-announcement-drafts')).announcementDrafts, [
+    independentDraft,
+  ])
+  equal((await call('dash-admin-2', 'personal', 'load-announcement-drafts')).announcementDrafts, [])
+  for (const uid of ['dash-a', 'dash-payroll', 'dash-shop', 'dash-none', 'dash-inactive'])
+    await denied(() => call(uid, 'personal', 'load-announcement-drafts'))
+  await denied(() => call(undefined, 'personal', 'load-announcement-drafts'), 'unauthenticated')
+  for (const fields of [
+    { uid: 'dash-admin' },
+    { ownerId: 'dash-admin' },
+    { role: 'admin' },
+    { extra: true },
+  ])
+    await denied(
+      () => call('dash-admin-2', 'personal', 'load-announcement-drafts', fields),
+      'invalid-argument',
+    )
+  await denied(() => call('dash-admin', 'role', 'load-announcement-drafts'), 'invalid-argument')
+  await denied(
+    () =>
+      call('dash-admin', 'personal', 'save-announcement-drafts', {
+        version: independentBefore.version + 1,
+        announcementDrafts: [],
+        recipientIds: ['dash-a'],
+      }),
+    'invalid-argument',
+  )
+  if (originalAdminTemplate)
+    await db.doc('sharedDashboardPersonal/dash-admin').set(originalAdminTemplate)
+  else await db.doc('sharedDashboardPersonal/dash-admin').delete()
   await call('dash-admin', 'personal', 'save-template', {
     version: adminPersonal.version,
     widgets: [...adminPersonal.widgets, draftWidget],
@@ -565,6 +610,7 @@ try {
     'save-notes',
     'save-calendar',
     'save-announcement-drafts',
+    'load-announcement-drafts',
     'publish-announcement',
     'list-announcement-recipients',
   ])

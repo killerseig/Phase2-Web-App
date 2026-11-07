@@ -5,6 +5,7 @@ import { watch } from 'vue'
 import { useIdleSessionTimeout } from '@/composables/useIdleSessionTimeout'
 import { useAuthStore } from '@/stores/auth'
 import { useUsageAnalytics } from '@/features/analytics/useUsageAnalytics'
+import AnnouncementDelivery from '@/components/dashboard/AnnouncementDelivery.vue'
 import UsageAnalyticsNotice from '@/components/common/UsageAnalyticsNotice.vue'
 
 useIdleSessionTimeout()
@@ -19,6 +20,7 @@ watch([() => route.name, () => auth.hasWorkspaceAccess], ([name, access]) => {
 <template>
   <div class="app-theme-dark">
     <RouterView />
+    <AnnouncementDelivery />
     <UsageAnalyticsNotice :available="analytics.controller.available && auth.hasWorkspaceAccess" scope="employee" :choice="analytics.choice.value" @consent="analytics.setConsent" />
   </div>
 </template>

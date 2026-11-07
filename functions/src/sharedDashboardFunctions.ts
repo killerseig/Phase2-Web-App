@@ -1,11 +1,11 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { db } from './runtime'
+import { manageAnnouncementDrafts } from './announcementDraftManagement'
 import {
   announcementId,
   listDashboardAnnouncements,
   publishDashboardAnnouncement,
   listAnnouncementRecipients,
-  validateAnnouncementRecipients,
 } from './dashboardAnnouncements'
 import {
   buildCurrentFunctionUser,
@@ -22,7 +22,6 @@ import {
   validateDashboardViewport,
   validateSharedCalendar,
   validatePersonalTasks,
-  validateAnnouncementDrafts,
   upgradeDashboardWidgets,
   type SharedDashboardScope,
 } from './sharedDashboardModel'
@@ -78,6 +77,7 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
       'save-calendar',
       'save-tasks',
       'save-announcement-drafts',
+      'load-announcement-drafts',
       'publish-announcement',
       'list-announcements',
       'list-announcement-recipients',
@@ -117,6 +117,8 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
     }
     if (data.action === 'save-announcement-drafts' && user.role !== 'admin')
       throw denied('Only Admin can create announcement drafts.')
+    if (['load-announcement-drafts', 'save-announcement-drafts'].includes(data.action))
+      return manageAnnouncementDrafts(tx, user, data)
     const role = (data.role ?? user.role) as UserRole
     if (
       scope === 'role' &&
@@ -313,42 +315,6 @@ export const sharedDashboardWorkspace = onCall(async (request) => {
         events,
         tasks,
         announcementDrafts,
-      }
-    }
-    if (data.action === 'save-announcement-drafts') {
-      checkVersion(data.version, Number(content.version || 0))
-      if (!widgets.some((w: { type: string }) => w.type === 'announcement-drafts'))
-        throw new HttpsError('failed-precondition', 'Add Announcement drafts first.')
-      let entries
-      try {
-        entries = validateAnnouncementDrafts(data.announcementDrafts)
-      } catch (error) {
-        throw new HttpsError(
-          'invalid-argument',
-          error instanceof Error ? error.message : 'Invalid announcement drafts.',
-        )
-      }
-      for (const entry of entries)
-        if (entry.audience === 'job') {
-          const job = await tx.get(db.doc('jobs/' + entry.jobId))
-          if (!job.exists) throw new HttpsError('invalid-argument', 'Choose an available job.')
-        }
-      for (const entry of entries)
-        if (entry.audience === 'people')
-          await validateAnnouncementRecipients(tx, entry.recipientIds || [])
-      tx.set(notesRef!, {
-        ...content,
-        announcementDrafts: entries,
-        version: Number(content.version || 0) + 1,
-        updatedBy: user.uid,
-        updatedAt: Date.now(),
-      })
-      return {
-        version: Number(content.version || 0) + 1,
-        notes: visibleNotes,
-        events,
-        tasks,
-        announcementDrafts: entries,
       }
     }
     if (data.action === 'save-tasks') {

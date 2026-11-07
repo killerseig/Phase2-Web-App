@@ -62,6 +62,7 @@ const props = defineProps<{
   device?: 'desktop' | 'tablet' | 'phone'
   fixedFrame?: boolean
   parentId?: string
+  selectionHost?: HTMLElement
   region?: string
   tabLabelId?: string
   selectedIds?: string[]
@@ -104,6 +105,10 @@ const canvasStyle = computed(() => {
   }
 })
 const canvasElement = ref<HTMLElement>()
+const selectionOverlay = ref<HTMLElement>()
+const selectionTarget = computed(() => props.selectionHost || selectionOverlay.value)
+const projectedSelection = ref<SelectionGeometry>()
+const selectionClip = ref<string>()
 type SelectionGeometry = NonNullable<SharedDashboardWidget['placement']>
 const measuredSelection = ref<SelectionGeometry>()
 const selectionWidgets = computed(() => {
@@ -132,6 +137,9 @@ const selectionGeometry = computed(() => {
     positions.value.filter((_, index) => ids.has(visibleWidgets.value[index]!.id)),
   )
 })
+const displayedSelection = computed(() =>
+  props.parentId ? projectedSelection.value : selectionGeometry.value,
+)
 const selectionMoveDisabled = computed(
   () =>
     props.busy ||
@@ -161,6 +169,7 @@ function updateMeasuredSelection(next?: SelectionGeometry) {
 }
 function measureSelection() {
   selectionFrame = 0
+  projectSelection()
   const host = canvasElement.value
   if (!host) return
   const measuring = !positioned.value && selectionWidgets.value.length > 0
@@ -191,14 +200,98 @@ function measureSelection() {
     .map((child) => {
       const rect = child.getBoundingClientRect()
       return {
-        x: ((rect.left - hostRect.left) / hostRect.width) * 24,
-        y: (rect.top - hostRect.top) / scale / 32,
-        w: (rect.width / hostRect.width) * 24,
+        x: (((rect.left - hostRect.left) / scale + host.scrollLeft) / host.clientWidth) * 24,
+        y: ((rect.top - hostRect.top) / scale + host.scrollTop) / 32,
+        w: (rect.width / scale / host.clientWidth) * 24,
         h: rect.height / scale / 32,
       }
     })
   updateMeasuredSelection(rectangles.length === ids.size ? geometryBounds(rectangles) : undefined)
 }
+function projectSelection() {
+  const geometry = selectionGeometry.value,
+    source = canvasElement.value,
+    target = selectionTarget.value
+  if (!geometry || !source || !target) {
+    projectedSelection.value = undefined
+    return
+  }
+  const from = source.getBoundingClientRect(),
+    to = target.getBoundingClientRect()
+  if (!from.width || !from.height || !to.width || !target.offsetWidth) {
+    projectedSelection.value = undefined
+    return
+  }
+  const scale = to.width / target.offsetWidth
+  const sourceScale = from.width / source.offsetWidth
+  const next = {
+    x:
+      ((from.left -
+        to.left +
+        ((geometry.x / 24) * source.clientWidth - source.scrollLeft) * sourceScale) /
+        to.width) *
+      24,
+    y: (from.top - to.top + (geometry.y * 32 - source.scrollTop) * sourceScale) / scale / 32,
+    w: (geometry.w * source.clientWidth * sourceScale) / to.width,
+    h: (geometry.h * sourceScale) / scale,
+  }
+  // Escaping layer stacks must not expose controls for content hidden by a
+  // scrolling/collapsed ancestor. Clip in the root overlay's coordinate space.
+  let left = -100000,
+    top = -100000,
+    right = 100000,
+    bottom = 100000,
+    clipped = false
+  const root = target.parentElement
+  for (
+    let element: HTMLElement | null = source;
+    element && element !== root;
+    element = element.parentElement
+  ) {
+    const style = getComputedStyle(element),
+      rect = element.getBoundingClientRect()
+    const elementScale = rect.width / element.offsetWidth || scale
+    if (/auto|scroll|hidden|clip/.test(style.overflowX)) {
+      left = Math.max(left, rect.left + element.clientLeft * elementScale)
+      right = Math.min(right, rect.left + (element.clientLeft + element.clientWidth) * elementScale)
+      clipped = true
+    }
+    if (/auto|scroll|hidden|clip/.test(style.overflowY)) {
+      top = Math.max(top, rect.top + element.clientTop * elementScale)
+      bottom = Math.min(
+        bottom,
+        rect.top + (element.clientTop + element.clientHeight) * elementScale,
+      )
+      clipped = true
+    }
+  }
+  selectionClip.value = clipped
+    ? `inset(${(top - to.top) / scale}px ${(to.right - right) / scale}px ${(to.bottom - bottom) / scale}px ${(left - to.left) / scale}px)`
+    : undefined
+  const previous = projectedSelection.value
+  if (
+    !previous ||
+    (['x', 'y', 'w', 'h'] as const).some((key) => Math.abs(previous[key] - next[key]) > 0.0001)
+  )
+    projectedSelection.value = next
+}
+// Only the selected canvas observes screen geometry. This also follows ancestor
+// scrolling/panning/transforms, which ResizeObserver alone cannot observe.
+let projectionFrame = 0
+function followSelection() {
+  projectionFrame = 0
+  projectSelection()
+  if (props.editing && selectionWidgets.value.length)
+    projectionFrame = requestAnimationFrame(followSelection)
+}
+watch(
+  [selectionWidgets, selectionTarget],
+  () => {
+    if (!projectionFrame && typeof requestAnimationFrame !== 'undefined')
+      projectionFrame = requestAnimationFrame(followSelection)
+  },
+  { flush: 'post' },
+)
 function scheduleSelectionMeasurement() {
   if (props.editing && !selectionFrame && typeof requestAnimationFrame !== 'undefined')
     selectionFrame = requestAnimationFrame(measureSelection)
@@ -217,6 +310,7 @@ onBeforeUnmount(() => {
   selectionObserver?.disconnect()
   observedWidgets.clear()
   if (selectionFrame) cancelAnimationFrame(selectionFrame)
+  if (projectionFrame) cancelAnimationFrame(projectionFrame)
 })
 function requestMenu(event: MouseEvent | KeyboardEvent, id: string) {
   if (!props.editing) return
@@ -472,25 +566,34 @@ function textStyle(widget: SharedDashboardWidget) {
     >
       <span>0,0</span>
     </span>
-    <DashboardSelectionFrame
-      v-if="selectionGeometry"
-      :geometry="selectionGeometry"
-      :disable-move="selectionMoveDisabled"
-      :disable-resize="selectionResizeDisabled"
-      :position-locked="selectionMoveDisabled"
-      :widget-title="
-        selectionWidgets.length === 1
-          ? selectionWidgets[0]!.title || sharedWidgetLabels[selectionWidgets[0]!.type]
-          : undefined
-      "
-      :scale="editorScale"
-      @move="emit('selection-move', $event, selectionPrimary)"
-      @resize="(event, direction) => emit('selection-resize', event, selectionPrimary, direction)"
-      @key="
-        (event, action, direction) =>
-          emit('selection-key', event, selectionPrimary, action, direction)
-      "
-    />
+    <div v-if="editing && !parentId" ref="selectionOverlay" class="dashboard-selection-overlay" />
+    <Teleport v-if="selectionTarget && displayedSelection" :to="selectionTarget">
+      <div
+        class="dashboard-selection-clip"
+        :style="{ clipPath: parentId ? selectionClip : undefined }"
+      >
+        <DashboardSelectionFrame
+          :geometry="displayedSelection"
+          :disable-move="selectionMoveDisabled"
+          :disable-resize="selectionResizeDisabled"
+          :position-locked="selectionMoveDisabled"
+          :widget-title="
+            selectionWidgets.length === 1
+              ? selectionWidgets[0]!.title || sharedWidgetLabels[selectionWidgets[0]!.type]
+              : undefined
+          "
+          :scale="editorScale"
+          @move="emit('selection-move', $event, selectionPrimary)"
+          @resize="
+            (event, direction) => emit('selection-resize', event, selectionPrimary, direction)
+          "
+          @key="
+            (event, action, direction) =>
+              emit('selection-key', event, selectionPrimary, action, direction)
+          "
+        />
+      </div>
+    </Teleport>
     <div
       v-if="editing && placementPreview && dropTarget?.surface === (parentId || 'shared-dashboard')"
       data-widget-placement-preview
@@ -629,6 +732,7 @@ function textStyle(widget: SharedDashboardWidget) {
             ref="childCanvases"
             v-show="widget.container.kind !== 'tabs' || (activeTabs[widget.id] || '0') === slot"
             v-bind="props"
+            :selection-host="selectionTarget"
             :parent-id="widget.id"
             :region="slot"
             :id="`region-${widget.id}-${slot}`"

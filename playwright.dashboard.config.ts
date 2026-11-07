@@ -14,6 +14,7 @@ export default defineConfig({
         'dashboard-grid-visibility.spec.ts',
         'dashboard-canvas-actions.spec.ts',
         'employee-announcements.spec.ts',
+        'announcement-management.spec.ts',
         'personal-timecard.spec.ts',
         'jobs-pending-edits.spec.ts',
         'jobs.spec.ts',

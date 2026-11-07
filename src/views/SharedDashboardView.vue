@@ -1392,9 +1392,11 @@ async function saveContent(
     })
     if (request !== generation) return
     layout.value.announcementDrafts = result.announcementDrafts || []
-    layout.value.tasks = result.tasks || []
-    layout.value.notes = result.notes
-    layout.value.events = result.events
+    if (action !== 'save-announcement-drafts') {
+      layout.value.tasks = result.tasks || []
+      layout.value.notes = result.notes
+      layout.value.events = result.events
+    }
     layout.value.notesVersion = result.version
     canvas.value?.finishNote(action, 'widgetId' in payload ? payload.widgetId : undefined)
     message.value = scope.value === 'job' ? 'Saved for this job.' : 'Saved for your account.'
@@ -1436,7 +1438,7 @@ async function publishAnnouncement(draftId: string) {
   if (
     !(await confirm.value?.ask({
       title: 'Publish announcement?',
-      message: `Publish “${draft.title}” to ${audience}? This publishes a snapshot; no notifications are sent.`,
+      message: `Publish “${draft.title}” to ${audience}? Recipients will see this snapshot when they enter the app or a job.`,
       confirmLabel: 'Publish',
     })) ||
     !current() ||

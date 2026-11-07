@@ -31,6 +31,7 @@ function getLegacyDailyLogGalleryRedirect(to: RouteLocationNormalized) {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/admin/announcements', name: 'admin-announcements', component: () => import('@/views/AdminAnnouncementsView.vue'), meta: { title: 'Announcements', requiredCapability: 'manage-announcements' } },
     { path: '/dashboards/announcements', name: 'announcements', component: () => import('@/views/AnnouncementsView.vue'), meta: { title: 'Announcements', requiresAuth: true } },
     { path: '/jobs/my-timecard', name: 'my-timecard', component: () => import('@/views/MyTimecardUnavailableView.vue'), meta: { title: 'My Timecard', requiresAuth: true } },
     { path: '/reports', name: 'reports', component: () => import('@/views/ReportsView.vue'), meta: { title: 'Reports', requiresAuth: true } },
