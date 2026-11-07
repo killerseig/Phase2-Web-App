@@ -17,14 +17,14 @@ const emit = defineEmits<{
           action: 'move',
           icon: 'pi-arrows-alt',
           label: 'Move widget',
-          hint: 'Drag to move. Arrow keys move; Shift uses larger steps.',
+          hint: 'Drag to move. Arrow keys move by the grid step; Shift moves one screen pixel.',
         },
         {
           action: canTransform ? 'bottom-right' : 'height',
           icon: 'pi-arrow-down-right',
           label: 'Resize widget',
           hint: canTransform
-            ? 'Drag to resize. Arrow keys adjust width and height.'
+            ? 'Drag to resize. Arrow keys adjust width and height; Shift uses one screen pixel.'
             : 'Drag to change height. Up and down arrows adjust height.',
         },
         {

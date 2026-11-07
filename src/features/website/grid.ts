@@ -101,14 +101,20 @@ export function resizeWithFollowing(
   sections: WebsiteSection[],
   id: string,
   next: WidgetGeometry,
+  precision = 3,
 ): Record<string, WidgetGeometry> {
   const section = sections.find((entry) => entry.id === id)
   const origin = section?.layout
   const result = { [id]: { ...next } }
   if (!origin || section.parentId || next.h === origin.h || layoutLocked(sections, id))
     return result
+  // Pointer gestures retain their established three-decimal behavior. Keyboard
+  // precision avoids multiplying large row coordinates beyond safe integers.
+  const round = (value: number) => precision === 3
+    ? Math.round(value * 1000) / 1000
+    : Number(value.toFixed(precision))
   const bottom = origin.y + origin.h
-  const delta = Math.round((next.y + next.h - bottom) * 1000) / 1000
+  const delta = round(next.y + next.h - bottom)
   if (!delta) return result
   const following = sections.filter(
     (entry) =>
@@ -123,11 +129,22 @@ export function resizeWithFollowing(
     delta,
     ...following.map((entry) => 10000 - entry.layout!.y - entry.layout!.h),
   )
-  const height = Math.round((next.h + shift - delta) * 1000) / 1000
+  let height = round(next.h + shift - delta)
+  if (precision !== 3) {
+    if (shift === delta) height = next.h
+    else if (shift === 0 && next.y === origin.y) height = origin.h
+    height = Math.min(10000 - next.y, height)
+  }
   if (height < 1) return { [id]: { ...origin } }
   result[id]!.h = height
-  for (const entry of following)
-    result[entry.id] = { ...entry.layout!, y: Math.round((entry.layout!.y + shift) * 1000) / 1000 }
+  for (const entry of following) {
+    if (precision !== 3 && shift === 0) continue
+    result[entry.id] = {
+      ...entry.layout!,
+      y: precision === 3 ? round(entry.layout!.y + shift)
+        : Math.min(10000 - entry.layout!.h, round(entry.layout!.y + shift)),
+    }
+  }
   return result
 }
 export function gridExtent(layouts: WidgetGeometry[]) {

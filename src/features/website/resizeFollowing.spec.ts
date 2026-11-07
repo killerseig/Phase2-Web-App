@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { resizeWithFollowing } from './grid'
+import { defaultGrid, resizeWithFollowing } from './grid'
 import { newSection } from './types'
+import { keyboardGeometry, KEYBOARD_GEOMETRY_PRECISION } from './keyboardGeometry'
 
 function widget(id: string, y: number, h = 4, x = 0) {
   return { ...newSection('text'), id, layout: { x, y, w: 12, h, z: 1 } }
@@ -53,5 +54,30 @@ describe('section resize following content', () => {
     })
     expect(layouts.nav?.h).toBe(6)
     expect(layouts.next?.y).toBe(9996)
+  })
+
+  it.each([0.5, 1, 2])('preserves a one-screen-pixel keyboard height change and the following gap at %sx', scale => {
+    const nav = widget('nav', 3.23453, 6.18741)
+    const next = widget('next', 12.12347)
+    const proposed = keyboardGeometry({ nav: nav.layout }, {
+      key: 'ArrowDown', precise: true, action: 'bottom', scale, settings: defaultGrid(),
+    }).nav!
+    const layouts = resizeWithFollowing([nav, next], nav.id, proposed, KEYBOARD_GEOMETRY_PRECISION)
+    expect((layouts.nav!.h - nav.layout.h) * 32 * scale).toBeCloseTo(1, 8)
+    expect((layouts.next!.y - next.layout.y) * 32 * scale).toBeCloseTo(1, 8)
+    expect(layouts.next!.y - layouts.nav!.y - layouts.nav!.h).toBeCloseTo(next.layout.y - nav.layout.y - nav.layout.h, 10)
+    expect({ ...layouts.next!, y: next.layout.y }).toEqual(next.layout)
+    expect({ ...layouts.nav!, h: nav.layout.h }).toEqual(nav.layout)
+  })
+
+  it('keeps high-precision following rows strictly inside saved bounds and avoids a blocked edit', () => {
+    const nav = widget('nav', 0, 4.123456789123)
+    const following = widget('following', 9994.23456789123, 4)
+    const layouts = resizeWithFollowing([nav, following], nav.id, { ...nav.layout, h: 20 }, KEYBOARD_GEOMETRY_PRECISION)
+    expect(layouts.following!.y + layouts.following!.h).toBeLessThanOrEqual(10000)
+    expect(layouts.following!.y).toBe(9996)
+    expect(layouts.nav!.h - nav.layout.h).toBeCloseTo(9996 - following.layout.y, 8)
+    const blocked = { ...following, layout: { ...following.layout, h: 10000 - following.layout.y } }
+    expect(resizeWithFollowing([nav, blocked], nav.id, { ...nav.layout, h: 20 }, KEYBOARD_GEOMETRY_PRECISION)).toEqual({ nav: nav.layout })
   })
 })

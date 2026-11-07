@@ -97,11 +97,8 @@ import WebsiteItemFields from '@/components/website/WebsiteItemFields.vue'
 import WebsiteCollectionInspector from '@/components/website/WebsiteCollectionInspector.vue'
 import ExplorerContextMenu from '@/components/dashboard/ExplorerContextMenu.vue'
 import { arrangementActions } from '@/features/website/arrangement'
-import {
-  translateSelection,
-  cloneWidgets,
-  layerSelection,
-} from '@/features/website/selection'
+import { cloneWidgets, layerSelection } from '@/features/website/selection'
+import { keyboardGeometry, KEYBOARD_GEOMETRY_PRECISION } from '@/features/website/keyboardGeometry'
 import {
   newItem,
   newSection,
@@ -133,8 +130,6 @@ import {
   materializeGrid,
   nextGeometry,
   gridExtent,
-  changeGeometry,
-  gridStep,
   resizeWithFollowing,
   type WidgetGeometry,
   type WidgetAction,
@@ -1198,13 +1193,19 @@ function addWidget(type: SectionType) {
 }
 function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'move') {
   if (!designMode.value) return
-  if (event.target instanceof HTMLElement && event.target.closest('input,textarea,select')) return
-  if (locked.value) return
+  const target = event.target instanceof HTMLElement ? event.target : undefined
+  if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey ||
+    target?.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"]')) return
+  if (locked.value || widgetDrag.isInteracting()) return
+  const rotating = action === 'rotate' || !!target?.closest('.grid-rotate')
+  const heightOnly = action === 'height' || !!target?.hasAttribute('data-height-resize')
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && !(rotating && event.key === 'Home')) return
+  if (heightOnly && !['ArrowUp', 'ArrowDown'].includes(event.key)) return
   chooseSectionScope(id)
   if (!page.value) return
   const entry = page.value.sections.find((section) => section.id === id)
   if (!entry?.layout || layoutLocked(page.value.sections, id) || selectedLayoutLocked.value) return
-  if (action === 'rotate' || (event.target as HTMLElement).closest('.grid-rotate')) {
+  if (rotating) {
     const direction = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[event.key]
     if (direction || event.key === 'Home') {
       event.preventDefault()
@@ -1225,7 +1226,7 @@ function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'm
     }
     return
   }
-  if (action === 'height' || (event.target as HTMLElement).hasAttribute('data-height-resize')) {
+  if (heightOnly) {
     const delta = { ArrowUp: -1, ArrowDown: 1 }[event.key]
     const frame = previewScroller.value?.querySelector<HTMLElement>(
       `[data-widget-id="${CSS.escape(id)}"]`,
@@ -1251,26 +1252,20 @@ function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'm
     return
   }
   if (entry.parentId || !geometryEditable.value) return
-  const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[
-    event.key
-  ]
-  if (!direction) return
   event.preventDefault()
   event.stopPropagation()
-  const settings = page.value.grid || defaultGrid()
-  const step = event.shiftKey ? 10 : 1
-  const layout = changeGeometry(
-    entry.layout,
-    direction[0]! * step * gridStep(settings, 'x'),
-    direction[1]! * step * gridStep(settings, 'y'),
-    action,
-    settings,
-  )
-  const group =
-    action === 'move' && selectedIds.value.includes(id) && selectedWidgets.value.length > 1
-      ? translateSelection(groupGeometry(), layout.x - entry.layout.x, layout.y - entry.layout.y)
-      : undefined
-  commitGeometry(id, group?.[id] || layout, undefined, group)
+  const surface = websiteCanvas.value?.getSurface(editingLayout.value)
+  if (!surface) return
+  const scale = surface.getBoundingClientRect().width / surface.offsetWidth
+  const grouped = action === 'move' && selectedIds.value.includes(id) && selectedWidgets.value.length > 1
+  const original = grouped ? groupGeometry() : { [id]: entry.layout }
+  const changes = keyboardGeometry(original, {
+    key: event.key, precise: event.shiftKey, action, scale, settings: page.value.grid || defaultGrid(),
+  })
+  const layout = changes[id]
+  if (!layout || Object.entries(changes).every(([key, next]) =>
+    (['x', 'y', 'w', 'h'] as const).every(field => next[field] === original[key]![field]))) return
+  commitGeometry(id, layout, undefined, grouped ? changes : undefined, undefined, false, KEYBOARD_GEOMETRY_PRECISION)
 }
 const overlapTargets = shallowRef<{ id: string; label: string; target?: ElementTarget }[]>([])
 function objectsAtPoint(event: MouseEvent) {

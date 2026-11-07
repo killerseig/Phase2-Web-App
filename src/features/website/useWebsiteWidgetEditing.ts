@@ -176,6 +176,7 @@ export function useWebsiteWidgetEditing(options: {
     layouts?: GeometryMap,
     rotation?: number,
     heightOnly = false,
+    precision?: number,
   ) {
     if (!designMode.value) return
     if (locked.value || !page.value || (type && page.value.sections.length >= 30)) return
@@ -199,7 +200,7 @@ export function useWebsiteWidgetEditing(options: {
     history.change(() => {
       page.value!.sections = materializeGrid(page.value!.sections)
       if (!type && !layouts && rotation === undefined && geometryEditable.value)
-        layouts = resizeWithFollowing(page.value!.sections, id, layout)
+        layouts = resizeWithFollowing(page.value!.sections, id, layout, precision)
       if (type) {
         const entry = { ...newSection(type as SectionType), layout }
         page.value!.sections.push(entry)

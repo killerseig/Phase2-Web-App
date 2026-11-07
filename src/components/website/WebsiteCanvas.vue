@@ -48,7 +48,7 @@ const emit = defineEmits<{
   'select-layout': [id: string]
   page: [id: string]
   'drag-widget': [event: PointerEvent, id: string, action: WidgetAction]
-  'geometry-key': [event: KeyboardEvent, id: string]
+  'geometry-key': [event: KeyboardEvent, id: string, action?: WidgetAction]
   'marquee-start': [event: PointerEvent, ownerId: string]
   'widget-menu': [event: MouseEvent, id: string, ownerId?: string]
 }>()
@@ -209,7 +209,7 @@ function contextMenu(event: MouseEvent, id = '') {
     @select-layout="(id) => emit('select-layout', id)"
     @page="(id) => emit('page', id)"
     @drag-widget="(event, id, action) => emit('drag-widget', event, id, action)"
-    @geometry-key="(event, id) => emit('geometry-key', event, id)"
+    @geometry-key="(event, id, action) => emit('geometry-key', event, id, action)"
     @marquee-start="(event, ownerId) => emit('marquee-start', event, ownerId)"
     @widget-menu="(event, id, ownerId) => emit('widget-menu', event, id, ownerId)"
   />
@@ -288,7 +288,7 @@ function contextMenu(event: MouseEvent, id = '') {
                 @select="(id, event) => emit('select', id, event)"
                 @page="(id) => emit('page', id)"
                 @drag-widget="(event, id, action) => emit('drag-widget', event, id, action)"
-                @geometry-key="(event, id) => emit('geometry-key', event, id)"
+                @geometry-key="(event, id, action) => emit('geometry-key', event, id, action)"
                 @marquee-start="(event, ownerId) => emit('marquee-start', event, ownerId)"
                 @widget-menu="(event, id, ownerId) => emit('widget-menu', event, id, ownerId)"
               />
@@ -317,7 +317,7 @@ function contextMenu(event: MouseEvent, id = '') {
                   "
                   @widget-menu="(event, id) => emit('widget-menu', event, id, page?.id)"
                   @drag-widget="(event, id, action) => emit('drag-widget', event, id, action)"
-                  @geometry-key="(event, id) => emit('geometry-key', event, id)"
+                  @geometry-key="(event, id, action) => emit('geometry-key', event, id, action)"
                 />
               </template>
             </template>

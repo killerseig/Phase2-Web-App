@@ -93,7 +93,7 @@ export const editorHelp: BuilderHelpGroup[] = [
         action: 'Keyboard adjustments',
         keys: 'Arrow keys',
         detail:
-          'Focus a move, resize or rotation handle first. Shift makes larger adjustments; Home resets a focused rotation handle.',
+          'Focus a widget or handle. On the Desktop free grid, Shift + Arrow moves or resizes by one screen pixel. Rotation uses 1° steps, or 15° with Shift; Home resets it.',
       },
       {
         action: 'Precise rotation',

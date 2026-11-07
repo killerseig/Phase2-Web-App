@@ -4,6 +4,8 @@ import { useWebsiteWidgetEditing } from './useWebsiteWidgetEditing'
 import { useWebsiteHistory } from './useWebsiteHistory'
 import { newSection, withWebsiteDefaults, type WebsiteSite, type WebsiteDevice } from './types'
 import type { ElementTarget } from './textBox'
+import { keyboardGeometry, KEYBOARD_GEOMETRY_PRECISION } from './keyboardGeometry'
+import { defaultGrid } from './grid'
 
 const scopes: EffectScope[] = []
 function fixture() {
@@ -78,5 +80,35 @@ describe('Website widget selection and geometry coordination', () => {
     state.commitGeometry(state.selectedSection.value, { x: 0, y: 0, w: 5, h: 5, z: 0 })
     expect(JSON.stringify(state.page.value)).toBe(before)
     expect(state.cancelDrag).not.toHaveBeenCalled()
+  })
+
+  it('commits precise keyboard resize and following rows as one reversible history change', () => {
+    const state = fixture(), [first, second] = state.page.value.sections
+    first!.layout = { x: 2.12749, y: 3.23453, w: 8.31217, h: 6.18741, z: 1 }
+    second!.layout = { x: 0, y: 12.12347, w: 12, h: 3, z: 2 }
+    state.history.reset(state.site.value)
+    const before = structuredClone(state.page.value.sections.map(entry => ({ ...entry.layout! })))
+    const next = keyboardGeometry({ [first!.id]: first!.layout }, {
+      key: 'ArrowDown', precise: true, action: 'bottom', scale: 2, settings: defaultGrid(),
+    })[first!.id]!
+    state.commitGeometry(first!.id, next, undefined, undefined, undefined, false, KEYBOARD_GEOMETRY_PRECISION)
+    expect(state.page.value.sections[0]!.layout!.h).toBeCloseTo(before[0]!.h + 1 / 64, 10)
+    expect(state.page.value.sections[1]!.layout!.y).toBeCloseTo(before[1]!.y + 1 / 64, 10)
+    state.history.undo()
+    expect(state.page.value.sections.map(entry => entry.layout)).toEqual(before)
+    expect(state.history.canUndo.value).toBe(false)
+    state.history.redo()
+    expect(state.page.value.sections[0]!.layout!.h).toBeCloseTo(next.h, 10)
+    expect(state.page.value.sections[1]!.layout!.y).toBeCloseTo(before[1]!.y + 1 / 64, 10)
+  })
+
+  it('does not add history for a keyboard height change blocked by the last row', () => {
+    const state = fixture(), [first, second] = state.page.value.sections
+    first!.layout = { x: 0, y: 0, w: 8, h: 4.123456789123, z: 1 }
+    second!.layout = { x: 0, y: 9999, w: 8, h: 1, z: 2 }
+    state.history.reset(state.site.value)
+    state.commitGeometry(first!.id, { ...first!.layout, h: first!.layout.h + 1 / 64 }, undefined, undefined, undefined, false, KEYBOARD_GEOMETRY_PRECISION)
+    expect(state.history.canUndo.value).toBe(false)
+    expect(state.page.value.sections[0]!.layout!.h).toBe(4.123456789123)
   })
 })

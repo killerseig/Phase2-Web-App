@@ -457,6 +457,7 @@ export function useWebsiteGrid(options: {
     guides,
     dragging,
     hand,
+    isInteracting: () => interaction !== undefined,
     start,
     cancel,
     background,

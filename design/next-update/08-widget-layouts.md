@@ -43,7 +43,7 @@ Read-only comparison against the adjacent `Networking-Application/src/features/d
 | Capability | Dashboard | Website Builder | Form Builder |
 | --- | --- | --- | --- |
 | Selection | Single/multiple, marquee, outline, nested selection, context menu | Single/multiple, marquee, layers, context menu, inline text/image | One field; click/Enter/Space |
-| Movement | Grid step; Shift+Arrow one screen pixel; grouped movement; inherited locks; Desktop reparenting | Grid/group movement and snapping; Shift+Arrow currently means ten grid steps | Ordered drag and up/down field movement |
+| Movement | Grid step; Shift+Arrow one screen pixel; grouped movement; inherited locks; Desktop reparenting | Relative grid/group movement; Shift+Arrow one screen pixel for root free-grid widgets | Ordered drag and up/down field movement |
 | Sizing | Eight pegs, atomic group resize, separate position/size locks | Widget and inline-element resize/rotation, responsive sizing | Field-specific properties; no free-canvas geometry |
 | Clipboard | Settings-only copy/paste/duplicate/cut, pointer placement, distinct repeated pastes, typing/dialog/repeat guards | Copy/paste/duplicate; repeated keyboard pastes reuse the same offset; Cut/repeat guards incomplete | Whole-template duplication; field duplication/clipboard absent |
 | Viewport | Pan/zoom; one-shot centered Fit frame/Fit content | Pan/zoom; persistent Fit within bounded device preview | Document width-fit and zoom |
@@ -53,7 +53,7 @@ Sources: `SharedDashboardView.vue`, `WebsiteBuilderView.vue`, `FormBuilderView.v
 
 ### Finite remaining consistency work
 
-1. **Website precise movement:** align `geometryKey` with Networking/Dashboard's one-screen-pixel Shift+Arrow, accounting for zoom and preserving off-grid offsets. Apply the same calculation to body and handle paths. Keep angular Shift rotation separately defined. No coordinate/schema change is needed.
+1. **Website remaining control paths:** root free-grid body/floating/resize-peg keyboard movement now follows the one-screen-pixel contract; validation is in the latest workspace checkpoint. Inline text/image/button transforms and responsive flow-height controls retain their existing steps and need a separately bounded consistency pass. Angular Shift rotation remains fifteen degrees. No coordinate/schema change is introduced.
 2. **Website clipboard:** add predictable distinct repeated placement and repeat/typing/dialog guards, then settings Cut and pointer anchoring where compatible. Preserve fresh IDs, nested hierarchy, inline content and the Website 30-widget limit. Do not import Dashboard's planner unchanged: units, bounds and container semantics differ.
 3. **Forms applicable commands:** add consistent selected-field actions, duplicate/copy/paste and guarded keyboard reorder in a separately verified pass. New IDs for repeat children and `requiredWhen` reference treatment are acceptance requirements, not implementation trivia. Preserve ordered flow and published output.
 4. **Common acceptance matrix:** test selection, supported movement/resize, Escape/cancel, repeated clipboard actions, typing/dialog guards, Undo/Redo, save/reload, narrow panels and read-only/disabled states. Include Website Content/Design/Code, Form author/respondent, and all Dashboard scopes. A pass in one editor does not establish another's behavior.

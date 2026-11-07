@@ -5,6 +5,45 @@ import { defaultGrid } from './grid'
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('active website pointer interaction', () => {
+  it.each(['move', 'resize', 'pan', 'marquee'] as const)('reports %s before the drag threshold and clears on release/cancel', action => {
+    vi.stubGlobal('requestAnimationFrame', () => 1)
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    const surface = document.createElement('div')
+    Object.defineProperty(surface, 'offsetWidth', { value: 1080 })
+    surface.getBoundingClientRect = () => new DOMRect(0, 0, 1080, 720)
+    const commit = vi.fn<Parameters<typeof useWebsiteGrid>[0]['commit']>()
+    const scope = effectScope()
+    const grid = scope.run(() => useWebsiteGrid({
+      surface: () => surface, scroller: ref(surface), disabled: () => false,
+      settings: defaultGrid, commit,
+    }))!
+    const pointer = (type: string) => new PointerEvent(type, { pointerId: 1, isPrimary: true, button: 0, clientX: 100, clientY: 100 })
+    surface.addEventListener('pointerdown', event => {
+      if (action === 'marquee') grid.startMarquee(event)
+      else {
+        grid.hand.value = action === 'pan'
+        grid.start(event, 'card', { x: 1, y: 1, w: 4, h: 4, z: 1 }, action === 'resize' ? 'bottom-right' : 'move')
+      }
+    })
+    try {
+      expect(grid.isInteracting()).toBe(false)
+      surface.dispatchEvent(pointer('pointerdown'))
+      expect(grid.isInteracting()).toBe(true)
+      expect(grid.dragging.value).toBe(false)
+      expect(grid.draft.value).toBeUndefined()
+      window.dispatchEvent(pointer('pointerup'))
+      expect(grid.isInteracting()).toBe(false)
+      surface.dispatchEvent(pointer('pointerdown'))
+      grid.cancel()
+      expect(grid.isInteracting()).toBe(false)
+      expect(commit).not.toHaveBeenCalled()
+      surface.dispatchEvent(pointer('pointerdown'))
+    } finally { scope.stop() }
+    expect(grid.isInteracting()).toBe(false)
+  })
+})
+
 describe('device screen scrolling', () => {
   it.each([1, 0.5])('uses the clipped Design edge at scale %s', (scale) => {
     let tick: FrameRequestCallback | undefined

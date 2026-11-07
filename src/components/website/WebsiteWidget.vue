@@ -44,7 +44,7 @@ const emit = defineEmits<{
   select: [id: string, event?: MouseEvent]
   'widget-menu': [event: MouseEvent, id: string]
   'drag-widget': [event: PointerEvent, id: string, action: WidgetAction]
-  'geometry-key': [event: KeyboardEvent, id: string]
+  'geometry-key': [event: KeyboardEvent, id: string, action?: WidgetAction]
 }>()
 const motionRoot = ref<HTMLElement>()
 useWebsiteMotion(
@@ -103,7 +103,7 @@ function geometryKey(event: KeyboardEvent) {
   if (
     props.preview &&
     props.designTools !== false &&
-    (event.target as HTMLElement).closest('.widget-frame') === event.currentTarget
+    event.target === event.currentTarget
   )
     emit('geometry-key', event, props.section.id)
 }
@@ -169,6 +169,7 @@ function geometryKey(event: KeyboardEvent) {
       title="Drag to rotate. Hold Shift for 15° steps. Arrow keys rotate; Home resets."
       :disabled="locked"
       @pointerdown.stop.prevent="emit('drag-widget', $event, section.id, 'rotate')"
+      @keydown="emit('geometry-key', $event, section.id, 'rotate')"
       @click.stop
       @dragstart.prevent
     >
@@ -198,6 +199,7 @@ function geometryKey(event: KeyboardEvent) {
       :aria-label="`Resize ${section.title || 'section'} from ${direction}`"
       :disabled="locked"
       @pointerdown.stop="emit('drag-widget', $event, section.id, direction)"
+      @keydown="emit('geometry-key', $event, section.id, direction)"
       @click.stop
       @dragstart.prevent
     />
@@ -218,7 +220,7 @@ function geometryKey(event: KeyboardEvent) {
       :aria-label="`Resize ${section.title || 'section'} height`"
       title="Drag to change height. Arrow keys adjust height."
       @pointerdown.stop="emit('drag-widget', $event, section.id, 'height')"
-      @keydown="emit('geometry-key', $event, section.id)"
+      @keydown="emit('geometry-key', $event, section.id, 'height')"
       @click.stop
     />
     <section
@@ -262,7 +264,7 @@ function geometryKey(event: KeyboardEvent) {
           @select="(id, event) => emit('select', id, event)"
           @widget-menu="(event, id) => emit('widget-menu', event, id)"
           @drag-widget="(event, id, action) => emit('drag-widget', event, id, action)"
-          @geometry-key="(event, id) => emit('geometry-key', event, id)"
+          @geometry-key="(event, id, action) => emit('geometry-key', event, id, action)"
         />
         <p
           v-if="preview && !sections.some((entry) => entry.parentId === section.id)"

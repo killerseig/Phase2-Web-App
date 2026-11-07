@@ -50,7 +50,9 @@ Record purpose/nonresponsibilities; public entry points and types; inputs/output
 
 **Invariants and effects:** there is one editable site state; geometry/selection is separate from publication. Selection and layout changes preserve IDs/references. Commands may call Website services and confirmation callbacks; editor operations do not independently publish. Account/scope and stale-result guards remain necessary. Admin authorization and public rendering are enforced at their existing server/renderer boundaries.
 
-[Editing source](../../src/features/website/useWebsiteWidgetEditing.ts) · [Editing tests](../../src/features/website/useWebsiteWidgetEditing.spec.ts) · [Command source](../../src/features/website/useWebsiteCommands.ts) · [Command tests](../../src/features/website/useWebsiteCommands.spec.ts)
+**Free-grid keyboard geometry:** root widget bodies, floating controls and directional resize pegs share relative grid steps; Shift uses one screen pixel measured from the actual unrotated canvas scale. Untouched fields and off-grid offsets are retained, grouped movement shares a bounded delta, and single-widget height changes retain following-row spacing in the same Undo entry. Precise keyboard calculations are separate from pointer snapping; the following-row helper's finer precision is opt-in. Typing, Alt/Ctrl/Meta, composition and pending/active pointer gestures cannot change keyboard geometry. Rotation retains one-degree arrows, fifteen-degree Shift arrows and Home reset. Inline text/image/button controls and responsive flow-height steps are separate paths, not covered by this parity claim. Saved units/bounds, pointer snapping and preview Fit/zoom behavior are unchanged.
+
+[Editing source](../../src/features/website/useWebsiteWidgetEditing.ts) · [Editing tests](../../src/features/website/useWebsiteWidgetEditing.spec.ts) · [Keyboard geometry](../../src/features/website/keyboardGeometry.ts) · [Command source](../../src/features/website/useWebsiteCommands.ts) · [Command tests](../../src/features/website/useWebsiteCommands.spec.ts)
 
 ## Library mutation lifetime
 
