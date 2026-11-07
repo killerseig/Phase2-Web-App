@@ -54,7 +54,13 @@ import {
   type Arrangement,
 } from '@/features/dashboard/editorGeometry'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
-import { startCamera, panCamera, alignmentOffset } from '@/features/dashboard/viewportGeometry'
+import {
+  startCamera,
+  panCamera,
+  alignmentOffset,
+  fitEditorBounds,
+  contentFitBounds,
+} from '@/features/dashboard/viewportGeometry'
 import type { RawRoleKey } from '@/types/domain'
 import { dashboardTextVariables, resolveDashboardText } from '@/features/dashboard/sharedText'
 import type { SharedCalendarEntry } from '@/features/dashboard/sharedDashboards'
@@ -274,6 +280,7 @@ function editWidget(id: string) {
   focusSettings()
 }
 async function revealWidget(id: string) {
+  cancelFit()
   selectWidget(id)
   activePane.value = 'preview'
   editorCamera.value = { x: 0, y: 0 }
@@ -453,6 +460,7 @@ function startTransform(
   selectionControl = false,
 ) {
   if (!editing.value || busy.value || !canEdit.value) return
+  cancelFit()
   const widget = widgets.value.find((w) => w.id === id)
   if (
     !widget ||
@@ -1512,10 +1520,13 @@ function selectForm(event: Event) {
   }
 }
 function manualZoom(delta: number) {
+  if (delta < 0 && previewScale.value <= 0.25) return
+  cancelFit()
   zoom.value = Math.max(0.25, Math.min(2, previewScale.value + delta))
   fit.value = false
 }
 function actualSize() {
+  cancelFit()
   zoom.value = 1
   fit.value = false
 }
@@ -1523,6 +1534,14 @@ const handTool = ref(false)
 const runtimeZoom = ref(1)
 const runtimeCamera = ref({ x: 0, y: 0 })
 const editorCamera = ref({ x: 0, y: 0 })
+let fitRequest = 0
+const fittedView = ref(false)
+const fittingView = ref(false)
+function cancelFit() {
+  fitRequest++
+  fittingView.value = false
+  fittedView.value = false
+}
 useDashboardWorkspaceGrid({
   viewport,
   content,
@@ -1535,14 +1554,76 @@ function scrollViewport(x: number, y: number) {
   viewport.value.scrollLeft = x
   viewport.value.scrollTop = y
 }
-function fitEditor() {
-  fit.value = true
-  returnToOrigin()
+async function fitEditor(target: 'frame' | 'content') {
+  const view = viewport.value,
+    body = content.value
+  if (
+    !editing.value || busy.value || dragging.value || !canEdit.value || !view || !body ||
+    (target === 'frame' && device.value !== 'desktop')
+  ) return
+  const current = captureDashboardContext(),
+    currentDevice = device.value
+  const request = ++fitRequest
+  const active = () => request === fitRequest && current() && editing.value && canEdit.value && !busy.value &&
+    currentDevice === device.value && body === content.value && view === viewport.value
+  const bodyRect = body.getBoundingClientRect(),
+    scale = bodyRect.width / body.offsetWidth
+  if (!Number.isFinite(scale) || scale <= 0) return
+  const entries = [...body.querySelectorAll<HTMLElement>(
+    '[data-widget-surface="shared-dashboard"] > [data-widget-id]',
+  )].map(el => {
+    const r = el.getBoundingClientRect()
+    return {
+      x: (r.left - bodyRect.left) / scale,
+      y: (r.top - bodyRect.top) / scale,
+      width: r.width / scale,
+      height: r.height / scale,
+    }
+  })
+  const bounds = (target === 'content' && contentFitBounds(entries, previewWidth.value / 24)) ||
+    configuredFrame.value
+  fittingView.value = true
+  stopBackground?.()
+  handTool.value = false
+  try {
+    // Native scrollbars can change the available padding box after scaling.
+    // A bounded post-layout correction accounts for that and automatic margins.
+    for (let pass = 0; pass < 3; pass++) {
+      if (!active()) return
+      const fitted = fitEditorBounds(bounds, view.clientWidth, view.clientHeight)
+      if (!fitted) return
+      fit.value = false
+      zoom.value = fitted.scale
+      await nextTick()
+      if (!active()) return
+      scrollViewport(0, 0)
+      const canvasRect = body.getBoundingClientRect(), viewportRect = view.getBoundingClientRect()
+      editorCamera.value = {
+        x: editorCamera.value.x + (canvasRect.left + fitted.center.x * fitted.scale -
+          (viewportRect.left + view.clientLeft + view.clientWidth / 2)) / fitted.scale,
+        y: editorCamera.value.y + (canvasRect.top + fitted.center.y * fitted.scale -
+          (viewportRect.top + view.clientTop + view.clientHeight / 2)) / fitted.scale,
+      }
+      await nextTick()
+    }
+    if (active()) fittedView.value = true
+  } finally {
+    if (request === fitRequest) fittingView.value = false
+  }
 }
 function returnToOrigin() {
+  cancelFit()
   editorCamera.value = { x: 0, y: 0 }
   scrollViewport(0, 0)
 }
+watch(device, () => {
+  const reset = fittedView.value || fittingView.value
+  cancelFit()
+  if (reset) {
+    fit.value = true
+    returnToOrigin()
+  }
+})
 const marquee = ref<{ x: number; y: number; w: number; h: number }>()
 let stopBackground: (() => void) | undefined
 function backgroundPointer(event: PointerEvent) {
@@ -1571,6 +1652,7 @@ function backgroundPointer(event: PointerEvent) {
   if (editing.value && !additive && !panning) selectWidget('')
   const scroller = viewport.value
   if (!scroller) return
+  if (editing.value) cancelFit()
   const initial = {
       x: event.clientX,
       y: event.clientY,
@@ -1742,6 +1824,7 @@ function resetRuntimeView() {
 watch(
   [editing, layout],
   () => {
+    cancelFit()
     stopBackground?.()
     handTool.value = false
     editorCamera.value = { x: 0, y: 0 }
@@ -2214,15 +2297,18 @@ onBeforeUnmount(() => {
                 {{
                   item === 'desktop' ? 'Desktop' : item === 'tablet' ? 'Tablet' : 'Phone'
                 }}</AppButton
-              ><AppButton type="button" :aria-pressed="fit" @click="fitEditor">Fit</AppButton
-              ><AppButton type="button" aria-label="Zoom out" @click="manualZoom(-0.1)">−</AppButton
+              ><AppButton type="button" :disabled="busy || dragging || device !== 'desktop'"
+                title="Center the desktop frame and fit its width and height" @click="fitEditor('frame')">Fit frame</AppButton
+              ><AppButton type="button" :disabled="busy || dragging"
+                title="Center all widgets in this device view; use the frame when empty" @click="fitEditor('content')">Fit content</AppButton
+              ><AppButton type="button" aria-label="Zoom out" :disabled="previewScale <= 0.25" @click="manualZoom(-0.1)">−</AppButton
               ><AppButton
                 type="button"
                 aria-label="Actual size"
                 title="Show at 100% zoom"
                 :aria-pressed="!fit && previewScale === 1"
                 @click="actualSize"
-                >{{ Math.round(previewScale * 100) }}%</AppButton
+                >{{ previewScale < 0.001 ? '<0.1' : previewScale < 0.1 ? (previewScale * 100).toFixed(1) : Math.round(previewScale * 100) }}%</AppButton
               ><AppButton type="button" aria-label="Zoom in" @click="manualZoom(0.1)">+</AppButton>
               <label><input v-model="gridVisible" type="checkbox" />Show grid</label>
               <label><input v-model="snapToGrid" type="checkbox" />Snap to grid</label>

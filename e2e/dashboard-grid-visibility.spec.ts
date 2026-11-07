@@ -258,9 +258,9 @@ test('workspace grid follows pan, zoom and native scroll without editing the lay
   const showGrid = page.getByLabel('Show grid', { exact: true })
   await actualSize.click()
   await expect(actualSize).toHaveText('100%')
-  await expect(page.getByRole('button', { name: 'Fit', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Actual size', exact: true })).toHaveAttribute(
     'aria-pressed',
-    'false',
+    'true',
   )
   await expect(page.locator('[data-dashboard-origin]')).toBeVisible()
   const initial = await surface(page)
@@ -318,9 +318,9 @@ test('workspace grid follows pan, zoom and native scroll without editing the lay
   await actualSize.click()
   await page.getByRole('button', { name: 'Return to canvas origin', exact: true }).click()
   await expect(actualSize).toHaveText('100%')
-  await expect(page.getByRole('button', { name: 'Fit', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Actual size', exact: true })).toHaveAttribute(
     'aria-pressed',
-    'false',
+    'true',
   )
   await expect.poll(() => viewport.evaluate((el) => [el.scrollLeft, el.scrollTop])).toEqual([0, 0])
   await expect.poll(async () => (await surface(page)).x).toBeCloseTo(initial.x, 1)

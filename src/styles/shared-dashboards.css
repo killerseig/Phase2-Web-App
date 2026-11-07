@@ -560,6 +560,10 @@
   /* The canvas owns its overlay; workspace dots must not show through twice. */
   background-color: var(--bg-elevated, #102532);
 }
+.shared-dashboard-grid.is-placement-editor:not(.is-nested) {
+  /* Blank workspace must not stretch legacy flow widgets to the edit minimum. */
+  align-content: start;
+}
 .shared-dashboard-origin {
   position: absolute;
   top: 0;

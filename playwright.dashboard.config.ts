@@ -12,6 +12,7 @@ export default defineConfig({
     : [
         'dashboard-editor-parity.spec.ts',
         'dashboard-published-frame.spec.ts',
+        'dashboard-fit.spec.ts',
         'dashboard-grid-visibility.spec.ts',
         'dashboard-canvas-actions.spec.ts',
         'employee-announcements.spec.ts',

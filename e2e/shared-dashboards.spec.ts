@@ -138,10 +138,8 @@ test('shared job template uses safe styled Text and the same catalog, while job 
   await page.getByLabel('Font size (px)', { exact: true }).blur()
   await page.getByLabel('Text alignment', { exact: true }).selectOption('center')
   await page.getByRole('button', { name: 'Phone', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Fit', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await expect(page.getByRole('button', { name: 'Fit content', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Fit frame', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Save template', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
   await expect(page.locator('.shared-variable-text')).toHaveCSS('font-size', '32px')
