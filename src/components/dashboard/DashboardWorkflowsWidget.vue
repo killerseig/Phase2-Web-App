@@ -14,6 +14,7 @@ const auth = useAuthStore()
       :job-id="jobId"
       :modules="getJobDashboardModules()"
       :show-company-library="auth.hasWorkspaceAccess"
+      responsive-to-container
     />
     <JobFormsList
       v-if="!editing"
@@ -33,5 +34,6 @@ const auth = useAuthStore()
   display: grid;
   gap: 1rem;
   min-width: 0;
+  container: dashboard-workflows / inline-size;
 }
 </style>

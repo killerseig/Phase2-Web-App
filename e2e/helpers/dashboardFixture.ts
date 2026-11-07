@@ -2,7 +2,11 @@ import type { Page } from '@playwright/test'
 import type { PublishedAnnouncement } from '../../functions/src/sharedDashboardModel.js'
 import type { SharedDashboardWidget as DashboardWidget } from '../../functions/src/sharedDashboardModel.js'
 
-export async function mockDashboard(page: Page, admin = true) {
+export async function mockDashboard(
+  page: Page,
+  admin = true,
+  job: { id: string; code: string; name: string } | null = null,
+) {
   const layouts = new Map<
     string,
     {
@@ -208,7 +212,7 @@ export async function mockDashboard(page: Page, admin = true) {
           canEdit,
           role: data.role || (admin ? 'admin' : 'foreman'),
           allowRoleEditing: false,
-          job: null,
+          job,
           publishedDraftIds,
           announcementDrafts: content.announcementDrafts || [],
           tasks: content.tasks || [],

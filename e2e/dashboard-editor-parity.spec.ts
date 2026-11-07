@@ -192,13 +192,13 @@ test('grid presets, eight handles and independent locks apply to pointer and key
   await page.getByLabel('Grid preset', { exact: true }).selectOption('2')
   await alpha.focus()
   await page.keyboard.press('ArrowRight')
-  await expect(page.getByLabel('Left column', { exact: true })).toHaveValue('4')
+  await expect(page.getByLabel('Left column', { exact: true })).toHaveValue('3')
   await page.getByLabel('Lock position', { exact: true }).check()
   await expect(alpha.getByRole('button', { name: 'Move Alpha', exact: true })).toBeDisabled()
   await expect(page.getByLabel('Left column', { exact: true })).toBeDisabled()
   await alpha.focus()
   await page.keyboard.press('ArrowRight')
-  await expect(page.getByLabel('Left column', { exact: true })).toHaveValue('4')
+  await expect(page.getByLabel('Left column', { exact: true })).toHaveValue('3')
   await expect(
     page.getByRole('button', { name: 'Resize Alpha from nw', exact: true }),
   ).toBeDisabled()
@@ -210,7 +210,7 @@ test('grid presets, eight handles and independent locks apply to pointer and key
   expect(api.layouts.get('personal')!.widgets[0]).toMatchObject({
     positionLocked: true,
     sizeLocked: true,
-    placement: { x: 4 },
+    placement: { x: 3 },
   })
   expect(api.layouts.get('personal')!.viewport?.grid).toMatchObject({ x: 2, y: 2 })
 })
@@ -474,6 +474,7 @@ test('marquee selection moves and resizes widgets together without moving the su
   await page.keyboard.up('Shift')
   await expect(a).toHaveClass(/is-selected/)
   await expect(b).toHaveClass(/is-selected/)
+  await expect(group).not.toHaveClass(/is-selected/)
   await expect(group).toHaveAttribute('style', beforeGroup!)
   const handle = await a.getByRole('button', { name: 'Move Alpha', exact: true }).boundingBox()
   await page.mouse.move(handle!.x + 8, handle!.y + 8)

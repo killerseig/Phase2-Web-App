@@ -5,13 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SharedDashboardView from '@/views/SharedDashboardView.vue'
 import { useAuthStore } from '@/stores/auth'
 const fake = vi.hoisted(() => ({
-  command: vi.fn(), ask: vi.fn(), discard: vi.fn(), prepare:vi.fn(), notesDirty:false,
+  command: vi.fn<(action: string, data?: Record<string, unknown>) => Promise<unknown>>(),
+  ask: vi.fn<() => Promise<boolean>>(), discard: vi.fn<() => void>(),
+  prepare: vi.fn<() => Promise<boolean>>(), notesDirty:false,
   auth: {currentUser:{uid:'a'},rawRole:'admin',hasWorkspaceAccess:true,assignedJobIds:[] as string[],displayName:'Admin'},
 }))
 vi.mock('@/stores/auth', async()=>{const {reactive}=await import('vue');const auth=reactive(fake.auth);return {useAuthStore:()=>auth}})
-vi.mock('@/stores/jobs',()=>({useJobsStore:()=>({jobs:[],error:null,loading:false,subscribeVisibleJobs:vi.fn()})}))
+vi.mock('@/stores/jobs',()=>({useJobsStore:()=>({jobs:[],error:null,loading:false,subscribeVisibleJobs:vi.fn<() => void>()})}))
 vi.mock('@/services/sharedDashboards',()=>({sharedDashboardCommand:fake.command}))
-vi.mock('@/services/forms',()=>({formApi:vi.fn().mockResolvedValue({templates:[]})}))
+vi.mock('@/services/forms',()=>({formApi:vi.fn<() => Promise<{ templates: unknown[] }>>().mockResolvedValue({templates:[]})}))
 const auth=useAuthStore() as unknown as typeof fake.auth
 const canvas=defineComponent({
   props:['announcementDrafts','publishedDraftIds','widgets'],
@@ -21,7 +23,7 @@ const canvas=defineComponent({
 })
 const cleanup: (() => void)[] = []
 afterEach(() => { cleanup.splice(0).forEach(dispose => dispose()); vi.unstubAllGlobals() })
-async function open() {
+async function open(disposeImmediately = false) {
   const router=createRouter({history:createMemoryHistory(),routes:[
     {path:'/personal',name:'personal-workspace',component:SharedDashboardView},
     {path:'/role',name:'role-workspace',component:{template:'<div />'}},
@@ -35,6 +37,11 @@ async function open() {
     SharedDashboardCanvas:canvas,
     BuilderConfirmDialog:{setup(_, {expose}){expose({ask:fake.ask})},template:'<div />'},
   }}})
+  if (disposeImmediately) {
+    wrapper.unmount()
+    await flushPromises()
+    return wrapper
+  }
   await flushPromises()
   cleanup.push(() => wrapper.unmount())
   return wrapper
@@ -53,6 +60,17 @@ describe('dashboard confirmation and publication context isolation',()=>{
     vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}})
     fake.command.mockImplementation(async action=>action==='load'?layout():{})
   })
+  it('does not resume initialization after the dashboard is unmounted', async () => {
+    const created = vi.fn<() => void>()
+    vi.stubGlobal('ResizeObserver', class { constructor() { created() } observe() {} disconnect() {} })
+    const added = vi.spyOn(window, 'addEventListener')
+    try {
+      await open(true)
+      expect(created).not.toHaveBeenCalled()
+      expect(fake.command).not.toHaveBeenCalled()
+      expect(added.mock.calls.filter(([name]) => name === 'beforeunload')).toHaveLength(0)
+    } finally { added.mockRestore() }
+  })
   it.each(['account', 'role', 'access'] as const)('does not publish a confirmation after %s changes',async change=>{
     let accept!: (value:boolean)=>void
     fake.ask.mockReturnValue(new Promise(resolve=>{accept=resolve}))
@@ -69,7 +87,7 @@ describe('dashboard confirmation and publication context isolation',()=>{
   })
   it('does not unlock a newer publication when the old request finishes',async()=>{
     const pending=new Map<string,(value:unknown)=>void>()
-    fake.command.mockImplementation((action,data)=>action==='load'?Promise.resolve(layout()):new Promise(resolve=>{pending.set(data.draftId,resolve)}))
+    fake.command.mockImplementation((action,data)=>action==='load'?Promise.resolve(layout()):new Promise(resolve=>{pending.set(String(data?.draftId),resolve)}))
     const wrapper=await open()
     const publish=()=>wrapper.findAll('button').find(button=>button.text()==='Publish test')!
     await publish().trigger('click')

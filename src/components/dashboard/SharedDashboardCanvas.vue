@@ -326,7 +326,20 @@ function requestMenu(event: MouseEvent | KeyboardEvent, id: string) {
   emit('request-menu', event, id)
 }
 function widgetKey(event: KeyboardEvent, id: string) {
+  if (event.target !== event.currentTarget) return
   if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) requestMenu(event, id)
+  else if (props.editing && !props.busy && !event.altKey && ['Enter', ' '].includes(event.key)) {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('select', id, event)
+  }
+}
+function canvasClick(event: MouseEvent) {
+  if (!props.editing) return
+  const widget = (event.target as HTMLElement).closest('[data-widget-id]')
+  // A blank nested canvas belongs to this surface, not its ancestor widget.
+  if (!widget || widget.closest('[data-widget-surface]') !== event.currentTarget)
+    event.stopPropagation()
 }
 function startWidgetMove(event: PointerEvent, id: string) {
   if (
@@ -356,7 +369,7 @@ function widgetStyle(widget: SharedDashboardWidget, index: number) {
     : { '--widget-span': widget.span }
 }
 const emit = defineEmits<{
-  select: [id: string, event?: MouseEvent | PointerEvent]
+  select: [id: string, event?: MouseEvent | PointerEvent | KeyboardEvent]
   edit: [id: string]
   resize: [event: PointerEvent, id: string, direction?: Direction]
   move: [event: PointerEvent, id: string]
@@ -561,6 +574,7 @@ function textStyle(widget: SharedDashboardWidget) {
     }"
     :data-widget-surface="parentId || 'shared-dashboard'"
     :data-region="region || '0'"
+    @click="canvasClick"
     :role="tabLabelId ? 'tabpanel' : undefined"
     :aria-labelledby="tabLabelId"
   >
@@ -627,7 +641,7 @@ function textStyle(widget: SharedDashboardWidget) {
       :aria-label="
         editing ? 'Widget ' + (widget.title || sharedWidgetLabels[widget.type]) : undefined
       "
-      :aria-keyshortcuts="editing ? 'ArrowLeft ArrowRight ArrowUp ArrowDown Shift+F10' : undefined"
+      :aria-keyshortcuts="editing ? 'Enter Space Escape ArrowLeft ArrowRight ArrowUp ArrowDown Shift+F10' : undefined"
       @pointerdown.stop="startWidgetMove($event, widget.id)"
       @contextmenu="requestMenu($event, widget.id)"
       @keydown="widgetKey($event, widget.id)"

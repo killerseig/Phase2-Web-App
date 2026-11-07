@@ -392,6 +392,9 @@
 .shared-dashboard-grid.phone-preview .shared-dashboard-widget {
   grid-column: span 12;
 }
+.shared-dashboard-grid.phone-preview > .shared-dashboard-widget {
+  padding: 14px;
+}
 @media (max-width: 1100px) {
   .shared-dashboard.is-editing .shared-dashboard-body {
     grid-template-columns: 210px minmax(0, 1fr) 240px;
@@ -410,7 +413,7 @@
   .shared-dashboard-grid > .shared-dashboard-widget {
     grid-column: span 12;
   }
-  .shared-dashboard-widget {
+  .shared-dashboard:not(.is-editing) .shared-dashboard-widget {
     padding: 14px;
   }
   .shared-dashboard.is-editing {

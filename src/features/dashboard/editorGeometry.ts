@@ -13,6 +13,7 @@ export function resizeEdges(
   grid: Grid,
   positionLocked = false,
   maxHeight = 100,
+  precision = 3,
 ): Placement {
   const gx = grid.snap ? grid.x : 1 / 45,
     gy = grid.snap ? grid.y : 1 / 32
@@ -28,10 +29,10 @@ export function resizeEdges(
   if (direction.includes('s'))
     bottom = Math.max(top + 3, Math.min(1000, top + maxHeight, snap(p.y + p.h + dy, gy)))
   return {
-    x: +left.toFixed(3),
-    y: +top.toFixed(3),
-    w: +(right - left).toFixed(3),
-    h: +(bottom - top).toFixed(3),
+    x: +left.toFixed(precision),
+    y: +top.toFixed(precision),
+    w: +(right - left).toFixed(precision),
+    h: +(bottom - top).toFixed(precision),
   }
 }
 export function bounds(placements: Placement[]) {
@@ -51,6 +52,7 @@ export function resizeGroup(
   dy: number,
   direction: Direction,
   grid: Grid,
+  precision = 3,
 ): Placement[] {
   const unchanged = () => placements.map((placement) => ({ ...placement }))
   if (
@@ -60,7 +62,7 @@ export function resizeGroup(
   )
     return unchanged()
   const box = bounds([...placements])
-  const requested = resizeEdges(box, dx, dy, direction, grid, false, 1000)
+  const requested = resizeEdges(box, dx, dy, direction, grid, false, 1000, precision)
   const west = direction.includes('w'),
     north = direction.includes('n')
   const minimumX = Math.max(...placements.map((p) => 2 / p.w))
@@ -80,10 +82,10 @@ export function resizeGroup(
   const scaleY = vertical ? Math.max(minimumY, Math.min(maximumY, requested.h / box.h)) : 1
   const left = west ? box.x + box.w - box.w * scaleX : box.x
   const top = north ? box.y + box.h - box.h * scaleY : box.y
-  const round = (value: number) => +value.toFixed(3)
+  const round = (value: number) => +value.toFixed(precision)
   return placements.map((p) => {
     // Scale limits have already protected every child's size. These bounds only
-    // remove rounding error at the three-decimal persistence/workspace edges.
+    // remove rounding error at the selected precision/workspace edges.
     const w = scaleX === 1 ? p.w : Math.max(2, Math.min(24, round(p.w * scaleX)))
     const h = scaleY === 1 ? p.h : Math.max(3, Math.min(100, round(p.h * scaleY)))
     const x =

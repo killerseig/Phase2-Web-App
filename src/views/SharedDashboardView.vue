@@ -54,6 +54,7 @@ import {
   type Arrangement,
 } from '@/features/dashboard/editorGeometry'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
+import { keyboardGeometry } from '@/features/dashboard/keyboardGeometry'
 import {
   startCamera,
   panCamera,
@@ -259,7 +260,8 @@ const canDuplicateSelected = computed(() => {
 })
 const requiredSelection = computed(() => !!selectedWidget.value &&
   descendants(widgets.value, [selectedWidget.value.id]).some((entry) => entry.type === requiredType.value))
-function selectWidget(id: string, event?: MouseEvent | PointerEvent) {
+function selectWidget(id: string, event?: MouseEvent | PointerEvent | KeyboardEvent) {
+  if (event?.type === 'keydown' && (drag.payload.value || stopBackground)) return
   if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
     const current = selectedIds.value
     selection.value = current.includes(id) ? current.filter((key) => key !== id) : [...current, id]
@@ -400,7 +402,8 @@ const previewScale = computed(() =>
     ? Math.min(1, Math.max(0.15, (viewportWidth.value - 24) / previewWidth.value))
     : zoom.value,
 )
-let generation = 0,
+let disposed = false,
+  generation = 0,
   observer: ResizeObserver | undefined,
   restoring = false
 const undo = ref<string[]>([]),
@@ -452,6 +455,15 @@ let dragOrigins: ReturnType<typeof measuredPlacements> = [],
   dragIds: string[] = [],
   dragParent = '',
   dragRegion = '0'
+function transformableSelection(widget: SharedDashboardWidget, action: 'move' | 'resize', direction: Direction) {
+  const entries = selectedRoots.value
+  if (!entries.length || entries.some(entry =>
+    (entry.parentId || '') !== (widget.parentId || '') || (entry.region || '0') !== (widget.region || '0') ||
+    (geometryLocked(widgets.value, entry, 'positionLocked') &&
+      (action === 'move' || entries.length > 1 || /[nw]/.test(direction))) ||
+    (action === 'resize' && geometryLocked(widgets.value, entry, 'sizeLocked')))) return []
+  return entries
+}
 function startTransform(
   event: PointerEvent,
   id: string,
@@ -474,23 +486,14 @@ function startTransform(
   )
     return
   if (!selectedIds.value.includes(id)) selectWidget(id)
+  const entries = transformableSelection(widget, kind, direction)
+  if (!entries.length) return
   dragParent = widget.parentId || ''
   dragRegion = widget.region || '0'
   dragOrigins = measuredPlacements()
-  dragIds = selectedRoots.value
-    .filter(
-      (w) =>
-        (w.parentId || '') === dragParent &&
-        (w.region || '0') === dragRegion &&
-        !geometryLocked(widgets.value, w, kind === 'move' ? 'positionLocked' : 'sizeLocked'),
-    )
-    .map((w) => w.id)
+  dragIds = entries.map(w => w.id)
   const surface = surfaceFor(dragParent, dragRegion)
   const primary = dragOrigins[widgets.value.indexOf(widget)]!
-  if (selectionControl && selectedRoots.value.some((entry) =>
-    (geometryLocked(widgets.value, entry, 'positionLocked') &&
-      (kind === 'move' || selectedRoots.value.length > 1 || /[nw]/.test(direction))) ||
-    (kind === 'resize' && geometryLocked(widgets.value, entry, 'sizeLocked')))) return
   drag.start(
     event,
     { kind, id, direction },
@@ -577,26 +580,26 @@ function resizeSelection(
   return resizeGroup(original, dx, dy, direction, interactionGrid.value)
 }
 function selectionKey(event: KeyboardEvent, id: string, action: 'move' | 'resize', direction: Direction = 'se') {
-  if (!editing.value || busy.value || !canEdit.value || event.altKey || event.ctrlKey || event.metaKey ||
+  if (!editing.value || busy.value || !canEdit.value || drag.payload.value || stopBackground || event.altKey || event.ctrlKey || event.metaKey ||
     !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
   const widget = widgets.value.find((entry) => entry.id === id)
-  const entries = selectedRoots.value
-  if (!widget || !entries.length || entries.some((entry) =>
-    (entry.parentId || '') !== (widget.parentId || '') || (entry.region || '0') !== (widget.region || '0') ||
-    (geometryLocked(widgets.value, entry, 'positionLocked') &&
-      (action === 'move' || entries.length > 1 || /[nw]/.test(direction))) ||
-    (action === 'resize' && geometryLocked(widgets.value, entry, 'sizeLocked')))) return
+  if (!widget) return
+  const entries = transformableSelection(widget, action, direction)
+  if (!entries.length) return
   event.preventDefault()
-  const grid = interactionGrid.value
-  const amount = event.shiftKey ? 10 : 1
-  const dx = (event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0) * (grid.snap ? grid.x : 1 / 45)
-  const dy = (event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0) * (grid.snap ? grid.y : 1 / 32)
+  const surface = surfaceFor(widget.parentId, widget.region)
+  if (!surface) return
+  const scale = surface.getBoundingClientRect().width / surface.offsetWidth
   const positions = measuredPlacements()
   const original = entries.map((entry) => positions[widgets.value.indexOf(entry)]!)
-  const changes = action === 'move' ? translate(original, dx, dy, grid)
-    : entries.length === 1
-      ? [resizeEdges(original[0]!, dx, dy, direction, grid, geometryLocked(widgets.value, widget, 'positionLocked'))]
-      : resizeSelection(original, dx, dy, direction)
+  const changes = keyboardGeometry(original, {
+    key: event.key, precise: event.shiftKey, action, direction,
+    surfaceWidth: surface.offsetWidth, scale, spacing: interactionGrid.value,
+    positionLocked: geometryLocked(widgets.value, widget, 'positionLocked'),
+  })
+  if (changes.every((p, i) => ['x', 'y', 'w', 'h'].every(key =>
+    p[key as keyof typeof p] === original[i]![key as keyof typeof p]))) return
+  cancelFit()
   widgets.value = widgets.value.map((entry, index) =>
     device.value === 'desktop' || entries.includes(entry)
       ? withPlacement(entry, entries.includes(entry) ? changes[entries.indexOf(entry)]! : positions[index]!)
@@ -1649,7 +1652,6 @@ function backgroundPointer(event: PointerEvent) {
   if (panning && target.closest('button,input,textarea,select,a,[contenteditable]')) return
   const additive = event.shiftKey || event.ctrlKey || event.metaKey
   const selecting = editing.value && additive && !panning && surface
-  if (editing.value && !additive && !panning) selectWidget('')
   const scroller = viewport.value
   if (!scroller) return
   if (editing.value) cancelFit()
@@ -1661,6 +1663,16 @@ function backgroundPointer(event: PointerEvent) {
       camera: { ...(editing.value ? editorCamera.value : runtimeCamera.value) },
     },
     initialSelection = selectedIds.value.slice()
+  // Add within the active coordinate surface; an ancestor selection must not
+  // swallow the children being selected. Cancellation still restores all IDs.
+  const marqueeSelection = selecting ? initialSelection.filter(id => {
+    const entry = widgets.value.find(widget => widget.id === id)
+    return entry && (entry.parentId || 'shared-dashboard') === surface!.dataset.widgetSurface &&
+      (entry.region || '0') === (surface!.dataset.region || '0')
+  }) : initialSelection
+  const emptySurface = !widget || (surface && !surface.contains(widget))
+  if (editing.value && emptySurface && !additive && event.button === 0 && !handTool.value)
+    selectWidget('')
   event.preventDefault()
   event.stopPropagation()
   stopBackground?.()
@@ -1697,11 +1709,12 @@ function backgroundPointer(event: PointerEvent) {
         return r.right >= left && r.left <= right && r.bottom >= top && r.top <= bottom
       })
       .map((el) => el.dataset.widgetId!)
-    selection.value = [...new Set([...initialSelection, ...ids])]
+    selection.value = [...new Set([...marqueeSelection, ...ids])]
     selected.value = selection.value.at(-1) || ''
   }
   function cancel(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      e.preventDefault()
       if (editing.value) editorCamera.value = { ...initial.camera }
       else runtimeCamera.value = { ...initial.camera }
       scroller!.scrollLeft = initial.left
@@ -1903,12 +1916,26 @@ function keydown(event: KeyboardEvent) {
     !editing.value ||
     busy.value ||
     event.altKey ||
-    (event.target as HTMLElement).closest('input,select,textarea,[contenteditable]')
+    (event.target as HTMLElement).closest('input,select,textarea,[contenteditable],dialog,[role="dialog"],[role="menu"],[role="tablist"]')
   )
     return
-  const targetWidget = (event.target as HTMLElement).closest<HTMLElement>('[data-widget-id]')
+  // In-flight gestures own Escape and restore their original selection/camera.
+  if (event.key === 'Escape') {
+    if (drag.payload.value || stopBackground) return
+    if (selectedIds.value.length) {
+      event.preventDefault()
+      const fromHandle = (event.target as HTMLElement).closest('[data-selection-control]')
+      selectWidget('')
+      if (fromHandle) viewport.value?.focus({ preventScroll: true })
+    }
+    return
+  }
+  if (drag.payload.value || stopBackground) return
+  const target = event.target as HTMLElement
+  const targetWidget = target.closest<HTMLElement>('[data-widget-id]')
   if (
     targetWidget &&
+    (target === targetWidget || target.closest('.shared-widget-move')) &&
     !event.ctrlKey &&
     !event.metaKey &&
     ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) &&
@@ -1916,31 +1943,10 @@ function keydown(event: KeyboardEvent) {
   ) {
     event.preventDefault()
     const id = targetWidget.dataset.widgetId
-    const positions = measuredPlacements()
     const widget = widgets.value.find((w) => w.id === id)
-    if (!widget || geometryLocked(widgets.value, widget, 'positionLocked')) return
+    if (!widget) return
     if (!selectedIds.value.includes(widget.id)) selectWidget(widget.id)
-    const distance = event.shiftKey ? 10 : 1
-    const entries = selectedRoots.value.filter(
-      (w) =>
-        !geometryLocked(widgets.value, w, 'positionLocked') &&
-        w.parentId === widget.parentId &&
-        (w.region || '0') === (widget.region || '0'),
-    )
-    const dx = event.key === 'ArrowLeft' ? -distance : event.key === 'ArrowRight' ? distance : 0
-    const dy = event.key === 'ArrowUp' ? -distance : event.key === 'ArrowDown' ? distance : 0
-    const grid = interactionGrid.value
-    const result = translate(
-      entries.map((w) => positions[widgets.value.indexOf(w)]!),
-      dx * (grid.snap ? grid.x : 1 / 45),
-      dy * (grid.snap ? grid.y : 1 / 32),
-      grid,
-    )
-    widgets.value = widgets.value.map((w, i) =>
-      device.value === 'desktop' || entries.includes(w)
-        ? withPlacement(w, entries.includes(w) ? result[entries.indexOf(w)]! : positions[i]!)
-        : w,
-    )
+    selectionKey(event, widget.id, 'move')
   } else if (
     (event.ctrlKey || event.metaKey) &&
     ['a', 'c', 'v'].includes(event.key.toLowerCase()) &&
@@ -1996,6 +2002,7 @@ watch([scope, jobId], () => void syncDocumentJob())
 onMounted(async () => {
   void jobsStore.subscribeVisibleJobs()
   await syncDocumentJob()
+  if (disposed) return
   void load()
   observer = new ResizeObserver(() => {
     viewportWidth.value = viewport.value?.clientWidth || 1100
@@ -2003,6 +2010,7 @@ onMounted(async () => {
     contentHeight.value = content.value?.offsetHeight || 700
   })
   await nextTick()
+  if (disposed) return
   if (viewport.value) observer.observe(viewport.value)
   if (content.value) observer.observe(content.value)
   window.addEventListener('beforeunload', beforeUnload)
@@ -2018,6 +2026,7 @@ watch(
   { flush: 'post' },
 )
 onBeforeUnmount(() => {
+  disposed = true
   resetForms()
   generation++
   observer?.disconnect()
@@ -2765,8 +2774,9 @@ onBeforeUnmount(() => {
               >
               <p>
                 Drag to move; use edge and corner handles to resize. Shift/Ctrl-click selects
-                several widgets. Shift-drag empty canvas selects an area. Arrow keys move; Shift
-                takes larger steps.
+                several widgets. Shift-drag empty canvas selects an area. Arrow keys use grid
+                spacing; Shift+Arrow makes a one-pixel adjustment. Enter/Space selects a focused
+                widget. Escape or an empty-canvas click clears the selection.
               </p>
               <p v-if="device !== 'desktop'">Placement edits override {{ device }} only.</p>
               <AppButton

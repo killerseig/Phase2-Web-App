@@ -1,5 +1,20 @@
 # Widget placement and dashboard layouts
 
+## Current dashboard editing workflow — November 6, 2026
+
+This is the current Personal, Role and Job workflow. Older milestones below remain dated history; the latest implementation/check results are in the [workspace design](03-workspace-design.md) and the [geometry contract](../engineering/module-contracts.md#dashboard-geometry-and-pointer-lifetime).
+
+1. Open a dashboard and choose **Edit**. Personal layout changes belong to the signed-in owner; shared Job templates require Admin. Shared Role editing retains the existing Admin/default-off explicit delegation rules. These controls do not grant access to another person's data or job.
+2. Add widgets from the palette by clicking or dragging. Select a widget on the canvas or outline. A focused canvas widget can be selected with Enter/Space; Shift/Ctrl/Command toggles membership in the selection. Escape or an empty root/container-canvas click clears the selection. Text fields and dialogs retain their usual keys.
+3. Drag the widget or move grip; resize with the eight circular pegs. Arrow keys move by configured grid spacing. **Shift+Arrow makes a one-screen-pixel adjustment**, including from resize pegs. This keeps existing off-grid offsets. A selected group moves/resizes within one container region; locked members block the group. Escape cancels an active gesture and restores its prior state.
+4. **Show grid** controls visible dots independently of **Snap to grid**. Spacing settings affect future pointer operations without repositioning existing widgets. Keyboard arrows add spacing rather than aligning an off-grid item to a new absolute line. Choose Desktop/Tablet/Phone to edit the corresponding placement; device edits preserve desktop and other device overrides.
+5. **Fit frame** centers the desktop published frame; **Fit content** centers the current device's root widgets. Both fit width and height. Pan, Origin, zoom and fitting only change the local view. Published-frame bounds and starting-view settings under Dashboard display are saved configuration, so changing those does dirty the template.
+6. Use Undo/Redo for layout changes. Copy/paste reuses configuration and fresh IDs, preserving private content separately. **Save template** persists the explicit draft; **Cancel edits** discards it after the existing confirmation when needed. Normal viewing has no grid or selection controls. Saved Notes, Documents, Forms and other widget content remain separate from layout changes.
+
+Job tools adapts to the width available inside its widget, including nested containers and zoomed device previews. Changing preview zoom does not change its card layout. The existing Jobs page retains its own responsive behavior.
+
+Remaining reference differences include repeated-paste placement, additional edit shortcuts, signed authored coordinates/dynamic extents, and the wider runtime starting-zoom range. The current 24-column percentage coordinate system must not be widened as a shortcut: that would rescale existing widgets. See the latest comparison for compatibility and root/nested-coordinate tradeoffs. No production rollout or permission expansion is implied by this workflow.
+
 ## October 23 completion work: all three scopes
 
 The user confirmed Personal, Role and Job dashboards are all in this milestone, with common functionality and different scope. The first verified source milestone adds owner-derived Personal support to `sharedDashboardWorkspace`. New layouts use `sharedDashboardPersonal/{uid}` and personal content uses `sharedDashboardPersonalData/{uid}`; Role and Job templates/content retain their existing independent stores. Existing `dashboardPersonal`/`dashboardRoles` layouts are a read-only fallback when a new layout does not exist. Conversion preserves notes and the original records; only an explicit save creates the new layout. Client-supplied owners and role/job context on Personal requests are rejected.
