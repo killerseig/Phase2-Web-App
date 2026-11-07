@@ -5,8 +5,13 @@ import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import SdsExplorerModule from './SdsExplorerModule.vue'
 import PrivateReferenceStatus from '@/components/intranet/PrivateReferenceStatus.vue'
 import { usePrivateReferences } from '@/features/intranet/usePrivateReferences'
+import { useAuthStore } from '@/stores/auth'
 withDefaults(defineProps<{ showHeading?: boolean }>(), { showHeading: true })
-const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences()
+const auth = useAuthStore()
+const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences({
+  enabled: () => !!auth.currentUser?.uid && auth.hasWorkspaceAccess && auth.rawRole !== 'employee',
+  context: () => JSON.stringify([auth.currentUser?.uid, auth.rawRole]),
+})
 const explorer = ref<InstanceType<typeof SdsExplorerModule>>()
 defineExpose({ prepareNavigation: () => explorer.value?.prepareNavigation() ?? true })
 const documentsReady = ref(false)

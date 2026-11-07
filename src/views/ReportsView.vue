@@ -22,9 +22,12 @@ import { usePrivateReferences } from '@/features/intranet/usePrivateReferences'
 import { suppliedStarterDecision } from '@/features/forms/suppliedStarters'
 import { canListCompanyForms } from '@/features/forms/availableForms'
 import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
-const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences()
 const auth = useAuthStore(), templates = ref<ServerFormTemplate[]>([]), loading = ref(true), error = ref(''), search = ref('')
 const allowed = computed(() => !!auth.currentUser?.uid && auth.hasWorkspaceAccess && canListCompanyForms(auth.rawRole))
+const { content, packages, selectedPackage, loading: referencesLoading, error: referencesError, notice, selectSource, reload } = usePrivateReferences({
+  enabled: () => allowed.value,
+  context: () => JSON.stringify([auth.currentUser?.uid, auth.rawRole]),
+})
 const pageLoading = computed(() => allowed.value && (loading.value || referencesLoading.value))
 const availableReports = computed(() => alphabetizeFormChoices(templates.value.filter(item => item.definition && item.latestVersion && !item.archived &&
   canSubmitForm(item.definition.access, { uid: auth.currentUser?.uid || '', role: auth.rawRole, active: auth.hasWorkspaceAccess })).map(item => ({ id: item.id, label: item.definition!.title }))))
@@ -74,7 +77,7 @@ onBeforeUnmount(() => { generation++ })
                   </li>
                 </ul>
                 <PrivateReferenceStatus :show-empty-state="false" :show-loading="false" :loading="referencesLoading" :error="referencesError" :notice="notice" :packages="packages" :selected="selectedPackage" @select="selectSource" @retry="reload" />
-                <template v-if="content">
+                <template v-if="allowed && content">
                   <h2>Supplied form references</h2>
                   <p>Reference text from the supplied ZIP. These are not published submission workflows.</p>
                   <p v-if="!references.length">No supplied form references match your search.</p>

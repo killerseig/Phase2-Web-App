@@ -6,6 +6,28 @@ Use this index to load the relevant boundary first, then inspect source/tests wh
 
 Record purpose/nonresponsibilities; public entry points and types; inputs/outputs and units; invariants/state ownership; side effects, errors, cleanup and retry behavior; permissions and scope; required/optional dependencies; source and behavioral tests. Add a usage example when it clarifies the contract. Update the card when callers' observable behavior changes, not for every internal line edit.
 
+## Authenticated session lifetime
+
+**Interface:** `useAuthStore().init/login/signOut` and existing identity/profile/capability getters. `services/auth.ts` remains the Firebase adapter; role/capability rules are unchanged. The store owns its subscription handles, retry timers and current-session profile promise, rather than sharing mutable lifetime state across store instances.
+
+**Invariants and effects:** switching identity clears the old profile and Jobs/PDF caches synchronously. Hydration, listener recovery and listener callbacks only commit to their captured current session; an obsolete error cannot sign out a newer identity. Login and the auth observer share profile work for the same session. Each profile hydration has at most three attempts; transient listener recovery permits one pending timer and stops when its session becomes obsolete; missing/inactive profiles and nontransient listener failure retain existing sign-out behavior. Disposal invalidates pending work, unsubscribes and releases retry timers. Local sign-out clears access before waiting for the provider; it is not a claim that a failed provider sign-out revoked remote credentials.
+
+[Store](../../src/stores/auth.ts) · [Adapter](../../src/services/auth.ts) · [Lifecycle regressions](../../src/__tests__/authStoreLifecycle.spec.ts) · [Adapter tests](../../src/__tests__/authService.spec.ts)
+
+## Private supplied-reference readers
+
+**Interface:** `usePrivateReferences({enabled,context})` exposes content, candidate packages, selection, loading/error/notice and select/reload/cancel. Callers provide reactive access and a stable account/role key: Company Library follows current workforce access, Reports follows its existing form-listing roles, Form Builder requires current Admin access. These are display/read-lifetime guards, not backend grants.
+
+**Invariants and effects:** per-invocation content stays in memory. Context/access changes synchronously clear private content, candidates and selection, invalidate outstanding generations and abort file reading. Current permitted mounted contexts reload; late results/errors/finalizers cannot restore old content or clear a newer spinner. Pagination remains bounded at 20 pages and detects repeated cursors. Multiple sources require explicit choice. Cancel/unmount stop accepting work; retry is an explicit reload. Ticket services independently authorize every read. No response is persisted or published.
+
+[Source](../../src/features/intranet/usePrivateReferences.ts) · [Regressions](../../src/features/intranet/usePrivateReferences.spec.ts)
+
+## Explorer access context
+
+`SdsExplorerModule.vue` observes UID, workspace access, role, active status and a sorted assignment set for access invalidation. Display-name changes or assignment-order-only snapshots do not discard metadata drafts or reload the library. Actual access changes retain editing/export/viewer invalidation. Query, file mutation, book polling and viewer lifetimes remain separately owned; this contract does not imply arbitrary in-flight mutations can be undone.
+
+[Owner](../../src/components/dashboard/SdsExplorerModule.vue) · [Draft regression](../../src/__tests__/SdsQuickUpload.spec.ts)
+
 ## Form authoring
 
 **Interface:** `useFormAuthoring(draft, dirty)` returns selection/select/reset/saved/undo/redo and reactive availability flags. Inputs are Vue refs; history snapshots cover the form definition and selected field, not network state. Reset establishes a baseline; `saved()` marks the current definition saved. Undo/redo retain stable field IDs and restore optional definition properties correctly.

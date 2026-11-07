@@ -2,6 +2,57 @@
 
 Draft proposals supporting the [requirements register](01-requirements.md). SDS delivery can begin before the broader workspace redesign is complete.
 
+## Refinement and workflow review — November 7, 2026
+
+This follows the completed local dashboard milestone. Its finite exit criterion is: reconcile the current workflow/contract map; fix and regression-test the highest-impact safe lifecycle findings; inventory all editors against Networking with explicit compatibility limits; prepare realistic role sessions; and run/report appropriate final checks while preserving the canonical preview and its data. Human usability acceptance, broader feature decisions, remaining editor parity and release are separate outcomes.
+
+The [architecture adoption record](../engineering/phase2-adoption.md#workflow-ownership-review--november-7-2026) now maps principal workflows, ownership, service boundaries, permissions, recovery and test owners. The [all-editor inventory](08-widget-layouts.md#all-editor-parity-inventory--november-7-2026) separates completed dashboard behavior, Website/Form gaps and deliberate differences. Module contracts remain the interface authority; the coding process remains the command/release authority. Historical dated checkpoints below are not overwritten or treated as current evidence.
+
+Code refinements target stale authenticated-profile callbacks, private reference read isolation, and document drafts being discarded by unrelated profile updates. They preserve saved models, issued/submitted forms, legacy pages, server authorization and explicit save/publish. Existing Form persistence lifetime limits are recorded as a specific follow-up, not claimed fixed by this pass.
+
+### Refinement verification and exit
+
+The finite local review/refinement checklist is complete. Auth lifecycle tests reproduced account-switch overwrite, duplicate login hydration, late failure/sign-out and stale login completion before the fixes; 21 final cases cover ordering, retry, disposal and normal recovery. Private-reference tests cover revocation, late success/failure, pagination, unmount and retry. Explorer tests preserve an open folder draft across display-name/assignment-order changes and invalidate it for actual access changes. All three private-reader consumers now supply explicit access/context inputs.
+
+| Check | Final evidence |
+| --- | --- |
+| Build and types | Full `npm.cmd run build` passed (frontend/public, Functions and SSR). Type checking passed again after test-only typing cleanup. |
+| Units and script tests | 465 files / 2,488 units passed. The three edited lifecycle/upload test files passed again afterward (41 cases). All 31 native script tests passed. |
+| Browser regressions | All 338 maintained dashboard cases, 23 bounded Website Builder cases and 15 Library/Forms integration cases passed; each final JSON report has zero unexpected, flaky or skipped cases. These use synthetic fixtures. |
+| Security boundary | Existing `verify-security-rules.mjs` passed with 84 expected denied operations, authorized reads/writes and single-use-token concurrency in isolated `demo-phase2-refinement` emulators (Auth 9197, Firestore 9297, Storage 9397). The preserved preview emulator was not used for mutations. |
+| Packaging / lint | Fresh Functions packaging passed for 56 handlers with `cloudCalls:false`. Scoped ESLint passed with zero errors and one pre-existing conditional-test warning; scoped Oxlint passed all ten changed TS/Vue/test files with zero errors/warnings. Whitespace check passed. This is scoped lint, not a repository-wide lint claim. |
+| Preview and data | Original Vite/bridge/Firestore owners remain on 5173/5001/8080. HTTP 200 serves the updated auth guards. All 287 saved documents/subcollections retain SHA256 `5d1a11803340cfa35eebcde27bea0eda573d40d4b7974b6c0177248822ef9151`. No push, deployment, production writes or email. |
+
+The first additional Library/Forms run passed 12 and failed three. Traces identified an unmocked announcement error covering mobile pagination and programmatic focus attempted while the Reports loading region was still inert. The fixture now uses the maintained empty announcement feed and waits for ready content, asserting focus before Enter; the complete 15-case rerun passes. No product control was removed or forced through an overlay. Initial changed-file Oxlint also identified missing mock types and deferred assertion syntax; those were corrected and rechecked. Existing build size/deprecation and Website ResizeObserver development warnings remain nonblocking observations, not silently relabeled as absent.
+
+Local evidence is retained under `.security-work/refinement-*`: final unit/build/types/targets/scripts/package logs; scoped lint logs; dashboard, builder and intranet JSON reports/logs; initial intranet failure report; isolated rules log/config; and before/final state digests. Generated evidence and emulator data are untracked. **Not run:** human role sessions, representative-user acceptance, real-provider sign-in/delivery, production acceptance, full-repository lint, and the separate privileged-handler emulator suites beyond the named rules/token check. Earlier results for those are historical. Remaining work is the finite Website/Form parity list, the specifically documented Form persistence race pass, and business/release decisions already owned by the decision register.
+
+### Role-based usability sessions — November 7, 2026
+
+**Status: prepared, human sessions not run.** Automated regression is rehearsal evidence; it cannot establish that an uncoached user understands the interface. Atlas role-playing and acceptance by representative users must be recorded separately. D19 owns reviewer selection and acceptance decisions.
+
+| Synthetic persona | Two primary goals and one recovery exercise | Boundary / success criteria |
+| --- | --- | --- |
+| Erin Employee | Read an update; dismiss and find it again; visit the paused timecard destination | Updates landing is understandable; no general Jobs/Library/Forms/editor access; the paused workflow is not mistaken for lost data. |
+| Fran Foreman | Find an assigned job and its document; start a daily log or crew timecard; leave an incomplete entry and cancel departure | Can locate the right job without coaching; understands submitted versus draft; cancelled departure retains work. Preserve existing timecard-route exceptions. |
+| Morgan Project Manager | Edit assigned job setup; review a submitted timecard/open a job form; return to the originating dashboard | Distinguishes setup/report review from crew-timecard entry; no delete/archive shortcut; return path retains context. |
+| Sam Shop Foreman | Find the Shop job and catalog material; prepare an order; cancel an incomplete order departure | Shop and assigned field work are discoverable; catalog management does not imply payroll/user administration. |
+| Pat Payroll | Find a submitted week and inspect export/lock controls; start creating a job; cancel its unsaved setup | Can identify week/job and submission state; existing job setup is not editable; no accidental save or export during the exercise. |
+| Alex Admin | Configure a shared layout using move/resize/Undo; prepare an announcement audience; cancel publication and layout edits | Distinguishes shared layout, private content and author-owned drafts; can recover without relying on refresh; nothing published accidentally. |
+| Inactive / No Access | Enter from a saved protected link; understand blocked entry; recover through sign-in | No protected cached content is displayed; message and exit path are understandable. |
+
+Current roles come from `targetRoleCapabilities.ts`, navigation and route guards, not proposed Superintendent/Operations/CEO titles. Personal layout/content is owner-private. Role layout is shared but its notes/calendar are per-user. One Job layout serves all jobs; job notes/calendar are shared and currently Admin-write-only. Moving/copying configuration never transfers records. Existing unassigned-timecard behavior in `useJobTimecardAccess.ts` is retained, not replaced by an invented assigned-only rule.
+
+**Session setup and order:** use maintained in-memory fixtures (`e2e/helpers/phase2AppFixture.ts`, `dashboardFixture.ts`, `playwright.dashboard.config.ts`) in a fresh isolated browser context for each fictional persona. Synthetic mutations and email outcomes stay in fixture memory. Do not create accounts, change roles or seed the preserved 5173/5001/8080 preview. Close each scenario context to exit; start the next with a fresh identity. Any walkthrough of that saved preview remains read-only, with temporary layout edits undone/cancelled before reload.
+
+Run Employee → Foreman → PM → Shop Foreman → Payroll → Admin in manageable 15–20 minute sessions, first desktop/keyboard then a selected phone journey. State each goal without naming buttons; record every hint rather than silently coaching. Follow with a focused recovery round: cancel dirty departure, retry failed save/preview, return from a form, dismiss an announcement, and sign out with a draft. Rehearse fixtures first, fix blockers, and repeat failed tasks before advancing.
+
+Record one row per task:
+
+`session/persona | build/environment | device/input | goal | expected boundary | actual steps | unassisted/assisted/blocked | time/backtracks | participant words | recovery/data outcome | evidence | severity | owner | retest`
+
+Use explicit evidence labels: **not run**, **automated rehearsal**, **Atlas-performed**, **representative-user acceptance**. Stop the scenario for data loss, cross-account exposure or an unintended write/send (P0/P1); record inability to complete/recover as P1, repeated coaching/navigation confusion as P2, and cosmetic friction as P3. Timing is observational, not an invented acceptance deadline. Existing regressions for pending edits, form return paths, document failures and announcement entry/dismissal provide starting cases; add a regression when a human observation is reproducible.
+
 ## November 6 dashboard testing readiness
 
 Atlas wants polished Personal, Role and Job dashboards for user testing, followed by design/workflow review and cohesive reuse, performance and security cleanup. Existing Jobs and Daily Logs remain available. The later Employee announcement decision adds a narrow read-only Employee landing/delivery exception; general workforce/source permissions and the general Jobs landing remain unchanged. No pages have been retired, records migrated or deployment performed.

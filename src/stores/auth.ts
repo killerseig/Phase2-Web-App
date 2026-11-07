@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref } from 'vue'
 import {
   canAccessProfileAssignedJob,
   canCreateJobs as canCreateJobsForRole,
@@ -35,15 +35,6 @@ type FirebaseLikeError = Error & {
   code?: string
 }
 
-let authInitPromise: Promise<void> | null = null
-let unsubscribeAuth: (() => void) | null = null
-let unsubscribeProfile: (() => void) | null = null
-let profileRetryTimer: number | null = null
-
-function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
 function isRetryableProfileError(error: unknown) {
   if (!(error instanceof Error)) return false
   const firebaseError = error as FirebaseLikeError
@@ -69,15 +60,27 @@ export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<AuthSessionUser | null>(null)
   const profile = ref<UserProfile | null>(null)
   const ready = ref(false)
+  let authInitPromise: Promise<void> | null = null
+  let finishInit: (() => void) | undefined
+  let unsubscribeAuth: (() => void) | null = null
+  let unsubscribeProfile: (() => void) | null = null
+  let profileRetryTimer: number | null = null
+  let retryDelay: { timer: number; finish: () => void } | undefined
+  let session = 0
+  let listener = 0
+  let disposed = false
+  let profileLoad: { session: number; promise: Promise<void> } | undefined
 
   const rawRole = computed<RawRoleKey>(() => profile.value?.role ?? 'none')
   const roleKey = computed<EffectiveRoleKey>(() => getEffectiveRole(rawRole.value))
   const isAuthenticated = computed(() => currentUser.value !== null)
-  const hasWorkspaceAccess = computed(() => hasCurrentWorkspaceAccess({
-    active: profile.value?.active ?? true,
-    authenticated: currentUser.value !== null,
-    rawRole: rawRole.value,
-  }))
+  const hasWorkspaceAccess = computed(() =>
+    hasCurrentWorkspaceAccess({
+      active: profile.value?.active ?? true,
+      authenticated: currentUser.value !== null,
+      rawRole: rawRole.value,
+    }),
+  )
   const canViewAllJobs = computed(() => canViewAllJobsForRole(rawRole.value))
   const canManageJobs = computed(() => canManageJobsForRole(rawRole.value))
   const canCreateJobs = computed(() => canCreateJobsForRole(rawRole.value))
@@ -101,32 +104,70 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearProfileListener() {
+    listener++
     clearProfileRetry()
     if (!unsubscribeProfile) return
     unsubscribeProfile()
     unsubscribeProfile = null
   }
 
-  async function hydrateProfile(uid: string, authUser: AuthSessionUser | null) {
-    profile.value = await getOrCreateUserProfile(uid, {
-      displayName: authUser?.displayName || null,
-      email: authUser?.email ?? null,
+  function isCurrent(uid: string, owner: number) {
+    return !disposed && owner === session && currentUser.value?.uid === uid
+  }
+
+  function cancelRetryDelay() {
+    if (!retryDelay) return
+    window.clearTimeout(retryDelay.timer)
+    retryDelay.finish()
+    retryDelay = undefined
+  }
+
+  function waitForRetry(ms: number) {
+    return new Promise<void>((resolve) => {
+      const timer = window.setTimeout(() => {
+        retryDelay = undefined
+        resolve()
+      }, ms)
+      retryDelay = { timer, finish: resolve }
     })
   }
 
-  async function hydrateProfileWithRetry(uid: string, authUser: AuthSessionUser | null) {
+  function adoptSession(nextUser: AuthSessionUser | null, reset = false) {
+    if (reset || currentUser.value?.uid !== nextUser?.uid) {
+      session++
+      clearProfileListener()
+      cancelRetryDelay()
+      profileLoad = undefined
+      profile.value = null
+      clearTimecardPdfExports()
+      useJobsStore().$reset()
+    }
+    currentUser.value = nextUser
+    return session
+  }
+
+  async function hydrateProfileWithRetry(authUser: AuthSessionUser, owner: number) {
+    const uid = authUser.uid
     const retryDelays = [0, 250, 800]
     let lastError: unknown = null
 
     for (const delay of retryDelays) {
+      if (!isCurrent(uid, owner)) return false
       if (delay > 0) {
-        await sleep(delay)
+        await waitForRetry(delay)
       }
+      if (!isCurrent(uid, owner)) return false
 
       try {
-        await hydrateProfile(uid, authUser)
-        return
+        const loaded = await getOrCreateUserProfile(uid, {
+          displayName: authUser.displayName || null,
+          email: authUser.email ?? null,
+        })
+        if (!isCurrent(uid, owner)) return false
+        profile.value = loaded
+        return true
       } catch (error) {
+        if (!isCurrent(uid, owner)) return false
         lastError = error
         if (!isRetryableProfileError(error) || delay === retryDelays[retryDelays.length - 1]) {
           throw error
@@ -137,12 +178,16 @@ export const useAuthStore = defineStore('auth', () => {
     throw lastError instanceof Error ? lastError : new Error('Failed to load user profile.')
   }
 
-  function setupProfileListener(uid: string) {
+  function setupProfileListener(uid: string, owner: number) {
+    if (!isCurrent(uid, owner)) return
     clearProfileListener()
+    const subscription = listener
+    const current = () => isCurrent(uid, owner) && subscription === listener
 
-    unsubscribeProfile = subscribeUserProfile(
+    const unsubscribe = subscribeUserProfile(
       uid,
       (nextProfile) => {
+        if (!current()) return
         if (!nextProfile) {
           void signOut()
           return
@@ -155,35 +200,54 @@ export const useAuthStore = defineStore('auth', () => {
         }
       },
       (error) => {
+        if (!current()) return
         if (isTransientProfileListenerError(error)) {
-          scheduleProfileListenerRetry(uid)
+          scheduleProfileListenerRetry(uid, owner, subscription)
           return
         }
 
         void signOut()
       },
     )
+    // A synchronous listener callback can revoke the session before subscribe returns.
+    if (current()) unsubscribeProfile = unsubscribe
+    else unsubscribe()
   }
 
-  function scheduleProfileListenerRetry(uid: string) {
+  function loadProfile(authUser: AuthSessionUser, owner: number) {
+    if (!isCurrent(authUser.uid, owner)) return Promise.resolve()
+    if (profileLoad?.session === owner) return profileLoad.promise
+    const promise = hydrateProfileWithRetry(authUser, owner).then((loaded) => {
+      if (loaded && isCurrent(authUser.uid, owner)) setupProfileListener(authUser.uid, owner)
+    })
+    profileLoad = { session: owner, promise }
+    return promise
+  }
+
+  function scheduleProfileListenerRetry(uid: string, owner: number, subscription: number) {
     if (profileRetryTimer !== null) return
 
     profileRetryTimer = window.setTimeout(async () => {
       profileRetryTimer = null
-      if (currentUser.value?.uid !== uid) return
+      if (!isCurrent(uid, owner) || listener !== subscription) return
+      const authUser = currentUser.value!
+      // Retire the failed listener before recovery so queued callbacks cannot
+      // overwrite the recovered profile or sign out another session.
+      clearProfileListener()
+      profileLoad = undefined
 
       try {
-        await hydrateProfileWithRetry(uid, currentUser.value)
-        setupProfileListener(uid)
+        await loadProfile(authUser, owner)
       } catch {
-        await signOut()
+        if (isCurrent(uid, owner)) await signOut()
       }
     }, 1500)
   }
 
   async function init() {
-    if (ready.value) return
+    if (disposed) return
     if (authInitPromise) return authInitPromise
+    if (ready.value && (unsubscribeAuth || isE2EActive() || !hasConfiguredFirebase)) return
 
     if (isE2EActive()) {
       const e2eAuthState = getE2EAuthState()
@@ -205,41 +269,27 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     authInitPromise = new Promise<void>((resolve) => {
-      let resolved = false
-
-      const resolveInit = () => {
-        if (resolved) return
-        resolved = true
-        ready.value = true
+      finishInit = () => {
+        if (!disposed) ready.value = true
+        finishInit = undefined
         resolve()
       }
 
-      if (unsubscribeAuth) {
-        resolveInit()
-        return
-      }
-
       unsubscribeAuth = subscribeAuthSession(async (nextUser) => {
-        if (!nextUser || (currentUser.value && currentUser.value.uid !== nextUser.uid)) {
-          clearTimecardPdfExports()
-        }
-        currentUser.value = nextUser
-
+        if (disposed) return
+        const owner = adoptSession(nextUser)
         if (!nextUser) {
-          profile.value = null
-          clearProfileListener()
-          resolveInit()
+          finishInit?.()
           return
         }
 
         try {
-          await hydrateProfileWithRetry(nextUser.uid, nextUser)
-          setupProfileListener(nextUser.uid)
+          await loadProfile(nextUser, owner)
         } catch {
-          await signOut()
+          if (isCurrent(nextUser.uid, owner)) await signOut()
         }
 
-        resolveInit()
+        if (isCurrent(nextUser.uid, owner)) finishInit?.()
       })
     })
 
@@ -247,24 +297,41 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(email: string, password: string) {
+    if (disposed) return
     if (!hasConfiguredFirebase) {
-      throw new Error('Firebase config is missing. Copy the v1 VITE_FIREBASE_* values into .env.local.')
+      throw new Error(
+        'Firebase config is missing. Copy the v1 VITE_FIREBASE_* values into .env.local.',
+      )
     }
-
-    const authenticatedUser = await signInWithPassword(email, password)
-    currentUser.value = authenticatedUser
 
     if (!ready.value || !unsubscribeAuth) {
       await init()
     }
-
-    await hydrateProfileWithRetry(authenticatedUser.uid, authenticatedUser)
-    setupProfileListener(authenticatedUser.uid)
+    if (disposed) return
+    const startedAt = session
+    const authenticatedUser = await signInWithPassword(email, password)
+    // Firebase may deliver this login's auth event before the credential result.
+    // Only that matching transition may advance the session during this await.
+    const expectedObserver =
+      session === startedAt + 1 && currentUser.value?.uid === authenticatedUser.uid
+    if (disposed || (session !== startedAt && !expectedObserver)) {
+      throw new Error('Sign-in attempt is no longer current. Please try again.')
+    }
+    const owner = adoptSession(authenticatedUser)
+    // The auth observer and the login continuation share one session load.
+    await loadProfile(authenticatedUser, owner)
+    if (!isCurrent(authenticatedUser.uid, owner)) {
+      throw new Error('Sign-in attempt is no longer current. Please try again.')
+    }
   }
 
   async function signOut() {
-    clearTimecardPdfExports()
-    clearProfileListener()
+    if (disposed) return
+    // Revoke local access before waiting for Firebase. A late provider response
+    // must not clear a different session that arrived while this one signed out.
+    adoptSession(null, true)
+    ready.value = true
+    finishInit?.()
 
     if (hasConfiguredFirebase && !isE2EActive()) {
       try {
@@ -273,12 +340,18 @@ export const useAuthStore = defineStore('auth', () => {
         // Keep clearing local state even if Firebase sign-out throws.
       }
     }
-
-    currentUser.value = null
-    profile.value = null
-    ready.value = true
-    useJobsStore().$reset()
   }
+
+  onScopeDispose(() => {
+    disposed = true
+    session++
+    clearProfileListener()
+    cancelRetryDelay()
+    unsubscribeAuth?.()
+    unsubscribeAuth = null
+    profileLoad = undefined
+    finishInit?.()
+  })
 
   function canAccessJob(jobId: string) {
     return canAccessProfileAssignedJob({

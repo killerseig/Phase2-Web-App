@@ -79,7 +79,10 @@ const settingsTab = ref<'form' | 'field' | 'output'>('field')
 const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
 const auth = useAuthStore()
 const uid = computed(() => auth.currentUser?.uid || '')
-const { content: suppliedContent, packages: sourcePackages, selectedPackage: sourcePackage, loading: sourcesLoading, error: sourcesError, notice: sourceNotice, selectSource, reload: reloadSources } = usePrivateReferences(() => auth.rawRole === 'admin')
+const { content: suppliedContent, packages: sourcePackages, selectedPackage: sourcePackage, loading: sourcesLoading, error: sourcesError, notice: sourceNotice, selectSource, reload: reloadSources } = usePrivateReferences({
+  enabled: () => !!uid.value && auth.hasWorkspaceAccess && auth.rawRole === 'admin',
+  context: () => JSON.stringify([uid.value, auth.rawRole]),
+})
 const suppliedStarters = computed(() => suppliedContent.value?.forms.filter(form => !suppliedStarterDecision(form)) ?? [])
 const serverEnabled = isFormServerEnabled()
 const legacyImportId = ref(''), legacyError = ref('')

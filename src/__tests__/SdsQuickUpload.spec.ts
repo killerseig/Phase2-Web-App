@@ -1,26 +1,29 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import SdsExplorerModule from '@/components/dashboard/SdsExplorerModule.vue'
 import { loadSds, loadSdsPage, sdsCommand, uploadDocument } from '@/services/sds'
 
 const access = vi.hoisted(() => ({ role: 'admin', jobId: '' }))
+const profile = reactive({ value: { firstName: 'Admin', active: true, assignedJobIds: ['a', 'b'] } })
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ rawRole: access.role, currentUser: { uid: 'admin' } }),
+  useAuthStore: () => ({ rawRole: access.role, currentUser: { uid: 'admin' }, hasWorkspaceAccess: true,
+    get profile() { return profile.value }, get assignedJobIds() { return profile.value.assignedJobIds } }),
 }))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ path: '/test-upload', query: access.jobId ? { sdsJob: access.jobId } : {} }),
-  onBeforeRouteLeave: vi.fn(),
+  onBeforeRouteLeave: vi.fn<typeof import('vue-router').onBeforeRouteLeave>(),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 vi.mock('@/services/sds', () => ({
-  loadSds: vi.fn(),
-  loadSdsPage: vi.fn(),
-  preflightSdsImport: vi.fn(),
-  sdsCommand: vi.fn(),
-  uploadDocument: vi.fn(),
+  loadSds: vi.fn<typeof import('@/services/sds').loadSds>(),
+  loadSdsPage: vi.fn<typeof import('@/services/sds').loadSdsPage>(),
+  preflightSdsImport: vi.fn<typeof import('@/services/sds').preflightSdsImport>(),
+  sdsCommand: vi.fn<typeof import('@/services/sds').sdsCommand>(),
+  uploadDocument: vi.fn<typeof import('@/services/sds').uploadDocument>(),
   sdsErrorMessage: (error: Error) => error.message,
 }))
-const cleanup = vi.fn()
+const cleanup = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
 const uploadId = '00000000-0000-4000-8000-000000000001'
 const mountModule = (toolbar = false, initialFolderId = '') =>
   mount(SdsExplorerModule, {
@@ -46,7 +49,8 @@ describe('direct document upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     access.role = 'admin'; access.jobId = ''; localStorage.clear()
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true })
+    profile.value = { firstName: 'Admin', active: true, assignedJobIds: ['a', 'b'] }
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn<HTMLElement['scrollIntoView']>(), configurable: true })
     vi.mocked(loadSds).mockResolvedValue({
       version: 7,
       folders: [{ id: 'materials', name: 'Materials', parentId: '', order: 0 }],
@@ -154,6 +158,20 @@ describe('direct document upload', () => {
     expect(wrapper.find('form').exists()).toBe(false)
     expect(sdsCommand).not.toHaveBeenCalled()
     wrapper.unmount(); confirm.mockRestore()
+  })
+  it('keeps an open folder draft and avoids reloading for a display-name or assignment-order update', async () => {
+    const wrapper = mountModule(true); await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'New folder')!.trigger('click')
+    await wrapper.get('form input').setValue('Unsaved folder')
+    vi.mocked(loadSds).mockClear(); vi.mocked(loadSdsPage).mockClear()
+    profile.value = { firstName: 'Renamed admin', active: true, assignedJobIds: ['b', 'a'] }
+    await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('form input').element.value).toBe('Unsaved folder')
+    expect(loadSds).not.toHaveBeenCalled(); expect(loadSdsPage).not.toHaveBeenCalled()
+    profile.value = { ...profile.value, active: false }
+    await flushPromises()
+    expect(wrapper.find('form').exists()).toBe(false)
+    wrapper.unmount()
   })
   it('blocks dashboard navigation while a document mutation is pending', async () => {
     const wrapper = mountModule(true); await flushPromises()

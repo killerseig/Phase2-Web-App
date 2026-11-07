@@ -36,6 +36,38 @@ This finite list is complete for the current local dashboard refinement stage; i
 | Deliberate Phase 2 differences | Preserve parent-local child coordinates, scoped/private records, required tools, settings-only clipboard, confirmed cascading removal, atomic locks/arrangements, clicked-widget menus, current widget count/depth limits and distinct repeated-paste placement. Networking terminal/automation widgets are outside this catalog's scope. These are not missing parity features. |
 | Deferred compatibility decisions | Signed authored extents/dynamic expansion and wider saved/runtime zoom are explicitly deferred from this refinement pass. The current 24-column model and 25–200% saved/runtime range remain unchanged. Any later expansion needs a separate compatibility design; this milestone does not claim literal Networking parity. |
 
+## All-editor parity inventory — November 7, 2026
+
+Read-only comparison against the adjacent `Networking-Application/src/features/dashboard/useDashboardViewFeature.js`, current Phase 2 sources and their tests. This is a code inventory, not a claim that every listed behavior was exercised in this review. The shared builder controls provide consistent chrome, but each editor still owns a different document and interaction model.
+
+| Capability | Dashboard | Website Builder | Form Builder |
+| --- | --- | --- | --- |
+| Selection | Single/multiple, marquee, outline, nested selection, context menu | Single/multiple, marquee, layers, context menu, inline text/image | One field; click/Enter/Space |
+| Movement | Grid step; Shift+Arrow one screen pixel; grouped movement; inherited locks; Desktop reparenting | Grid/group movement and snapping; Shift+Arrow currently means ten grid steps | Ordered drag and up/down field movement |
+| Sizing | Eight pegs, atomic group resize, separate position/size locks | Widget and inline-element resize/rotation, responsive sizing | Field-specific properties; no free-canvas geometry |
+| Clipboard | Settings-only copy/paste/duplicate/cut, pointer placement, distinct repeated pastes, typing/dialog/repeat guards | Copy/paste/duplicate; repeated keyboard pastes reuse the same offset; Cut/repeat guards incomplete | Whole-template duplication; field duplication/clipboard absent |
+| Viewport | Pan/zoom; one-shot centered Fit frame/Fit content | Pan/zoom; persistent Fit within bounded device preview | Document width-fit and zoom |
+| History and persistence | Undo/redo, explicit save/cancel, conflicts and private-content separation | Undo/redo, autosave/recovery, shared draft, revisions and explicit publish | Undo/redo, saved drafts, immutable published versions |
+
+Sources: `SharedDashboardView.vue`, `WebsiteBuilderView.vue`, `FormBuilderView.vue`, `features/dashboard/useWidgetDrag.ts`, `features/website/selection.ts` and `features/forms/useFormAuthoring.ts`. Existing behavioral coverage lives in `e2e/dashboard-{keyboard,clipboard,reparent}.spec.ts`, `website-builder.spec.ts`, `website-preview-parity.spec.ts`, `form-canvas-controls.spec.ts`, `form-authoring.spec.ts` and `builder-consistency.spec.ts`. Tests are evidence only when their actual run/status is recorded.
+
+### Finite remaining consistency work
+
+1. **Website precise movement:** align `geometryKey` with Networking/Dashboard's one-screen-pixel Shift+Arrow, accounting for zoom and preserving off-grid offsets. Apply the same calculation to body and handle paths. Keep angular Shift rotation separately defined. No coordinate/schema change is needed.
+2. **Website clipboard:** add predictable distinct repeated placement and repeat/typing/dialog guards, then settings Cut and pointer anchoring where compatible. Preserve fresh IDs, nested hierarchy, inline content and the Website 30-widget limit. Do not import Dashboard's planner unchanged: units, bounds and container semantics differ.
+3. **Forms applicable commands:** add consistent selected-field actions, duplicate/copy/paste and guarded keyboard reorder in a separately verified pass. New IDs for repeat children and `requiredWhen` reference treatment are acceptance requirements, not implementation trivia. Preserve ordered flow and published output.
+4. **Common acceptance matrix:** test selection, supported movement/resize, Escape/cancel, repeated clipboard actions, typing/dialog guards, Undo/Redo, save/reload, narrow panels and read-only/disabled states. Include Website Content/Design/Code, Form author/respondent, and all Dashboard scopes. A pass in one editor does not establish another's behavior.
+
+### Deliberate differences and compatibility decisions
+
+- Forms' `functions/src/formModel.ts` has no field `x/y/w/h/z/parentId` model. Literal free-canvas parity needs schema, validation, responsive/accessible rendering, PDF and issued-version compatibility design. Command consistency can proceed without that redesign.
+- Website persistent device Fit, Forms document-width Fit and Dashboard one-shot world/frame/content Fit are distinct established behaviors. Improve naming before changing their semantics.
+- Dashboard's bounded 24-column percentage coordinates and 25–200% saved/runtime zoom remain intact. Networking's signed expanding plane and wider view are not safe drop-in replacements. Website has its own finite geometry model.
+- Required tools, owner/job data separation, settings-only clipboard, inherited atomic locks and confirmed cascading removal remain intentional protections. Networking terminal/automation features are outside these editors' catalog.
+- The reference app itself requires verification: its reparent controller supplies membership fields to an adapter that accepts geometry. Copying the intended handler is not proof that end-to-end reparenting works.
+
+The dashboard stage is complete locally; the four bounded items above are follow-up editor work. They do not reopen the completed dashboard checklist or authorize saved-format migration, old-page retirement, access changes or deployment.
+
 ## October 23 completion work: all three scopes
 
 The user confirmed Personal, Role and Job dashboards are all in this milestone, with common functionality and different scope. The first verified source milestone adds owner-derived Personal support to `sharedDashboardWorkspace`. New layouts use `sharedDashboardPersonal/{uid}` and personal content uses `sharedDashboardPersonalData/{uid}`; Role and Job templates/content retain their existing independent stores. Existing `dashboardPersonal`/`dashboardRoles` layouts are a read-only fallback when a new layout does not exist. Conversion preserves notes and the original records; only an explicit save creates the new layout. Client-supplied owners and role/job context on Personal requests are rejected.

@@ -4,7 +4,11 @@ Design and implementation record · September 14, 2026
 
 The next phase includes **all requests collected from the stakeholder emails and planning conversation**. General and job-specific SDS access is the first feature priority. The user subsequently authorized first-phase implementation. These documents do not establish delivery dates or remove later work from scope; see the implementation record for what is built versus still proposed.
 
-## Start here: November 7 dashboard acceptance
+## Start here: November 7 refinement and workflow review
+
+The dashboard milestone below is complete locally. The follow-on [bounded refinement review and role-session plan](03-workspace-design.md#refinement-and-workflow-review--november-7-2026), [workflow ownership map](../engineering/phase2-adoption.md#workflow-ownership-review--november-7-2026) and [all-editor parity inventory](08-widget-layouts.md#all-editor-parity-inventory--november-7-2026) now distinguish code fixes, remaining Website/Form work, compatibility decisions and human acceptance. The private foundation was readable; its relevant Vue/module guidance is applied through repository contracts rather than duplicated. Current validation is recorded with that dated review, not inferred from older totals.
+
+## November 7 dashboard acceptance
 
 The current Personal, Role and Job dashboard work is recorded in the [November 6 checkpoint](03-workspace-design.md#november-6-dashboard-testing-readiness). The owner wants these polished for user testing before gradually replacing older pages. The current work preserves the Jobs pages, Daily Logs, Timecards, Shop Orders, existing permissions and production records. It is a source checkpoint on `test`, not a deployment or permission to retire pages. The older dated entries below remain history rather than the current feature inventory.
 
@@ -53,7 +57,7 @@ Requirement IDs remain stable so future tasks and tests can reference them. The 
 
 ## Product direction
 
-One employee workspace supports Role and Job dashboards alongside the existing workflows. Current local work adds two NEW parallel surfaces for review, sharing one Admin-maintained layout across all jobs and one across each existing role, with data tied to the selected job or signed-in person. Old Jobs/job pages and prototype dashboard routes stay intact. Personal configurable desktops, jobs-list migration and retirement of old pages remain future work. The current catalog is deliberately bounded; Weather and wider component audits/refactors are backlog only. A public company website continues to publish only approved public content.
+One employee workspace supports Personal, Role and Job dashboards alongside existing workflows. Current local work includes owner-private Personal layouts/content, one Admin-maintained layout across all jobs, and one shared layout per existing role with default-off explicit delegation. Data retains its selected-job or signed-in-person ownership. Old Jobs/job pages and prototype routes stay intact. Jobs-list migration, old-page retirement, Weather and wider product expansion remain separate work. A public company website continues to publish only approved public content.
 
 For SDS, Admin adds information/PDFs and manages the master explorer; its hierarchy becomes the table of contents for PDF/printed books. Anyone with access to a job can check/uncheck its sheets and export/print its book, including otherwise read-only job users. Unchecked sheets remain in the master library; jobs inherit its organization. These actions live on new SDS surfaces and do not change existing job-edit permissions. Vendor integration is optional later work; embedded preview details and offline app access still need decisions.
 

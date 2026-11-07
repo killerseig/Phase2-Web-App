@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './helpers/test.js'
 import { createJobsFixture, createJobDashboardFixture, gotoPhase2App, openLibraryFiles } from './helpers/phase2AppFixture.js'
+import { mockDashboard } from './helpers/dashboardFixture.js'
 import { sampleContent } from '../src/features/intranet/__tests__/fixtures.js'
 import { readFileSync } from 'node:fs'
 import type { IntranetContent } from '../src/features/intranet/content.js'
@@ -12,6 +13,9 @@ const content: IntranetContent = actualPath ? JSON.parse(readFileSync(actualPath
     { id: 'foreman-source-b15', title: 'Synthetic theft report', paragraphs: [], fields: [{ label: 'JOB NAME', type: 'text', required: true, signature: false }, ...['Item Description', 'Phase 2 Number', 'Serial Number', 'Value of Item'].map(label => ({ label: 'Item 1 - ' + label, type: 'text', required: false, signature: false }))] }],
 }
 async function setup(page: Page, reader = false, denied = false, path = '/company-library', uploadedReference = false, missingPackage = false) {
+  // Normal Library/Form journeys start with an empty announcement feed.
+  // Failure/dismissal behavior has its own announcement-delivery coverage.
+  await mockDashboard(page, !reader)
   await page.addInitScript(() => { window.__PHASE2_FORM_SERVER__ = true })
   const actions: string[] = []
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
@@ -215,9 +219,12 @@ for (const width of [390, 1280]) test('keyboard and native layout review at ' + 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
   // Reports remains an existing route; its redundant global sidebar link was removed.
   await page.goto('/reports')
+  await expect(page.getByRole('region', { name: 'Forms workspace', exact: true })).toHaveAttribute('aria-busy', 'false')
   const form = content.forms.find(item => item.id === 'foreman-source-b14')!
   const row = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: form.title }) })
-  await row.locator('summary').focus(); await page.keyboard.press('Enter')
+  await row.locator('summary').focus()
+  await expect(row.locator('summary')).toBeFocused()
+  await page.keyboard.press('Enter')
   await expect(row).toHaveAttribute('open', '')
   const builderLink = row.getByRole('link', { name: 'Prepare an editable draft in Form Builder', exact: true })
   await builderLink.focus(); await page.keyboard.press('Enter')

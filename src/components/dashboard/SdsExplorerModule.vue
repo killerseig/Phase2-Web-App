@@ -47,7 +47,12 @@ const restored = previousView?.jobId === requestedJobId ? previousView : undefin
 const isAdmin = computed(() => auth.rawRole === 'admin')
 const jobId = ref(requestedJobId)
 const viewerContext = ref(0)
-watch([() => auth.currentUser?.uid, () => auth.hasWorkspaceAccess, () => JSON.stringify([auth.rawRole, auth.profile?.active, auth.assignedJobIds]), jobId], ([uid, access]) => {
+const accessContext = computed(() => JSON.stringify([
+  auth.currentUser?.uid, auth.hasWorkspaceAccess, auth.rawRole, auth.profile?.active,
+  [...(auth.assignedJobIds ?? [])].sort(),
+]))
+watch([accessContext, jobId], () => {
+  const uid = auth.currentUser?.uid, access = auth.hasWorkspaceAccess
   viewerSession.reset(!!uid && access); documentOpener.reset(); viewerContext.value++
 }, { flush: 'sync' })
 const folderId = ref(
@@ -588,7 +593,7 @@ function prepareNavigation() {
 defineExpose({ prepareNavigation })
 onBeforeRouteLeave(prepareNavigation)
 watch(
-  () => auth.profile,
+  accessContext,
   () => {
     editing.value = false
     editor.value = ''
