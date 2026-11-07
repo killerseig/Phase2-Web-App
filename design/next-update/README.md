@@ -8,6 +8,8 @@ The next phase includes **all requests collected from the stakeholder emails and
 
 The dashboard milestone below is complete locally. The follow-on [bounded refinement review and role-session plan](03-workspace-design.md#refinement-and-workflow-review--november-7-2026), [workflow ownership map](../engineering/phase2-adoption.md#workflow-ownership-review--november-7-2026) and [all-editor parity inventory](08-widget-layouts.md#all-editor-parity-inventory--november-7-2026) now distinguish code fixes, remaining Website/Form work, compatibility decisions and human acceptance. The private foundation was readable; its relevant Vue/module guidance is applied through repository contracts rather than duplicated. Current validation is recorded with that dated review, not inferred from older totals.
 
+The latest [Form persistence lifetime checkpoint](03-workspace-design.md#form-persistence-lifetime--november-7-2026) addresses the previously documented stale-request limitation and its adjacent confirmation/import/navigation callers. Earlier verification totals remain historical; current results and limits belong to that checkpoint.
+
 ## November 7 dashboard acceptance
 
 The current Personal, Role and Job dashboard work is recorded in the [November 6 checkpoint](03-workspace-design.md#november-6-dashboard-testing-readiness). The owner wants these polished for user testing before gradually replacing older pages. The current work preserves the Jobs pages, Daily Logs, Timecards, Shop Orders, existing permissions and production records. It is a source checkpoint on `test`, not a deployment or permission to retire pages. The older dated entries below remain history rather than the current feature inventory.

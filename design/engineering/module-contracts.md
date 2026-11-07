@@ -1,6 +1,6 @@
 # Module contracts
 
-Use this index to load the relevant boundary first, then inspect source/tests when changing it or when evidence conflicts. These cards describe existing behavior as of November 6, 2026; commercial module interfaces and general company entitlements remain proposals. Each card should stay short enough to review alongside a change.
+Use this index to load the relevant boundary first, then inspect source/tests when changing it or when evidence conflicts. These cards describe existing behavior as of November 7, 2026; commercial module interfaces and general company entitlements remain proposals. Each card should stay short enough to review alongside a change.
 
 ## Contract card format
 
@@ -38,11 +38,11 @@ Record purpose/nonresponsibilities; public entry points and types; inputs/output
 
 ## Form persistence
 
-**Interface:** `useFormPersistence(options)` coordinates device library storage, server template loading/saving and confirmed save-before-publish. Options supply UID/draft/library/status refs, storage, authoring callbacks and confirmation. Returned operations/status are the authoritative persistence boundary; the view retains field editing and navigation.
+**Interface:** `useFormPersistence(options)` coordinates device library storage and server template list/save/duplicate/remove/confirmed publication. Options supply UID, `useFormEditorContext`, draft/library/status refs, storage, authoring callbacks and confirmation. The view shares the context for selection, starter creation, local removal and dirty navigation; field editing and history remain separate.
 
-**Invariants and effects:** device versions and server revisions are different concepts. Successful saves/publication have owner/draft guards; issuing follows a successful save and confirmation. The implementation does not guard every error/finally update by request generation, and server loading checks UID only. Callers must preserve its existing lifetime constraints; this is not a complete stale-result isolation guarantee. Uses local storage and Admin template transport. Server handlers independently authorize Admin access and validate immutable issuance; a client flag cannot grant it. Busy/error/publication state reports failures without silently declaring a draft published.
+**Invariants and effects:** context epochs invalidate on account/access transitions, including sign-out and return to the same UID, and on unmount. A deep draft epoch invalidates replacement and edit-then-revert while confirmation or a write is pending. Latest-list and mutation ownership reject obsolete results, errors, saved baselines and finalizers; callers synchronously clear private draft/library/history on context change. A newer list supersedes an older mutation's refresh without allowing that old continuation to overwrite current status. A current successful save with a failed refresh remains saved but cannot proceed to issue; a current successful issue with a failed refresh reports publication and asks for refresh. Duplicate retry keys remain until a current successful refresh/selection, so a failed refresh does not create a second copy on retry. Device versions remain distinct from server revisions. Issue requires explicit confirmation, a matching successful save and a successful current refresh. Server handlers independently authorize Admin access and validate immutable issuance. Invalidation suppresses obsolete local effects; it cannot cancel or undo a server mutation already sent.
 
-[Source](../../src/features/forms/useFormPersistence.ts) · [Tests](../../src/features/forms/useFormPersistence.spec.ts)
+[Persistence](../../src/features/forms/useFormPersistence.ts) · [Context](../../src/features/forms/useFormEditorContext.ts) · [Persistence tests](../../src/features/forms/useFormPersistence.spec.ts) · [Lifecycle regressions](../../src/features/forms/useFormPersistenceLifecycle.spec.ts) · [Caller regressions](../../src/views/FormBuilderContext.spec.ts)
 
 ## Website editing and commands
 

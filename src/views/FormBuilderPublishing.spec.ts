@@ -3,17 +3,21 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router'
 import { defineComponent } from 'vue'
 import PrimeVue from 'primevue/config'
-const { api, ask } = vi.hoisted(() => ({ api: vi.fn(), ask: vi.fn() }))
+import type { FormDefinition } from '@/features/forms/model'
+const { api, ask } = vi.hoisted(() => ({
+  api: vi.fn<(name: string, data: { action: string; [key: string]: unknown }) => Promise<unknown>>(),
+  ask: vi.fn<(options: { title: string; message: string; confirmLabel: string }) => Promise<boolean>>(),
+}))
 vi.mock('@/services/forms', () => ({ formApi: api, isFormServerEnabled: () => true, isFormEmulatorEnabled: () => false }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { uid: 'synthetic-admin' }, rawRole: 'admin' }) }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { uid: 'synthetic-admin' }, rawRole: 'admin', hasWorkspaceAccess: true }) }))
 vi.mock('@/features/intranet/usePrivateReferences', async () => {
   const { ref } = await import('vue')
-  return { usePrivateReferences: () => ({ content: ref(null), packages: ref([]), selectedPackage: ref(null), loading: ref(false), error: ref(''), notice: ref(''), reload: vi.fn(), cancel: vi.fn(), selectSource: vi.fn() }) }
+  return { usePrivateReferences: () => ({ content: ref(null), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: ref(''), notice: ref(''), reload: vi.fn<() => void>(), cancel: vi.fn<() => void>(), selectSource: vi.fn<(id: string) => void>() }) }
 })
 vi.mock('@/layouts/AppShell.vue', () => ({ default: { template: '<main><slot :openNavigation="() => {}" :mobileNavOpen="false" /></main>' } }))
 import FormBuilderView from './FormBuilderView.vue'
 
-const definition = () => ({ title: 'Original', description: '', recipients: [], fields: [{ id: 'notes', kind: 'text', label: 'Notes', required: false, options: [] }] })
+const definition = (): FormDefinition => ({ title: 'Original', description: '', recipients: [], fields: [{ id: 'notes', kind: 'text', label: 'Notes', required: false, options: [] }] })
 let wrapper: VueWrapper
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
@@ -26,13 +30,13 @@ async function setup(options: { saveError?: string; publishError?: string; confi
     if (name === 'formTemplates' && data.action === 'save') {
       await options.saveWait
       if (options.saveError) throw new Error(options.saveError)
-      template.draft = copy(data.definition); template.revision++
+      template.draft = copy(data.definition as FormDefinition); template.revision++
       return { ...copy(template), id: options.wrongId ? 'wrong-id' : template.id }
     }
     if (name === 'formTemplates' && data.action === 'issue') {
       await options.issueWait
       if (options.publishError) throw new Error(options.publishError)
-      expect(data.revision).toBe(template.revision)
+      if (data.revision !== template.revision) throw new Error('Synthetic publication revision mismatch')
       template.latestVersion = 1
       return { ok: true }
     }
@@ -105,12 +109,16 @@ describe('confirmed save then publish using isolated synthetic API responses', (
     await button('Saving draft…').trigger('click'); saving.resolve(); await flushPromises()
     expect(button('Publishing…').attributes('disabled')).toBeDefined(); await button('Publishing…').trigger('click')
     issuing.resolve(); await flushPromises(); expect(mutations().map(([, data]) => data.action)).toEqual(['save', 'issue'])
+    expect(mutations()[1]![1]).toEqual({ action: 'issue', id: 'test-form', revision: 8 })
     expect(button('Publish').attributes('disabled')).toBeUndefined()
   })
   it('rejects a mismatched save response instead of issuing another template', async () => {
-    await setup({ wrongId: true }); await publishing(); await button('Publish').trigger('click'); await flushPromises()
+    await setup({ wrongId: true }); await title().setValue('Keep selected draft')
+    await publishing(); await button('Publish').trigger('click'); await flushPromises()
     expect(mutations().map(([, data]) => data.action)).toEqual(['save'])
     expect(wrapper.text()).toContain('Review it before publishing again')
+    expect((title().element as HTMLInputElement).value).toBe('Keep selected draft')
+    expect(wrapper.text()).toContain('Unsaved edits')
   })
   it.each(['confirming', 'saving'])('blocks publication when state changes during %s', async phase => {
     const gate = deferred<boolean>(), saving = deferred<void>()
@@ -120,7 +128,8 @@ describe('confirmed save then publish using isolated synthetic API responses', (
     wrapper.findComponent({ name: 'FormOutputSettings' }).vm.$emit('update:definition', { ...definition(), title: 'Changed while pending' })
     gate.resolve(true); saving.resolve(); await flushPromises()
     expect(mutations().filter(([, data]) => data.action === 'issue')).toHaveLength(0)
-    expect(wrapper.text()).toContain('before publishing again')
+    expect(wrapper.findAll('.form-builder > p[role="alert"], .form-builder > p[role="status"]')).toHaveLength(0)
+    expect((title().element as HTMLInputElement).value).toBe('Changed while pending')
     expect(wrapper.text()).toContain('Unsaved edits')
   })
   it('keeps archived metadata readable without enabling editing, duplication or publication', async () => {

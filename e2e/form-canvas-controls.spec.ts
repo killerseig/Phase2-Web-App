@@ -1,5 +1,10 @@
-import { expect, test } from './helpers/test.js'
+import { expect, test, type Page } from './helpers/test.js'
 import { createJobsFixture, gotoPhase2App } from './helpers/phase2AppFixture.js'
+
+async function panel(page: Page, name: 'Canvas' | 'Editor') {
+  if ((page.viewportSize()?.width || 1280) <= 900)
+    await page.getByRole('navigation', { name: 'Builder panels' }).getByRole('button', { name, exact: true }).click()
+}
 
 for (const width of [1440, 820, 390]) {
   test(
@@ -25,10 +30,14 @@ for (const width of [1440, 820, 390]) {
         'photo',
       ]
       for (const kind of kinds) {
+        await panel(page, 'Editor')
+        await page.getByRole('button', { name: 'Add fields', exact: true }).click()
+        await expect(page.getByRole('region', { name: 'Field palette', exact: true })).toBeVisible()
         await page.getByRole('button', { name: 'Add ' + kind, exact: true }).click()
         await page.getByLabel('Selected field label', { exact: true }).fill('Review ' + kind)
         await page.getByLabel('Selected field hint', { exact: true }).fill('Help for ' + kind)
         await page.getByLabel('Selected field required', { exact: true }).check()
+        await panel(page, 'Canvas')
         const card = page.getByRole('article', {
           name: 'Field ' + (kinds.indexOf(kind) + 1),
           exact: true,
@@ -64,23 +73,28 @@ for (const width of [1440, 820, 390]) {
         'Review text',
       )
       await page.getByLabel('Selected field label', { exact: true }).fill('Edited on inspector')
+      await panel(page, 'Canvas')
       await expect(first.locator('.form-field > label')).toContainText('Edited on inspector')
       await first.focus()
+      await expect(first).toBeFocused()
       await page.keyboard.press('Delete')
       await page.getByRole('button', { name: 'Undo', exact: true }).click()
+      await panel(page, 'Editor')
       await expect(page.getByLabel('Selected field label', { exact: true })).toHaveValue(
         'Edited on inspector',
       )
       await page.getByRole('button', { name: 'Save local draft', exact: true }).click()
+      await panel(page, 'Canvas')
       await page.getByLabel('Form canvas').scrollIntoViewIfNeeded()
       await page.screenshot({ path: test.info().outputPath('canvas-controls-' + width + '.png') })
       expect(
         await page.getByLabel('Form editor').evaluate((el) => el.scrollWidth - el.clientWidth),
       ).toBeLessThanOrEqual(1)
-      await page.getByRole('button', { name: 'Full-page preview', exact: true }).click()
+      const modes = page.getByRole('navigation', { name: 'Builder modes' })
+      await modes.getByRole('button', { name: 'Preview', exact: true }).click()
       await expect(page.getByLabel('Edited on inspector', { exact: false })).toBeEnabled()
       await page.getByLabel('Edited on inspector', { exact: false }).fill('Trial answer')
-      await page.getByRole('button', { name: 'Edit fields', exact: true }).click()
+      await modes.getByRole('button', { name: 'Edit', exact: true }).click()
       await expect(
         page.getByRole('article', { name: 'Field 1', exact: true }).locator('input[type="text"]'),
       ).toHaveValue('')

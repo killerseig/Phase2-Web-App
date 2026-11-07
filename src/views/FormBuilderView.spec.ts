@@ -3,9 +3,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router'
 import { defineComponent } from 'vue'
 import PrimeVue from 'primevue/config'
-const { api } = vi.hoisted(() => ({ api: vi.fn() }))
+const { api } = vi.hoisted(() => ({ api: vi.fn<(name: string, data: { action: string; [key: string]: unknown }) => Promise<unknown>>() }))
 vi.mock('@/services/forms', () => ({ formApi: api, isFormServerEnabled: () => true, isFormEmulatorEnabled: () => false }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { uid: 'synthetic-builder-admin' } }) }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { uid: 'synthetic-builder-admin' }, rawRole: 'admin', hasWorkspaceAccess: true }) }))
 vi.mock('@/layouts/AppShell.vue', () => ({ default: { template: '<main><slot :openNavigation="() => {}" :mobileNavOpen="false" /></main>' } }))
 import FormBuilderView from './FormBuilderView.vue'
 import committeeSource from '../../functions/src/committee-inspection-native.json'
@@ -25,7 +25,7 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
       if (name === 'formTemplates' && data.action === 'list') return deferred
       throw new Error('This New-form regression must not save or publish')
     })
-    const ask = vi.fn().mockResolvedValue(false)
+    const ask = vi.fn<(options: { title: string; message: string; confirmLabel: string }) => Promise<boolean>>().mockResolvedValue(false)
     const dialog = defineComponent({ setup(_props, { expose }) { expose({ ask }); return () => null } })
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/forms', component: FormBuilderView }] })
     await router.push('/admin/forms'); await router.isReady()
@@ -72,7 +72,7 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
       }
       throw new Error('Unexpected mocked call')
     })
-    const ask = vi.fn().mockResolvedValue(false)
+    const ask = vi.fn<(options: { title: string; message: string; confirmLabel: string }) => Promise<boolean>>().mockResolvedValue(false)
     const dialog = defineComponent({ setup(_props, { expose }) { expose({ ask }); return () => null } })
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/forms', component: FormBuilderView }, { path: '/other', component: { template: '<p>Other page</p>' } }] })
     await router.push('/admin/forms'); await router.isReady()
@@ -134,7 +134,7 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('confirm the entries service is deployed')
     expect(wrapper.text()).toContain('Form preview shows questions only')
-    expect(api.mock.calls.every(([name, data]) => !['save', 'issue', 'create', 'submit'].includes(data.action))).toBe(true)
+    expect(api.mock.calls.every(([, data]) => !['save', 'issue', 'create', 'submit'].includes(data.action))).toBe(true)
     wrapper.unmount()
   })
 })

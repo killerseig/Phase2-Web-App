@@ -4,14 +4,18 @@ import { createRouter, createMemoryHistory, RouterView } from 'vue-router'
 import { defineComponent, ref } from 'vue'
 import { sampleContent } from '@/features/intranet/__tests__/fixtures'
 import PrimeVue from 'primevue/config'
-const { api, ask, state } = vi.hoisted(() => ({ api: vi.fn(), ask: vi.fn(), state: { role: 'admin' } }))
+const { api, ask, state } = vi.hoisted(() => ({
+  api: vi.fn<(name: string, data: { action: string; [key: string]: unknown }) => Promise<unknown>>(),
+  ask: vi.fn<(options: { title: string; message: string; confirmLabel: string }) => Promise<boolean>>(),
+  state: { role: 'admin' },
+}))
 vi.mock('@/services/forms', () => ({ formApi: api, isFormServerEnabled: () => true, isFormEmulatorEnabled: () => false }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ rawRole: state.role, currentUser: { uid: 'synthetic-builder-admin' } }) }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ rawRole: state.role, currentUser: { uid: 'synthetic-builder-admin' }, hasWorkspaceAccess: true }) }))
 vi.mock('@/layouts/AppShell.vue', () => ({ default: { template: '<main><slot :openNavigation="() => {}" :mobileNavOpen="false" /></main>' } }))
 vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({ content: ref({ ...sampleContent(), forms: [
   { id: 'foreman-source-b14', title: 'Synthetic damage report', paragraphs: [], fields: [{ label: 'Date of Damage', type: 'text', required: true, signature: false }] },
   { id: 'foreman-source-b17', title: 'Synthetic confidential warning', paragraphs: [], fields: [{ label: 'Signature', type: 'text', signature: true, required: false }] },
-] }), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: ref(''), notice: ref(''), selectSource: vi.fn(), reload: vi.fn(), cancel: vi.fn() }) }))
+] }), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: ref(''), notice: ref(''), selectSource: vi.fn<(id: string) => void>(), reload: vi.fn<() => void>(), cancel: vi.fn<() => void>() }) }))
 import FormBuilderView from './FormBuilderView.vue'
 afterEach(() => { vi.unstubAllGlobals(); api.mockReset(); ask.mockReset(); state.role = 'admin' })
 async function render() {

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { adminTemplateCommand } from '@/features/forms/templateCommands'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink } from 'vue-router'
 import { isFormServerEnabled, isFormEmulatorEnabled, type ServerFormTemplate } from '@/services/forms'
@@ -17,6 +16,7 @@ import BuilderEditingTools from '@/components/builder/BuilderEditingTools.vue'
 import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
 import BuilderSettingsTabs from '@/components/builder/BuilderSettingsTabs.vue'
 import { useFormPersistence } from '@/features/forms/useFormPersistence'
+import { useFormEditorContext } from '@/features/forms/useFormEditorContext'
 import { alphabetizeFormChoices } from '@/features/forms/selectorOrder'
 import {
   clone,
@@ -60,8 +60,9 @@ const activePane = ref<'outline' | 'preview' | 'inspector'>('outline')
 const inspectorPane = ref<HTMLElement>()
 function focusInspector() {
   activePane.value = 'inspector'
+  const operation = context.capture()
   void nextTick(() => {
-    if (window.matchMedia?.('(max-width: 900px)').matches) inspectorPane.value?.focus({ preventScroll: true })
+    if (operation.draftCurrent() && inspectorPane.value?.isConnected && window.matchMedia?.('(max-width: 900px)').matches) inspectorPane.value.focus({ preventScroll: true })
   })
 }
 function selectCanvasField(id: string) {
@@ -79,6 +80,7 @@ const settingsTab = ref<'form' | 'field' | 'output'>('field')
 const previewDevice = ref<'desktop' | 'tablet' | 'phone'>('desktop')
 const auth = useAuthStore()
 const uid = computed(() => auth.currentUser?.uid || '')
+const editorEnabled = computed(() => auth.hasWorkspaceAccess && auth.rawRole === 'admin')
 const { content: suppliedContent, packages: sourcePackages, selectedPackage: sourcePackage, loading: sourcesLoading, error: sourcesError, notice: sourceNotice, selectSource, reload: reloadSources } = usePrivateReferences({
   enabled: () => !!uid.value && auth.hasWorkspaceAccess && auth.rawRole === 'admin',
   context: () => JSON.stringify([uid.value, auth.rawRole]),
@@ -87,32 +89,11 @@ const suppliedStarters = computed(() => suppliedContent.value?.forms.filter(form
 const serverEnabled = isFormServerEnabled()
 const legacyImportId = ref(''), legacyError = ref('')
 async function removeServer(template: ServerFormTemplate) {
-  const owner = uid.value
-  if (
-    !(await confirmation.value?.ask({
-      title: 'Remove or archive server template?',
-      message: 'Issued or used templates are archived and their records remain available.',
-      confirmLabel: 'Remove or archive',
-    })) ||
-    uid.value !== owner
-  )
-    return
-  serverBusy.value = true
-  try {
-    await adminTemplateCommand('remove', {
-      id: template.id,
-      revision: template.revision,
-    })
-    await loadServer()
-    if (uid.value === owner && draft.value?.id === template.id) {
-      draft.value = undefined
-      authoring.reset()
-    }
-  } catch (caught) {
-    error.value = (caught as Error).message
-  } finally {
-    serverBusy.value = false
-  }
+  await persistence.removeServer(template, async () => confirmation.value?.ask({
+    title: 'Remove or archive server template?',
+    message: 'Issued or used templates are archived and their records remain available.',
+    confirmLabel: 'Remove or archive',
+  }))
 }
 async function selectServer(template: ServerFormTemplate) {
   await select({
@@ -131,8 +112,9 @@ const library = ref(emptyLibrary()),
   dirty = ref(false)
 const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
 const authoring = useFormAuthoring(draft, dirty)
+const context = useFormEditorContext({ uid, enabled: editorEnabled, draft })
 const persistence = useFormPersistence({
-  uid, draft, library, dirty, blocked, message, error, authoring, serverEnabled, localPreview,
+  uid, draft, library, dirty, blocked, message, error, authoring, serverEnabled, localPreview, context,
   storage: () => localStorage,
   confirmPublish: async () => confirmation.value?.ask({
     title: 'Publish this form?',
@@ -140,8 +122,9 @@ const persistence = useFormPersistence({
     confirmLabel: 'Save and publish',
   }),
   showPublicationIssues: () => { settingsTab.value = 'output' },
+  onDraftSelected: () => { pointerDrag.cancel(); preview.value = false; starterSelection.value = '' },
 })
-const { serverTemplates, serverBusy, serverAvailable, publishPhase, loadServer, saveServer, issueServer, persist, save } = persistence
+const { serverTemplates, serverBusy, serverAvailable, publishPhase, loadServer, saveServer, issueServer, persist, save, duplicateServer } = persistence
 const { selection, canUndo, canRedo } = authoring
 const starterSelection = ref('')
 const selectedServerForm = computed(() => serverEnabled ? serverTemplates.value.find(item => item.id === draft.value?.id) : undefined)
@@ -159,7 +142,7 @@ const formChoices = computed(() => {
   const rows: FormChoice[] = starters.map(item => ({ ...item, key: 'starter:' + item.starter, kind: 'starter', meta: 'Starter', disabled: creationLocked.value }))
   if (auth.rawRole === 'admin') rows.push(...suppliedStarters.value.map(source => ({ key: 'source:' + source.id, label: source.title + ' draft', meta: 'Starter', disabled: creationLocked.value, kind: 'source' as const, source })))
   if (serverEnabled) rows.push(...serverTemplates.value.map(server => ({ key: 'server:' + server.id, templateId: server.id, label: server.draft.title, meta: server.archived ? 'Archived' : server.latestVersion ? 'Published' : 'Draft', disabled: serverBusy.value || !!publishPhase.value, kind: 'server' as const, server })))
-  else rows.push(...library.value.templates.map(local => ({ key: 'local:' + local.id, templateId: local.id, label: local.title, meta: local.archived ? 'Archived' : local.versions.length ? 'Published' : 'Draft', disabled: blocked.value, kind: 'local' as const, local })))
+  else rows.push(...library.value.templates.map(local => ({ key: 'local:' + local.id, templateId: local.id, label: local.title, meta: local.archived ? 'Archived' : local.versions.length ? 'Published' : 'Draft', disabled: creationLocked.value, kind: 'local' as const, local })))
   return alphabetizeFormChoices(rows)
 })
 async function chooseForm(key: string) {
@@ -213,10 +196,11 @@ const selectedField = computed(() =>
 )
 const builderRoot = ref<HTMLElement>()
 const creationLocked = computed(
-  () => blocked.value || serverBusy.value || !!publishPhase.value || (serverEnabled && !serverAvailable.value),
+  () => !context.allowed.value || blocked.value || serverBusy.value || !!publishPhase.value || (serverEnabled && !serverAvailable.value),
 )
 const authoringLocked = computed(
   () =>
+    !context.allowed.value ||
     blocked.value ||
     serverBusy.value ||
     !!publishPhase.value ||
@@ -263,35 +247,6 @@ function editorKeys(event: KeyboardEvent) {
     else authoring.undo()
   }
 }
-async function duplicateServer(template: ServerFormTemplate) {
-  if (serverBusy.value || !serverAvailable.value || template.archived) return
-  if (dirty.value) {
-    error.value = 'Save or discard current edits before duplicating.'
-    return
-  }
-  const owner = uid.value
-  const key = 'form-copy-request:v1:' + owner + ':' + template.id + ':' + template.revision
-  const targetId = localStorage.getItem(key) || crypto.randomUUID()
-  localStorage.setItem(key, targetId)
-  serverBusy.value = true
-  try {
-    const result = await adminTemplateCommand('duplicate', {
-      id: template.id,
-      revision: template.revision,
-      targetId,
-    })
-    if (uid.value !== owner) return
-    localStorage.removeItem(key)
-    await loadServer()
-    await selectServer(result)
-    message.value = 'Independent server copy created. Original versions and records are unchanged.'
-  } catch (caught) {
-    if (uid.value === owner) error.value = (caught as Error).message
-  } finally {
-    if (uid.value === owner) serverBusy.value = false
-  }
-}
-
 async function importDeviceDraft() {
   await persistence.importDeviceDraft(legacyImportId.value)
 }
@@ -308,7 +263,7 @@ const recipientText = computed({
   },
 })
 watch(
-  uid,
+  context.revision,
   () => {
     draft.value = undefined
     library.value = emptyLibrary()
@@ -317,9 +272,17 @@ watch(
     dirty.value = false
     blocked.value = false
     legacyError.value = ''
+    legacyImportId.value = ''
+    starterSelection.value = ''
+    preview.value = false
+    entriesMode.value = false
+    fieldsExpanded.value = false
+    formActionsExpanded.value = false
+    activePane.value = 'outline'
+    settingsTab.value = 'form'
     authoring.reset()
     pointerDrag.cancel()
-    if (!uid.value) return
+    if (!context.allowed.value) return
     try {
       library.value = readLibrary(localStorage, uid.value)
     } catch (caught) {
@@ -329,20 +292,13 @@ watch(
           'Device cache could not be read; it is preserved. The server library remains separate.'
       else error.value = (caught as Error).message
     }
-  },
-  { immediate: true },
-)
-watch(
-  uid,
-  () => {
-    serverTemplates.value = []
-    serverAvailable.value = false
     void loadServer()
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 )
 async function select(template: FormTemplate) {
-  const owner = uid.value
+  if (creationLocked.value) return
+  const operation = context.capture()
   if (
     dirty.value &&
     !(await confirmation.value?.ask({
@@ -352,12 +308,13 @@ async function select(template: FormTemplate) {
     }))
   )
     return
-  if (uid.value !== owner) return
+  if (!operation.draftCurrent() || creationLocked.value) return
   pointerDrag.cancel()
   draft.value = clone(template)
   authoring.reset()
   dirty.value = false
   preview.value = false
+  starterSelection.value = ''
   message.value = ''
   error.value = ''
 }
@@ -369,9 +326,10 @@ function correctCommitteeDraft() {
   settingsTab.value = 'output'
 }
 async function create(audit: boolean | ReportingStarter | IntranetForm = false) {
-  const owner = uid.value
-  if (blocked.value) return
-  if (typeof audit === 'object' && (auth.rawRole !== 'admin' || creationLocked.value)) return
+  if (creationLocked.value) return
+  const operation = context.capture()
+  const sourceCurrent = () => typeof audit !== 'object' || suppliedStarters.value.includes(audit)
+  if (!sourceCurrent()) return
   if (
     dirty.value &&
     !(await confirmation.value?.ask({
@@ -381,7 +339,7 @@ async function create(audit: boolean | ReportingStarter | IntranetForm = false) 
     }))
   )
     return
-  if (uid.value !== owner) return
+  if (!operation.draftCurrent() || creationLocked.value || !sourceCurrent()) return
   pointerDrag.cancel()
   try {
     draft.value = typeof audit === 'object' ? suppliedReportStarter(audit) :
@@ -393,13 +351,16 @@ async function create(audit: boolean | ReportingStarter | IntranetForm = false) 
   authoring.reset()
   preview.value = false
   if (typeof audit === 'object') {
+    const prepared = context.capture()
     await nextTick()
+    if (!prepared.draftCurrent() || creationLocked.value || !sourceCurrent()) return
     settingsTab.value = 'form'
     message.value = 'Prepared an unsaved Admin-only draft. Review fields, audience and delivery before saving or publishing. No notification was sent.'
   }
 }
 async function remove(template: FormTemplate) {
-  const owner = uid.value
+  if (creationLocked.value || template.archived) return
+  const operation = context.capture(), libraryOwner = library.value, libraryRevision = library.value.revision
   const archive = template.versions.length > 0
   if (
     !(await confirmation.value?.ask({
@@ -412,13 +373,15 @@ async function remove(template: FormTemplate) {
     }))
   )
     return
-  if (uid.value !== owner) return
+  if (!operation.draftCurrent() || creationLocked.value || library.value !== libraryOwner || library.value.revision !== libraryRevision) return
   if (persist(removeOrArchive(library.value, template.id)) && draft.value?.id === template.id) {
     draft.value = undefined
+    authoring.reset()
     dirty.value = false
   }
 }
 function duplicate(template: FormTemplate) {
+  if (creationLocked.value || template.archived) return
   if (dirty.value) {
     error.value = 'Save or discard your current edits before duplicating.'
     return
@@ -427,6 +390,7 @@ function duplicate(template: FormTemplate) {
   authoring.reset(true)
   dirty.value = true
   preview.value = false
+  starterSelection.value = ''
 }
 function add(kind: FormFieldKind, at = draft.value?.fields.length || 0) {
   if (!draft.value || authoringLocked.value || draft.value.fields.length >= 60) return
@@ -493,16 +457,17 @@ function removeField(index: number) {
 }
 const errors = computed(() => (draft.value ? definitionErrors(draft.value) : []))
 async function leaveEditor() {
+  if (!context.allowed.value) return true
   if (serverBusy.value || publishPhase.value) return false
   if (!dirty.value) return true
-  const owner = uid.value
+  const operation = context.capture()
   const discard = await confirmation.value?.ask({
     title: 'Leave unsaved form edits?',
     message:
       'Your last saved template remains in the library. Save this draft before leaving to keep these edits.',
     confirmLabel: 'Leave without saving',
   })
-  return !!discard && uid.value === owner && !serverBusy.value
+  return !!discard && operation.draftCurrent() && !serverBusy.value && !publishPhase.value
 }
 function beforeUnload(event: BeforeUnloadEvent) {
   if (dirty.value || serverBusy.value || publishPhase.value) {
@@ -512,7 +477,7 @@ function beforeUnload(event: BeforeUnloadEvent) {
 }
 onBeforeRouteLeave(leaveEditor)
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => { context.dispose(); window.removeEventListener('beforeunload', beforeUnload) })
 watch(
   () => draft.value?.id,
   (id) => {

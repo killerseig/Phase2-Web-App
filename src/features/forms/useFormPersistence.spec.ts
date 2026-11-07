@@ -4,6 +4,7 @@ import { clone, emptyLibrary, keepVersion, newField, newTemplate, type FormTempl
 import { readLibrary, saveLibrary } from './localLibrary'
 import { useFormAuthoring } from './useFormAuthoring'
 import { useFormPersistence } from './useFormPersistence'
+import { useFormEditorContext } from './useFormEditorContext'
 import type { ServerFormTemplate } from '@/services/forms'
 
 const fake = vi.hoisted(() => ({ api: vi.fn<(name: string, data: Record<string, unknown>) => Promise<unknown>>() }))
@@ -17,6 +18,7 @@ function fixture(localPreview = false) {
     const initial = newTemplate('Synthetic form')
     initial.fields = [newField('text', 'Notes')]
     const uid = ref('synthetic-admin'), draft = ref<FormTemplate>(initial)
+    const context = useFormEditorContext({ uid, enabled: ref(true), draft })
     const library = ref(emptyLibrary()), dirty = ref(false), blocked = ref(false)
     const message = ref(''), error = ref('')
     const authoring = useFormAuthoring(draft, dirty)
@@ -25,10 +27,11 @@ function fixture(localPreview = false) {
     const storage = {
       getItem: vi.fn<Storage['getItem']>((key: string) => values.get(key) ?? null),
       setItem: vi.fn<Storage['setItem']>((key: string, value: string) => { values.set(key, value) }),
+      removeItem: vi.fn<Storage['removeItem']>((key: string) => { values.delete(key) }),
     }
     const confirmPublish = vi.fn<() => Promise<boolean>>().mockResolvedValue(true), showPublicationIssues = vi.fn<() => void>()
     const controller = useFormPersistence({
-      uid, draft, library, dirty, blocked, message, error, authoring,
+      uid, context, draft, library, dirty, blocked, message, error, authoring,
       serverEnabled: true, localPreview, storage: () => storage, confirmPublish, showPublicationIssues,
     })
     return { uid, draft, library, dirty, blocked, message, error, authoring, storage, controller, confirmPublish, showPublicationIssues }
@@ -84,7 +87,7 @@ describe('Form persistence orchestration with synthetic services and device stor
     state.uid.value = 'different-account'
     pending.resolve({ templates: [] })
     await loading
-    expect(state.controller.serverTemplates.value).toHaveLength(1)
+    expect(state.controller.serverTemplates.value).toHaveLength(0)
   })
 
   it('retries a failed server save without publishing or losing the dirty baseline', async () => {
