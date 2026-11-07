@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { resizeDirections, type Direction } from '@/features/dashboard/editorGeometry'
 
 const props = defineProps<{
@@ -10,12 +10,53 @@ const props = defineProps<{
   widgetTitle?: string
   controlLabel?: string
   scale?: number
+  clipBounds?: { left: number; top: number; right: number; bottom: number }
 }>()
 const emit = defineEmits<{
   move: [event: PointerEvent]
   resize: [event: PointerEvent, direction: Direction]
   key: [event: KeyboardEvent, action: 'move' | 'resize', direction?: Direction]
+  'focus-hidden': []
 }>()
+const element = ref<HTMLElement>()
+const hiddenControls = ref(new Set<string>())
+function syncClippedControls() {
+  const hidden = new Set<string>(),
+    clip = props.clipBounds
+  if (clip && element.value) {
+    for (const button of element.value.querySelectorAll<HTMLElement>(
+      'button[data-selection-control]',
+    )) {
+      const bounds = button.getBoundingClientRect()
+      if (
+        clip.right <= clip.left ||
+        clip.bottom <= clip.top ||
+        bounds.right <= clip.left ||
+        bounds.left >= clip.right ||
+        bounds.bottom <= clip.top ||
+        bounds.top >= clip.bottom
+      )
+        hidden.add(button.dataset.selectionControl!)
+    }
+  }
+  const focused = document.activeElement as HTMLElement | null
+  if (
+    focused &&
+    element.value?.contains(focused) &&
+    hidden.has(focused.dataset.selectionControl || '')
+  )
+    emit('focus-hidden')
+  if (
+    hidden.size !== hiddenControls.value.size ||
+    [...hidden].some((key) => !hiddenControls.value.has(key))
+  )
+    hiddenControls.value = hidden
+}
+watch(
+  [element, () => props.geometry, () => props.clipBounds, () => props.scale],
+  syncClippedControls,
+  { flush: 'post' },
+)
 // The parent supplies bounds in the coordinate system of the common canvas.
 // Its existing transform scales this frame along with the selected widgets.
 const frameStyle = computed(() => ({
@@ -57,6 +98,7 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
 
 <template>
   <div
+    ref="element"
     class="dashboard-selection-frame"
     data-selection-control
     :style="frameStyle"
@@ -68,8 +110,22 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
       class="dashboard-selection-frame__move"
       data-selection-control="move"
       :disabled="disableMove"
-      :aria-label="controlLabel ? 'Move ' + controlLabel : widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
-      :title="controlLabel ? 'Move ' + controlLabel : widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
+      :inert="hiddenControls.has('move') || undefined"
+      :aria-hidden="hiddenControls.has('move') || undefined"
+      :aria-label="
+        controlLabel
+          ? 'Move ' + controlLabel
+          : widgetTitle
+            ? 'Move selected widget'
+            : 'Move selected widgets'
+      "
+      :title="
+        controlLabel
+          ? 'Move ' + controlLabel
+          : widgetTitle
+            ? 'Move selected widget'
+            : 'Move selected widgets'
+      "
       @pointerdown.stop="move"
       @keydown="key($event, 'move')"
       @click.stop
@@ -88,6 +144,8 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
       :class="`resize-${direction}`"
       :style="handleStyle(direction)"
       :disabled="resizeDisabled(direction)"
+      :inert="hiddenControls.has(direction) || undefined"
+      :aria-hidden="hiddenControls.has(direction) || undefined"
       :aria-label="resizeLabel(direction)"
       :title="resizeLabel(direction)"
       @pointerdown.stop="resize($event, direction)"

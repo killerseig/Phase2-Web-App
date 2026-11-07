@@ -109,6 +109,10 @@ const selectionOverlay = ref<HTMLElement>()
 const selectionTarget = computed(() => props.selectionHost || selectionOverlay.value)
 const projectedSelection = ref<SelectionGeometry>()
 const selectionClip = ref<string>()
+const selectionClipBounds = ref<{ left: number; top: number; right: number; bottom: number }>()
+function focusVisibleCanvas() {
+  selectionTarget.value?.closest<HTMLElement>('[data-widget-scroll]')?.focus({ preventScroll: true })
+}
 type SelectionGeometry = NonNullable<SharedDashboardWidget['placement']>
 const measuredSelection = ref<SelectionGeometry>()
 const selectionWidgets = computed(() => {
@@ -268,6 +272,9 @@ function projectSelection() {
   selectionClip.value = clipped
     ? `inset(${(top - to.top) / scale}px ${(to.right - right) / scale}px ${(to.bottom - bottom) / scale}px ${(left - to.left) / scale}px)`
     : undefined
+  const clipBounds = clipped ? { left, top, right, bottom } : undefined
+  if (JSON.stringify(selectionClipBounds.value) !== JSON.stringify(clipBounds))
+    selectionClipBounds.value = clipBounds
   const previous = projectedSelection.value
   if (
     !previous ||
@@ -583,6 +590,8 @@ function textStyle(widget: SharedDashboardWidget) {
               : undefined
           "
           :scale="editorScale"
+          :clip-bounds="parentId ? selectionClipBounds : undefined"
+          @focus-hidden="focusVisibleCanvas"
           @move="emit('selection-move', $event, selectionPrimary)"
           @resize="
             (event, direction) => emit('selection-resize', event, selectionPrimary, direction)

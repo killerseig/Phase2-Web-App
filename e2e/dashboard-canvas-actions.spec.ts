@@ -77,7 +77,7 @@ test('legacy nested selection follows scrolling and respects the container clip'
       ),
     )
     .toBeLessThan(1)
-  const peg = frame.getByRole('button', { name: 'Resize Long note from nw', exact: true })
+  const peg = frame.locator('[data-selection-control="nw"]')
   await expect
     .poll(() =>
       peg.evaluate((element) => {
@@ -86,6 +86,11 @@ test('legacy nested selection follows scrolling and respects the container clip'
       }),
     )
     .toBe(false)
+  await peg.focus()
+  await expect(peg).not.toBeFocused()
+  await frame.locator('[data-selection-control="e"]').focus()
+  await page.keyboard.press('Shift+Tab')
+  await expect(page.getByLabel('Dashboard canvas', { exact: true })).toBeFocused()
   await source.evaluate((element) => {
     element.scrollTop = 0
   })
@@ -94,6 +99,11 @@ test('legacy nested selection follows scrolling and respects the container clip'
       Math.abs((await frame.boundingBox())!.y - (await widget(page, 'Long note').boundingBox())!.y),
     )
     .toBeLessThan(1)
+  await expect(peg).not.toHaveAttribute('inert')
+  await peg.focus()
+  await expect(peg).toBeFocused()
+  await source.evaluate((element) => { element.scrollTop = 70 })
+  await expect(page.getByLabel('Dashboard canvas', { exact: true })).toBeFocused()
 })
 
 for (const zoom of ['fit', 'half'] as const)
