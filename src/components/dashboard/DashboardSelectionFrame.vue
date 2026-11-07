@@ -174,7 +174,8 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
   user-select: none;
 }
 .dashboard-selection-frame__move {
-  top: calc(4px * var(--selection-control-scale));
+  /* Keep the move grip clear of the top resize peg, even on narrow groups. */
+  top: calc(26px * var(--selection-control-scale));
   left: calc(20px * var(--selection-control-scale));
   display: inline-flex;
   align-items: center;

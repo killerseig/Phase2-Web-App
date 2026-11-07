@@ -55,6 +55,8 @@ import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDr
 import { useClipboardPointer } from '@/features/dashboard/useClipboardPointer'
 import { selectionLockState, setSelectionLock, type LockKey } from '@/features/dashboard/selectionLocks'
 import { arrangementLabels, arrangementSelection, arrangementPlacement, sameArrangementSurface, planArrangement } from '@/features/dashboard/selectionArrangement'
+import { planWidgetMove, primaryMoveRoot, resolveMoveSurface, type MoveSurface } from '@/features/dashboard/widgetMove'
+import { surfaceGeometry } from '@/features/dashboard/surfaceGeometry'
 import { keyboardGeometry } from '@/features/dashboard/keyboardGeometry'
 import { captureWidgetClipboard, materializeWidgetClipboard, type WidgetClipboard } from '@/features/dashboard/widgetClipboard'
 import {
@@ -464,6 +466,17 @@ let dragOrigins: ReturnType<typeof measuredPlacements> = [],
   dragIds: string[] = [],
   dragParent = '',
   dragRegion = '0'
+let dragTransaction: { source: MoveSurface; current: () => boolean; ignored: Set<string> } | undefined
+function captureMoveSurface(parentId = '', region = '0'): MoveSurface | undefined {
+  const surface = surfaceFor(parentId, region)
+  const rect = surface?.getBoundingClientRect()
+  if (!surface?.isConnected || !rect?.width || !rect.height || !surface.clientWidth || !surface.offsetWidth) return
+  const identity = { parentId, region }, siblings = widgets.value.filter(w =>
+    (w.parentId || '') === parentId && (w.region || '0') === region)
+  const geometry = surfaceGeometry(surface)
+  return { ...identity, width: geometry.width, scale: geometry.scale,
+    positions: resolveMoveSurface(widgets.value, identity, device.value, arrangementMeasurements(siblings)) }
+}
 function transformableSelection(widget: SharedDashboardWidget, action: 'move' | 'resize', direction: Direction) {
   const entries = selectedRoots.value
   if (!entries.length || entries.some(entry =>
@@ -480,9 +493,9 @@ function startTransform(
   direction: Direction = 'se',
   selectionControl = false,
 ) {
-  if (!editing.value || busy.value || !canEdit.value) return
+  if (!editing.value || busy.value || !canEdit.value || removalPending.value || backgroundActive.value) return
   cancelFit()
-  const widget = widgets.value.find((w) => w.id === id)
+  let widget = widgets.value.find((w) => w.id === id)
   if (
     !widget ||
     geometryLocked(widgets.value, widget, kind === 'move' ? 'positionLocked' : 'sizeLocked')
@@ -495,6 +508,7 @@ function startTransform(
   )
     return
   if (!selectedIds.value.includes(id)) selectWidget(id)
+  widget = primaryMoveRoot(widgets.value, selectedIds.value, id) || widget
   const entries = transformableSelection(widget, kind, direction)
   if (!entries.length) return
   dragParent = widget.parentId || ''
@@ -502,24 +516,45 @@ function startTransform(
   dragOrigins = measuredPlacements()
   dragIds = entries.map(w => w.id)
   const surface = surfaceFor(dragParent, dragRegion)
+  const source = captureMoveSurface(dragParent, dragRegion)
+  if (!source) return
+  const context = captureDashboardContext(), identity = lockSelectionIdentity.value, revision = snapshot(),
+    camera = JSON.stringify([editorCamera.value, previewScale.value, previewWidth.value, window.innerWidth, window.innerHeight])
+  dragTransaction = { source, ignored: new Set(descendants(widgets.value, dragIds).map(w => w.id)),
+    current: () => context() && identity === lockSelectionIdentity.value && revision === snapshot() && !!surface?.isConnected &&
+      source.width === surfaceGeometry(surface).width && camera === JSON.stringify([editorCamera.value, previewScale.value, previewWidth.value, window.innerWidth, window.innerHeight]) }
+  dragOrigins = widgets.value.map((w, i) => source.positions.get(w.id) || dragOrigins[i]!)
   const primary = dragOrigins[widgets.value.indexOf(widget)]!
   drag.start(
     event,
-    { kind, id, direction },
+    { kind, id: widget.id, direction },
     kind === 'move' ? 'Move selection' : 'Resize selection',
-    selectionControl && surface
-      ? { surface, origin: { x: primary.x / 24 * surface.offsetWidth, y: primary.y * 32 } }
+    (selectionControl || kind === 'move') && surface
+      ? { surface, origin: { x: primary.x / 24 * source.width, y: primary.y * 32 } }
       : undefined,
   )
 }
-const drag = useWidgetDrag<Payload>({
+const drag: ReturnType<typeof useWidgetDrag<Payload>> = useWidgetDrag<Payload>({
   root,
   freePosition: true,
-  lockToOriginSurface: true,
-  disabled: () => !editing.value || busy.value || !canEdit.value,
+  lockToOriginSurface: payload => payload.kind === 'resize',
+  boundary: viewport,
+  retainOriginUnderOverlay: true,
+  ignoreTarget: element => !!element.closest('[data-selection-control],.shared-drag-ghost') ||
+    (drag.payload.value?.kind !== 'new' && !!dragTransaction?.ignored.has(element.closest<HTMLElement>('[data-widget-id]')?.dataset.widgetId || '')),
+  acceptTarget: (element, surface) => {
+    if (element.closest('button,input,textarea,select,a,[contenteditable],[role="tab"],[role="menu"],[role="dialog"]')) return false
+    const container = element.closest('[data-container-kind]')
+    return !container || container.closest('[data-widget-surface]') !== surface
+  },
+  disabled: () => !editing.value || busy.value || !canEdit.value || removalPending.value || backgroundActive.value ||
+    (!!drag.payload.value && drag.payload.value.kind !== 'new' && !dragTransaction?.current()),
   drop,
 })
 const { dragging, point, label, target: dropTarget } = drag
+watch([snapshot, lockSelectionIdentity, editing, busy, canEdit, removalPending], () => {
+  if (drag.payload.value && drag.payload.value.kind !== 'new' && (!dragTransaction?.current() || !editing.value || busy.value || !canEdit.value || removalPending.value)) drag.cancel()
+}, { flush: 'sync' })
 function canAdd(type: SharedDashboardWidget['type']) {
   return (
     widgets.value.length < 12 && (repeatable(type) || !widgets.value.some((w) => w.type === type))
@@ -627,9 +662,35 @@ function withPlacement(
     ? { ...widget, placement }
     : { ...widget, devices: { ...widget.devices, [device.value]: placement } }
 }
+function movePlan(payload: Payload, destination: WidgetDrop) {
+  const unavailable = (reason: string) => ({ widgets: widgets.value, reason, previews: [] as NonNullable<SharedDashboardWidget['placement']>[] })
+  if (payload.kind !== 'move' || !dragTransaction?.current() || !destination.position) return unavailable('This move is no longer available.')
+  const parent = destination.surface === 'shared-dashboard' ? '' : destination.surface, region = destination.region || '0'
+  const target = parent === dragParent && region === dragRegion ? dragTransaction.source : captureMoveSurface(parent, region)
+  if (!target) return unavailable('Open a visible container region before moving.')
+  return planWidgetMove({ widgets: widgets.value, ids: dragIds, primaryId: payload.id, device: device.value,
+    scope: scope.value, source: dragTransaction.source, target, point: destination.position, grid: interactionGrid.value })
+}
+const isCrossSurfaceMove = computed(() => drag.payload.value?.kind === 'move' && !!dropTarget.value &&
+  (dropTarget.value.surface !== (dragParent || 'shared-dashboard') || (dropTarget.value.region || '0') !== dragRegion))
+const moveDrop = computed(() => dragging.value && drag.payload.value?.kind === 'move' && dropTarget.value
+  ? movePlan(drag.payload.value, dropTarget.value) : undefined)
+const moveDropLabel = computed(() => {
+  if (drag.payload.value?.kind !== 'move') return label.value
+  if (!dropTarget.value) return 'Drop on a visible canvas region. Escape cancels.'
+  if (moveDrop.value?.reason) return moveDrop.value.reason
+  const parent = widgets.value.find(w => w.id === dropTarget.value!.surface)
+  return `Move ${dragIds.length} widget${dragIds.length === 1 ? '' : 's'} to ${parent?.title || 'Dashboard root'}${parent ? ' / ' + parentRegions(parent.id)[Number(dropTarget.value.region || '0')] : ''}`
+})
 function transformPreview(payload: Payload, destination: WidgetDrop) {
   const result: Record<string, NonNullable<SharedDashboardWidget['placement']>> = {}
   if (!destination.position) return result
+  if (payload.kind === 'move') {
+    if (destination.surface !== (dragParent || 'shared-dashboard') || (destination.region || '0') !== dragRegion) return result
+    const plan = movePlan(payload, destination)
+    if (!plan.reason) plan.previews.forEach((p, i) => { result[dragIds[i]!] = p })
+    return result
+  }
   const parent =
     payload.kind === 'new'
       ? destination.surface === 'shared-dashboard'
@@ -643,7 +704,7 @@ function transformPreview(payload: Payload, destination: WidgetDrop) {
     (payload.kind !== 'new' && (destination.region || '0') !== dragRegion)
   )
     return result
-  const x = (destination.position.x / surface.offsetWidth) * 24,
+  const x = (destination.position.x / surfaceGeometry(surface).width) * 24,
     y = destination.position.y / 32
   const grid = interactionGrid.value
   if (payload.kind === 'new') {
@@ -655,11 +716,7 @@ function transformPreview(payload: Payload, destination: WidgetDrop) {
   const ids = dragIds.filter((id) => widgets.value.some((w) => w.id === id))
   const original = ids.map((id) => dragOrigins[widgets.value.findIndex((w) => w.id === id)]!)
   if (!original.length) return result
-  if (payload.kind === 'move') {
-    translate(original, x - primary.x, y - primary.y, grid).forEach((p, i) => {
-      result[ids[i]!] = p
-    })
-  } else if (original.length === 1)
+  if (original.length === 1)
     result[ids[0]!] = resizeEdges(
       primary,
       x - primary.x,
@@ -685,7 +742,7 @@ const placementPreviews = computed(() =>
 )
 const placementPreview = computed(
   () =>
-    placementPreviews.value.new ||
+    (isCrossSurfaceMove.value && moveDrop.value?.previews.length ? bounds(moveDrop.value.previews) : undefined) || placementPreviews.value.new ||
     (drag.payload.value?.kind !== 'new' && drag.payload.value
       ? placementPreviews.value[drag.payload.value.id]
       : undefined),
@@ -741,15 +798,34 @@ function updatePlacement(key: 'x' | 'y' | 'w' | 'h', event: Event, requested?: n
 }
 function drop(payload: Payload, destination: WidgetDrop) {
   if (!editing.value || busy.value || !canEdit.value) return
+  if (payload.kind === 'move') {
+    const plan = movePlan(payload, destination)
+    if (plan.reason) { clipboardFeedback(plan.reason); return }
+    if (plan.widgets !== widgets.value && applyLayout(plan.widgets)) {
+      message.value = ''
+      const moved = widgets.value.find(w => w.id === payload.id)
+      if (dragIds.length === 1 && moved && destination.surface === (dragParent || 'shared-dashboard') && (destination.region || '0') === dragRegion)
+        announcePosition(moved, 'Moved')
+      else editorAnnouncement.value = `Moved ${dragIds.length} widget${dragIds.length === 1 ? '' : 's'}. Container assignments apply to every device.`
+      void nextTick(() => focusWidget(payload.id))
+    }
+    return
+  }
+  if (payload.kind === 'resize' && !dragTransaction?.current()) return
   if (destination.position) {
     const changes = transformPreview(payload, destination)
     if (!Object.keys(changes).length) return
     const positions = payload.kind === 'new' ? measuredPlacements() : dragOrigins
-    const next = widgets.value.map((widget, index) =>
-      device.value === 'desktop' || changes[widget.id]
-        ? withPlacement(widget, changes[widget.id] || positions[index]!)
-        : widget,
-    )
+    const sourceSiblings = widgets.value.filter(w => (w.parentId || '') === dragParent && (w.region || '0') === dragRegion)
+    const sourceIsFlow = !sourceSiblings.some(w => readPlacement(w))
+    const next = widgets.value.map((widget, index) => {
+      if (payload.kind === 'resize') {
+        const placement = changes[widget.id] || (sourceIsFlow && sourceSiblings.includes(widget) ? dragTransaction?.source.positions.get(widget.id) : undefined)
+        return placement ? withPlacement(widget, placement) : widget
+      }
+      return device.value === 'desktop' || changes[widget.id]
+        ? withPlacement(widget, changes[widget.id] || positions[index]!) : widget
+    })
     let widget = payload.kind !== 'new' ? next.find((w) => w.id === payload.id) : undefined
     if (payload.kind === 'new') {
       if (!canAdd(payload.type)) return
@@ -761,6 +837,10 @@ function drop(payload: Payload, destination: WidgetDrop) {
       next.push(widget)
     }
     if (!widget) return
+    if (payload.kind === 'resize') {
+      if (applyLayout(next)) announcePosition(widget, 'Resized')
+      return
+    }
     widgets.value = next
     selected.value = widget.id
     announcePosition(
@@ -1041,7 +1121,7 @@ function arrangementMeasurements(entries: SharedDashboardWidget[]) {
   if (!entries.length || entries.some(w => arrangementPlacement(w, device.value))) return measured
   const surface = surfaceFor(entries[0]!.parentId, entries[0]!.region)
   if (!surface?.isConnected || !surface.clientWidth || !surface.offsetWidth) return measured
-  const bounds = surface.getBoundingClientRect(), scale = bounds.width / surface.offsetWidth
+  const { rect: bounds, scale, width, left, top } = surfaceGeometry(surface)
   if (!bounds.width || !bounds.height || !Number.isFinite(scale) || scale <= 0) return measured
   const children = [...surface.querySelectorAll<HTMLElement>(':scope > [data-widget-id]')]
   for (const entry of entries) {
@@ -1049,9 +1129,9 @@ function arrangementMeasurements(entries: SharedDashboardWidget[]) {
     const rect = element?.getBoundingClientRect()
     if (!rect?.width || !rect.height) continue
     measured.set(entry.id, {
-      x: (((rect.left - bounds.left) / scale - surface.clientLeft + surface.scrollLeft) / surface.clientWidth) * 24,
-      y: ((rect.top - bounds.top) / scale - surface.clientTop + surface.scrollTop) / 32,
-      w: rect.width / scale / surface.clientWidth * 24,
+      x: (((rect.left - bounds.left) / scale - left + surface.scrollLeft) / width) * 24,
+      y: ((rect.top - bounds.top) / scale - top + surface.scrollTop) / 32,
+      w: rect.width / scale / width * 24,
       h: rect.height / scale / 32,
     })
   }
@@ -1232,23 +1312,32 @@ const availableParents = computed(() =>
     (w) => w.type === 'container' && !descendants(widgets.value, selectedIds.value).includes(w),
   ),
 )
-function changeParent(event: Event) {
-  const widget = selectedWidget.value
-  if (!widget || geometryLocked(widgets.value, widget, 'positionLocked')) return
-  const id = (event.target as HTMLSelectElement).value
-  const next = widgets.value.map((w) => {
-    if (w.id !== widget.id) return w
-    const result = { ...w }
-    if (id) {
-      result.parentId = id
-      result.region = '0'
-    } else {
-      delete result.parentId
-      delete result.region
-    }
-    return result
-  })
-  applyLayout(next)
+const membershipRoot = computed(() => primaryMoveRoot(widgets.value, selectedIds.value, selected.value))
+const membershipUnavailable = computed(() => !clipboardCommandsAvailable() || device.value !== 'desktop' ||
+  selectedRoots.value.some(w => geometryLocked(widgets.value, w, 'positionLocked') || !sameArrangementSurface(w, selectedRoots.value[0]!)))
+function changeParent(event: Event, regionOnly = false) {
+  const input = event.currentTarget as HTMLSelectElement, widget = membershipRoot.value
+  if (!widget || membershipUnavailable.value || !root.value?.contains(input) ||
+    input.closest<HTMLElement>('[data-membership]')?.dataset.membership !== String(arrangementToken.value)) return
+  const target = regionOnly ? { parentId: widget.parentId || '', region: input.value } : { parentId: input.value, region: '0' }
+  const source = captureMoveSurface(widget.parentId || '', widget.region || '0')
+  // A hidden positioned region has complete model geometry. Hidden flow needs
+  // to be opened first: guessing its dimensions would move existing children.
+  const destination = captureMoveSurface(target.parentId, target.region) || {
+    ...target, width: 1, scale: 1,
+    positions: resolveMoveSurface(widgets.value, target, device.value, new Map()),
+  }
+  if (!source) { clipboardFeedback('Open the selected widget’s region before moving.'); return }
+  const plan = planWidgetMove({ widgets: widgets.value, ids: selectedIds.value, primaryId: widget.id,
+    device: device.value, scope: scope.value, source, target: destination, point: { x: 0, y: 0 },
+    grid: interactionGrid.value, preserveLocalPlacement: true })
+  if (plan.reason) { clipboardFeedback(plan.reason); input.value = regionOnly ? widget.region || '0' : widget.parentId || ''; return }
+  if (plan.widgets === widgets.value) return
+  const context = captureDashboardContext()
+  if (applyLayout(plan.widgets)) {
+    editorAnnouncement.value = 'Container assignment updated for the selection in every device view.'
+    void nextTick(() => { if (context()) root.value?.querySelector<HTMLElement>(`select[aria-label="${regionOnly ? 'Container region' : 'Container'}"]`)?.focus({ preventScroll: true }) })
+  }
 }
 function updateContainerLabels(event: Event) {
   const widget = selectedWidget.value
@@ -1726,7 +1815,10 @@ function backgroundPointer(event: PointerEvent) {
   )
     return
   const target = event.target as HTMLElement
-  if (target.closest('[data-selection-control]')) return
+  const selectionControl = !!target.closest('[data-selection-control]')
+  // Explicit Pan also owns gestures over editing grips; ordinary controls keep
+  // their existing behavior when the hand tool is not active.
+  if (selectionControl && !handTool.value && event.button !== 1) return
   const surface = target.closest<HTMLElement>('[data-widget-surface]')
   const widget = target.closest<HTMLElement>('[data-widget-id]')
   const panning =
@@ -1738,7 +1830,7 @@ function backgroundPointer(event: PointerEvent) {
         : !(event.shiftKey || event.ctrlKey || event.metaKey)))
   if (!editing.value && !panning) return
   if (!panning && (!surface || (widget && surface.contains(widget)))) return
-  if (panning && target.closest('button,input,textarea,select,a,[contenteditable]')) return
+  if (panning && !selectionControl && target.closest('button,input,textarea,select,a,[contenteditable]')) return
   const additive = event.shiftKey || event.ctrlKey || event.metaKey
   const selecting = editing.value && additive && !panning && surface
   const scroller = viewport.value
@@ -2578,6 +2670,7 @@ onBeforeUnmount(() => {
                     :editing="editing"
                     :editor-scale="previewScale"
                     :drop-target="dragging ? dropTarget : undefined"
+                    :drop-invalid="!!moveDrop?.reason"
                     :placement-preview="placementPreview"
                     :placement-previews="placementPreviews"
                     :grid-spacing="viewportSettings.grid"
@@ -2866,11 +2959,14 @@ onBeforeUnmount(() => {
                 @click="resetDevicePlacement"
                 >Use desktop placement</AppButton
               >
+              <div :key="arrangementToken" :data-membership="arrangementToken">
+              <p id="container-assignment-policy" class="shared-muted">Move between containers in Desktop. Assignments apply to every device; saved device placements keep their local coordinates.</p>
               <label
                 >Container<select
                   aria-label="Container"
-                  :value="selectedWidget.parentId || ''"
-                  :disabled="geometryLocked(widgets, selectedWidget, 'positionLocked')"
+                  aria-describedby="container-assignment-policy"
+                  :value="membershipRoot?.parentId || ''"
+                  :disabled="membershipUnavailable"
                   @change="changeParent"
                 >
                   <option value="">Dashboard root</option>
@@ -2879,14 +2975,16 @@ onBeforeUnmount(() => {
                   </option>
                 </select></label
               >
-              <label v-if="selectedWidget.parentId"
+              <label v-if="membershipRoot?.parentId"
                 >Container region<select
                   aria-label="Container region"
-                  v-model="selectedWidget.region"
-                  :disabled="geometryLocked(widgets, selectedWidget, 'positionLocked')"
+                  :value="membershipRoot.region || '0'"
+                  :disabled="membershipUnavailable"
+                  aria-describedby="container-assignment-policy"
+                  @change="changeParent($event, true)"
                 >
                   <option
-                    v-for="(label, index) in parentRegions(selectedWidget.parentId)"
+                    v-for="(label, index) in parentRegions(membershipRoot.parentId)"
                     :key="index"
                     :value="String(index)"
                   >
@@ -2894,6 +2992,7 @@ onBeforeUnmount(() => {
                   </option>
                 </select></label
               >
+              </div>
               <template v-if="selectedWidget.container">
                 <label
                   >Container type<select
@@ -3088,7 +3187,7 @@ onBeforeUnmount(() => {
           class="shared-drag-ghost builder-floating"
           :style="{ left: point.x + 12 + 'px', top: point.y + 12 + 'px' }"
         >
-          {{ label }}
+          {{ moveDropLabel }}
         </div>
       </AppLoadingRegion>
       <BuilderConfirmDialog ref="confirm" />

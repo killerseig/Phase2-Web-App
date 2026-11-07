@@ -1,7 +1,8 @@
 @import './builder-ui.css';
 .shared-dashboard-grid.is-empty-editor {
   min-height: 18rem;
-  border: 2px dashed var(--editor-border);
+  outline: 2px dashed var(--editor-border);
+  outline-offset: -2px;
   border-radius: var(--radius-sm);
   box-sizing: border-box;
 }
@@ -17,8 +18,15 @@
   color: var(--text);
 }
 .shared-dashboard-grid.is-empty-editor.is-drop-target {
-  border-color: var(--accent);
+  outline-color: var(--accent);
   background: var(--field);
+}
+.shared-dashboard-grid.is-drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.shared-dashboard-grid.is-drop-target.is-drop-invalid {
+  outline-color: var(--danger, #ef8795);
 }
 .shared-dashboard-widget[data-drop-edge='before'] {
   box-shadow: inset 0 4px var(--accent);

@@ -1,4 +1,5 @@
 import { onScopeDispose, ref, shallowRef, type Ref } from 'vue'
+import { surfaceGeometry } from './surfaceGeometry'
 
 export interface WidgetDrop {
   beforeId: string | null
@@ -14,7 +15,11 @@ export function useWidgetDrag<T>(options: {
   root: Ref<HTMLElement | undefined>
   disabled: () => boolean
   freePosition?: boolean
-  lockToOriginSurface?: boolean
+  lockToOriginSurface?: boolean | ((payload: T) => boolean)
+  boundary?: Ref<HTMLElement | undefined>
+  ignoreTarget?: (element: Element) => boolean
+  acceptTarget?: (element: Element, surface: HTMLElement) => boolean
+  retainOriginUnderOverlay?: boolean
   drop: (payload: T, target: WidgetDrop) => void
 }) {
   const payload = shallowRef<T>()
@@ -29,12 +34,82 @@ export function useWidgetDrag<T>(options: {
   let suppressClick = false
   let clickTimer: ReturnType<typeof setTimeout> | undefined
   let originSurface: HTMLElement | undefined
+  let originScale = 1
+
+  function originLocked() {
+    return typeof options.lockToOriginSurface === 'function'
+      ? payload.value !== undefined && options.lockToOriginSurface(payload.value)
+      : options.lockToOriginSurface
+  }
 
   function findSurface() {
-    if (options.lockToOriginSurface && originSurface?.isConnected) return originSurface
-    const element = document.elementFromPoint(point.value.x, point.value.y)
+    const boundary = options.boundary?.value
+    if (options.boundary) {
+      const rect = boundary?.getBoundingClientRect()
+      if (
+        !rect ||
+        point.value.x < rect.left ||
+        point.value.x >= rect.right ||
+        point.value.y < rect.top ||
+        point.value.y >= rect.bottom
+      )
+        return
+    }
+    if (
+      originLocked() &&
+      originSurface?.isConnected &&
+      originSurface.getBoundingClientRect().width > 0
+    )
+      return originSurface
+    const element = options.ignoreTarget
+      ? document
+          .elementsFromPoint(point.value.x, point.value.y)
+          .find((el) => !options.ignoreTarget!(el))
+      : document.elementFromPoint(point.value.x, point.value.y)
     const surface = element?.closest<HTMLElement>('[data-widget-surface]')
-    return surface && options.root.value?.contains(surface) ? surface : undefined
+    if (
+      !element ||
+      !surface ||
+      !options.root.value?.contains(surface) ||
+      (boundary && !boundary.contains(surface))
+    )
+      return
+    if (options.acceptTarget && !options.acceptTarget(element, surface)) return
+    // Selection grips can sit above a sibling that covers a nested canvas.
+    // Moving through that overlay must not silently pull the selection out.
+    if (
+      options.retainOriginUnderOverlay &&
+      originSurface?.isConnected &&
+      surface !== originSurface &&
+      surface.contains(originSurface) &&
+      insideVisibleClient(originSurface)
+    )
+      return originSurface
+    return surface
+  }
+  function insideVisibleClient(surface: HTMLElement) {
+    let current: HTMLElement | null = surface
+    while (current) {
+      const style = getComputedStyle(current),
+        rect = current.getBoundingClientRect()
+      const scaleX = rect.width / current.offsetWidth || 1,
+        scaleY = rect.height / current.offsetHeight || 1
+      const x = (point.value.x - rect.left) / scaleX - current.clientLeft
+      const y = (point.value.y - rect.top) / scaleY - current.clientTop
+      if (
+        (current === surface || style.overflowX !== 'visible') &&
+        (x < 0 || x >= current.clientWidth)
+      )
+        return false
+      if (
+        (current === surface || style.overflowY !== 'visible') &&
+        (y < 0 || y >= current.clientHeight)
+      )
+        return false
+      if (current === options.boundary?.value) break
+      current = current.parentElement
+    }
+    return true
   }
   function locate() {
     const surface = findSurface()
@@ -48,11 +123,30 @@ export function useWidgetDrag<T>(options: {
         element.closest('[data-widget-surface]') === surface,
     )
     const bounds = surface.getBoundingClientRect()
-    const scale = bounds.width / surface.offsetWidth || 1
+    const geometry = options.boundary ? surfaceGeometry(surface) : undefined
+    const scale = geometry?.scale || bounds.width / surface.offsetWidth || 1
+    if (options.boundary && (!surface.clientWidth || !bounds.height || !bounds.width)) {
+      target.value = undefined
+      return
+    }
+    const localX = (point.value.x - bounds.left) / scale - (geometry?.left ?? surface.clientLeft)
+    const localY = (point.value.y - bounds.top) / scale - (geometry?.top ?? surface.clientTop)
+    if (
+      options.boundary &&
+      !originLocked() &&
+      (localX < 0 || localX >= surface.clientWidth || localY < 0 || localY >= surface.clientHeight)
+    ) {
+      target.value = undefined
+      return
+    }
     const position = options.freePosition
       ? {
-          x: (point.value.x - bounds.left) / scale - grab.x,
-          y: (point.value.y - bounds.top) / scale - grab.y,
+          x: options.boundary
+            ? localX + surface.scrollLeft - (grab.x * originScale) / scale
+            : (point.value.x - bounds.left) / scale - grab.x,
+          y: options.boundary
+            ? localY + surface.scrollTop - (grab.y * originScale) / scale
+            : (point.value.y - bounds.top) / scale - grab.y,
         }
       : undefined
     const nearest = entries.reduce<HTMLElement | undefined>((best, element) => {
@@ -98,8 +192,49 @@ export function useWidgetDrag<T>(options: {
       cancel()
       return
     }
-    const scroller = findSurface()?.closest<HTMLElement>('[data-widget-scroll]')
-    if (scroller) {
+    const surface = findSurface()
+    const scroller = surface?.closest<HTMLElement>('[data-widget-scroll]')
+    if (surface && options.boundary?.value) {
+      const boundary = options.boundary.value.getBoundingClientRect()
+      let current: HTMLElement | null = surface,
+        movedX = false,
+        movedY = false
+      while (current) {
+        const rect = current.getBoundingClientRect(),
+          style = getComputedStyle(current)
+        const left = Math.max(rect.left, boundary.left),
+          right = Math.min(rect.right, boundary.right)
+        const top = Math.max(rect.top, boundary.top),
+          bottom = Math.min(rect.bottom, boundary.bottom)
+        if (
+          right > left &&
+          bottom > top &&
+          point.value.x >= left &&
+          point.value.x < right &&
+          point.value.y >= top &&
+          point.value.y < bottom
+        ) {
+          const speed = (value: number, start: number, end: number) =>
+            value < start + Math.min(45, (end - start) / 4)
+              ? -12
+              : value > end - Math.min(45, (end - start) / 4)
+                ? 12
+                : 0
+          if (!movedX && /auto|scroll/.test(style.overflowX)) {
+            const before = current.scrollLeft
+            current.scrollLeft += speed(point.value.x, left, right)
+            movedX = current.scrollLeft !== before
+          }
+          if (!movedY && /auto|scroll/.test(style.overflowY)) {
+            const before = current.scrollTop
+            current.scrollTop += speed(point.value.y, top, bottom)
+            movedY = current.scrollTop !== before
+          }
+        }
+        if (current === options.boundary.value) break
+        current = current.parentElement
+      }
+    } else if (scroller) {
       const rect = scroller.getBoundingClientRect()
       const edge = 45
       const speed =
@@ -131,6 +266,7 @@ export function useWidgetDrag<T>(options: {
     window.removeEventListener('pointercancel', cancel)
     window.removeEventListener('keydown', keydown)
     window.removeEventListener('blur', cancel)
+    window.removeEventListener('resize', cancel)
     pointerId = undefined
     payload.value = undefined
     dragging.value = false
@@ -180,13 +316,22 @@ export function useWidgetDrag<T>(options: {
     const surface = anchor?.surface || widget?.closest<HTMLElement>('[data-widget-surface]')
     originSurface = surface || undefined
     const rect = widget?.getBoundingClientRect()
-    const scale = surface ? surface.getBoundingClientRect().width / surface.offsetWidth : 1
+    const geometry = surface && options.boundary ? surfaceGeometry(surface) : undefined
+    const scale =
+      geometry?.scale || (surface ? surface.getBoundingClientRect().width / surface.offsetWidth : 1)
+    originScale = scale || 1
     const surfaceRect = surface?.getBoundingClientRect()
     grab =
       anchor && surfaceRect
         ? {
-            x: (event.clientX - surfaceRect.left) / scale - anchor.origin.x,
-            y: (event.clientY - surfaceRect.top) / scale - anchor.origin.y,
+            x:
+              (event.clientX - surfaceRect.left) / scale -
+              anchor.origin.x +
+              (options.boundary ? -anchor.surface.clientLeft + anchor.surface.scrollLeft : 0),
+            y:
+              (event.clientY - surfaceRect.top) / scale -
+              anchor.origin.y +
+              (options.boundary ? -anchor.surface.clientTop + anchor.surface.scrollTop : 0),
           }
         : rect
           ? { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
@@ -198,6 +343,7 @@ export function useWidgetDrag<T>(options: {
     window.addEventListener('pointercancel', cancel)
     window.addEventListener('keydown', keydown)
     window.addEventListener('blur', cancel)
+    if (options.boundary) window.addEventListener('resize', cancel)
   }
   function guardClick(event: MouseEvent) {
     if (suppressClick) {

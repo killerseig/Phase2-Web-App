@@ -55,6 +55,7 @@ const props = defineProps<{
   gridVisible?: boolean
   placementPreview?: SharedDashboardWidget['placement']
   dropTarget?: WidgetDrop
+  dropInvalid?: boolean
   selected: string
   canEditNotes: boolean
   busy: boolean
@@ -75,6 +76,8 @@ const visibleWidgets = computed(() =>
       (w.parentId || '') === (props.parentId || '') && (w.region || '0') === (props.region || '0'),
   ),
 )
+const targeted = computed(() => props.editing && props.dropTarget?.surface === (props.parentId || 'shared-dashboard') &&
+  (props.dropTarget.region || '0') === (props.region || '0'))
 const positioned = computed(() =>
   visibleWidgets.value.some(
     (widget) =>
@@ -97,9 +100,12 @@ const positions = computed(() =>
 const canvasStyle = computed(() => {
   return {
     minHeight: positioned.value
+      || (props.editing && !visibleWidgets.value.length)
       ? Math.max(
           props.editing ? (props.parentId ? 200 : 960) : 0,
           ...positions.value.map((p) => (p.y + p.h) * 32 + 64),
+          targeted.value && props.placementPreview && !props.dropInvalid
+            ? (props.placementPreview.y + props.placementPreview.h) * 32 + 64 : 0,
         ) + 'px'
       : undefined,
   }
@@ -570,7 +576,8 @@ function textStyle(widget: SharedDashboardWidget) {
       'phone-preview': phone,
       'has-phone-placement': fixedFrame || visibleWidgets.some((w) => w.devices?.phone),
       'is-empty-editor': editing && !visibleWidgets.length,
-      'is-drop-target': editing && dropTarget?.surface === (parentId || 'shared-dashboard'),
+      'is-drop-target': targeted,
+      'is-drop-invalid': targeted && dropInvalid,
     }"
     :data-widget-surface="parentId || 'shared-dashboard'"
     :data-region="region || '0'"
@@ -618,7 +625,7 @@ function textStyle(widget: SharedDashboardWidget) {
       </div>
     </Teleport>
     <div
-      v-if="editing && placementPreview && dropTarget?.surface === (parentId || 'shared-dashboard')"
+      v-if="targeted && placementPreview && !dropInvalid"
       data-widget-placement-preview
       aria-hidden="true"
       :style="{
@@ -636,6 +643,7 @@ function textStyle(widget: SharedDashboardWidget) {
       v-for="(widget, widgetIndex) in visibleWidgets"
       :key="widget.id"
       :data-widget-id="widget.id"
+      :data-container-kind="widget.container?.kind"
       class="shared-dashboard-widget"
       :tabindex="editing ? 0 : undefined"
       :aria-label="
