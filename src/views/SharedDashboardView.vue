@@ -44,7 +44,6 @@ import {
   resizeEdges,
   resizeGroup,
   translate,
-  arrange,
   bounds,
   descendants,
   rootSelection,
@@ -55,6 +54,7 @@ import {
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { useClipboardPointer } from '@/features/dashboard/useClipboardPointer'
 import { selectionLockState, setSelectionLock, type LockKey } from '@/features/dashboard/selectionLocks'
+import { arrangementLabels, arrangementSelection, arrangementPlacement, sameArrangementSurface, planArrangement } from '@/features/dashboard/selectionArrangement'
 import { keyboardGeometry } from '@/features/dashboard/keyboardGeometry'
 import { captureWidgetClipboard, materializeWidgetClipboard, type WidgetClipboard } from '@/features/dashboard/widgetClipboard'
 import {
@@ -1019,42 +1019,67 @@ function clipboardShortcut(event: KeyboardEvent) {
   else void remove(true)
   return true
 }
-function arrangeSelection(operation: Arrangement) {
-  const size = operation === 'width' || operation === 'height'
-  const entries = selectedRoots.value.filter(
-    (w) => !geometryLocked(widgets.value, w, size ? 'sizeLocked' : 'positionLocked'),
-  )
-  if (
-    entries.length < 2 ||
-    new Set(entries.map((w) => (w.parentId || '') + ':' + (w.region || '0'))).size > 1
-  )
-    return
-  const positions = measuredPlacements(),
-    indices = entries.map((w) => widgets.value.indexOf(w))
-  const result = arrange(
-    indices.map((i) => positions[i]!),
-    operation,
-    positions[selectedIndex.value]!,
-  )
-  if (size)
-    entries.forEach((w, i) => {
-      if (geometryLocked(widgets.value, w, 'positionLocked')) {
-        const original = positions[indices[i]!]!,
-          changed = result[i]!
-        result[i] = {
-          ...changed,
-          x: original.x,
-          y: original.y,
-          w: Math.min(changed.w, 24 - original.x),
-          h: Math.min(changed.h, 1000 - original.y),
-        }
-      }
+const arrangementToken = ref(0)
+watch([lockSelectionIdentity, snapshot], ([identity], [previousIdentity]) => {
+  const focused = document.activeElement as HTMLElement | null
+  const action = root.value?.contains(focused) ? focused?.dataset.arrangeAction : undefined
+  const token = ++arrangementToken.value
+  if (action && identity === previousIdentity) void nextTick(() => {
+    if (token !== arrangementToken.value || document.activeElement !== document.body) return
+    const replacement = root.value?.querySelector<HTMLElement>(`[data-arrange-action="${action}"]`)
+    const target = replacement && !replacement.matches(':disabled') ? replacement : viewport.value
+    target?.focus({ preventScroll: true })
+  })
+}, { flush: 'sync' })
+const arrangementStates = computed(() => Object.fromEntries(
+  (Object.keys(arrangementLabels) as Arrangement[]).map(operation => [operation,
+    arrangementSelection(widgets.value, selectedIds.value, selected.value, operation)]),
+) as Record<Arrangement, ReturnType<typeof arrangementSelection>>)
+const arrangementReasons = computed(() => [...new Set(Object.values(arrangementStates.value).map(state => state.reason).filter(Boolean))])
+function arrangementMeasurements(entries: SharedDashboardWidget[]) {
+  const measured = new Map<string, NonNullable<SharedDashboardWidget['placement']>>()
+  if (!entries.length || entries.some(w => arrangementPlacement(w, device.value))) return measured
+  const surface = surfaceFor(entries[0]!.parentId, entries[0]!.region)
+  if (!surface?.isConnected || !surface.clientWidth || !surface.offsetWidth) return measured
+  const bounds = surface.getBoundingClientRect(), scale = bounds.width / surface.offsetWidth
+  if (!bounds.width || !bounds.height || !Number.isFinite(scale) || scale <= 0) return measured
+  const children = [...surface.querySelectorAll<HTMLElement>(':scope > [data-widget-id]')]
+  for (const entry of entries) {
+    const element = children.find(el => el.dataset.widgetId === entry.id)
+    const rect = element?.getBoundingClientRect()
+    if (!rect?.width || !rect.height) continue
+    measured.set(entry.id, {
+      x: (((rect.left - bounds.left) / scale - surface.clientLeft + surface.scrollLeft) / surface.clientWidth) * 24,
+      y: ((rect.top - bounds.top) / scale - surface.clientTop + surface.scrollTop) / 32,
+      w: rect.width / scale / surface.clientWidth * 24,
+      h: rect.height / scale / 32,
     })
-  widgets.value = widgets.value.map((w, i) =>
-    device.value === 'desktop' || indices.includes(i)
-      ? withPlacement(w, indices.includes(i) ? result[indices.indexOf(i)]! : positions[i]!)
-      : w,
-  )
+  }
+  return measured
+}
+function arrangeSelection(operation: Arrangement, event: Event) {
+  const trigger = event.currentTarget as HTMLElement | null
+  if (!clipboardCommandsAvailable() || !trigger || !root.value?.contains(trigger) ||
+    trigger.closest<HTMLElement>('[data-arrangement]')?.dataset.arrangement !== String(arrangementToken.value)) return
+  const state = arrangementStates.value[operation]
+  if (state.reason) { clipboardFeedback(state.reason); return }
+  const context = captureDashboardContext(), token = arrangementToken.value
+  const siblings = widgets.value.filter(w => sameArrangementSurface(w, state.roots[0]!))
+  const result = planArrangement({ widgets: widgets.value, ids: selectedIds.value,
+    primaryId: selected.value, device: device.value, operation, measurements: arrangementMeasurements(siblings) })
+  if (!context() || token !== arrangementToken.value || !clipboardCommandsAvailable()) return
+  if (result.reason) { clipboardFeedback(result.reason); return }
+  if (result.widgets === widgets.value) { editorAnnouncement.value = 'The selection is already arranged.'; return }
+  if (applyLayout(result.widgets)) {
+    cancelFit()
+    message.value = ''
+    editorAnnouncement.value = `${arrangementLabels[operation]} applied to ${state.roots.length} widgets.`
+    const appliedToken = arrangementToken.value
+    void nextTick(() => {
+      if (context() && appliedToken === arrangementToken.value)
+        root.value?.querySelector<HTMLElement>(`[data-arrange-action="${operation}"]`)?.focus({ preventScroll: true })
+    })
+  }
 }
 function lockDescription(key: LockKey) {
   const state = selectionLocks.value[key]
@@ -2742,43 +2767,21 @@ onBeforeUnmount(() => {
                 >Ungroup container</AppButton
               >
             </div>
-            <fieldset v-if="selectedIds.length > 1" :disabled="busy">
+            <fieldset v-if="selectedIds.length > 1" :key="arrangementToken" :data-arrangement="arrangementToken" :disabled="!clipboardCommandsAvailable()">
               <legend>{{ selectedIds.length }} widgets selected</legend>
               <div class="shared-widget-actions">
                 <AppButton
-                  v-for="action in [
-                    'left',
-                    'center',
-                    'right',
-                    'top',
-                    'middle',
-                    'bottom',
-                    'horizontal',
-                    'vertical',
-                    'width',
-                    'height',
-                  ] as const"
+                  v-for="(label, action) in arrangementLabels"
                   :key="action"
-                  :disabled="
-                    ['horizontal', 'vertical'].includes(action) && selectedRoots.length < 3
-                  "
-                  @click="arrangeSelection(action)"
-                  >{{
-                    {
-                      left: 'Align left',
-                      center: 'Center horizontally',
-                      right: 'Align right',
-                      top: 'Align top',
-                      middle: 'Center vertically',
-                      bottom: 'Align bottom',
-                      horizontal: 'Distribute horizontally',
-                      vertical: 'Distribute vertically',
-                      width: 'Match width',
-                      height: 'Match height',
-                    }[action]
-                  }}</AppButton
+                  :data-arrange-action="action"
+                  :disabled="!!arrangementStates[action].reason"
+                  :title="arrangementStates[action].reason || label"
+                  :aria-describedby="arrangementStates[action].reason ? 'arrangement-reasons' : undefined"
+                  @click="arrangeSelection(action, $event)"
+                  >{{ label }}</AppButton
                 >
               </div>
+              <p v-if="arrangementReasons.length" id="arrangement-reasons" class="shared-muted">{{ arrangementReasons.join(' ') }}</p>
             </fieldset>
             <fieldset v-if="selectedWidget" :disabled="busy">
               <legend>{{ sharedWidgetLabels[selectedWidget.type] }}</legend>

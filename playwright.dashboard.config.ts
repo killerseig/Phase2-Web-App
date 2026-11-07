@@ -17,6 +17,7 @@ export default defineConfig({
         'dashboard-clipboard.spec.ts',
         'dashboard-pointer-paste.spec.ts',
         'dashboard-selection-locks.spec.ts',
+        'dashboard-arrangement.spec.ts',
         'dashboard-preview-responsiveness.spec.ts',
         'dashboard-grid-visibility.spec.ts',
         'dashboard-canvas-actions.spec.ts',

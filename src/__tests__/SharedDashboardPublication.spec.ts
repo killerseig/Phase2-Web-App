@@ -122,6 +122,51 @@ describe('dashboard confirmation and publication context isolation',()=>{
     finish({ ...source, version: 1 })
     await flushPromises()
   })
+  it.each(['account', 'role', 'access'] as const)('rejects an obsolete arrangement after %s changes', async change => {
+    const widgets = [
+      { id: 'a', type: 'text', title: 'Alpha', text: '', span: 6, placement: { x: 1, y: 2, w: 6, h: 8 } },
+      { id: 'b', type: 'text', title: 'Beta', text: '', span: 6, placement: { x: 12, y: 8, w: 6, h: 8 } },
+    ]
+    fake.command.mockImplementation(async action => action === 'load' ? { ...layout(), widgets } : {})
+    const wrapper = await open()
+    const button = (name: string) => wrapper.findAll('button').find(entry => entry.text() === name)!
+    await button('Edit').trigger('click')
+    await button('Alpha').trigger('click')
+    await button('Beta').trigger('click', { ctrlKey: true })
+    const old = button('Align left').element
+    if (change === 'account') auth.currentUser.uid = 'b'
+    if (change === 'role') auth.rawRole = 'foreman'
+    if (change === 'access') auth.hasWorkspaceAccess = false
+    await flushPromises()
+    old.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const current = wrapper.findComponent(canvas)
+    const actual = current.exists() ? current.props('widgets') : widgets
+    expect(actual).toEqual(widgets)
+    expect(fake.command.mock.calls.filter(([action]) => action.startsWith('save'))).toHaveLength(0)
+  })
+  it('guards arrangement commands while a save is pending', async () => {
+    let finish!: (value: unknown) => void
+    const widgets = [
+      { id: 'a', type: 'text', title: 'Alpha', text: '', span: 6, placement: { x: 1, y: 2, w: 6, h: 8 } },
+      { id: 'b', type: 'text', title: 'Beta', text: '', span: 6, placement: { x: 12, y: 8, w: 6, h: 8 } },
+    ]
+    const source = { ...layout(), widgets }
+    fake.command.mockImplementation(action => action === 'load' ? Promise.resolve(source) : new Promise(resolve => { finish = resolve }))
+    const wrapper = await open()
+    const button = (name: string) => wrapper.findAll('button').find(entry => entry.text() === name)!
+    await button('Edit').trigger('click')
+    await button('Alpha').trigger('click')
+    await button('Beta').trigger('click', { ctrlKey: true })
+    await wrapper.get('input[maxlength="100"]').setValue('Changed')
+    await button('Save template').trigger('click')
+    await flushPromises()
+    button('Align left').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.findComponent(canvas).props('widgets').map((w: typeof widgets[number]) => w.placement)).toEqual(widgets.map(w => w.placement))
+    finish({ ...source, version: 1 })
+    await flushPromises()
+  })
   it.each(['account', 'role', 'access'] as const)('does not publish a confirmation after %s changes',async change=>{
     let accept!: (value:boolean)=>void
     fake.ask.mockReturnValue(new Promise(resolve=>{accept=resolve}))

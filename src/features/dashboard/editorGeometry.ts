@@ -122,6 +122,7 @@ export type Arrangement =
   | 'width'
   | 'height'
 export function arrange(placements: Placement[], operation: Arrangement, primary: Placement) {
+  if (placements.length < 2) return placements
   const b = bounds(placements)
   const horizontal = operation === 'horizontal',
     vertical = operation === 'vertical'
@@ -135,34 +136,36 @@ export function arrange(placements: Placement[], operation: Arrangement, primary
       (last[axis] + last[size] - sorted[0]![axis] - sorted.reduce((sum, p) => sum + p[size], 0)) /
       (sorted.length - 1)
     let cursor = sorted[0]![axis]
-    const result = placements.map((p) => ({ ...p }))
-    for (const p of sorted) {
-      result[p.i]![axis] = +cursor.toFixed(3)
+    const result = [...placements]
+    for (let index = 0; index < sorted.length; index++) {
+      const p = sorted[index]!
+      // Keep both endpoints exact; only interior origins are distributed.
+      if (index > 0 && index < sorted.length - 1)
+        result[p.i] = changeAxis(placements[p.i]!, axis, cursor)
       cursor += p[size] + gap
     }
     return result
   }
-  return placements.map((p) =>
-    placeWidget(
-      operation === 'left'
-        ? b.x
-        : operation === 'center'
-          ? b.x + (b.w - p.w) / 2
-          : operation === 'right'
-            ? b.x + b.w - p.w
-            : p.x,
-      operation === 'top'
-        ? b.y
-        : operation === 'middle'
-          ? b.y + (b.h - p.h) / 2
-          : operation === 'bottom'
-            ? b.y + b.h - p.h
-            : p.y,
-      operation === 'width' ? primary.w : p.w,
-      operation === 'height' ? primary.h : p.h,
-      false,
-    ),
-  )
+  return placements.map((p) => {
+    switch (operation) {
+      case 'left': return changeAxis(p, 'x', b.x)
+      case 'center': return changeAxis(p, 'x', b.x + (b.w - p.w) / 2)
+      case 'right': return changeAxis(p, 'x', b.x + b.w - p.w)
+      case 'top': return changeAxis(p, 'y', b.y)
+      case 'middle': return changeAxis(p, 'y', b.y + (b.h - p.h) / 2)
+      case 'bottom': return changeAxis(p, 'y', b.y + b.h - p.h)
+      case 'width': return changeAxis(p, 'w', primary.w)
+      case 'height': return changeAxis(p, 'h', primary.h)
+      default: return p
+    }
+  })
+}
+function changeAxis(p: Placement, key: keyof Placement, value: number): Placement {
+  // Arithmetic noise is not an edit. Never round/snap unrelated properties.
+  const maximum = key === 'x' ? 24 - p.w : key === 'y' ? 1000 - p.h
+    : key === 'w' ? 24 - p.x : 1000 - p.y
+  if (value > maximum && value - maximum < 1e-9) value = maximum
+  return Math.abs(p[key] - value) < 1e-9 ? p : { ...p, [key]: value }
 }
 export function descendants(widgets: Widget[], ids: string[]) {
   const result = new Set(ids)
