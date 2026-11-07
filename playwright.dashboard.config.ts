@@ -14,6 +14,7 @@ export default defineConfig({
         'dashboard-published-frame.spec.ts',
         'dashboard-fit.spec.ts',
         'dashboard-keyboard.spec.ts',
+        'dashboard-clipboard.spec.ts',
         'dashboard-preview-responsiveness.spec.ts',
         'dashboard-grid-visibility.spec.ts',
         'dashboard-canvas-actions.spec.ts',

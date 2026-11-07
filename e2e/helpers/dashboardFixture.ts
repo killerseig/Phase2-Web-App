@@ -230,6 +230,7 @@ export async function mockDashboard(
   })
   return {
     layouts,
+    contents,
     requests,
     announcements,
     failAnnouncementSave: () => {

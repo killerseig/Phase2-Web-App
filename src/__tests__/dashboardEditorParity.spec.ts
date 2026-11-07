@@ -7,7 +7,6 @@ import {
 } from '../../functions/src/sharedDashboardModel'
 import {
   arrange,
-  copyConfiguration,
   descendants,
   locked,
   resizeEdges,
@@ -16,6 +15,7 @@ import {
   type Direction,
 } from '@/features/dashboard/editorGeometry'
 import { startCamera, panCamera, alignmentOffset } from '@/features/dashboard/viewportGeometry'
+import { captureWidgetClipboard, materializeWidgetClipboard } from '@/features/dashboard/widgetClipboard'
 const text = (id: string, extra: Partial<Widget> = {}): Widget => ({
   id,
   type: 'text',
@@ -97,7 +97,8 @@ describe('Networking dashboard editor contracts', () => {
     ]
     expect(rootSelection(entries, ['parent', 'child']).map((w) => w.id)).toEqual(['parent'])
     expect(descendants(entries, ['parent'])).toHaveLength(2)
-    const copies = copyConfiguration(entries, ['parent', 'child'])
+    const captured = captureWidgetClipboard(entries, ['parent', 'child'], 'a', 'desktop', [])
+    const copies = materializeWidgetClipboard(captured, entries, 'a', 'desktop', { x: 1, y: 1 }).widgets
     expect(copies).toHaveLength(2)
     expect(copies[0]!.id).not.toBe('parent')
     expect(copies[1]!.parentId).toBe(copies[0]!.id)

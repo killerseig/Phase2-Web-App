@@ -198,34 +198,3 @@ export function locked(widgets: Widget[], widget: Widget, key: 'positionLocked' 
   }
   return false
 }
-export function copyConfiguration(widgets: Widget[], ids: string[]) {
-  const roots = rootSelection(widgets, ids)
-  const entries: Widget[] = JSON.parse(
-    JSON.stringify(
-      descendants(
-        widgets,
-        roots.map((w) => w.id),
-      ),
-    ),
-  )
-  const mapping = new Map(entries.map((w) => [w.id, crypto.randomUUID()]))
-  return entries.map((w) => {
-    const parentId = w.parentId && mapping.get(w.parentId)
-    const result = { ...w, id: mapping.get(w.id)! }
-    if (result.type === 'notes') result.text = ''
-    if (parentId) result.parentId = parentId
-    else {
-      delete result.parentId
-      delete result.region
-      if (result.placement)
-        result.placement = placeWidget(
-          result.placement.x + 1,
-          result.placement.y + 1,
-          result.placement.w,
-          result.placement.h,
-          false,
-        )
-    }
-    return result
-  })
-}

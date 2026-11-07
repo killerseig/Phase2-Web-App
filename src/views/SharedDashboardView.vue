@@ -49,12 +49,12 @@ import {
   descendants,
   rootSelection,
   locked as geometryLocked,
-  copyConfiguration,
   type Direction,
   type Arrangement,
 } from '@/features/dashboard/editorGeometry'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { keyboardGeometry } from '@/features/dashboard/keyboardGeometry'
+import { captureWidgetClipboard, materializeWidgetClipboard, type WidgetClipboard } from '@/features/dashboard/widgetClipboard'
 import {
   startCamera,
   panCamera,
@@ -122,9 +122,9 @@ const selectedIds = computed(() =>
       : [],
 )
 const selectedRoots = computed(() => rootSelection(widgets.value, selectedIds.value))
-const clipboard = ref<SharedDashboardWidget[]>([])
+const clipboard = ref<WidgetClipboard>()
 watch([() => auth.currentUser?.uid, () => auth.rawRole, () => auth.hasWorkspaceAccess], () => {
-  clipboard.value = []
+  clipboard.value = undefined
   selection.value = []
 })
 const root = ref<HTMLElement>(),
@@ -252,14 +252,13 @@ const selectedIndex = computed(() =>
 const repeatable = (type: SharedDashboardWidget['type']) =>
   ['notes', 'text', 'form', 'container'].includes(type)
 const canDuplicateSelected = computed(() => {
-  const widget = selectedWidget.value
-  if (!widget || !editing.value || busy.value || !canEdit.value) return false
-  const copies = descendants(widgets.value, [widget.id])
+  if (!selectedRoots.value.length || !editing.value || busy.value || !canEdit.value) return false
+  const copies = descendants(widgets.value, selectedRoots.value.map(w => w.id))
   return widgets.value.length + copies.length <= 12 &&
     copies.every((entry) => repeatable(entry.type) && palette.value.includes(entry.type))
 })
-const requiredSelection = computed(() => !!selectedWidget.value &&
-  descendants(widgets.value, [selectedWidget.value.id]).some((entry) => entry.type === requiredType.value))
+const requiredSelection = computed(() =>
+  descendants(widgets.value, selectedRoots.value.map(w => w.id)).some((entry) => entry.type === requiredType.value))
 function selectWidget(id: string, event?: MouseEvent | PointerEvent | KeyboardEvent) {
   if (event?.type === 'keydown' && (drag.payload.value || stopBackground)) return
   if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
@@ -817,29 +816,10 @@ function move(direction: number, focusList = false) {
     )
 }
 function duplicateWidget() {
-  const widget = selectedWidget.value
-  if (!widget || !canDuplicateSelected.value) return
-  if (widget.container) {
-    const copies = copyConfiguration(widgets.value, [widget.id])
-    const copy = copies.find((entry) => !entry.parentId)!
-    if (widget.parentId) {
-      copy.parentId = widget.parentId
-      copy.region = widget.region || '0'
-    }
-    copy.title = `${widget.title || sharedWidgetLabels[widget.type]} copy`.slice(0, 100)
-    if (applyLayout([...widgets.value, ...copies])) editWidget(copy.id)
-    return
-  }
-  const copy: SharedDashboardWidget = JSON.parse(JSON.stringify(widget))
-  copy.id = crypto.randomUUID()
-  if (copy.type === 'notes') copy.text = ''
-  if (copy.placement) {
-    const p = copy.placement
-    copy.placement = placeWidget(p.x + 1, p.y + 1, p.w, p.h, false)
-  }
-  copy.title = `${widget.title || sharedWidgetLabels[widget.type]} copy`.slice(0, 100)
-  widgets.value.splice(selectedIndex.value + 1, 0, copy)
-  editWidget(copy.id)
+  if (!clipboardCommandsAvailable()) return
+  if (!canDuplicateSelected.value) return clipboardFeedback('This selection cannot be duplicated: check widget types and the 12-widget limit.')
+  try { insertClipboard(captureSelection(), true) }
+  catch (reason) { clipboardFeedback(reason) }
 }
 const widgetMenu = ref<{ id: string; x: number; y: number; trigger?: HTMLElement }>()
 function focusWidget(id: string) {
@@ -905,6 +885,7 @@ const widgetMenuActions = computed(() => [
   { id: 'edit', label: 'Edit widget' },
   { id: 'duplicate', label: 'Duplicate widget', disabled: !canDuplicateSelected.value },
   { id: 'copy', label: 'Copy widget' },
+  { id: 'cut', label: 'Cut widget settings', disabled: requiredSelection.value },
   { id: 'front', label: 'Bring to front', disabled: !canLayer('front'), separatorBefore: true },
   { id: 'forward', label: 'Bring forward', disabled: !canLayer('forward') },
   { id: 'backward', label: 'Send backward', disabled: !canLayer('backward') },
@@ -925,6 +906,7 @@ function widgetMenuAction(action: string) {
   if (action === 'edit') return editWidget(menu.id)
   if (action === 'duplicate') return duplicateWidget()
   if (action === 'remove') { void remove(); return }
+  if (action === 'cut') { void remove(true); return }
   if (action === 'copy') copySelection()
   else if (['front', 'forward', 'backward', 'back'].includes(action)) reorderLayer(action as LayerAction)
   else if (action === 'positionLocked' || action === 'sizeLocked') {
@@ -940,6 +922,7 @@ function captureDashboardContext() {
     rawRole = auth.rawRole,
     access = auth.hasWorkspaceAccess,
     currentScope = scope.value,
+    currentRole = role.value,
     currentJob = jobId.value
   return () =>
     request === generation &&
@@ -947,6 +930,7 @@ function captureDashboardContext() {
     rawRole === auth.rawRole &&
     access === auth.hasWorkspaceAccess &&
     currentScope === scope.value &&
+    currentRole === role.value &&
     currentJob === jobId.value
 }
 function applyLayout(next: SharedDashboardWidget[]) {
@@ -960,30 +944,70 @@ function applyLayout(next: SharedDashboardWidget[]) {
     return false
   }
 }
+let removalPending = false, editRevision = 0
+watch([snapshot, editing, device, () => selectedIds.value.join('|')], () => editRevision++, { flush: 'sync' })
+const clipboardContext = () => JSON.stringify([auth.currentUser?.uid, scope.value, role.value, jobId.value])
+function clipboardCommandsAvailable() {
+  return editing.value && canEdit.value && !busy.value && !removalPending && !drag.payload.value && !stopBackground
+}
+function clipboardFeedback(reason: unknown) {
+  const text = reason instanceof Error ? reason.message : String(reason)
+  message.value = text
+  editorAnnouncement.value = text
+}
+function captureSelection() {
+  return captureWidgetClipboard(widgets.value, selectedIds.value, clipboardContext(), device.value, measuredPlacements())
+}
 function copySelection() {
-  clipboard.value = JSON.parse(
-    JSON.stringify(
-      descendants(
-        widgets.value,
-        selectedRoots.value.map((w) => w.id),
-      ),
-    ),
+  if (!clipboardCommandsAvailable()) return
+  try {
+    const captured = captureSelection()
+    clipboard.value = captured
+    clipboardFeedback('Widget settings copied. Saved private content is not copied.')
+  } catch (reason) { clipboardFeedback(reason) }
+}
+function insertClipboard(captured: WidgetClipboard, duplicate = false) {
+  if (captured.widgets.some(w => !palette.value.includes(w.type)))
+    throw Error('This selection includes widget types unavailable on this dashboard.')
+  const copied = materializeWidgetClipboard(
+    captured, widgets.value, clipboardContext(), device.value, interactionGrid.value, measuredPlacements(),
   )
-  message.value = 'Widget settings copied. Saved private content is not copied.'
+  if (duplicate) copied.widgets.filter(w => copied.roots.includes(w.id)).forEach(w => {
+    w.title = `${w.title || sharedWidgetLabels[w.type]} copy`.slice(0, 100)
+  })
+  const after = duplicate ? Math.max(...widgets.value.map((w, index) =>
+    captured.widgets.some(source => source.id === w.id) ? index : -1)) + 1 : widgets.value.length
+  const next = [...widgets.value.slice(0, after), ...copied.widgets, ...widgets.value.slice(after)]
+  if (applyLayout(next)) {
+    selection.value = copied.roots
+    selected.value = selection.value.at(-1) || ''
+    clipboardFeedback(`${duplicate ? 'Duplicated' : 'Pasted'} ${copied.roots.length} widget${copied.roots.length === 1 ? '' : 's'}. Saved private content is not copied.`)
+    focusWidget(selected.value)
+  } else clipboardFeedback(error.value)
 }
 function pasteSelection() {
-  if (!clipboard.value.length || clipboard.value.some((w) => !palette.value.includes(w.type)))
-    return
-  const copied = copyConfiguration(
-    clipboard.value,
-    clipboard.value
-      .filter((w) => !clipboard.value.some((p) => p.id === w.parentId))
-      .map((w) => w.id),
-  )
-  if (applyLayout([...widgets.value, ...copied])) {
-    selection.value = copied.filter((w) => !w.parentId).map((w) => w.id)
-    selected.value = selection.value.at(-1) || ''
-  }
+  if (!clipboardCommandsAvailable()) return
+  if (!clipboard.value) return clipboardFeedback('Copy widget settings before pasting.')
+  try { insertClipboard(clipboard.value) }
+  catch (reason) { clipboardFeedback(reason) }
+}
+function editorShortcutTarget(target: HTMLElement) {
+  return !!target.closest('.shared-dashboard-viewport,.shared-widget-list,[data-selection-control]')
+}
+function clipboardShortcut(event: KeyboardEvent) {
+  const command = event.ctrlKey || event.metaKey
+  const key = event.key.toLowerCase()
+  const removeKey = !command && ['delete', 'backspace'].includes(key)
+  if (event.shiftKey || !editorShortcutTarget(event.target as HTMLElement) ||
+    (!removeKey && !(command && ['c', 'v', 'd', 'x'].includes(key)))) return false
+  event.preventDefault()
+  if (event.repeat || !clipboardCommandsAvailable()) return true
+  if (removeKey) void remove()
+  else if (key === 'c') copySelection()
+  else if (key === 'v') pasteSelection()
+  else if (key === 'd') duplicateWidget()
+  else void remove(true)
+  return true
 }
 function arrangeSelection(operation: Arrangement) {
   const size = operation === 'width' || operation === 'height'
@@ -1201,31 +1225,36 @@ function changeContainerKind(event: Event) {
   if (applyLayout(next))
     message.value = 'Container updated. Widgets from removed regions moved to the first region.'
 }
-async function remove() {
-  if (!editing.value || busy.value || !canEdit.value) return
-  const widget = selectedWidget.value
-  if (!widget || requiredSelection.value) return
-  const current = captureDashboardContext()
-  if (
-    (await confirm.value?.ask({
-      title: 'Remove widget?',
-      message:
-        'This removes the widget from this layout. Saved announcements, notes, tasks, calendar dates, documents and form submissions are retained.',
-      confirmLabel: 'Remove',
-      destructive: true,
-    })) &&
-    current() &&
-    editing.value &&
-    !busy.value &&
-    canEdit.value &&
-    widgets.value.includes(widget)
-  ) {
-    const index = widgets.value.findIndex((entry) => entry.id === widget.id)
-    const removed = new Set(descendants(widgets.value, [widget.id]).map((w) => w.id))
-    if (!applyLayout(widgets.value.filter((w) => !removed.has(w.id)))) return
-    selected.value = widgets.value[Math.min(index, widgets.value.length - 1)]?.id || ''
-    focusSettings()
-  }
+async function remove(cut = false) {
+  if (!clipboardCommandsAvailable()) return
+  const ids = selectedRoots.value.map(w => w.id)
+  if (!ids.length) return clipboardFeedback('Select a widget first.')
+  if (requiredSelection.value) return clipboardFeedback('This selection contains a required tool and cannot be removed or cut.')
+  let captured: WidgetClipboard | undefined
+  try { if (cut) captured = captureSelection() }
+  catch (reason) { clipboardFeedback(reason); return }
+  const current = captureDashboardContext(), revision = editRevision
+  const removed = new Set(descendants(widgets.value, ids).map(w => w.id))
+  removalPending = true
+  try {
+    const accepted = await confirm.value?.ask({
+      title: cut ? 'Cut widget settings?' : ids.length === 1 ? 'Remove widget?' : 'Remove selected widgets?',
+      message: cut
+        ? 'Cut removes these widgets from this layout and copies their settings. Pasting creates new widgets; saved notes, tasks, announcements, calendar dates, documents and form submissions stay with their existing records and are not moved. Undo restores the original widgets.'
+        : 'This removes the selected widgets and their children from this layout. Saved announcements, notes, tasks, calendar dates, documents and form submissions are retained.',
+      confirmLabel: cut ? 'Cut settings' : 'Remove', destructive: true,
+    })
+    if (!accepted || !current() || disposed || revision !== editRevision ||
+      !editing.value || busy.value || !canEdit.value || drag.payload.value || stopBackground) return
+    if (!applyLayout(widgets.value.filter(w => !removed.has(w.id)))) {
+      clipboardFeedback(error.value)
+      return
+    }
+    if (captured) clipboard.value = captured
+    selectWidget('')
+    clipboardFeedback(cut ? 'Widget settings cut. Saved content was retained and will not be moved by Paste.' : 'Selected widgets removed. Saved content was retained.')
+    void nextTick(() => viewport.value?.focus({ preventScroll: true }))
+  } finally { removalPending = false }
 }
 async function prepare() {
   if (busy.value) return false
@@ -1930,6 +1959,7 @@ function keydown(event: KeyboardEvent) {
     }
     return
   }
+  if (clipboardShortcut(event)) return
   if (drag.payload.value || stopBackground) return
   const target = event.target as HTMLElement
   const targetWidget = target.closest<HTMLElement>('[data-widget-id]')
@@ -1949,15 +1979,15 @@ function keydown(event: KeyboardEvent) {
     selectionKey(event, widget.id, 'move')
   } else if (
     (event.ctrlKey || event.metaKey) &&
-    ['a', 'c', 'v'].includes(event.key.toLowerCase()) &&
+    event.key.toLowerCase() === 'a' &&
+    editorShortcutTarget(event.target as HTMLElement) &&
     canEdit.value
   ) {
     event.preventDefault()
     if (event.key.toLowerCase() === 'a') {
       selection.value = widgets.value.filter((w) => !w.parentId).map((w) => w.id)
       selected.value = selection.value.at(-1) || ''
-    } else if (event.key.toLowerCase() === 'c') copySelection()
-    else pasteSelection()
+    }
   } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
     event.preventDefault()
     if (event.shiftKey) redoChange()
@@ -2656,9 +2686,11 @@ onBeforeUnmount(() => {
               <AppButton :disabled="!selectedIds.length || busy" @click="copySelection"
                 >Copy selection</AppButton
               >
-              <AppButton :disabled="!clipboard.length || busy" @click="pasteSelection"
+              <AppButton :disabled="!clipboard || busy" @click="pasteSelection"
                 >Paste widgets</AppButton
               >
+              <AppButton :disabled="!selectedIds.length || requiredSelection || busy" @click="remove(true)"
+                >Cut settings</AppButton>
               <AppButton
                 :disabled="
                   selectedRoots.length < 2 || widgets.length >= 12 || busy || device !== 'desktop'
@@ -2727,13 +2759,13 @@ onBeforeUnmount(() => {
                   type="button"
                   :disabled="!canDuplicateSelected"
                   @click="duplicateWidget"
-                  >Duplicate widget</AppButton
+                  >{{ selectedRoots.length > 1 ? 'Duplicate selection' : 'Duplicate widget' }}</AppButton
                 >
                 <AppButton
                   type="button"
                   :disabled="requiredSelection"
-                  @click="remove"
-                  >Remove widget</AppButton
+                  @click="remove()"
+                  >{{ selectedRoots.length > 1 ? 'Remove selection' : 'Remove widget' }}</AppButton
                 >
               </div>
               <small v-if="requiredSelection">Contains a required tool for this layout.</small>
@@ -2777,6 +2809,11 @@ onBeforeUnmount(() => {
                 several widgets. Shift-drag empty canvas selects an area. Arrow keys use grid
                 spacing; Shift+Arrow makes a one-pixel adjustment. Enter/Space selects a focused
                 widget. Escape or an empty-canvas click clears the selection.
+              </p>
+              <p>
+                On the canvas or outline, Ctrl/Command+C copies settings, V pastes, D duplicates,
+                and X cuts settings after confirmation. Delete/Backspace removes the selection
+                after confirmation. Saved private content stays with its original records.
               </p>
               <p v-if="device !== 'desktop'">Placement edits override {{ device }} only.</p>
               <AppButton

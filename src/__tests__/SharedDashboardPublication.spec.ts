@@ -58,6 +58,7 @@ describe('dashboard confirmation and publication context isolation',()=>{
     fake.notesDirty=false;fake.discard.mockReset().mockImplementation(()=>{fake.notesDirty=false})
     auth.currentUser.uid='a';auth.rawRole='admin';auth.hasWorkspaceAccess=true
     vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}})
+    vi.stubGlobal('CSS', { escape: (value: string) => value }) // Fixture IDs are plain identifiers.
     fake.command.mockImplementation(async action=>action==='load'?layout():{})
   })
   it('does not resume initialization after the dashboard is unmounted', async () => {
@@ -133,6 +134,82 @@ describe('dashboard confirmation and publication context isolation',()=>{
     accept(true)
     await flushPromises()
     expect(wrapper.find('[data-widgets]').text()).toBe('drafts')
+  })
+  it.each(['cancel', 'selection', 'content', 'device'] as const)(
+    'does not cut or replace the clipboard after %s invalidates confirmation', async change => {
+      fake.command.mockImplementation(async action => action === 'load' ? {
+        ...layout(), widgets: [
+          { id: 'a', type: 'text', title: 'Alpha', text: '', span: 6 },
+          { id: 'b', type: 'text', title: 'Beta', text: '', span: 6 },
+        ],
+      } : {})
+      const wrapper = await open()
+      const button = (label: string) => wrapper.findAll('button').find(entry => entry.text() === label)!
+      await button('Edit').trigger('click')
+      await flushPromises()
+      await button('Copy selection').trigger('click')
+      await button('Beta').trigger('click')
+      let accept!: (value: boolean) => void
+      fake.ask.mockReturnValue(new Promise(resolve => { accept = resolve }))
+      await button('Cut settings').trigger('click')
+      await flushPromises()
+      if (change === 'selection') await button('Alpha').trigger('click')
+      if (change === 'content') await wrapper.get('input[maxlength="100"]').setValue('Changed')
+      if (change === 'device') await button('Phone').trigger('click')
+      await flushPromises()
+      accept(change !== 'cancel')
+      await flushPromises()
+      expect(fake.command.mock.calls.filter(([action]) => action.startsWith('save'))).toHaveLength(0)
+      expect(wrapper.get('[data-widgets]').text()).toBe('a,b')
+      await button('Paste widgets').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('input[maxlength="100"]').element).toHaveProperty('value', 'Alpha')
+      expect(wrapper.get('[data-widgets]').text().split(',')).toHaveLength(3)
+    },
+  )
+  it.each(['account', 'role', 'access'] as const)('rejects an old Cut after %s changes', async change => {
+    const wrapper = await open()
+    const button = (label: string) => wrapper.findAll('button').find(entry => entry.text() === label)!
+    await button('Edit').trigger('click')
+    await flushPromises()
+    await button('Copy selection').trigger('click')
+    let accept!: (value: boolean) => void
+    fake.ask.mockReturnValue(new Promise(resolve => { accept = resolve }))
+    await button('Cut settings').trigger('click')
+    await flushPromises()
+    if (change === 'account') auth.currentUser.uid = 'b'
+    if (change === 'role') auth.rawRole = 'foreman'
+    if (change === 'access') auth.hasWorkspaceAccess = false
+    await flushPromises()
+    accept(true)
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Widget settings cut.')
+    expect(fake.command.mock.calls.filter(([action]) => action.startsWith('save'))).toHaveLength(0)
+  })
+  it('retains the old clipboard when a confirmed Cut fails complete-layout validation', async () => {
+    const invalidTitle = 'z'.repeat(101)
+    fake.command.mockImplementation(async action => action === 'load' ? {
+      ...layout(), widgets: [
+        { id: 'a', type: 'text', title: 'Alpha', text: '', span: 6 },
+        { id: 'b', type: 'text', title: 'Beta', text: '', span: 6 },
+        { id: 'c', type: 'text', title: invalidTitle, text: '', span: 6 },
+      ],
+    } : {})
+    const wrapper = await open()
+    const button = (label: string) => wrapper.findAll('button').find(entry => entry.text() === label)!
+    await button('Edit').trigger('click')
+    await flushPromises()
+    await button('Copy selection').trigger('click')
+    await button('Beta').trigger('click')
+    await button('Cut settings').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-widgets]').text()).toBe('a,b,c')
+    await button(invalidTitle).trigger('click')
+    await wrapper.get('input[maxlength="100"]').setValue('Valid')
+    await button('Paste widgets').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('input[maxlength="100"]').element).toHaveProperty('value', 'Alpha')
+    expect(wrapper.get('[data-widgets]').text().split(',')).toHaveLength(4)
   })
   it('does not refresh or discard the new account after an old discard confirmation',async()=>{
     const wrapper=await open()
