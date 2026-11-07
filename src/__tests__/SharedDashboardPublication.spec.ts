@@ -72,6 +72,56 @@ describe('dashboard confirmation and publication context isolation',()=>{
       expect(added.mock.calls.filter(([name]) => name === 'beforeunload')).toHaveLength(0)
     } finally { added.mockRestore() }
   })
+  it.each(['selection', 'device', 'account', 'role', 'access'] as const)(
+    'rejects a late inspector lock event after %s changes', async change => {
+      fake.command.mockImplementation(async action => action === 'load' ? {
+        ...layout(), widgets: [
+          { id: 'a', type: 'text', title: 'Alpha', text: '', span: 6 },
+          { id: 'b', type: 'text', title: 'Beta', text: '', span: 6 },
+        ],
+      } : {})
+      const wrapper = await open()
+      const button = (name: string) => wrapper.findAll('button').find(entry => entry.text() === name)!
+      await button('Edit').trigger('click')
+      await flushPromises()
+      const old = wrapper.get('[data-lock-selection] input').element as HTMLInputElement
+      if (change === 'selection') await button('Beta').trigger('click')
+      if (change === 'device') await button('Phone').trigger('click')
+      if (change === 'account') auth.currentUser.uid = 'b'
+      if (change === 'role') auth.rawRole = 'foreman'
+      if (change === 'access') auth.hasWorkspaceAccess = false
+      await flushPromises()
+      old.checked = true
+      old.dispatchEvent(new Event('change', { bubbles: true }))
+      await flushPromises()
+      const currentCanvas = wrapper.findComponent(canvas)
+      const currentWidgets = currentCanvas.exists() ? currentCanvas.props('widgets') : []
+      expect(currentWidgets.some((w: { positionLocked?: boolean }) => w.positionLocked)).toBe(false)
+      expect(fake.command.mock.calls.filter(([action]) => action.startsWith('save'))).toHaveLength(0)
+    },
+  )
+  it('does not change locks while saving a layout', async () => {
+    let finish!: (value: unknown) => void
+    const source = { ...layout(), widgets: [{ id: 'a', type: 'text', title: 'Alpha', text: '', span: 6 }] }
+    fake.command.mockImplementation(action => action === 'load' ? Promise.resolve(source) : new Promise(resolve => { finish = resolve }))
+    const wrapper = await open()
+    const mountedElement = wrapper.element
+    document.body.append(mountedElement)
+    cleanup.push(() => mountedElement.remove())
+    const button = (name: string) => wrapper.findAll('button').find(entry => entry.text() === name)!
+    await button('Edit').trigger('click')
+    await wrapper.get('input[maxlength="100"]').setValue('Changed')
+    await button('Save template').trigger('click')
+    await flushPromises()
+    const input = wrapper.get('[data-lock-selection] input').element as HTMLInputElement
+    input.checked = true
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.findComponent(canvas).props('widgets')[0].positionLocked).toBeUndefined()
+    expect(input.checked).toBe(false)
+    finish({ ...source, version: 1 })
+    await flushPromises()
+  })
   it.each(['account', 'role', 'access'] as const)('does not publish a confirmation after %s changes',async change=>{
     let accept!: (value:boolean)=>void
     fake.ask.mockReturnValue(new Promise(resolve=>{accept=resolve}))

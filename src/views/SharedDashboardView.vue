@@ -54,6 +54,7 @@ import {
 } from '@/features/dashboard/editorGeometry'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
 import { useClipboardPointer } from '@/features/dashboard/useClipboardPointer'
+import { selectionLockState, setSelectionLock, type LockKey } from '@/features/dashboard/selectionLocks'
 import { keyboardGeometry } from '@/features/dashboard/keyboardGeometry'
 import { captureWidgetClipboard, materializeWidgetClipboard, type WidgetClipboard } from '@/features/dashboard/widgetClipboard'
 import {
@@ -123,7 +124,15 @@ const selectedIds = computed(() =>
       : [],
 )
 const selectedRoots = computed(() => rootSelection(widgets.value, selectedIds.value))
+const selectionLocks = computed(() => ({
+  positionLocked: selectionLockState(widgets.value, selectedIds.value, 'positionLocked'),
+  sizeLocked: selectionLockState(widgets.value, selectedIds.value, 'sizeLocked'),
+}))
+const lockSelectionIdentity = computed(() => JSON.stringify([
+  auth.currentUser?.uid, auth.rawRole, scope.value, role.value, jobId.value, device.value, selectedIds.value,
+]))
 const clipboard = ref<WidgetClipboard>()
+const removalPending = ref(false), backgroundActive = ref(false)
 watch([() => auth.currentUser?.uid, () => auth.rawRole, () => auth.hasWorkspaceAccess], () => {
   clipboard.value = undefined
   selection.value = []
@@ -822,7 +831,7 @@ function duplicateWidget() {
   try { insertClipboard(captureSelection(), true) }
   catch (reason) { clipboardFeedback(reason) }
 }
-const widgetMenu = ref<{ id: string; x: number; y: number; trigger?: HTMLElement }>()
+const widgetMenu = ref<{ id: string; x: number; y: number; trigger?: HTMLElement; current: () => boolean }>()
 function focusWidget(id: string) {
   void nextTick(() => root.value?.querySelector<HTMLElement>(
     `[data-widget-id="${CSS.escape(id)}"]`,
@@ -842,6 +851,7 @@ function outlineMenuKey(event: KeyboardEvent, id: string) {
 }
 function openWidgetMenu(event: MouseEvent | KeyboardEvent, id: string) {
   if (!editing.value || busy.value || !canEdit.value) return
+  if (!clipboardCommandsAvailable()) { event.preventDefault(); return }
   const element = root.value?.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(id)}"]`)
   if (!element) return
   event.preventDefault()
@@ -849,11 +859,14 @@ function openWidgetMenu(event: MouseEvent | KeyboardEvent, id: string) {
   selectWidget(id)
   const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : element
   const rect = trigger.getBoundingClientRect()
+  const currentContext = captureDashboardContext(), identity = lockSelectionIdentity.value,
+    revision = snapshot()
   widgetMenu.value = {
     id,
     x: 'clientX' in event ? event.clientX : rect.left + 20,
     y: 'clientY' in event ? event.clientY : rect.top + 20,
     trigger,
+    current: () => currentContext() && identity === lockSelectionIdentity.value && revision === snapshot(),
   }
 }
 function canLayer(action: LayerAction) {
@@ -878,10 +891,6 @@ function reorderLayer(action: LayerAction) {
   if (applyLayout(reorderWidgetLayers(next, [widget.id], action)))
     editorAnnouncement.value = 'Widget layer updated.'
 }
-function ancestorLock(key: 'positionLocked' | 'sizeLocked') {
-  const parent = widgets.value.find((entry) => entry.id === selectedWidget.value?.parentId)
-  return !!parent && geometryLocked(widgets.value, parent, key)
-}
 const widgetMenuActions = computed(() => [
   { id: 'edit', label: 'Edit widget' },
   { id: 'duplicate', label: 'Duplicate widget', disabled: !canDuplicateSelected.value },
@@ -891,16 +900,16 @@ const widgetMenuActions = computed(() => [
   { id: 'forward', label: 'Bring forward', disabled: !canLayer('forward') },
   { id: 'backward', label: 'Send backward', disabled: !canLayer('backward') },
   { id: 'back', label: 'Send to back', disabled: !canLayer('back') },
-  { id: 'positionLocked', label: ancestorLock('positionLocked') ? 'Position locked by container' :
-    selectedWidget.value?.positionLocked ? 'Unlock position' : 'Lock position',
-    disabled: ancestorLock('positionLocked'), separatorBefore: true },
-  { id: 'sizeLocked', label: ancestorLock('sizeLocked') ? 'Size locked by container' :
-    selectedWidget.value?.sizeLocked ? 'Unlock size' : 'Lock size', disabled: ancestorLock('sizeLocked') },
+  { id: 'positionLocked', label: selectionLocks.value.positionLocked.blocked ? 'Position locked by container' :
+    selectionLocks.value.positionLocked.checked ? 'Unlock position' : 'Lock position',
+    disabled: selectionLocks.value.positionLocked.blocked, separatorBefore: true },
+  { id: 'sizeLocked', label: selectionLocks.value.sizeLocked.blocked ? 'Size locked by container' :
+    selectionLocks.value.sizeLocked.checked ? 'Unlock size' : 'Lock size', disabled: selectionLocks.value.sizeLocked.blocked },
   { id: 'remove', label: 'Remove widget', disabled: requiredSelection.value, separatorBefore: true },
 ])
 function widgetMenuAction(action: string) {
   const menu = widgetMenu.value
-  if (!menu || !editing.value || busy.value || !canEdit.value ||
+  if (!menu || !clipboardCommandsAvailable() || !menu.current() ||
     !widgets.value.some((entry) => entry.id === menu.id)) return closeWidgetMenu()
   if (widgetMenuActions.value.find((entry) => entry.id === action)?.disabled) return
   closeWidgetMenu()
@@ -911,12 +920,11 @@ function widgetMenuAction(action: string) {
   if (action === 'copy') copySelection()
   else if (['front', 'forward', 'backward', 'back'].includes(action)) reorderLayer(action as LayerAction)
   else if (action === 'positionLocked' || action === 'sizeLocked') {
-    const widget = selectedWidget.value
-    if (widget && !ancestorLock(action)) widget[action] = !widget[action]
+    setLock(action, !selectionLocks.value[action].checked)
   }
   restoreMenuFocus(menu)
 }
-watch([editing, busy, canEdit, device, () => auth.currentUser?.uid, scope, role, jobId], () => closeWidgetMenu())
+watch([editing, busy, canEdit, lockSelectionIdentity, snapshot, drag.payload, removalPending, backgroundActive], () => closeWidgetMenu(), { flush: 'sync' })
 function captureDashboardContext() {
   const request = generation,
     owner = auth.currentUser?.uid,
@@ -945,11 +953,11 @@ function applyLayout(next: SharedDashboardWidget[]) {
     return false
   }
 }
-let removalPending = false, editRevision = 0
+let editRevision = 0
 watch([snapshot, editing, device, () => selectedIds.value.join('|')], () => editRevision++, { flush: 'sync' })
 const clipboardContext = () => JSON.stringify([auth.currentUser?.uid, scope.value, role.value, jobId.value])
 function clipboardCommandsAvailable() {
-  return editing.value && canEdit.value && !busy.value && !removalPending && !drag.payload.value && !stopBackground
+  return editing.value && canEdit.value && !busy.value && !removalPending.value && !drag.payload.value && !backgroundActive.value
 }
 function clipboardFeedback(reason: unknown) {
   const text = reason instanceof Error ? reason.message : String(reason)
@@ -1048,11 +1056,29 @@ function arrangeSelection(operation: Arrangement) {
       : w,
   )
 }
-function setLock(key: 'positionLocked' | 'sizeLocked', value: boolean) {
-  if (!editing.value || busy.value || !canEdit.value) return
-  widgets.value = widgets.value.map((w) =>
-    selectedIds.value.includes(w.id) ? { ...w, [key]: value } : w,
-  )
+function lockDescription(key: LockKey) {
+  const state = selectionLocks.value[key]
+  let description = `${state.ownCount} of ${state.total} selected widgets directly locked.`
+  if (state.blocked) description += ` ${state.inheritedCount} inherit a lock from ${state.parents.join(', ')}. Select the controlling container, or select widgets without inherited locks, to change this lock.`
+  if (state.checked || state.mixed) description += key === 'positionLocked'
+    ? ' Position locks prevent moving and block group move/resize controls. A single widget can still resize from the right or bottom if its size is unlocked.'
+    : ' Size locks prevent resizing. Moving remains available if position is unlocked.'
+  return description
+}
+function setLock(key: LockKey, value: boolean, event?: Event) {
+  const input = event?.currentTarget as HTMLInputElement | undefined
+  const validInput = !input || (root.value?.contains(input) &&
+    input.closest<HTMLElement>('[data-lock-selection]')?.dataset.lockSelection === lockSelectionIdentity.value)
+  if (clipboardCommandsAvailable() && validInput) {
+    const next = setSelectionLock(widgets.value, selectedIds.value, key, value)
+    if (next !== widgets.value && applyLayout(next))
+      editorAnnouncement.value = `${value ? 'Locked' : 'Unlocked'} ${key === 'positionLocked' ? 'position' : 'size'} for ${selectedRoots.value.length} selected widget${selectedRoots.value.length === 1 ? '' : 's'}.`
+  }
+  // A stale/blocked native change must not leave a misleading checkbox behind.
+  if (input?.isConnected) {
+    input.checked = selectionLocks.value[key].checked
+    input.indeterminate = selectionLocks.value[key].mixed
+  }
 }
 function groupSelection() {
   const entries = selectedRoots.value
@@ -1238,7 +1264,7 @@ async function remove(cut = false) {
   const current = captureDashboardContext(), revision = editRevision
   const removed = new Set(descendants(widgets.value, ids).map(w => w.id))
   clipboardPointer.clear()
-  removalPending = true
+  removalPending.value = true
   try {
     const accepted = await confirm.value?.ask({
       title: cut ? 'Cut widget settings?' : ids.length === 1 ? 'Remove widget?' : 'Remove selected widgets?',
@@ -1257,7 +1283,7 @@ async function remove(cut = false) {
     selectWidget('')
     clipboardFeedback(cut ? 'Widget settings cut. Saved content was retained and will not be moved by Paste.' : 'Selected widgets removed. Saved content was retained.')
     void nextTick(() => viewport.value?.focus({ preventScroll: true }))
-  } finally { removalPending = false }
+  } finally { removalPending.value = false }
 }
 async function prepare() {
   if (busy.value) return false
@@ -1762,6 +1788,7 @@ function backgroundPointer(event: PointerEvent) {
       stopBackground?.()
     }
   }
+  backgroundActive.value = true
   stopBackground = () => {
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerup', finish)
@@ -1770,6 +1797,7 @@ function backgroundPointer(event: PointerEvent) {
     window.removeEventListener('keydown', cancel)
     marquee.value = undefined
     stopBackground = undefined
+    backgroundActive.value = false
   }
   function finish() {
     stopBackground?.()
@@ -2799,20 +2827,23 @@ onBeforeUnmount(() => {
                 </select></label
               >
 
-              <label
-                ><input
-                  type="checkbox"
-                  :checked="!!selectedWidget.positionLocked"
-                  @change="setLock('positionLocked', ($event.target as HTMLInputElement).checked)"
-                />Lock position</label
-              >
-              <label
-                ><input
-                  type="checkbox"
-                  :checked="!!selectedWidget.sizeLocked"
-                  @change="setLock('sizeLocked', ($event.target as HTMLInputElement).checked)"
-                />Lock size</label
-              >
+              <div :key="lockSelectionIdentity" role="group" aria-label="Selection locks"
+                :data-lock-selection="lockSelectionIdentity">
+                <p class="shared-muted">Applies to {{ selectedRoots.length }} selected outermost widget{{ selectedRoots.length === 1 ? '' : 's' }}.
+                  <template v-if="selectedRoots.length < selectedIds.length">Selected children keep their own locks.</template>
+                </p>
+                <template v-for="key in (['positionLocked', 'sizeLocked'] as const)" :key="key">
+                  <label><input type="checkbox"
+                    :checked="selectionLocks[key].checked"
+                    :indeterminate="selectionLocks[key].mixed"
+                    :aria-checked="selectionLocks[key].mixed ? 'mixed' : selectionLocks[key].checked"
+                    :aria-describedby="`selection-lock-${key}`"
+                    :disabled="!clipboardCommandsAvailable() || selectionLocks[key].blocked"
+                    @change="setLock(key, ($event.target as HTMLInputElement).checked, $event)"
+                    />Lock {{ key === 'positionLocked' ? 'position' : 'size' }}</label>
+                  <small :id="`selection-lock-${key}`" class="shared-muted">{{ lockDescription(key) }}</small>
+                </template>
+              </div>
               <p>
                 Drag to move; use edge and corner handles to resize. Shift/Ctrl-click selects
                 several widgets. Shift-drag empty canvas selects an area. Arrow keys use grid
