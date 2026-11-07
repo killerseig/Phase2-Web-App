@@ -1,8 +1,14 @@
 import type { SharedDashboardWidget as Widget } from './sharedDashboards'
-import { descendants, rootSelection } from './editorGeometry'
+import { bounds, descendants, rootSelection, snap } from './editorGeometry'
 import { fallbackPlacements, type Placement } from './widgetPlacement'
 
 export type ClipboardDevice = 'desktop' | 'tablet' | 'phone'
+export interface ClipboardAnchor {
+  x: number
+  y: number
+  parentId: string
+  region: string
+}
 export interface WidgetClipboard {
   context: string
   device: ClipboardDevice
@@ -83,8 +89,9 @@ export function materializeWidgetClipboard(
   destination: Widget[],
   context: string,
   device: ClipboardDevice,
-  spacing: { x: number; y: number },
+  spacing: { x: number; y: number; snap?: boolean },
   measured: Placement[] = [],
+  anchor?: ClipboardAnchor,
 ): { widgets: Widget[]; roots: string[] } {
   if (
     !clipboard.roots.length ||
@@ -176,8 +183,37 @@ export function materializeWidgetClipboard(
     )
     const same = (a: Placement, b: Placement) =>
       (['x', 'y', 'w', 'h'] as const).every((key) => Math.abs(a[key] - b[key]) < 0.00001)
+    const current = roots.map((w) =>
+      device === 'desktop' ? w.placement : w.devices?.[device] || w.placement,
+    )
+    // Anchoring must not silently reparent widgets or turn a flowing surface
+    // into a positioned layout. Duplicate omits the anchor altogether.
+    const anchored =
+      anchor &&
+      [anchor.x, anchor.y].every(Number.isFinite) &&
+      roots.every((w) => surface(w) === `${anchor.parentId}:${anchor.region}`) &&
+      current.every((p): p is Placement => !!p) &&
+      destination.some(
+        (w) =>
+          surface(w) === surface(roots[0]!) &&
+          (device === 'desktop' ? w.placement : w.devices?.[device] || w.placement),
+      )
+    let origin = { x: 0, y: 0 }
+    if (anchored) {
+      const box = bounds(current as Placement[]),
+        primary = current.at(-1)!
+      origin = { x: anchor.x - box.x - box.w / 2, y: anchor.y - box.y - box.h / 2 }
+      if (spacing.snap !== false)
+        origin = {
+          x: snap(primary.x + origin.x, spacing.x) - primary.x,
+          y: snap(primary.y + origin.y, spacing.y) - primary.y,
+        }
+      origin.x = Math.max(minX, Math.min(maxX, origin.x))
+      origin.y = Math.max(minY, Math.min(maxY, origin.y))
+    }
     const seen = new Set<string>()
     let offset: { x: number; y: number } | undefined
+    const candidates = anchored ? [{ ...origin }] : []
     for (const [sx, sy] of [
       [1, 1],
       [0, 1],
@@ -189,28 +225,33 @@ export function materializeWidgetClipboard(
       [-1, 1],
     ]) {
       for (let step = 1; step <= 32; step++) {
-        const x = Math.max(minX, Math.min(maxX, sx! * step * spacing.x))
-        const y = Math.max(minY, Math.min(maxY, sy! * step * spacing.y))
-        const key = `${x}:${y}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        const collision = views.some((view) =>
-          roots.some((w) => {
-            const p = view === 'desktop' ? w.placement : w.devices?.[view] || w.placement
-            if (!p) return false
-            const moved = { ...p, x: p.x + x, y: p.y + y }
-            return destination.some(
-              (other) =>
-                surface(other) === surface(w) && same(moved, occupied.get(view)!.get(other.id)!),
-            )
-          }),
-        )
-        if (!collision) {
-          offset = { x, y }
-          break
-        }
+        candidates.push({
+          x: origin.x + sx! * step * spacing.x,
+          y: origin.y + sy! * step * spacing.y,
+        })
       }
-      if (offset) break
+    }
+    for (const candidate of candidates) {
+      const x = Math.max(minX, Math.min(maxX, candidate.x))
+      const y = Math.max(minY, Math.min(maxY, candidate.y))
+      const key = `${x}:${y}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const collision = views.some((view) =>
+        roots.some((w) => {
+          const p = view === 'desktop' ? w.placement : w.devices?.[view] || w.placement
+          if (!p) return false
+          const moved = { ...p, x: p.x + x, y: p.y + y }
+          return destination.some(
+            (other) =>
+              surface(other) === surface(w) && same(moved, occupied.get(view)!.get(other.id)!),
+          )
+        }),
+      )
+      if (!collision) {
+        offset = { x, y }
+        break
+      }
     }
     if (!offset)
       throw Error(

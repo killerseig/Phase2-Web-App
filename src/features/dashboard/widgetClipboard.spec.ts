@@ -35,6 +35,35 @@ const insert = (copied: ReturnType<typeof capture>, entries: Widget[], context =
 afterEach(() => vi.restoreAllMocks())
 
 describe('dashboard configuration clipboard', () => {
+  it('centers at a matching pointer, snaps one root, and advances repeated anchored paste', () => {
+    const entries = [widget('a')],
+      copied = snapshot(entries)
+    const anchor = { x: 15, y: 12, parentId: '', region: '0' }
+    const first = paste(
+      copied,
+      entries,
+      'personal:a',
+      'desktop',
+      { x: 1, y: 1, snap: true },
+      [],
+      anchor,
+    )
+    expect(first.widgets[0]!.placement).toEqual({ x: 12, y: 10, w: 6, h: 5 })
+    const second = paste(
+      copied,
+      [...entries, ...first.widgets],
+      'personal:a',
+      'desktop',
+      { x: 1, y: 1, snap: true },
+      [],
+      anchor,
+    )
+    expect(second.widgets[0]!.placement).toEqual({ x: 13, y: 11, w: 6, h: 5 })
+    expect(
+      paste(copied, entries, 'personal:a', 'desktop', { x: 1, y: 1, snap: true }, [], anchor)
+        .widgets[0]!.placement,
+    ).toEqual(first.widgets[0]!.placement)
+  })
   it('advances repeated pastes without re-quantizing offsets and reuses a position after undo', () => {
     const entries = [
       widget('a', { placement: { x: 2.123456, y: 3.123456, w: 6.123456, h: 5.123456 } }),
@@ -52,6 +81,104 @@ describe('dashboard configuration clipboard', () => {
     expect(insert(copied, entries).widgets[0]!.placement).toEqual(first.widgets[0]!.placement)
     expect(new Set([...entries, ...first.widgets, ...second.widgets].map((w) => w.id)).size).toBe(3)
     expect(entries).toEqual(before)
+  })
+  it('keeps multi-root gaps at an unsnapped nested anchor', () => {
+    const entries = [
+      panel,
+      widget('a', { parentId: 'panel', region: '0' }),
+      widget('b', { parentId: 'panel', region: '0', placement: { x: 12.125, y: 7, w: 5, h: 4 } }),
+    ]
+    const copied = snapshot(entries, ['a', 'b']),
+      before = structuredClone(copied)
+    const result = paste(
+      copied,
+      entries,
+      'personal:a',
+      'desktop',
+      { x: 2, y: 2, snap: false },
+      [],
+      { x: 12.125, y: 14.25, parentId: 'panel', region: '0' },
+    ).widgets
+    expect(result[1]!.placement!.x - result[0]!.placement!.x).toBeCloseTo(9.875, 8)
+    expect(result[1]!.placement!.y - result[0]!.placement!.y).toBeCloseTo(3.875, 8)
+    expect((result[0]!.placement!.x + result[1]!.placement!.x + 5) / 2).toBeCloseTo(12.125, 8)
+    expect(result.every((w) => w.parentId === 'panel' && w.region === '0')).toBe(true)
+    expect(copied).toEqual(before)
+  })
+  it('moves only subtree roots and keeps child geometry and private content protections', () => {
+    const parent = { ...panel, placement: { x: 1, y: 1, w: 12, h: 15 } }
+    const child = widget('child', {
+      parentId: parent.id,
+      region: '0',
+      type: 'notes',
+      text: 'Private legacy note',
+      devices: { phone: { x: 0, y: 2, w: 24, h: 5 } },
+    })
+    const entries = [parent, child]
+    const result = paste(
+      snapshot(entries, [parent.id]),
+      entries,
+      'personal:a',
+      'desktop',
+      { x: 1, y: 1 },
+      [],
+      { x: 18, y: 20, parentId: '', region: '0' },
+    ).widgets
+    expect(result[0]!.placement).toEqual({ x: 12, y: 13, w: 12, h: 15 })
+    expect(result[1]!.placement).toEqual(child.placement)
+    expect(result[1]!.devices).toEqual(child.devices)
+    expect(result[1]!.parentId).toBe(result[0]!.id)
+    expect(result[1]!.text).toBe('')
+    expect(child.text).toBe('Private legacy note')
+  })
+  it('preserves all authored bounds even when a different device prevents exact anchoring', () => {
+    const entries = [widget('a', { devices: { phone: { x: 0, y: 995, w: 24, h: 5 } } })]
+    const result = paste(snapshot(entries), entries, 'personal:a', 'desktop', { x: 1, y: 1 }, [], {
+      x: 20,
+      y: 20,
+      parentId: '',
+      region: '0',
+    }).widgets[0]!
+    expect(result.placement!.x).toBe(2.25)
+    expect(result.placement!.y).toBe(2.125)
+    expect(result.devices!.phone).toEqual({ x: 0, y: 994, w: 24, h: 5 })
+    expect(() => validateSharedWidgets([...entries, result], 'personal')).not.toThrow()
+  })
+  it('uses the active device geometry for centering and shares its delta with other authored views', () => {
+    const entries = [widget('a', { devices: { phone: { x: 4, y: 5, w: 8, h: 6 } } })]
+    const result = paste(snapshot(entries), entries, 'personal:a', 'phone', { x: 1, y: 1 }, [], {
+      x: 14,
+      y: 12,
+      parentId: '',
+      region: '0',
+    }).widgets[0]!
+    expect(result.devices!.phone).toEqual({ x: 10, y: 9, w: 8, h: 6 })
+    expect(result.placement).toEqual({ x: 8.25, y: 7.125, w: 6, h: 5 })
+    expect(result.devices!.tablet).toBeUndefined()
+  })
+  it.each([
+    { x: 15, y: 12, parentId: 'unrelated', region: '0' },
+    { x: 15, y: 12, parentId: '', region: '1' },
+    { x: NaN, y: 12, parentId: '', region: '0' },
+  ])('falls back for an unrelated or invalid anchor %j', (anchor) => {
+    const entries = [widget('a')],
+      copied = snapshot(entries)
+    expect(
+      paste(copied, entries, 'personal:a', 'desktop', { x: 1, y: 1 }, [], anchor).widgets[0]!
+        .placement,
+    ).toEqual(insert(copied, entries).widgets[0]!.placement)
+  })
+  it('keeps flow-only destinations flowing even with a matching pointer', () => {
+    const entries = [widget('a', { placement: undefined })]
+    const result = paste(snapshot(entries), entries, 'personal:a', 'desktop', { x: 1, y: 1 }, [], {
+      x: 15,
+      y: 12,
+      parentId: '',
+      region: '0',
+    })
+    expect(result.widgets[0]!.placement).toBeUndefined()
+    expect(result.widgets[0]!.devices).toBeUndefined()
+    expect(entries[0]!.placement).toBeUndefined()
   })
   it('clamps one shared delta at the boundary and retains group gaps in every authored device', () => {
     const entries = [

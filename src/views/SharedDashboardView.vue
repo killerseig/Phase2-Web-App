@@ -53,6 +53,7 @@ import {
   type Arrangement,
 } from '@/features/dashboard/editorGeometry'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
+import { useClipboardPointer } from '@/features/dashboard/useClipboardPointer'
 import { keyboardGeometry } from '@/features/dashboard/keyboardGeometry'
 import { captureWidgetClipboard, materializeWidgetClipboard, type WidgetClipboard } from '@/features/dashboard/widgetClipboard'
 import {
@@ -971,6 +972,7 @@ function insertClipboard(captured: WidgetClipboard, duplicate = false) {
     throw Error('This selection includes widget types unavailable on this dashboard.')
   const copied = materializeWidgetClipboard(
     captured, widgets.value, clipboardContext(), device.value, interactionGrid.value, measuredPlacements(),
+    duplicate ? undefined : clipboardPointer.resolve(),
   )
   if (duplicate) copied.widgets.filter(w => copied.roots.includes(w.id)).forEach(w => {
     w.title = `${w.title || sharedWidgetLabels[w.type]} copy`.slice(0, 100)
@@ -1235,6 +1237,7 @@ async function remove(cut = false) {
   catch (reason) { clipboardFeedback(reason); return }
   const current = captureDashboardContext(), revision = editRevision
   const removed = new Set(descendants(widgets.value, ids).map(w => w.id))
+  clipboardPointer.clear()
   removalPending = true
   try {
     const accepted = await confirm.value?.ask({
@@ -1566,6 +1569,12 @@ const handTool = ref(false)
 const runtimeZoom = ref(1)
 const runtimeCamera = ref({ x: 0, y: 0 })
 const editorCamera = ref({ x: 0, y: 0 })
+const clipboardPointer = useClipboardPointer({
+  viewport,
+  enabled: clipboardCommandsAvailable,
+  context: () => [clipboardContext(), auth.rawRole, device.value, previewScale.value,
+    previewWidth.value, editorCamera.value.x, editorCamera.value.y],
+})
 let fitRequest = 0
 const fittedView = ref(false)
 const fittingView = ref(false)
@@ -2814,6 +2823,8 @@ onBeforeUnmount(() => {
                 On the canvas or outline, Ctrl/Command+C copies settings, V pastes, D duplicates,
                 and X cuts settings after confirmation. Delete/Backspace removes the selection
                 after confirmation. Saved private content stays with its original records.
+                Hover over the same canvas region before pasting to place near the pointer.
+                Flow layouts keep their reading order; Duplicate uses an offset.
               </p>
               <p v-if="device !== 'desktop'">Placement edits override {{ device }} only.</p>
               <AppButton
