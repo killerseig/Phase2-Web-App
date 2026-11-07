@@ -366,6 +366,9 @@
 .shared-preview-frame {
   margin: 0 auto;
 }
+.shared-dashboard-content {
+  position: relative;
+}
 .shared-dashboard-widget.is-selected {
   outline: 2px solid var(--accent);
   outline-offset: 1px;

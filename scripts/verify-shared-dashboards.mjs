@@ -922,6 +922,7 @@ try {
     frame: 'custom',
     zoom: 0.75,
     start: { x: -2.25, y: 5.5 },
+    publishedFrame: { x: -120, y: 64, width: 800, height: 600 },
     pan: 'free',
     grid: {
       ...defaultDashboardViewport().grid,
@@ -948,6 +949,9 @@ try {
     original = (await ref.get()).data()
   for (const extra of [
     { viewport: { ...display, width: 0 } },
+    ...[null, {}, { ...display.publishedFrame, x: -10001 }, { ...display.publishedFrame, width: 319 },
+      { ...display.publishedFrame, height: 4001 }, { ...display.publishedFrame, owner: 'forged' }]
+      .map((publishedFrame) => ({ viewport: { ...display, publishedFrame } })),
     { viewport: { ...display, companyId: 'forged' } },
     { viewport: { ...display, start: { x: '3', y: 0 } } },
     { viewport: { ...display, start: { x: 0, y: -10001 } } },
@@ -1013,6 +1017,7 @@ try {
   // A pre-parity viewport reads with defaults but is never rewritten by a load.
   const legacy = structuredClone(display)
   delete legacy.start
+  delete legacy.publishedFrame
   delete legacy.grid.linked
   delete legacy.grid.majorEvery
   const legacyRecord = { ...original, viewport: legacy }
@@ -1040,6 +1045,7 @@ try {
   })
   equal(delegated.viewport.zoom, 1)
   equal(delegated.viewport.start, display.start)
+  equal(delegated.viewport.publishedFrame, display.publishedFrame)
   equal(delegated.viewport.grid.majorEvery, 8)
   await call('dash-admin', 'role', 'save-template', {
     role: 'foreman',

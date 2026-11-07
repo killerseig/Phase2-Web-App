@@ -8,6 +8,7 @@ const props = defineProps<{
   disableResize?: boolean
   positionLocked?: boolean
   widgetTitle?: string
+  controlLabel?: string
   scale?: number
 }>()
 const emit = defineEmits<{
@@ -60,15 +61,15 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
     data-selection-control
     :style="frameStyle"
     role="group"
-    :aria-label="widgetTitle ? 'Selected widget frame' : 'Selected widgets frame'"
+    :aria-label="controlLabel || (widgetTitle ? 'Selected widget frame' : 'Selected widgets frame')"
   >
     <button
       type="button"
       class="dashboard-selection-frame__move"
       data-selection-control="move"
       :disabled="disableMove"
-      :aria-label="widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
-      :title="widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
+      :aria-label="controlLabel ? 'Move ' + controlLabel : widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
+      :title="controlLabel ? 'Move ' + controlLabel : widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
       @pointerdown.stop="move"
       @keydown="key($event, 'move')"
       @click.stop
@@ -76,7 +77,7 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
         <path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
       </svg>
-      <span>Move</span>
+      <span>{{ controlLabel || 'Move' }}</span>
     </button>
     <button
       v-for="direction in resizeDirections"

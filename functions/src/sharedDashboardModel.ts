@@ -21,6 +21,13 @@ export interface DashboardPlacement {
   w: number
   h: number
 }
+/** Independent published window in authored canvas pixels; never widget geometry. */
+export interface DashboardPublishedFrame {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 export interface DashboardViewport {
   mode: 'responsive' | 'fixed' | 'scale'
   width: number
@@ -32,6 +39,7 @@ export interface DashboardViewport {
   pan: 'overflow' | 'free' | 'locked'
   zoom: number
   start: { x: number; y: number }
+  publishedFrame?: DashboardPublishedFrame
   grid: {
     x: number
     y: number
@@ -75,6 +83,7 @@ export function validateDashboardViewport(value: unknown): DashboardViewport {
           'pan',
           'zoom',
           'start',
+          'publishedFrame',
           'grid',
         ].includes(k),
     ) ||
@@ -93,6 +102,21 @@ export function validateDashboardViewport(value: unknown): DashboardViewport {
     !Number.isFinite(v.zoom) ||
     v.zoom < 0.25 ||
     v.zoom > 2 ||
+    (v.publishedFrame !== undefined &&
+      (!v.publishedFrame ||
+        typeof v.publishedFrame !== 'object' ||
+        Array.isArray(v.publishedFrame) ||
+        Object.keys(v.publishedFrame).length !== 4 ||
+        Object.keys(v.publishedFrame).some((k) => !['x', 'y', 'width', 'height'].includes(k)) ||
+        ![v.publishedFrame.x, v.publishedFrame.y].every(
+          (n) => Number.isFinite(n) && Math.abs(n) <= 10000,
+        ) ||
+        !Number.isFinite(v.publishedFrame.width) ||
+        v.publishedFrame.width < 320 ||
+        v.publishedFrame.width > 3840 ||
+        !Number.isFinite(v.publishedFrame.height) ||
+        v.publishedFrame.height < 240 ||
+        v.publishedFrame.height > 4000)) ||
     !v.grid ||
     typeof v.grid !== 'object' ||
     Array.isArray(v.grid) ||
@@ -116,6 +140,7 @@ export function validateDashboardViewport(value: unknown): DashboardViewport {
     throw Error('Invalid dashboard viewport settings.')
   return {
     ...v,
+    ...(v.publishedFrame ? { publishedFrame: { ...v.publishedFrame } } : {}),
     start: v.start ? { ...v.start } : { x: 0, y: 0 },
     grid: {
       ...v.grid,

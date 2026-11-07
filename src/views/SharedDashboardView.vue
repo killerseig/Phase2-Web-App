@@ -14,6 +14,8 @@ import BuilderPanelSwitcher from '@/components/builder/BuilderPanelSwitcher.vue'
 import { canSubmitForm } from '../../functions/src/formAccess'
 import SharedDashboardCanvas from '@/components/dashboard/SharedDashboardCanvas.vue'
 import DashboardWidgetMenu from '@/components/dashboard/DashboardWidgetMenu.vue'
+import DashboardPublishedFrame from '@/components/dashboard/DashboardPublishedFrame.vue'
+import type { DashboardPublishedFrame as PublishedFrame } from '../../functions/src/sharedDashboardModel'
 import { canReorderWidgetLayers, reorderWidgetLayers, type LayerAction } from '@/features/dashboard/widgetLayers'
 import { useDashboardWorkspaceGrid } from '@/features/dashboard/useDashboardWorkspaceGrid'
 import { useAuthStore } from '@/stores/auth'
@@ -86,6 +88,24 @@ const saved = ref(''),
   fit = ref(true),
   zoom = ref(1)
 const viewportSettings = ref<DashboardViewport>(defaultDashboardViewport())
+const editPublishedFrame = ref(false)
+const configuredFrame = computed<PublishedFrame>(() => (viewportSettings.value.frame === 'custom' && viewportSettings.value.publishedFrame) || {
+  x: 0, y: 0, width: previewWidth.value,
+  height: viewportSettings.value.frame === 'custom' ? viewportSettings.value.height : Math.max(240, Math.min(4000, contentHeight.value)),
+})
+const frameControlsVisible = computed(() => editing.value && editPublishedFrame.value &&
+  device.value === 'desktop' && viewportSettings.value.mode !== 'responsive')
+function changePublishedFrame(frame: PublishedFrame) {
+  if (!canEdit.value || busy.value || !frameControlsVisible.value) return
+  // One replacement is one history entry; content positions and camera offsets stay untouched.
+  viewportSettings.value = { ...viewportSettings.value, frame: 'custom', publishedFrame: frame }
+}
+function resetPublishedFrame() {
+  if (!canEdit.value || busy.value) return
+  const settings = { ...viewportSettings.value }
+  delete settings.publishedFrame
+  viewportSettings.value = settings
+}
 const selection = ref<string[]>([])
 const selectedIds = computed(() =>
   selection.value.includes(selected.value)
@@ -1629,6 +1649,8 @@ function backgroundPointer(event: PointerEvent) {
 }
 onBeforeUnmount(() => stopBackground?.())
 const runtimeFixed = computed(() => viewportSettings.value.mode !== 'responsive')
+const runtimePublishedFrame = computed(() => runtimeFixed.value && viewportSettings.value.frame === 'custom'
+  ? viewportSettings.value.publishedFrame : undefined)
 const runtimeCanvasWidth = computed(() =>
   runtimeFixed.value ? viewportSettings.value.width : viewportWidth.value,
 )
@@ -1636,11 +1658,11 @@ const runtimeScale = computed(() =>
   viewportSettings.value.mode === 'scale'
     ? Math.min(
         1,
-        viewportWidth.value / viewportSettings.value.width,
+        viewportWidth.value / (runtimePublishedFrame.value?.width || viewportSettings.value.width),
         viewportSettings.value.fit === 'contain'
           ? viewportHeight.value /
               (viewportSettings.value.frame === 'custom'
-                ? viewportSettings.value.height
+                ? runtimePublishedFrame.value?.height || viewportSettings.value.height
                 : contentHeight.value)
           : 1,
       ) * runtimeZoom.value
@@ -1663,17 +1685,48 @@ const runtimeCameraMode = computed(
 const runtimeOffsetX = computed(() =>
   alignmentOffset(
     viewportWidth.value,
-    runtimeCanvasWidth.value * runtimeScale.value,
+    (runtimePublishedFrame.value?.width || runtimeCanvasWidth.value) * runtimeScale.value,
     viewportSettings.value.align,
   ),
 )
 const runtimeOffsetY = computed(() =>
   alignmentOffset(
     viewportHeight.value,
-    contentHeight.value * runtimeScale.value,
+    (runtimePublishedFrame.value?.height || contentHeight.value) * runtimeScale.value,
     viewportSettings.value.verticalAlign,
   ),
 )
+// Explicit frames crop the published window, not the widgets. Free panning can
+// leave that window; Overflow uses native scroll bounds; Locked holds the camera.
+const publishedBoundsStyle = computed(() => {
+  const frame = runtimePublishedFrame.value
+  if (editing.value || !frame || runtimeFree.value) return { display: 'contents' }
+  const scale = runtimeScale.value
+  return {
+    position: runtimeCameraMode.value ? 'absolute' as const : 'relative' as const,
+    overflow: 'hidden',
+    width: frame.width * scale + 'px', height: frame.height * scale + 'px',
+    ...(runtimeCameraMode.value ? {
+      left: runtimeOffsetX.value - runtimeCamera.value.x * scale + 'px',
+      top: runtimeOffsetY.value - runtimeCamera.value.y * scale + 'px',
+    } : {
+      marginLeft: viewportSettings.value.align === 'start' ? '0' : 'auto',
+      marginRight: viewportSettings.value.align === 'end' ? '0' : 'auto',
+      marginTop: runtimeOffsetY.value + 'px',
+    }),
+  }
+})
+const publishedContentStyle = computed(() => {
+  const frame = runtimePublishedFrame.value
+  if (!frame) return {}
+  const scale = runtimeScale.value
+  return {
+    position: 'absolute' as const, margin: '0',
+    width: runtimeCanvasWidth.value * scale + 'px', height: contentHeight.value * scale + 'px',
+    left: ((runtimeFree.value ? runtimeOffsetX.value - runtimeCamera.value.x * scale : 0) - frame.x * scale) + 'px',
+    top: ((runtimeFree.value ? runtimeOffsetY.value - runtimeCamera.value.y * scale : 0) - frame.y * scale) + 'px',
+  }
+})
 function resetRuntimeView() {
   runtimeZoom.value = viewportSettings.value.zoom
   runtimeCamera.value = startCamera(viewportSettings.value.start, runtimeCanvasWidth.value)
@@ -1687,7 +1740,7 @@ function resetRuntimeView() {
   })
 }
 watch(
-  [editing, layout, () => viewportSettings.value],
+  [editing, layout],
   () => {
     stopBackground?.()
     handTool.value = false
@@ -1696,6 +1749,9 @@ watch(
   },
   { flush: 'post' },
 )
+watch(viewportSettings, () => {
+  if (!editing.value) resetRuntimeView()
+}, { flush: 'post' })
 watch([runtimeScale, runtimeCanvasWidth], ([, width], [, previousWidth]) => {
   if (!editing.value && runtimeCameraMode.value && width !== previousWidth)
     runtimeCamera.value = startCamera(viewportSettings.value.start, width)
@@ -2255,13 +2311,14 @@ onBeforeUnmount(() => {
                   ? {
                       height:
                         viewportSettings.frame === 'custom'
-                          ? `min(70dvh, ${viewportSettings.height}px)`
+                          ? `min(70dvh, ${runtimePublishedFrame?.height || viewportSettings.height}px)`
                           : '70dvh',
                       overflow: runtimeCameraMode ? 'hidden' : 'auto',
                     }
                   : undefined
               "
             >
+              <div class="shared-published-bounds" :style="publishedBoundsStyle">
               <div
                 :style="
                   editing
@@ -2270,7 +2327,7 @@ onBeforeUnmount(() => {
                         minHeight: contentHeight * previewScale + 'px',
                         transform: `translate(${-editorCamera.x * previewScale}px, ${-editorCamera.y * previewScale}px)`,
                       }
-                    : runtimeFramed
+                    : runtimePublishedFrame ? publishedContentStyle : runtimeFramed
                       ? {
                           width: runtimeCanvasWidth * runtimeScale + 'px',
                           height: contentHeight * runtimeScale + 'px',
@@ -2293,6 +2350,7 @@ onBeforeUnmount(() => {
               >
                 <div
                   ref="content"
+                  class="shared-dashboard-content"
                   :style="
                     editing
                       ? {
@@ -2366,7 +2424,12 @@ onBeforeUnmount(() => {
                     @save-note="saveNote"
                     @save-calendar="saveCalendar"
                   />
+                  <DashboardPublishedFrame v-if="frameControlsVisible"
+                    :frame="configuredFrame" :canvas-width="previewWidth" :scale="previewScale"
+                    :grid="viewportSettings.grid" :disabled="busy || !canEdit"
+                    @change="changePublishedFrame" />
                 </div>
+              </div>
               </div>
             </div>
           </main>
@@ -2396,6 +2459,19 @@ onBeforeUnmount(() => {
                   <option value="scale">Scale canvas</option>
                 </select></label
               >
+              <AppButton :aria-pressed="editPublishedFrame"
+                :disabled="busy || viewportSettings.mode === 'responsive' || device !== 'desktop'"
+                @click="editPublishedFrame = !editPublishedFrame"
+                >{{ editPublishedFrame ? 'Hide frame controls' : 'Adjust published frame' }}</AppButton>
+              <p class="shared-muted">In Desktop edit view, use Fixed or Scale canvas to move and resize the published frame. Widgets stay in place. Responsive follows the screen.</p>
+              <fieldset v-if="viewportSettings.publishedFrame" :disabled="busy">
+                <legend>Published frame (pixels)</legend>
+                <label>Frame X<input type="number" min="-10000" max="10000" v-model.number="viewportSettings.publishedFrame.x" /></label>
+                <label>Frame Y<input type="number" min="-10000" max="10000" v-model.number="viewportSettings.publishedFrame.y" /></label>
+                <label>Published width<input type="number" min="320" max="3840" v-model.number="viewportSettings.publishedFrame.width" /></label>
+                <label>Published height<input type="number" min="240" max="4000" v-model.number="viewportSettings.publishedFrame.height" /></label>
+                <AppButton @click="resetPublishedFrame">Reset frame bounds</AppButton>
+              </fieldset>
               <label
                 >Canvas width<input
                   type="number"
@@ -2408,6 +2484,7 @@ onBeforeUnmount(() => {
                   type="number"
                   min="240"
                   max="4000"
+                  :disabled="!!viewportSettings.publishedFrame"
                   v-model.number="viewportSettings.height"
               /></label>
               <label
@@ -2476,7 +2553,7 @@ onBeforeUnmount(() => {
                   v-model.number="viewportSettings.start.y"
               /></label>
               <p class="shared-muted">
-                Starting offsets are relative to the canvas origin. Free allows panning beyond the
+                Starting offsets are relative to the published frame origin when set, otherwise the canvas origin. Free allows panning beyond the
                 content; Overflow stays within it; Locked holds the starting view.
               </p>
             </details>
