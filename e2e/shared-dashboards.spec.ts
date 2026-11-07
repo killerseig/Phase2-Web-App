@@ -420,7 +420,7 @@ for (const scope of ['role', 'job'] as const) test(`${scope} editor saves free p
   await page.mouse.move(bounds.x + bounds.width * 4 / 24 + cx - origin.x, bounds.y + 6 * 32 * scale + cy - origin.y, { steps: 10 })
   await page.mouse.up()
   const first = (await widget.boundingBox())!
-  const resize = widget.getByRole('button', { name: 'Resize Positioned text', exact: true })
+  const resize = page.getByRole('button', { name: 'Resize Positioned text', exact: true })
   const grip = (await resize.boundingBox())!
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
   await page.mouse.down()

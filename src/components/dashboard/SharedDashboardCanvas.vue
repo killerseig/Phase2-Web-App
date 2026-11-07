@@ -23,7 +23,6 @@ import {
 import { resolveDashboardText, type DashboardTextContext } from '@/features/dashboard/sharedText'
 import { fallbackPlacements } from '@/features/dashboard/widgetPlacement'
 import {
-  resizeDirections,
   bounds as geometryBounds,
   rootSelection,
   locked as geometryLocked,
@@ -52,6 +51,7 @@ const props = defineProps<{
   resourceRole?: RawRoleKey
   textContext: DashboardTextContext
   editing: boolean
+  editorScale?: number
   gridVisible?: boolean
   placementPreview?: SharedDashboardWidget['placement']
   dropTarget?: WidgetDrop
@@ -109,7 +109,7 @@ const measuredSelection = ref<SelectionGeometry>()
 const selectionWidgets = computed(() => {
   if (!props.editing) return []
   const roots = rootSelection(props.widgets, props.selectedIds || [props.selected])
-  return roots.length > 1 &&
+  return roots.length > 0 &&
     roots.every(
       (widget) =>
         (widget.parentId || '') === (props.parentId || '') &&
@@ -125,7 +125,7 @@ const selectionPrimary = computed(
     '',
 )
 const selectionGeometry = computed(() => {
-  if (selectionWidgets.value.length < 2) return undefined
+  if (!selectionWidgets.value.length) return undefined
   if (!positioned.value) return measuredSelection.value
   const ids = new Set(selectionWidgets.value.map((widget) => widget.id))
   return geometryBounds(
@@ -141,7 +141,8 @@ const selectionMoveDisabled = computed(
 )
 const selectionResizeDisabled = computed(
   () =>
-    selectionMoveDisabled.value ||
+    props.busy ||
+    (selectionWidgets.value.length > 1 && selectionMoveDisabled.value) ||
     selectionWidgets.value.some((widget) => geometryLocked(props.widgets, widget, 'sizeLocked')),
 )
 let selectionObserver: ResizeObserver | undefined
@@ -162,7 +163,7 @@ function measureSelection() {
   selectionFrame = 0
   const host = canvasElement.value
   if (!host) return
-  const measuring = !positioned.value && selectionWidgets.value.length > 1
+  const measuring = !positioned.value && selectionWidgets.value.length > 0
   const children = measuring
     ? [...host.querySelectorAll<HTMLElement>(':scope > [data-widget-id]')]
     : []
@@ -476,6 +477,13 @@ function textStyle(widget: SharedDashboardWidget) {
       :geometry="selectionGeometry"
       :disable-move="selectionMoveDisabled"
       :disable-resize="selectionResizeDisabled"
+      :position-locked="selectionMoveDisabled"
+      :widget-title="
+        selectionWidgets.length === 1
+          ? selectionWidgets[0]!.title || sharedWidgetLabels[selectionWidgets[0]!.type]
+          : undefined
+      "
+      :scale="editorScale"
       @move="emit('selection-move', $event, selectionPrimary)"
       @resize="(event, direction) => emit('selection-resize', event, selectionPrimary, direction)"
       @key="
@@ -847,30 +855,6 @@ function textStyle(widget: SharedDashboardWidget) {
         :can-respond="['admin', 'project-manager', 'foreman', 'shop-foreman'].includes(role)"
         :job-id="scope === 'job' ? job?.id : undefined"
       />
-      <template v-if="editing">
-        <button
-          v-for="direction in resizeDirections"
-          v-show="direction === 'se' || (selectedIds || [selected]).includes(widget.id)"
-          :key="direction"
-          type="button"
-          :class="['shared-widget-resize', 'resize-' + direction]"
-          :aria-label="
-            'Resize ' +
-            (widget.title || sharedWidgetLabels[widget.type]) +
-            (direction === 'se' ? '' : ' from ' + direction)
-          "
-          :disabled="
-            busy ||
-            geometryLocked(widgets, widget, 'sizeLocked') ||
-            (geometryLocked(widgets, widget, 'positionLocked') && /[nw]/.test(direction))
-          "
-          @pointerdown.stop="emit('resize', $event, widget.id, direction)"
-          @dragstart.prevent
-          @click.stop="emit('edit', widget.id)"
-        >
-          {{ direction === 'se' ? '↘' : '' }}
-        </button>
-      </template>
     </article>
   </div>
 </template>

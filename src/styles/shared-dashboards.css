@@ -623,20 +623,6 @@
 .shared-dashboard-grid.is-placement-editor > .shared-dashboard-widget {
   position: relative;
 }
-.shared-widget-resize {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  cursor: se-resize;
-  touch-action: none;
-  width: 28px;
-  height: 28px;
-  z-index: 3;
-  color: var(--text);
-  background: var(--panel-background);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
 .shared-preview-controls label {
   display: flex;
   align-items: center;
@@ -654,62 +640,6 @@
 .shared-dashboard-grid.is-placement-editor input,
 .shared-dashboard-grid.is-placement-editor textarea {
   user-select: text;
-}
-.shared-widget-resize:not(.resize-se) {
-  width: 12px;
-  height: 12px;
-  min-height: 0;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--panel-background);
-}
-.shared-widget-resize.resize-n {
-  left: calc(50% - 6px);
-  top: 1px;
-  bottom: auto;
-  cursor: n-resize;
-}
-.shared-widget-resize.resize-ne {
-  right: 1px;
-  top: 1px;
-  bottom: auto;
-  cursor: ne-resize;
-}
-.shared-widget-resize.resize-e {
-  right: 1px;
-  top: calc(50% - 6px);
-  bottom: auto;
-  cursor: e-resize;
-}
-.shared-widget-resize.resize-s {
-  left: calc(50% - 6px);
-  bottom: 1px;
-  cursor: s-resize;
-}
-.shared-widget-resize.resize-sw {
-  left: 1px;
-  bottom: 1px;
-  right: auto;
-  cursor: sw-resize;
-}
-.shared-widget-resize.resize-w {
-  left: 1px;
-  top: calc(50% - 6px);
-  bottom: auto;
-  right: auto;
-  cursor: w-resize;
-}
-.shared-widget-resize.resize-nw {
-  left: 1px;
-  top: 1px;
-  right: auto;
-  bottom: auto;
-  cursor: nw-resize;
-}
-.shared-widget-resize:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
 }
 .shared-dashboard-grid.is-nested {
   min-height: 200px;

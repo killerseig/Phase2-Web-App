@@ -6,6 +6,9 @@ const props = defineProps<{
   geometry: { x: number; y: number; w: number; h: number }
   disableMove?: boolean
   disableResize?: boolean
+  positionLocked?: boolean
+  widgetTitle?: string
+  scale?: number
 }>()
 const emit = defineEmits<{
   move: [event: PointerEvent]
@@ -19,22 +22,32 @@ const frameStyle = computed(() => ({
   top: props.geometry.y * 32 + 'px',
   width: (props.geometry.w / 24) * 100 + '%',
   height: props.geometry.h * 32 + 'px',
+  '--selection-control-scale':
+    1 / (Number.isFinite(props.scale) && props.scale! > 0 ? props.scale! : 1),
 }))
+function resizeDisabled(direction: Direction) {
+  return props.disableResize || (props.positionLocked && /[nw]/.test(direction))
+}
+function resizeLabel(direction: Direction) {
+  return props.widgetTitle
+    ? `Resize ${props.widgetTitle}${direction === 'se' ? '' : ' from ' + direction}`
+    : `Resize selected widgets from ${direction}`
+}
 function handleStyle(direction: Direction) {
   return {
     left: direction.includes('w') ? '0%' : direction.includes('e') ? '100%' : '50%',
     top: direction.includes('n') ? '0%' : direction.includes('s') ? '100%' : '50%',
-    cursor: props.disableResize ? 'not-allowed' : `${direction}-resize`,
+    cursor: resizeDisabled(direction) ? 'not-allowed' : `${direction}-resize`,
   }
 }
 function move(event: PointerEvent) {
   if (!props.disableMove && event.button === 0) emit('move', event)
 }
 function resize(event: PointerEvent, direction: Direction) {
-  if (!props.disableResize && event.button === 0) emit('resize', event, direction)
+  if (!resizeDisabled(direction) && event.button === 0) emit('resize', event, direction)
 }
 function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direction) {
-  if (action === 'move' ? props.disableMove : props.disableResize) return
+  if (action === 'move' ? props.disableMove : resizeDisabled(direction || 'se')) return
   emit('key', event, action, direction)
   // Let unhandled keys reach the existing editor and drag-cancellation handlers.
   if (event.defaultPrevented) event.stopPropagation()
@@ -47,15 +60,15 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
     data-selection-control
     :style="frameStyle"
     role="group"
-    aria-label="Selected widgets frame"
+    :aria-label="widgetTitle ? 'Selected widget frame' : 'Selected widgets frame'"
   >
     <button
       type="button"
       class="dashboard-selection-frame__move"
       data-selection-control="move"
       :disabled="disableMove"
-      aria-label="Move selected widgets"
-      title="Move selected widgets"
+      :aria-label="widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
+      :title="widgetTitle ? 'Move selected widget' : 'Move selected widgets'"
       @pointerdown.stop="move"
       @keydown="key($event, 'move')"
       @click.stop
@@ -73,9 +86,9 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
       :data-selection-control="direction"
       :class="`resize-${direction}`"
       :style="handleStyle(direction)"
-      :disabled="disableResize"
-      :aria-label="`Resize selected widgets from ${direction}`"
-      :title="`Resize selected widgets from ${direction}`"
+      :disabled="resizeDisabled(direction)"
+      :aria-label="resizeLabel(direction)"
+      :title="resizeLabel(direction)"
       @pointerdown.stop="resize($event, direction)"
       @keydown="key($event, 'resize', direction)"
       @click.stop
@@ -102,8 +115,8 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
   user-select: none;
 }
 .dashboard-selection-frame__move {
-  top: -13px;
-  left: 20px;
+  top: calc(4px * var(--selection-control-scale));
+  left: calc(20px * var(--selection-control-scale));
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -118,6 +131,8 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
   font-weight: 600;
   line-height: 1.2;
   cursor: grab;
+  transform: translateY(-50%) scale(var(--selection-control-scale));
+  transform-origin: left center;
 }
 .dashboard-selection-frame__move:active:not(:disabled) {
   cursor: grabbing;
@@ -137,7 +152,7 @@ function key(event: KeyboardEvent, action: 'move' | 'resize', direction?: Direct
   padding: 0;
   border: 0;
   background: transparent;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(var(--selection-control-scale));
 }
 .dashboard-selection-frame__resize::before {
   content: '';

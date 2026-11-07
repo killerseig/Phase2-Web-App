@@ -460,7 +460,8 @@ function startTransform(
   const surface = surfaceFor(dragParent, dragRegion)
   const primary = dragOrigins[widgets.value.indexOf(widget)]!
   if (selectionControl && selectedRoots.value.some((entry) =>
-    geometryLocked(widgets.value, entry, 'positionLocked') ||
+    (geometryLocked(widgets.value, entry, 'positionLocked') &&
+      (kind === 'move' || selectedRoots.value.length > 1 || /[nw]/.test(direction))) ||
     (kind === 'resize' && geometryLocked(widgets.value, entry, 'sizeLocked')))) return
   drag.start(
     event,
@@ -552,9 +553,10 @@ function selectionKey(event: KeyboardEvent, id: string, action: 'move' | 'resize
     !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
   const widget = widgets.value.find((entry) => entry.id === id)
   const entries = selectedRoots.value
-  if (!widget || entries.length < 2 || entries.some((entry) =>
+  if (!widget || !entries.length || entries.some((entry) =>
     (entry.parentId || '') !== (widget.parentId || '') || (entry.region || '0') !== (widget.region || '0') ||
-    geometryLocked(widgets.value, entry, 'positionLocked') ||
+    (geometryLocked(widgets.value, entry, 'positionLocked') &&
+      (action === 'move' || entries.length > 1 || /[nw]/.test(direction))) ||
     (action === 'resize' && geometryLocked(widgets.value, entry, 'sizeLocked')))) return
   event.preventDefault()
   const grid = interactionGrid.value
@@ -563,7 +565,10 @@ function selectionKey(event: KeyboardEvent, id: string, action: 'move' | 'resize
   const dy = (event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0) * (grid.snap ? grid.y : 1 / 32)
   const positions = measuredPlacements()
   const original = entries.map((entry) => positions[widgets.value.indexOf(entry)]!)
-  const changes = action === 'move' ? translate(original, dx, dy, grid) : resizeSelection(original, dx, dy, direction)
+  const changes = action === 'move' ? translate(original, dx, dy, grid)
+    : entries.length === 1
+      ? [resizeEdges(original[0]!, dx, dy, direction, grid, geometryLocked(widgets.value, widget, 'positionLocked'))]
+      : resizeSelection(original, dx, dy, direction)
   widgets.value = widgets.value.map((entry, index) =>
     device.value === 'desktop' || entries.includes(entry)
       ? withPlacement(entry, entries.includes(entry) ? changes[entries.indexOf(entry)]! : positions[index]!)
@@ -2324,6 +2329,7 @@ onBeforeUnmount(() => {
                     :role="auth.rawRole"
                     :resource-role="role"
                     :editing="editing"
+                    :editor-scale="previewScale"
                     :drop-target="dragging ? dropTarget : undefined"
                     :placement-preview="placementPreview"
                     :placement-previews="placementPreviews"

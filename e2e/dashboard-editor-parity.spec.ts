@@ -188,7 +188,7 @@ test('grid presets, eight handles and independent locks apply to pointer and key
   const api = await setup(page)
   await outline(page).getByRole('button', { name: 'Alpha', exact: true }).click()
   const alpha = page.locator('[data-widget-id="a"]')
-  await expect(alpha.locator('.shared-widget-resize')).toHaveCount(8)
+  await expect(page.getByRole('group', { name: 'Selected widget frame', exact: true }).getByRole('button', { name: /^Resize / })).toHaveCount(8)
   await page.getByLabel('Grid preset', { exact: true }).selectOption('2')
   await alpha.focus()
   await page.keyboard.press('ArrowRight')
@@ -200,11 +200,11 @@ test('grid presets, eight handles and independent locks apply to pointer and key
   await page.keyboard.press('ArrowRight')
   await expect(page.getByLabel('Left column', { exact: true })).toHaveValue('4')
   await expect(
-    alpha.getByRole('button', { name: 'Resize Alpha from nw', exact: true }),
+    page.getByRole('button', { name: 'Resize Alpha from nw', exact: true }),
   ).toBeDisabled()
-  await expect(alpha.getByRole('button', { name: 'Resize Alpha', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Resize Alpha', exact: true })).toBeEnabled()
   await page.getByLabel('Lock size', { exact: true }).check()
-  await expect(alpha.getByRole('button', { name: 'Resize Alpha', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Resize Alpha', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Save template', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
   expect(api.layouts.get('personal')!.widgets[0]).toMatchObject({
@@ -316,7 +316,7 @@ test('all eight pointer handles anchor the opposite edge and escape cancels a li
   for (const direction of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']) {
     const before = await alpha.boundingBox()
     expect(before).toBeTruthy()
-    const handle = alpha.locator('.resize-' + direction),
+    const handle = page.getByRole('group', { name: 'Selected widget frame', exact: true }).locator('.resize-' + direction),
       h = await handle.boundingBox()
     expect(h).toBeTruthy()
     await page.mouse.move(h!.x + h!.width / 2, h!.y + h!.height / 2)
@@ -484,7 +484,7 @@ test('marquee selection moves and resizes widgets together without moving the su
     movedB = await b.boundingBox()
   expect(Math.abs(movedB!.x - movedA!.x - (beforeB!.x - beforeA!.x))).toBeLessThan(2)
   expect(movedA!.x).toBeGreaterThan(beforeA!.x)
-  const resize = await b.getByRole('button', { name: 'Resize Beta', exact: true }).boundingBox()
+  const resize = await page.getByRole('button', { name: 'Resize selected widgets from se', exact: true }).boundingBox()
   await page.mouse.move(resize!.x + 8, resize!.y + 8)
   await page.mouse.down()
   await page.mouse.move(resize!.x + 38, resize!.y + 35, { steps: 5 })

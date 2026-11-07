@@ -401,16 +401,15 @@ test('duplicating a nested container preserves its region, remaps children and r
     copied.getByRole('button', { name: 'Move Nested panel copy', exact: true }),
   ).toBeDisabled()
   await expect(
-    copied.getByRole('button', { name: 'Resize Nested panel copy', exact: true }),
+    page.getByRole('button', { name: 'Resize Nested panel copy', exact: true }),
   ).toBeDisabled()
   const copiedChild = page.locator(`[data-widget-surface="${copyId}"] > [data-widget-id]`)
   await expect(copiedChild).toHaveCount(1)
   const childId = (await copiedChild.getAttribute('data-widget-id'))!
   expect(childId).not.toBe('Child')
   await expect(copiedChild.getByRole('button', { name: 'Move Child', exact: true })).toBeDisabled()
-  await expect(
-    copiedChild.getByRole('button', { name: 'Resize Child', exact: true }),
-  ).toBeDisabled()
+  await copiedChild.getByRole('button', { name: 'Edit Child', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Resize Child', exact: true })).toBeDisabled()
 
   await page.getByRole('button', { name: 'Save template', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
@@ -437,3 +436,83 @@ test('duplicating a nested container preserves its region, remaps children and r
   expect(saved.find((entry) => entry.id === childId)!.positionLocked).toBeUndefined()
   expect(saved.find((entry) => entry.id === childId)!.sizeLocked).toBeUndefined()
 })
+
+for (const zoom of ['fit', 'half'] as const) {
+  test(`single-selection pegs stay clickable above overlapping widgets at ${zoom} zoom`, async ({
+    page,
+  }) => {
+    await open(page, [
+      text('Behind', { placement: { x: 0, y: 0, w: 8, h: 6 } }),
+      text('Front', { placement: { x: 0, y: 0, w: 8, h: 6 } }),
+    ])
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    if (zoom === 'half') {
+      await page.getByRole('button', { name: 'Actual size', exact: true }).click()
+      for (let i = 0; i < 5; i++)
+        await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+    }
+    await outline(page).getByRole('button', { name: 'Behind', exact: true }).click()
+    const frame = page.getByRole('group', { name: 'Selected widget frame', exact: true })
+    const pegs = frame.getByRole('button', { name: /^Resize Behind/ })
+    await expect(pegs).toHaveCount(8)
+    const viewBounds = (await page.getByLabel('Dashboard canvas', { exact: true }).boundingBox())!
+    const moveBounds = (await frame
+      .getByRole('button', { name: 'Move selected widget', exact: true })
+      .boundingBox())!
+    expect(moveBounds.y).toBeGreaterThanOrEqual(viewBounds.y)
+    expect(moveBounds.x).toBeGreaterThanOrEqual(viewBounds.x)
+    for (const peg of await pegs.all()) {
+      const box = (await peg.boundingBox())!
+      expect(box.width).toBeCloseTo(24, 0)
+      expect(box.height).toBeCloseTo(24, 0)
+      expect(
+        await peg.evaluate((element) => {
+          const rect = element.getBoundingClientRect()
+          return (
+            document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === element
+          )
+        }),
+      ).toBe(true)
+    }
+    const front = widget(page, 'Front')
+    const frontBefore = (await front.boundingBox())!
+    expect(
+      await front.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return document
+          .elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+          ?.closest('[data-widget-id]')
+          ?.getAttribute('data-widget-id')
+      }),
+    ).toBe('Front')
+    const behind = widget(page, 'Behind')
+    const before = (await behind.boundingBox())!
+    const units = await rootMetrics(page)
+    await drag(
+      page,
+      frame.getByRole('button', { name: 'Resize Behind', exact: true }),
+      units.column * 2,
+      units.row * 2,
+    )
+    const resized = (await behind.boundingBox())!
+    expect(resized.width - before.width).toBeCloseTo(units.column * 2, 0)
+    expect(resized.height - before.height).toBeCloseTo(units.row * 2, 0)
+    expect(await front.boundingBox()).toEqual(frontBefore)
+    await page.getByRole('button', { name: 'Undo template edit', exact: true }).click()
+    await frame.getByRole('button', { name: 'Resize Behind from e', exact: true }).focus()
+    await page.keyboard.press('ArrowRight')
+    expect((await behind.boundingBox())!.width - before.width).toBeCloseTo(units.column, 0)
+    await page.getByLabel('Lock position', { exact: true }).check()
+    await expect(
+      frame.getByRole('button', { name: 'Move selected widget', exact: true }),
+    ).toBeDisabled()
+    await expect(
+      frame.getByRole('button', { name: 'Resize Behind from nw', exact: true }),
+    ).toBeDisabled()
+    await frame.getByRole('button', { name: 'Resize Behind from e', exact: true }).focus()
+    await page.keyboard.press('ArrowRight')
+    expect((await behind.boundingBox())!.x).toBeCloseTo(before.x, 0)
+    expect((await behind.boundingBox())!.width - before.width).toBeCloseTo(units.column * 2, 0)
+    await page.screenshot({ path: test.info().outputPath(`single-pegs-${zoom}.png`) })
+  })
+}
