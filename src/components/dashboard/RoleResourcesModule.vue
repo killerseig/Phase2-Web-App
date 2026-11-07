@@ -218,6 +218,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .role-resources {
+  container-type: inline-size;
   border: 1px solid var(--border, #cbd5e1);
   padding: 1.25rem;
   border-radius: 8px;
@@ -267,9 +268,11 @@ select {
   padding: 0.6rem;
   border-radius: 5px;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 fieldset {
+  min-width: 0;
   border: 1px solid var(--border, #cbd5e1);
   border-radius: 5px;
   padding: 1rem;
@@ -279,6 +282,10 @@ fieldset {
 }
 .role-resources__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+@container (max-width: 400px) {
+  fieldset, li { padding: .5rem; }
 }
 </style>

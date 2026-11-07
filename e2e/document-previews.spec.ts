@@ -269,11 +269,15 @@ for (const width of [1280, 390]) test(`PDF wheel scrolling reaches later pages i
   const distant = page.getByRole('img', { name: 'PDF page 200 of 387', exact: true })
   await expect(distant).toBeInViewport()
   await page.setViewportSize({ width: 1440, height: 844 })
-  const fittedWidth = await surface.evaluate(element => {
-    const style = getComputedStyle(element)
-    return element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-  })
-  await expect.poll(async () => Math.abs(((await distant.boundingBox())?.width || 0) - fittedWidth)).toBeLessThan(1)
+  // The explorer's width observer can change drawer mode after the viewport
+  // resize. Compare both live measurements while that layout settles.
+  await expect.poll(async () => {
+    const fittedWidth = await surface.evaluate(element => {
+      const style = getComputedStyle(element)
+      return element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    })
+    return Math.abs(((await distant.boundingBox())?.width || 0) - fittedWidth)
+  }).toBeLessThan(1)
   let before = 0
   await expect.poll(async () => before = (await distant.boundingBox())?.width || 0).toBeGreaterThan(600)
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click()

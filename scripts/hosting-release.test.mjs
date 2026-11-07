@@ -4,7 +4,6 @@ import { gzipSync } from 'node:zlib'
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve, sep } from 'node:path'
-import { createRequire } from 'node:module'
 import { analyticsHostingConfig, deployCombinedHosting, deployEmployeeHosting, publicFiles, sha256, documentPreviewHostingConfig } from './hosting-release.mjs'
 
 const prefix = 'projects/phase2-website/sites/phase2-website'
@@ -144,19 +143,6 @@ test('superseded main stops before creating a version', async () => {
   const f = fixture()
   await assert.rejects(deployEmployeeHosting({ ...f, files, commit, assertCurrentMain: async () => { throw Error('newer main') } }), /newer main/)
   assert.equal(f.writes.length, 0)
-})
-test('workflow validates both branches and gates cloud authentication behind main and approval', () => {
-  const require = createRequire(import.meta.url)
-  const workflow = require('yaml').parse(readFileSync(new URL('../.github/workflows/phase2.yml', import.meta.url), 'utf8'))
-  assert.deepEqual(workflow.on.push.branches, ['main', 'test'])
-  assert.deepEqual(workflow.on.pull_request.branches, ['main', 'test'])
-  assert.equal(workflow.jobs.deploy.if, "github.event_name == 'push' && github.ref == 'refs/heads/main'")
-  assert.equal(workflow.jobs.deploy.needs, 'validate')
-  assert.equal(workflow.jobs.deploy.concurrency['cancel-in-progress'], false)
-  assert(!workflow.jobs.validate.steps.some(step => step.uses?.startsWith('google-github-actions/auth')))
-  assert.match(workflow.jobs.deploy.steps[0].run, /exit 1/)
-  assert.equal(workflow.jobs.deploy.steps[0].env.APPROVED, '${{ vars.PHASE2_DEPLOY_AUTH_APPROVED }}')
-  assert(!JSON.stringify(workflow).includes('credentials_json'))
 })
 test('source Hosting configuration routes private previews before the application fallback', () => {
   const config = JSON.parse(readFileSync(new URL('../firebase.json', import.meta.url), 'utf8')).hosting

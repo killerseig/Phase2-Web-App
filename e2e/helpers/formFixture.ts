@@ -129,6 +129,7 @@ export async function setupFormServer(
             const record: FormRecord = {
               id,
               ownerUid: owner,
+              ...(data.dashboardJobId ? { jobId: data.dashboardJobId } : {}),
               templateId: 'audit-e2e',
               templateVersion: data.version,
               definition,

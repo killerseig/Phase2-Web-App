@@ -44,4 +44,8 @@ withDefaults(defineProps<{ title: string; inline?: boolean; mainLabel?: string; 
 .form-presentation :deep(.response-information dd) { margin: 0; overflow-wrap: anywhere; }
 @container (max-width: 1080px) { .form-presentation__layout { grid-template-columns: 1fr; } }
 .form-presentation--inline .form-presentation__layout { grid-template-columns: 1fr; }
+@container (max-width: 720px) {
+  .form-presentation--inline .form-presentation__header { flex-direction: column; align-items: flex-start; }
+  .form-presentation--inline :deep(.app-pane-header__actions) { width: 100%; justify-content: flex-start; }
+}
 </style>

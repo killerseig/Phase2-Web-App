@@ -645,10 +645,8 @@ function textStyle(widget: SharedDashboardWidget) {
       :data-widget-id="widget.id"
       :data-container-kind="widget.container?.kind"
       class="shared-dashboard-widget"
-      :tabindex="editing ? 0 : undefined"
-      :aria-label="
-        editing ? 'Widget ' + (widget.title || sharedWidgetLabels[widget.type]) : undefined
-      "
+      tabindex="0"
+      :aria-label="'Widget ' + (widget.title || sharedWidgetLabels[widget.type])"
       :aria-keyshortcuts="editing ? 'Enter Space Escape ArrowLeft ArrowRight ArrowUp ArrowDown Shift+F10' : undefined"
       @pointerdown.stop="startWidgetMove($event, widget.id)"
       @contextmenu="requestMenu($event, widget.id)"

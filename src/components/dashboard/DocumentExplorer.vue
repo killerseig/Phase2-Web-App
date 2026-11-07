@@ -44,12 +44,16 @@ const menu = ref<{
   source: HTMLElement
   key: number
 }>()
-const filesOpen = ref(false), phone = ref(false)
-const drawerEnabled = computed(() => !!props.sidebarTools && phone.value)
+const filesOpen = ref(false), phone = ref(false), narrow = ref(false)
+const drawerEnabled = computed(() => !!props.sidebarTools && (phone.value || narrow.value))
 const sidebarId = useId()
+const explorer = ref<HTMLElement>()
+const contextMenu = ref<InstanceType<typeof ExplorerContextMenu>>()
 const sidebar = ref<HTMLElement>(), viewer = ref<HTMLElement>()
 function focusFilesButton() { viewer.value?.querySelector<HTMLButtonElement>('button[data-library-files-toggle]')?.focus({ preventScroll: true }) }
+function focusSearch() { sidebar.value?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true }) }
 let media: MediaQueryList | undefined
+let observer: ResizeObserver | undefined
 function closeFiles(restoreFocus = true) {
   filesOpen.value = false
   if (restoreFocus && drawerEnabled.value) void nextTick(focusFilesButton)
@@ -58,29 +62,46 @@ async function openFiles() {
   if (!drawerEnabled.value) return
   filesOpen.value = true
   await nextTick()
-  sidebar.value?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true })
+  focusSearch()
 }
 function selectDocument(document: T) { emit('select', document); if (drawerEnabled.value) closeFiles() }
 function syncPhone() {
-  const hadSidebarFocus = sidebar.value?.contains(document.activeElement)
   phone.value = media?.matches ?? false
+}
+// Measure authored CSS width, independent of the dashboard's camera zoom. Hidden
+// tabs can report zero; retain their mode until they have a real width again.
+function syncWidth(width: number) { if (width > 0) narrow.value = width <= 600 }
+watch(drawerEnabled, (enabled) => {
+  const active = document.activeElement
+  const restoreFocus = sidebar.value?.contains(active) || contextMenu.value?.containsFocus() ||
+    (viewer.value?.contains(active) && active?.matches('[data-library-files-toggle]'))
   filesOpen.value = false
   closeMenu()
-  if (drawerEnabled.value && hadSidebarFocus) void nextTick(focusFilesButton)
-}
+  if (restoreFocus) void nextTick(() => enabled ? focusFilesButton() : focusSearch())
+})
 function escapeDrawer(event: KeyboardEvent) {
   if (event.key === 'Escape' && !event.defaultPrevented && drawerEnabled.value && filesOpen.value) {
     event.preventDefault(); closeFiles()
   }
 }
 onMounted(() => {
+  if (explorer.value) {
+    syncWidth(explorer.value.clientWidth)
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(entries => {
+        const entry = entries.find(entry => entry.target === explorer.value)
+        if (entry) syncWidth(entry.contentRect.width)
+      })
+      observer.observe(explorer.value)
+    }
+  }
   if (typeof window.matchMedia === 'function') {
     media = window.matchMedia('(max-width: 900px)'); syncPhone()
     media.addEventListener('change', syncPhone)
   }
   window.addEventListener('keydown', escapeDrawer)
 })
-onBeforeUnmount(() => { media?.removeEventListener('change', syncPhone); window.removeEventListener('keydown', escapeDrawer) })
+onBeforeUnmount(() => { observer?.disconnect(); media?.removeEventListener('change', syncPhone); window.removeEventListener('keydown', escapeDrawer) })
 watch(() => props.sidebarTools, () => { filesOpen.value = false; closeMenu() })
 let menuKey = 0
 const actions = computed(() => (menu.value ? (props.menuActions?.(menu.value.target) ?? []) : []))
@@ -214,7 +235,7 @@ function folderState(folder: ExplorerFolder) {
 </script>
 
 <template>
-  <section class="document-explorer" :class="{ 'document-explorer--drawer': sidebarTools, 'is-files-open': filesOpen }" :aria-label="title">
+  <section ref="explorer" class="document-explorer" :class="{ 'document-explorer--drawer': drawerEnabled, 'document-explorer--phone': sidebarTools && phone, 'is-files-open': filesOpen }" :aria-label="title">
     <header v-if="!sidebarTools" class="document-explorer__header">
       <h2>{{ title }}</h2>
       <slot name="context" />
@@ -367,6 +388,7 @@ function folderState(folder: ExplorerFolder) {
       <AppLoadingOverlay :loading="!sidebarTools && !!loading" label="Loading documents…" />
     </div>
     <ExplorerContextMenu
+      ref="contextMenu"
       v-if="menu && actions.length"
       :key="menu.key"
       :x="menu.x"
@@ -539,7 +561,6 @@ p {
     min-height: 36px;
   }
 }
-@media (max-width: 900px) {
   .document-explorer--drawer .document-explorer__body { display:flex; }
   .document-explorer--drawer .document-explorer__viewer { flex:1; }
   .document-explorer--drawer .document-explorer__viewer[inert] { visibility:visible; }
@@ -554,9 +575,13 @@ p {
   }
   .document-explorer--drawer :deep(.document-explorer__mobile-toolbar) { display:flex;align-items:center;gap:.35rem;min-height:2.75rem;flex:none;border-bottom:1px solid var(--border);padding-inline:.25rem; }
   .document-explorer--drawer :deep(.document-explorer__files-button:hover) { background:var(--field-hover); }
-  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-toolbar) { padding:.0rem .35rem .0rem .15rem;min-height:2.75rem;box-sizing:border-box;flex-wrap:nowrap; }
-  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-zoom) { display:none; }
-  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-operations) { margin-inline-start:.35rem; }
+  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-toolbar) { padding:.15rem .35rem;min-height:2.75rem;box-sizing:border-box;flex-wrap:wrap; }
+  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-zoom) { flex-wrap:wrap; }
+  .document-explorer--drawer .document-explorer__viewer :deep(.viewer-operations) { margin-inline-start:0;flex-wrap:wrap; }
+  /* Preserve the compact phone toolbar and native pinch; a narrow widget on a
+     desktop still needs its mouse/keyboard zoom controls. */
+  .document-explorer--phone .document-explorer__viewer :deep(.viewer-zoom) { display:none; }
+  .document-explorer--phone .document-explorer__viewer :deep(.viewer-toolbar) { flex-wrap:nowrap;padding:.0rem .35rem .0rem .15rem; }
   .document-explorer--drawer :is(.document-explorer__folders),
   .document-explorer--drawer .document-explorer__viewer :deep(:is(.pdf-surface, .image-scroll, .table-scroll, pre)) { scrollbar-width:thin;scrollbar-color:var(--text-muted) transparent; }
   .document-explorer--drawer .document-explorer__folders::-webkit-scrollbar,
@@ -564,6 +589,5 @@ p {
   .document-explorer--drawer .document-explorer__folders::-webkit-scrollbar-thumb,
   .document-explorer--drawer .document-explorer__viewer :deep(:is(.pdf-surface, .image-scroll, .table-scroll, pre)::-webkit-scrollbar-thumb) { background:var(--text-muted);border-radius:6px; }
   .document-explorer--drawer .document-explorer__viewer :deep(.docx-note) { position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
-}
 @media (prefers-reduced-motion: reduce) { .document-explorer--drawer .document-explorer__sidebar { transition:none; } }
 </style>

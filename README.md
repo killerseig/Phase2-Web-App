@@ -160,6 +160,8 @@ npm.cmd run deploy
 npm run test:unit
 ```
 
+Vitest owns tests under `src/`, `functions/src/`, `functions/test/` and the Vite plugin specs under `scripts/`. Use `npm run test:unit -- --run` for a complete noninteractive run. Native Node tests for emulator persistence, Hosting release helpers and lint ownership run separately with `npm run test:scripts`; local ignored browser audits are not unit tests. GitHub Actions remains removed; these commands do not deploy anything.
+
 ### Regression standard
 
 Every feature or fix must add or update meaningful Playwright coverage for the changed owner workflow. Include negative, interrupted/recovery and repeated flows when relevant, and rerun affected existing workflows before completion. Protect daily logs, shop orders, timecards and user management whenever shared code or a website release could affect them. Report exact passing/failing counts and checks not run; do not replace browser workflow coverage with implementation-mirroring unit tests.

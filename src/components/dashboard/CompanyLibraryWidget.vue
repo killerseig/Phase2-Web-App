@@ -31,7 +31,6 @@ function documentLoadingChanged(value: boolean) { if (!value) documentsReady.val
 .company-library-widget :deep(.sds-editor) { flex: 1; min-height: 0; }
 @container (max-width: 600px) {
   .company-library-widget :deep(.document-explorer__header) { flex-wrap: wrap; }
-  .company-library-widget :deep(.document-explorer__body) { grid-template-columns: minmax(120px, 38%) minmax(0, 1fr); }
   .company-library-widget :deep(.document-explorer__search) { flex: 1 1 55%; }
   .company-library-widget :deep(.sds-form-grid) { grid-template-columns: 1fr; }
 }

@@ -154,6 +154,7 @@
 }
 .shared-widget-heading {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   align-items: center;
@@ -163,6 +164,12 @@
   font-size: 19px;
   margin: 0;
 }
+.shared-dashboard-widget > .role-resources { padding: 0; border: 0; }
+/* Tiny authored cards scroll locally instead of squeezing content into letters.
+   Container regions keep their saved coordinate widths. */
+.shared-dashboard-widget > .shared-widget-heading,
+.shared-dashboard-widget:not(.is-container) > * { min-width: 160px; }
+.shared-dashboard-widget:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .shared-job-information {
   display: grid;
   gap: 12px;
@@ -319,7 +326,7 @@
   white-space: normal;
 }
 .shared-widget-heading h2 {
-  flex: 1;
+  flex: 1 1 12rem;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -690,6 +697,7 @@
 .shared-container-tabs [aria-selected='true'] {
   border-color: var(--accent);
 }
+.shared-container-tabs [role='tab'] { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .shared-preview-controls input[type='number'] {
   width: 4.5rem;
   padding: 0.2rem;

@@ -47,7 +47,8 @@ The managed local demo uses `npm.cmd run dev:forms` and normally serves `http://
 | --- | --- |
 | Frontend types and all build entries | `npm.cmd run build` |
 | Fresh Functions packaging without cloud calls | `npm.cmd run verify:functions-build` after build |
-| Unit/model regression | `npm.cmd run test:unit -- --run src functions/test` |
+| Unit/model regression | `npm.cmd run test:unit -- --run` (frontend, backend source/test and Vite plugin specs) |
+| Native script regression | `npm.cmd run test:scripts` (Node test runner; no cloud deployment) |
 | Dashboard browser workflows | `npm.cmd run test:dashboards` |
 | Website editor/browser workflows | `npx.cmd playwright test --config=playwright.builder-regression.config.ts` |
 | Read-only source lint | `npm.cmd run lint:check`; use scoped checks to distinguish existing debt from changed-file failures |

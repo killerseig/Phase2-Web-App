@@ -285,9 +285,12 @@ test('Enter and Space cannot change selection during a group drag or background 
     .click({ modifiers: ['Control'] })
   await article(page).focus()
   const before = (await article(page).boundingBox())!
-  await page.mouse.move(before.x + 30, before.y + 50)
+  // Use the content, not a fixed inset that can land on wrapped header actions.
+  const content = (await article(page).locator('.shared-variable-text').boundingBox())!
+  await page.mouse.move(content.x + 10, content.y + content.height / 2)
   await page.mouse.down()
-  await page.mouse.move(before.x + 90, before.y + 70, { steps: 5 })
+  await page.mouse.move(content.x + 70, content.y + content.height / 2 + 20, { steps: 5 })
+  await expect(page.locator('.shared-drag-ghost')).toBeVisible()
   await page.keyboard.press('Enter')
   await page.keyboard.press('Shift+Space')
   await expect(selectedFrame(page)).toHaveAccessibleName('Selected widgets frame')

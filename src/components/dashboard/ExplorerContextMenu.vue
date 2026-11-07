@@ -10,6 +10,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ action: [id: string]; close: [restoreFocus: boolean] }>()
 const menu = ref<HTMLElement>()
+defineExpose({ containsFocus: () => !!menu.value?.contains(document.activeElement) })
 const left = ref(props.x)
 const top = ref(props.y)
 function buttons() {

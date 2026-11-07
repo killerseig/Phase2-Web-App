@@ -50,8 +50,8 @@ defineExpose({ dirty, editing, discard })
   </div>
 </template>
 <style scoped>
-.personal-task-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; }
-.personal-task-row label { flex: 1; min-width: 0; }
+.personal-task-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .75rem; }
+.personal-task-row label { flex: 1 1 10rem; min-width: 0; }
 .personal-task-row input[type=checkbox] { width: auto; flex: none; }
 ul { max-height: 24rem; overflow-y: auto; overflow-wrap: anywhere; }
 .completed { text-decoration: line-through; }
