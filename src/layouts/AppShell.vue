@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
@@ -18,6 +18,12 @@ const route = useRoute()
 const router = useRouter()
 const mobileNavOpen = ref(false)
 const signOutBusy = ref(false)
+const sidebar = ref<HTMLElement>()
+const mobileQuery = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 1180px)') : undefined
+const narrowNavigation = ref(mobileQuery?.matches ?? false)
+const mobileDialogOpen = computed(() => narrowNavigation.value && mobileNavOpen.value)
+let navigationOpener: HTMLElement | null = null
+let focusGeneration = 0
 
 // The main worksheet and print view retain their original content theme.
 const usesBrandContentTheme = computed(
@@ -39,13 +45,49 @@ const jobDashboardRoute = computed(() => {
   return { name: 'job-dashboard', params: { jobId } }
 })
 
-function openMobileNav() {
+async function openMobileNav() {
+  if (!narrowNavigation.value || mobileNavOpen.value) return
+  navigationOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null
   mobileNavOpen.value = true
+  const generation = ++focusGeneration
+  await nextTick()
+  if (generation !== focusGeneration || !mobileDialogOpen.value) return
+  sidebar.value?.querySelector<HTMLButtonElement>('.app-shell__sidebar-close')?.focus({ preventScroll: true })
 }
 
-function closeMobileNav() {
+function closeMobileNav(restoreFocus = true) {
+  if (!mobileNavOpen.value) return
   mobileNavOpen.value = false
+  const opener = navigationOpener
+  navigationOpener = null
+  const generation = ++focusGeneration
+  // Wait until the body is no longer inert before restoring its opener.
+  void nextTick(() => {
+    if (restoreFocus && generation === focusGeneration && opener?.isConnected) opener.focus({ preventScroll: true })
+  })
 }
+
+function navigationKey(event: KeyboardEvent) {
+  if (!mobileDialogOpen.value || event.isComposing) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeMobileNav()
+  } else if (event.key === 'Tab') {
+    const controls = Array.from(sidebar.value?.querySelectorAll<HTMLElement>('a[href],button') ?? [])
+      .filter(control => !control.hasAttribute('disabled') && control.tabIndex >= 0)
+    const first = controls[0], last = controls.at(-1)
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+  }
+}
+
+function navigationBreakpoint(event: { matches: boolean }) {
+  narrowNavigation.value = event.matches
+  if (!event.matches) closeMobileNav(false)
+}
+mobileQuery?.addEventListener('change', navigationBreakpoint)
+onBeforeUnmount(() => { focusGeneration++; navigationOpener = null; mobileQuery?.removeEventListener('change', navigationBreakpoint) })
 
 async function handleSignOut() {
   if (signOutBusy.value) return
@@ -79,12 +121,18 @@ watch(
     <button
       class="app-shell__sidebar-backdrop"
       type="button"
-      :tabindex="mobileNavOpen ? 0 : -1"
+      tabindex="-1"
+      aria-hidden="true"
       aria-label="Close navigation"
-      @click="closeMobileNav"
+      @click="closeMobileNav()"
     ></button>
 
-    <aside id="app-shell-navigation" class="app-shell__sidebar">
+    <aside id="app-shell-navigation" ref="sidebar" class="app-shell__sidebar"
+      :inert="narrowNavigation && !mobileNavOpen || undefined"
+      :role="mobileDialogOpen ? 'dialog' : undefined"
+      :aria-modal="mobileDialogOpen ? 'true' : undefined"
+      aria-label="Navigation"
+      @keydown="navigationKey">
       <div class="app-shell__brand">
         <div class="app-shell__brand-mark">
           <img :src="brandLogo" alt="" width="26" height="42" />
@@ -97,7 +145,7 @@ watch(
           class="app-shell__sidebar-close"
           type="button"
           aria-label="Close navigation"
-          @click="closeMobileNav"
+          @click="closeMobileNav()"
         >
           <i class="pi pi-times app-shell__control-icon" aria-hidden="true"></i>
         </Button>
@@ -112,19 +160,19 @@ watch(
             class="app-shell__back-to-job"
             aria-label="Back to Job"
             title="Back to Job"
-            @click="closeMobileNav"
+            @click="closeMobileNav()"
           >
             <i class="pi pi-arrow-left app-shell__control-icon" aria-hidden="true"></i>
           </RouterLink>
         </div>
-        <nav class="app-shell__nav">
+        <nav class="app-shell__nav" aria-label="Workspace">
           <RouterLink
             v-for="item in workspaceNavigationItems"
             :key="item.to"
             :to="item.to"
             class="app-shell__nav-link"
             active-class="app-shell__nav-link--active"
-            @click="closeMobileNav"
+            @click="closeMobileNav()"
           >
             {{ item.label }}
           </RouterLink>
@@ -134,14 +182,14 @@ watch(
       <div class="app-shell__sidebar-footer">
         <div v-if="adminNavigationItems.length" class="app-shell__sidebar-admin">
           <div class="app-shell__section-label">Admin</div>
-          <nav class="app-shell__nav">
+          <nav class="app-shell__nav" aria-label="Administration">
             <RouterLink
               v-for="item in adminNavigationItems"
               :key="item.to"
               :to="item.to"
               class="app-shell__nav-link"
               active-class="app-shell__nav-link--active"
-              @click="closeMobileNav"
+              @click="closeMobileNav()"
             >
               {{ item.label }}
             </RouterLink>
@@ -160,7 +208,7 @@ watch(
       </div>
     </aside>
 
-    <div class="app-shell__body">
+    <div class="app-shell__body" :inert="mobileDialogOpen || undefined">
       <header v-if="!compact" class="app-shell__topbar">
         <div class="app-shell__topbar-leading">
           <Button
@@ -226,16 +274,16 @@ watch(
   border-right: 1px solid var(--border-soft);
   box-shadow: none;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .app-shell__sidebar-main {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-height: 0;
   flex-direction: column;
   gap: var(--space-3);
-  overflow: auto;
+  overflow: visible;
   padding-right: 0.1rem;
 }
 
@@ -569,7 +617,7 @@ watch(
     border-right: 1px solid var(--border);
     border-bottom: 0;
     box-shadow: none;
-    overflow: hidden;
+    overflow: auto;
     transform: translateX(calc(-100% - 1rem));
     transition: transform 0.22s ease;
   }

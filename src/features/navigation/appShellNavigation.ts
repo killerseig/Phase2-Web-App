@@ -5,21 +5,21 @@ import {
 } from '@/auth/capabilities'
 import type { RawRoleKey } from '@/types/domain'
 import { canListCompanyForms } from '@/features/forms/availableForms'
+import { getTargetRoleCapabilities } from '@/auth/targetRoleCapabilities'
 
 export interface AppShellNavigationItem {
   capability?: AppRouteCapability
-  hidden?: boolean
   label: string
   to: string
 }
 
 const WORKSPACE_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { label: 'Jobs', to: '/jobs' },
+  { label: 'Personal dashboard', to: '/dashboards/personal' },
+  { label: 'Role dashboard', to: '/dashboards/role' },
+  { label: 'Job dashboards', to: '/dashboards/job-home' },
   { label: 'Company Library', to: '/company-library' },
   { label: 'Forms', to: '/reports' },
-  // Remove these visibility flags after review; route authorization is independent of navigation.
-  { label: 'Role home', to: '/dashboards/role-home', hidden: true },
-  { label: 'Job home', to: '/dashboards/job-home', hidden: true },
 ]
 
 const ADMIN_NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
@@ -36,9 +36,13 @@ export function getAppShellWorkspaceNavigationItems(
   rawRole: RawRoleKey = 'none',
 ): AppShellNavigationItem[] {
   if (rawRole === 'employee') return [{ label: 'Updates', to: '/dashboards/announcements' }]
+  if (rawRole === 'none') return []
+  const capabilities = getTargetRoleCapabilities(rawRole)
   return WORKSPACE_NAVIGATION_ITEMS.filter(
-    (item) => !item.hidden && (item.to !== '/reports' || canListCompanyForms(rawRole)),
-  )
+    (item) => (item.to !== '/reports' || canListCompanyForms(rawRole)) &&
+      (item.to !== '/dashboards/job-home' || capabilities.editAllJobs ||
+        capabilities.useAssignedJobDashboards || capabilities.useShopJobDashboard),
+  ).map(item => ({ ...item }))
 }
 
 export function getAppShellAdminNavigationItems(rawRole: RawRoleKey): AppShellNavigationItem[] {

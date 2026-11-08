@@ -6,10 +6,13 @@ import {
 } from '@/features/navigation/appShellNavigation'
 
 describe('app shell navigation policy', () => {
-  it('keeps unannounced dashboards out of workspace navigation for every role', () => {
-    expect(getAppShellWorkspaceNavigationItems()).toEqual([
-      { label: 'Jobs', to: '/jobs' },
-      { label: 'Company Library', to: '/company-library' },
+  it('keeps no-access users out of workspace navigation', () => {
+    expect(getAppShellWorkspaceNavigationItems()).toEqual([])
+  })
+
+  it('preserves the employee announcements-only destination', () => {
+    expect(getAppShellWorkspaceNavigationItems('employee')).toEqual([
+      { label: 'Updates', to: '/dashboards/announcements' },
     ])
   })
 
@@ -18,6 +21,9 @@ describe('app shell navigation policy', () => {
     (role) => {
       expect(getAppShellWorkspaceNavigationItems(role).map((item) => item.to)).toEqual([
         '/jobs',
+        '/dashboards/personal',
+        '/dashboards/role',
+        '/dashboards/job-home',
         '/company-library',
         '/reports',
       ])
@@ -27,6 +33,8 @@ describe('app shell navigation policy', () => {
   it('does not advertise the forbidden form list to Payroll', () => {
     expect(getAppShellWorkspaceNavigationItems('payroll').map((item) => item.to)).toEqual([
       '/jobs',
+      '/dashboards/personal',
+      '/dashboards/role',
       '/company-library',
     ])
   })

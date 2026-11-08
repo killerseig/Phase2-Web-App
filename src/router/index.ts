@@ -36,7 +36,7 @@ const router = createRouter({
     { path: '/jobs/my-timecard', name: 'my-timecard', component: () => import('@/views/MyTimecardUnavailableView.vue'), meta: { title: 'My Timecard', requiresAuth: true } },
     { path: '/reports', name: 'reports', component: () => import('@/views/ReportsView.vue'), meta: { title: 'Reports', requiresAuth: true } },
     { path: '/company-library', name: 'company-library', component: () => import('@/views/CompanyLibraryView.vue'), meta: { title: 'Company Library', requiresAuth: true } },
-    {path:'/dashboards/role-home',name:'shared-role-home',component:()=>import('@/views/SharedDashboardView.vue'),meta:{title:'Role home',requiresAuth:true}},
+    { path: '/dashboards/role-home', name: 'shared-role-home', redirect: to => ({ name: 'role-workspace', query: to.query, hash: to.hash }) },
     {path:'/dashboards/job-home/:jobId?',name:'shared-job-home',component:()=>import('@/views/SharedDashboardView.vue'),meta:{title:'Job home',requiresAuth:true}},
     {
       path: '/form-submissions/:id',
