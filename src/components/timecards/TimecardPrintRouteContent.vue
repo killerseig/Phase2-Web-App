@@ -31,7 +31,13 @@ defineProps<{
       {{ loadError }}
     </AppEmptyState>
 
-    <main v-else-if="payload" class="timecard-print-view__document" data-testid="timecard-export-print-document">
+    <main
+      v-else-if="payload"
+      class="timecard-print-view__document"
+      data-testid="timecard-export-print-document"
+      aria-label="Printable timecards"
+      tabindex="0"
+    >
       <article
         v-for="(pageCards, pageIndex) in pagedCards"
         :key="`${payload.exportId}-page-${pageIndex}`"
@@ -155,6 +161,24 @@ defineProps<{
 
 .timecard-print-view__card-shell--empty {
   visibility: hidden;
+}
+
+@media screen {
+  /* Keep the full-size print sheet reachable on narrow screens without
+     changing the workbook or the printed page dimensions. */
+  .timecard-print-view__document {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .timecard-print-view__page {
+    margin: 0 auto 1rem;
+  }
+
+  .timecard-print-view__page:last-child {
+    margin-bottom: 0;
+  }
 }
 
 @page {

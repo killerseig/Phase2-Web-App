@@ -36,25 +36,8 @@ defineProps<{
 
 @media (max-width: 900px) {
   .job-timecard-status-bar__strip {
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
     gap: 0.45rem;
-    overflow-x: auto;
-    padding: 0 0.05rem 0.1rem;
-    margin: 0 -0.05rem;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    overscroll-behavior-x: contain;
-  }
-
-  .job-timecard-status-bar__strip::-webkit-scrollbar {
-    display: none;
-  }
-
-  .timecard-toolbar-signal {
-    flex: 0 0 auto;
-    white-space: nowrap;
   }
 }
 </style>
