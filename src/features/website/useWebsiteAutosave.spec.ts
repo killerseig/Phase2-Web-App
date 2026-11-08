@@ -5,7 +5,14 @@ import type { WebsiteSite } from './types'
 import { useWebsiteAutosave } from './useWebsiteAutosave'
 
 const wrappers: VueWrapper[] = []
-function setup(save = vi.fn(async () => ({ version: 2 })), account = 'project:admin') {
+type Save = () => Promise<{ version: number }>
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
+}
+function setup(save = vi.fn<Save>(async () => ({ version: 2 })), account = 'project:admin') {
   const site = ref<WebsiteSite>({ name: 'Initial', accent: '#174878', pages: [] })
   const saved = ref(JSON.stringify(site.value))
   const version = ref(1)
@@ -42,6 +49,42 @@ afterEach(() => {
   vi.useRealTimers()
 })
 describe('website draft autosave', () => {
+  it('rejects an old save across an access revoke and restore to the same scope', async () => {
+    const old = deferred<{ version: number }>()
+    const save = vi.fn<() => Promise<{ version: number }>>(() => old.promise)
+    const state = setup(save)
+    state.site.value.name = 'Old session edit'
+    await vi.advanceTimersByTimeAsync(3100)
+    expect(save).toHaveBeenCalledOnce()
+    state.scope.value = ''; state.scope.value = 'project:admin'
+    state.site.value = { name: 'Freshly loaded', accent: '#174878', pages: [] }
+    state.saved.value = JSON.stringify(state.site.value); state.version.value = 10
+    state.autosave.begin()
+    old.resolve({ version: 2 }); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(state.version.value).toBe(10)
+    expect(JSON.parse(state.saved.value).name).toBe('Freshly loaded')
+    expect(state.autosave.problem.value).toBe('')
+  })
+
+  it('allows a new scope to save and keeps its busy/error ownership when an older save fails', async () => {
+    const old = deferred<{ version: number }>(), newer = deferred<{ version: number }>()
+    const save = vi.fn<Save>()
+    save.mockReturnValueOnce(old.promise).mockReturnValueOnce(newer.promise)
+    const state = setup(save)
+    state.site.value.name = 'Old session edit'; await vi.advanceTimersByTimeAsync(3100)
+    state.scope.value = 'project:new-admin'
+    state.site.value = { name: 'New baseline', accent: '#174878', pages: [] }
+    state.saved.value = JSON.stringify(state.site.value); state.version.value = 10
+    state.autosave.begin()
+    state.site.value.name = 'New edit'; await vi.advanceTimersByTimeAsync(3100)
+    expect(save).toHaveBeenCalledTimes(2)
+    old.reject(new Error('Old save failure')); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(state.autosave.saving.value).toBe(true)
+    expect(state.autosave.problem.value).toBe('')
+    newer.resolve({ version: 11 }); await state.autosave.settle()
+    expect(state.version.value).toBe(11)
+    expect(state.autosave.saving.value).toBe(false)
+  })
   it('does not save loading defaults until the user edits', async () => {
     const state = setup()
     state.autosave.ready.value = false
@@ -68,7 +111,7 @@ describe('website draft autosave', () => {
   })
   it('does not mark edits typed during an in-flight save as saved', async () => {
     let finish!: (value: { version: number }) => void
-    const save = vi.fn(
+    const save = vi.fn<Save>(
       () =>
         new Promise<{ version: number }>((resolve) => {
           finish = resolve
@@ -100,9 +143,8 @@ describe('website draft autosave', () => {
     expect(resumed.save).not.toHaveBeenCalled()
   })
   it('retries connection failures and saves when online again', async () => {
-    const save = vi
-      .fn()
-      .mockRejectedValueOnce({ code: 'functions/unavailable' })
+    const save = vi.fn<Save>()
+    save.mockRejectedValueOnce({ code: 'functions/unavailable' })
       .mockResolvedValue({ version: 2 })
     const state = setup(save)
     state.site.value.name = 'Retry edit'
@@ -115,7 +157,8 @@ describe('website draft autosave', () => {
     expect(state.autosave.problem.value).toBe('')
   })
   it('pauses version conflicts without losing the recovery copy', async () => {
-    const save = vi.fn().mockRejectedValue({ code: 'functions/aborted' })
+    const save = vi.fn<Save>()
+    save.mockRejectedValue({ code: 'functions/aborted' })
     const state = setup(save)
     state.site.value.name = 'Conflicting work'
     await vi.advanceTimersByTimeAsync(3100)

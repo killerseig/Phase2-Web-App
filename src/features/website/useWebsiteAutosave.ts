@@ -40,6 +40,7 @@ export function useWebsiteAutosave(options: {
   let remoteTimer: ReturnType<typeof setTimeout> | undefined
   let pending: Promise<void> | undefined
   let disposed = false
+  let generation = 0
   let retryDelay = 5000
 
   function discover(server?: string) {
@@ -71,7 +72,7 @@ export function useWebsiteAutosave(options: {
   }
   function persist() {
     clearTimeout(localTimer)
-    if (!ready.value || !options.scope() || !snapshot.value) return
+    if (disposed || !ready.value || !options.scope() || !snapshot.value) return
     if (dirty.value && !changed.value) return
     try {
       if (dirty.value) {
@@ -143,13 +144,15 @@ export function useWebsiteAutosave(options: {
     persist()
     const sent = snapshot.value
     const scope = options.scope()
+    const requestGeneration = generation
+    const current = () => !disposed && requestGeneration === generation && scope === options.scope()
     const sentVersion = options.version.value
     saving.value = true
     let retry = false
-    pending = (async () => {
+    const request = (async () => {
       try {
         const result = await options.save(JSON.parse(sent), sentVersion)
-        if (disposed || scope !== options.scope()) return
+        if (!current()) return
         options.version.value = result.version
         options.saved.value = sent
         problem.value = ''
@@ -157,13 +160,15 @@ export function useWebsiteAutosave(options: {
         persist()
         retry = dirty.value
       } catch (reason) {
-        if (!disposed && scope === options.scope()) {
+        if (current()) {
           retry = reportFailure(reason)
           persist()
         }
       }
     })()
-    await pending
+    pending = request
+    await request
+    if (pending !== request) return
     pending = undefined
     saving.value = false
     if (retry && !disposed) {
@@ -211,6 +216,13 @@ export function useWebsiteAutosave(options: {
     () => {
       // Never write one account's content under a different account's recovery key.
       ready.value = false
+      generation++
+      pending = undefined
+      saving.value = false
+      changed.value = false
+      problem.value = ''
+      conflict.value = false
+      retryDelay = 5000
       clearTimeout(localTimer)
       clearTimeout(remoteTimer)
       recoveries.value = []
@@ -227,6 +239,9 @@ export function useWebsiteAutosave(options: {
   onBeforeUnmount(() => {
     persist()
     disposed = true
+    generation++
+    pending = undefined
+    saving.value = false
     clearTimeout(localTimer)
     clearTimeout(remoteTimer)
     window.removeEventListener('online', connection)
@@ -238,6 +253,7 @@ export function useWebsiteAutosave(options: {
   discover()
   return {
     begin: (recovered = false) => {
+      if (disposed || !options.scope()) return
       changed.value = recovered
       ready.value = true
     },

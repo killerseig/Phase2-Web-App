@@ -947,6 +947,67 @@ for (const scale of [0.5, 1, 2]) {
   })
 }
 
+for (const scale of [0.5, 1, 2]) {
+  test(`inline and flow controls preserve precise screen movement at ${scale}x`, async ({ page }) => {
+    const content = structuredClone(initial)
+    const hero = content.pages[0]!.sections[0]!
+    hero.title = 'Inline precision'
+    hero.layout = { x: 1, y: 1, w: 18, h: 10, z: 1 }
+    hero.textBoxes = { title: { width: 300, height: 80, x: 10, y: 10 } }
+    content.pages[0]!.layout = { desktop: 'flow' }
+    hero.sizing = { height: 300 }
+    const api = await mockWebsite(page, false, false, content)
+    await page.setViewportSize({ width: 1920, height: 1200 })
+    await gotoPhase2App(page, '/admin/website', createJobsFixture())
+    await selectCanvasWidget(page, 'Inline precision')
+    await page.getByRole('button', { name: 'Reset zoom', exact: true }).click()
+    const zoom = page.getByRole('button', { name: scale < 1 ? 'Zoom out' : 'Zoom in', exact: true })
+    for (let i = 0; i < Math.round(Math.abs(scale - 1) * 10); i++) await zoom.click()
+    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText(`${scale * 100}%`)
+    const heading = page.locator('.preview-frame').getByRole('heading', { name: 'Inline precision', exact: true })
+    await heading.click()
+    const bounds = () => heading.evaluate(element => {
+      const b = element.getBoundingClientRect(), frame = element.closest('.preview-frame')!.getBoundingClientRect()
+      return { x: b.x - frame.x, y: b.y - frame.y, w: b.width, h: b.height }
+    })
+    const original = await bounds()
+    await heading.press('Shift+ArrowRight')
+    await expect.poll(async () => (await bounds()).x - original.x).toBeCloseTo(1, 1)
+    const moved = await bounds()
+    const left = heading.getByRole('button', { name: 'Resize text from left', exact: true })
+    await left.press('Shift+ArrowRight')
+    await expect.poll(async () => (await bounds()).x - moved.x).toBeCloseTo(1, 1)
+    expect((await bounds()).w - moved.w).toBeCloseTo(-1, 1)
+    expect((await bounds()).x + (await bounds()).w).toBeCloseTo(moved.x + moved.w, 1)
+    await left.press('ArrowDown')
+    const resized = await heading.getAttribute('style')
+    await heading.dispatchEvent('keydown', { key: 'ArrowRight', isComposing: true })
+    await heading.dispatchEvent('keydown', { key: 'Enter', isComposing: true })
+    await heading.press('Control+ArrowRight')
+    await expect(heading).toHaveAttribute('style', resized!)
+    await expect(page.getByRole('textbox', { name: 'Edit heading on page' })).toHaveCount(0)
+    await heading.hover()
+    await page.mouse.down()
+    await heading.press('Shift+ArrowRight')
+    await expect(heading).toHaveAttribute('style', resized!)
+    await page.mouse.up()
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await expect.poll(bounds).toEqual(moved)
+    await selectCanvasWidget(page, 'Inline precision')
+    const widget = page.locator('.preview-frame [data-widget-id="hero"]')
+    const height = () => widget.evaluate(element => element.getBoundingClientRect().height)
+    const beforeHeight = await height()
+    await page.getByRole('button', { name: 'Resize Inline precision height', exact: true }).press('Shift+ArrowDown')
+    await expect.poll(async () => (await height()) - beforeHeight).toBeCloseTo(1, 1)
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+    await expect.poll(() => api.draft().pages[0]!.sections[0]!.sizing?.height).toBeCloseTo(300 + 1 / scale, 8)
+    expect(api.draft().pages[0]!.sections[0]!.textBoxes?.title?.x).toBeCloseTo(10 + 1 / scale, 8)
+    await page.reload()
+    await expect(widget).toHaveAttribute('style', new RegExp(`height: ${300 + 1 / scale}px`))
+    expect(api.published()).toBeNull()
+  })
+}
+
 test('floating widget actions support transforms, locks, history and safe removal', async ({
   page,
 }) => {
@@ -2353,6 +2414,8 @@ test('templates, copies and local history edit the draft without changing public
 }) => {
   const api = await mockWebsite(page, true)
   await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  // Vite resolves the editor's module graph before the initial draft can load.
+  await expect(page.getByRole('group', { name: 'Editor mode', exact: true }).getByRole('button', { name: 'Design', exact: true })).toBeEnabled({ timeout: 15000 })
   const inspector = page.getByRole('complementary', { name: 'Content editor' })
   const undo = page.getByRole('button', { name: 'Undo', exact: true })
   const redo = page.getByRole('button', { name: 'Redo', exact: true })
@@ -5054,6 +5117,7 @@ test('editor modes and site settings remain usable on a phone without changing t
   const api = await mockWebsite(page)
   await page.setViewportSize({ width: 390, height: 844 })
   await gotoPhase2App(page, '/admin/website', createJobsFixture())
+  await expect(page.getByRole('group', { name: 'Editor mode', exact: true }).getByRole('button', { name: 'Design', exact: true })).toBeEnabled({ timeout: 15000 })
   await expect(page.getByLabel('Page title', { exact: true })).toBeVisible()
   const initialState = await page.locator('.builder-header .subtle').innerText()
   const modes = page.getByRole('group', { name: 'Editor mode', exact: true })

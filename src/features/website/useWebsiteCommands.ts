@@ -1,4 +1,4 @@
-import { nextTick, type Ref } from 'vue'
+import { nextTick, onScopeDispose, watch, type Ref } from 'vue'
 import { websiteCommand, websiteError } from '@/services/website'
 import { withWebsiteDefaults, type WebsiteSite } from './types'
 import type { useWebsiteAutosave } from './useWebsiteAutosave'
@@ -13,6 +13,10 @@ export interface WebsiteCommandConfirmation {
 }
 
 export function useWebsiteCommands(options: {
+  /** Empty unless the current account may administer this project's website. */
+  scope: () => string
+  cancelConfirmation: () => void
+  onInvalidated: () => void
   site: Ref<WebsiteSite | undefined>
   locked: Readonly<Ref<boolean>>
   dirty: Readonly<Ref<boolean>>
@@ -75,17 +79,75 @@ export function useWebsiteCommands(options: {
     autosave,
   } = options
   const fitView = options.fitView
+  let disposed = false, generation = 0, attempt = 0, draftRevision = 0
+  let loadingRequest = false
+  let pendingDecision: symbol | undefined
+  const allowed = () => !disposed && !!options.scope()
+  function cancelDecision() {
+    if (!pendingDecision) return
+    pendingDecision = undefined
+    options.cancelConfirmation()
+  }
+  function invalidate() {
+    generation++
+    cancelDecision()
+    autosave.ready.value = false
+    loading.value = false
+    loadingRequest = false
+    busy.value = false
+    saving.value = false
+    error.value = ''
+    message.value = ''
+    saved.value = ''
+    version.value = 0
+    publishedAt.value = null
+    hasPrevious.value = false
+    starterReview.value = false
+    selectedPage.value = ''
+    selectedSection.value = ''
+    homePageId.value = ''
+    autosave.conflict.value = false
+    autosave.problem.value = ''
+    options.onInvalidated()
+    history.reset(undefined)
+  }
+  const stopScope = watch(options.scope, invalidate, { flush: 'sync' })
+  const stopDraft = watch(site, () => { draftRevision++; cancelDecision() }, { deep: true, flush: 'sync' })
+  onScopeDispose(() => { disposed = true; stopScope(); stopDraft(); invalidate() })
+  function capture(includeDraft = true) {
+    const owner = generation, revision = draftRevision
+    return () => allowed() && owner === generation && (!includeDraft || revision === draftRevision)
+  }
+  function operation() {
+    const owner = generation, request = ++attempt
+    return () => allowed() && owner === generation && request === attempt
+  }
+  async function decide(current: () => boolean, question: () => Promise<boolean> | undefined) {
+    const decision = Symbol(), revision = draftRevision
+    pendingDecision = decision
+    try {
+      return !!(await question()) && current() && revision === draftRevision
+    } finally {
+      if (pendingDecision === decision) pendingDecision = undefined
+    }
+  }
   async function load(trigger?: Event) {
-    if (!(await options.canDiscard(trigger))) return
+    if (!allowed() || pendingDecision || loadingRequest || busy.value) return
+    const current = operation()
+    if (!(await decide(current, () => options.canDiscard(trigger)))) return
     autosave.stash()
     autosave.ready.value = false
+    loadingRequest = true
     loading.value = true
     error.value = ''
     message.value = ''
     let receivedDraft = false
     try {
       await autosave.settle()
+      if (!current()) return
+      const revision = draftRevision
       const result = await websiteCommand('load')
+      if (!current() || revision !== draftRevision) return
       history.reset(withWebsiteDefaults(result.draft))
       starterReview.value = false
       options.onLoaded(result.version)
@@ -104,12 +166,15 @@ export function useWebsiteCommands(options: {
       selectedPage.value = result.draft.pages[0]?.id || ''
       selectedSection.value = ''
       await nextTick()
-      fitView()
+      if (current()) fitView()
     } catch (reason) {
-      error.value = websiteError(reason)
+      if (current()) error.value = websiteError(reason)
     } finally {
-      loading.value = false
-      if (site.value) autosave.begin(!receivedDraft)
+      if (current()) {
+        loadingRequest = false
+        loading.value = false
+        if (site.value) autosave.begin(!receivedDraft)
+      }
     }
   }
   async function command(
@@ -117,7 +182,8 @@ export function useWebsiteCommands(options: {
     revisionId?: string,
     trigger?: Event,
   ) {
-    if (locked.value || !site.value) return
+    if (!allowed() || pendingDecision || locked.value || !site.value) return
+    const current = operation()
     if ((action === 'save' || action === 'publish') && cssError.value) {
       error.value = cssError.value
       return
@@ -131,19 +197,19 @@ export function useWebsiteCommands(options: {
     }
     if (
       action === 'publish' &&
-      !(await options.confirm(
+      !(await decide(current, () => options.confirm(
         {
           title: 'Publish website?',
           message: 'Your saved pages and images will be visible to anyone with the website link.',
           confirmLabel: 'Publish website',
         },
         trigger,
-      ))
+      )))
     )
       return
     if (
       action === 'unpublish' &&
-      !(await options.confirm(
+      !(await decide(current, () => options.confirm(
         {
           title: 'Take website offline?',
           message:
@@ -152,15 +218,15 @@ export function useWebsiteCommands(options: {
           destructive: true,
         },
         trigger,
-      ))
+      )))
     )
       return
     if (
       (action === 'restore' || action === 'restoreRevision') &&
-      !(await options.canDiscard(trigger))
+      !(await decide(current, () => options.canDiscard(trigger)))
     )
       return
-    if (locked.value || !site.value) return
+    if (!current() || locked.value || !site.value) return
     if (action === 'publish' && publishBlocked.value) {
       error.value = 'Resolve the publishing checks before publishing.'
       return
@@ -172,12 +238,17 @@ export function useWebsiteCommands(options: {
     message.value = ''
     try {
       await autosave.settle()
+      if (!current() || !site.value) return
       const snapshot = JSON.stringify(site.value)
+      const revision = draftRevision
       const result = await websiteCommand(action, {
         version: version.value,
         ...(action === 'save' ? { site: JSON.parse(snapshot) } : {}),
         ...(action === 'restoreRevision' ? { revisionId } : {}),
       })
+      if (!current()) return
+      // A restore replaces the whole draft. Never discard edits made during its request.
+      if (result.draft && revision !== draftRevision) return
       version.value = result.version
       if (action === 'save') {
         starterReview.value = false
@@ -204,12 +275,15 @@ export function useWebsiteCommands(options: {
         restoreRevision: 'Saved version restored to your draft. Review it before publishing.',
       }[action]
     } catch (reason) {
+      if (!current()) return
       error.value = websiteError(reason)
       if (action === 'save') autosave.reportFailure(reason)
     } finally {
-      busy.value = false
-      saving.value = false
+      if (current()) {
+        busy.value = false
+        saving.value = false
+      }
     }
   }
-  return { load, command }
+  return { load, command, capture }
 }

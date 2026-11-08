@@ -101,6 +101,7 @@ import { layerSelection } from '@/features/website/selection'
 import { useWebsiteSelectionCommands } from '@/features/website/useWebsiteSelectionCommands'
 import { captureWebsitePastePoint } from '@/features/website/clipboardPointer'
 import { keyboardGeometry, KEYBOARD_GEOMETRY_PRECISION } from '@/features/website/keyboardGeometry'
+import { elementViewportTransform } from '@/features/website/textBoxGeometry'
 import {
   newItem,
   newSection,
@@ -170,6 +171,10 @@ function helpKey(event: KeyboardEvent) {
   void guide.value?.open()
 }
 const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const auth = useAuthStore()
+const websiteScope = computed(() => auth.currentUser?.uid && auth.rawRole === 'admin' &&
+  auth.hasWorkspaceAccess && auth.profile?.active !== false
+  ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default'}:${auth.currentUser.uid}` : '')
 const editorMode = ref<EditorMode>(preferredMode())
 const designMode = computed(() => editorMode.value === 'design')
 const codeMode = computed(() => editorMode.value === 'code')
@@ -498,7 +503,7 @@ function resetDevice() {
   })
 }
 const selectedText = ref<ElementTarget>()
-const locked = computed(() => loading.value || busy.value || uploading.value)
+const locked = computed(() => !websiteScope.value || loading.value || busy.value || uploading.value)
 const widgetEditing = useWebsiteWidgetEditing({
  page, section, selectedSection, selectedIds, selectedText, settingsPanel, activePane, locked, designMode, geometryEditable, device, history,
  cancelDrag: () => widgetDrag.cancel(),
@@ -1239,6 +1244,8 @@ function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'm
       `[data-widget-id="${CSS.escape(id)}"]`,
     )
     if (delta && frame) {
+      const { scale } = elementViewportTransform(frame)
+      if (!Number.isFinite(scale) || scale <= 0) return
       event.preventDefault()
       event.stopPropagation()
       commitGeometry(
@@ -1247,13 +1254,14 @@ function geometryKey(event: KeyboardEvent, id: string, action: WidgetAction = 'm
           ...entry.layout,
           h:
             ((renderedSection(entry).sizing?.height ?? frame.offsetHeight) +
-              delta * (event.shiftKey ? 10 : 1)) /
+              delta * (event.shiftKey ? 1 / scale : 1)) /
             32,
         },
         undefined,
         undefined,
         undefined,
         true,
+        KEYBOARD_GEOMETRY_PRECISION,
       )
     }
     return
@@ -1464,7 +1472,6 @@ function setGeometry(field: keyof WidgetGeometry, event: Event) {
   }
   commitGeometry(section.value.id, next)
 }
-const auth = useAuthStore()
 const selectionCommands = useWebsiteSelectionCommands({
   identity: computed(() => auth.currentUser?.uid || ''),
   enabled: computed(() => auth.rawRole === 'admin' && auth.hasWorkspaceAccess),
@@ -1503,10 +1510,7 @@ const starterReview = ref(false)
 const starterConfirmation = ref(false)
 
 const autosave = useWebsiteAutosave({
-  scope: () =>
-    auth.currentUser?.uid
-      ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default'}:${auth.currentUser.uid}`
-      : '',
+  scope: () => websiteScope.value,
   site,
   saved,
   version,
@@ -1524,7 +1528,17 @@ const recovery = computed(
 let loadedServer = false
 let loadedSnapshot = ''
 let loadedVersion = 0
-const { load, command } = useWebsiteCommands({
+const { load, command, capture: captureWebsiteContext } = useWebsiteCommands({
+ scope: () => websiteScope.value,
+ cancelConfirmation: () => confirmation.value?.cancel(),
+ onInvalidated() {
+   loadedServer = false; loadedSnapshot = ''; loadedVersion = 0
+   recoveryKey.value = ''; starterConfirmation.value = false
+   uploading.value = false
+   runningCode.value = false; codePreviewSite.value = undefined
+   widgetDrag.cancel(); closeMenu(); setSelection([])
+   confirmation.value?.cancel()
+ },
  site, locked, dirty, cssError, publishBlocked, loading, busy, saving, error, message, saved, version, starterReview, publishedAt, hasPrevious, homePageId, selectedPage, selectedSection, history, autosave, canDiscard, fitView,
  confirm: (request, trigger) => confirmation.value?.ask(request, trigger),
  onLoaded(value) { loadedSnapshot = JSON.stringify(site.value); loadedVersion = value; loadedServer = true },
@@ -1532,10 +1546,7 @@ const { load, command } = useWebsiteCommands({
 })
 
 const draftSync = useWebsiteDraftSync({
-  scope: () =>
-    auth.currentUser?.uid
-      ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default'}:${auth.currentUser.uid}`
-      : '',
+  scope: () => websiteScope.value,
   snapshot: draftSnapshot,
   version,
   ready: () => loadedServer && autosave.ready.value && !loading.value,
@@ -1565,6 +1576,7 @@ const draftSync = useWebsiteDraftSync({
 watch(draftSync.newerVersion, (value) => (remoteChangePending.value = value !== null), {
   flush: 'sync',
 })
+watch(websiteScope, scope => { if (scope) void load() }, { flush: 'sync' })
 function applySharedDraft(result: WebsiteState) {
   autosave.ready.value = false
   history.reset(withWebsiteDefaults(result.draft))
@@ -1599,18 +1611,21 @@ function downloadRecovery() {
 }
 async function importStarter(trigger?: Event) {
   if (locked.value || !site.value || !auth.currentUser || starterConfirmation.value) return
+  const current = captureWebsiteContext(false), unchanged = captureWebsiteContext()
   const snapshot = JSON.stringify(site.value)
   const uid = auth.currentUser.uid
   starterConfirmation.value = true
   try {
     await autosave.settle()
+    if (!current()) return
     if (!(await confirmation.value?.ask({
       title: 'Review the nine-page starter?',
       message: 'This replaces the pages in this editor with an editable placeholder starter. A browser backup and downloaded copy preserve your current draft. Automatic saving stays paused until you choose Save draft. The published website stays unchanged. Careers is hidden until you configure its recipients.',
       confirmLabel: 'Back up and review starter',
       destructive: true,
     }, trigger))) return
-    if (locked.value || uid !== auth.currentUser?.uid || snapshot !== JSON.stringify(site.value)) {
+    if (!current()) return
+    if (!unchanged() || locked.value || uid !== auth.currentUser?.uid || snapshot !== JSON.stringify(site.value)) {
       message.value = 'The draft changed while confirming. Review it and try again.'
       return
     }
@@ -1636,18 +1651,20 @@ async function importStarter(trigger?: Event) {
     error.value = ''
     message.value = 'Starter review is local. Automatic saving is paused. Save draft only when you are ready to replace the private draft; publication remains a separate action.'
     await nextTick()
-    fitView()
+    if (current()) fitView()
   } catch {
-    error.value = 'The starter was not imported because a draft backup could not be saved. Your current draft is unchanged.'
-  } finally { starterConfirmation.value = false }
+    if (current()) error.value = 'The starter was not imported because a draft backup could not be saved. Your current draft is unchanged.'
+  } finally { if (current()) starterConfirmation.value = false }
 }
 
 async function recoverDraft(trigger?: Event) {
+  const current = captureWebsiteContext()
   const record = recovery.value
   if (
     !record ||
     locked.value ||
-    (JSON.stringify(site.value) !== loadedSnapshot && !(await canDiscard(trigger)))
+    (JSON.stringify(site.value) !== loadedSnapshot && !(await canDiscard(trigger))) ||
+    !current()
   )
     return
   const serverVersion = version.value

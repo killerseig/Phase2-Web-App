@@ -13,5 +13,5 @@ export function useTextBox(_root: Ref<HTMLElement | undefined>, target: Ref<Elem
     transformOrigin: 'center',
   } : undefined)
   const noop = () => {}
-  return { enabled: computed(() => false), selected: computed(() => false), style, guides: ref([]), rotationPreview: ref<number>(), rotationSnapped: ref(false), select: noop, start: noop, key: noop, consumeClick: () => false }
+  return { enabled: computed(() => false), selected: computed(() => false), style, guides: ref([]), rotationPreview: ref<number>(), rotationSnapped: ref(false), select: noop, start: noop, key: noop, acceptsKey: () => false, consumeClick: () => false }
 }

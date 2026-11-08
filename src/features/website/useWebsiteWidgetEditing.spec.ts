@@ -28,6 +28,16 @@ function fixture() {
 afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()) })
 
 describe('Website widget selection and geometry coordination', () => {
+  it('retains fractional flow height for precise keyboard controls and one undo', () => {
+    const state = fixture(), entry = state.page.value.sections[0]!
+    entry.sizing = { height: 100 }
+    state.history.reset(state.site.value)
+    state.commitGeometry(entry.id, { ...entry.layout!, h: 100.5 / 32 }, undefined, undefined, undefined, true, KEYBOARD_GEOMETRY_PRECISION)
+    expect(entry.sizing.height).toBe(100.5)
+    state.history.undo()
+    expect(state.page.value.sections[0]!.sizing?.height).toBe(100)
+    expect(state.history.canUndo.value).toBe(false)
+  })
   it('filters invalid selections, synchronizes inspector selection and removes deleted IDs', async () => {
     const state = fixture(), id = state.page.value.sections[0]!.id
     state.selectedText.value = { id, field: 'text' }

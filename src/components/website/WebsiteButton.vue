@@ -38,6 +38,7 @@ const label = computed(() =>
 )
 function edit(event: MouseEvent | KeyboardEvent) {
   if (!editable.value || event.shiftKey) return
+  if (event instanceof KeyboardEvent && !box.acceptsKey(event)) return
   event.preventDefault()
   event.stopPropagation()
   editing?.begin({ id: props.sectionId, field: 'linkLabel', key: key.value })

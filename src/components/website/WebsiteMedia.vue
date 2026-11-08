@@ -29,6 +29,7 @@ const editable = computed(
 )
 function edit(event: MouseEvent | KeyboardEvent) {
   if (!editable.value || event.shiftKey) return
+  if (event instanceof KeyboardEvent && !box.acceptsKey(event)) return
   event.preventDefault()
   event.stopPropagation()
   const element = event.currentTarget as HTMLElement

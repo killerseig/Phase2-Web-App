@@ -131,7 +131,7 @@ function click(event: MouseEvent) {
   else begin()
 }
 function textKey(event: KeyboardEvent) {
-  if (active.value) return
+  if (active.value || !box.acceptsKey(event)) return
   box.key(event)
   if (box.selected.value && ['Delete', 'Backspace'].includes(event.key)) {
     event.preventDefault()

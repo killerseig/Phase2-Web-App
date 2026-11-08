@@ -26,12 +26,12 @@ export function useWebsiteHistory(site: Ref<WebsiteSite | undefined>, limit = 30
     if (snapshots.value.length > limit + 1) snapshots.value.shift()
     position.value = snapshots.value.length - 1
   }
-  function reset(value: WebsiteSite) {
+  function reset(value: WebsiteSite | undefined) {
     grouping = false
     clearTimer()
     applying = true
     site.value = value
-    snapshots.value = [JSON.stringify(value)]
+    snapshots.value = value ? [JSON.stringify(value)] : []
     position.value = 0
     applying = false
   }

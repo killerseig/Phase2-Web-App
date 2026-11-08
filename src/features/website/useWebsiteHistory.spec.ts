@@ -13,6 +13,21 @@ function setup(limit = 30) {
   return { site, history, scope }
 }
 describe('local website draft history', () => {
+  it('clears private Undo and Redo snapshots when the editor session is reset', () => {
+    const { site, history, scope } = setup()
+    history.change(() => { site.value!.name = 'Private edit' })
+    history.undo()
+    expect(history.canRedo.value).toBe(true)
+    history.reset(undefined)
+    history.undo(); history.redo(); vi.advanceTimersByTime(1000)
+    expect(site.value).toBeUndefined()
+    expect(history.canUndo.value).toBe(false)
+    expect(history.canRedo.value).toBe(false)
+    history.reset({ name: 'New session', accent: '#174878', pages: [] })
+    history.undo()
+    expect(site.value!.name).toBe('New session')
+    scope.stop()
+  })
   it('keeps an inline editing session together even across pauses and focus changes', () => {
     const { site, history, scope } = setup()
     history.beginGroup()

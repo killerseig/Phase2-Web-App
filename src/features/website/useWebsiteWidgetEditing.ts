@@ -184,7 +184,7 @@ export function useWebsiteWidgetEditing(options: {
       const entry = page.value.sections.find((entry) => entry.id === id)
       if (!entry || layoutLocked(page.value.sections, id)) return
       history.change(() => {
-        const height = Math.max(32, Math.min(2000, Math.round(layout.h * 32)))
+        const height = Math.max(32, Math.min(2000, Number((layout.h * 32).toFixed(precision ?? 0))))
         if (device.value === 'desktop') entry.sizing = { ...entry.sizing, height }
         else
           entry.devices = {

@@ -4,6 +4,8 @@ import { sameText, textBoxEditingKey, textBoxValueKey, type ElementTarget } from
 import { alignMove, rotationAssist, type AlignmentGuide, type AlignmentRect } from './alignment'
 import { normalizeRotation, pointerRotation } from './transform'
 import type { ResizeDirection } from './grid'
+import { elementViewportTransform, resizeTextBox } from './textBoxGeometry'
+import { KEYBOARD_GEOMETRY_PRECISION } from './keyboardGeometry'
 
 type Action = 'move' | 'rotate' | ResizeDirection
 const clamp = (n: number, min = -4000, max = 4000) =>
@@ -73,27 +75,14 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
     select()
     element.focus({ preventScroll: true })
     const rect = element.getBoundingClientRect()
-    const preview = element.closest<HTMLElement>('.preview-frame')
-    let scale = preview ? preview.getBoundingClientRect().width / preview.offsetWidth : 1
+    const { scale, angle: parentAngle } = elementViewportTransform(element)
+    if (!Number.isFinite(scale) || scale <= 0) return
     const owner = element.closest<HTMLElement>('.widget-frame')
     const targets = [...(owner?.querySelectorAll<HTMLElement>('[data-alignable]') || [])]
       .filter((peer) => peer !== element && !element.contains(peer) && !peer.contains(element))
       .map((peer) => peer.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0)
     if (owner) targets.push(owner.getBoundingClientRect())
-    let parentAngle = 0
-    for (
-      let parent = element.parentElement;
-      parent && parent !== preview;
-      parent = parent.parentElement
-    ) {
-      const transform = getComputedStyle(parent).transform
-      if (transform !== 'none') {
-        const matrix = new DOMMatrixReadOnly(transform)
-        parentAngle += Math.atan2(matrix.b, matrix.a)
-        scale *= Math.hypot(matrix.a, matrix.b)
-      }
-    }
     element.setPointerCapture(event.pointerId)
     gesture = {
       pointer: event.pointerId,
@@ -174,40 +163,8 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
       next.rotation = result.angle
       rotationSnapped.value = result.snapped
     } else {
-      const angle = ((g.origin.rotation || 0) * Math.PI) / 180,
-        c = Math.cos(angle),
-        s = Math.sin(angle)
-      const horizontal = g.action.includes('left') ? -1 : g.action.includes('right') ? 1 : 0
-      const vertical = g.action.includes('top') ? -1 : g.action.includes('bottom') ? 1 : 0
-      let width = horizontal ? clamp(g.width + horizontal * (c * dx + s * dy), 24) : g.width
-      let height = vertical ? clamp(g.height + vertical * (-s * dx + c * dy), 24) : g.height
-      if (
-        horizontal &&
-        vertical &&
-        (g.origin.lockAspect ?? target.value.field === 'image') !== event.shiftKey
-      ) {
-        const ratio = g.width / Math.max(1, g.height)
-        const factor =
-          Math.abs(width / g.width - 1) >= Math.abs(height / g.height - 1)
-            ? width / g.width
-            : height / g.height
-        width = clamp(
-          g.width *
-            Math.max(
-              24 / g.width,
-              24 / g.height,
-              Math.min(factor, 4000 / g.width, 4000 / g.height),
-            ),
-          24,
-        )
-        height = clamp(width / ratio, 24)
-      }
-      const shiftX = (horizontal * (width - g.width)) / 2,
-        shiftY = (vertical * (height - g.height)) / 2
-      next.width = width
-      next.height = height
-      next.x = clamp((g.origin.x || 0) + c * shiftX - s * shiftY - (width - g.width) / 2)
-      next.y = clamp((g.origin.y || 0) + s * shiftX + c * shiftY - (height - g.height) / 2)
+      Object.assign(next, resizeTextBox(g.origin, g.width, g.height, dx, dy, g.action,
+        (g.origin.lockAspect ?? target.value.field === 'image') !== event.shiftKey))
     }
     draft.value = next
   }
@@ -235,13 +192,19 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
     if (next && enabled.value) editor?.save(target.value, next)
   }
   function escape(event: KeyboardEvent) {
-    if (event.key !== 'Escape') return
+    if (event.key !== 'Escape' || event.isComposing) return
     event.preventDefault()
     event.stopImmediatePropagation()
     cancel()
   }
+  function acceptsKey(event: KeyboardEvent) {
+    const element = event.target instanceof HTMLElement ? event.target : undefined
+    return !gesture && !event.defaultPrevented && !event.isComposing && !event.ctrlKey &&
+      !event.metaKey && !event.altKey &&
+      !element?.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"]')
+  }
   function key(event: KeyboardEvent, action: Action = 'move') {
-    if (!selected.value) return
+    if (!selected.value || !acceptsKey(event) || !root.value) return
     if (['Delete', 'Backspace'].includes(event.key)) {
       event.preventDefault()
       event.stopPropagation()
@@ -258,8 +221,7 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
     if (!delta && !(action === 'rotate' && event.key === 'Home')) return
     event.preventDefault()
     event.stopPropagation()
-    const next = { ...read?.(target.value) },
-      step = event.shiftKey ? 10 : 1
+    let next = { ...read?.(target.value) }
     if (action === 'rotate')
       next.rotation =
         event.key === 'Home'
@@ -267,29 +229,22 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
           : normalizeRotation(
               (next.rotation || 0) + (delta![0]! || -delta![1]!) * (event.shiftKey ? 15 : 1),
             )
-    else if (action === 'move') {
-      next.x = clamp((next.x || 0) + delta![0]! * step)
-      next.y = clamp((next.y || 0) + delta![1]! * step)
-    } else {
-      const width = next.width ?? root.value!.offsetWidth
-      const height = next.height ?? root.value!.offsetHeight
-      const corner =
-        (action.includes('left') || action.includes('right')) &&
-        (action.includes('top') || action.includes('bottom'))
-      if (corner && (next.lockAspect ?? target.value.field === 'image')) {
-        const factor = delta![0]
-          ? (width + delta![0]! * step) / width
-          : (height + delta![1]! * step) / height
-        const bounded = Math.max(
-          24 / width,
-          24 / height,
-          Math.min(factor, 4000 / width, 4000 / height),
-        )
-        next.width = clamp(width * bounded, 24)
-        next.height = clamp(height * bounded, 24)
+    else {
+      const { scale, angle } = elementViewportTransform(root.value)
+      if (!Number.isFinite(scale) || scale <= 0) return
+      const step = event.shiftKey ? 1 / scale : 1
+      const dx = (Math.cos(angle) * delta![0]! + Math.sin(angle) * delta![1]!) * step
+      const dy = (-Math.sin(angle) * delta![0]! + Math.cos(angle) * delta![1]!) * step
+      const precise = (value: number) => Number(Math.max(-4000, Math.min(4000, value)).toFixed(KEYBOARD_GEOMETRY_PRECISION))
+      if (action === 'move') {
+        if (dx) next.x = precise((next.x || 0) + dx)
+        if (dy) next.y = precise((next.y || 0) + dy)
       } else {
-        next.width = clamp(width + delta![0]! * step, 24)
-        next.height = clamp(height + delta![1]! * step, 24)
+        const width = next.width ?? root.value.offsetWidth
+        const height = next.height ?? root.value.offsetHeight
+        next = resizeTextBox(next, width, height, dx, dy, action,
+          next.lockAspect ?? target.value.field === 'image', KEYBOARD_GEOMETRY_PRECISION)
+        if ((next.width ?? width) === width && (next.height ?? height) === height) return
       }
     }
     editor?.save(target.value, next)
@@ -331,6 +286,7 @@ export function useTextBox(root: Ref<HTMLElement | undefined>, target: Ref<Eleme
     select,
     start,
     key,
+    acceptsKey,
     consumeClick() {
       const result = swallowClick
       swallowClick = false
