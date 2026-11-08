@@ -1,3 +1,5 @@
+import { watch } from 'vue'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import {
   buildShopCatalogCategoryWritePayload,
   buildShopCatalogItemWritePayload,
@@ -16,6 +18,7 @@ import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogFormActionsOptions {
+  context?: AdminRequestContext
   activeFolderId: WritableRef<string | null>
   createCategoryForm: ShopCatalogCategoryFormState
   createItemForm: ShopCatalogItemFormState
@@ -38,6 +41,7 @@ interface UseShopCatalogFormActionsOptions {
 }
 
 export function useShopCatalogFormActions({
+  context,
   activeFolderId,
   createCategoryForm,
   createItemForm,
@@ -58,7 +62,13 @@ export function useShopCatalogFormActions({
   setDetailInfo,
   showInspectorPanel,
 }: UseShopCatalogFormActionsOptions) {
+  const createScope = useAdminRequestScope(context, () => selectedInspectorKey.value, () => [createCategoryForm, createItemForm])
+  const detailScope = useAdminRequestScope(context, () => selectedInspectorKey.value, () => [detailCategoryForm, detailItemForm])
+  watch(createScope.revision, () => { createLoading.value = false }, { flush: 'sync' })
+  watch(detailScope.revision, () => { saveLoading.value = false }, { flush: 'sync' })
   async function handleCreateCategory() {
+    if (!createScope.allowed.value || createLoading.value) return
+    const request = createScope.capture()
     setCreateErrorMessage('')
     setDetailInfo('')
 
@@ -71,6 +81,8 @@ export function useShopCatalogFormActions({
     createLoading.value = true
     try {
       const categoryId = await createShopCategory(buildShopCatalogCategoryWritePayload(createCategoryForm))
+      if (!request.draftCurrent()) return
+      createLoading.value = false
 
       activeFolderId.value = createCategoryForm.parentId
       ensureExpandedToCategory(createCategoryForm.parentId)
@@ -78,13 +90,15 @@ export function useShopCatalogFormActions({
       selectedInspectorKey.value = `category:${categoryId}`
       showInspectorPanel()
     } catch (error) {
-      setCreateError(error, 'Failed to create folder.')
+      if (request.draftCurrent()) setCreateError(error, 'Failed to create folder.')
     } finally {
-      createLoading.value = false
+      if (request.current()) createLoading.value = false
     }
   }
 
   async function handleCreateItem() {
+    if (!createScope.allowed.value || createLoading.value) return
+    const request = createScope.capture()
     setCreateErrorMessage('')
     setDetailInfo('')
 
@@ -97,20 +111,23 @@ export function useShopCatalogFormActions({
     createLoading.value = true
     try {
       const itemId = await createShopCatalogItem(buildShopCatalogItemWritePayload(createItemForm))
+      if (!request.draftCurrent()) return
+      createLoading.value = false
 
       activeFolderId.value = createItemForm.categoryId
       ensureExpandedToCategory(createItemForm.categoryId)
       selectedInspectorKey.value = `item:${itemId}`
       showInspectorPanel()
     } catch (error) {
-      setCreateError(error, 'Failed to create catalog item.')
+      if (request.draftCurrent()) setCreateError(error, 'Failed to create catalog item.')
     } finally {
-      createLoading.value = false
+      if (request.current()) createLoading.value = false
     }
   }
 
   async function handleSaveCategory() {
-    if (!selectedCategory.value) return
+    if (!detailScope.allowed.value || !selectedCategory.value || saveLoading.value) return
+    const request = detailScope.capture()
 
     resetDetailMessages()
 
@@ -123,19 +140,21 @@ export function useShopCatalogFormActions({
     saveLoading.value = true
     try {
       await updateShopCategory(selectedCategory.value.id, buildShopCatalogCategoryWritePayload(detailCategoryForm))
+      if (!request.draftCurrent()) return
 
       activeFolderId.value = selectedCategory.value.id
       ensureExpandedToCategory(detailCategoryForm.parentId)
       setDetailInfo('Folder updated.')
     } catch (error) {
-      setDetailError(error, 'Failed to update folder.')
+      if (request.draftCurrent()) setDetailError(error, 'Failed to update folder.')
     } finally {
-      saveLoading.value = false
+      if (request.current()) saveLoading.value = false
     }
   }
 
   async function handleSaveItem() {
-    if (!selectedItem.value) return
+    if (!detailScope.allowed.value || !selectedItem.value || saveLoading.value) return
+    const request = detailScope.capture()
 
     resetDetailMessages()
 
@@ -151,14 +170,15 @@ export function useShopCatalogFormActions({
         selectedItem.value.id,
         buildShopCatalogItemWritePayload(detailItemForm, selectedItem.value.categoryId),
       )
+      if (!request.draftCurrent()) return
 
       activeFolderId.value = selectedItem.value.categoryId
       ensureExpandedToCategory(selectedItem.value.categoryId)
       setDetailInfo('Catalog item updated.')
     } catch (error) {
-      setDetailError(error, 'Failed to update catalog item.')
+      if (request.draftCurrent()) setDetailError(error, 'Failed to update catalog item.')
     } finally {
-      saveLoading.value = false
+      if (request.current()) saveLoading.value = false
     }
   }
 

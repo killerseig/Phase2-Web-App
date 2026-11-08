@@ -1,3 +1,5 @@
+import { watch } from 'vue'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import {
   getShopCatalogDescendantCategoryIds,
   getShopCatalogItemDisplayName,
@@ -9,6 +11,7 @@ import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogArchiveActionsOptions {
+  context?: AdminRequestContext
   activeFolderId: WritableRef<string | null>
   catalogConfirmAction: WritableRef<ShopCatalogConfirmAction | null>
   categoriesById: ReadonlyRef<ReadonlyMap<string, ShopCategoryRecord>>
@@ -27,6 +30,7 @@ interface UseShopCatalogArchiveActionsOptions {
 }
 
 export function useShopCatalogArchiveActions({
+  context,
   activeFolderId,
   catalogConfirmAction,
   categoriesById,
@@ -43,6 +47,8 @@ export function useShopCatalogArchiveActions({
   setDetailInfo,
   showArchived,
 }: UseShopCatalogArchiveActionsOptions) {
+  const scope = useAdminRequestScope(context, () => selectedInspectorKey.value)
+  watch(scope.revision, () => { saveLoading.value = false; catalogConfirmAction.value = null }, { flush: 'sync' })
   function getDescendantCategoryIdsWithSelf(categoryId: string) {
     const descendantIds = getShopCatalogDescendantCategoryIds(categoryId, childCategoriesByParent.value)
     descendantIds.add(categoryId)
@@ -54,7 +60,7 @@ export function useShopCatalogArchiveActions({
     categoryId = selectedCategory.value?.id ?? null,
     options?: { showInspector?: boolean },
   ) {
-    if (!categoryId) return
+    if (!scope.allowed.value || saveLoading.value || !categoryId) return
 
     const category = categoriesById.value.get(categoryId) ?? null
     if (!category) return
@@ -71,6 +77,8 @@ export function useShopCatalogArchiveActions({
   }
 
   async function confirmArchiveCategory(action: Extract<ShopCatalogConfirmAction, { kind: 'archive-category' }>) {
+    if (!scope.allowed.value || saveLoading.value || catalogConfirmAction.value !== action) return
+    const request = scope.capture()
     const category = categoriesById.value.get(action.categoryId) ?? null
     if (!category) {
       catalogConfirmAction.value = null
@@ -114,6 +122,9 @@ export function useShopCatalogArchiveActions({
           })
         }),
       ])
+      if (!request.current()) return
+      saveLoading.value = false
+      catalogConfirmAction.value = null
 
       if (!nextActive && !showArchived.value) {
         activeFolderId.value = category.parentId
@@ -124,10 +135,9 @@ export function useShopCatalogArchiveActions({
 
       setDetailInfo(`Folder ${actionLabel}.`)
     } catch (error) {
-      setDetailError(error, `Failed to ${nextActive ? 'restore' : 'archive'} folder.`)
+      if (request.current()) setDetailError(error, `Failed to ${nextActive ? 'restore' : 'archive'} folder.`)
     } finally {
-      saveLoading.value = false
-      catalogConfirmAction.value = null
+      if (request.current()) { saveLoading.value = false; catalogConfirmAction.value = null }
     }
   }
 
@@ -136,7 +146,7 @@ export function useShopCatalogArchiveActions({
     itemId = selectedItem.value?.id ?? null,
     options?: { showInspector?: boolean },
   ) {
-    if (!itemId) return
+    if (!scope.allowed.value || saveLoading.value || !itemId) return
 
     const item = items.value.find((candidate) => candidate.id === itemId) ?? null
     if (!item) return
@@ -153,6 +163,8 @@ export function useShopCatalogArchiveActions({
   }
 
   async function confirmArchiveItem(action: Extract<ShopCatalogConfirmAction, { kind: 'archive-item' }>) {
+    if (!scope.allowed.value || saveLoading.value || catalogConfirmAction.value !== action) return
+    const request = scope.capture()
     const item = items.value.find((candidate) => candidate.id === action.itemId) ?? null
     if (!item) {
       catalogConfirmAction.value = null
@@ -174,6 +186,9 @@ export function useShopCatalogArchiveActions({
         price: item.price,
         active: nextActive,
       })
+      if (!request.current()) return
+      saveLoading.value = false
+      catalogConfirmAction.value = null
 
       if (!nextActive && !showArchived.value) {
         selectedInspectorKey.value = item.categoryId ? `category:${item.categoryId}` : 'root'
@@ -190,10 +205,9 @@ export function useShopCatalogArchiveActions({
 
       setDetailInfo(`Item ${actionLabel}.`)
     } catch (error) {
-      setDetailError(error, `Failed to ${nextActive ? 'restore' : 'archive'} item.`)
+      if (request.current()) setDetailError(error, `Failed to ${nextActive ? 'restore' : 'archive'} item.`)
     } finally {
-      saveLoading.value = false
-      catalogConfirmAction.value = null
+      if (request.current()) { saveLoading.value = false; catalogConfirmAction.value = null }
     }
   }
 

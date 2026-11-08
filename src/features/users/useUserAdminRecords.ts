@@ -1,14 +1,20 @@
-import { useSubscribedRecords } from '@/composables/useSubscribedRecords'
+import { useAdminRecords } from '@/features/admin/useAdminRecords'
+import { watch } from 'vue'
+import type { AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import { subscribeVisibleJobs } from '@/services/jobs'
 import { subscribeUsers } from '@/services/users'
 import type { JobRecord, UserProfile } from '@/types/domain'
-import type { WritableRef } from '@/types/reactivity'
+import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseUserAdminRecordsOptions {
+  context?: AdminRequestContext
+  deleting?: ReadonlyRef<boolean>
   selectedUserId: WritableRef<string | 'new' | null>
 }
 
 export function useUserAdminRecords({
+  context,
+  deleting,
   selectedUserId,
 }: UseUserAdminRecordsOptions) {
   const subscribeAssignableJobs = (
@@ -22,7 +28,8 @@ export function useUserAdminRecords({
     records: jobs,
     start: startJobsSubscription,
     stop: stopJobsSubscription,
-  } = useSubscribedRecords<JobRecord>(subscribeAssignableJobs, {
+  } = useAdminRecords<JobRecord>(subscribeAssignableJobs, {
+    context,
     errorMessage: 'Failed to load jobs.',
   })
 
@@ -32,18 +39,24 @@ export function useUserAdminRecords({
     records: users,
     start: startUsersSubscription,
     stop: stopUsersSubscription,
-  } = useSubscribedRecords<UserProfile>(subscribeUsers, {
+  } = useAdminRecords<UserProfile>(subscribeUsers, {
+    context,
     errorMessage: 'Failed to load users.',
-    onUpdate: (nextUsers) => {
-      if (
-        selectedUserId.value
-        && selectedUserId.value !== 'new'
-        && !nextUsers.some((user) => user.id === selectedUserId.value)
-      ) {
-        selectedUserId.value = null
-      }
-    },
+    onUpdate: reconcileSelection,
   })
+  function reconcileSelection(nextUsers: UserProfile[]) {
+    // The deletion owner reports its result before releasing its selection.
+    // Listener removal may arrive before the callable response.
+    if (
+      !deleting?.value &&
+      selectedUserId.value &&
+      selectedUserId.value !== 'new' &&
+      !nextUsers.some((user) => user.id === selectedUserId.value)
+    ) {
+      selectedUserId.value = null
+    }
+  }
+  if (deleting) watch(() => deleting.value, () => reconcileSelection(users.value), { flush: 'sync' })
 
   return {
     jobs,

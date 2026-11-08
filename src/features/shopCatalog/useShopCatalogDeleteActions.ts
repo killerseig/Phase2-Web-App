@@ -1,3 +1,5 @@
+import { watch } from 'vue'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import {
   getShopCatalogItemDisplayName,
   getShopCategoryDisplayName,
@@ -8,6 +10,7 @@ import type { ShopCatalogItemRecord, ShopCategoryRecord } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseShopCatalogDeleteActionsOptions {
+  context?: AdminRequestContext
   activeFolderId: WritableRef<string | null>
   catalogConfirmAction: WritableRef<ShopCatalogConfirmAction | null>
   deleteLoading: WritableRef<boolean>
@@ -21,6 +24,7 @@ interface UseShopCatalogDeleteActionsOptions {
 }
 
 export function useShopCatalogDeleteActions({
+  context,
   activeFolderId,
   catalogConfirmAction,
   deleteLoading,
@@ -32,8 +36,10 @@ export function useShopCatalogDeleteActions({
   setDetailError,
   setDetailErrorMessage,
 }: UseShopCatalogDeleteActionsOptions) {
+  const scope = useAdminRequestScope(context, () => selectedInspectorKey.value)
+  watch(scope.revision, () => { deleteLoading.value = false; catalogConfirmAction.value = null }, { flush: 'sync' })
   function handleDeleteCategory() {
-    if (!selectedCategory.value) return
+    if (!scope.allowed.value || deleteLoading.value || !selectedCategory.value) return
 
     if (selectedCategoryHasChildren.value) {
       setDetailErrorMessage('Empty the folder before deleting it.')
@@ -49,22 +55,26 @@ export function useShopCatalogDeleteActions({
   }
 
   async function confirmDeleteCategory(action: Extract<ShopCatalogConfirmAction, { kind: 'delete-category' }>) {
+    if (!scope.allowed.value || deleteLoading.value || catalogConfirmAction.value !== action) return
+    const request = scope.capture()
     resetDetailMessages()
     deleteLoading.value = true
     try {
       await deleteShopCategory(action.categoryId)
+      if (!request.current()) return
+      deleteLoading.value = false
+      catalogConfirmAction.value = null
       selectedInspectorKey.value = 'root'
       activeFolderId.value = action.parentId
     } catch (error) {
-      setDetailError(error, 'Failed to delete folder.')
+      if (request.current()) setDetailError(error, 'Failed to delete folder.')
     } finally {
-      deleteLoading.value = false
-      catalogConfirmAction.value = null
+      if (request.current()) { deleteLoading.value = false; catalogConfirmAction.value = null }
     }
   }
 
   function handleDeleteItem() {
-    if (!selectedItem.value) return
+    if (!scope.allowed.value || deleteLoading.value || !selectedItem.value) return
 
     catalogConfirmAction.value = {
       kind: 'delete-item',
@@ -75,17 +85,21 @@ export function useShopCatalogDeleteActions({
   }
 
   async function confirmDeleteItem(action: Extract<ShopCatalogConfirmAction, { kind: 'delete-item' }>) {
+    if (!scope.allowed.value || deleteLoading.value || catalogConfirmAction.value !== action) return
+    const request = scope.capture()
     resetDetailMessages()
     deleteLoading.value = true
     try {
       await deleteShopCatalogItem(action.itemId)
+      if (!request.current()) return
+      deleteLoading.value = false
+      catalogConfirmAction.value = null
       selectedInspectorKey.value = action.categoryId ? `category:${action.categoryId}` : 'root'
       activeFolderId.value = action.categoryId
     } catch (error) {
-      setDetailError(error, 'Failed to delete catalog item.')
+      if (request.current()) setDetailError(error, 'Failed to delete catalog item.')
     } finally {
-      deleteLoading.value = false
-      catalogConfirmAction.value = null
+      if (request.current()) { deleteLoading.value = false; catalogConfirmAction.value = null }
     }
   }
 

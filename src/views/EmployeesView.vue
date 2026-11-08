@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import AppShell from '@/layouts/AppShell.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useAdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import DirectoryEditorWorkspaceShell from '@/components/common/DirectoryEditorWorkspaceShell.vue'
 import EmployeeConfirmDialogs from '@/components/employees/EmployeeConfirmDialogs.vue'
 import EmployeeDirectoryPanel from '@/components/employees/EmployeeDirectoryPanel.vue'
@@ -21,10 +24,17 @@ import { useEmployeeFormState } from '@/features/employees/useEmployeeFormState'
 import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
 
 const mobilePanelTabs = buildDirectoryEditorMobilePanelTabs('Employees')
+const auth = useAuthStore()
+const context = useAdminRequestContext(
+  computed(() => auth.currentUser?.uid || ''),
+  computed(() => auth.hasWorkspaceAccess && ['admin', 'payroll'].includes(auth.rawRole)),
+  computed(() => auth.rawRole),
+)
 
 const searchTerm = ref('')
 const statusFilter = ref<DirectoryStatusFilter>('active')
 const selectedEmployeeId = ref<string | 'new'>('new')
+const deleteLoading = ref(false)
 const {
   employees,
   employeesError,
@@ -32,6 +42,8 @@ const {
   startEmployeesSubscription,
   stopEmployeesSubscription,
 } = useEmployeeAdminRecords({
+  context,
+  deleting: deleteLoading,
   selectedEmployeeId,
 })
 const {
@@ -52,7 +64,6 @@ const {
 } = usePageMessages()
 const createLoading = ref(false)
 const saveLoading = ref(false)
-const deleteLoading = ref(false)
 const deleteConfirmOpen = ref(false)
 
 const {
@@ -105,6 +116,7 @@ const {
   handleCreateEmployee,
   handleDeleteEmployee,
 } = useEmployeeActions({
+  context,
   createForm,
   createLoading,
   deleteConfirmOpen,
@@ -137,7 +149,16 @@ const {
   onCreateMode: resetCreateForm,
 })
 
+watch(context.revision, () => {
+  selectedEmployeeId.value = 'new'
+  searchTerm.value = ''
+  resetCreateForm()
+  void applyEmployeeToDetailForm(null)
+  resetDetailMessages()
+}, { flush: 'sync' })
+
 useEmployeeAdminViewSync({
+  context,
   applyEmployeeToDetailForm,
   resetCreateForm,
   selectedEmployee,
@@ -151,6 +172,7 @@ useEmployeeAdminViewSync({
 
 <template>
   <DirectoryEditorWorkspaceShell
+    v-if="context.allowed.value"
     title="Employees"
     description="Manage employee details and keep your crew directory up to date."
     class="employees-workspace"
@@ -212,4 +234,5 @@ useEmployeeAdminViewSync({
       @update-delete-open="deleteConfirmOpen = $event"
     />
   </DirectoryEditorWorkspaceShell>
+  <AppShell v-else><p role="status">You do not have access to manage employees.</p></AppShell>
 </template>

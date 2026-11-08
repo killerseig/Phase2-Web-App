@@ -1,3 +1,5 @@
+import { watch } from 'vue'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import {
   getShopCatalogItemDisplayName,
   getShopCategoryDisplayName,
@@ -23,6 +25,7 @@ interface InlineRenameState {
 }
 
 interface UseShopCatalogInlineActionsOptions {
+  context?: AdminRequestContext
   activeFolderId: WritableRef<string | null>
   cancelInlineCreate: () => void
   cancelRename: () => void
@@ -48,6 +51,7 @@ interface UseShopCatalogInlineActionsOptions {
 }
 
 export function useShopCatalogInlineActions({
+  context,
   activeFolderId,
   cancelInlineCreate,
   cancelRename,
@@ -71,7 +75,15 @@ export function useShopCatalogInlineActions({
   startInlineCreate,
   startInlineRename,
 }: UseShopCatalogInlineActionsOptions) {
+  const createScope = useAdminRequestScope(context,
+    () => `${selectedInspectorKey.value}\0${createState.key}`,
+    () => [createState.value, createState.parentId, createState.kind])
+  const renameScope = useAdminRequestScope(context,
+    () => `${selectedInspectorKey.value}\0${renameState.key}`, () => renameState.value)
+  watch(createScope.revision, () => { createState.saving = false }, { flush: 'sync' })
+  watch(renameScope.revision, () => { renameState.saving = false }, { flush: 'sync' })
   function openCreateItemMode(parentId: string | null = activeFolderId.value) {
+    if (!createScope.allowed.value) return
     cancelRename()
     cancelInlineCreate()
     activeFolderId.value = parentId
@@ -87,6 +99,7 @@ export function useShopCatalogInlineActions({
   }
 
   async function beginInlineCreate(kind: 'category' | 'item', parentId: string | null = activeFolderId.value) {
+    if (!createScope.allowed.value) return
     setCreateErrorMessage('')
 
     if (parentId == null) {
@@ -104,6 +117,7 @@ export function useShopCatalogInlineActions({
   }
 
   async function beginRenameNode(target: ShopCatalogContextMenuTarget) {
+    if (!renameScope.allowed.value) return
     if (target.kind === 'root') return
 
     if (target.kind === 'category') {
@@ -123,7 +137,8 @@ export function useShopCatalogInlineActions({
   }
 
   async function saveInlineCreate() {
-    if (!createState.key || !createState.kind || createState.saving) return
+    if (!createScope.allowed.value || !createState.key || !createState.kind || createState.saving) return
+    const request = createScope.capture()
 
     const nextValue = createState.value.trim()
     if (!nextValue) {
@@ -141,6 +156,8 @@ export function useShopCatalogInlineActions({
           parentId: createState.parentId,
           active: true,
         })
+        if (!request.draftCurrent()) return
+        createState.saving = false
 
         if (createState.parentId) {
           ensureExpandedToCategory(createState.parentId)
@@ -156,6 +173,8 @@ export function useShopCatalogInlineActions({
           price: null,
           active: true,
         })
+        if (!request.draftCurrent()) return
+        createState.saving = false
 
         const item = items.value.find((candidate) => candidate.id === itemId)
         if (item) {
@@ -168,13 +187,15 @@ export function useShopCatalogInlineActions({
 
       cancelInlineCreate()
     } catch (error) {
-      setCreateError(error, `Failed to create ${createState.kind}.`)
-      createState.saving = false
+      if (request.draftCurrent()) setCreateError(error, `Failed to create ${createState.kind}.`)
+    } finally {
+      if (request.current()) createState.saving = false
     }
   }
 
   async function saveInlineRename() {
-    if (!renameState.key || renameState.saving) return
+    if (!renameScope.allowed.value || !renameState.key || renameState.saving) return
+    const request = renameScope.capture()
 
     const nextValue = renameState.value.trim()
     if (!nextValue) {
@@ -215,10 +236,11 @@ export function useShopCatalogInlineActions({
         })
       }
 
-      cancelRename()
+      if (request.draftCurrent()) cancelRename()
     } catch (error) {
-      setDetailError(error, 'Failed to rename catalog entry.')
-      renameState.saving = false
+      if (request.draftCurrent()) setDetailError(error, 'Failed to rename catalog entry.')
+    } finally {
+      if (request.current()) renameState.saving = false
     }
   }
 

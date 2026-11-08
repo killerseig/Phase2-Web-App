@@ -22,18 +22,18 @@ import {
 import type { EmployeeRecord, UserProfile } from '@/types/domain'
 
 vi.mock('@/services/users', () => ({
-  createUserByAdmin: vi.fn(),
-  deleteUserByAdmin: vi.fn(),
-  resendUserInviteByAdmin: vi.fn(),
-  sendPendingInvitesByAdmin: vi.fn(),
-  sendUserPasswordResetByAdmin: vi.fn(),
-  updateUser: vi.fn(),
+  createUserByAdmin: vi.fn<typeof import('@/services/users')['createUserByAdmin']>(),
+  deleteUserByAdmin: vi.fn<typeof import('@/services/users')['deleteUserByAdmin']>(),
+  resendUserInviteByAdmin: vi.fn<typeof import('@/services/users')['resendUserInviteByAdmin']>(),
+  sendPendingInvitesByAdmin: vi.fn<typeof import('@/services/users')['sendPendingInvitesByAdmin']>(),
+  sendUserPasswordResetByAdmin: vi.fn<typeof import('@/services/users')['sendUserPasswordResetByAdmin']>(),
+  updateUser: vi.fn<typeof import('@/services/users')['updateUser']>(),
 }))
 
 vi.mock('@/services/employees', () => ({
-  createEmployeeRecord: vi.fn(),
-  deleteEmployeeRecord: vi.fn(),
-  updateEmployeeRecord: vi.fn(),
+  createEmployeeRecord: vi.fn<typeof import('@/services/employees')['createEmployeeRecord']>(),
+  deleteEmployeeRecord: vi.fn<typeof import('@/services/employees')['deleteEmployeeRecord']>(),
+  updateEmployeeRecord: vi.fn<typeof import('@/services/employees')['updateEmployeeRecord']>(),
 }))
 
 const createUserByAdminMock = vi.mocked(createUserByAdmin)
@@ -102,8 +102,8 @@ function mountUserCreateActions() {
   const createInfos: string[] = []
   const inviteErrors: Array<{ error: unknown; fallback: string }> = []
   const inviteInfos: string[] = []
-  const resetCreateMessages = vi.fn()
-  const resetInviteMessages = vi.fn()
+  const resetCreateMessages = vi.fn<() => void>()
+  const resetInviteMessages = vi.fn<() => void>()
 
   const actions = useUserCreateActions({
     createAction,
@@ -156,9 +156,9 @@ function mountUserDetailActions(
     role: 'foreman',
   }
   const editingSelf = ref(options.editingSelf ?? false)
-  const hasUnsavedDetailChanges = vi.fn(() => options.hasUnsavedDetailChanges ?? true)
+  const hasUnsavedDetailChanges = vi.fn<() => boolean>(() => options.hasUnsavedDetailChanges ?? true)
   const isCreateMode = ref(options.isCreateMode ?? false)
-  const resetCreateForm = vi.fn()
+  const resetCreateForm = vi.fn<() => void>()
   const saveLoading = ref(false)
   const selectedUser = ref<UserProfile | null>(options.selectedUser ?? makeUser())
   const selectedUserId = ref<string | 'new' | null>(selectedUser.value?.id ?? null)
@@ -166,7 +166,7 @@ function mountUserDetailActions(
   const detailErrors: Array<{ error: unknown; fallback: string }> = []
   const detailInfos: string[] = []
   const syncingDetailForm = ref(options.syncingDetailForm ?? false)
-  const toggleDetailAssignedJob = vi.fn((jobId: string) => {
+  const toggleDetailAssignedJob = vi.fn<(jobId: string) => void>((jobId) => {
     if (detailForm.assignedJobIds.includes(jobId)) {
       detailForm.assignedJobIds = detailForm.assignedJobIds.filter((id) => id !== jobId)
       return
@@ -237,13 +237,13 @@ function mountEmployeeActions(
     lastName: 'Blanchard',
     occupation: 'Shop Foreman',
   })
-  const resetCreateForm = vi.fn()
-  const resetCreateMessages = vi.fn()
-  const resetDetailMessages = vi.fn()
+  const resetCreateForm = vi.fn<() => void>()
+  const resetCreateMessages = vi.fn<() => void>()
+  const resetDetailMessages = vi.fn<() => void>()
   const saveLoading = ref(false)
   const selectedEmployee = ref<EmployeeRecord | null>(options.selectedEmployee ?? makeEmployee())
   const selectedEmployeeId = ref<string | 'new'>(selectedEmployee.value?.id ?? 'new')
-  const hasUnsavedDetailChanges = vi.fn(() => options.hasUnsavedDetailChanges ?? true)
+  const hasUnsavedDetailChanges = vi.fn<() => boolean>(() => options.hasUnsavedDetailChanges ?? true)
   const createErrorMessages: string[] = []
   const createErrors: Array<{ error: unknown; fallback: string }> = []
   const createInfos: string[] = []
@@ -362,7 +362,7 @@ describe('admin user actions', () => {
       lastName: 'Manager',
       role: 'project-manager',
       sendInvite: true,
-    })
+    }, { isCurrent: expect.any(Function) })
     expect(createInfos).toEqual(['User created.'])
     expect(selectedUserId.value).toBe('user-new')
     expect(createAction.value).toBeNull()
@@ -377,11 +377,12 @@ describe('admin user actions', () => {
         assignedJobIds: ['personal-admin-job'],
         sendInvite: false,
       }),
+      { isCurrent: expect.any(Function) },
     )
     createForm.role = 'payroll'
     createForm.assignedJobIds = ['must-not-grant-field-access']
     await actions.handleCreateUser(false)
-    expect(createUserByAdminMock).toHaveBeenLastCalledWith(expect.objectContaining({ role: 'payroll', assignedJobIds: [], sendInvite: false }))
+    expect(createUserByAdminMock).toHaveBeenLastCalledWith(expect.objectContaining({ role: 'payroll', assignedJobIds: [], sendInvite: false }), { isCurrent: expect.any(Function) })
   })
 
   it('sends pending invites and forwards invite failures', async () => {

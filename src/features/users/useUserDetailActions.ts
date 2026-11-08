@@ -1,5 +1,7 @@
+import { getCurrentScope, onScopeDispose, watch } from 'vue'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import { currentRoleCanHaveAccountJobAssignments } from '@/auth/roles'
-import { getUserDetailUpdateRole, type UserDetailFormState } from '@/features/users/userViewHelpers'
+import { getUserDetailFormSnapshot, getUserDetailUpdateRole, type UserDetailFormState } from '@/features/users/userViewHelpers'
 import {
   deleteUserByAdmin,
   resendUserInviteByAdmin,
@@ -10,6 +12,7 @@ import type { UserProfile } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseUserDetailActionsOptions {
+  context?: AdminRequestContext
   deleteConfirmOpen: WritableRef<boolean>
   deleteLoading: WritableRef<boolean>
   detailError: ReadonlyRef<string>
@@ -30,6 +33,7 @@ interface UseUserDetailActionsOptions {
 }
 
 export function useUserDetailActions({
+  context,
   deleteConfirmOpen,
   deleteLoading,
   detailError,
@@ -49,6 +53,16 @@ export function useUserDetailActions({
   toggleDetailAssignedJob,
 }: UseUserDetailActionsOptions) {
   let detailSaveTimer: number | null = null
+  const scope = useAdminRequestScope(context, () => selectedUserId.value, () => getUserDetailFormSnapshot(detailForm))
+  let deletion: { id: string; current: () => boolean } | undefined
+  watch(scope.revision, () => {
+    clearDetailSaveTimer()
+    saveLoading.value = false
+    deleteLoading.value = false
+    emailAction.value = null
+    deleteConfirmOpen.value = false
+    deletion = undefined
+  }, { flush: 'sync' })
 
   function clearDetailSaveTimer() {
     if (detailSaveTimer !== null) {
@@ -56,10 +70,12 @@ export function useUserDetailActions({
       detailSaveTimer = null
     }
   }
+  if (getCurrentScope()) onScopeDispose(clearDetailSaveTimer)
 
   async function handleAutoSaveUser(): Promise<boolean> {
     const user = selectedUser.value
-    if (!user || saveLoading.value) return false
+    if (!scope.allowed.value || !user || saveLoading.value || deleteLoading.value || deleteConfirmOpen.value) return false
+    const request = scope.capture()
 
     clearDetailSaveTimer()
     setDetailErrorMessage('')
@@ -86,22 +102,25 @@ export function useUserDetailActions({
         assignedJobIds: currentRoleCanHaveAccountJobAssignments(role) ? detailForm.assignedJobIds : [],
       })
 
-      if (selectedUser.value?.id === user.id) {
+      if (request.draftCurrent()) {
         setDetailInfo('All changes saved.')
       }
-      return true
+      return request.draftCurrent()
     } catch (error) {
-      if (selectedUser.value?.id === user.id) {
+      if (request.draftCurrent()) {
         setDetailError(error, 'Failed to update user.')
       }
       return false
     } finally {
-      saveLoading.value = false
+      if (request.current()) {
+        saveLoading.value = false
+        if (!request.draftCurrent()) queueDetailSave()
+      }
     }
   }
 
   function queueDetailSave(delay = 450) {
-    if (isCreateMode.value || !selectedUser.value || syncingDetailForm.value) return
+    if (!scope.allowed.value || isCreateMode.value || !selectedUser.value || syncingDetailForm.value) return
 
     clearDetailSaveTimer()
 
@@ -123,6 +142,7 @@ export function useUserDetailActions({
 
   async function handleDeleteUser() {
     if (
+      !scope.allowed.value ||
       !selectedUser.value ||
       editingSelf.value ||
       deleteLoading.value ||
@@ -130,40 +150,41 @@ export function useUserDetailActions({
       saveLoading.value
     )
       return
+    deletion = { id: selectedUser.value.id, current: scope.capture().current }
     deleteConfirmOpen.value = true
   }
 
   async function confirmDeleteUser() {
+    if (deleteLoading.value || emailAction.value !== null || saveLoading.value) return
     const user = selectedUser.value
-    if (!user || editingSelf.value) {
+    const target = deletion
+    if (!target?.current() || !deleteConfirmOpen.value || !user || user.id !== target.id || editingSelf.value) {
       deleteConfirmOpen.value = false
       return
     }
-    if (deleteLoading.value || emailAction.value !== null || saveLoading.value) return
 
     setDetailErrorMessage('')
     deleteLoading.value = true
     try {
       const result = await deleteUserByAdmin(user.id)
-      if (selectedUserId.value === user.id || selectedUserId.value === null) {
+      if (target.current()) {
         setDetailInfo(result.message || 'User deleted.')
+        deleteLoading.value = false
+        deleteConfirmOpen.value = false
         selectedUserId.value = null
         resetCreateForm()
       }
-      deleteConfirmOpen.value = false
     } catch (error) {
-      if (selectedUser.value?.id === user.id) {
+      if (target.current()) {
         setDetailError(error, 'Failed to delete user.')
       }
     } finally {
-      if (selectedUser.value?.id !== user.id) {
-        deleteConfirmOpen.value = false
-      }
-      deleteLoading.value = false
+      if (target.current()) deleteLoading.value = false
     }
   }
 
   function handleDetailAssignedJobToggle(jobId: string) {
+    if (!scope.allowed.value || deleteLoading.value || deleteConfirmOpen.value || emailAction.value) return
     toggleDetailAssignedJob(jobId)
 
     if (syncingDetailForm.value || !selectedUser.value || isCreateMode.value) return
@@ -172,9 +193,11 @@ export function useUserDetailActions({
   }
 
   async function handleResendInvite() {
+    const request = scope.capture()
     const user = selectedUser.value
     const email = user?.email?.trim()
     if (
+      !scope.allowed.value ||
       !user ||
       deleteConfirmOpen.value ||
       deleteLoading.value ||
@@ -190,27 +213,29 @@ export function useUserDetailActions({
       return
     }
 
-    if (!(await handleAutoSaveUser()) || selectedUser.value?.id !== user.id) return
+    if (!(await handleAutoSaveUser()) || !request.draftCurrent()) return
 
     emailAction.value = 'invite'
     try {
       const result = await resendUserInviteByAdmin(user.id)
-      if (selectedUser.value?.id === user.id) {
+      if (request.current()) {
         setDetailInfo(result.message || `Invite email sent to ${email}.`)
       }
     } catch (error) {
-      if (selectedUser.value?.id === user.id) {
+      if (request.current()) {
         setDetailError(error, `Failed to resend invite email to ${email}.`)
       }
     } finally {
-      emailAction.value = null
+      if (request.current()) emailAction.value = null
     }
   }
 
   async function handleSendPasswordReset() {
+    const request = scope.capture()
     const user = selectedUser.value
     const email = user?.email?.trim()
     if (
+      !scope.allowed.value ||
       !user ||
       deleteConfirmOpen.value ||
       deleteLoading.value ||
@@ -226,20 +251,20 @@ export function useUserDetailActions({
       return
     }
 
-    if (!(await handleAutoSaveUser()) || selectedUser.value?.id !== user.id) return
+    if (!(await handleAutoSaveUser()) || !request.draftCurrent()) return
 
     emailAction.value = 'reset'
     try {
       const result = await sendUserPasswordResetByAdmin(user.id)
-      if (selectedUser.value?.id === user.id) {
+      if (request.current()) {
         setDetailInfo(result.message || `Password reset email sent to ${email}.`)
       }
     } catch (error) {
-      if (selectedUser.value?.id === user.id) {
+      if (request.current()) {
         setDetailError(error, `Failed to send password reset email to ${email}.`)
       }
     } finally {
-      emailAction.value = null
+      if (request.current()) emailAction.value = null
     }
   }
 

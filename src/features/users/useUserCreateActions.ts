@@ -1,9 +1,12 @@
+import { watch } from 'vue'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import { currentRoleCanHaveAccountJobAssignments } from '@/auth/roles'
 import { createUserByAdmin, sendPendingInvitesByAdmin } from '@/services/users'
 import type { UserCreateFormState } from '@/features/users/userViewHelpers'
 import type { WritableRef } from '@/types/reactivity'
 
 interface UseUserCreateActionsOptions {
+  context?: AdminRequestContext
   createAction: WritableRef<'queue' | 'send' | null>
   createForm: UserCreateFormState
   inviteLoading: WritableRef<boolean>
@@ -18,6 +21,7 @@ interface UseUserCreateActionsOptions {
 }
 
 export function useUserCreateActions({
+  context,
   createAction,
   createForm,
   inviteLoading,
@@ -30,7 +34,13 @@ export function useUserCreateActions({
   setInviteError,
   setInviteInfo,
 }: UseUserCreateActionsOptions) {
+  const createScope = useAdminRequestScope(context, () => selectedUserId.value, () => createForm)
+  const inviteScope = useAdminRequestScope(context)
+  watch(createScope.revision, () => { createAction.value = null }, { flush: 'sync' })
+  watch(inviteScope.revision, () => { inviteLoading.value = false }, { flush: 'sync' })
   async function handleCreateUser(sendInvite: boolean) {
+    if (!createScope.allowed.value || createAction.value) return
+    const request = createScope.capture()
     resetCreateMessages()
 
     if (!createForm.email.trim() || !createForm.firstName.trim() || !createForm.lastName.trim()) {
@@ -47,28 +57,32 @@ export function useUserCreateActions({
         role: createForm.role,
         assignedJobIds: currentRoleCanHaveAccountJobAssignments(createForm.role) ? createForm.assignedJobIds : [],
         sendInvite,
-      })
+      }, { isCurrent: request.current })
 
+      if (!request.draftCurrent()) return
+      createAction.value = null
       setCreateInfo(result.message || 'User created. Invite queued.')
       selectedUserId.value = result.uid
     } catch (error) {
-      setCreateError(error, 'Failed to create user.')
+      if (request.draftCurrent()) setCreateError(error, 'Failed to create user.')
     } finally {
-      createAction.value = null
+      if (request.current()) createAction.value = null
     }
   }
 
   async function handleSendPendingInvites() {
+    if (!inviteScope.allowed.value || inviteLoading.value) return
+    const request = inviteScope.capture()
     resetInviteMessages()
     inviteLoading.value = true
 
     try {
       const result = await sendPendingInvitesByAdmin()
-      setInviteInfo(result.message || 'Pending invites sent.')
+      if (request.current()) setInviteInfo(result.message || 'Pending invites sent.')
     } catch (error) {
-      setInviteError(error, 'Failed to send pending invites.')
+      if (request.current()) setInviteError(error, 'Failed to send pending invites.')
     } finally {
-      inviteLoading.value = false
+      if (request.current()) inviteLoading.value = false
     }
   }
 

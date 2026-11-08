@@ -1,8 +1,10 @@
 import { onBeforeUnmount, onMounted, watch } from 'vue'
+import type { AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import type { EmployeeRecord } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 type UseEmployeeAdminViewSyncOptions = {
+  context?: AdminRequestContext
   applyEmployeeToDetailForm: (employee: EmployeeRecord | null) => void | Promise<void>
   resetCreateForm: () => void
   selectedEmployee: ReadonlyRef<EmployeeRecord | null>
@@ -14,6 +16,7 @@ type UseEmployeeAdminViewSyncOptions = {
 }
 
 export function useEmployeeAdminViewSync({
+  context,
   applyEmployeeToDetailForm,
   resetCreateForm,
   selectedEmployee,
@@ -23,6 +26,7 @@ export function useEmployeeAdminViewSync({
   startEmployeesSubscription,
   stopEmployeesSubscription,
 }: UseEmployeeAdminViewSyncOptions) {
+  let mounted = false
   watch(() => selectedEmployee.value, (employee) => {
     if (!employee) {
       if (selectedEmployeeId.value === 'new') {
@@ -41,10 +45,17 @@ export function useEmployeeAdminViewSync({
   })
 
   onMounted(() => {
+    mounted = true
+    if (context && !context.allowed.value) return
     startEmployeesSubscription()
   })
 
   onBeforeUnmount(() => {
+    mounted = false
     stopEmployeesSubscription()
   })
+  if (context) watch(context.revision, () => {
+    stopEmployeesSubscription()
+    if (mounted && context.allowed.value) startEmployeesSubscription()
+  }, { flush: 'sync' })
 }

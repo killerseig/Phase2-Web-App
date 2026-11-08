@@ -4,10 +4,11 @@ import {
   ref,
 } from 'vue'
 import type { ShopCatalogTreeNode as TreeNode } from '@/features/shopCatalog/treeTypes'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 
 type InlineCreateKind = 'category' | 'item'
 
-export function useShopCatalogInlineEditing() {
+export function useShopCatalogInlineEditing(context?: AdminRequestContext) {
   const inlineInputRef = ref<HTMLInputElement | null>(null)
   const renameState = reactive({
     key: null as TreeNode['key'] | null,
@@ -21,6 +22,7 @@ export function useShopCatalogInlineEditing() {
     value: '',
     saving: false,
   })
+  const scope = useAdminRequestScope(context, () => `${createState.key}\0${renameState.key}`)
 
   function setInlineInputRef(element: HTMLInputElement | null) {
     inlineInputRef.value = element
@@ -64,11 +66,15 @@ export function useShopCatalogInlineEditing() {
   }
 
   async function focusInlineInput(options: { select?: boolean } = {}) {
+    const request = scope.capture()
     await nextTick()
+    if (!request.current()) return
+    const input = inlineInputRef.value
     requestAnimationFrame(() => {
-      inlineInputRef.value?.focus()
+      if (!request.current() || !input?.isConnected || inlineInputRef.value !== input) return
+      input.focus()
       if (options.select) {
-        inlineInputRef.value?.select()
+        input.select()
       }
     })
   }

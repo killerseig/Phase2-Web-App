@@ -2,7 +2,11 @@
 import {
   computed,
   ref,
+  watch,
 } from 'vue'
+import AppShell from '@/layouts/AppShell.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useAdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import ShopCatalogConfirmDialog from '@/components/shopCatalog/ShopCatalogConfirmDialog.vue'
 import ShopCatalogContextMenu from '@/components/shopCatalog/ShopCatalogContextMenu.vue'
 import ShopCatalogInspectorPane from '@/components/shopCatalog/ShopCatalogInspectorPane.vue'
@@ -40,6 +44,12 @@ import { useShopCatalogTreeDisplayState } from '@/features/shopCatalog/useShopCa
 import { useShopCatalogTreeExpansion } from '@/features/shopCatalog/useShopCatalogTreeExpansion'
 import { useShopCatalogTreeInteractions } from '@/features/shopCatalog/useShopCatalogTreeInteractions'
 
+const auth = useAuthStore()
+const context = useAdminRequestContext(
+  computed(() => auth.currentUser?.uid || ''),
+  computed(() => auth.hasWorkspaceAccess && ['admin', 'shop-foreman'].includes(auth.rawRole)),
+  computed(() => auth.rawRole),
+)
 const {
   categories,
   error: catalogError,
@@ -48,6 +58,7 @@ const {
   stopCatalogRecords,
   subscribeCatalogRecords,
 } = useShopCatalogRecords({
+  context,
   loadingMode: 'category-or-items',
   categoryErrorMessage: 'Failed to load folders.',
   itemErrorMessage: 'Failed to load catalog items.',
@@ -99,7 +110,7 @@ const {
   setInlineInputRef: setRenameInputRef,
   startInlineCreate,
   startInlineRename,
-} = useShopCatalogInlineEditing()
+} = useShopCatalogInlineEditing(context)
 
 const {
   categoriesById,
@@ -144,7 +155,6 @@ const {
   expandedCategoryIds,
   getVisibleCategoryIds,
   initializeRootCategories,
-  isCategoryExpanded,
   rootBucketExpanded,
   toggleCategoryExpanded,
   toggleRootBucketExpanded,
@@ -200,6 +210,8 @@ const {
   handleDragMoveError,
   moveDraggedEntry,
 } = useShopCatalogMoveActions({
+  context,
+  selectedInspectorKey,
   categoriesById,
   ensureExpandedToCategory,
   inspectItem,
@@ -262,6 +274,7 @@ const {
   handleSelectedCategoryArchiveRequest,
   handleSelectedItemArchiveRequest,
 } = useShopCatalogArchiveActions({
+  context,
   activeFolderId,
   catalogConfirmAction,
   categoriesById,
@@ -286,6 +299,7 @@ const {
   saveInlineCreate,
   saveInlineRename,
 } = useShopCatalogInlineActions({
+  context,
   activeFolderId,
   cancelInlineCreate,
   cancelRename,
@@ -358,6 +372,7 @@ const {
   handleSaveCategory,
   handleSaveItem,
 } = useShopCatalogFormActions({
+  context,
   activeFolderId,
   createCategoryForm,
   createItemForm,
@@ -402,6 +417,7 @@ const {
   handleDeleteCategory,
   handleDeleteItem,
 } = useShopCatalogDeleteActions({
+  context,
   activeFolderId,
   catalogConfirmAction,
   deleteLoading,
@@ -479,7 +495,28 @@ useShopCatalogSelectionSync({
   treeInitialized,
 })
 
+watch(context.revision, () => {
+  closeContextMenu()
+  disposeContextMenu()
+  clearDragState()
+  cancelRename()
+  cancelInlineCreate()
+  catalogConfirmAction.value = null
+  selectedInspectorKey.value = 'root'
+  activeFolderId.value = null
+  treeSearch.value = ''
+  expandedCategoryIds.value = []
+  treeInitialized.value = false
+  resetCreateCategoryForm()
+  resetCreateItemForm()
+  applySelectedCategoryToForm(null)
+  applySelectedItemToForm(null)
+  resetCreateMessages()
+  resetDetailMessages()
+}, { flush: 'sync' })
+
 useShopCatalogAdminLifecycle({
+  context,
   disposeContextMenu,
   stopCatalogRecords,
   stopTreeListAutoScroll,
@@ -490,6 +527,7 @@ useShopCatalogAdminLifecycle({
 
 <template>
   <ShopCatalogPageShell
+    v-if="context.allowed.value"
     :active-panel="activeMobilePanel"
     test-id="shop-catalog-page"
   >
@@ -629,4 +667,5 @@ useShopCatalogAdminLifecycle({
       @confirm="confirmCatalogAction"
     />
   </ShopCatalogPageShell>
+  <AppShell v-else><p role="status">You do not have access to manage the shop catalog.</p></AppShell>
 </template>

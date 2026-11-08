@@ -1,9 +1,11 @@
 import { onBeforeUnmount, onMounted, watch } from 'vue'
+import type { AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import type { UserProfile } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 import type { UserDetailSnapshot } from './userViewHelpers'
 
 type UseUserAdminViewSyncOptions = {
+  context?: AdminRequestContext
   applyUserToDetailForm: (user: UserProfile | null) => void | Promise<void>
   clearDetailSaveTimer: () => void
   getDetailFormSnapshot: () => UserDetailSnapshot
@@ -21,6 +23,7 @@ type UseUserAdminViewSyncOptions = {
 }
 
 export function useUserAdminViewSync({
+  context,
   applyUserToDetailForm,
   clearDetailSaveTimer,
   getDetailFormSnapshot,
@@ -36,6 +39,7 @@ export function useUserAdminViewSync({
   stopJobsSubscription,
   stopUsersSubscription,
 }: UseUserAdminViewSyncOptions) {
+  let mounted = false
   watch(() => selectedUserId.value, (nextValue) => {
     clearDetailSaveTimer()
     setDetailErrorMessage('')
@@ -65,13 +69,25 @@ export function useUserAdminViewSync({
   )
 
   onMounted(() => {
+    mounted = true
+    if (context && !context.allowed.value) return
     startUsersSubscription()
     startJobsSubscription()
   })
 
   onBeforeUnmount(() => {
+    mounted = false
     clearDetailSaveTimer()
     stopUsersSubscription()
     stopJobsSubscription()
   })
+  if (context) watch(context.revision, () => {
+    clearDetailSaveTimer()
+    stopUsersSubscription()
+    stopJobsSubscription()
+    if (mounted && context.allowed.value) {
+      startUsersSubscription()
+      startJobsSubscription()
+    }
+  }, { flush: 'sync' })
 }

@@ -1,3 +1,5 @@
+import { watch } from 'vue'
+import { useAdminRequestScope, type AdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import {
   validateEmployeeForm,
   type EmployeeFormState,
@@ -7,6 +9,7 @@ import type { EmployeeRecord } from '@/types/domain'
 import type { ReadonlyRef, WritableRef } from '@/types/reactivity'
 
 interface UseEmployeeActionsOptions {
+  context?: AdminRequestContext
   createForm: EmployeeFormState
   createLoading: WritableRef<boolean>
   deleteConfirmOpen: WritableRef<boolean>
@@ -29,6 +32,7 @@ interface UseEmployeeActionsOptions {
 }
 
 export function useEmployeeActions({
+  context,
   createForm,
   createLoading,
   deleteConfirmOpen,
@@ -49,7 +53,19 @@ export function useEmployeeActions({
   setDetailInfo,
   syncingDetailForm,
 }: UseEmployeeActionsOptions) {
+  const createScope = useAdminRequestScope(context, () => selectedEmployeeId.value, () => createForm)
+  const detailScope = useAdminRequestScope(context, () => selectedEmployeeId.value, () => detailForm)
+  let deletion: { id: string; current: () => boolean } | undefined
+  watch(createScope.revision, () => { createLoading.value = false }, { flush: 'sync' })
+  watch(detailScope.revision, () => {
+    saveLoading.value = false
+    deleteLoading.value = false
+    deleteConfirmOpen.value = false
+    deletion = undefined
+  }, { flush: 'sync' })
   async function handleCreateEmployee() {
+    if (!createScope.allowed.value || createLoading.value) return
+    const request = createScope.capture()
     resetCreateMessages()
 
     const validationMessage = validateEmployeeForm(createForm)
@@ -69,19 +85,23 @@ export function useEmployeeActions({
         isContractor: createForm.isContractor,
       })
 
+      if (!request.draftCurrent()) return
+      createLoading.value = false
       setCreateInfo('Employee created.')
       selectedEmployeeId.value = employeeId
     } catch (error) {
-      setCreateError(error, 'Failed to create employee.')
+      if (request.draftCurrent()) setCreateError(error, 'Failed to create employee.')
     } finally {
-      createLoading.value = false
+      if (request.current()) createLoading.value = false
     }
   }
 
   async function handleAutoSaveEmployee() {
+    if (!detailScope.allowed.value || saveLoading.value || deleteLoading.value || deleteConfirmOpen.value) return
     if (!selectedEmployee.value) return
     if (syncingDetailForm.value) return
 
+    const request = detailScope.capture()
     setDetailErrorMessage('')
 
     if (!hasUnsavedDetailChanges(selectedEmployee.value)) {
@@ -107,37 +127,43 @@ export function useEmployeeActions({
         isContractor: detailForm.isContractor,
       })
 
-      setDetailInfo('All changes saved.')
+      if (request.draftCurrent()) setDetailInfo('All changes saved.')
     } catch (error) {
-      setDetailError(error, 'Failed to update employee.')
+      if (request.draftCurrent()) setDetailError(error, 'Failed to update employee.')
     } finally {
-      saveLoading.value = false
+      if (request.current()) saveLoading.value = false
     }
   }
 
   async function handleDeleteEmployee() {
-    if (!selectedEmployee.value) return
+    if (!detailScope.allowed.value || !selectedEmployee.value || saveLoading.value || deleteLoading.value) return
+    deletion = { id: selectedEmployee.value.id, current: detailScope.capture().current }
     deleteConfirmOpen.value = true
   }
 
   async function confirmDeleteEmployee() {
-    if (!selectedEmployee.value) {
+    const target = deletion
+    if (!target?.current() || !deleteConfirmOpen.value || target.id !== selectedEmployee.value?.id) {
       deleteConfirmOpen.value = false
       return
     }
+    if (deleteLoading.value || saveLoading.value) return
 
     resetDetailMessages()
     deleteLoading.value = true
     try {
-      await deleteEmployeeRecord(selectedEmployee.value.id)
+      await deleteEmployeeRecord(target.id)
+      if (!target.current()) return
       setDetailInfo('Employee deleted.')
+      deleteLoading.value = false
+      deleteConfirmOpen.value = false
       selectedEmployeeId.value = 'new'
       resetCreateForm()
       deleteConfirmOpen.value = false
     } catch (error) {
-      setDetailError(error, 'Failed to delete employee.')
+      if (target.current()) setDetailError(error, 'Failed to delete employee.')
     } finally {
-      deleteLoading.value = false
+      if (target.current()) deleteLoading.value = false
     }
   }
 

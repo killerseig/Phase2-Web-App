@@ -201,9 +201,11 @@ export function useShopCatalogContextMenu(options: UseShopCatalogContextMenuOpti
   }
 
   function disposeContextMenu() {
-    clearLongPressTimer()
+    resetLongPress()
     clearSuppressTimer()
-    releaseLongPressCapture(longPress.pointerId ?? undefined)
+    longPress.suppressClick = false
+    contextMenu.target = { kind: 'root' }
+    closeContextMenu()
   }
 
   return {

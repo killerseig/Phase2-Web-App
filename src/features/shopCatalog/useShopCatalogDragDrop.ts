@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { getCurrentScope, onScopeDispose, reactive } from 'vue'
 import {
   canDropShopCatalogPayload,
   getShopCatalogDragPayloadFromNode,
@@ -27,6 +27,7 @@ interface UseShopCatalogDragDropOptions {
 }
 
 export function useShopCatalogDragDrop(options: UseShopCatalogDragDropOptions) {
+  let generation = 0
   const dragState = reactive({
     sourceKey: null as TreeNode['key'] | null,
     overKey: null as TreeNode['key'] | 'root' | null,
@@ -38,11 +39,13 @@ export function useShopCatalogDragDrop(options: UseShopCatalogDragDropOptions) {
   })
 
   function clearDragState() {
+    generation++
     dragState.sourceKey = null
     dragState.overKey = null
     dragState.dropping = false
     stopTreeListAutoScroll()
   }
+  if (getCurrentScope()) onScopeDispose(clearDragState)
 
   function getDragPayloadFromNode(node: TreeNode): ShopCatalogDragPayload | null {
     return getShopCatalogDragPayloadFromNode(node, {
@@ -64,6 +67,7 @@ export function useShopCatalogDragDrop(options: UseShopCatalogDragDropOptions) {
   }
 
   function handleTreeDragStart(event: DragEvent, node: TreeNode) {
+    if (dragState.dropping) { event.preventDefault(); return }
     if (options.shouldBlockDragStart.value) {
       event.preventDefault()
       return
@@ -87,6 +91,14 @@ export function useShopCatalogDragDrop(options: UseShopCatalogDragDropOptions) {
 
   function handleTreeDragEnd() {
     options.clearPointerType()
+    // Native dragend follows drop while its save may still be pending. Only
+    // clear the pointer presentation; the request still owns its result.
+    if (dragState.dropping) {
+      dragState.sourceKey = null
+      dragState.overKey = null
+      stopTreeListAutoScroll()
+      return
+    }
     clearDragState()
   }
 
@@ -145,13 +157,14 @@ export function useShopCatalogDragDrop(options: UseShopCatalogDragDropOptions) {
     event.preventDefault()
     stopTreeListAutoScroll()
     dragState.dropping = true
+    const owner = ++generation
 
     try {
       await options.moveEntry(payload, targetCategoryId)
     } catch (error) {
-      options.onMoveError(error)
+      if (owner === generation) options.onMoveError(error)
     } finally {
-      clearDragState()
+      if (owner === generation) clearDragState()
     }
   }
 

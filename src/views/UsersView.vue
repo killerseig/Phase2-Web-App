@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import AppShell from '@/layouts/AppShell.vue'
+import { useAdminRequestContext } from '@/features/admin/useAdminRequestContext'
 import DirectoryEditorWorkspaceShell from '@/components/common/DirectoryEditorWorkspaceShell.vue'
 import UserConfirmDialogs from '@/components/users/UserConfirmDialogs.vue'
 import UserDirectoryPanel from '@/components/users/UserDirectoryPanel.vue'
@@ -25,10 +27,16 @@ import type { DirectoryStatusFilter } from '@/utils/directoryFilters'
 const mobilePanelTabs = buildDirectoryEditorMobilePanelTabs('Users')
 
 const auth = useAuthStore()
+const context = useAdminRequestContext(
+  computed(() => auth.currentUser?.uid || ''),
+  computed(() => auth.hasWorkspaceAccess && auth.rawRole === 'admin'),
+  computed(() => auth.rawRole),
+)
 
 const searchTerm = ref('')
 const statusFilter = ref<DirectoryStatusFilter>('active')
 const selectedUserId = ref<string | 'new' | null>(null)
+const deleteLoading = ref(false)
 const {
   jobs,
   jobsError,
@@ -41,6 +49,8 @@ const {
   startUsersSubscription,
   stopUsersSubscription,
 } = useUserAdminRecords({
+  context,
+  deleting: deleteLoading,
   selectedUserId,
 })
 const {
@@ -67,7 +77,6 @@ const {
 } = usePageMessages()
 const createAction = ref<'queue' | 'send' | null>(null)
 const saveLoading = ref(false)
-const deleteLoading = ref(false)
 const deleteConfirmOpen = ref(false)
 const inviteLoading = ref(false)
 const emailAction = ref<'invite' | 'reset' | null>(null)
@@ -131,6 +140,7 @@ const {
 })
 
 const { handleCreateUser, handleSendPendingInvites } = useUserCreateActions({
+  context,
   createAction,
   createForm,
   inviteLoading,
@@ -153,6 +163,7 @@ const {
   handleSendPasswordReset,
   queueDetailSave,
 } = useUserDetailActions({
+  context,
   deleteConfirmOpen,
   deleteLoading,
   detailError,
@@ -183,7 +194,20 @@ const {
   onCreateMode: resetCreateForm,
 })
 
+watch(context.revision, () => {
+  clearDetailSaveTimer()
+  selectedUserId.value = null
+  searchTerm.value = ''
+  resetCreateForm()
+  void applyUserToDetailForm(null)
+  resetDetailJobSearchTerm()
+  setDetailErrorMessage('')
+  setDetailInfo('')
+  resetInviteMessages()
+}, { flush: 'sync' })
+
 useUserAdminViewSync({
+  context,
   applyUserToDetailForm,
   clearDetailSaveTimer,
   getDetailFormSnapshot,
@@ -203,6 +227,7 @@ useUserAdminViewSync({
 
 <template>
   <DirectoryEditorWorkspaceShell
+    v-if="context.allowed.value"
     title="Users"
     description="Manage accounts, access, and job assignments."
     class="users-workspace"
@@ -273,4 +298,5 @@ useUserAdminViewSync({
       @update-delete-open="deleteConfirmOpen = $event"
     />
   </DirectoryEditorWorkspaceShell>
+  <AppShell v-else><p role="status">You do not have access to manage users.</p></AppShell>
 </template>

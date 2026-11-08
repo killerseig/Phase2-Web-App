@@ -1,12 +1,9 @@
 import {
   collection,
   doc,
-  getDoc,
-  getDocs,
   onSnapshot,
   query,
-  updateDoc,
-  writeBatch,
+  runTransaction,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore'
@@ -137,40 +134,39 @@ async function fetchAssignableUsersViaCallable(): Promise<UserProfile[]> {
   )
 }
 
-async function syncUserJobAssignments(uid: string, role: RawRoleKey, nextAssignedJobIds: string[]) {
+async function syncUserJobAssignments(uid: string, nextAssignedJobIds: string[], profile?: {
+  firstName: string | null
+  lastName: string | null
+  role: RawRoleKey
+  active: boolean
+}) {
   const { db } = requireFirebaseServices()
   const userRef = doc(db, 'users', uid)
-  const userSnapshot = await getDoc(userRef)
-
-  if (!userSnapshot.exists()) {
-    throw new Error('User not found.')
-  }
-
-  const previousAssignedJobIds = normalizeAssignedJobIds(userSnapshot.data().assignedJobIds)
-  const effectiveAssignedJobIds = currentRoleCanHaveAccountJobAssignments(role) ? nextAssignedJobIds : []
-  const changedJobIds = Array.from(new Set([...previousAssignedJobIds, ...effectiveAssignedJobIds]))
-
-  const batch = writeBatch(db)
-  batch.update(userRef, { assignedJobIds: effectiveAssignedJobIds })
-
-  for (const jobId of changedJobIds) {
-    const jobRef = doc(db, 'jobs', jobId)
-    const jobSnapshot = await getDoc(jobRef)
-    if (!jobSnapshot.exists()) continue
-
-    const currentAssignedForemanIds = normalizeAssignedJobIds(jobSnapshot.data().assignedForemanIds)
-    const nextAssignedForemanIds = new Set(currentAssignedForemanIds)
-
-    if (effectiveAssignedJobIds.includes(jobId) && role !== 'employee' && role !== 'admin' && currentRoleCanBeAssignedJobs(role)) {
-      nextAssignedForemanIds.add(uid)
-    } else {
-      nextAssignedForemanIds.delete(uid)
+  await runTransaction(db, async transaction => {
+    const userSnapshot = await transaction.get(userRef)
+    if (!userSnapshot.exists()) throw new Error('User not found.')
+    const role = profile?.role ?? normalizeStoredRoleKey(userSnapshot.data().role)
+    const previousAssignedJobIds = normalizeAssignedJobIds(userSnapshot.data().assignedJobIds)
+    const effectiveAssignedJobIds = currentRoleCanHaveAccountJobAssignments(role) ? nextAssignedJobIds : []
+    const changedJobIds = Array.from(new Set([...previousAssignedJobIds, ...effectiveAssignedJobIds]))
+    // Read every membership before writing. Firestore retries when another
+    // administrator changes one, and profile + membership commit together.
+    const jobs = await Promise.all(changedJobIds.map(async jobId => {
+      const reference = doc(db, 'jobs', jobId)
+      return { jobId, reference, snapshot: await transaction.get(reference) }
+    }))
+    transaction.update(userRef, { ...profile, assignedJobIds: effectiveAssignedJobIds })
+    for (const { jobId, reference, snapshot } of jobs) {
+      if (!snapshot.exists()) continue
+      const members = new Set(normalizeAssignedJobIds(snapshot.data().assignedForemanIds))
+      if (effectiveAssignedJobIds.includes(jobId) && role !== 'employee' && role !== 'admin' && currentRoleCanBeAssignedJobs(role)) {
+        members.add(uid)
+      } else {
+        members.delete(uid)
+      }
+      transaction.update(reference, { assignedForemanIds: Array.from(members) })
     }
-
-    batch.update(jobRef, { assignedForemanIds: Array.from(nextAssignedForemanIds) })
-  }
-
-  await batch.commit()
+  })
 }
 
 export function subscribeUsers(
@@ -223,6 +219,7 @@ export function subscribeAssignableUsers(
 
 export async function createUserByAdmin(
   input: CreateUserInput,
+  lifecycle?: { isCurrent: () => boolean },
 ): Promise<CreateUserByAdminResponse> {
   if (isE2EActive()) {
     const sanitizedRole = normalizeEditableUserRole(input.role)
@@ -255,8 +252,14 @@ export async function createUserByAdmin(
     })
 
     if (currentRoleCanHaveAccountJobAssignments(sanitizedRole) && sanitizedAssignedJobIds.length) {
+      // Creation may already have completed; only the dependent membership
+      // transaction can still be prevented after the editor loses ownership.
+      if (lifecycle && !lifecycle.isCurrent()) return {
+        ...result.data,
+        message: `${result.data.message || 'User created.'} Job assignments were not saved because the editor context changed.`,
+      }
       try {
-        await syncUserJobAssignments(result.data.uid, sanitizedRole, sanitizedAssignedJobIds)
+        await syncUserJobAssignments(result.data.uid, sanitizedAssignedJobIds)
       } catch (error) {
         const baseMessage = result.data.message || 'User created. Invite queued.'
         const assignmentMessage = normalizeError(error, 'Assigned jobs could not be saved.')
@@ -289,18 +292,16 @@ export async function updateUser(uid: string, input: UpdateUserInput): Promise<v
   }
 
   try {
-    const { db } = requireFirebaseServices()
     const sanitizedRole = normalizeStoredRoleKey(input.role)
     const sanitizedAssignedJobIds = normalizeAssignedJobIds(input.assignedJobIds)
 
-    await updateDoc(doc(db, 'users', uid), {
+    await syncUserJobAssignments(uid, sanitizedAssignedJobIds, {
       firstName: input.firstName.trim() || null,
       lastName: input.lastName.trim() || null,
       role: sanitizedRole,
       active: input.active,
     })
 
-    await syncUserJobAssignments(uid, sanitizedRole, sanitizedAssignedJobIds)
   } catch (error) {
     throw new Error(normalizeError(error, 'Failed to update user.'))
   }
