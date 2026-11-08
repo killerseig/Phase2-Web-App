@@ -28,6 +28,22 @@ async function controlsFit(controls: Locator) {
   expect(sizes.length).toBeGreaterThan(0)
   expect(sizes.filter(box => box.left < -1 || box.right > box.width + 1 || box.over > 1)).toEqual([])
 }
+async function buttonWordsStayTogether(buttons: Locator) {
+  const brokenWords = await buttons.evaluateAll(elements => elements.flatMap(element => {
+    const failures: string[] = []
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (const word of (node.textContent ?? '').matchAll(/\b[A-Za-z]{3,12}\b/g)) {
+        const range = document.createRange()
+        range.setStart(node, word.index); range.setEnd(node, word.index + word[0].length)
+        const lines = new Set([...range.getClientRects()].filter(rect => rect.width && rect.height).map(rect => Math.round(rect.top)))
+        if (lines.size > 1) failures.push(word[0])
+      }
+    }
+    return failures
+  }))
+  expect(brokenWords).toEqual([])
+}
 async function screenshot(page: Page, name: string) {
   await page.screenshot({ path: test.info().outputPath(name + '.png'), fullPage: false })
 }
@@ -170,6 +186,7 @@ for (const device of devices) test.describe('legacy ' + device.name, () => {
     await expect(page.getByTestId('timecards-week-ending')).toHaveValue('2026-06-06')
     await chooseWeek(page)
     await controlsFit(page.locator('.timecards-toolbar button:visible, .timecards-toolbar input:visible'))
+    await buttonWordsStayTogether(page.locator('.timecards-toolbar button:visible'))
     await controlsFit(page.locator('.timecards-canvas__item-header button:visible'))
     const status = page.locator('.job-timecard-status-bar__strip')
     await expect(status.locator('.timecard-toolbar-signal')).toHaveCount(4)
@@ -188,6 +205,9 @@ for (const device of devices) test.describe('legacy ' + device.name, () => {
     await expect(page.getByRole('button', { name: 'Expand Card', exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Expand Card', exact: true }).click()
     await expect(page.getByTestId('timecard-job-number-0')).toBeVisible()
+    await selectExportTab(page, 'Actions')
+    await controlsFit(page.locator('#timecards-toolbar-panel-actions button:visible'))
+    await buttonWordsStayTogether(page.locator('#timecards-toolbar-panel-actions button:visible'))
   })
 
   test('payroll export filters and actions stay reachable alongside the workbook', async ({ page }) => {
@@ -205,6 +225,7 @@ for (const device of devices) test.describe('legacy ' + device.name, () => {
     const action = page.getByRole('button', { name: 'Export PDF', exact: true })
     await expect(action).toBeVisible(); await action.focus(); await expect(action).toBeFocused()
     await controlsFit(page.locator('#timecard-export-panel-actions button:visible'))
+    await buttonWordsStayTogether(page.locator('#timecard-export-panel-actions button:visible'))
     await screenshot(page, 'timecard-export-actions')
   })
 

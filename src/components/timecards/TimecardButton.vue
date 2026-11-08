@@ -35,7 +35,7 @@ const buttonClasses = computed(() => [
   background: var(--timecards-toolbar-control-bg-muted);
   color: var(--timecards-toolbar-control-text);
   font-weight: 600;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
   box-shadow: none;
   transition:
     border-color 0.18s ease,
