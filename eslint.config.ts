@@ -36,5 +36,22 @@ export default defineConfigWithVueTs(
 
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 
+  {
+    name: 'scripts/commonjs',
+    files: ['scripts/**/*.cjs', 'functions/scripts/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        Buffer: 'readonly',
+        process: 'readonly',
+      },
+    },
+    // These maintained Node entrypoints intentionally load CommonJS output.
+    // TypeScript application and backend source retain the import rule.
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+
   skipFormatting,
 )

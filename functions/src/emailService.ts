@@ -5,7 +5,7 @@
 
 import axios from 'axios'
 import PDFDocument from 'pdfkit'
-import { EMAIL, DEFAULTS, EMAIL_STYLES } from './constants'
+import { EMAIL, EMAIL_STYLES } from './constants'
 import {
   emailEnabled,
   getAppBaseUrl,

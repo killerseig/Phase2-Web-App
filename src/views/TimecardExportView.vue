@@ -150,7 +150,6 @@ const {
   availableJobOptions,
   createCardForemanOptions,
   createCardJobOptions,
-  createCardJobRecord,
   createTrayMessage,
   targetCreateWeek,
   availableEmployees,
@@ -180,7 +179,6 @@ const {
   cardsLoading,
   deleteWeekCache,
   getNextSortIndexForWeek,
-  rebuildArchiveCards,
   redecorateLoadedCards,
   setCardsChangedHandler,
   stopCardsSubscription,
@@ -198,7 +196,7 @@ const {
     )
   },
 })
-const { activeCreateWeekCards, filteredCards, orderedCards } = useTimecardExportVisibleCards({
+const { filteredCards, orderedCards } = useTimecardExportVisibleCards({
   cards,
   cardsByWeekId,
   collator,

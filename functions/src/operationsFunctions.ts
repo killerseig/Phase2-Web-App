@@ -15,7 +15,6 @@ import {
   buildSubmissionEmailRouting,
   buildDailyLogEmail,
   buildDailyLogEmailSubject,
-  buildDailyLogAutoSubmitEmail,
   buildShopOrderEmail,
   buildShopOrderEmailSubject,
   buildShopOrderPdfBuffer,
@@ -32,7 +31,7 @@ import {
   claimSubmittedEmailOperation,
   getSubmittedEmailClaimShortCircuitMessage,
 } from './submittedEmailOperations'
-import { ERROR_MESSAGES, EMAIL, COLLECTIONS, EMAIL_STYLES } from './constants'
+import { ERROR_MESSAGES, COLLECTIONS } from './constants'
 import { getAppBaseUrl, getGraphEmailSecrets } from './functionConfig'
 import {
   type CurrentFunctionRole,

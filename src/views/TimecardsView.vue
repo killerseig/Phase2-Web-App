@@ -155,7 +155,6 @@ const {
   recentWeeks,
   selectedWeek,
   selectedWeekStartDate,
-  weeksForSelectedDate,
 } = useJobTimecardWorkspaceState({
   cardSearchTerm,
   cards,

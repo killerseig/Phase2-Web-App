@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS smoke test patches dependencies before loading the compiled email service. */
+// Patch dependencies before loading the compiled CommonJS email service.
 const assert = require('node:assert/strict')
 const axios = require('axios')
 const config = require('../lib/functionConfig.js')

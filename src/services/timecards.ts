@@ -10,7 +10,6 @@ import {
   DEFAULT_TIMECARD_BURDEN,
   buildCardDisplayName,
   buildEmployeeCard,
-  getWeekStartFromSaturday,
   recalculateCardTotals,
   type TimecardEmployeeSeed,
 } from '@/features/timecards/workbook'
