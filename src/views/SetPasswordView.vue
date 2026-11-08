@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import AuthCard from '@/components/auth/AuthCard.vue'
 import AuthStatusMessage from '@/components/auth/AuthStatusMessage.vue'
 import AuthSubmitButton from '@/components/auth/AuthSubmitButton.vue'
@@ -31,6 +31,9 @@ const loading = ref(false)
 const verifying = ref(true)
 const error = ref('')
 const info = ref('')
+let active = true
+
+onBeforeUnmount(() => { active = false })
 
 useToastMessages([
   { source: error, severity: 'error', summary: 'Create Password', clear: false },
@@ -56,15 +59,17 @@ async function verifyLink() {
   uid.value = nextUid
 
   try {
-    email.value = await verifySetupToken(nextUid, nextToken)
+    const verifiedEmail = await verifySetupToken(nextUid, nextToken)
+    if (active) email.value = verifiedEmail
   } catch (nextError) {
-    error.value = normalizeError(nextError, 'Invalid or expired password setup link.')
+    if (active) error.value = normalizeError(nextError, 'Invalid or expired password setup link.')
   } finally {
-    verifying.value = false
+    if (active) verifying.value = false
   }
 }
 
 async function handleSubmit() {
+  if (!active || loading.value) return
   error.value = ''
   info.value = ''
 
@@ -77,11 +82,14 @@ async function handleSubmit() {
   loading.value = true
   try {
     await setPasswordFromSetupLink(uid.value, password.value, setupToken.value)
+    if (!active) return
     try {
       await auth.login(email.value, password.value)
+      if (!active) return
       await router.replace('/jobs')
       return
     } catch {
+      if (!active) return
       await router.replace({
         name: 'login',
         query: {
@@ -92,9 +100,9 @@ async function handleSubmit() {
       return
     }
   } catch (nextError) {
-    error.value = normalizeError(nextError, 'Failed to set password.')
+    if (active) error.value = normalizeError(nextError, 'Failed to set password.')
   } finally {
-    loading.value = false
+    if (active) loading.value = false
   }
 }
 
