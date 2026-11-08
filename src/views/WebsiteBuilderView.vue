@@ -97,7 +97,9 @@ import WebsiteItemFields from '@/components/website/WebsiteItemFields.vue'
 import WebsiteCollectionInspector from '@/components/website/WebsiteCollectionInspector.vue'
 import ExplorerContextMenu from '@/components/dashboard/ExplorerContextMenu.vue'
 import { arrangementActions } from '@/features/website/arrangement'
-import { cloneWidgets, layerSelection } from '@/features/website/selection'
+import { layerSelection } from '@/features/website/selection'
+import { useWebsiteSelectionCommands } from '@/features/website/useWebsiteSelectionCommands'
+import { captureWebsitePastePoint } from '@/features/website/clipboardPointer'
 import { keyboardGeometry, KEYBOARD_GEOMETRY_PRECISION } from '@/features/website/keyboardGeometry'
 import {
   newItem,
@@ -340,9 +342,8 @@ const selectedPage = ref('')
 const homePageId = ref('')
 const selectedSection = ref('')
 const selectedIds = ref<string[]>([])
-const clipboard = ref<WebsiteSection[]>([])
 const arrangementPanel = ref<HTMLElement>()
-const menu = ref<{ x: number; y: number; point?: { x: number; y: number } }>()
+const menu = ref<{ x: number; y: number; anchor?: () => { x: number; y: number } | undefined }>()
 let menuOpener: HTMLElement | undefined
 const builtinLabels = Object.fromEntries(
   Object.entries(sectionLabels).filter(
@@ -998,6 +999,12 @@ provide(navigationEditingKey, (sectionId, linkId) => {
   })
 })
 const builderRoot = ref<HTMLElement>()
+const commandPointers = new Set<number>()
+function trackCommandPointer(event: PointerEvent) {
+  if (event.button === 0) commandPointers.add(event.pointerId)
+}
+function releaseCommandPointer(event: PointerEvent) { commandPointers.delete(event.pointerId) }
+function clearCommandPointers() { commandPointers.clear() }
 const previewScroller = ref<HTMLElement>()
 const previewViewport = ref<HTMLElement>()
 const previewFrame = ref<HTMLElement>()
@@ -1009,7 +1016,7 @@ const widgetDrag = useWebsiteGrid({
   scroller: previewScroller,
   viewport: previewViewport,
   clip: previewFrame,
-  disabled: () => locked.value || Boolean(inlineTarget.value),
+  disabled: () => locked.value || Boolean(inlineTarget.value) || selectionCommands.pending.value,
   settings: () => page.value?.grid || defaultGrid(),
   commit: commitGeometry,
   resize: (id, layout) =>
@@ -1306,22 +1313,20 @@ const menuActions = computed(() => [
     label: `Select object: ${entry.label}`,
     icon: 'pi-mouse-pointer',
   })),
-  { id: 'copy', label: 'Copy widgets', disabled: !selectedWidgets.value.length },
+  { id: 'copy', label: 'Copy widgets', disabled: !selectionCommands.available('copy') },
+  { id: 'cut', label: 'Cut widgets', disabled: !selectionCommands.available('cut') },
   {
     id: 'paste',
     label: 'Paste widgets',
-    disabled:
-      !clipboard.value.length || (page.value?.sections.length || 0) + clipboard.value.length > 30,
+    disabled: !selectionCommands.available('paste'),
   },
   {
     id: 'duplicate',
     label: 'Duplicate selection',
-    disabled:
-      !selectedWidgets.value.length ||
-      (page.value?.sections.length || 0) + selectedTree.value.length > 30,
+    disabled: !selectionCommands.available('duplicate'),
   },
-  { id: 'front', label: 'Bring to front', disabled: !selectedWidgets.value.length },
-  { id: 'back', label: 'Send to back', disabled: !selectedWidgets.value.length },
+  { id: 'front', label: 'Bring to front', disabled: !selectedWidgets.value.length || selectedLayoutLocked.value },
+  { id: 'back', label: 'Send to back', disabled: !selectedWidgets.value.length || selectedLayoutLocked.value },
   { id: 'group', label: 'Group in container', disabled: !canGroup.value },
   ...(selectedWidgets.value.length > 1
     ? arrangementOptions.value.map((option) => ({
@@ -1333,13 +1338,13 @@ const menuActions = computed(() => [
   {
     id: 'all',
     label: 'Select all widgets',
-    disabled: !page.value?.sections.some((entry) => !entry.hidden),
+    disabled: !visibleSections((page.value?.sections || []).map(renderedSection)).length,
   },
   {
     id: 'delete',
     label: 'Remove selection',
     danger: true,
-    disabled: !selectedWidgets.value.length,
+    disabled: !selectionCommands.available('delete'),
   },
 ])
 function closeMenu(restore = false) {
@@ -1356,8 +1361,7 @@ function startCanvasMarquee(event: PointerEvent, ownerId: string) {
   widgetDrag.startMarquee(event)
 }
 async function openMenu(event: MouseEvent, id = '', ownerId?: string) {
-  if (!designMode.value) return
-  if (locked.value) return
+  if (!selectionCommands.ready()) return
   chooseCanvasScope(ownerId)
   if (id) chooseSectionScope(id)
   event.preventDefault()
@@ -1366,20 +1370,15 @@ async function openMenu(event: MouseEvent, id = '', ownerId?: string) {
   if (id && !selectedIds.value.includes(id)) setSelection([id])
   if (!id) setSelection([])
   const surface = websiteCanvas.value?.getSurface(editingLayout.value)
-  const bounds = surface?.getBoundingClientRect()
-  const scale = bounds && surface ? bounds.width / surface.offsetWidth : 1
-  const point =
-    !id && bounds
-      ? {
-          x: Math.max(0, (event.clientX - bounds.left) / (45 * scale)),
-          y: Math.max(0, (event.clientY - bounds.top) / (32 * scale)),
-        }
-      : undefined
+  const current = selectionCommands.capture()
+  const anchor = !id && geometryEditable.value
+    ? captureWebsitePastePoint(event, surface, [previewScroller.value, previewViewport.value, previewFrame.value], current)
+    : undefined
   menuOpener =
     (event.target as HTMLElement).closest<HTMLElement>('[tabindex],button') || previewScroller.value
   menu.value = undefined
   await nextTick()
-  menu.value = { x: event.clientX, y: event.clientY, point }
+  if (current()) menu.value = { x: event.clientX, y: event.clientY, anchor }
 }
 function widgetToolbarAction(action: string, trigger?: Event) {
   if (locked.value || !designMode.value || !section.value) return
@@ -1397,8 +1396,7 @@ function widgetToolbarAction(action: string, trigger?: Event) {
   } else selectionAction(action, trigger)
 }
 async function selectionAction(action: string, trigger?: Event) {
-  if (!designMode.value) return
-  if (locked.value || !page.value) return
+  if (!selectionCommands.ready() || !page.value) return
   if (action.startsWith('select-object:')) {
     const entry = overlapTargets.value[Number(action.split(':')[1])]
     closeMenu()
@@ -1406,104 +1404,30 @@ async function selectionAction(action: string, trigger?: Event) {
     else if (entry) revealLayer(entry.id)
     return
   }
-  if (
-    ['delete', 'duplicate', 'copy'].includes(action) &&
-    selectedTree.value.some((section) => section.type === 'page-content')
-  ) {
-    error.value = 'Keep the page-content slot in the site layout.'
-    return
-  }
-  const point = menu.value?.point
+  const point = menu.value?.anchor?.()
   closeMenu(true)
-  if (action === 'group') {
-    groupWidgets()
-    return
-  }
-  if (arrangementActions.some((option) => option.id === action)) {
-    arrangeWidgets(action)
-    return
-  }
-  if (action === 'all') {
-    setSelection(page.value.sections.filter((entry) => !entry.hidden).map((entry) => entry.id))
-    return
-  }
-  if (action === 'copy') {
-    clipboard.value = JSON.parse(JSON.stringify(selectedTree.value))
-    message.value = `${clipboard.value.length} widget(s) copied in this editor.`
-    return
-  }
-  if (action === 'paste' || action === 'duplicate') {
-    const source = action === 'paste' ? clipboard.value : selectedTree.value
-    const copies = cloneWidgets(source, page.value.sections, point)
-    if (!copies.length) return
-    history.change(() => page.value!.sections.push(...copies))
-    const copiedIds = new Set(copies.map((entry) => entry.id))
-    setSelection(
-      copies
-        .filter((entry) => !entry.parentId || !copiedIds.has(entry.parentId))
-        .map((entry) => entry.id),
-    )
-  } else if (action === 'front' || action === 'back') {
+  if (action === 'group') groupWidgets()
+  else if (arrangementActions.some((option) => option.id === action)) arrangeWidgets(action)
+  else if (action === 'front' || action === 'back') {
+    if (selectedLayoutLocked.value) return
     const layouts = layerSelection(page.value.sections, selectedIds.value, action === 'front')
+    // Reordering must not rewrite a position-locked widget's layer as a side effect.
+    if (page.value.sections.some(entry => layoutLocked(page.value!.sections, entry.id) &&
+      layouts[entry.id]?.z !== entry.layout?.z)) return
     history.change(() => {
       for (const entry of page.value!.sections)
         if (layouts[entry.id]) entry.layout = layouts[entry.id]
     })
-  } else if (action === 'delete' && selectedWidgets.value.length) {
-    const target = page.value
-    const ids = selectedTree.value.map((entry) => entry.id)
-    if (
-      !(await confirmation.value?.ask(
-        {
-          title: 'Remove widgets?',
-          message:
-            'Remove ' +
-            ids.length +
-            ' widget(s), including container contents, from this draft? You can undo this change.',
-          confirmLabel: 'Remove widgets',
-          destructive: true,
-        },
-        trigger,
-      )) ||
-      locked.value ||
-      page.value !== target
-    )
-      return
-    history.change(() => {
-      page.value!.sections = page.value!.sections.filter((entry) => !ids.includes(entry.id))
-    })
-    setSelection([])
-  }
+  } else await selectionCommands.run(action, trigger, point)
 }
 function editorKey(event: KeyboardEvent) {
-  if (
-    locked.value ||
-    event.defaultPrevented ||
-    (event.target instanceof HTMLElement &&
-      event.target.closest('input,textarea,select,[contenteditable]'))
-  )
-    return
-  const command = event.ctrlKey || event.metaKey
-  if (command && ['z', 'y'].includes(event.key.toLowerCase())) {
-    event.preventDefault()
+  selectionCommands.key(event)
+  if (!event.defaultPrevented && event.key === 'Escape' && !event.isComposing &&
+    event.target instanceof HTMLElement && event.target.closest('[data-website-selection-commands]') &&
+    !event.target.closest('input,textarea,select,[contenteditable],dialog,[role="menu"]')) {
+    const wasInteracting = widgetDrag.isInteracting()
     widgetDrag.cancel()
-    closeMenu()
-    if (event.key.toLowerCase() === 'y' || event.shiftKey) history.redo()
-    else history.undo()
-    return
-  }
-  const action = command
-    ? { a: 'all', c: 'copy', v: 'paste', d: 'duplicate' }[event.key.toLowerCase()]
-    : ['Delete', 'Backspace'].includes(event.key)
-      ? 'delete'
-      : undefined
-  if (action) {
-    event.preventDefault()
-    selectionAction(action)
-  } else if (event.key === 'Escape') {
-    const wasDragging = widgetDrag.dragging.value
-    widgetDrag.cancel()
-    if (!wasDragging) setSelection([])
+    if (!wasInteracting) setSelection([])
     closeMenu()
   }
 }
@@ -1541,6 +1465,27 @@ function setGeometry(field: keyof WidgetGeometry, event: Event) {
   commitGeometry(section.value.id, next)
 }
 const auth = useAuthStore()
+const selectionCommands = useWebsiteSelectionCommands({
+  identity: computed(() => auth.currentUser?.uid || ''),
+  enabled: computed(() => auth.rawRole === 'admin' && auth.hasWorkspaceAccess),
+  site, page, selectedIds, mode: editorMode,
+  context: () => `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'default'}:${auth.currentUser?.uid || ''}:${editingLayout.value ? 'layout' : 'page'}:${page.value?.id || ''}`,
+  environment: () => [selectedPage.value, editingLayout.value, device.value, runningCode.value, locked.value],
+  blocked: () => locked.value || runningCode.value || !!inlineTarget.value || !!imageTarget.value,
+  interacting: () => widgetDrag.isInteracting() || commandPointers.size > 0,
+  confirm: (request, trigger) => confirmation.value?.ask(request, trigger),
+  cancelConfirmation: () => confirmation.value?.cancel(),
+  change: history.change,
+  travel: applyHistory,
+  select: setSelection,
+  report: (text, failed = false) => { error.value = failed ? text : ''; message.value = failed ? '' : text },
+  invalidate: () => closeMenu(),
+  visible: () => visibleSections((page.value?.sections || []).map(renderedSection)).map(entry => entry.id),
+  completed: () => {
+    const current = selectionCommands.capture()
+    void nextTick(() => { if (current()) previewScroller.value?.focus({ preventScroll: true }) })
+  },
+})
 const panels = useBuilderPanels({
   scope: () =>
     auth.currentUser?.uid
@@ -2065,7 +2010,11 @@ function duplicateSection() {
   selectionAction('duplicate')
 }
 function travelHistory(direction: 'undo' | 'redo') {
-  if (locked.value) return
+  if (locked.value || selectionCommands.pending.value || widgetDrag.isInteracting() || commandPointers.size ||
+    !auth.currentUser || auth.rawRole !== 'admin' || !auth.hasWorkspaceAccess) return
+  applyHistory(direction)
+}
+function applyHistory(direction: 'undo' | 'redo') {
   history[direction]()
   if (editingLayout.value && !site.value?.sharedLayout) editingLayout.value = false
   if (!page.value) selectedPage.value = site.value?.pages[0]?.id || ''
@@ -2135,8 +2084,17 @@ function beforeUnload(event: BeforeUnloadEvent) {
 onMounted(() => {
   void load()
   window.addEventListener('beforeunload', beforeUnload)
+  window.addEventListener('pointerup', releaseCommandPointer, true)
+  window.addEventListener('pointercancel', releaseCommandPointer, true)
+  window.addEventListener('blur', clearCommandPointers)
 })
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', beforeUnload)
+  window.removeEventListener('pointerup', releaseCommandPointer, true)
+  window.removeEventListener('pointercancel', releaseCommandPointer, true)
+  window.removeEventListener('blur', clearCommandPointers)
+  clearCommandPointers()
+})
 onBeforeRouteLeave(() => {
   autosave.persist()
   return !uploading.value && !busy.value && (autosave.protectedLocally.value || canDiscard())
@@ -2312,6 +2270,7 @@ onBeforeRouteLeave(() => {
         @focusout="history.checkpoint()"
         @click.capture="widgetDrag.guardClick"
         @keydown="editorKey"
+        @pointerdown.capture="trackCommandPointer"
       >
         <aside
           id="website-structure"
@@ -2411,7 +2370,7 @@ onBeforeRouteLeave(() => {
                 <button :disabled="locked || starterConfirmation" @click="importStarter">Review nine-page starter</button>
               </details>
               <h2 class="on-page-heading">On this page</h2>
-              <div v-if="page" data-widget-surface="outline" class="widget-outline">
+              <div v-if="page" data-widget-surface="outline" data-website-selection-commands class="widget-outline">
                 <div
                   v-for="(entry, index) in page.sections"
                   :key="entry.id"
@@ -2779,6 +2738,7 @@ onBeforeRouteLeave(() => {
           <div
             v-if="designMode && selectedWidgets.length > 1"
             class="selection-toolbar"
+            data-website-selection-commands
             role="group"
             aria-label="Selection actions"
           >
@@ -2798,7 +2758,7 @@ onBeforeRouteLeave(() => {
               aria-label="Duplicate selection"
               title="Duplicate selection"
               :disabled="
-                !selectedWidgets.length || (page?.sections.length || 0) + selectedTree.length > 30
+                !selectionCommands.available('duplicate')
               "
               @click="selectionAction('duplicate')"
             >
@@ -2856,10 +2816,9 @@ onBeforeRouteLeave(() => {
               section.type !== 'page-content'
             "
             :can-copy="
-              (page?.sections.length || 0) + selectedTree.length <= 30 &&
-              !selectedTree.some((entry) => entry.type === 'page-content')
+              selectionCommands.available('duplicate')
             "
-            :can-delete="!selectedTree.some((entry) => entry.type === 'page-content')"
+            :can-delete="selectionCommands.available('delete')"
             @action="widgetToolbarAction"
             @drag="(event, action) => startWidgetMove(event, section!.id, action)"
             @geometry-key="(event, action) => geometryKey(event, section!.id, action)"
@@ -2867,6 +2826,7 @@ onBeforeRouteLeave(() => {
           <WebsiteAlignmentGuides :guides="widgetDrag.guides.value" />
           <div
             ref="previewScroller"
+            data-website-selection-commands
             class="preview-scroll"
             :class="{ 'pan-tool': hand }"
             :style="{ '--preview-handle-space': '0px' }"
@@ -2964,8 +2924,8 @@ onBeforeRouteLeave(() => {
           <BuilderEditingTools v-if="designMode && settingsPanel === 'page'" add-label="Add widgets" :add-expanded="builderTool === 'widgets' && leftPanelOpen" add-controls="website-structure" :add-disabled="locked || !page" :action-label="section ? 'Widget actions' : 'Page actions'" :action-expanded="objectActionsExpanded" action-controls="website-object-actions" :action-disabled="locked || !page || section?.type === 'page-content' || (editingLayout && !section)" @add="toggleWidgetLibrary" @actions="objectActionsExpanded = !objectActionsExpanded" />
           <section v-if="designMode && settingsPanel === 'page' && page" v-show="objectActionsExpanded" id="website-object-actions" class="object-actions" :aria-label="section ? 'Widget actions' : 'Page actions'">
             <template v-if="section && section.type !== 'page-content'">
-              <button :disabled="page.sections.length >= 30" @click="duplicateSection">Duplicate widget</button>
-              <button class="danger remove-section" @click="removeSection">Remove widget</button>
+              <button :disabled="!selectionCommands.available('duplicate')" @click="duplicateSection">Duplicate widget</button>
+              <button :disabled="!selectionCommands.available('delete')" class="danger remove-section" @click="removeSection">Remove widget</button>
             </template>
             <template v-else-if="!section">
               <button v-if="!editingLayout" :disabled="site.pages.length >= 30" @click="duplicatePage">Duplicate page</button>
@@ -3025,6 +2985,7 @@ onBeforeRouteLeave(() => {
           <section
             v-if="designMode && selectedWidgets.length > 1"
             ref="arrangementPanel"
+            data-website-selection-commands
             class="arrangement-panel"
             aria-label="Arrange widgets"
             tabindex="-1"

@@ -55,7 +55,12 @@ export const editorHelp: BuilderHelpGroup[] = [
       {
         action: 'Copy / paste',
         keys: `${commandKey} + C / V`,
-        detail: 'In Design, copy selected widgets and paste them within this editor.',
+        detail: 'In Design, copy selected widgets and paste them at distinct positions within this editor.',
+      },
+      {
+        action: 'Cut',
+        keys: `${commandKey} + X`,
+        detail: 'Confirm removal, then paste the widgets elsewhere. Cancel keeps the previous clipboard; Undo restores the cut widgets.',
       },
       {
         action: 'Duplicate',

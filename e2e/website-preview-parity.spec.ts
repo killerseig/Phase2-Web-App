@@ -238,7 +238,6 @@ async function mockWebsite(page: Page, draft: ReturnType<typeof fixture>) {
 }
 
 async function ready(page: Page, scope: Locator) {
-  await page.evaluate(() => document.fonts.ready)
   await expect(scope.locator('.section-hero img')).toBeVisible()
   for (const image of await scope.locator('img').all()) {
     await image.scrollIntoViewIfNeeded()
@@ -248,6 +247,16 @@ async function ready(page: Page, scope: Locator) {
       )
       .toBe(true)
   }
+  // Navigation may resolve fonts.ready before the new page has requested its faces.
+  // Load the fonts used by the rendered content before comparing ch widths and wrapping.
+  await scope.evaluate(async (root) => {
+    const fonts = new Set(Array.from(root.querySelectorAll('*'), (element) => {
+      const style = getComputedStyle(element)
+      return `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+    }))
+    await Promise.all([...fonts].map((font) => document.fonts.load(font)))
+    await document.fonts.ready
+  })
   await page.mouse.move(0, 0)
   await page.locator('.preview-viewport, .preview-scroll').evaluateAll((elements) => {
     elements.forEach((element) => element.scrollTo(0, 0))

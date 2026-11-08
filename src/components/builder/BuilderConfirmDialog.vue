@@ -60,7 +60,7 @@ function keepFocus(event: KeyboardEvent) {
   }
 }
 onBeforeUnmount(() => finish(false))
-defineExpose({ ask })
+defineExpose({ ask, cancel: () => finish(false) })
 </script>
 
 <template>

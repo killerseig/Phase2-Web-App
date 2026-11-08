@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
       Front at top. Drag to reorder within a container. Double-click to find an object. Use Pages →
       On this page to change content order.
     </p>
-    <ol ref="list" class="layers-list" aria-label="Layers from front to back">
+    <ol ref="list" class="layers-list" data-website-selection-commands aria-label="Layers from front to back">
       <li
         v-for="{ section, depth, inheritedHidden } in rows"
         :key="section.id"

@@ -106,6 +106,7 @@ onBeforeUnmount(() => {
   <div
     ref="toolbar"
     class="widget-toolbar builder-floating"
+    data-website-selection-commands
     role="group"
     aria-label="Widget actions"
     :style="{ ...position, visibility: visible ? 'visible' : 'hidden' }"

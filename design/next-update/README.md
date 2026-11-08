@@ -10,7 +10,7 @@ The dashboard milestone below is complete locally. The follow-on [bounded refine
 
 The latest [Form persistence lifetime checkpoint](03-workspace-design.md#form-persistence-lifetime--november-7-2026) addresses the previously documented stale-request limitation and its adjacent confirmation/import/navigation callers. Earlier verification totals remain historical; current results and limits belong to that checkpoint.
 
-The subsequent [Website precise keyboard checkpoint](03-workspace-design.md#website-precise-keyboard-controls--november-7-2026) aligns root free-grid body and handle movement with Networking/Dashboard while keeping pointer behavior and saved geometry intact. Remaining inline/flow-height and clipboard/Form command work stays explicit in the editor inventory.
+The subsequent [Website precise keyboard checkpoint](03-workspace-design.md#website-precise-keyboard-controls--november-7-2026) aligns root free-grid body and handle movement with Networking/Dashboard while keeping pointer behavior and saved geometry intact. The [Website clipboard checkpoint](03-workspace-design.md#website-clipboard-and-shortcut-cleanup--november-7-2026) records distinct placement, guarded Copy/Paste/Duplicate/Cut, context-owned confirmation and actual validation. Remaining inline/flow-height and Form command work stays explicit in the editor inventory.
 
 ## November 7 dashboard acceptance
 
