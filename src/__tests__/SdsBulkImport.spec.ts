@@ -1,14 +1,16 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { webcrypto, createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import SdsBulkImport from '@/components/dashboard/SdsBulkImport.vue'
 import { loadSds, preflightSdsImport, sdsCommand, uploadDocument } from '@/services/sds'
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { uid: 'admin' } }) }))
+const auth = reactive({ currentUser: { uid: 'admin' }, rawRole: 'admin', hasWorkspaceAccess: true, profile: { active: true }, assignedJobIds: [] as string[] })
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
 vi.mock('@/services/sds', () => ({
-  loadSds: vi.fn(),
-  preflightSdsImport: vi.fn(),
-  sdsCommand: vi.fn(),
-  uploadDocument: vi.fn(),
+  loadSds: vi.fn<typeof import('@/services/sds').loadSds>(),
+  preflightSdsImport: vi.fn<typeof import('@/services/sds').preflightSdsImport>(),
+  sdsCommand: vi.fn<typeof import('@/services/sds').sdsCommand>(),
+  uploadDocument: vi.fn<typeof import('@/services/sds').uploadDocument>(),
   sdsErrorMessage: (e: Error) => e.message,
 }))
 const bytes = new TextEncoder().encode('%PDF-fixture')
@@ -55,6 +57,7 @@ async function prepare(paths = ['a.pdf', 'b.pdf']) {
 describe('bulk index import', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.assign(auth, { currentUser: { uid: 'admin' }, rawRole: 'admin', hasWorkspaceAccess: true, profile: { active: true }, assignedJobIds: [] })
     vi.stubGlobal('crypto', webcrypto)
     vi.mocked(loadSds).mockResolvedValue({
       version: 8,
@@ -66,8 +69,24 @@ describe('bulk index import', () => {
       uploadId: '00000000-0000-4000-8000-000000000066',
       uploadExtension: 'pdf',
       originalName: 'original.pdf',
-      cleanup: vi.fn(async () => undefined),
+      cleanup: vi.fn<() => Promise<void>>(async () => undefined),
     })
+  })
+  it.each(['access', 'unmount'])('cleans staged files without committing after %s invalidates the import', async reason => {
+    const cleanup = vi.fn<() => Promise<void>>(async () => undefined)
+    let finish!: (value: Awaited<ReturnType<typeof uploadDocument>>) => void
+    vi.mocked(uploadDocument).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = await prepare(['a.pdf'])
+    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises()
+    expect(uploadDocument).toHaveBeenCalledOnce()
+    if (reason === 'access') auth.hasWorkspaceAccess = false
+    else wrapper.unmount()
+    finish({ uploadId: '00000000-0000-4000-8000-000000000066', uploadExtension: 'pdf', originalName: 'original.pdf', cleanup })
+    await flushPromises()
+    expect(sdsCommand).not.toHaveBeenCalled()
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(wrapper.emitted('completed')).toBeUndefined()
+    if (reason === 'access') wrapper.unmount()
   })
   it('previews before writes, preserves metadata and byte evidence, and resumes only failed rows', async () => {
     const wrapper = await prepare()

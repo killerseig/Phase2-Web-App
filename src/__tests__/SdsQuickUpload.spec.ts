@@ -106,6 +106,31 @@ describe('direct document upload', () => {
     expect(wrapper.find('form').exists()).toBe(false)
     wrapper.unmount()
   })
+  it('does not commit a staged upload after access changes, but still cleans its file', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof uploadDocument>>) => void
+    vi.mocked(uploadDocument).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mountModule(); await flushPromises()
+    await choose(wrapper, new File(['pdf'], 'Safety sheet.pdf', { type: 'application/pdf' }))
+    profile.value = { ...profile.value, active: false }
+    await flushPromises()
+    finish({ uploadId, uploadExtension: 'pdf', originalName: 'Safety sheet.pdf', cleanup })
+    await flushPromises()
+    expect(sdsCommand).not.toHaveBeenCalled()
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(wrapper.text()).not.toContain('File added.')
+    wrapper.unmount()
+  })
+  it('does not commit a staged upload after unmount', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof uploadDocument>>) => void
+    vi.mocked(uploadDocument).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mountModule(); await flushPromises()
+    await choose(wrapper, new File(['pdf'], 'Safety sheet.pdf', { type: 'application/pdf' }))
+    wrapper.unmount()
+    finish({ uploadId, uploadExtension: 'pdf', originalName: 'Safety sheet.pdf', cleanup })
+    await flushPromises()
+    expect(sdsCommand).not.toHaveBeenCalled()
+    expect(cleanup).toHaveBeenCalledOnce()
+  })
   it('reports a failed save, cleans up staging, and allows retrying the same file', async () => {
     vi.mocked(sdsCommand).mockRejectedValueOnce(new Error('Please try again.'))
     const wrapper = mountModule()

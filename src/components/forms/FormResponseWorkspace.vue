@@ -158,6 +158,7 @@ function updateAnswers(value: FormAnswers) {
 async function load() {
   const current = ++sequence,
     owner = uid.value
+  confirm.value?.cancel?.()
   record.value = undefined
   answers.value = {}
   savedAnswers = ''
@@ -169,6 +170,9 @@ async function load() {
   pendingSubmission.value = ''
   message.value = ''
   invalidField.value = ''
+  saveRequest = { signature: '', id: '' }
+  busy.value = false
+  loading.value = false
   if (!enabled) return
   busy.value = true
   loading.value = true
@@ -184,6 +188,7 @@ async function load() {
             }
           : {}),
       })
+      if (current !== sequence || uid.value !== owner) return
       if (template.definition?.access?.respondents === 'public' || !owner) {
         if (current === sequence) templates.value = [template]
         return
@@ -244,9 +249,19 @@ async function load() {
   if (current === sequence && uid.value === owner && jobWorkflow.value && !error.value && !record.value)
     await start()
 }
-watch([uid, templateId, dashboardJobId, () => props.templateVersion, () => auth.rawRole], load, {
-  immediate: true,
-})
+const respondentContext = computed(() => JSON.stringify([
+  uid.value, auth.rawRole, auth.hasWorkspaceAccess, auth.profile?.active,
+  [...(auth.assignedJobIds ?? [])].sort(), templateId.value, dashboardJobId.value,
+  props.templateVersion, props.ignoreRouteContext,
+  !props.ignoreRouteContext ? route.query.version : undefined,
+  !props.ignoreRouteContext ? route.query.record : undefined,
+]))
+watch(respondentContext, () => {
+  respondentName.value = ''
+  respondentEmail.value = ''
+  ephemeral.clear()
+  void load()
+}, { immediate: true, flush: 'sync' })
 async function discard() {
   return (
     !dirty.value ||
@@ -279,7 +294,8 @@ async function start() {
         .filter((item) => item.status === 'draft' && item.templateVersion === pinnedVersion.value)
         .sort((a, b) => b.updatedAt - a.updatedAt)[0]
       if (draft) {
-        received(await formApi<FormRecord>('formWorkspace', { action: 'get', id: draft.id }))
+        const next = await formApi<FormRecord>('formWorkspace', { action: 'get', id: draft.id })
+        if (uid.value === owner && generation === sequence) received(next)
         return
       }
     }
@@ -456,6 +472,7 @@ async function submit() {
           problem.message.startsWith(field.label + ':'),
       )?.id || ''
     await nextTick()
+    if (generation !== sequence) return
     if (generation === sequence && invalidField.value)
       document.getElementById('answer-' + invalidField.value)?.focus()
     if (
@@ -482,6 +499,7 @@ async function upload(fieldId: string, files: File[], groupId?: string, instance
   busy.value = true
   try {
     if (dirty.value && !(await save())) return
+    if (generation !== sequence || owner !== uid.value) return
     for (const file of files) {
       const next = await uploadFormPhoto(
         record.value!,
@@ -561,7 +579,8 @@ async function prepareNavigation(): Promise<boolean> {
   }
 }
 async function openFullPage() {
-  if (!(await prepareNavigation())) return
+  const generation = sequence
+  if (!(await prepareNavigation()) || generation !== sequence) return
   await router.push({
     name: 'form-response',
     params: { templateId: templateId.value },
@@ -575,7 +594,8 @@ async function openFullPage() {
   })
 }
 async function reloadRecords() {
-  if (await prepareNavigation()) await load()
+  const generation = sequence
+  if (await prepareNavigation() && generation === sequence) await load()
 }
 function beforeUnload(event: BeforeUnloadEvent) {
   if (dirty.value || (busy.value && !loading.value)) {

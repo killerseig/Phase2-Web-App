@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppButton from '@/components/common/AppButton.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   loadSds,
@@ -23,24 +23,47 @@ const error = ref('')
 const progress = ref(0)
 const duplicates = ref(0)
 const destination = ref('')
+let generation = 0
+let disposed = false
+const current = (request: number) => !disposed && generation === request
+watch(() => JSON.stringify([
+  auth.currentUser?.uid, auth.rawRole, auth.hasWorkspaceAccess, auth.profile?.active,
+  [...(auth.assignedJobIds ?? [])].sort(), props.folderId,
+]), () => {
+  reset()
+  indexFile.value = undefined
+  selectedFiles.value = []
+  duplicates.value = 0
+  destination.value = ''
+}, { flush: 'sync' })
+onBeforeUnmount(() => { disposed = true; generation++ })
 const complete = computed(() => rows.value.filter((r) => r.status === 'saved').length)
 const digest = async (bytes: ArrayBuffer) =>
   Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (n) =>
     n.toString(16).padStart(2, '0'),
   ).join('')
 function reset() {
+  generation++
+  busy.value = false
+  paused.value = false
+  progress.value = 0
   rows.value = []
   error.value = ''
 }
 async function preflight() {
-  if (!indexFile.value || !selectedFiles.value.length) return
+  if (disposed || busy.value || !indexFile.value || !selectedFiles.value.length) return
+  const request = ++generation, index = indexFile.value, picked = [...selectedFiles.value]
+  const folderId = props.folderId, owner = auth.currentUser?.uid
   busy.value = true
   error.value = ''
   rows.value = []
   try {
-    const result = await preflightSdsImport(JSON.parse(await indexFile.value.text()))
+    const input = JSON.parse(await index.text())
+    if (!current(request)) return
+    const result = await preflightSdsImport(input)
+    if (!current(request)) return
     const files = new Map<string, File>()
-    for (const file of selectedFiles.value) {
+    for (const file of picked) {
       const path = (file.webkitRelativePath || file.name).replace(/\\/g, '/')
       if (files.has(path)) throw new Error(`Duplicate selected path: ${path}`)
       files.set(path, file)
@@ -49,7 +72,7 @@ async function preflight() {
       throw new Error(
         'The selected files and index must match exactly, without missing or extra files.',
       )
-    destination.value = props.folderId
+    destination.value = folderId
     const verified = []
     for (const row of result.files) {
       const file = files.get(row.path)
@@ -57,43 +80,51 @@ async function preflight() {
         throw new Error(
           `Missing selected file: ${row.path}. Index paths must include the selected folder name.`,
         )
-      if (file.size !== row.size || (await digest(await file.arrayBuffer())) !== row.sha256)
+      const bytes = await file.arrayBuffer()
+      if (!current(request)) return
+      const hash = await digest(bytes)
+      if (!current(request)) return
+      if (file.size !== row.size || hash !== row.sha256)
         throw new Error(`Size or SHA-256 mismatch: ${row.path}`)
       const identity = new TextEncoder().encode(
-        `${auth.currentUser?.uid}\n${destination.value}\n${row.path}\n${row.sha256}`,
+        `${owner}\n${folderId}\n${row.path}\n${row.sha256}`,
       )
       const id = `import_${(await digest(identity.buffer)).slice(0, 48)}`
+      if (!current(request)) return
       verified.push({ row, file, id, status: 'ready' })
       progress.value = Math.round((verified.length / result.files.length) * 100)
     }
     rows.value = verified
     duplicates.value = result.duplicateByteGroups.length
   } catch (e) {
-    error.value = sdsErrorMessage(e)
+    if (current(request)) error.value = sdsErrorMessage(e)
   } finally {
-    busy.value = false
-    progress.value = 0
+    if (current(request)) { busy.value = false; progress.value = 0 }
   }
 }
 async function run() {
+  if (disposed || busy.value || !rows.value.length) return
+  const request = ++generation, entries = [...rows.value], folderId = destination.value
   busy.value = true
   paused.value = false
   error.value = ''
   try {
     let version = (await loadSds('', true)).version
-    for (const entry of rows.value) {
-      if (paused.value) break
+    if (!current(request)) return
+    for (const entry of entries) {
+      if (!current(request) || paused.value) break
       if (entry.status === 'saved') continue
       entry.status = 'uploading'
       let staged: Awaited<ReturnType<typeof uploadDocument>> | undefined
       try {
         staged = await uploadDocument(entry.file, (percent) => {
-          progress.value = percent
+          if (current(request)) progress.value = percent
         })
+        if (!current(request)) return
         const result = await sdsCommand<{ id: string; reused?: boolean }>('saveSheet', {
           ...entry.row,
           id: entry.id,
-          folderId: destination.value,
+          folderId,
           order: 0,
           archived: false,
           sourcePath: entry.row.path,
@@ -104,21 +135,24 @@ async function run() {
           originalName: staged.originalName,
           version,
         })
+        if (!current(request)) return
         if (!result.reused) version++
         entry.status = 'saved'
       } catch (e) {
-        entry.status = 'retry'
+        if (current(request)) entry.status = 'retry'
         throw e
       } finally {
         await staged?.cleanup()
       }
     }
   } catch (e) {
-    error.value = sdsErrorMessage(e)
+    if (current(request)) error.value = sdsErrorMessage(e)
   } finally {
-    busy.value = false
-    progress.value = 0
-    emit('completed')
+    if (current(request)) {
+      busy.value = false
+      progress.value = 0
+      emit('completed')
+    }
   }
 }
 function pickIndex(event: Event) {

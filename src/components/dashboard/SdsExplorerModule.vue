@@ -13,7 +13,6 @@ import type { IntranetContent, IntranetResource, LibraryCategory, ReadingPair } 
 import { documentAccept, documentFormatsLabel, printableFile } from '@/features/documents/formats'
 import { createViewerSession, viewerSessionKey } from '@/features/documents/viewerSession'
 import { useAuthStore } from '@/stores/auth'
-import { sdsErrorMessage } from '@/services/sds'
 import { useLibraryMutation } from '@/features/sds/useLibraryMutation'
 import { useLibraryQuery } from '@/features/sds/useLibraryQuery'
 import { useLibraryBookExport } from '@/features/sds/useLibraryBookExport'
@@ -83,7 +82,9 @@ const bulkOpen = ref(false)
 const bulkFolderId = ref('')
 const editor = ref<'' | 'folder' | 'sheet'>('')
 const progress = ref<number | null>(null)
-const { runMutation } = useLibraryMutation({ busy, error, progress })
+const { runMutation, dispose: disposeMutation } = useLibraryMutation({
+  busy, error, progress, context: () => JSON.stringify([accessContext.value, jobId.value]),
+})
 const form = reactive({
   id: '',
   name: '',
@@ -166,7 +167,6 @@ const revisionChanged = (sheet: SdsSheet) =>
     (s) => s.documentId === sheet.id && s.revisionId !== sheet.revisionId,
   )
 const sheetSearch = (sheet: SdsSheet) => `${sheet.name} ${sheet.manufacturer} ${sheet.productCode}`
-const message = sdsErrorMessage
 
 const query = useLibraryQuery({
   jobId, search, showArchived, library, loading, loadFailed, nextPage, pageBusy, error,
@@ -215,23 +215,15 @@ function toggleFolder(folder: ExplorerFolder) {
   })
 }
 async function saveSelection() {
-  busy.value = true
-  error.value = ''
-  try {
-    await libraryCommand('saveSelection', {
-      jobId: jobId.value,
-      selections: selection.value,
-      version: library.value.binder.version,
-    })
+  const request = { jobId: jobId.value, selections: selection.value.map(entry => ({ ...entry })), version: library.value.binder.version }
+  await runMutation(async (_stageFile, current) => {
+    await libraryCommand('saveSelection', request)
+    if (!current()) return
     editing.value = false
     clearExport()
     await refresh()
-    notice.value = 'Job file selection saved.'
-  } catch (e) {
-    error.value = message(e)
-  } finally {
-    busy.value = false
-  }
+    if (current()) notice.value = 'Job file selection saved.'
+  })
 }
 function latestRevision(sheet: SdsSheet) {
   selection.value = selection.value.map((s) =>
@@ -406,22 +398,14 @@ async function menuAction(action: string, target: ExplorerMenuTarget) {
         )
       )
         return
-      busy.value = true
-      error.value = ''
-      try {
-        await libraryCommand('saveSheet', {
-          ...sheet,
-          archived: !sheet.archived,
-          version: library.value.version,
-        })
+      const request = { ...sheet, archived: !sheet.archived, version: library.value.version }
+      await runMutation(async (_stageFile, current) => {
+        await libraryCommand('saveSheet', request)
+        if (!current()) return
         clearExport()
         await refresh()
-        notice.value = sheet.archived ? 'File restored.' : 'File archived.'
-      } catch (e) {
-        error.value = message(e)
-      } finally {
-        busy.value = false
-      }
+        if (current()) notice.value = sheet.archived ? 'File restored.' : 'File archived.'
+      })
     }
     if (action === 'toggle-sheet' || action === 'latest') {
       if (!editing.value) beginSelection()
@@ -471,10 +455,10 @@ async function addFile(event: Event) {
   const picked = input.files?.[0]
   input.value = ''
   if (!picked || busy.value || loading.value || !isAdmin.value || jobId.value) return
-  const destination = addFileFolder
+  const destination = addFileFolder, version = library.value.version
   notice.value = ''
   progress.value = 0
-  await runMutation(async stageFile => {
+  await runMutation(async (stageFile, current) => {
     const staged = await stageFile(picked)
     const result = await libraryCommand('saveSheet', {
       name: picked.name.slice(0, 160),
@@ -485,17 +469,18 @@ async function addFile(event: Event) {
       revisionDate: '',
       order: 0,
       archived: false,
-      version: library.value.version,
+      version,
       uploadId: staged.uploadId,
       uploadExtension: staged.uploadExtension,
       originalName: staged.originalName,
     })
+    if (!current()) return
     clearExport()
     folderId.value = destination
     search.value = ''
     selectedId.value = result.id
     await refresh()
-    notice.value = 'File added.'
+    if (current()) notice.value = 'File added.'
   })
 }
 function pickFile(event: Event) {
@@ -503,48 +488,41 @@ function pickFile(event: Event) {
   if (file.value && !form.name) form.name = file.value.name.replace(/\.[^.]+$/, '').slice(0, 160)
 }
 async function saveRecord() {
-  await runMutation(async stageFile => {
-    if (editor.value === 'sheet' && !form.id && !file.value)
+  const kind = editor.value, picked = file.value, request = { ...form, version: library.value.version }
+  if (!kind) return
+  await runMutation(async (stageFile, current) => {
+    if (kind === 'sheet' && !request.id && !picked)
       throw new Error('Choose a file before saving.')
-    const staged = file.value ? await stageFile(file.value) : undefined
-    await libraryCommand(editor.value === 'folder' ? 'saveFolder' : 'saveSheet', {
-      ...form,
-      version: library.value.version,
+    const staged = picked ? await stageFile(picked) : undefined
+    await libraryCommand(kind === 'folder' ? 'saveFolder' : 'saveSheet', {
+      ...request,
       uploadId: staged?.uploadId ?? '',
       uploadExtension: staged?.uploadExtension,
       originalName: staged?.originalName,
     })
+    if (!current()) return
     editor.value = ''
     clearExport()
     await refresh()
-    notice.value = 'Company documents updated.'
+    if (current()) notice.value = 'Company documents updated.'
   })
 }
 async function deleteFolder(folder = currentFolder.value) {
   if (!folder || !window.confirm(`Remove empty folder “${folder.name}”?`)) return
-  busy.value = true
-  try {
-    await libraryCommand('deleteFolder', { id: folder.id, version: library.value.version })
+  const request = { id: folder.id, version: library.value.version }
+  await runMutation(async (_stageFile, current) => {
+    await libraryCommand('deleteFolder', request)
+    if (!current()) return
     if (folderId.value === folder.id) folderId.value = folder.parentId
     await refresh()
-  } catch (e) {
-    error.value = message(e)
-  } finally {
-    busy.value = false
-  }
+  })
 }
 async function openSheet(download = false, sheet = selected.value) {
   if (!sheet || busy.value || loading.value) return
-  const id = sheet.id
-  busy.value = true
-  error.value = ''
-  try {
-    await documentOpener.open(() => libraryCommand('openSheet', { id, jobId: jobId.value, download }), 'Opening file', 'Opening your file…')
-  } catch (e) {
-    error.value = message(e)
-  } finally {
-    busy.value = false
-  }
+  const request = { id: sheet.id, jobId: jobId.value, download }
+  await runMutation(async () => {
+    await documentOpener.open(() => libraryCommand('openSheet', request), 'Opening file', 'Opening your file…')
+  })
 }
 async function exportBook() {
   if (dirty.value || editor.value) {
@@ -561,13 +539,8 @@ async function exportBook() {
     )
   )
     return
-  busy.value = true
-  error.value = ''
-  try {
-    await bookExport.request({ printableOnly: excluded > 0, jobId: jobId.value, version: library.value.binder.version })
-  } finally {
-    busy.value = false
-  }
+  const request = { printableOnly: excluded > 0, jobId: jobId.value, version: library.value.binder.version }
+  await runMutation(async () => { await bookExport.request(request) })
 }
 function beforeUnload(event: BeforeUnloadEvent) {
   if (hasDraft.value || busy.value) {
@@ -593,19 +566,27 @@ function prepareNavigation() {
 defineExpose({ prepareNavigation })
 onBeforeRouteLeave(prepareNavigation)
 watch(
-  accessContext,
+  [accessContext, jobId],
   () => {
     editing.value = false
     editor.value = ''
+    file.value = null
+    bulkOpen.value = false
+    notice.value = ''
+    selectedId.value = ''
+    selection.value = []
+    library.value = { version: 0, folders: [], sheets: [], binder: { version: 0, selections: [] } }
     clearExport()
     void refresh()
   },
+  { flush: 'sync' },
 )
 onMounted(() => {
   void refresh()
   window.addEventListener('beforeunload', beforeUnload)
 })
 onBeforeUnmount(() => {
+  disposeMutation()
   rememberSdsViewState(viewUid, viewRoute, {
     jobId: jobId.value,
     folderId: folderId.value,

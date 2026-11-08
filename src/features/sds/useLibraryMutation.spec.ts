@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { sdsErrorMessage } from '@/services/sds'
 import { useLibraryMutation } from './useLibraryMutation'
@@ -9,12 +9,18 @@ vi.mock('@/services/sds', async importOriginal => ({
   uploadDocument: fake.upload,
 }))
 
-function fixture() {
-  const state = { busy: ref(false), error: ref('Previous error'), progress: ref<number | null>(null) }
+function fixture(context?: Ref<string>) {
+  const state = { busy: ref(false), error: ref('Previous error'), progress: ref<number | null>(null), context: context ? () => context.value : undefined }
   return { ...state, ...useLibraryMutation(state) }
 }
 const uploadId = '00000000-0000-4000-8000-000000000001' as const
 const file = new File(['synthetic contents'], 'document.txt', { type: 'text/plain' })
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
+}
 
 describe('Library mutation staging lifetime', () => {
   beforeEach(() => { fake.upload.mockReset() })
@@ -95,6 +101,56 @@ describe('Library mutation staging lifetime', () => {
     })
     expect(cleanup).toHaveBeenCalledOnce()
     expect(state.error.value).toBe(`${phase} failed`)
+    expect(state.busy.value).toBe(false)
+    expect(state.progress.value).toBeNull()
+  })
+
+  it('rejects staging across context ABA and preserves the newer operation through old cleanup', async () => {
+    const context = ref('admin-a'), state = fixture(context)
+    const upload = deferred<Awaited<ReturnType<typeof fake.upload>>>()
+    const cleanup = deferred<void>(), nextCommand = deferred<void>()
+    const clean = vi.fn<() => Promise<void>>(() => cleanup.promise), save = vi.fn<() => void>()
+    let progress!: (value: number) => void
+    fake.upload.mockImplementation((_file, update) => { progress = update; return upload.promise })
+    const old = state.runMutation(async stage => { await stage(file); save() })
+    progress(20)
+    context.value = 'none'; context.value = 'admin-a'
+    const newer = state.runMutation(async () => { await nextCommand.promise })
+    state.progress.value = 80
+    progress(50)
+    upload.resolve({ uploadId, uploadExtension: 'txt', originalName: file.name, cleanup: clean })
+    await vi.waitFor(() => expect(clean).toHaveBeenCalledOnce())
+    expect(save).not.toHaveBeenCalled()
+    expect(state.busy.value).toBe(true)
+    expect(state.progress.value).toBe(80)
+    cleanup.reject(new Error('Old cleanup failed'))
+    await old
+    expect(state.busy.value).toBe(true)
+    expect(state.error.value).toBe('')
+    nextCommand.resolve(); await newer
+    expect(state.busy.value).toBe(false)
+    state.dispose()
+  })
+
+  it('ignores an old command error after disposal and rejects later operations', async () => {
+    const state = fixture(), command = deferred<void>(), followup = vi.fn<() => Promise<void>>(async () => undefined)
+    const pending = state.runMutation(async () => { await command.promise })
+    state.dispose(); state.dispose()
+    command.reject(new Error('Old failure')); await pending
+    await state.runMutation(followup)
+    expect(followup).not.toHaveBeenCalled()
+    expect(state.error.value).toBe('')
+    expect(state.busy.value).toBe(false)
+  })
+
+  it('does not start overlapping commands and releases busy after cleanup failure', async () => {
+    const state = fixture(), command = deferred<void>(), duplicate = vi.fn<() => Promise<void>>(async () => undefined)
+    fake.upload.mockResolvedValue({ uploadId, uploadExtension: 'txt', originalName: file.name, cleanup: vi.fn<() => Promise<void>>(async () => { throw new Error('Cleanup failed') }) })
+    const pending = state.runMutation(async stage => { await stage(file); await command.promise })
+    await state.runMutation(duplicate)
+    expect(duplicate).not.toHaveBeenCalled()
+    command.resolve(); await pending
+    expect(state.error.value).toBe('Cleanup failed')
     expect(state.busy.value).toBe(false)
     expect(state.progress.value).toBeNull()
   })
