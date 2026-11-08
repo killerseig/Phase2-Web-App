@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import MyTimecardView from './MyTimecardView.vue'
@@ -13,12 +13,12 @@ const state = vi.hoisted(() => ({
     activeJobs: Array<{ id: string; code: string; name: string }>
     subscribeVisibleJobs: () => void
   },
-  request: vi.fn(),
+  request: vi.fn<(data: { personalAction?: string; requestId?: string }) => Promise<unknown>>(),
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => state.auth }))
 vi.mock('@/stores/jobs', () => ({ useJobsStore: () => state.jobs }))
 vi.mock('@/services/personalTimecard', () => ({ personalTimecardRequest: state.request }))
-vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn() }))
+vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn<(guard: unknown) => void>() }))
 const saved = () => ({
   state: 'ready',
   employeeName: 'Synthetic Employee',
@@ -49,6 +49,10 @@ const context = () => ({ state: 'context', jobs: [
   { id: 'job-a', code: '100', name: 'First job' }, { id: 'job-b', code: '200', name: 'Second job' },
 ], defaultJobId: 'job-a', currentWeekEndDate: '2026-11-07', card: null, version: null, readOnly: true })
 beforeEach(() => {
+  // jsdom lacks the native dialog methods; keyboard isolation is covered in
+  // the browser confirmation regression rather than simulated by this view.
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.open = true } })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.open = false } })
   state.auth = reactive({
     currentUser: { uid: 'me' },
     rawRole: 'project-manager',
@@ -59,10 +63,14 @@ beforeEach(() => {
       { id: 'job-a', code: '100', name: 'First job' },
       { id: 'job-b', code: '200', name: 'Second job' },
     ],
-    subscribeVisibleJobs: vi.fn(),
+    subscribeVisibleJobs: vi.fn<() => void>(),
   })
   state.request.mockReset()
   state.request.mockImplementation(data => Promise.resolve(data.personalAction === 'context' ? context() : saved()))
+})
+afterEach(() => {
+  Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
+  Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
 })
 describe('My Timecard local user flow', () => {
   it('opens only a selected job and saves a personal draft through the scoped action', async () => {

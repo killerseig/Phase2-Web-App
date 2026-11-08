@@ -1,6 +1,6 @@
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
@@ -32,6 +32,28 @@ afterEach(() => {
 })
 
 describe('ConfirmDialog', () => {
+  beforeEach(() => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: vi.fn<() => void>(function (this: HTMLDialogElement) { this.open = true }) })
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: vi.fn<() => void>(function (this: HTMLDialogElement) { this.open = false }) })
+  })
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
+  })
+
+  it('opens a native modal, focuses cancellation and restores the opener', async () => {
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    opener.focus()
+    const wrapper = mountDialog()
+    await nextTick()
+    const modal = document.body.querySelector('dialog')
+    expect(modal?.open).toBe(true)
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancel')
+    await wrapper.setProps({ open: false })
+    expect(document.activeElement).toBe(opener)
+    unmountDialog(wrapper)
+  })
   it('renders the open dialog with accessible title, message, and default actions', () => {
     const wrapper = mountDialog()
 
