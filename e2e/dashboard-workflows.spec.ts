@@ -97,10 +97,16 @@ for (const width of [1280, 390])
       expect(server.submitted).toBe(0)
       await expect(page.getByRole('button', { name: 'Back to job', exact: true })).toHaveCount(0)
       await page.getByRole('button', { name: 'Return to dashboard', exact: true }).click()
-      await expect(page).toHaveURL((url) => url.pathname === path)
+      // Legacy role-home bookmarks return through the canonical role dashboard route.
+      await expect(page).toHaveURL(
+        (url) =>
+          url.pathname === (scope === 'role' ? '/dashboards/role' : path) &&
+          (scope === 'job' || url.searchParams.get('dashboardJob') === 'job-e2e'),
+      )
       if (scope !== 'job')
         await expect(page.getByLabel('Choose job for tools')).toHaveValue('job-e2e')
       await expect(page.getByRole('list', { name: 'Available forms' })).toBeVisible()
+      await expect(form).toBeVisible()
       if (scope !== 'job') {
         server.archived = true
         await page.getByLabel('Choose job for tools').selectOption('')

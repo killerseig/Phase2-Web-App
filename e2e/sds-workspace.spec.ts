@@ -4,6 +4,7 @@ import {
   createJobDashboardFixture,
   createJobsFixture,
   gotoPhase2App,
+  openLibraryFiles,
 } from './helpers/phase2AppFixture.js'
 
 async function mockSds(page: Page, fail = false, ready: Promise<void> = Promise.resolve(), jobReady: Promise<void> = Promise.resolve()) {
@@ -207,10 +208,12 @@ test('SDS explorer works on a narrow phone screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockSds(page)
   await gotoPhase2App(page, '/safety/sds', createJobDashboardFixture())
+  await openLibraryFiles(page)
   await page.getByRole('searchbox').fill('Adhesive')
   await page.getByRole('button', { name: 'Adhesive A', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Open PDF', exact: true })).toBeVisible()
   await expect(page.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
+  await openLibraryFiles(page)
   await page.getByRole('button', { name: 'Actions for Adhesive A', exact: true }).click()
   const menu = page.getByRole('menu', { name: 'Adhesive A', exact: true })
   await expect(menu).toBeVisible()
