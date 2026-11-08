@@ -4,7 +4,11 @@ Design and implementation record · September 14, 2026
 
 The next phase includes **all requests collected from the stakeholder emails and planning conversation**. General and job-specific SDS access is the first feature priority. The user subsequently authorized first-phase implementation. These documents do not establish delivery dates or remove later work from scope; see the implementation record for what is built versus still proposed.
 
-## Start here: November 8 reliability and editor consistency
+## Start here: November 8 dashboard access and responsive usability
+
+The current [dashboard access and responsive usability checkpoint](03-workspace-design.md#dashboard-access-and-responsive-usability--november-8-2026) supersedes the historical hidden-sidebar decision: existing Personal, Role and authorized Job dashboards are discoverable through normal navigation. Jobs stays in place, and existing role restrictions remain. The checkpoint records the compact-control pass across maintained pages, device coverage and local verification; it does not authorize production rollout.
+
+## November 8 reliability and editor consistency
 
 The latest [module reliability and editor consistency checkpoint](03-workspace-design.md#module-reliability-and-editor-consistency--november-8-2026) records pending-edit preservation, request ownership, atomic assignments, native confirmation focus, Library/Form lifetimes and completed Website/Form command consistency. It owns current verification results and limits, including production-built local checks, and separates them from deployment and human-device acceptance.
 

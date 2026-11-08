@@ -15,7 +15,7 @@ describe('clean public pages preserve existing app routes', () => {
     const redirect = legacy.matched[0]!.redirect
     expect(typeof redirect).toBe('function')
     if (typeof redirect !== 'function') throw new Error('Role home must redirect to the existing role workspace.')
-    expect(redirect(legacy)).toEqual({ name: 'role-workspace', query: { source: 'bookmark' }, hash: '#notes' })
+    expect(redirect(legacy, router.currentRoute.value)).toEqual({ name: 'role-workspace', query: { source: 'bookmark' }, hash: '#notes' })
     expect(router.resolve('/dashboard').name).toBe('dashboard')
     expect(router.resolve('/jobs/job-1').name).toBe('job-dashboard')
   })

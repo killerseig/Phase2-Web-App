@@ -6,6 +6,8 @@ Start coding with the [project process](design/engineering/coding-process.md), [
 
 ## Project structure and build contracts
 
+The existing Personal, Role and authorized Job dashboards are available through the app navigation. Jobs navigation/workflows remain intact; Payroll retains its current job/export access and Employee retains Updates only. See the [responsive usability checkpoint](design/next-update/03-workspace-design.md#dashboard-access-and-responsive-usability--november-8-2026) for the route/device coverage and verification limits. After building Functions (`npm --prefix functions run build`), the synthetic page-review suite runs with `npx playwright test --config=playwright.responsive-review.config.ts` on an isolated server; it never reuses the saved preview.
+
 - Root HTML files are Vite entry points. `src/` contains the browser app: views, components, features, services, stores and the router. These folder names are project conventions, not a Firebase/Vite requirement.
 - `src/firebase.ts` owns lazy initialization of the modular browser SDK and the existing development-only emulator connections. `VITE_*` values are public browser configuration, never server secrets.
 - `src/services/workspaceServer.ts` shares the configured/synthetic workspace availability check without coupling dashboards to the Forms service. This client-side check is not authorization; Firebase handlers still enforce access.

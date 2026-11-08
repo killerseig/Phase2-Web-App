@@ -114,6 +114,8 @@ The respondent workspace synchronously invalidates reads, draft saves, photo-upl
 
 ## Dashboard transport and server model
 
+**Navigation:** `getAppShellWorkspaceNavigationItems` exposes the existing Personal and Role dashboards to active workforce roles, with Job dashboards limited by the existing job-dashboard capabilities. Payroll retains Jobs/export and Personal/Role; Employee retains Updates only and the My Timecard pause. `/dashboards/role-home` redirects to `/dashboards/role`, preserving query/hash and the destination's access guard. No new layout store or permission grant accompanies a sidebar link. On narrow screens, AppShell treats its open navigation as a modal region: closed links are inert, background content is inert while navigation is open, focus enters/stays in the drawer and Escape restores its opener. Desktop keeps ordinary scrolling navigation.
+
 **Interface:** `sharedDashboardCommand(action,data)` maps typed actions to typed responses through `sharedDashboardWorkspace`. Context contains personal/job/role scope and optional job/role identifiers; personal ownership is derived server-side. For example:
 
 ```ts

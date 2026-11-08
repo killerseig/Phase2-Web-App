@@ -51,6 +51,7 @@ The managed local demo uses `npm.cmd run dev:forms` and normally serves `http://
 | Native script regression | `npm.cmd run test:scripts` (Node test runner; no cloud deployment) |
 | Production-built critical journeys | Build with `scripts/vite.critical-built.ts`, then run `scripts/verify-critical-built.mjs` through `firebase.critical-built.json` isolated emulators; exact guarded commands are in the script header. Uses real SDK/rules/compiled handlers and synthetic data, never the saved preview. |
 | Dashboard browser workflows | `npm.cmd run test:dashboards` |
+| Maintained-page responsive review | After `npm.cmd --prefix functions run build`, run `npx.cmd playwright test --config=playwright.responsive-review.config.ts`. Synthetic phone/tablet/desktop contexts use isolated port 5196; do not point this gate at the saved preview. |
 | Website editor/browser workflows | `npx.cmd playwright test --config=playwright.builder-regression.config.ts` |
 | Read-only source lint | `npm.cmd run lint:check`; use scoped checks to distinguish existing debt from changed-file failures |
 | Rules and privileged handlers | Existing emulator verification scripts, with their required demo project/loopback guards |
