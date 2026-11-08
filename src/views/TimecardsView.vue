@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
+import { useTimecardPendingNavigation } from '@/features/timecards/useTimecardPendingNavigation'
 import JobTimecardCanvasPanel from '@/components/timecards/JobTimecardCanvasPanel.vue'
 import JobTimecardCreateTray from '@/components/timecards/JobTimecardCreateTray.vue'
 import JobTimecardToolbar from '@/components/timecards/JobTimecardToolbar.vue'
@@ -173,6 +175,7 @@ const {
   activeSaveCount,
   disposeSaveQueue,
   flushPendingSaves,
+  hasQueuedWork,
   lastSavedAt,
   pendingSaveCount,
   pruneSaveQueueToIds,
@@ -183,6 +186,7 @@ const {
   scheduleCardSave,
   scheduledSaveIds,
 } = useJobTimecardSaveQueue({
+  getCurrentUserId: () => auth.currentUser?.uid ?? null,
   burdenValue,
   canEditWeek,
   cards,
@@ -363,10 +367,26 @@ useJobTimecardWorkspaceSync({
   weekSubscriptionKey,
   weeks,
 })
+const navigationConfirm = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const { prepareNavigation } = useTimecardPendingNavigation({
+  context: () => `${weekSubscriptionKey.value}|${selectedWeek.value?.id ?? ''}|${auth.rawRole}|${canEditWeek.value}`,
+  blocked: () => actionLoading.value || ensuringWeek.value,
+  hasPending: hasQueuedWork,
+  save: flushPendingSaves,
+  discard: () => resetSaveQueueState({ clearQueued: true }),
+  confirmDiscard: () => navigationConfirm.value?.ask({
+    title: 'Keep unsaved timecard changes?',
+    message: 'Changes could not finish saving. Keep editing to retry, or discard them to leave.',
+    confirmLabel: 'Discard changes', cancelLabel: 'Keep editing', destructive: true,
+  }),
+  cancelConfirmation: () => navigationConfirm.value?.cancel(),
+  onError: (error) => setPageError(error, 'Timecard changes could not finish saving.'),
+})
 </script>
 
 <template>
-  <TimecardPageShell test-id="timecards-page">
+  <TimecardPageShell test-id="timecards-page" :before-sign-out="prepareNavigation">
+    <BuilderConfirmDialog ref="navigationConfirm" />
     <template #workspace>
       <JobTimecardToolbar
         :active-mobile-tab="activeMobileToolbarTab"

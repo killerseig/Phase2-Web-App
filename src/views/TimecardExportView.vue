@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
+import { useTimecardPendingNavigation } from '@/features/timecards/useTimecardPendingNavigation'
 import { useRouter } from 'vue-router'
 import TimecardConfirmDialog from '@/components/timecards/TimecardConfirmDialog.vue'
 import TimecardExportCanvasPanel from '@/components/timecards/TimecardExportCanvasPanel.vue'
@@ -219,6 +221,7 @@ const {
   scheduleCardSave,
   scheduledSaveIds,
 } = useTimecardExportSaveQueue({
+  getCurrentUserId: () => auth.currentUser?.uid ?? null,
   canEditWeek,
   cards,
 })
@@ -371,10 +374,26 @@ useTimecardExportLifecycle({
   stopUsersSubscription,
   stopWeeksSubscription,
 })
+const navigationConfirm = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const { prepareNavigation } = useTimecardPendingNavigation({
+  context: () => `${auth.currentUser?.uid ?? ''}|${auth.rawRole}|${canEditWeek.value}`,
+  blocked: () => actionLoading.value,
+  hasPending: hasQueuedWork,
+  save: flushPendingSaves,
+  discard: () => resetSaveQueueState({ clearQueued: true }),
+  confirmDiscard: () => navigationConfirm.value?.ask({
+    title: 'Keep unsaved timecard changes?',
+    message: 'Changes could not finish saving. Keep editing to retry, or discard them to leave.',
+    confirmLabel: 'Discard changes', cancelLabel: 'Keep editing', destructive: true,
+  }),
+  cancelConfirmation: () => navigationConfirm.value?.cancel(),
+  onError: (error) => setPageError(error, 'Timecard changes could not finish saving.'),
+})
 </script>
 
 <template>
-  <TimecardExportPageShell test-id="timecard-export-page">
+  <TimecardExportPageShell test-id="timecard-export-page" :before-sign-out="prepareNavigation">
+    <BuilderConfirmDialog ref="navigationConfirm" />
     <template #workspace>
       <TimecardExportToolbar
         :tabs="mobileToolbarTabs"

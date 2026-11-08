@@ -6,13 +6,14 @@ defineOptions({ inheritAttrs: false })
 
 withDefaults(defineProps<{
   testId?: string
+  beforeSignOut?: () => boolean | Promise<boolean>
 }>(), {
   testId: undefined,
 })
 </script>
 
 <template>
-  <AppShell>
+  <AppShell :before-sign-out="beforeSignOut">
     <TimecardWorkspaceShell v-bind="$attrs" :test-id="testId">
       <slot name="workspace" />
     </TimecardWorkspaceShell>

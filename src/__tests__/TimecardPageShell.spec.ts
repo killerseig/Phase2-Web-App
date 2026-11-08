@@ -1,10 +1,12 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import TimecardPageShell from '@/components/timecards/TimecardPageShell.vue'
+import TimecardExportPageShell from '@/components/timecards/TimecardExportPageShell.vue'
 
 const AppShellStub = {
   name: 'AppShell',
+  props: ['beforeSignOut'],
   template: '<div data-testid="app-shell"><main><slot /></main></div>',
 }
 
@@ -20,6 +22,12 @@ const TimecardWorkspaceShellStub = {
 }
 
 describe('TimecardPageShell', () => {
+  it.each([TimecardPageShell, TimecardExportPageShell])('forwards sign-out preparation to the app shell', (component) => {
+    const prepare = vi.fn<() => Promise<boolean>>().mockResolvedValue(false)
+    const wrapper = mount(component, { attrs: { beforeSignOut: prepare }, global: { stubs: { AppShell: AppShellStub } } })
+    expect(wrapper.getComponent(AppShellStub).props('beforeSignOut')).toBe(prepare)
+    wrapper.unmount()
+  })
   it('composes the app shell, timecard workspace shell, forwarded attrs, and dialog slot', () => {
     const wrapper = mount(TimecardPageShell, {
       props: {

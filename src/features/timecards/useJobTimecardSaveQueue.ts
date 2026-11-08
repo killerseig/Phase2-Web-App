@@ -9,6 +9,7 @@ interface UseJobTimecardSaveQueueOptions {
   cards: ReadonlyRef<readonly TimecardCardRecord[]>
   selectedWeek: ReadonlyRef<TimecardWeekRecord | null>
   selectedWeekStartDate: ReadonlyRef<string>
+  getCurrentUserId?: () => string | null
 }
 
 export function useJobTimecardSaveQueue({
@@ -17,10 +18,12 @@ export function useJobTimecardSaveQueue({
   cards,
   selectedWeek,
   selectedWeekStartDate,
+  getCurrentUserId,
 }: UseJobTimecardSaveQueueOptions) {
   return useTimecardSaveQueue<TimecardCardRecord>({
     canSave: () => !!selectedWeek.value && canEditWeek.value,
     getCards: () => cards.value,
+    context: () => `${getCurrentUserId?.() ?? ''}|${selectedWeek.value?.id ?? ''}|${canEditWeek.value}`,
     saveCard: async (card) => {
       const week = selectedWeek.value
       if (!week) return

@@ -4,11 +4,11 @@ import TimecardWorkspaceShell from '@/components/timecards/TimecardWorkspaceShel
 import AppShell from '@/layouts/AppShell.vue'
 
 defineOptions({ inheritAttrs: false })
-defineProps<{ testId?: string }>()
+defineProps<{ testId?: string; beforeSignOut?: () => boolean | Promise<boolean> }>()
 </script>
 
 <template>
-  <AppShell>
+  <AppShell :before-sign-out="beforeSignOut">
     <AppPageLayout
       title="Timecard Export"
       eyebrow="Reporting"

@@ -6,6 +6,14 @@ Use this index to load the relevant boundary first, then inspect source/tests wh
 
 Record purpose/nonresponsibilities; public entry points and types; inputs/outputs and units; invariants/state ownership; side effects, errors, cleanup and retry behavior; permissions and scope; required/optional dependencies; source and behavioral tests. Add a usage example when it clarifies the contract. Update the card when callers' observable behavior changes, not for every internal line edit.
 
+## Timecard pending saves and departure
+
+`useTimecardSaveQueue` owns debounce, active writes and unsaved retry markers for crew and Payroll workbooks. A card's active promise includes changes queued while its write runs. Flush waits for all current work and rejects a failed active or newly-started write; failure retains the edited card for explicit retry. Timer-triggered failures are reported in queue state rather than unhandled promises. Synchronous identity/editability/week invalidation advances an epoch, and a multi-card flush checks ownership before each subsequent write. Obsolete results cannot clear newer status or start another card in the replacement context. Already-sent writes cannot be canceled.
+
+`useTimecardPendingNavigation` supplies the same preparation to route leave/update and AppShell sign-out. Saving completes before departure; failure offers Keep editing or explicit discard of the current local queue. Context changes invalidate pending confirmation, busy commands block departure, and browser exit warns about outstanding work. Unmount only tears down timers after navigation has resolved. Existing week selection/submission/export owners still await the queue; calculations, payloads, roles and old Jobs routes are unchanged.
+
+[Queue](../../src/features/timecards/useTimecardSaveQueue.ts) · [Deferred regressions](../../src/features/timecards/useTimecardSaveQueue.spec.ts) · [Departure owner](../../src/features/timecards/useTimecardPendingNavigation.ts) · [Browser journeys](../../e2e/timecard-pending-edits.spec.ts)
+
 ## Authenticated session lifetime
 
 **Interface:** `useAuthStore().init/login/signOut` and existing identity/profile/capability getters. `services/auth.ts` remains the Firebase adapter; role/capability rules are unchanged. The store owns its subscription handles, retry timers and current-session profile promise, rather than sharing mutable lifetime state across store instances.

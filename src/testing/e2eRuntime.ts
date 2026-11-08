@@ -1927,6 +1927,7 @@ export async function updateE2ETimecardCard(
   const nextCard = cloneValue(card)
   nextCard.fullName = buildCardDisplayName(nextCard)
   recalculateCardTotals(nextCard, weekStartDate, burden)
+  await waitForDelay('timecardUpdateMs')
 
   state.timecardCards[index] = {
     ...state.timecardCards[index]!,
