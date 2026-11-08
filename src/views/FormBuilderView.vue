@@ -26,7 +26,6 @@ import {
   emptyLibrary,
   fieldKinds,
   optionFieldKinds,
-  moveField,
   moveGroupField,
   newField,
   newTemplate,
@@ -36,6 +35,7 @@ import {
   type FormTemplate,
 } from '@/features/forms/model'
 import { useFormAuthoring } from '@/features/forms/useFormAuthoring'
+import { captureFormField, countFormFields, planFieldPaste, planFieldReorder, type FormFieldClipboard, type FieldCommandPlan } from '@/features/forms/fieldCommands'
 import { reportingStarter, type ReportingStarter } from '@/features/forms/reportingStarters'
 import { committeeFieldsToRemove, applyApprovedCommitteeCorrections } from '@/features/forms/committeeCorrection'
 import { useWidgetDrag, type WidgetDrop } from '@/features/dashboard/useWidgetDrag'
@@ -89,7 +89,7 @@ const suppliedStarters = computed(() => suppliedContent.value?.forms.filter(form
 const serverEnabled = isFormServerEnabled()
 const legacyImportId = ref(''), legacyError = ref('')
 async function removeServer(template: ServerFormTemplate) {
-  await persistence.removeServer(template, async () => confirmation.value?.ask({
+  await persistence.removeServer(template, async () => askConfirmation({
     title: 'Remove or archive server template?',
     message: 'Issued or used templates are archived and their records remain available.',
     confirmLabel: 'Remove or archive',
@@ -111,12 +111,21 @@ const library = ref(emptyLibrary()),
   preview = ref(false),
   dirty = ref(false)
 const confirmation = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const confirmationPending = ref(false)
+const fieldClipboard = ref<FormFieldClipboard>()
+async function askConfirmation(options: Parameters<InstanceType<typeof BuilderConfirmDialog>['ask']>[0]) {
+  if (confirmationPending.value || !context.allowed.value) return false
+  confirmationPending.value = true
+  pointerDrag.cancel()
+  try { return !!(await confirmation.value?.ask(options)) }
+  finally { confirmationPending.value = false }
+}
 const authoring = useFormAuthoring(draft, dirty)
 const context = useFormEditorContext({ uid, enabled: editorEnabled, draft })
 const persistence = useFormPersistence({
   uid, draft, library, dirty, blocked, message, error, authoring, serverEnabled, localPreview, context,
   storage: () => localStorage,
-  confirmPublish: async () => confirmation.value?.ask({
+  confirmPublish: async () => askConfirmation({
     title: 'Publish this form?',
     message: 'Save this draft and publish it as an immutable version. New respondents use this version; completed entries retain their original questions and answers.',
     confirmLabel: 'Save and publish',
@@ -207,10 +216,10 @@ const authoringLocked = computed(
     !!draft.value?.archived ||
     (serverEnabled && !serverAvailable.value),
 )
-type FieldDrag = { kind: 'new'; type: FormFieldKind } | { kind: 'move'; id: string }
+type FieldDrag = ({ kind: 'new'; type: FormFieldKind } | { kind: 'move'; id: string }) & { current: () => boolean }
 const pointerDrag = useWidgetDrag<FieldDrag>({
   root: builderRoot,
-  disabled: () => authoringLocked.value || preview.value || !draft.value,
+  disabled: () => authoringLocked.value || preview.value || entriesMode.value || confirmationPending.value || !draft.value,
   drop: dropField,
 })
 const {
@@ -219,12 +228,18 @@ const {
   point: pointerPoint,
   label: pointerLabel,
 } = pointerDrag
+const commandsLocked = computed(() => authoringLocked.value || !draft.value || preview.value || entriesMode.value || confirmationPending.value || pointerDrag.payload.value !== undefined)
+function startNewFieldDrag(event: PointerEvent, kind: FormFieldKind) {
+  if (commandsLocked.value) return
+  pointerDrag.start(event, { kind: 'new', type: kind, current: context.capture().draftCurrent }, kind)
+}
 function startFieldDrag(event: PointerEvent, id: string, label: string) {
+  if (commandsLocked.value) return
   authoring.select(id)
-  pointerDrag.start(event, { kind: 'move', id }, label)
+  pointerDrag.start(event, { kind: 'move', id, current: context.capture().draftCurrent }, label)
 }
 function dropField(payload: FieldDrag, target: WidgetDrop) {
-  if (!draft.value || authoringLocked.value) return
+  if (!draft.value || commandsLocked.value || !payload.current()) return
   const at = target.beforeId
     ? draft.value.fields.findIndex((field) => field.id === target.beforeId)
     : draft.value.fields.length
@@ -234,19 +249,76 @@ function dropField(payload: FieldDrag, target: WidgetDrop) {
     const from = draft.value.fields.findIndex((field) => field.id === payload.id)
     if (from < 0) return
     reorder(payload.id, Math.max(0, at > from ? at - 1 : at))
-    selection.value = payload.id
   }
+}
+function focusField(id: string) {
+  const operation = context.capture()
+  void nextTick(() => {
+    if (!operation.draftCurrent() || selection.value !== id || preview.value || entriesMode.value) return
+    const element = [...(builderRoot.value?.querySelectorAll<HTMLElement>('[data-widget-id]') || [])].find(item => item.dataset.widgetId === id)
+    element?.focus({ preventScroll: true })
+  })
+}
+function applyFieldPlan(plan: FieldCommandPlan) {
+  if (commandsLocked.value || !draft.value) return
+  if (!plan.ok) { error.value = plan.error; return }
+  if (!plan.changed) return
+  authoring.transact(() => {
+    draft.value!.fields = plan.fields
+    selection.value = plan.selection
+  })
+  error.value = ''
+  focusField(plan.selection)
+}
+function copySelectedField() {
+  if (commandsLocked.value || !draft.value || !selectedField.value) return
+  fieldClipboard.value = captureFormField(draft.value, selectedField.value.id)
+  message.value = 'Field copied. Paste it into this form or another form in this editor.'
+}
+function pasteField() {
+  if (commandsLocked.value || !draft.value || !fieldClipboard.value) return
+  applyFieldPlan(planFieldPaste(draft.value, fieldClipboard.value, selection.value || undefined))
+}
+function duplicateSelectedField() {
+  if (commandsLocked.value || !draft.value || !selectedField.value) return
+  const snapshot = captureFormField(draft.value, selectedField.value.id)
+  if (snapshot) applyFieldPlan(planFieldPaste(draft.value, snapshot, selectedField.value.id))
+}
+function historyCommand(redo = false) {
+  if (commandsLocked.value) return
+  if (redo) authoring.redo()
+  else authoring.undo()
 }
 function editorKeys(event: KeyboardEvent) {
-  if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]'))
-    return
-  if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
+  const target = event.target
+  if (event.defaultPrevented || event.isComposing || !(target instanceof HTMLElement) ||
+    target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="dialog"],[role="menu"],[inert]') ||
+    commandsLocked.value) return
+  const key = event.key.toLowerCase(), modifier = event.ctrlKey || event.metaKey
+  if (modifier && !event.altKey && !(event.ctrlKey && event.metaKey)) {
+    if (['z', 'y'].includes(key)) {
+      event.preventDefault()
+      historyCommand(key === 'y' || event.shiftKey)
+    } else if (!event.shiftKey && ['c', 'v', 'd'].includes(key)) {
+      if (key === 'c' && window.getSelection()?.toString()) return
+      if (key !== 'v' && !selectedField.value) return
+      event.preventDefault()
+      if (key === 'c') copySelectedField()
+      else if (key === 'v') pasteField()
+      else duplicateSelectedField()
+    }
+  } else if (event.altKey && !modifier && !event.shiftKey && selectedField.value && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
     event.preventDefault()
-    if (authoringLocked.value) return
-    if (event.key.toLowerCase() === 'y' || event.shiftKey) authoring.redo()
-    else authoring.undo()
+    const index = draft.value!.fields.findIndex(field => field.id === selection.value)
+    const next = index + (event.key === 'ArrowUp' ? -1 : 1)
+    if (next >= 0 && next < draft.value!.fields.length) reorder(selection.value, next)
+  } else if (!modifier && !event.altKey && !event.shiftKey && event.key === 'Delete' && target.matches('.field-row')) {
+    event.preventDefault()
+    removeField(draft.value!.fields.findIndex(field => field.id === target.dataset.widgetId))
   }
 }
+watch(draft, () => pointerDrag.cancel(), { flush: 'sync' })
+watch([preview, entriesMode], () => pointerDrag.cancel(), { flush: 'sync' })
 async function importDeviceDraft() {
   await persistence.importDeviceDraft(legacyImportId.value)
 }
@@ -282,6 +354,8 @@ watch(
     settingsTab.value = 'form'
     authoring.reset()
     pointerDrag.cancel()
+    fieldClipboard.value = undefined
+    confirmation.value?.cancel?.()
     if (!context.allowed.value) return
     try {
       library.value = readLibrary(localStorage, uid.value)
@@ -301,7 +375,7 @@ async function select(template: FormTemplate) {
   const operation = context.capture()
   if (
     dirty.value &&
-    !(await confirmation.value?.ask({
+    !(await askConfirmation({
       title: 'Discard unsaved form edits?',
       message: 'Your last saved form stays in the library.',
       confirmLabel: 'Discard edits',
@@ -332,7 +406,7 @@ async function create(audit: boolean | ReportingStarter | IntranetForm = false) 
   if (!sourceCurrent()) return
   if (
     dirty.value &&
-    !(await confirmation.value?.ask({
+    !(await askConfirmation({
       title: 'Discard unsaved form edits?',
       message: 'Create a new form without saving these edits.',
       confirmLabel: 'Discard edits',
@@ -363,7 +437,7 @@ async function remove(template: FormTemplate) {
   const operation = context.capture(), libraryOwner = library.value, libraryRevision = library.value.revision
   const archive = template.versions.length > 0
   if (
-    !(await confirmation.value?.ask({
+    !(await askConfirmation({
       title: archive ? 'Archive this form?' : 'Delete this unused form?',
       message: archive
         ? 'Retained versions stay intact. This form leaves the active library.'
@@ -393,22 +467,26 @@ function duplicate(template: FormTemplate) {
   starterSelection.value = ''
 }
 function add(kind: FormFieldKind, at = draft.value?.fields.length || 0) {
-  if (!draft.value || authoringLocked.value || draft.value.fields.length >= 60) return
+  if (!draft.value || commandsLocked.value || at < 0 || at > draft.value.fields.length) return
   const field = newField(kind)
-  draft.value.fields.splice(at, 0, field)
-  selection.value = field.id
-  dirty.value = true
-  void nextTick(() =>
-    builderRoot.value?.querySelector<HTMLElement>('[data-widget-id="' + field.id + '"]')?.focus(),
-  )
+  if (countFormFields(draft.value.fields) + countFormFields([field]) > 60) {
+    error.value = 'Use up to 60 fields, including fields inside groups.'
+    return
+  }
+  const fields = [...draft.value.fields]
+  fields.splice(at, 0, field)
+  applyFieldPlan({ ok: true, fields, selection: field.id, changed: true })
 }
 function reorder(id: string, index: number) {
-  if (!draft.value || authoringLocked.value) return
-  if (draft.value.fields.findIndex((field) => field.id === id) === index) return
-  moveField(draft.value, id, index)
-  dirty.value = true
+  if (!draft.value || commandsLocked.value) return
+  applyFieldPlan(planFieldReorder(draft.value, id, index))
 }
 function changeFieldKind(field: FormField, kind: FormFieldKind) {
+  if (commandsLocked.value || !draft.value) return
+  if (kind === 'repeat' && !field.fields?.length && countFormFields(draft.value.fields) >= 60) {
+    error.value = 'Use up to 60 fields, including fields inside groups.'
+    return
+  }
   if (
     draft.value?.fields.some((item) => item.requiredWhen?.fieldId === field.id) &&
     !['choice', 'radio'].includes(kind)
@@ -440,20 +518,29 @@ function changeFieldKind(field: FormField, kind: FormFieldKind) {
   if (!optionFieldKinds.includes(kind)) field.options = []
   else if (field.options.length < 2) field.options = ['Yes', 'No']
 }
+function addGroupField(field: FormField) {
+  if (commandsLocked.value || !draft.value) return
+  if (countFormFields(draft.value.fields) >= 60) {
+    error.value = 'Use up to 60 fields, including fields inside groups.'
+    return
+  }
+  authoring.transact(() => { (field.fields ||= []).push(newField('text')) })
+}
 function changeCondition(field: FormField, id: string) {
   const source = draft.value?.fields.find((item) => item.id === id)
   if (!source) delete field.requiredWhen
   else field.requiredWhen = { fieldId: source.id, values: [source.options[0]!] }
 }
 function removeField(index: number) {
-  if (!draft.value || authoringLocked.value) return
+  if (!draft.value || commandsLocked.value) return
   if (index < 0 || index >= draft.value.fields.length) return
-  const [removed] = draft.value.fields.splice(index, 1)
-  for (const field of draft.value.fields)
-    if (field.requiredWhen?.fieldId === removed?.id) delete field.requiredWhen
-  if (removed?.id === selection.value)
-    selection.value = draft.value.fields[index]?.id || draft.value.fields[index - 1]?.id || ''
-  dirty.value = true
+  authoring.transact(() => {
+    const [removed] = draft.value!.fields.splice(index, 1)
+    for (const field of draft.value!.fields)
+      if (field.requiredWhen?.fieldId === removed?.id) delete field.requiredWhen
+    if (removed?.id === selection.value)
+      selection.value = draft.value!.fields[index]?.id || draft.value!.fields[index - 1]?.id || ''
+  })
 }
 const errors = computed(() => (draft.value ? definitionErrors(draft.value) : []))
 async function leaveEditor() {
@@ -461,7 +548,7 @@ async function leaveEditor() {
   if (serverBusy.value || publishPhase.value) return false
   if (!dirty.value) return true
   const operation = context.capture()
-  const discard = await confirmation.value?.ask({
+  const discard = await askConfirmation({
     title: 'Leave unsaved form edits?',
     message:
       'Your last saved template remains in the library. Save this draft before leaving to keep these edits.',
@@ -556,16 +643,16 @@ watch(
             class="history-action"
             aria-label="Undo"
             title="Undo draft edit"
-            :disabled="authoringLocked || !canUndo"
-            @click="authoring.undo"
+            :disabled="commandsLocked || !canUndo"
+            @click="historyCommand()"
           >
             <i class="pi pi-undo" aria-hidden="true" /></button
           ><button
             class="history-action"
             aria-label="Redo"
             title="Redo draft edit"
-            :disabled="authoringLocked || !canRedo"
-            @click="authoring.redo"
+            :disabled="commandsLocked || !canRedo"
+            @click="historyCommand(true)"
           >
             <i class="pi pi-refresh" aria-hidden="true" />
           </button>
@@ -655,6 +742,7 @@ watch(
                     />
                   </button>
                 </div>
+                <button type="button" aria-label="Paste field" title="Paste field (Ctrl/Cmd+V)" :disabled="commandsLocked || !fieldClipboard" @click="pasteField">Paste field</button>
               </template>
               <fieldset
                 class="canvas-panel"
@@ -688,7 +776,6 @@ watch(
                     @keydown.space.self.prevent="
                       selectCanvasField(field.id)
                     "
-                    @keydown.delete.self.prevent="removeField(index)"
                     :aria-description="
                       field.label + ', ' + field.kind + (field.required ? ', required' : '')
                     "
@@ -724,12 +811,14 @@ watch(
                       <button
                         :disabled="index === 0"
                         :aria-label="'Move ' + field.label + ' up'"
+                        title="Move field up (Alt+Up)"
                         @click="reorder(field.id, index - 1)"
                       >
                         ↑</button
                       ><button
                         :disabled="index === draft.fields.length - 1"
                         :aria-label="'Move ' + field.label + ' down'"
+                        title="Move field down (Alt+Down)"
                         @click="reorder(field.id, index + 1)"
                       >
                         ↓</button
@@ -778,8 +867,8 @@ watch(
                   v-for="kind in group.kinds"
                   :key="kind"
                   class="form-grip"
-                  :disabled="authoringLocked || draft.fields.length >= 60"
-                  @pointerdown="pointerDrag.start($event, { kind: 'new', type: kind }, kind)"
+                  :disabled="authoringLocked || countFormFields(draft.fields) + (kind === 'repeat' ? 2 : 1) > 60"
+                  @pointerdown="startNewFieldDrag($event, kind)"
                   @dragstart.prevent
                   @click="add(kind); fieldsExpanded = false"
                   :aria-label="'Add ' + kind"
@@ -889,6 +978,10 @@ watch(
                 class="field-inspector"
               >
                 <BuilderSelectionContext kind="Field" :scope="selectedField.label" />
+                <div class="toolbar" role="group" aria-label="Selected field actions">
+                  <button type="button" aria-label="Copy selected field" title="Copy field (Ctrl/Cmd+C)" :disabled="commandsLocked" @click="copySelectedField"><i class="pi pi-copy" aria-hidden="true" />Copy</button>
+                  <button type="button" aria-label="Duplicate selected field" title="Duplicate field (Ctrl/Cmd+D)" :disabled="commandsLocked" @click="duplicateSelectedField">Duplicate</button>
+                </div>
                 <label
                   >Selected field label<input v-model="selectedField.label" maxlength="1000"
                 /></label>
@@ -1011,7 +1104,8 @@ watch(
                   </div>
                   <button
                     type="button"
-                    @click="(selectedField.fields ||= []).push(newField('text'))"
+                    :disabled="commandsLocked || countFormFields(draft.fields) >= 60"
+                    @click="addGroupField(selectedField)"
                   >
                     Add group field
                   </button>

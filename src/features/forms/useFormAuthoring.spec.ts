@@ -3,6 +3,33 @@ import { effectScope, nextTick, ref } from 'vue'
 import { committeeAudit, newField, newTemplate, type FormTemplate } from './model'
 import { useFormAuthoring } from './useFormAuthoring'
 describe('form authoring history', () => {
+  it('keeps immediate structural commands atomic and separate from pending text edits', async () => {
+    const scope = effectScope(), draft = ref<FormTemplate>(newTemplate()), dirty = ref(false)
+    const history = scope.run(() => useFormAuthoring(draft, dirty))!
+    const original = draft.value.title
+    history.reset()
+    draft.value.title = 'Typed edit'
+    const first = newField('text'), second = newField('text')
+    history.transact(() => { draft.value.fields.push(first); history.selection.value = first.id })
+    history.transact(() => { draft.value.fields.push(second); history.selection.value = second.id })
+    history.undo()
+    expect(draft.value.fields.map(field => field.id)).toEqual([first.id])
+    expect(history.selection.value).toBe(first.id)
+    history.undo()
+    expect(draft.value.fields).toHaveLength(0)
+    expect(draft.value.title).toBe('Typed edit')
+    history.undo()
+    expect(draft.value.title).toBe(original)
+    expect(dirty.value).toBe(false)
+    history.redo(); history.redo(); history.redo()
+    await nextTick()
+    expect(draft.value.fields.map(field => field.id)).toEqual([first.id, second.id])
+    expect(history.selection.value).toBe(second.id)
+    history.transact(() => {})
+    history.undo()
+    expect(draft.value.fields).toHaveLength(1)
+    scope.stop()
+  })
   it('undo removes introduced optional policies and redo restores them without changing identity or versions', async () => {
     const scope = effectScope(),
       draft = ref<FormTemplate>(newTemplate()),

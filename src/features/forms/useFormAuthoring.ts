@@ -39,20 +39,24 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
     baseline.value = fingerprint()
     dirty.value = false
   }
-  watch(
-    draft,
-    () => {
-      const value = definition()
-      if (!value || !current) return
-      if (stableFormFingerprint(value) === stableFormFingerprint(current.definition)) return
-      past.value.push(clone(current))
-      if (past.value.length > 60) past.value.shift()
-      future.value = []
-      current = { definition: value, selection: selection.value }
-      dirty.value = fingerprint() !== baseline.value
-    },
-    { deep: true, flush: 'post' },
-  )
+  function record() {
+    const value = definition()
+    if (!value || !current) return
+    if (stableFormFingerprint(value) === stableFormFingerprint(current.definition)) return
+    past.value.push(clone(current))
+    if (past.value.length > 60) past.value.shift()
+    future.value = []
+    current = { definition: value, selection: selection.value }
+    dirty.value = fingerprint() !== baseline.value
+  }
+  watch(draft, record, { deep: true, flush: 'post' })
+  // Structural commands each have one undo step, even when invoked in the same
+  // event loop turn. First retain any preceding inspector edit independently.
+  function transact(change: () => void) {
+    record()
+    change()
+    record()
+  }
   // Navigation can run before the post-flush history watcher. Compare actual data
   // synchronously rather than treating bubbled preview input events as edits.
   watch(fingerprint, value => { if (draft.value) dirty.value = value !== baseline.value }, { flush: 'sync' })
@@ -70,12 +74,14 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
     dirty.value = fingerprint() !== baseline.value
   }
   function undo() {
+    record()
     const previous = past.value.pop()
     if (!previous || !current) return
     future.value.push(clone(current))
     restore(previous)
   }
   function redo() {
+    record()
     const next = future.value.pop()
     if (!next || !current) return
     past.value.push(clone(current))
@@ -88,6 +94,7 @@ export function useFormAuthoring(draft: Ref<FormTemplate | undefined>, dirty: Re
     saved,
     undo,
     redo,
+    transact,
     canUndo: computed(() => past.value.length > 0),
     canRedo: computed(() => future.value.length > 0),
   }
