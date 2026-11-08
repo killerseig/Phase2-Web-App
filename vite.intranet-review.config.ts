@@ -12,6 +12,11 @@ export default defineConfig({
     'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify('offline-fixture-only'),
     'import.meta.env.VITE_FORM_EMULATORS': JSON.stringify('true'),
   },
-  server: { ...base.server, proxy: {}, host: '127.0.0.1', port: 5202, strictPort: true },
+  server: {
+    ...base.server, proxy: {}, host: '127.0.0.1', port: 5202, strictPort: true,
+    // Playwright traces contain HTML. Writing verification evidence must not
+    // reload the application under test or reset an in-progress interaction.
+    watch: { ...base.server?.watch, ignored: ['**/evidence/**', '**/test-results/**', '**/.security-work/**'] },
+  },
   build: { ...base.build, outDir: 'evidence/employee-build', rolldownOptions: { input: { index: resolve('index.html') } } },
 })

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import AppPane from '@/components/common/AppPane.vue'
 import AppPaneHeader from '@/components/common/AppPaneHeader.vue'
 import AppListButton from '@/components/common/AppListButton.vue'
+import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import { formApi, type ServerFormTemplate } from '@/services/forms'
 import { canSubmitForm } from '../../../functions/src/formAccess'
@@ -39,7 +40,7 @@ onBeforeUnmount(() => { generation++ })
     <AppPaneHeader title="Forms" title-tag="h2" />
     <p v-if="!allowed">Forms are not available for your current role.</p>
     <p v-else-if="loading" role="status">Loading available forms.</p>
-    <p v-else-if="error" role="alert">{{ error }} <button type="button" @click="load">Retry forms</button></p>
+    <p v-else-if="error" role="alert">{{ error }} <AppButton type="button" @click="load">Retry forms</AppButton></p>
     <p v-else-if="!forms.length">No published forms are available to your account.</p>
     <ul v-else class="job-forms__list" aria-label="Available forms">
       <li v-for="form in forms" :key="form.id"><AppListButton class="job-forms__row" :aria-label="form.label" @click="open(form.id)"><i class="pi pi-file" aria-hidden="true" /><strong>{{ form.label }}</strong><i class="pi pi-angle-right" aria-hidden="true" /></AppListButton></li>
