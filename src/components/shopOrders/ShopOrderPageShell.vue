@@ -10,6 +10,7 @@ withDefaults(
     confirmationOpen?: boolean
     testId?: string
     description?: string
+    beforeSignOut?: () => boolean | Promise<boolean>
   }>(),
   {
     confirmationOpen: false,
@@ -19,7 +20,7 @@ withDefaults(
 </script>
 
 <template>
-  <AppShell>
+  <AppShell :before-sign-out="beforeSignOut">
     <AppPageLayout
       title="Shop Orders"
       eyebrow="Field Workspace"

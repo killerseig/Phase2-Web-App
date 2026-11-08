@@ -1,3 +1,4 @@
+import { getCurrentScope, onScopeDispose, watch } from 'vue'
 import {
   cloneSortedShopOrderItems,
   getSortedShopOrderItems,
@@ -15,6 +16,7 @@ interface ShopOrderActor {
 
 interface UseShopOrderPersistenceOptions {
   getActor: () => ShopOrderActor
+  getContextEpoch?: () => number
   itemActionLoading: WritableRef<boolean>
   replaceOrderLocally: (order: ShopOrderRecord) => void
   selectedOrder: ReadonlyRef<ShopOrderRecord | null>
@@ -24,6 +26,7 @@ interface UseShopOrderPersistenceOptions {
 
 export function useShopOrderPersistence({
   getActor,
+  getContextEpoch,
   itemActionLoading,
   replaceOrderLocally,
   selectedOrder,
@@ -33,6 +36,16 @@ export function useShopOrderPersistence({
   let itemPersistQueue: Promise<void> = Promise.resolve()
   let itemPersistRevision = 0
   let activeMutationCount = 0
+  const pendingItemSaves = new Set<Promise<boolean>>()
+  let contextVersion = 0
+  let disposed = false
+  watch([() => selectedOrder.value?.id, () => getActor().userId, () => getContextEpoch?.()],
+    () => { contextVersion += 1 }, { flush: 'sync' })
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; contextVersion += 1 })
+  function captureContext() {
+    const version = contextVersion
+    return () => !disposed && contextVersion === version
+  }
 
   function beginMutation() {
     activeMutationCount += 1
@@ -45,6 +58,8 @@ export function useShopOrderPersistence({
   }
 
   async function persistOrderMeta(orderId: string, form: OrderMetaFormState) {
+    const isCurrent = captureContext()
+    if (!isCurrent()) return false
     const endMutation = beginMutation()
     setActionError('')
 
@@ -57,11 +72,13 @@ export function useShopOrderPersistence({
         },
         getActor(),
       )
-      setActionInfo('Order details saved.')
-      return true
+      if (isCurrent() && selectedOrder.value?.id === orderId) setActionInfo('Order details saved.')
+      return isCurrent()
     } catch (error) {
-      setActionError(normalizeError(error, 'Failed to save order details.'))
-      setActionInfo('')
+      if (isCurrent() && selectedOrder.value?.id === orderId) {
+        setActionError(normalizeError(error, 'Failed to save order details.'))
+        setActionInfo('')
+      }
       return false
     } finally {
       endMutation()
@@ -77,6 +94,8 @@ export function useShopOrderPersistence({
     nextItems: ShopOrderItemRecord[],
     successMessage: string,
   ) {
+    const isCurrent = captureContext()
+    if (!isCurrent()) return false
     if (!orderId) {
       setActionError('Start an order before changing items.')
       setActionInfo('')
@@ -86,7 +105,7 @@ export function useShopOrderPersistence({
     itemActionLoading.value = true
     setActionError('')
 
-    const sortedItems = getSortedShopOrderItems(nextItems)
+    const sortedItems = getSortedShopOrderItems(nextItems).map(item => ({ ...item }))
     const previousOrder = selectedOrder.value?.id === orderId ? selectedOrder.value : null
     const persistRevision = ++itemPersistRevision
 
@@ -98,32 +117,51 @@ export function useShopOrderPersistence({
     }
 
     const endMutation = beginMutation()
+    const actor = getActor()
 
     const persistOperation = itemPersistQueue
       .catch(() => undefined)
-      .then(() => updateShopOrderRecord(orderId, { items: sortedItems }, getActor()))
+      .then(() => {
+        if (!isCurrent()) throw new Error('The shop order context changed before saving.')
+        return updateShopOrderRecord(orderId, { items: sortedItems }, actor)
+      })
     itemPersistQueue = persistOperation
 
-    try {
+    const result = (async () => { try {
       await persistOperation
-      setActionError('')
-      setActionInfo(successMessage)
-      return true
+      if (isCurrent() && selectedOrder.value?.id === orderId) {
+        setActionError('')
+        setActionInfo(successMessage)
+      }
+      return isCurrent()
     } catch (error) {
-      if (previousOrder && persistRevision === itemPersistRevision) {
+      if (isCurrent() && previousOrder && persistRevision === itemPersistRevision && selectedOrder.value?.id === orderId) {
         replaceOrderLocally(previousOrder)
       }
-      setActionError(normalizeError(error, 'Failed to update shop order items.'))
-      setActionInfo('')
+      if (isCurrent() && selectedOrder.value?.id === orderId) {
+        setActionError(normalizeError(error, 'Failed to update shop order items.'))
+        setActionInfo('')
+      }
       return false
     } finally {
       endMutation()
+    } })()
+    pendingItemSaves.add(result)
+    try { return await result } finally { pendingItemSaves.delete(result) }
+  }
+
+  async function prepareOrderItemNavigation() {
+    const isCurrent = captureContext()
+    while (isCurrent() && pendingItemSaves.size) {
+      if ((await Promise.all(pendingItemSaves)).some(saved => !saved)) return false
     }
+    return isCurrent()
   }
 
   return {
     cloneOrderItems,
     persistOrderItems,
     persistOrderMeta,
+    prepareOrderItemNavigation,
   }
 }

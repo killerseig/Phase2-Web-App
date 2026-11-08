@@ -225,4 +225,100 @@ describe('useShopOrderMetaForm', () => {
     expect(metaForm.ensureFreshDraftDeliveryDate(staleDraft)).toBe(false)
     expect(metaForm.orderMetaForm.deliveryDate).toBe('2026-06-20')
   })
+
+  it('captures immutable metadata while an earlier save is in flight', async () => {
+    let finish!: (saved: boolean) => void
+    const { metaForm, persistOrderMeta } = mountMetaForm()
+    persistOrderMeta.mockReturnValueOnce(new Promise<boolean>(resolve => { finish = resolve }))
+    metaForm.applySelectedOrderToForm(makeOrder())
+    metaForm.orderMetaForm.comments = 'First snapshot'
+    const saving = metaForm.saveOrderMetaImmediately()
+    metaForm.orderMetaForm.comments = 'Newer typing'
+    expect(persistOrderMeta.mock.calls[0]?.[1].comments).toBe('First snapshot')
+    finish(true)
+    await saving
+    await metaForm.saveOrderMetaImmediately()
+    expect(persistOrderMeta.mock.calls[1]?.[1].comments).toBe('Newer typing')
+  })
+
+  it('ignores an old order save completion after selection changes', async () => {
+    let finish!: (saved: boolean) => void
+    const { metaForm, persistOrderMeta, selectedOrder } = mountMetaForm()
+    persistOrderMeta.mockReturnValueOnce(new Promise<boolean>(resolve => { finish = resolve }))
+    metaForm.applySelectedOrderToForm(makeOrder())
+    metaForm.orderMetaForm.comments = 'First order edit'
+    const saving = metaForm.saveOrderMetaImmediately()
+    const other = makeOrder({ id: 'order-2', comments: 'Second order content' })
+    selectedOrder.value = other
+    metaForm.applySelectedOrderToForm(other)
+    finish(true)
+    await saving
+    await metaForm.saveOrderMetaImmediately()
+    expect(persistOrderMeta).toHaveBeenCalledTimes(1)
+    expect(metaForm.orderMetaForm.comments).toBe('Second order content')
+  })
+
+  it('flushes a pending debounce before navigation without a duplicate later write', async () => {
+    const { metaForm, persistOrderMeta } = mountMetaForm()
+    metaForm.applySelectedOrderToForm(makeOrder())
+    metaForm.orderMetaForm.comments = 'Save before history selection'
+    metaForm.queueOrderMetaSave()
+    await expect(metaForm.prepareOrderMetaNavigation()).resolves.toBe(true)
+    await vi.runOnlyPendingTimersAsync()
+    expect(persistOrderMeta).toHaveBeenCalledTimes(1)
+    expect(metaForm.hasUnsavedOrderMetaChanges.value).toBe(false)
+  })
+
+  it('waits for an active save then writes newer edits to the same order', async () => {
+    let finish!: (saved: boolean) => void
+    const { metaForm, persistOrderMeta } = mountMetaForm()
+    persistOrderMeta.mockReturnValueOnce(new Promise<boolean>(resolve => { finish = resolve }))
+    metaForm.applySelectedOrderToForm(makeOrder())
+    metaForm.orderMetaForm.comments = 'First version'
+    const saving = metaForm.saveOrderMetaImmediately()
+    metaForm.orderMetaForm.comments = 'Newest version'
+    const navigation = metaForm.prepareOrderMetaNavigation()
+    expect(persistOrderMeta).toHaveBeenCalledTimes(1)
+    finish(true)
+    await saving
+    await expect(navigation).resolves.toBe(true)
+    expect(persistOrderMeta.mock.calls.map(([id, form]) => [id, form.comments])).toEqual([
+      ['order-1', 'First version'], ['order-1', 'Newest version'],
+    ])
+  })
+
+  it('retains invalid metadata and failed saves for editing or explicit discard', async () => {
+    const { metaForm, persistOrderMeta } = mountMetaForm()
+    metaForm.applySelectedOrderToForm(makeOrder())
+    metaForm.orderMetaForm.deliveryDate = '2026-06-03'
+    metaForm.orderMetaForm.comments = 'Keep these instructions'
+    await expect(metaForm.prepareOrderMetaNavigation()).resolves.toBe(false)
+    expect(persistOrderMeta).not.toHaveBeenCalled()
+    metaForm.orderMetaForm.deliveryDate = '2026-06-18'
+    persistOrderMeta.mockResolvedValueOnce(false)
+    await expect(metaForm.prepareOrderMetaNavigation()).resolves.toBe(false)
+    expect(metaForm.orderMetaForm.comments).toBe('Keep these instructions')
+    expect(metaForm.hasUnsavedOrderMetaChanges.value).toBe(true)
+    await expect(metaForm.prepareOrderMetaNavigation()).resolves.toBe(true)
+  })
+
+  it('does not resume old navigation after leaving and returning to the same order', async () => {
+    let finish!: (saved: boolean) => void
+    const { metaForm, persistOrderMeta, selectedOrder } = mountMetaForm()
+    persistOrderMeta.mockReturnValueOnce(new Promise<boolean>(resolve => { finish = resolve }))
+    metaForm.applySelectedOrderToForm(makeOrder())
+    metaForm.orderMetaForm.comments = 'Old pending version'
+    const saving = metaForm.saveOrderMetaImmediately()
+    const navigation = metaForm.prepareOrderMetaNavigation()
+    selectedOrder.value = makeOrder({ id: 'order-2' })
+    metaForm.applySelectedOrderToForm(selectedOrder.value)
+    selectedOrder.value = makeOrder()
+    metaForm.applySelectedOrderToForm(selectedOrder.value)
+    metaForm.orderMetaForm.comments = 'New visit edit'
+    finish(true)
+    await saving
+    await expect(navigation).resolves.toBe(false)
+    expect(persistOrderMeta).toHaveBeenCalledTimes(1)
+    expect(metaForm.hasUnsavedOrderMetaChanges.value).toBe(true)
+  })
 })

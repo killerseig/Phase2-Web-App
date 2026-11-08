@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import { useCurrentActor } from '@/composables/useCurrentActor'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useRouteJobContext } from '@/composables/useRouteJobContext'
@@ -70,6 +72,17 @@ const {
   getDisplayName: () => auth.displayName,
   getEmail: () => auth.currentUser?.email ?? null,
 })
+const navigationConfirm = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const navigationBusy = ref(false)
+const navigationEpoch = ref(0)
+const navigationContext = () => navigationEpoch.value
+function invalidateNavigation() {
+  navigationEpoch.value += 1
+  navigationConfirm.value?.cancel()
+}
+watch([currentUserId, jobId, selectedOrderId, () => auth.rawRole,
+  () => auth.hasWorkspaceAccess, () => [...auth.assignedJobIds].sort().join('|'),
+  () => [...(job.value?.assignedForemanIds ?? [])].sort().join('|')], invalidateNavigation, { flush: 'sync' })
 
 const {
   customItemForm,
@@ -108,6 +121,7 @@ const {
   orders,
   selectedOrderId,
 })
+watch(() => selectedOrder.value?.status, invalidateNavigation, { flush: 'sync' })
 const {
   closeDeleteDraftConfirm,
   closeRemoveItemConfirm,
@@ -125,8 +139,10 @@ const {
   cloneOrderItems,
   persistOrderItems,
   persistOrderMeta,
+  prepareOrderItemNavigation,
 } = useShopOrderPersistence({
   getActor,
+  getContextEpoch: navigationContext,
   itemActionLoading,
   replaceOrderLocally,
   selectedOrder,
@@ -139,12 +155,15 @@ const {
   clearOrderMetaSaveTimer,
   ensureFreshDraftDeliveryDate,
   hasSelectedOrderChanged,
+  hasUnsavedOrderMetaChanges,
   orderMetaForm,
   queueOrderMetaSave,
+  prepareOrderMetaNavigation,
   saveOrderMetaImmediately,
   shouldHydrateSelectedOrder,
 } = useShopOrderMetaForm({
   canEditSelectedOrder,
+  getContextEpoch: navigationContext,
   persistOrderMeta,
   selectedOrder,
   setActionError,
@@ -154,10 +173,13 @@ const {
   clearOrderItemNoteDrafts,
   handleOrderItemNoteBlur,
   handleOrderItemNoteInput,
+  hasUnsavedOrderItemNotes,
+  prepareOrderItemNoteNavigation,
   orderItemNoteDrafts,
   syncOrderItemNoteDrafts,
 } = useShopOrderItemNotes({
   cloneOrderItems,
+  getContextEpoch: navigationContext,
   persistOrderItems,
   selectedOrder,
 })
@@ -257,12 +279,75 @@ useShopOrderSubscriptionLifecycle({
   subscribeCatalogRecords,
   subscribeRouteJob,
 })
+
+const hasCustomItemDraft = () => !!customItemForm.description.trim() || !!customItemForm.note.trim() || customItemForm.quantity !== '1'
+async function prepareSavedChanges() {
+  const context = navigationContext()
+  clearOrderMetaSaveTimer()
+  if (!await prepareOrderItemNavigation() || context !== navigationContext()) return false
+  if (!await prepareOrderItemNoteNavigation() || context !== navigationContext()) return false
+  return prepareOrderMetaNavigation()
+}
+async function prepareNavigation() {
+  if (navigationBusy.value) return false
+  if (createOrderLoading.value || deleteDraftConfirmOpen.value || removeItemConfirmOpen.value || submitConfirmOpen.value) {
+    setActionError('Finish the current shop order action before leaving.')
+    return false
+  }
+  const context = navigationContext()
+  navigationBusy.value = true
+  try {
+    const saved = await prepareSavedChanges()
+    if (context !== navigationContext()) return false
+    if (saved && !hasCustomItemDraft()) return true
+    const discard = await navigationConfirm.value?.ask({
+      title: 'Keep unsaved shop order changes?',
+      message: saved
+        ? 'This custom item has not been added. Discard it to continue?'
+        : 'Shop order changes could not finish saving. Keep editing to retry, or discard the unsaved changes.',
+      confirmLabel: 'Discard changes', cancelLabel: 'Keep editing', destructive: true,
+    })
+    if (!discard || context !== navigationContext()) return false
+    clearOrderMetaSaveTimer()
+    clearOrderItemNoteDrafts()
+    applySelectedOrderToForm(selectedOrder.value)
+    syncOrderItemNoteDrafts(selectedOrder.value, true)
+    resetCustomItemForm()
+    return true
+  } finally { navigationBusy.value = false }
+}
+async function selectOrderSafely(orderId: string) {
+  if (orderId !== selectedOrderId.value && await prepareNavigation()) selectOrder(orderId)
+}
+async function createOrderSafely() {
+  if (selectedOrder.value?.status === 'draft' || await prepareNavigation()) await handleCreateOrder()
+}
+async function submitOrderSafely() {
+  if (navigationBusy.value) return
+  navigationBusy.value = true
+  const context = navigationContext()
+  try {
+    if (await prepareSavedChanges() && context === navigationContext()) await handleSubmitSelectedOrder()
+  } finally { navigationBusy.value = false }
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (hasUnsavedOrderMetaChanges.value || hasUnsavedOrderItemNotes.value || itemActionLoading.value || createOrderLoading.value || hasCustomItemDraft()) {
+    event.preventDefault()
+    event.returnValue = ''
+  }
+}
+onBeforeRouteLeave(prepareNavigation)
+onBeforeRouteUpdate((to, from) => to.params.jobId === from.params.jobId || prepareNavigation())
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => { invalidateNavigation(); window.removeEventListener('beforeunload', beforeUnload) })
 </script>
 
 <template>
   <ShopOrderPageShell
     test-id="shop-orders-page"
-    :confirmation-open="deleteDraftConfirmOpen || removeItemConfirmOpen || submitConfirmOpen"
+    :before-sign-out="prepareNavigation"
+    :inert="navigationBusy"
+    :confirmation-open="deleteDraftConfirmOpen || removeItemConfirmOpen || submitConfirmOpen || navigationBusy"
   >
     <template #catalog="{ compact, drawerVisible, openOrder }">
       <ShopOrderCatalogBrowser
@@ -293,7 +378,7 @@ useShopOrderSubscriptionLifecycle({
               data-testid="shoporder-new-order"
               :loading="createOrderLoading"
               :disabled="!jobId || !job"
-              @click="handleCreateOrder"
+              @click="createOrderSafely"
             />
           </div>
         </template>
@@ -333,8 +418,8 @@ useShopOrderSubscriptionLifecycle({
         @delete-selected-order="handleDeleteSelectedOrder"
         @remove-item="requestRemoveOrderItem"
         @save-note="handleOrderItemNoteBlur"
-        @select-order="selectOrder"
-        @submit-order="handleSubmitSelectedOrder"
+        @select-order="selectOrderSafely"
+        @submit-order="submitOrderSafely"
         @update-note-draft="handleOrderItemNoteInput"
         @update-quantity="updateOrderItemQuantity"
       />
@@ -350,6 +435,7 @@ useShopOrderSubscriptionLifecycle({
       @confirm-remove-item="confirmRemoveOrderItem"
       @confirm-submit-order="confirmSubmitSelectedOrder"
     />
+    <BuilderConfirmDialog ref="navigationConfirm" />
   </ShopOrderPageShell>
 </template>
 

@@ -5,6 +5,7 @@ import DailyLogPageShell from '@/components/dailyLogs/DailyLogPageShell.vue'
 
 const AppShellStub = {
   name: 'AppShell',
+  props: ['beforeSignOut'],
   template: '<div data-testid="app-shell"><main><slot /></main></div>',
 }
 
@@ -23,9 +24,11 @@ const DailyLogWorkspaceShellStub = {
 
 describe('DailyLogPageShell', () => {
   it('composes the app shell, workspace shell, forwarded attrs, named slots, and default slot', () => {
+    const beforeSignOut = async () => false
     const wrapper = mount(DailyLogPageShell, {
       props: {
         testId: 'daily-logs-page',
+        beforeSignOut,
       },
       attrs: {
         class: 'daily-log-page-test',
@@ -47,6 +50,7 @@ describe('DailyLogPageShell', () => {
     const workspace = wrapper.get('[data-testid="daily-logs-page"]')
 
     expect(wrapper.find('[data-testid="app-shell"]').exists()).toBe(true)
+    expect(wrapper.getComponent(AppShellStub).props('beforeSignOut')).toBe(beforeSignOut)
     expect(workspace.classes()).toContain('daily-log-page-test')
     expect(workspace.attributes('data-shell')).toBe('daily-log-workspace')
     expect(wrapper.get('[data-testid="header-slot"]').text()).toBe('Header')

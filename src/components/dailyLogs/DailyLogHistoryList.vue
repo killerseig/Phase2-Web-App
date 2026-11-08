@@ -12,7 +12,7 @@ import AppSectionHeader from '@/components/common/AppSectionHeader.vue'
 import { getDailyLogLabel, getDailyLogStatusLabel, getDailyLogTimestampLabel } from '@/features/dailyLogs/format'
 import type { DailyLogRecord } from '@/types/domain'
 
-defineProps<{
+const props = defineProps<{
   loading: boolean
   logs: DailyLogRecord[]
   selectedDate: string
@@ -25,6 +25,11 @@ const emit = defineEmits<{
   today: []
   'update:selectedDate': [value: string]
 }>()
+
+function restoreDisplayedDate(event: Event) {
+  // The requested date is committed by the parent only after pending edits save.
+  if (event.target instanceof HTMLInputElement) event.target.value = props.selectedDate
+}
 </script>
 
 <template>
@@ -42,6 +47,7 @@ const emit = defineEmits<{
           :model-value="selectedDate"
           data-testid="dailylog-date-search"
           @update:model-value="emit('update:selectedDate', $event)"
+          @input="restoreDisplayedDate"
         />
       </AppField>
 

@@ -6,7 +6,7 @@ import { updateShopOrderRecord } from '@/services/shopOrders'
 import type { ShopOrderItemRecord, ShopOrderRecord } from '@/types/domain'
 
 vi.mock('@/services/shopOrders', () => ({
-  updateShopOrderRecord: vi.fn(),
+  updateShopOrderRecord: vi.fn<typeof updateShopOrderRecord>(),
 }))
 
 const updateShopOrderRecordMock = vi.mocked(updateShopOrderRecord)
@@ -66,12 +66,15 @@ function mountPersistence(options: {
     options.selectedOrder === undefined ? makeOrder() : options.selectedOrder,
   )
   const itemActionLoading = ref(false)
+  const actorUserId = ref('user-1')
+  const contextEpoch = ref(0)
   const actionErrors: string[] = []
   const actionInfos: string[] = []
   const replacedOrders: ShopOrderRecord[] = []
 
   const persistence = useShopOrderPersistence({
-    getActor: () => ({ userId: 'user-1', displayName: 'CJ Blanchard' }),
+    getActor: () => ({ userId: actorUserId.value, displayName: 'CJ Blanchard' }),
+    getContextEpoch: () => contextEpoch.value,
     itemActionLoading,
     replaceOrderLocally: (order) => {
       replacedOrders.push(order)
@@ -87,6 +90,8 @@ function mountPersistence(options: {
   })
 
   return {
+    actorUserId,
+    contextEpoch,
     actionErrors,
     actionInfos,
     itemActionLoading,
@@ -100,6 +105,51 @@ describe('useShopOrderPersistence', () => {
   beforeEach(() => {
     updateShopOrderRecordMock.mockReset()
     updateShopOrderRecordMock.mockResolvedValue(undefined)
+  })
+
+  it('reports an active item save failure to navigation and does not roll another order back', async () => {
+    const pending = makeDeferred()
+    updateShopOrderRecordMock.mockReturnValueOnce(pending.promise)
+    const { persistence, selectedOrder } = mountPersistence()
+    const saving = persistence.persistOrderItems('order-1', [makeItem({ note: 'Pending' })], 'Saved')
+    await flushPromises()
+    const navigation = persistence.prepareOrderItemNavigation()
+    selectedOrder.value = makeOrder({ id: 'order-2', comments: 'Second order' })
+    pending.reject(new Error('Offline'))
+    await expect(saving).resolves.toBe(false)
+    await expect(navigation).resolves.toBe(false)
+    expect(selectedOrder.value.id).toBe('order-2')
+    expect(selectedOrder.value.comments).toBe('Second order')
+  })
+
+  it('does not start a queued write after its selected-order context was lost and restored', async () => {
+    const pending = makeDeferred()
+    updateShopOrderRecordMock.mockReturnValueOnce(pending.promise)
+    const { persistence, selectedOrder } = mountPersistence()
+    const first = persistence.persistOrderItems('order-1', [makeItem({ note: 'First' })], 'Saved')
+    await flushPromises()
+    const queued = persistence.persistOrderItems('order-1', [makeItem({ note: 'Queued' })], 'Saved')
+    selectedOrder.value = makeOrder({ id: 'order-2' })
+    selectedOrder.value = makeOrder()
+    pending.resolve()
+    await first
+    await expect(queued).resolves.toBe(false)
+    expect(updateShopOrderRecordMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['identity', 'access'] as const)('cancels queued item writes after %s is lost and restored', async (change) => {
+    const pending = makeDeferred()
+    updateShopOrderRecordMock.mockReturnValueOnce(pending.promise)
+    const { persistence, actorUserId, contextEpoch } = mountPersistence()
+    const first = persistence.persistOrderItems('order-1', [makeItem({ note: 'First' })], 'Saved')
+    await flushPromises()
+    const queued = persistence.persistOrderItems('order-1', [makeItem({ note: 'Queued' })], 'Saved')
+    if (change === 'identity') { actorUserId.value = 'other-user'; actorUserId.value = 'user-1' }
+    else { contextEpoch.value += 1; contextEpoch.value += 1 }
+    pending.resolve()
+    await first
+    await expect(queued).resolves.toBe(false)
+    expect(updateShopOrderRecordMock).toHaveBeenCalledTimes(1)
   })
 
   it('persists metadata with the current actor and reports success', async () => {

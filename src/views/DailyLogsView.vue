@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
+import BuilderConfirmDialog from '@/components/builder/BuilderConfirmDialog.vue'
 import { useCurrentActor } from '@/composables/useCurrentActor'
 import { usePageMessages } from '@/composables/usePageMessages'
 import { useRouteJobContext } from '@/composables/useRouteJobContext'
@@ -49,6 +50,17 @@ const { currentUserId, getActor } = useCurrentActor({
   getDisplayName: () => auth.displayName,
   getEmail: () => auth.currentUser?.email ?? null,
 })
+const navigationConfirm = ref<InstanceType<typeof BuilderConfirmDialog>>()
+const navigationBusy = ref(false)
+const navigationEpoch = ref(0)
+const navigationContext = () => navigationEpoch.value
+function invalidateNavigation() {
+  navigationEpoch.value += 1
+  navigationConfirm.value?.cancel()
+}
+watch([currentUserId, jobId, selectedLogId, selectedDate,
+  () => auth.rawRole, () => auth.hasWorkspaceAccess, () => [...auth.assignedJobIds].sort().join('|'),
+  () => [...(job.value?.assignedForemanIds ?? [])].sort().join('|')], invalidateNavigation, { flush: 'sync' })
 const {
   globalNotificationRecipients,
   logs,
@@ -89,6 +101,7 @@ const {
   selectedDate,
   selectedLogId,
 })
+watch(() => selectedLog.value?.status, invalidateNavigation, { flush: 'sync' })
 const {
   additionalDailyLogRecipients,
   adminDailyLogRecipients,
@@ -121,6 +134,7 @@ const {
   hasUnsavedDraftChanges,
   hydrateForm,
   lastSavedSignature,
+  prepareDraftNavigation,
   saveDraftImmediately,
   savingDraft,
   serializePayload,
@@ -129,6 +143,7 @@ const {
   canEditSelectedLog,
   form,
   getActor,
+  getContextEpoch: navigationContext,
   normalizeError,
   preparePayload: clonePreparedPayload,
   selectedLog,
@@ -239,6 +254,53 @@ useDailyLogSubscriptionLifecycle({
   subscribeRouteJob,
 })
 
+const mutationBusy = () => creatingDraft.value || deletingDraft.value || submittingLog.value || recipientSaving.value ||
+  photoAttachmentBusy.value || ptpAttachmentBusy.value || qcAttachmentBusy.value
+async function prepareNavigation() {
+  if (navigationBusy.value) return false
+  if (mutationBusy()) {
+    setActionError('Wait for the daily log change to finish before leaving.')
+    return false
+  }
+  const context = navigationContext()
+  navigationBusy.value = true
+  try {
+    const saved = await prepareDraftNavigation()
+    if (context !== navigationContext()) return false
+    if (saved && !recipientInput.value.trim()) return true
+    const discard = await navigationConfirm.value?.ask({
+      title: 'Keep unsaved daily log changes?',
+      message: saved
+        ? 'This recipient address has not been added. Discard it to continue?'
+        : 'Daily log changes could not finish saving. Keep editing to retry, or discard the unsaved changes.',
+      confirmLabel: 'Discard changes', cancelLabel: 'Keep editing', destructive: true,
+    })
+    if (!discard || context !== navigationContext()) return false
+    clearRecipientInput()
+    resetForm(selectedLog.value)
+    return true
+  } finally { navigationBusy.value = false }
+}
+async function selectDateSafely(date: string) {
+  if (date !== selectedDate.value && await prepareNavigation()) selectedDate.value = date
+}
+async function selectLogSafely(logId: string) {
+  if (logId !== selectedLogId.value && await prepareNavigation()) selectedLogId.value = logId
+}
+async function selectTodaySafely() {
+  if (selectedDate.value !== getTodayDateString() && await prepareNavigation()) setSelectedDateToToday()
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (hasUnsavedDraftChanges.value || savingDraft.value || mutationBusy() || recipientInput.value.trim()) {
+    event.preventDefault()
+    event.returnValue = ''
+  }
+}
+onBeforeRouteLeave(prepareNavigation)
+onBeforeRouteUpdate((to, from) => to.params.jobId === from.params.jobId || prepareNavigation())
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => { invalidateNavigation(); window.removeEventListener('beforeunload', beforeUnload) })
+
 let handledPhotoLinkKey = ''
 watch(
   [selectedLog, logsLoading, () => route.hash],
@@ -265,7 +327,7 @@ watch(
 </script>
 
 <template>
-  <DailyLogPageShell test-id="daily-logs-page">
+  <DailyLogPageShell test-id="daily-logs-page" :before-sign-out="prepareNavigation" :inert="navigationBusy">
     <template #header>
       <DailyLogPageHeader
         :can-create-daily-log="canCreateDailyLogForToday"
@@ -321,7 +383,8 @@ watch(
     <template #sidebar>
       <DailyLogSidebar
         v-model:recipient-input="recipientInput"
-        v-model:selected-date="selectedDate"
+        :selected-date="selectedDate"
+        @update:selected-date="selectDateSafely"
         :additional-recipients="additionalDailyLogRecipients"
         :admin-recipients="adminDailyLogRecipients"
         :can-delete-selected-log="canDeleteSelectedLog"
@@ -336,8 +399,8 @@ watch(
         @add-recipient="handleAddRecipient"
         @delete-selected-log="handleDeleteSelectedLog"
         @remove-recipient="handleRemoveRecipient"
-        @select-log="selectedLogId = $event"
-        @today="setSelectedDateToToday"
+        @select-log="selectLogSafely"
+        @today="selectTodaySafely"
       />
     </template>
 
@@ -347,5 +410,6 @@ watch(
       @confirm-delete-draft="confirmDeleteSelectedLog"
       @update-delete-draft-open="deleteDraftConfirmOpen = $event"
     />
+    <BuilderConfirmDialog ref="navigationConfirm" />
   </DailyLogPageShell>
 </template>

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useShopOrderItemNotes } from '@/features/shopOrders/useShopOrderItemNotes'
 import type { ShopOrderItemRecord, ShopOrderRecord } from '@/types/domain'
 
+type PersistOrderItems = (orderId: string, items: ShopOrderItemRecord[], message: string) => Promise<boolean>
+
 function makeItem(overrides: Partial<ShopOrderItemRecord> = {}): ShopOrderItemRecord {
   return {
     catalogItemId: 'catalog-1',
@@ -73,7 +75,7 @@ describe('useShopOrderItemNotes', () => {
     }))
     const notes = useShopOrderItemNotes({
       cloneOrderItems: cloneItems,
-      persistOrderItems: vi.fn(),
+      persistOrderItems: vi.fn<PersistOrderItems>(),
       selectedOrder: computed(() => selectedOrder.value),
     })
 
@@ -95,7 +97,7 @@ describe('useShopOrderItemNotes', () => {
     vi.useFakeTimers()
 
     const selectedOrder = ref<ShopOrderRecord | null>(makeOrder())
-    const persistOrderItems = vi.fn().mockResolvedValue(true)
+    const persistOrderItems = vi.fn<PersistOrderItems>().mockResolvedValue(true)
     const notes = useShopOrderItemNotes({
       cloneOrderItems: cloneItems,
       persistOrderItems,
@@ -124,7 +126,7 @@ describe('useShopOrderItemNotes', () => {
     vi.useFakeTimers()
 
     const selectedOrder = ref<ShopOrderRecord | null>(makeOrder())
-    const persistOrderItems = vi.fn().mockResolvedValue(true)
+    const persistOrderItems = vi.fn<PersistOrderItems>().mockResolvedValue(true)
     const notes = useShopOrderItemNotes({
       cloneOrderItems: cloneItems,
       persistOrderItems,
@@ -149,7 +151,7 @@ describe('useShopOrderItemNotes', () => {
     const selectedOrder = ref<ShopOrderRecord | null>(makeOrder({
       items: [makeItem({ note: 'same note' })],
     }))
-    const persistOrderItems = vi.fn().mockResolvedValue(true)
+    const persistOrderItems = vi.fn<PersistOrderItems>().mockResolvedValue(true)
     const notes = useShopOrderItemNotes({
       cloneOrderItems: cloneItems,
       persistOrderItems,
@@ -177,9 +179,9 @@ describe('useShopOrderItemNotes', () => {
 
     const selectedOrder = ref<ShopOrderRecord | null>(makeOrder())
     const firstSave = createDeferred<boolean>()
-    const persistOrderItems = vi.fn()
-      .mockImplementationOnce(() => firstSave.promise)
-      .mockResolvedValue(true)
+    const persistOrderItems = vi.fn<PersistOrderItems>()
+    persistOrderItems.mockImplementationOnce(() => firstSave.promise)
+    persistOrderItems.mockResolvedValue(true)
     const notes = useShopOrderItemNotes({
       cloneOrderItems: cloneItems,
       persistOrderItems,
@@ -210,5 +212,43 @@ describe('useShopOrderItemNotes', () => {
       [makeItem({ note: 'second note' })],
       'Order note updated.',
     )
+  })
+
+  it('flushes pending note text before leaving and retains it after an active failed write', async () => {
+    vi.useFakeTimers()
+    const selectedOrder = ref<ShopOrderRecord | null>(makeOrder())
+    const pending = createDeferred<boolean>()
+    const persistOrderItems = vi.fn<PersistOrderItems>()
+    persistOrderItems.mockReturnValueOnce(pending.promise)
+    persistOrderItems.mockResolvedValue(true)
+    const notes = useShopOrderItemNotes({ cloneOrderItems: cloneItems, persistOrderItems, selectedOrder })
+    notes.handleOrderItemNoteInput('item-1', 'Keep the delivery detail')
+    const navigation = notes.prepareOrderItemNoteNavigation()
+    expect(persistOrderItems).toHaveBeenCalledTimes(1)
+    pending.resolve(false)
+    await expect(navigation).resolves.toBe(false)
+    expect(notes.orderItemNoteDrafts['item-1']).toBe('Keep the delivery detail')
+    await expect(notes.prepareOrderItemNoteNavigation()).resolves.toBe(true)
+    await vi.runOnlyPendingTimersAsync()
+    expect(persistOrderItems).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not continue queued note work in a different selected order', async () => {
+    vi.useFakeTimers()
+    const selectedOrder = ref<ShopOrderRecord | null>(makeOrder())
+    const pending = createDeferred<boolean>()
+    const persistOrderItems = vi.fn<PersistOrderItems>().mockReturnValueOnce(pending.promise)
+    const notes = useShopOrderItemNotes({ cloneOrderItems: cloneItems, persistOrderItems, selectedOrder })
+    notes.handleOrderItemNoteInput('item-1', 'First order note')
+    const saving = notes.handleOrderItemNoteBlur('item-1')
+    notes.handleOrderItemNoteInput('item-1', 'Newer first order note')
+    notes.clearOrderItemNoteDrafts()
+    selectedOrder.value = makeOrder({ id: 'order-2', items: [makeItem({ note: 'Second order note' })] })
+    notes.syncOrderItemNoteDrafts(selectedOrder.value, true)
+    pending.resolve(true)
+    await saving
+    await vi.runOnlyPendingTimersAsync()
+    expect(persistOrderItems).toHaveBeenCalledTimes(1)
+    expect(notes.orderItemNoteDrafts['item-1']).toBe('Second order note')
   })
 })

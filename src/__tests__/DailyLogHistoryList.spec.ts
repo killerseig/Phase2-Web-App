@@ -88,6 +88,7 @@ describe('DailyLogHistoryList', () => {
     })
 
     await wrapper.get('[data-testid="dailylog-date-search"]').setValue('2026-06-12')
+    expect((wrapper.get('[data-testid="dailylog-date-search"]').element as HTMLInputElement).value).toBe('2026-06-11')
     await wrapper.get('button.app-button').trigger('click')
     await wrapper.get('[data-testid="dailylog-history-draft-log"]').trigger('click')
 

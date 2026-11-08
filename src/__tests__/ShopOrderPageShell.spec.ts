@@ -5,6 +5,7 @@ import ShopOrderPageShell from '@/components/shopOrders/ShopOrderPageShell.vue'
 
 const AppShellStub = {
   name: 'AppShell',
+  props: ['beforeSignOut'],
   template: '<div data-testid="app-shell"><main><slot /></main></div>',
 }
 
@@ -22,9 +23,11 @@ const ShopOrderExplorerShellStub = {
 
 describe('ShopOrderPageShell', () => {
   it('composes the app shell, explorer shell, forwarded attrs, named slots, and default slot', () => {
+    const beforeSignOut = async () => false
     const wrapper = mount(ShopOrderPageShell, {
       props: {
         testId: 'shop-orders-page',
+        beforeSignOut,
       },
       attrs: {
         class: 'shop-order-page-test',
@@ -45,6 +48,7 @@ describe('ShopOrderPageShell', () => {
     const explorer = wrapper.get('[data-testid="shop-orders-page"]')
 
     expect(wrapper.find('[data-testid="app-shell"]').exists()).toBe(true)
+    expect(wrapper.getComponent(AppShellStub).props('beforeSignOut')).toBe(beforeSignOut)
     expect(explorer.classes()).toContain('shop-order-page-test')
     expect(explorer.attributes('data-shell')).toBe('shop-order-explorer')
     expect(wrapper.get('[data-testid="catalog-slot"]').text()).toBe('Catalog')

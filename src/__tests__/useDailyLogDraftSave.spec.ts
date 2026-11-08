@@ -10,7 +10,7 @@ import { updateDailyLogRecord } from '@/services/dailyLogs'
 import type { DailyLogPayload, DailyLogRecord } from '@/types/domain'
 
 vi.mock('@/services/dailyLogs', () => ({
-  updateDailyLogRecord: vi.fn(),
+  updateDailyLogRecord: vi.fn<typeof updateDailyLogRecord>(),
 }))
 
 const updateDailyLogRecordMock = vi.mocked(updateDailyLogRecord)
@@ -178,6 +178,77 @@ describe('useDailyLogDraftSave', () => {
     expect(draftSave.savingDraft.value).toBe(false)
     expect(form.value.weeklySchedule).toBe('Local text should stay visible')
     expect(draftSave.lastSavedPayload.value.weeklySchedule).toBe('Original schedule')
+    expect(draftSave.hasUnsavedDraftChanges.value).toBe(true)
+  })
+
+  it.each(['full', 'field'] as const)('does not apply an old %s save to a newly selected log', async (kind) => {
+    let finish!: () => void
+    updateDailyLogRecordMock.mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve }))
+    const { draftSave, form, selectedLog } = mountDraftSave()
+    form.value.weeklySchedule = 'First log edit'
+    const saving = kind === 'full'
+      ? draftSave.saveDraftImmediately()
+      : draftSave.saveDailyLogTextField('weeklySchedule')
+
+    const nextPayload = makePayload({ weeklySchedule: 'Second log saved content' })
+    selectedLog.value = { ...makeLog(nextPayload), id: 'daily-log-2' }
+    form.value = nextPayload
+    draftSave.setSavedPayloadSnapshot(nextPayload)
+    finish()
+    await saving
+
+    expect(draftSave.lastSavedPayload.value.weeklySchedule).toBe('Second log saved content')
+    expect(draftSave.hasUnsavedDraftChanges.value).toBe(false)
+    expect(updateDailyLogRecordMock.mock.calls[0]?.[0]).toBe('daily-log-1')
+  })
+
+  it('waits for blur saving and preserves newer manpower edits before navigation', async () => {
+    let finish!: () => void
+    updateDailyLogRecordMock.mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve }))
+    const { draftSave, form } = mountDraftSave()
+    form.value.weeklySchedule = 'Blur snapshot'
+    const fieldSave = draftSave.saveDailyLogTextField('weeklySchedule')
+    form.value.manpowerLines = [{ trade: 'Framing', count: 7, areas: 'Level 2', addedByUserId: 'user-1' }]
+    const navigation = draftSave.prepareDraftNavigation()
+    expect(updateDailyLogRecordMock).toHaveBeenCalledTimes(1)
+    finish()
+    await fieldSave
+    await expect(navigation).resolves.toBe(true)
+    expect(updateDailyLogRecordMock.mock.calls[1]?.[1]).toMatchObject({ payload: { manpowerLines: [{ count: 7 }] } })
+    expect(draftSave.hasUnsavedDraftChanges.value).toBe(false)
+  })
+
+  it('blocks navigation after an active failure and keeps the draft retryable', async () => {
+    let fail!: (error: Error) => void
+    updateDailyLogRecordMock.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { fail = reject }))
+    const { draftSave, form } = mountDraftSave()
+    form.value.weeklySchedule = 'Keep this draft'
+    const saving = draftSave.saveDraftImmediately()
+    const navigation = draftSave.prepareDraftNavigation()
+    fail(new Error('Offline'))
+    await expect(saving).resolves.toBe(false)
+    await expect(navigation).resolves.toBe(false)
+    expect(form.value.weeklySchedule).toBe('Keep this draft')
+    expect(draftSave.hasUnsavedDraftChanges.value).toBe(true)
+    await expect(draftSave.prepareDraftNavigation()).resolves.toBe(true)
+  })
+
+  it('does not resume navigation saving after leaving and returning to the same log', async () => {
+    let finish!: () => void
+    updateDailyLogRecordMock.mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve }))
+    const { draftSave, form, selectedLog } = mountDraftSave()
+    form.value.weeklySchedule = 'Old pending version'
+    const saving = draftSave.saveDraftImmediately()
+    const navigation = draftSave.prepareDraftNavigation()
+    selectedLog.value = { ...makeLog(), id: 'daily-log-2' }
+    draftSave.setSavedPayloadSnapshot(makePayload())
+    selectedLog.value = makeLog()
+    draftSave.setSavedPayloadSnapshot(makePayload())
+    form.value.weeklySchedule = 'New visit edit must not be sent by old navigation'
+    finish()
+    await saving
+    await expect(navigation).resolves.toBe(false)
+    expect(updateDailyLogRecordMock).toHaveBeenCalledTimes(1)
     expect(draftSave.hasUnsavedDraftChanges.value).toBe(true)
   })
 })
