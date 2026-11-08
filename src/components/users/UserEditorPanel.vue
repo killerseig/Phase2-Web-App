@@ -439,9 +439,17 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
     padding-right: 0;
   }
 
-  .users-detail__header-side,
-  .users-detail__danger {
+  .users-detail__header-side {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     width: 100%;
+  }
+
+  .users-detail__danger {
+    flex: 0 0 auto;
   }
 
   .users-detail__actions .app-button {
@@ -458,9 +466,5 @@ function handleDetailTextInput(field: UserDetailTextField, value: string) {
     grid-template-columns: 1fr;
   }
 
-  .users-detail__header-side {
-    width: 100%;
-    justify-items: stretch;
-  }
 }
 </style>

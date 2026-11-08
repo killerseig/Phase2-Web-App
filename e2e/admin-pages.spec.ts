@@ -176,7 +176,7 @@ test.describe('admin page coverage', () => {
     await expect(page.getByRole('link', { name: 'Timecard Export' })).toHaveCount(0)
 
     await page.getByTestId('shop-catalog-root-row').click({ button: 'right' })
-    await page.getByRole('button', { name: 'New Item' }).click()
+    await page.getByRole('menuitem', { name: 'New Item' }).click()
     await inspector.getByLabel('Description').fill('Shop Foreman Harness')
     await inspector.getByLabel('SKU').fill('SF-HARNESS')
     await inspector.getByRole('button', { name: 'Create Item' }).click()
@@ -217,7 +217,7 @@ test.describe('admin page coverage', () => {
     const inspector = page.locator('.catalog-inspector-pane')
 
     await page.getByTestId('shop-catalog-root-row').click({ button: 'right' })
-    await page.getByRole('button', { name: 'New Folder' }).click()
+    await page.getByRole('menuitem', { name: 'New Folder' }).click()
     await page.locator('.catalog-tree-node__rename').fill('Safety Gear')
     await page.locator('.catalog-tree-node__rename').press('Enter')
 
@@ -230,7 +230,7 @@ test.describe('admin page coverage', () => {
     await expect(page.locator('.catalog-tree-node', { hasText: 'Field Safety' })).toBeVisible()
 
     await page.locator('.catalog-tree-node', { hasText: 'Field Safety' }).click({ button: 'right' })
-    await page.getByRole('button', { name: 'New Item' }).click()
+    await page.getByRole('menuitem', { name: 'New Item' }).click()
     await inspector.getByLabel('Description').fill('Hard Hat')
     await inspector.getByLabel('SKU').fill('HH-01')
     await inspector.getByLabel('Price').fill('18.75')

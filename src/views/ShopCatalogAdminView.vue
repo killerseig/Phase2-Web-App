@@ -652,7 +652,9 @@ useShopCatalogAdminLifecycle({
         :visible="contextMenu.visible"
         :x="contextMenu.x"
         :y="contextMenu.y"
+        :anchor="contextMenu.anchor"
         :actions="contextMenuActions"
+        @close="closeContextMenu"
       />
     </template>
 

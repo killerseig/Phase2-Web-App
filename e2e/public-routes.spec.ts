@@ -23,7 +23,7 @@ test.describe('public route coverage', () => {
     await page.goto('/set-password')
 
     await expect(page.getByRole('heading', { name: 'Create Your Password' })).toBeVisible()
-    await expect(page.getByText('Finish the admin-created account setup')).toBeVisible()
+    await expect(page.getByText('Choose a password to finish setting up your account.')).toBeVisible()
   })
 
   test('unknown routes render the not found page', async ({ page }) => {

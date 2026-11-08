@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import AuthCard from '@/components/auth/AuthCard.vue'
 import AuthStatusMessage from '@/components/auth/AuthStatusMessage.vue'
 import AuthSubmitButton from '@/components/auth/AuthSubmitButton.vue'
+import AuthTextLink from '@/components/auth/AuthTextLink.vue'
 import AppField from '@/components/common/AppField.vue'
 import AppTextInput from '@/components/common/AppTextInput.vue'
 import { useToastMessages } from '@/composables/useToastMessages'
@@ -32,8 +33,8 @@ const error = ref('')
 const info = ref('')
 
 useToastMessages([
-  { source: error, severity: 'error', summary: 'Create Password' },
-  { source: info, severity: 'success', summary: 'Create Password' },
+  { source: error, severity: 'error', summary: 'Create Password', clear: false },
+  { source: info, severity: 'success', summary: 'Create Password', clear: false },
 ])
 
 async function verifyLink() {
@@ -106,13 +107,13 @@ onMounted(() => {
   <AuthCard
     eyebrow="Phase 2"
     title="Create Your Password"
-    copy="Finish the admin-created account setup using the same link flow from the current app."
+    copy="Choose a password to finish setting up your account."
   >
     <AuthStatusMessage v-if="verifying">
       Verifying your setup link...
     </AuthStatusMessage>
 
-    <template v-else-if="email">
+    <form v-else-if="email" @submit.prevent="handleSubmit">
       <AppField class="auth-field" label="Email">
         <AppTextInput :model-value="email" type="email" readonly />
       </AppField>
@@ -141,8 +142,11 @@ onMounted(() => {
         label="Create Password & Login"
         loading-label="Creating Password..."
         :loading="loading"
-        @click="handleSubmit"
       />
-    </template>
+    </form>
+
+    <AuthStatusMessage v-if="error" :message="error" tone="error" />
+    <AuthStatusMessage v-if="info" :message="info" tone="success" />
+    <AuthTextLink v-if="!verifying" to="/login">Back to login</AuthTextLink>
   </AuthCard>
 </template>

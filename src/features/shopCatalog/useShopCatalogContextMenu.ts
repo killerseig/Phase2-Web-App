@@ -35,6 +35,7 @@ export function useShopCatalogContextMenu(options: UseShopCatalogContextMenuOpti
     visible: false,
     x: 0,
     y: 0,
+    anchor: null as HTMLElement | null,
     target: { kind: 'root' } as ShopCatalogContextMenuTarget,
   })
 
@@ -59,8 +60,11 @@ export function useShopCatalogContextMenu(options: UseShopCatalogContextMenuOpti
     || longPress.pointerType === 'pen'
   ))
 
-  function closeContextMenu() {
+  function closeContextMenu(restoreFocus = false) {
+    const anchor = contextMenu.anchor
     contextMenu.visible = false
+    contextMenu.anchor = null
+    if (restoreFocus && anchor?.isConnected) anchor.focus({ preventScroll: true })
   }
 
   function clearLongPressTimer() {
@@ -110,7 +114,7 @@ export function useShopCatalogContextMenu(options: UseShopCatalogContextMenuOpti
     longPress.moved = false
   }
 
-  function openContextMenuAt(target: ShopCatalogContextMenuTarget, clientX: number, clientY: number) {
+  function openContextMenuAt(target: ShopCatalogContextMenuTarget, clientX: number, clientY: number, anchor: HTMLElement | null) {
     const position = getViewportFloatingPosition({
       x: clientX,
       y: clientY,
@@ -123,13 +127,14 @@ export function useShopCatalogContextMenu(options: UseShopCatalogContextMenuOpti
     contextMenu.x = position.x
     contextMenu.y = position.y
     contextMenu.target = target
+    contextMenu.anchor = anchor
     contextMenu.visible = true
   }
 
   function openContextMenu(event: MouseEvent, target: ShopCatalogContextMenuTarget) {
     event.preventDefault()
     event.stopPropagation()
-    openContextMenuAt(target, event.clientX, event.clientY)
+    openContextMenuAt(target, event.clientX, event.clientY, event.currentTarget instanceof HTMLElement ? event.currentTarget : null)
   }
 
   function hasMovedBeyondTouchThreshold(clientX: number, clientY: number) {
@@ -168,8 +173,9 @@ export function useShopCatalogContextMenu(options: UseShopCatalogContextMenuOpti
       if (!menuTarget || longPress.moved) return
 
       setSuppressClickWindow()
+      const anchor = longPress.captureElement instanceof HTMLElement ? longPress.captureElement : null
       resetLongPress(event.pointerId)
-      openContextMenuAt(menuTarget, event.clientX, event.clientY)
+      openContextMenuAt(menuTarget, event.clientX, event.clientY, anchor)
     }, touchDelayMs)
   }
 

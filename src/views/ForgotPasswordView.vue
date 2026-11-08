@@ -30,8 +30,8 @@ const loading = ref(false)
 const initializing = computed(() => !auth.ready)
 
 useToastMessages([
-  { source: error, severity: 'error', summary: 'Reset Password' },
-  { source: info, severity: 'success', summary: 'Reset Password' },
+  { source: error, severity: 'error', summary: 'Reset Password', clear: false },
+  { source: info, severity: 'success', summary: 'Reset Password', clear: false },
 ])
 
 onMounted(async () => {
@@ -96,6 +96,9 @@ async function handleSubmit() {
           :disabled="!hasConfiguredFirebase"
         />
       </form>
+
+      <AuthStatusMessage v-if="error" :message="error" tone="error" />
+      <AuthStatusMessage v-if="info" :message="info" tone="success" />
 
       <AuthTextLink to="/login">
         Back to login

@@ -42,8 +42,8 @@ const forgotPasswordTarget = computed(() => buildForgotPasswordTarget(email.valu
 const workspaceTarget = computed(() => getWorkspaceRedirectTarget(route.query.redirect))
 
 useToastMessages([
-  { source: error, severity: 'error', summary: 'Login' },
-  { source: info, severity: 'success', summary: 'Login' },
+  { source: error, severity: 'error', summary: 'Login', clear: false },
+  { source: info, severity: 'success', summary: 'Login', clear: false },
 ])
 
 async function routeIntoWorkspaceIfAllowed() {
@@ -145,6 +145,9 @@ async function handleLogin() {
 
       <AuthTextLink :to="forgotPasswordTarget"> Forgot Password? </AuthTextLink>
     </form>
+
+    <AuthStatusMessage v-if="error" :message="error" tone="error" />
+    <AuthStatusMessage v-if="info" :message="info" tone="success" />
 
     <AuthFirebaseConfigWarning v-if="!hasConfiguredFirebase" />
   </AuthCard>

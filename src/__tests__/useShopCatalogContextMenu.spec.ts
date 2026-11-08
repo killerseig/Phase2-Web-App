@@ -59,9 +59,9 @@ function target(kind: ShopCatalogContextMenuTarget['kind']): ShopCatalogContextM
 
 function captureElement() {
   const element = document.createElement('button')
-  element.setPointerCapture = vi.fn()
-  element.hasPointerCapture = vi.fn(() => true)
-  element.releasePointerCapture = vi.fn()
+  element.setPointerCapture = vi.fn<(pointerId: number) => void>()
+  element.hasPointerCapture = vi.fn<(pointerId: number) => boolean>(() => true)
+  element.releasePointerCapture = vi.fn<(pointerId: number) => void>()
   return element
 }
 
@@ -72,6 +72,25 @@ afterEach(() => {
 })
 
 describe('useShopCatalogContextMenu', () => {
+  it('returns focus only when explicitly requested, retaining the real menu trigger', () => {
+    const menu = useShopCatalogContextMenu()
+    const anchor = document.createElement('button')
+    const other = document.createElement('button')
+    document.body.append(anchor, other)
+    anchor.addEventListener('contextmenu', event => menu.openContextMenu(event, target('item')))
+    anchor.dispatchEvent(mouseEvent())
+    expect(menu.contextMenu.anchor).toBe(anchor)
+    other.focus()
+    menu.closeContextMenu()
+    expect(document.activeElement).toBe(other)
+    anchor.dispatchEvent(mouseEvent())
+    menu.closeContextMenu(true)
+    expect(document.activeElement).toBe(anchor)
+    expect(menu.contextMenu.anchor).toBeNull()
+    anchor.remove()
+    other.remove()
+  })
+
   it('opens a context menu at the event point and prevents the browser menu', () => {
     setViewport(600, 400)
     const menu = useShopCatalogContextMenu({ menuWidth: 100, menuHeight: 80 })

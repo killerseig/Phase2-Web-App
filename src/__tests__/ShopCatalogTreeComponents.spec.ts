@@ -1,5 +1,6 @@
-import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import ShopCatalogContextMenu, {
   type ShopCatalogContextMenuAction,
@@ -7,6 +8,8 @@ import ShopCatalogContextMenu, {
 import ShopCatalogTreeNodeRow from '@/components/shopCatalog/ShopCatalogTreeNodeRow.vue'
 import ShopCatalogTreeRootRow from '@/components/shopCatalog/ShopCatalogTreeRootRow.vue'
 import type { ShopCatalogTreeNode } from '@/features/shopCatalog/treeTypes'
+
+enableAutoUnmount(afterEach)
 
 function makeNode(overrides: Partial<ShopCatalogTreeNode> = {}): ShopCatalogTreeNode {
   return {
@@ -25,8 +28,8 @@ function makeNode(overrides: Partial<ShopCatalogTreeNode> = {}): ShopCatalogTree
 
 describe('ShopCatalogContextMenu', () => {
   it('renders positioned actions and runs enabled callbacks only', async () => {
-    const archive = vi.fn()
-    const remove = vi.fn()
+    const archive = vi.fn<() => void>()
+    const remove = vi.fn<() => void>()
     const actions: ShopCatalogContextMenuAction[] = [
       { key: 'archive', label: 'Archive Folder', run: archive },
       { key: 'delete', label: 'Delete Folder', danger: true, disabled: true, run: remove },
@@ -67,6 +70,41 @@ describe('ShopCatalogContextMenu', () => {
     })
 
     expect(wrapper.find('.shop-catalog-context-menu').exists()).toBe(false)
+  })
+
+  it('focuses enabled actions, skips unavailable items and requests trigger return on Escape', async () => {
+    const wrapper = mount(ShopCatalogContextMenu, {
+      attachTo: document.body,
+      props: { visible: true, x: 10, y: 10, actions: [
+        { key: 'inspect', label: 'Inspect', run: vi.fn<() => void>() },
+        { key: 'delete', label: 'Delete', disabled: true, run: vi.fn<() => void>() },
+        { key: 'rename', label: 'Rename', run: vi.fn<() => void>() },
+      ] },
+    })
+    await nextTick()
+    const items = wrapper.findAll('[role="menuitem"]')
+    expect(document.activeElement).toBe(items[0]!.element)
+    await items[0]!.trigger('keydown', { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(items[2]!.element)
+    await items[2]!.trigger('keydown', { key: 'Home' })
+    expect(document.activeElement).toBe(items[0]!.element)
+    await items[0]!.trigger('keydown', { key: 'Escape' })
+    expect(wrapper.emitted('close')).toEqual([[true]])
+  })
+
+  it('does not move focus for an opening cancelled before rendering', async () => {
+    const anchor = document.createElement('button')
+    document.body.append(anchor)
+    anchor.focus()
+    const wrapper = mount(ShopCatalogContextMenu, {
+      attachTo: document.body,
+      props: { visible: false, x: 10, y: 10, actions: [{ key: 'inspect', label: 'Inspect', run: vi.fn<() => void>() }] },
+    })
+    void wrapper.setProps({ visible: true })
+    wrapper.unmount()
+    await nextTick()
+    expect(document.activeElement).toBe(anchor)
+    anchor.remove()
   })
 })
 
@@ -144,7 +182,7 @@ describe('ShopCatalogTreeNodeRow', () => {
         renaming: false,
         createValue: '',
         renameValue: '',
-        setInputRef: vi.fn(),
+        setInputRef: vi.fn<() => void>(),
       },
     })
     const row = wrapper.get('[data-testid="shop-catalog-category-cat-tools"]')
@@ -197,7 +235,7 @@ describe('ShopCatalogTreeNodeRow', () => {
         renaming: false,
         createValue: '',
         renameValue: '',
-        setInputRef: vi.fn(),
+        setInputRef: vi.fn<() => void>(),
       },
     })
     const row = wrapper.get('[data-testid="shop-catalog-item-item-aha"]')
@@ -222,7 +260,7 @@ describe('ShopCatalogTreeNodeRow', () => {
         renaming: false,
         createValue: 'New Folder',
         renameValue: '',
-        setInputRef: vi.fn(),
+        setInputRef: vi.fn<() => void>(),
       },
     })
     const renamingWrapper = mount(ShopCatalogTreeNodeRow, {
@@ -237,7 +275,7 @@ describe('ShopCatalogTreeNodeRow', () => {
         renaming: true,
         createValue: '',
         renameValue: 'Renamed Folder',
-        setInputRef: vi.fn(),
+        setInputRef: vi.fn<() => void>(),
       },
     })
 
