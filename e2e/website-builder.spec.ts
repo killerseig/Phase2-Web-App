@@ -1117,6 +1117,11 @@ test('offline website edits recover after reload and sync without publication', 
   await page.addInitScript(() =>
     Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }),
   )
+  // Restoring browser transport emits online on the old document too. Keep its
+  // reconnect autosave paused while reload waits for the new document to load.
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false })
+  })
   await context.setOffline(false)
   await page.reload()
   await expect(page.getByRole('button', { name: 'Recover edits', exact: true })).toBeVisible()

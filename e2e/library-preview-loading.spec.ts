@@ -59,7 +59,10 @@ for (const width of [390, 1440]) {
       await expect(preview.getByRole('img', { name: 'PDF page 1 of 2', exact: true })).toBeVisible()
       await expectSingleLoadingFade(page)
       await selectLibraryFile(page, 'Synthetic Word')
-      await expect(preview).toHaveAttribute('aria-busy', 'false')
+      // The first Word preview also loads cold Vite modules for the renderer.
+      // Keep a bounded readiness budget; the iframe/image/fit checks below still
+      // require successful rendering rather than accepting an error as settled.
+      await expect(preview).toHaveAttribute('aria-busy', 'false', { timeout: 15000 })
       const iframe = page.locator('iframe.docx-pages'), word = page.frameLocator('iframe.docx-pages')
       await expect(iframe).toBeVisible()
       await expect(word.locator('img')).toHaveJSProperty('complete', true)

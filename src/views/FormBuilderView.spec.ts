@@ -1,17 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router'
-import { defineComponent } from 'vue'
+import { defineComponent, ref } from 'vue'
 import PrimeVue from 'primevue/config'
 const { api } = vi.hoisted(() => ({ api: vi.fn<(name: string, data: { action: string; [key: string]: unknown }) => Promise<unknown>>() }))
 vi.mock('@/services/forms', () => ({ formApi: api, isFormServerEnabled: () => true, isFormEmulatorEnabled: () => false }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { uid: 'synthetic-builder-admin' }, rawRole: 'admin', hasWorkspaceAccess: true }) }))
 vi.mock('@/layouts/AppShell.vue', () => ({ default: { template: '<main><slot :openNavigation="() => {}" :mobileNavOpen="false" /></main>' } }))
+vi.mock('@/features/intranet/usePrivateReferences', () => ({ usePrivateReferences: () => ({
+  content: ref(), packages: ref([]), selectedPackage: ref(''), loading: ref(false), error: ref(''), notice: ref(''),
+  selectSource: vi.fn<(id: string) => void>(), reload: vi.fn<() => void>(),
+}) }))
 import FormBuilderView from './FormBuilderView.vue'
 import committeeSource from '../../functions/src/committee-inspection-native.json'
 import bbsSource from '../../functions/src/behavior-based-safety-observation-native.json'
 import { validateFormDefinition } from '../../functions/src/formModel'
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); api.mockReset() })
+const mounted: VueWrapper[] = []
+afterEach(() => {
+  for (const wrapper of mounted.splice(0)) wrapper.unmount()
+  vi.unstubAllEnvs(); vi.unstubAllGlobals(); api.mockReset()
+})
 describe('normal Form Builder controls with synthetic server fixtures', () => {
   it('does not show the exact New-form discard modal for untouched persisted forms or blank shells', async () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
@@ -30,6 +38,7 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/forms', component: FormBuilderView }] })
     await router.push('/admin/forms'); await router.isReady()
     const wrapper = mount(RouterView, { global: { plugins: [router, PrimeVue], stubs: { BuilderConfirmDialog: dialog } } })
+    mounted.push(wrapper)
     hydrate(); await flushPromises()
     const clickNew = async () => { await wrapper.findAll('button').find(button => button.text() === 'New form')!.trigger('click'); await flushPromises() }
     for (const template of templates) {
@@ -54,7 +63,6 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     expect(ask).toHaveBeenCalledExactlyOnceWith({ title: 'Discard unsaved form edits?', message: 'Create a new form without saving these edits.', confirmLabel: 'Discard edits' })
     expect((wrapper.get('.inspector-panel input[maxlength="160"]').element as HTMLInputElement).value).toBe('Edited starter')
     expect(api.mock.calls.every(([, data]) => data.action === 'list')).toBe(true)
-    wrapper.unmount()
   })
   it('leaves untouched hydration clean and preserves edit/cancel/save/switch/history guards', async () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
@@ -77,6 +85,7 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/forms', component: FormBuilderView }, { path: '/other', component: { template: '<p>Other page</p>' } }] })
     await router.push('/admin/forms'); await router.isReady()
     const wrapper = mount(RouterView, { global: { plugins: [router, PrimeVue], stubs: { BuilderConfirmDialog: dialog } } })
+    mounted.push(wrapper)
     hydrate(); await flushPromises()
     const open = async (id: string) => { await wrapper.get('[data-template-id="' + id + '"] .library-target').trigger('click'); await flushPromises() }
     await open('first')
@@ -98,7 +107,6 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     router.back(); await flushPromises(); router.forward(); await flushPromises()
     expect(router.currentRoute.value.path).toBe('/other')
     expect(api.mock.calls.filter(([, data]) => data.action === 'save')).toHaveLength(1)
-    wrapper.unmount()
   })
   it('distinguishes an unpublished draft, preview, public link and missing entries service', async () => {
     vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'phase2-website')
@@ -118,6 +126,7 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/forms', component: FormBuilderView }] })
     await router.push('/admin/forms'); await router.isReady()
     const wrapper = mount(RouterView, { global: { plugins: [router], stubs: { BuilderConfirmDialog: true } } })
+    mounted.push(wrapper)
     await flushPromises()
     await wrapper.get('[data-template-id="synthetic-unpublished"] .library-target').trigger('click')
     await flushPromises()
@@ -132,9 +141,8 @@ describe('normal Form Builder controls with synthetic server fixtures', () => {
     expect(wrapper.get('.form-share-links a').attributes('href')).toBe('https://phase2-website.web.app/forms/synthetic-published')
     await wrapper.findAll('button').find(button => button.text() === 'View Entries')!.trigger('click')
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toContain('confirm the entries service is deployed')
+    expect(wrapper.get('.form-entries [role="alert"]').text()).toContain('confirm the entries service is deployed')
     expect(wrapper.text()).toContain('Form preview shows questions only')
     expect(api.mock.calls.every(([, data]) => !['save', 'issue', 'create', 'submit'].includes(data.action))).toBe(true)
-    wrapper.unmount()
   })
 })
