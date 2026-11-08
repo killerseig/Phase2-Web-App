@@ -49,6 +49,7 @@ The managed local demo uses `npm.cmd run dev:forms` and normally serves `http://
 | Fresh Functions packaging without cloud calls | `npm.cmd run verify:functions-build` after build |
 | Unit/model regression | `npm.cmd run test:unit -- --run` (frontend, backend source/test and Vite plugin specs) |
 | Native script regression | `npm.cmd run test:scripts` (Node test runner; no cloud deployment) |
+| Production-built critical journeys | Build with `scripts/vite.critical-built.ts`, then run `scripts/verify-critical-built.mjs` through `firebase.critical-built.json` isolated emulators; exact guarded commands are in the script header. Uses real SDK/rules/compiled handlers and synthetic data, never the saved preview. |
 | Dashboard browser workflows | `npm.cmd run test:dashboards` |
 | Website editor/browser workflows | `npx.cmd playwright test --config=playwright.builder-regression.config.ts` |
 | Read-only source lint | `npm.cmd run lint:check`; use scoped checks to distinguish existing debt from changed-file failures |
@@ -56,6 +57,8 @@ The managed local demo uses `npm.cmd run dev:forms` and normally serves `http://
 | Hosting release gate | `npm.cmd run test:shop-order-layout`, plus the approved release's other affected gates |
 
 Choose tests for the behavior: model bounds and invalid input need units; pointer geometry, focus, clipping and device previews need browsers; Rules and Admin handlers need separate authorization checks. Exercise failure, retry, stale response, account/scope change and navigation while dirty where relevant. Inspect screenshots for visual changes. A test passing against mocked callables does not establish deployed IAM or real delivery. Report failures and skipped verification honestly, including a repository-wide lint backlog; do not relabel a scoped pass as a full pass.
+
+The production-built journey harness preserves production fixture exclusion and aliases only Firebase initialization to exact isolated loopback endpoints. Its output is verification-only and must never be deployed. It exposes a limited read/draft-save bridge; email, submissions, invitations and publication are not acceptance actions. Run heavy unit/build jobs separately from browser readiness gates to avoid machine-resource contention. Startup assertions may use a bounded readiness budget, while actual behavior/geometry assertions retain their normal limits.
 
 ## Preserve working chats and handoffs
 

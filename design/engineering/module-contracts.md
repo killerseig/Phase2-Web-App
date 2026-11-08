@@ -1,6 +1,6 @@
 # Module contracts
 
-Use this index to load the relevant boundary first, then inspect source/tests when changing it or when evidence conflicts. These cards describe existing behavior as of November 7, 2026; commercial module interfaces and general company entitlements remain proposals. Each card should stay short enough to review alongside a change.
+Use this index to load the relevant boundary first, then inspect source/tests when changing it or when evidence conflicts. These cards describe existing behavior as of November 8, 2026; commercial module interfaces and general company entitlements remain proposals. Each card should stay short enough to review alongside a change.
 
 ## Contract card format
 
@@ -13,6 +13,26 @@ Record purpose/nonresponsibilities; public entry points and types; inputs/output
 `useTimecardPendingNavigation` supplies the same preparation to route leave/update and AppShell sign-out. Saving completes before departure; failure offers Keep editing or explicit discard of the current local queue. Context changes invalidate pending confirmation, busy commands block departure, and browser exit warns about outstanding work. Unmount only tears down timers after navigation has resolved. Existing week selection/submission/export owners still await the queue; calculations, payloads, roles and old Jobs routes are unchanged.
 
 [Queue](../../src/features/timecards/useTimecardSaveQueue.ts) · [Deferred regressions](../../src/features/timecards/useTimecardSaveQueue.spec.ts) · [Departure owner](../../src/features/timecards/useTimecardPendingNavigation.ts) · [Browser journeys](../../e2e/timecard-pending-edits.spec.ts)
+
+## Pending Daily Log and Shop Order edits
+
+Legacy workspaces prepare pending changes before record/date/week selection, route departure and AppShell sign-out. Daily Logs await active field writes and save the latest complete payload; Shop Orders flush metadata/notes and await queued item writes. Failed writes keep editable values and offer explicit Keep editing/Discard through the owning view. Browser exit warns about pending work. A synchronous identity/access/record epoch prevents a departed-and-restored context from resuming an old queued write or accepting stale discard. Same-record server echoes do not invalidate the current editor. No submitted-record, recipient, calculation or Jobs routing semantics change.
+
+[Daily Log save owner](../../src/features/dailyLogs/useDailyLogDraftSave.ts) · [Shop Order persistence](../../src/features/shopOrders/useShopOrderPersistence.ts) · [Browser regressions](../../e2e/legacy-pending-edits.spec.ts)
+
+## Admin request ownership and assignments
+
+Users, Employees and Catalog compose `useAdminRequestContext` with request/selection/draft scopes and `useAdminRecords`. Identity, effective access and role changes synchronously invalidate old work, including leaving and returning to the same identity. Captured targets and normalized draft epochs prevent obsolete confirmation, completion, error and finalizer effects. A rightful delete may still report success when its own listener removes the selected record first. Record subscriptions clear private state after access loss; transient failures retain current data for retry. These frontend guards do not grant server authority or cancel writes already sent.
+
+`updateUser` reads the current user and affected jobs, then writes the profile, account assignments and job memberships in one Firestore transaction. Conflict retries retain other administrators' membership changes. Account creation remains two-stage: the callable creates the account, then an optional current-lifetime guard gates assignments; partial success is reported truthfully. Missing-job handling and role eligibility retain existing semantics.
+
+[Request context](../../src/features/admin/useAdminRequestContext.ts) · [Records](../../src/features/admin/useAdminRecords.ts) · [User service](../../src/services/users.ts) · [Concurrent assignment regressions](../../src/__tests__/usersAssignmentIntegrity.spec.ts)
+
+## Shared confirmation focus
+
+`ConfirmDialog` uses a native modal dialog: the page behind it is inert, initial focus is Cancel, Tab cycles enabled actions, Escape cancels except during composition/busy work, and closing restores the connected opener. It emits intent only; callers own captured targets, permission checks and mutation lifetime. Unmount invalidates delayed focus work. Browser evidence must cover native focus/inertness rather than relying solely on the unit DOM's dialog mock.
+
+[Component](../../src/components/ConfirmDialog.vue) · [Browser regressions](../../e2e/admin-confirmations.spec.ts)
 
 ## Authenticated session lifetime
 
@@ -38,9 +58,11 @@ Record purpose/nonresponsibilities; public entry points and types; inputs/output
 
 ## Form authoring
 
-**Interface:** `useFormAuthoring(draft, dirty)` returns selection/select/reset/saved/undo/redo and reactive availability flags. Inputs are Vue refs; history snapshots cover the form definition and selected field, not network state. Reset establishes a baseline; `saved()` marks the current definition saved. Undo/redo retain stable field IDs and restore optional definition properties correctly.
+**Interface:** `useFormAuthoring(draft, dirty)` owns selection and bounded history, including atomic selected-field commands. Inputs are Vue refs; history snapshots cover the form definition and selected field, not network state. Reset establishes a baseline; `saved()` marks the current definition saved. Undo/redo retain stable field IDs and restore optional definition properties correctly.
 
 **Ownership and effects:** mutates the caller's draft/dirty refs and manages bounded local history/watchers. No server writes or authorization. The view owns account/scope reset and navigation; persistence owns successful-save notification.
+
+Selected-field Copy/Paste/Duplicate and Alt+Up/Down reorder remain ordered flow operations. The in-memory clipboard contains a cloned field subtree; paste assigns fresh field/child/matrix-row IDs and remaps internal required-note sources. External conditions are retained only for the same form with a still-valid source; otherwise the whole paste is rejected. The 60-field limit includes group descendants. A command and its selection change use one Undo transaction. Typing, composition, dialogs, unavailable access and armed/active pointer interactions retain their keys; clipboard state clears on account/access changes. Issued definitions and response history are unchanged.
 
 [Source](../../src/features/forms/useFormAuthoring.ts) · [Tests](../../src/features/forms/useFormAuthoring.spec.ts)
 
@@ -56,9 +78,9 @@ Record purpose/nonresponsibilities; public entry points and types; inputs/output
 
 **Interfaces:** `useWebsiteWidgetEditing(options)` owns selection, inspector context and widget geometry operations; `useWebsiteCommands(options)` returns `load` and `command` to coordinate explicit persistence/publication. Both compose injected editor state and the existing history/autosave/draft-sync boundaries.
 
-**Invariants and effects:** there is one editable site state; geometry/selection is separate from publication. Selection and layout changes preserve IDs/references. Commands may call Website services and confirmation callbacks; editor operations do not independently publish. Account/scope and stale-result guards remain necessary. Admin authorization and public rendering are enforced at their existing server/renderer boundaries.
+**Invariants and effects:** there is one editable site state; geometry/selection is separate from publication. Selection and layout changes preserve IDs/references. Commands may call Website services and confirmation callbacks; editor operations do not independently publish. Commands, autosave and draft synchronization share an access-qualified project/account scope. Synchronous context epochs invalidate old responses/finalizers and clear private draft/history; destructive decisions also capture a deep draft epoch. Save inputs are snapshots, and restores never replace edits made while waiting. Autosave from an obsolete session cannot block or overwrite a new session, including same-UID return. Already-sent writes cannot be canceled. Admin authorization and public rendering remain independently enforced at their existing boundaries.
 
-**Free-grid keyboard geometry:** root widget bodies, floating controls and directional resize pegs share relative grid steps; Shift uses one screen pixel measured from the actual unrotated canvas scale. Untouched fields and off-grid offsets are retained, grouped movement shares a bounded delta, and single-widget height changes retain following-row spacing in the same Undo entry. Precise keyboard calculations are separate from pointer snapping; the following-row helper's finer precision is opt-in. Typing, Alt/Ctrl/Meta, composition and pending/active pointer gestures cannot change keyboard geometry. Rotation retains one-degree arrows, fifteen-degree Shift arrows and Home reset. Inline text/image/button controls and responsive flow-height steps are separate paths, not covered by this parity claim. Saved units/bounds, pointer snapping and preview Fit/zoom behavior are unchanged.
+**Keyboard geometry:** root widget bodies, floating controls and directional resize pegs share relative grid steps; Shift uses one screen pixel measured from the actual unrotated canvas scale. Untouched fields and off-grid offsets are retained, grouped movement shares a bounded delta, and single-widget height changes retain following-row spacing in the same Undo entry. Inline text/image/button movement and responsive flow-height controls also use one screen pixel with Shift; ordinary inline/flow arrows retain one authored CSS pixel. Inline resizing uses the same opposite-edge anchoring as pointer resizing, including rotation/aspect constraints. Fractional flow height uses existing numeric schema/bounds. Precise keyboard calculations remain separate from pointer snapping. Typing, Alt/Ctrl/Meta, composition and pending/active pointer gestures cannot change keyboard geometry. Rotation retains one-degree arrows, fifteen-degree Shift arrows and Home reset. Saved units/bounds, pointer snapping and preview Fit/zoom behavior are unchanged.
 
 **Widget clipboard:** `useWebsiteSelectionCommands` owns session-local Copy/Paste/Duplicate/Cut/Delete and their guarded shortcuts; `widgetClipboard` captures independent subtrees and plans atomic insertions. Website copies retain authored content, responsive overrides and layout locks. Owned section/item/navigation/inline-definition IDs are fresh, nested parent and binding references are remapped, and library form/widget references remain linked. Only free-grid roots translate; nested/flow geometry retains its meaning. Distinct placement comes from current occupancy, so failed attempts consume no position and Undo frees it. Capacity, bounds, required page-content slots, missing libraries/parents and protected layer limits reject the whole operation. External parents require the same source context and an unlocked destination; pasting never implicitly reparents.
 
@@ -70,11 +92,17 @@ Keyboard commands belong to explicit widget canvas/outline/layer/action regions 
 
 ## Library mutation lifetime
 
-**Interface:** `useLibraryMutation({busy,error,progress}).runMutation(operation)` supplies a `stageFile(File)` callback returning uploaded metadata. One mutation stages one file; the caller owns file validation, metadata commands, navigation and success UI.
+**Interface:** `useLibraryMutation({busy,error,progress,context?}).runMutation(operation)` supplies `stageFile(File)` and `current()` callbacks. One mutation stages one file; the caller owns file validation, metadata commands, navigation and success UI.
 
-**Effects and limits:** the helper sets busy/progress, maps operation errors and awaits staging cleanup in `finally`. It does not grant document access, renew viewer tickets or own byte ranges. Cleanup failures can reject; callers must not assume arbitrary operations are idempotent or use this as a batch transaction. Backend upload/metadata services remain the permission boundary.
+**Effects and limits:** the helper owns status/progress and synchronous context/disposal epochs. Callers recheck `current()` after preflight/staging/command awaits before starting follow-up writes or UI updates. Staged-file cleanup is attempted and awaited even after access loss/unmount; cleanup errors are reported only to the current operation and do not strand its busy state. Bulk imports capture their own context and stop before further metadata writes on invalidation. This does not undo an already-sent write, grant access, renew viewer tickets or make a batch transaction. Backend services remain the permission boundary.
 
 [Source](../../src/features/sds/useLibraryMutation.ts) · [Tests](../../src/features/sds/useLibraryMutation.spec.ts)
+
+## Form respondent lifetime
+
+The respondent workspace synchronously invalidates reads, draft saves, photo-upload handoffs, submission continuation and confirmation on identity/effective-access/job/template changes, including same-identity return. Old completions cannot repopulate private answers or start a later submission after scope changes. Existing public sessions, immutable issued definitions, draft recovery and server permissions remain distinct. Invalidation cannot undo an already-sent save or submission.
+
+[Workspace](../../src/components/forms/FormResponseWorkspace.vue) · [Deferred regressions](../../src/__tests__/FormResponseLifecycle.spec.ts)
 
 ## Authorized document requests
 
